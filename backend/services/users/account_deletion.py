@@ -3,12 +3,16 @@ from __future__ import annotations
 import logging
 
 import time
-from typing import Any, Callable, Literal, TypedDict, cast
+from typing import Any, Callable, Literal, NotRequired, TypedDict, cast
 
 from database import vector_db
 from database import users as users_db
 from database.action_items import get_action_item_ids
-from database.conversations import get_conversation_ids
+from database.conversation_vector_cleanup import (
+    ConversationVectorCleanupDescriptor,
+    claim_conversation_vector_cleanup_descriptors,
+    release_conversation_vector_cleanup_descriptor,
+)
 from database.memories import get_memory_ids
 from database.screen_activity import get_screen_activity_ids
 from database.vector_db import (
@@ -24,10 +28,13 @@ from utils.executors import cleanup_executor, submit_with_context
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
+from utils.other.conversation_playback_storage import delete_all_conversation_playback_artifacts
 from utils.other.storage import delete_all_conversation_recordings
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 
 logger = logging.getLogger(__name__)
+
+ACCOUNT_DELETION_CONVERSATION_CLAIM_MAX_SCANS = 8
 
 
 class PurgeFailure(TypedDict):
@@ -38,9 +45,14 @@ class PurgeFailure(TypedDict):
 class PurgeResult(TypedDict):
     required_failures: list[PurgeFailure]
     best_effort_failures: list[PurgeFailure]
+    _conversation_cleanup_descriptors: NotRequired[list[ConversationVectorCleanupDescriptor]]
 
 
-def purge_derived_user_data(uid: str) -> PurgeResult:
+def purge_derived_user_data(
+    uid: str,
+    *,
+    retain_conversation_cleanup_claims: bool = False,
+) -> PurgeResult:
     """Purge a user's derived data outside Firestore.
 
     Required failures must block the Firestore wipe because those IDs are
@@ -62,23 +74,72 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         if vector_db.index is None:
             raise RuntimeError(f'Pinecone index not initialized for {operation}')
 
+    conversation_ids: list[str] = []
+    generation_ids: dict[str, str | None] = {}
+    transcript_vector_counts: dict[str, int | None] = {}
+    conversation_descriptors = []
+    conversation_descriptor_error: Exception | None = None
     try:
-        conversation_ids = get_conversation_ids(uid)
+        claimed_conversation_ids: set[str] = set()
+        for _scan in range(ACCOUNT_DELETION_CONVERSATION_CLAIM_MAX_SCANS):
+            newly_claimed = claim_conversation_vector_cleanup_descriptors(
+                uid,
+                exclude_conversation_ids=frozenset(claimed_conversation_ids),
+            )
+            conversation_descriptors.extend(newly_claimed)
+            if not newly_claimed:
+                break
+            claimed_conversation_ids.update(descriptor.conversation_id for descriptor in newly_claimed)
+        else:
+            raise RuntimeError('conversation cleanup descriptor scan did not converge')
+        conversation_ids = [descriptor.conversation_id for descriptor in conversation_descriptors]
+        generation_ids = {
+            descriptor.conversation_id: descriptor.finalization_vector_generation_id
+            for descriptor in conversation_descriptors
+        }
+        transcript_vector_counts = {
+            descriptor.conversation_id: descriptor.transcript_vector_count for descriptor in conversation_descriptors
+        }
+    except Exception as e:
+        conversation_descriptor_error = e
+
+    try:
+        if conversation_descriptor_error is not None:
+            raise conversation_descriptor_error
         if conversation_ids:
             require_vector_index('conversation_vectors')
-            delete_conversation_vectors_batch(uid, conversation_ids)
+            delete_conversation_vectors_batch(
+                uid,
+                conversation_ids,
+                finalization_vector_generation_ids=generation_ids,
+            )
     except Exception as e:
         record_failure('required_failures', 'conversation_vectors', e)
         logger.error(f'delete_account purge conversation vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
-        conversation_ids = get_conversation_ids(uid)
+        if conversation_descriptor_error is not None:
+            raise conversation_descriptor_error
         if conversation_ids:
             require_vector_index('transcript_chunk_vectors')
-            delete_transcript_chunk_vectors_batch(uid, conversation_ids, raise_on_failure=True)
+            delete_transcript_chunk_vectors_batch(
+                uid,
+                conversation_ids,
+                finalization_vector_generation_ids=generation_ids,
+                transcript_vector_counts=transcript_vector_counts,
+                raise_on_failure=True,
+            )
     except Exception as e:
         record_failure('required_failures', 'transcript_chunk_vectors', e)
         logger.error(f'delete_account purge transcript chunk vectors failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        if conversation_descriptor_error is not None:
+            raise conversation_descriptor_error
+        delete_all_conversation_playback_artifacts(uid)
+    except Exception as e:
+        record_failure('required_failures', 'conversation_playback_artifacts', e)
+        logger.error(f'delete_account purge playback artifacts failed for {uid}: {sanitize(str(e))}')
 
     try:
         memory_ids = get_memory_ids(uid)
@@ -120,6 +181,19 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         record_failure('required_failures', 'canonical_derived_data', e)
         logger.error(f'delete_account purge canonical vectors failed for {uid}: {sanitize(str(e))}')
 
+    if retain_conversation_cleanup_claims:
+        # The wipe worker keeps this authority until its Firestore delete
+        # succeeds. Releasing here would reopen finalization between the vector
+        # purge and deletion of the source rows that supplied those vector IDs.
+        result['_conversation_cleanup_descriptors'] = conversation_descriptors
+    else:
+        for descriptor in conversation_descriptors:
+            try:
+                release_conversation_vector_cleanup_descriptor(uid, descriptor)
+            except Exception as e:
+                record_failure('required_failures', 'conversation_cleanup_claim_release', e)
+                logger.error(f'delete_account cleanup claim release failed for {uid}: {sanitize(str(e))}')
+
     return result
 
 
@@ -143,6 +217,7 @@ def _required_failures_from_purge_result(purge_result: object) -> list[PurgeFail
 
 
 def background_wipe_user_data(uid: str) -> bool:
+    retained_conversation_cleanup_descriptors: list[ConversationVectorCleanupDescriptor] = []
     try:
         # Transition to ``running`` so the reconciler can distinguish a
         # genuinely orphaned ``pending`` marker (queued but never started)
@@ -164,7 +239,8 @@ def background_wipe_user_data(uid: str) -> bool:
                 raise
         # Twilio caller IDs first, while the phone_numbers subcollection still carries twilio_sid metadata.
         delete_user_caller_ids(uid)
-        purge_result = purge_derived_user_data(uid)
+        purge_result = purge_derived_user_data(uid, retain_conversation_cleanup_claims=True)
+        retained_conversation_cleanup_descriptors = list(purge_result.get('_conversation_cleanup_descriptors', []))
         required_failures = _required_failures_from_purge_result(purge_result)
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)
@@ -175,6 +251,14 @@ def background_wipe_user_data(uid: str) -> bool:
         logger.info('delete_account background wipe complete')
     except Exception as e:
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
+        for descriptor in retained_conversation_cleanup_descriptors:
+            try:
+                release_conversation_vector_cleanup_descriptor(uid, descriptor)
+            except Exception as release_error:
+                logger.error(
+                    f'delete_account cleanup claim release after wipe failure failed for {uid}: '
+                    f'{sanitize(str(release_error))}'
+                )
         # Mark the wipe as failed so a reconciliation worker can retry. Do NOT mark
         # completed — that would hide a partial wipe from the recovery path.
         try:

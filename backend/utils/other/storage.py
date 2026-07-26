@@ -28,6 +28,10 @@ from database.redis_db import cache_signed_url, get_cached_signed_url
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
 from utils.other.deferred_delete import DeferredDeleter
+from utils.sync.conversation_artifact_protocol import (
+    conversation_finalization_identity,
+    enqueue_conversation_artifact_build,
+)
 from database import users as users_db
 import logging
 
@@ -89,6 +93,25 @@ chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
 
 _did_warn_missing_speech_profiles_bucket = False
+
+
+def get_private_cloud_sync_blob(path: str) -> Any:
+    """Return a blob handle within the private sync bucket."""
+    return _get_storage_client().bucket(private_cloud_sync_bucket).blob(path)
+
+
+def delete_private_cloud_sync_prefix(prefix: str) -> None:
+    """Delete every private-sync object under one explicit directory prefix."""
+    if not prefix or prefix.startswith('/') or prefix.count('/') < 2 or not prefix.endswith('/'):
+        raise ValueError('private cloud sync deletion prefix must name a scoped directory')
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    for blob in bucket.list_blobs(prefix=prefix):
+        blob.delete()
+
+
+def get_storage_signed_url(blob: Any, minutes: int) -> str:
+    """Create or reuse the cached signed URL for a storage blob."""
+    return _get_signed_url(blob, minutes)
 
 
 def _get_opuslib() -> Any:
@@ -1009,6 +1032,7 @@ def get_or_create_merged_audio(
     fill_gaps: bool = True,
     sample_rate: int = 16000,
     caller: str = 'unknown',
+    wait_for_cache_upload: bool = False,
 ) -> tuple[bytes, bool]:
     """
     Get merged audio from cache or create it.
@@ -1078,19 +1102,29 @@ def get_or_create_merged_audio(
     wav_kb = len(wav_data) // 1024
     logger.info(f'audio_merge complete {log_ctx} duration={merge_duration:.1f}s size={wav_kb}KB')
 
-    def _upload_to_cache():
-        try:
-            expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
-            cache_blob.metadata = {
-                'expires_at': expires_at.isoformat(),
-                'audio_file_id': audio_file_id,
-            }
-            cache_blob.upload_from_string(wav_data, content_type='audio/wav')
-            logger.info(f'audio_merge cached {log_ctx}')
-        except Exception as e:
-            logger.error(f'audio_merge cache_upload_failed {log_ctx}: {e}')
+    def _upload_to_cache() -> None:
+        expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
+        cache_blob.metadata = {
+            'expires_at': expires_at.isoformat(),
+            'audio_file_id': audio_file_id,
+        }
+        cache_blob.upload_from_string(wav_data, content_type='audio/wav')
+        logger.info(f'audio_merge cached {log_ctx}')
 
-    storage_executor.submit(_upload_to_cache)
+    if wait_for_cache_upload:
+        # This function is already running on storage_executor during a durable
+        # precache. Upload inline so the worker remains a leaf operation: waiting
+        # on a child submitted to the same pool can deadlock at saturation.
+        _upload_to_cache()
+    else:
+
+        def _upload_to_cache_best_effort() -> None:
+            try:
+                _upload_to_cache()
+            except Exception as e:
+                logger.error(f'audio_merge cache_upload_failed {log_ctx}: {e}')
+
+        storage_executor.submit(_upload_to_cache_best_effort)
 
     return wav_data, False
 
@@ -1228,14 +1262,10 @@ def enqueue_conversation_audio_merge(
 
 
 # ----------------------------------------------------------------------------
-# Conversation-level playback artifact: ONE dense MP3 per conversation
-# (playback/{uid}/{conversation_id}/conversation.mp3) with only captured audio;
-# inter-part gaps collapsed. The spans manifest + audio_files fingerprint are
-# stamped on the conversation doc (conversation_audio). Same 30-day lifecycle.
-# 'conversation' cannot collide with per-part names: audio_file ids are UUIDv4.
+# Conversation-level playback uses one dense MP3 per source generation with
+# inter-part gaps collapsed. Its spans, generation, and audio fingerprint are
+# stamped on the conversation document.
 # ----------------------------------------------------------------------------
-
-CONVERSATION_ARTIFACT_NAME = 'conversation'
 
 
 def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]]) -> str:
@@ -1271,62 +1301,13 @@ def maybe_invalidate_conversation_playback(
         return
     fingerprint = compute_audio_files_fingerprint(audio_files)
     if fingerprint != stamped:
-        enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller)
-
-
-def _conversation_playback_blob(uid: str, conversation_id: str):
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
-    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{CONVERSATION_ARTIFACT_NAME}.mp3')
-
-
-def get_conversation_playback_signed_url(uid: str, conversation_id: str):
-    blob = _conversation_playback_blob(uid, conversation_id)
-    if not blob.exists():
-        return None
-    return _get_signed_url(blob, 60)
-
-
-def upload_conversation_playback_artifact(uid: str, conversation_id: str, mp3_data: bytes) -> None:
-    blob = _conversation_playback_blob(uid, conversation_id)
-    blob.upload_from_string(mp3_data, content_type='audio/mpeg')
-
-
-def _conversation_playback_unavailable_blob(uid: str, conversation_id: str):
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
-    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{CONVERSATION_ARTIFACT_NAME}.unavailable')
-
-
-def mark_conversation_playback_unavailable(uid: str, conversation_id: str, fingerprint: str, reason: str) -> None:
-    """Marker content carries the fingerprint it was written for: a marker for a
-    stale fingerprint is ignored on read (late chunks may fix a chunks_missing verdict)."""
-    blob = _conversation_playback_unavailable_blob(uid, conversation_id)
-    blob.upload_from_string(f'{fingerprint}:{reason}', content_type='text/plain')
-
-
-def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id: str) -> Optional[str]:
-    blob = _conversation_playback_unavailable_blob(uid, conversation_id)
-    try:
-        content = blob.download_as_bytes().decode()
-    except BlobNotFound:
-        return None
-    return content.split(':', 1)[0] if content else None
-
-
-def enqueue_conversation_artifact_build(uid: str, conversation_id: str, fingerprint: str, caller: str) -> None:
-    """Enqueue the conversation-level artifact build (named-task deduped on the
-    fingerprint). Failures are swallowed: the next /urls poll re-enqueues."""
-    try:
-        enqueue_audio_merge_job(
-            {
-                'schema_version': 2,
-                'uid': uid,
-                'conversation_id': conversation_id,
-                'fingerprint': fingerprint,
-                'caller': caller,
-            }
+        enqueue_conversation_artifact_build(
+            uid,
+            conversation_id,
+            fingerprint,
+            caller,
+            expected_finalization_identity=conversation_finalization_identity(conversation),
         )
-    except Exception as e:
-        logger.error(f'audio_merge: conversation enqueue failed conv={conversation_id}: {e}')
 
 
 def download_legacy_merged_wav(uid: str, conversation_id: str, audio_file_id: str):
@@ -1345,22 +1326,18 @@ def download_legacy_merged_wav(uid: str, conversation_id: str, audio_file_id: st
 
 
 def precache_conversation_audio(
-    uid: str, conversation_id: str, audio_files: List[Dict[str, Any]], fill_gaps: bool = True, sample_rate: int = 16000
+    uid: str,
+    conversation_id: str,
+    audio_files: List[Dict[str, Any]],
+    fill_gaps: bool = True,
+    sample_rate: int = 16000,
+    wait_for_completion: bool = False,
 ) -> None:
-    """
-    Pre-cache all audio files for a conversation in a background thread.
-
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
-        audio_files: List of audio file dicts with 'id' and 'chunk_timestamps'
-        fill_gaps: If True, insert silence between chunks to maintain time alignment. Default True.
-        sample_rate: Audio sample rate in Hz (default 16000)
-    """
+    """Pre-cache conversation audio, optionally waiting for every local merge."""
     if not audio_files:
         return
 
-    if is_audio_merge_dispatch_enabled():
+    if is_audio_merge_dispatch_enabled() and not wait_for_completion:
         # Eager build at conversation completion, off-process via Cloud Tasks
         enqueue_conversation_audio_merge(uid, conversation_id, audio_files, caller='process_conversation')
         return
@@ -1381,9 +1358,12 @@ def precache_conversation_audio(
                     fill_gaps=fill_gaps,
                     sample_rate=sample_rate,
                     caller='process_conversation',
+                    wait_for_cache_upload=wait_for_completion,
                 )
             except Exception as e:
                 logger.error(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
+                if wait_for_completion:
+                    raise
 
         futures: List[Any] = []
         for af in audio_files:
@@ -1395,13 +1375,23 @@ def precache_conversation_audio(
             except Exception:
                 _PRECACHE_FILE_SEM.release()
                 raise
+        first_error: Exception | None = None
         for future in as_completed(futures):
             try:
                 future.result()
-            except Exception:
-                pass
+            except Exception as error:
+                # Drain every submitted child before surfacing a durable-mode
+                # failure. Releasing finalization ownership while sibling file
+                # work is still running would allow a retry to overlap it.
+                if first_error is None:
+                    first_error = error
+        if first_error is not None:
+            raise first_error
 
-    postprocess_executor.submit(_precache_all)
+    if wait_for_completion:
+        _precache_all()
+    else:
+        postprocess_executor.submit(_precache_all)
 
 
 # **********************************

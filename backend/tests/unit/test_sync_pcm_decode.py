@@ -32,6 +32,7 @@ _stub_modules = [
     'utils.conversations.factory',
     'utils.conversations.process_conversation',
     'utils.other',
+    'utils.other.conversation_playback_storage',
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.encryption',

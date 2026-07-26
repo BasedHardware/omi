@@ -937,6 +937,7 @@ def _load_sync_router_for_fast_path():
         'utils.conversations.process_conversation',
         'utils.conversations.factory',
         'utils.other',
+        'utils.other.conversation_playback_storage',
         'utils.other.endpoints',
         'utils.other.storage',
         'utils.encryption',
@@ -957,6 +958,7 @@ def _load_sync_router_for_fast_path():
         'utils.sync.backfill',
         'utils.sync.content_id',
         'utils.sync.capture_manifest',
+        'utils.sync.conversation_artifact_worker',
         'utils.speaker_assignment',
         'utils.speaker_identification',
         'utils.stt.speaker_embedding',
@@ -969,6 +971,7 @@ def _load_sync_router_for_fast_path():
         sys.modules[mod_name] = MagicMock()
 
     sys.modules['utils'].__path__ = []
+    sys.modules['utils.other'].__path__ = []
     sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
     sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
     sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint

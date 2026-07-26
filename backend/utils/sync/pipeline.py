@@ -88,12 +88,15 @@ from utils.other.storage import (
     compute_audio_files_fingerprint,
     delete_syncing_temporal_file,
     download_syncing_temporal_file,
-    enqueue_conversation_artifact_build,
     get_syncing_file_temporal_signed_url,
     precache_conversation_audio,
     schedule_syncing_temporal_file_deletion,
     upload_audio_chunk,
     upload_syncing_temporal_file,
+)
+from utils.sync.conversation_artifact_protocol import (
+    conversation_finalization_identity,
+    enqueue_conversation_artifact_build,
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
@@ -1389,10 +1392,7 @@ def _store_sync_audio_chunk(
 
 
 def _finalize_sync_audio_files(uid: str, response: dict):
-    """After all segments are assigned, build audio_files from the uploaded chunks and
-    persist them on each conversation — exactly as the realtime flush does — then warm the
-    playback artifact. Rebuild+replace is idempotent across retries (create_audio_files_from_chunks
-    always rebuilds from the full chunk listing)."""
+    """Persist audio files and warm playback after all segments are assigned."""
     conversation_ids = set(response.get('new_memories', set())) | set(response.get('updated_memories', set()))
     for conversation_id in conversation_ids:
         try:
@@ -1403,18 +1403,17 @@ def _finalize_sync_audio_files(uid: str, response: dict):
             conversations_db.update_conversation(uid, conversation_id, {'audio_files': files_payload})
             precache_conversation_audio(uid, conversation_id, files_payload)
             if is_audio_merge_dispatch_enabled():
-                enqueue_conversation_artifact_build(
-                    uid, conversation_id, compute_audio_files_fingerprint(files_payload), caller='sync_finalize'
-                )
+                identity = conversation_finalization_identity(conversations_db.get_conversation(uid, conversation_id))
+                if identity is not None:
+                    fingerprint = compute_audio_files_fingerprint(files_payload)
+                    enqueue_conversation_artifact_build(
+                        uid, conversation_id, fingerprint, 'sync_finalize', expected_finalization_identity=identity
+                    )
         except Exception as e:
-            logger.error(
-                'event=sync_audio_finalize outcome=failed exception_type=%s',
-                type(e).__name__,
-            )
+            logger.error('event=sync_audio_finalize outcome=failed exception_type=%s', type(e).__name__)
 
 
 def _cleanup_files(file_paths):
-    """Helper to clean up temporary files."""
     for path in file_paths:
         try:
             if path and os.path.exists(path):

@@ -11,6 +11,7 @@ which reprocess intentionally revives — the same tombstone-eligibility contrac
 sync (#10119) and merge (#10262), via the shared `is_soft_deleted` predicate.
 """
 
+from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -54,11 +55,66 @@ class TestReprocessTombstoneGuard:
         process.assert_not_called()  # deleted content never re-enters the pipeline
 
     def test_reprocess_still_allows_a_discarded_conversation(self):
-        discarded = {'id': 'c1', 'discarded': True, 'status': 'completed'}
+        discarded = {
+            'id': 'c1',
+            'discarded': True,
+            'status': 'completed',
+            'finalization_incarnation_id': 'incarnation-1',
+        }
         fake_conv = SimpleNamespace(language='en')
+
+        def process_contract(*args, **kwargs):
+            kwargs['persistence_observer'](True)
+            return fake_conv
+
         with patch.object(conv_router, '_get_valid_conversation_by_id', return_value=discarded), patch.object(
             conv_router, 'deserialize_conversation', return_value=fake_conv
-        ), patch.object(conv_router, 'process_conversation', return_value=fake_conv) as process:
+        ), patch.object(conv_router, 'process_conversation', side_effect=process_contract) as process, patch.object(
+            conv_router.lifecycle_service, 'processing_admission_guard', return_value=nullcontext()
+        ), patch.object(
+            conv_router.finalization_identity_db,
+            'ensure_conversation_finalization_identity',
+            return_value=('incarnation-1', None, None),
+        ):
             result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
         process.assert_called_once()
+        assert process.call_args.kwargs['expected_finalization_identity'] == ('incarnation-1', None, None)
         assert result is fake_conv
+
+    def test_reprocess_stamps_and_rereads_a_legacy_conversation(self):
+        legacy = {'id': 'c1', 'status': 'completed'}
+        stamped = {**legacy, 'finalization_incarnation_id': 'incarnation-stamped'}
+        fake_conv = SimpleNamespace(language='en')
+
+        def process_contract(*args, **kwargs):
+            kwargs['persistence_observer'](True)
+            return fake_conv
+
+        with patch.object(conv_router, '_get_valid_conversation_by_id', side_effect=(legacy, stamped)), patch.object(
+            conv_router, 'deserialize_conversation', return_value=fake_conv
+        ) as deserialize, patch.object(
+            conv_router, 'process_conversation', side_effect=process_contract
+        ) as process, patch.object(
+            conv_router.lifecycle_service, 'processing_admission_guard', return_value=nullcontext()
+        ), patch.object(
+            conv_router.finalization_identity_db,
+            'ensure_conversation_finalization_identity',
+            return_value=('incarnation-stamped', None, None),
+        ) as ensure_identity:
+            result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
+
+        ensure_identity.assert_called_once_with('u1', 'c1')
+        deserialize.assert_called_once_with(stamped)
+        assert process.call_args.kwargs['expected_finalization_identity'] == ('incarnation-stamped', None, None)
+        assert result is fake_conv
+
+    def test_reprocess_rejects_an_unavailable_or_malformed_identity(self):
+        conversation = {'id': 'c1', 'status': 'completed'}
+        with patch.object(conv_router, '_get_valid_conversation_by_id', return_value=conversation), patch.object(
+            conv_router.finalization_identity_db, 'ensure_conversation_finalization_identity', return_value=None
+        ), patch.object(conv_router, 'process_conversation') as process:
+            with pytest.raises(HTTPException) as exc:
+                conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
+
+        assert exc.value.status_code == 409
+        process.assert_not_called()

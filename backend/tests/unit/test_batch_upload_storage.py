@@ -56,6 +56,16 @@ def merge():
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
 
+    vector_cleanup_stub = ModuleType("database.conversation_vector_cleanup")
+    vector_cleanup_stub.ConversationVectorCleanupConflict = type(
+        "ConversationVectorCleanupConflict",
+        (RuntimeError,),
+        {},
+    )
+    vector_cleanup_stub.claim_conversation_vector_cleanup_descriptor = MagicMock()
+    vector_cleanup_stub.delete_claimed_conversation_source = MagicMock()
+    vector_cleanup_stub.release_conversation_vector_cleanup_descriptor = MagicMock()
+
     # utils.other.storage is stubbed (not imported real) so the merge module's
     # ``_get_storage_client`` / ``list_audio_chunks`` / ``private_cloud_sync_bucket``
     # references resolve to fakes that tests then override via monkeypatch.
@@ -71,8 +81,14 @@ def merge():
     ]:
         setattr(storage_stub, _name, MagicMock())
 
+    playback_storage_stub = ModuleType("utils.other.conversation_playback_storage")
+    playback_storage_stub.delete_conversation_playback_artifacts = MagicMock()
+
     cloud_tasks_stub = ModuleType("utils.cloud_tasks")
     cloud_tasks_stub.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+    artifact_protocol_stub = ModuleType("utils.sync.conversation_artifact_protocol")
+    artifact_protocol_stub.conversation_finalization_identity = MagicMock(return_value=None)
+    artifact_protocol_stub.enqueue_conversation_artifact_build = MagicMock()
 
     models_pkg = ModuleType("models")
     models_pkg.__path__ = []  # type: ignore[attr-defined]
@@ -115,8 +131,11 @@ def merge():
         "database._client": client_stub,
         "database.conversations": conversations_stub,
         "database.vector_db": vector_db_stub,
+        "database.conversation_vector_cleanup": vector_cleanup_stub,
         "utils.cloud_tasks": cloud_tasks_stub,
         "utils.other.storage": storage_stub,
+        "utils.other.conversation_playback_storage": playback_storage_stub,
+        "utils.sync.conversation_artifact_protocol": artifact_protocol_stub,
         "models": models_pkg,
         "utils.memory.memory_service": memory_service_stub,
         "utils.memory.memory_system": memory_system_stub,
@@ -132,6 +151,34 @@ def merge():
             os.path.join(str(_BACKEND), "utils", "conversations", "merge_conversations.py"),
         )
         yield module
+
+
+def test_merge_artifact_enqueue_carries_destination_identity(merge, monkeypatch):
+    identity = ('incarnation-1', 'job-1', 7)
+    audio_file = MagicMock()
+    audio_file.model_dump.return_value = {'id': 'file-1', 'chunk_timestamps': [1.0]}
+    enqueue = MagicMock()
+    monkeypatch.setattr(merge, 'is_audio_merge_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(merge, 'conversation_finalization_identity', lambda _source: identity)
+    monkeypatch.setattr(merge, 'compute_audio_files_fingerprint', lambda _files: 'fingerprint-1')
+    monkeypatch.setattr(merge, 'enqueue_conversation_artifact_build', enqueue)
+
+    assert (
+        merge._enqueue_merged_playback_artifact(
+            'uid-1',
+            'conversation-1',
+            [audio_file],
+            {'finalization_incarnation_id': identity[0]},
+        )
+        is True
+    )
+    enqueue.assert_called_once_with(
+        'uid-1',
+        'conversation-1',
+        'fingerprint-1',
+        caller='merge_conversations',
+        expected_finalization_identity=identity,
+    )
 
 
 class _FakeNotFound(Exception):

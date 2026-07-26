@@ -9,6 +9,7 @@ import importlib
 import os
 import sys
 import types
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
@@ -22,7 +23,6 @@ os.environ.setdefault(
 )
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-PROCESS_CONVERSATION_PATH = BACKEND_DIR / "utils" / "conversations" / "process_conversation.py"
 
 
 class _AutoMockModule(ModuleType):
@@ -177,26 +177,14 @@ class TestStoreSeparation:
 class TestExtractionSeamFanOut:
     """process_conversation must fan out to separate downstream writers."""
 
-    def test_process_conversation_submits_three_separate_postprocess_tasks(self):
-        source = PROCESS_CONVERSATION_PATH.read_text(encoding="utf-8")
-        # Characterization of the live seam — WS-I must keep three distinct destinations.
-        assert "submit_with_context(postprocess_executor, _extract_memories" in source
-        assert "submit_with_context(postprocess_executor, _save_action_items" in source
-        assert "submit_with_context(postprocess_executor, _update_goal_progress" in source
-
-    def test_fan_out_invokes_memory_action_item_and_goal_paths_separately(self):
-        """Functional: mocked postprocess submits must hit three different callables."""
+    @pytest.fixture
+    def deferred_effect_bundle(self):
         pc = _ensure_process_conversation_importable()
 
         from models.conversation import Conversation
         from models.conversation_enums import CategoryEnum, ConversationSource
         from models.structured import Structured
         from models.transcript_segment import TranscriptSegment
-
-        submitted = []
-
-        def _capture_submit(_executor, fn, *args, **kwargs):
-            submitted.append((fn, args))
 
         conversation = Conversation(
             id="conv-fanout-1",
@@ -222,27 +210,76 @@ class TestExtractionSeamFanOut:
             ],
         )
 
-        structured = conversation.structured
+        observed_effects = []
+        extract_memories = MagicMock()
+        save_action_items = MagicMock()
+        update_goal_progress = MagicMock()
+        submit_with_context = MagicMock()
+        complete = MagicMock()
 
         with (
             patch.object(pc, "is_trial_paywalled", return_value=False),
             patch.object(pc.redis_db, "get_conversation_meeting_id", return_value=None),
-            patch.object(pc, "_get_structured", return_value=(structured, False)),
-            patch.object(pc, "_get_conversation_obj", return_value=conversation),
+            patch.object(
+                pc,
+                "persist_generation",
+                return_value=(conversation, False, None, True),
+            ),
+            patch.object(pc, "_calendar_auto_link_enabled", return_value=False),
             patch.object(pc, "_trigger_apps"),
-            patch.object(pc.conversations_db, "upsert_conversation"),
-            patch.object(pc, "submit_with_context", side_effect=_capture_submit),
+            patch.object(pc, "record_usage"),
+            patch.object(pc, "memory_system_request_scope", return_value=nullcontext(pc.MemorySystem.LEGACY)),
+            patch.object(pc, "_extract_memories", extract_memories),
+            patch.object(pc, "_save_action_items", save_action_items),
+            patch.object(pc, "_update_goal_progress", update_goal_progress),
+            patch.object(pc, "submit_with_context", submit_with_context),
+            patch.object(pc.lifecycle_service, "complete", complete),
             patch.object(pc, "TRANSCRIPT_CHUNK_INDEXING_ENABLED", False),
         ):
-            pc.process_conversation("uid-boundary", "en", conversation, is_reprocess=True)
+            result = pc.process_conversation(
+                "uid-boundary",
+                "en",
+                conversation,
+                is_reprocess=True,
+                defer_derived_effects=True,
+                derived_effects_observer=observed_effects.append,
+            )
+            yield types.SimpleNamespace(
+                conversation=conversation,
+                result=result,
+                observed_effects=observed_effects,
+                extract_memories=extract_memories,
+                save_action_items=save_action_items,
+                update_goal_progress=update_goal_progress,
+                submit_with_context=submit_with_context,
+                complete=complete,
+            )
 
-        submitted_fns = {fn.__name__ for fn, _ in submitted if callable(fn) and hasattr(fn, "__name__")}
-        assert "_extract_memories" in submitted_fns
-        assert "_save_action_items" in submitted_fns
-        assert "_update_goal_progress" in submitted_fns
-        assert (
-            len(submitted_fns.intersection({"_extract_memories", "_save_action_items", "_update_goal_progress"})) == 3
+    def test_process_conversation_defers_effect_bundle_to_owner(self, deferred_effect_bundle):
+        deferred = deferred_effect_bundle
+
+        assert deferred.result is deferred.conversation
+        assert len(deferred.observed_effects) == 1
+        assert callable(deferred.observed_effects[0])
+        deferred.extract_memories.assert_not_called()
+        deferred.save_action_items.assert_not_called()
+        deferred.update_goal_progress.assert_not_called()
+        deferred.submit_with_context.assert_not_called()
+        deferred.complete.assert_not_called()
+
+    def test_owner_invokes_memory_action_item_and_goal_paths_separately(self, deferred_effect_bundle):
+        deferred = deferred_effect_bundle
+
+        deferred.observed_effects[0]()
+
+        deferred.extract_memories.assert_called_once_with("uid-boundary", deferred.conversation)
+        deferred.save_action_items.assert_called_once_with(
+            "uid-boundary",
+            deferred.conversation,
+            True,
         )
+        deferred.update_goal_progress.assert_called_once_with("uid-boundary", deferred.conversation)
+        deferred.submit_with_context.assert_not_called()
 
 
 class TestNoConversationAsMemory:

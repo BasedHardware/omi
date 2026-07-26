@@ -155,6 +155,8 @@ env:
     value: "false"
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
+  - name: CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE
+    value: "standby"
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:

@@ -24,10 +24,7 @@ def _load_playback(request):
         "download_audio_chunks_and_merge",
         "download_legacy_merged_wav",
         "download_playback_artifact",
-        "enqueue_conversation_artifact_build",
         "enqueue_conversation_audio_merge",
-        "get_conversation_playback_signed_url",
-        "get_conversation_playback_unavailable_fingerprint",
         "get_merged_audio_signed_url",
         "get_or_create_merged_audio",
         "get_playback_artifact_signed_url",
@@ -35,7 +32,21 @@ def _load_playback(request):
     ):
         setattr(storage_module, name, MagicMock())
     storage_module._PRECACHE_FILE_SEM = MagicMock()
-    with stub_modules({"utils.cloud_tasks": cloud_tasks_module, "utils.other.storage": storage_module}):
+    artifact_storage_module = ModuleType("utils.other.conversation_playback_storage")
+    artifact_storage_module.get_conversation_playback_signed_url = MagicMock()
+    artifact_storage_module.get_conversation_playback_unavailable_fingerprint = MagicMock()
+    artifact_protocol_module = ModuleType("utils.sync.conversation_artifact_protocol")
+    artifact_protocol_module.conversation_finalization_identity = MagicMock()
+    artifact_protocol_module.conversation_playback_artifact_generation_id = MagicMock()
+    artifact_protocol_module.enqueue_conversation_artifact_build = MagicMock()
+    with stub_modules(
+        {
+            "utils.cloud_tasks": cloud_tasks_module,
+            "utils.other.storage": storage_module,
+            "utils.other.conversation_playback_storage": artifact_storage_module,
+            "utils.sync.conversation_artifact_protocol": artifact_protocol_module,
+        }
+    ):
         module = load_module_fresh("utils.sync.playback", os.path.join(str(BACKEND), "utils", "sync", "playback.py"))
         request.module.playback = module
         yield
@@ -102,11 +113,21 @@ def test_artifact_urls_shapes_and_enqueue(monkeypatch):
     )
     conversation_enqueues = []
     monkeypatch.setattr(playback, 'compute_audio_files_fingerprint', lambda audio_files: 'fp1')
-    monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda uid, cid: None)
+    monkeypatch.setattr(playback, 'conversation_finalization_identity', lambda conversation: None)
+    monkeypatch.setattr(
+        playback,
+        'conversation_playback_artifact_generation_id',
+        lambda fingerprint, identity: 'a' * 32,
+    )
+    monkeypatch.setattr(
+        playback,
+        'get_conversation_playback_unavailable_fingerprint',
+        lambda uid, cid, generation=None: None,
+    )
     monkeypatch.setattr(
         playback,
         'enqueue_conversation_artifact_build',
-        lambda uid, conversation_id, fingerprint, caller: conversation_enqueues.append(
+        lambda uid, conversation_id, fingerprint, caller, **kwargs: conversation_enqueues.append(
             (uid, conversation_id, fingerprint, caller)
         ),
     )
@@ -146,6 +167,59 @@ def test_artifact_urls_shapes_and_enqueue(monkeypatch):
     }
     assert enqueues == [('u', 'c', [{'id': 'pending', 'duration': 4}], 'sync_urls')]
     assert conversation_enqueues == [('u', 'c', 'fp1', 'sync_urls')]
+
+
+def test_conversation_artifact_stamp_must_match_current_generation(monkeypatch):
+    signed_url = MagicMock(return_value='https://stale-generation')
+    enqueues = []
+    identity = ('incarnation-2', 'job-2', 1)
+    monkeypatch.setattr(playback, 'compute_audio_files_fingerprint', lambda _audio_files: 'fp1')
+    monkeypatch.setattr(playback, 'conversation_finalization_identity', lambda _conversation: identity)
+    monkeypatch.setattr(
+        playback,
+        'conversation_playback_artifact_generation_id',
+        lambda _fingerprint, _identity: 'b' * 32,
+    )
+    monkeypatch.setattr(playback, 'get_conversation_playback_signed_url', signed_url)
+    monkeypatch.setattr(
+        playback,
+        'get_conversation_playback_unavailable_fingerprint',
+        lambda _uid, _conversation_id, _generation: None,
+    )
+    monkeypatch.setattr(
+        playback,
+        'enqueue_conversation_artifact_build',
+        lambda uid, conversation_id, fingerprint, caller, **kwargs: enqueues.append(
+            (uid, conversation_id, fingerprint, caller, kwargs)
+        ),
+    )
+
+    result = playback._conversation_audio_urls_entry(
+        'u',
+        'c',
+        [{'id': 'file-1', 'chunk_timestamps': [1.0]}],
+        {
+            'finalization_incarnation_id': identity[0],
+            'finalization_job_id': identity[1],
+            'finalization_revision': identity[2],
+            'conversation_audio': {
+                'audio_files_fingerprint': 'fp1',
+                'artifact_generation_id': 'a' * 32,
+            },
+        },
+    )
+
+    assert result == {'status': 'pending', 'signed_url': None, 'spans': []}
+    signed_url.assert_not_called()
+    assert enqueues == [
+        (
+            'u',
+            'c',
+            'fp1',
+            'sync_urls',
+            {'expected_finalization_identity': identity},
+        )
+    ]
 
 
 def test_inline_urls_first_sync_remaining_background_and_no_content_type(monkeypatch):

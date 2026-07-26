@@ -5,9 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
 from google.api_core.exceptions import Aborted
 
+from database import conversation_finalization_effect_store as effect_store
 from database import conversation_finalization_jobs as jobs
+from database import conversation_finalization_terminal_store as terminal_store
 from database import firestore_transaction_retry
 
 
@@ -129,6 +132,29 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
     assert forbidden.isdisjoint(job)
     assert transaction.updates[0][1]['status'] == 'processing'
     assert transaction.updates[0][1]['finalization_job_id'] == intent['job_id']
+
+
+def test_intent_is_rejected_after_vector_cleanup_claims_the_source():
+    transaction = _Transaction()
+    conversation_ref = _conversation()
+    conversation_ref.data['vector_cleanup_pending'] = True
+    collection = _Collection({})
+
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        _admit_finalization,
+        _now(),
+    )
+
+    assert intent['status'] == 'vector_cleanup_pending'
+    assert intent['job_id'] is None
+    assert transaction.sets == []
+    assert transaction.updates == []
 
 
 def test_rest_intent_persists_its_force_mode_and_calendar_context_atomically():
@@ -412,6 +438,9 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
     claim_update = first.updates[0][1]
     assert claim_update['status'] == 'leased'
     assert claim_update['attempt_count'] == 1
+    assert claim_update['fanout_status'] == 'leased'
+    assert claim_update['fanout_lease_epoch'] == 1
+    assert claim_update['fanout_started_at'] == now
 
     ref.data = ref.data | claim_update
     duplicate = _Transaction()
@@ -443,6 +472,83 @@ def test_expired_worker_lease_can_be_safely_reclaimed():
     assert transaction.updates[0][1]['lease_epoch'] == 1
 
 
+def test_job_claim_never_overwrites_an_undrained_fanout_epoch():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 2,
+            'lease_epoch': 4,
+            'lease_expires_at': now - timedelta(seconds=1),
+            'fanout_status': 'leased',
+            'fanout_lease_epoch': 4,
+        },
+    )
+    transaction = _Transaction()
+
+    claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
+
+    assert claim['status'] == 'draining'
+    assert transaction.updates == []
+
+
+def test_current_finalization_job_owner_renews_its_lease_and_reconcile_deadline():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 3,
+            'lease_epoch': 4,
+            'requires_byok': False,
+            'lease_expires_at': now + timedelta(seconds=5),
+        },
+    )
+    transaction = _Transaction()
+
+    assert jobs._renew_finalization_job_lease_txn(transaction, ref, 3, 4, now) is True
+    update = transaction.updates[0][1]
+    expected_expiration = now + timedelta(seconds=jobs.DEFAULT_LEASE_SECONDS)
+    assert update == {
+        'lease_expires_at': expected_expiration,
+        'reconcile_after_at': expected_expiration,
+        'updated_at': now,
+    }
+
+
+def test_byok_finalization_job_renewal_keeps_reconciliation_disabled():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 3,
+            'lease_epoch': 4,
+            'requires_byok': True,
+        },
+    )
+    transaction = _Transaction()
+
+    assert jobs._renew_finalization_job_lease_txn(transaction, ref, 3, 4, now) is True
+    assert transaction.updates[0][1]['reconcile_after_at'] is jobs.firestore.DELETE_FIELD
+
+
+def test_finalization_job_renewal_rejects_stale_generation_epoch_or_status():
+    base = {'status': 'leased', 'dispatch_generation': 3, 'lease_epoch': 4}
+    cases = (
+        (base, 2, 4),
+        (base, 3, 3),
+        (base | {'status': 'queued'}, 3, 4),
+    )
+
+    for data, generation, epoch in cases:
+        transaction = _Transaction()
+        ref = _Ref('job-1', data)
+        assert jobs._renew_finalization_job_lease_txn(transaction, ref, generation, epoch, _now()) is False
+        assert transaction.updates == []
+
+
 def test_finalization_completion_requires_durable_fanout_completion():
     now = _now()
     ref = _Ref(
@@ -465,7 +571,15 @@ def test_finalization_completion_requires_durable_fanout_completion():
     fanout = _Transaction()
     conversation_ref = _completed_finalization_conversation()
     claim = jobs._claim_finalization_fanout_txn(fanout, ref, 1, 4, now, lambda *_: conversation_ref)
-    assert claim == {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization:1'}
+    assert claim == {
+        'status': 'claimed',
+        'fanout_key': 'conversation:conversation-1:finalization:1',
+        'plan_version': 1,
+        'completed_effects': (),
+        'finalization_incarnation_id': None,
+        'finalization_vector_generation_id': None,
+        'transcript_vector_count': None,
+    }
     ref.data = ref.data | fanout.updates[0][1]
 
     completed_fanout = _Transaction()
@@ -572,8 +686,16 @@ def test_fanout_claim_terminally_fences_a_discard_that_wins_before_its_transacti
         lambda *_: discarded_conversation,
     )
 
-    assert claim == {'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization:1'}
-    assert transaction.updates == [(ref, jobs._fenced_finalization_update(now))]
+    assert claim == {
+        'status': 'fenced',
+        'fanout_key': 'conversation:conversation-1:finalization:1',
+        'plan_version': 1,
+        'completed_effects': (),
+        'finalization_incarnation_id': None,
+        'finalization_vector_generation_id': None,
+        'transcript_vector_count': None,
+    }
+    assert transaction.updates == [(ref, jobs.fenced_finalization_update(now))]
 
 
 def test_fanout_claim_terminally_fences_a_superseded_finalization_binding():
@@ -602,8 +724,441 @@ def test_fanout_claim_terminally_fences_a_superseded_finalization_binding():
         lambda *_: newer_conversation,
     )
 
-    assert claim == {'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization:1'}
-    assert transaction.updates == [(ref, jobs._fenced_finalization_update(now))]
+    assert claim == {
+        'status': 'fenced',
+        'fanout_key': 'conversation:conversation-1:finalization:1',
+        'plan_version': 1,
+        'completed_effects': (),
+        'finalization_incarnation_id': None,
+        'finalization_vector_generation_id': None,
+        'transcript_vector_count': None,
+    }
+    assert transaction.updates == [(ref, jobs.fenced_finalization_update(now))]
+
+
+def test_reclaimed_worker_waits_for_an_older_fanout_epoch_to_drain():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 5,
+            'fanout_status': 'leased',
+            'fanout_lease_epoch': 4,
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 1,
+        },
+    )
+    deleting = _completed_finalization_conversation(data={jobs.VECTOR_CLEANUP_PENDING_FIELD: True})
+    transaction = _Transaction()
+
+    claim = jobs._claim_finalization_fanout_txn(
+        transaction,
+        ref,
+        1,
+        5,
+        now,
+        lambda *_: deleting,
+    )
+
+    assert claim['status'] == 'draining'
+    assert transaction.updates == []
+
+
+def test_reclaimed_worker_cannot_overwrite_an_older_fanout_epoch_on_a_current_source():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 5,
+            'fanout_status': 'leased',
+            'fanout_lease_epoch': 4,
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 1,
+        },
+    )
+    transaction = _Transaction()
+
+    claim = jobs._claim_finalization_fanout_txn(
+        transaction,
+        ref,
+        1,
+        5,
+        now,
+        lambda *_: _completed_finalization_conversation(),
+    )
+
+    assert claim['status'] == 'draining'
+    assert transaction.updates == []
+
+
+def test_fanout_epoch_release_records_that_all_worker_mutations_returned():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 2,
+            'lease_epoch': 8,
+            'fanout_status': 'leased',
+            'fanout_lease_epoch': 7,
+        },
+    )
+    transaction = _Transaction()
+
+    assert effect_store._release_finalization_fanout_txn(transaction, ref, 2, 7, now) is True
+    assert transaction.updates == [
+        (
+            ref,
+            {
+                'fanout_status': 'drained',
+                'fanout_drained_at': now,
+                'updated_at': now,
+            },
+        )
+    ]
+
+
+def test_fanout_epoch_release_rejects_a_different_worker():
+    ref = _Ref(
+        'job-1',
+        {
+            'dispatch_generation': 2,
+            'fanout_status': 'leased',
+            'fanout_lease_epoch': 7,
+        },
+    )
+    transaction = _Transaction()
+
+    assert effect_store._release_finalization_fanout_txn(transaction, ref, 2, 6, _now()) is False
+    assert transaction.updates == []
+
+
+def test_final_attempt_claims_cleanup_before_deleting_an_incomplete_v2_generation():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'lease_epoch': 3,
+            'fanout_status': 'drained',
+            'fanout_plan_version': 2,
+            'completed_effects': ['structured_vector'],
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_vector_generation_id': 'generation-1',
+            'transcript_vector_count': 4,
+        },
+    )
+    transaction = _Transaction()
+
+    result = terminal_store._claim_finalization_dead_letter_cleanup_txn(transaction, ref, 2, 3, now)
+
+    assert result | {'created_at': None} == {
+        'status': 'claimed',
+        'uid': 'uid-1',
+        'conversation_id': 'conversation-1',
+        'finalization_vector_generation_id': 'generation-1',
+        'transcript_vector_count': 4,
+        'created_at': None,
+    }
+    update = transaction.updates[0][1]
+    assert update['status'] == jobs.DEAD_LETTER_CLEANUP_STATUS
+    assert update['fanout_status'] == jobs.DEAD_LETTER_CLEANUP_STATUS
+    assert update[jobs.DEAD_LETTER_CLEANUP_EPOCH_FIELD] == 3
+
+
+def test_final_attempt_waits_for_an_older_fanout_epoch_before_cleanup():
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'lease_epoch': 4,
+            'fanout_status': 'leased',
+            'fanout_lease_epoch': 3,
+            'fanout_plan_version': 2,
+            'completed_effects': ['structured_vector'],
+        },
+    )
+    transaction = _Transaction()
+
+    result = terminal_store._claim_finalization_dead_letter_cleanup_txn(transaction, ref, 2, 4, _now())
+
+    assert result == {'status': 'draining'}
+    assert transaction.updates == []
+
+
+def test_final_attempt_requires_its_own_fanout_epoch_to_release_before_cleanup():
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'lease_epoch': 4,
+            'fanout_status': 'leased',
+            'fanout_lease_epoch': 4,
+            'fanout_plan_version': 2,
+            'completed_effects': ['structured_vector'],
+        },
+    )
+    transaction = _Transaction()
+
+    result = terminal_store._claim_finalization_dead_letter_cleanup_txn(transaction, ref, 2, 4, _now())
+
+    assert result == {'status': 'draining'}
+    assert transaction.updates == []
+
+
+def test_cleanup_deadline_covers_every_bounded_provider_delete(monkeypatch):
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS', '30')
+
+    # One structured delete plus three transcript batches, each with a 30
+    # second provider timeout, followed by the fixed 60 second handoff grace.
+    assert terminal_store._cleanup_lease_duration(2500) == timedelta(seconds=180)
+
+
+def test_byok_cleanup_owner_expires_before_a_new_live_epoch_can_rebuild_the_generation(monkeypatch):
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS', '30')
+    now = _now()
+    deadline = now + terminal_store._cleanup_lease_duration(2500)
+    data = {
+        'status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+        'fanout_status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+        'dispatch_generation': 2,
+        'lease_epoch': 3,
+        'requires_byok': True,
+        'lease_expires_at': deadline,
+        jobs.DEAD_LETTER_CLEANUP_EPOCH_FIELD: 3,
+        'uid': 'uid-1',
+        'conversation_id': 'conversation-1',
+        'finalization_vector_generation_id': 'generation-1',
+        'transcript_vector_count': 2500,
+    }
+
+    still_owned = _Transaction()
+    assert (
+        terminal_store._claim_finalization_dead_letter_cleanup_txn(
+            still_owned,
+            _Ref('job-1', data),
+            2,
+            3,
+            deadline - timedelta(microseconds=1),
+        )['status']
+        == 'claimed'
+    )
+    assert still_owned.updates == []
+
+    overlapping_rebuild = _Transaction()
+    assert (
+        jobs._claim_finalization_job_txn(
+            overlapping_rebuild,
+            _Ref('job-1', data),
+            2,
+            True,
+            1500,
+            deadline - timedelta(microseconds=1),
+        )['status']
+        == 'not_actionable'
+    )
+    assert overlapping_rebuild.updates == []
+
+    expired_cleanup = _Transaction()
+    assert terminal_store._claim_finalization_dead_letter_cleanup_txn(
+        expired_cleanup,
+        _Ref('job-1', data),
+        2,
+        3,
+        deadline,
+    ) == {'status': 'stale'}
+
+    replacement = _Transaction()
+    claim = jobs._claim_finalization_job_txn(
+        replacement,
+        _Ref('job-1', data),
+        2,
+        True,
+        1500,
+        deadline,
+    )
+    assert claim['status'] == 'claimed'
+    assert claim['lease_epoch'] == 4
+    replacement_update = replacement.updates[0][1]
+    assert replacement_update['fanout_status'] == 'leased'
+    assert replacement_update['fanout_lease_epoch'] == 4
+
+    replaced_data = data | replacement_update
+    stale_terminal = _Transaction()
+    assert not jobs._mark_finalization_dead_letter_txn(stale_terminal, _Ref('job-1', replaced_data), 2, 3, 5, deadline)
+    assert stale_terminal.updates == []
+
+
+def test_terminal_cleanup_cas_rejects_a_same_epoch_state_with_replaced_fanout_ownership():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+            'fanout_status': 'leased',
+            'fanout_lease_epoch': 4,
+            'dispatch_generation': 2,
+            'lease_epoch': 4,
+            'lease_expires_at': now + timedelta(minutes=5),
+            jobs.DEAD_LETTER_CLEANUP_EPOCH_FIELD: 4,
+        },
+    )
+
+    claim_transaction = _Transaction()
+    assert terminal_store._claim_finalization_dead_letter_cleanup_txn(
+        claim_transaction,
+        ref,
+        2,
+        4,
+        now,
+    ) == {'status': 'stale'}
+    assert claim_transaction.updates == []
+
+    abort_transaction = _Transaction()
+    assert not terminal_store._abort_finalization_dead_letter_cleanup_txn(
+        abort_transaction,
+        ref,
+        2,
+        4,
+        now,
+    )
+    assert abort_transaction.updates == []
+
+    terminal_transaction = _Transaction()
+    assert not jobs._mark_finalization_dead_letter_txn(
+        terminal_transaction,
+        ref,
+        2,
+        4,
+        5,
+        now,
+    )
+    assert terminal_transaction.updates == []
+
+
+def test_dead_letter_cleanup_state_is_not_reclaimed_as_a_processing_lease():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+            'fanout_status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+            'dispatch_generation': 2,
+            'lease_epoch': 3,
+            jobs.DEAD_LETTER_CLEANUP_EPOCH_FIELD: 3,
+        },
+    )
+    transaction = _Transaction()
+
+    claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
+
+    assert claim['status'] == 'not_actionable'
+    assert transaction.updates == []
+
+
+def test_dead_letter_cleanup_byok_recovery_requires_a_live_keyed_session():
+    now = _now()
+    data = {
+        'status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+        'fanout_status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+        'dispatch_generation': 2,
+        'lease_epoch': 3,
+        'requires_byok': True,
+        'lease_expires_at': now - timedelta(seconds=1),
+        jobs.DEAD_LETTER_CLEANUP_EPOCH_FIELD: 3,
+    }
+    blocked = _Transaction()
+    assert (
+        jobs._claim_finalization_job_txn(blocked, _Ref('job-1', data), 2, False, 1500, now)['status'] == 'blocked_byok'
+    )
+    assert blocked.updates == []
+
+    live = _Transaction()
+    claim = jobs._claim_finalization_job_txn(live, _Ref('job-1', data), 2, True, 1500, now)
+
+    assert claim['status'] == 'claimed'
+    assert claim['lease_epoch'] == 4
+    update = live.updates[0][1]
+    assert update['fanout_status'] == 'leased'
+    assert update['fanout_lease_epoch'] == 4
+    assert update['completed_effects'] == []
+    assert update['reconcile_after_at'] is jobs.firestore.DELETE_FIELD
+    assert update[jobs.DEAD_LETTER_CLEANUP_EPOCH_FIELD] is jobs.firestore.DELETE_FIELD
+
+
+def test_dead_letter_cleanup_failure_requeues_and_invalidates_partial_checkpoints():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+            'fanout_status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+            'dispatch_generation': 2,
+            'lease_epoch': 3,
+            jobs.DEAD_LETTER_CLEANUP_EPOCH_FIELD: 3,
+        },
+    )
+    transaction = _Transaction()
+
+    assert terminal_store._abort_finalization_dead_letter_cleanup_txn(transaction, ref, 2, 3, now) is True
+    update = transaction.updates[0][1]
+    assert update['status'] == 'queued'
+    assert update['fanout_status'] == 'pending'
+    assert update['completed_effects'] == []
+
+
+def test_stale_platform_dead_letter_cleanup_replays_from_a_clean_effect_ledger():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+            'fanout_status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+            'dispatch_generation': 2,
+            'lease_epoch': 3,
+            'reconcile_after_at': now - timedelta(seconds=1),
+            jobs.DEAD_LETTER_CLEANUP_EPOCH_FIELD: 3,
+        },
+    )
+    transaction = _Transaction()
+
+    intent = jobs._claim_finalization_replay_txn(transaction, ref, timedelta(minutes=5), now)
+
+    assert intent['status'] == 'queued'
+    update = transaction.updates[0][1]
+    assert update['dispatch_generation'] == 3
+    assert update['fanout_status'] == 'pending'
+    assert update['completed_effects'] == []
+
+
+def test_dead_letter_terminal_cas_accepts_the_durable_cleanup_owner():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+            'fanout_status': jobs.DEAD_LETTER_CLEANUP_STATUS,
+            'dispatch_generation': 2,
+            'lease_epoch': 3,
+            jobs.DEAD_LETTER_CLEANUP_EPOCH_FIELD: 3,
+        },
+    )
+    transaction = _Transaction()
+
+    assert jobs._mark_finalization_dead_letter_txn(transaction, ref, 2, 3, 5, now) is True
+    update = transaction.updates[0][1]
+    assert update['status'] == 'dead_letter'
+    assert update['fanout_status'] == 'dead_letter'
 
 
 def test_fenced_finalization_is_a_terminal_no_fanout_outcome():
@@ -702,6 +1257,83 @@ def test_reconciler_replaces_stale_generation_after_worker_crash():
     assert transaction.updates[0][1]['dispatch_generation'] == 5
 
 
+def test_reconciler_waits_for_expired_worker_fanout_to_drain_before_advancing_generation():
+    now = _now()
+    transaction = _Transaction()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 4,
+            'lease_epoch': 6,
+            'requires_byok': False,
+            'lease_expires_at': now - timedelta(seconds=1),
+            'fanout_status': 'leased',
+            'fanout_lease_epoch': 6,
+        },
+    )
+
+    intent = jobs._claim_finalization_replay_txn(transaction, ref, timedelta(minutes=5), now)
+
+    assert intent['status'] == 'leased'
+    assert intent['dispatch_generation'] == 4
+    assert transaction.updates == []
+
+
+def test_operator_force_drain_requires_expired_exact_worker_epoch_and_confirmed_cutoff():
+    now = _now()
+    terminated_before = now - timedelta(minutes=1)
+    base = {
+        'status': 'leased',
+        'dispatch_generation': 4,
+        'lease_epoch': 6,
+        'lease_expires_at': now - timedelta(minutes=2),
+        'fanout_status': 'leased',
+        'fanout_lease_epoch': 6,
+    }
+    ref = _Ref('job-1', base)
+    transaction = _Transaction()
+
+    assert effect_store._force_drain_finalization_worker_txn(
+        transaction,
+        ref,
+        6,
+        terminated_before,
+        now,
+    )
+    assert transaction.updates == [
+        (
+            ref,
+            {
+                'fanout_status': 'drained',
+                'fanout_drained_at': now,
+                'fanout_operator_recovered_at': now,
+                'fanout_operator_terminated_before': terminated_before,
+                'updated_at': now,
+            },
+        )
+    ]
+
+    rejected = (
+        (base, 5, terminated_before),
+        (base | {'lease_expires_at': now}, 6, terminated_before),
+        (base | {'lease_epoch': 7}, 6, terminated_before),
+        (base | {'status': 'queued'}, 6, terminated_before),
+        (base, 6, now + timedelta(seconds=1)),
+        (base, 6, datetime(2026, 7, 13)),
+    )
+    for data, epoch, cutoff in rejected:
+        rejected_transaction = _Transaction()
+        assert not effect_store._force_drain_finalization_worker_txn(
+            rejected_transaction,
+            _Ref('job-1', data),
+            epoch,
+            cutoff,
+            now,
+        )
+        assert rejected_transaction.updates == []
+
+
 def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
     now = _now()
     ref = _Ref(
@@ -787,6 +1419,8 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
                 'reconcile_after_at': jobs.firestore.DELETE_FIELD,
                 'task_retry_count': 5,
                 'last_failure_code': 'final_attempt_failed',
+                'fanout_status': 'dead_letter',
+                jobs.DEAD_LETTER_CLEANUP_EPOCH_FIELD: jobs.firestore.DELETE_FIELD,
             },
         ),
         (
@@ -798,6 +1432,46 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
             },
         ),
     ]
+
+
+def test_final_attempt_does_not_fail_a_recreated_same_id_conversation():
+    transaction = _Transaction()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 3,
+            'finalization_incarnation_id': 'incarnation-old',
+            'dispatch_generation': 3,
+            'lease_epoch': 1,
+        },
+    )
+    recreated = _conversation(
+        {
+            'status': 'processing',
+            'discarded': False,
+            'finalization_job_id': 'job-1',
+            'finalization_revision': 3,
+            'finalization_incarnation_id': 'incarnation-new',
+        }
+    )
+
+    assert jobs._mark_finalization_dead_letter_txn(
+        transaction,
+        job_ref,
+        3,
+        1,
+        5,
+        _now(),
+        lambda *_: recreated,
+    )
+
+    assert len(transaction.updates) == 1
+    assert transaction.updates[0][0] is job_ref
+    assert recreated.data['status'] == 'processing'
+    assert recreated.data['discarded'] is False
 
 
 def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregations():

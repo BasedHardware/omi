@@ -141,6 +141,7 @@ import database.conversations as conversations_db  # noqa: E402
 import routers.developer as developer  # noqa: E402
 from models.conversation import Conversation, CreateConversation  # noqa: E402
 from models.conversation_enums import ConversationStatus  # noqa: E402
+from utils.conversations import developer_cleanup  # noqa: E402
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -152,6 +153,11 @@ def _passthrough_resolve_geolocation(monkeypatch):
     # which would fail CreateConversation validation. Patch it to a passthrough so the geolocation flows
     # through unchanged, matching production for the None / already-resolved cases these tests exercise.
     monkeypatch.setattr(developer, 'resolve_geolocation', lambda g: g)
+    monkeypatch.setattr(
+        developer_cleanup,
+        'renew_from_segments_processing_lease',
+        lambda _uid, _conversation_id, _incarnation_id: True,
+    )
 
 
 def _segment():
@@ -204,21 +210,26 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
 
 def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     captured = {}
-    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(side_effect=[None, {'finalization_incarnation_id': 'incarnation-1'}]),
+    )
     claim = MagicMock(return_value=True)
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
     persisted = MagicMock()
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    def _process(uid, language, conversation):
+    def _process(uid, language, conversation, *, expected_finalization_identity):
         captured['conversation'] = conversation
+        captured['expected_finalization_identity'] = expected_finalization_identity
         conversation.status = ConversationStatus.completed
         return conversation
 
     monkeypatch.setattr(developer, 'process_conversation', _process)
 
     response = developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-1'))
-    expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
+    expected_id = developer_cleanup.from_segments_conversation_id('uid1', 'local-session-1')
 
     assert response.id == expected_id
     assert isinstance(captured['conversation'], Conversation)
@@ -226,22 +237,31 @@ def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     assert captured['conversation'].external_data['from_segments_client_session_id'] == 'local-session-1'
     assert isinstance(captured['conversation'].external_data['from_segments_claimed_at'], datetime)
     assert captured['conversation'].status == ConversationStatus.completed
-    conversations_db.get_conversation.assert_called_once_with('uid1', expected_id)
+    assert conversations_db.get_conversation.call_count == 2
+    conversations_db.get_conversation.assert_called_with('uid1', expected_id)
     claim.assert_called_once()
     assert claim.call_args.args[0] == 'uid1'
     assert claim.call_args.args[1]['id'] == expected_id
     assert claim.call_args.args[1]['status'] == ConversationStatus.processing
-    persisted.assert_called_once()
+    assert captured['expected_finalization_identity'] == ('incarnation-1', None, None)
+    persisted.assert_not_called()
 
 
-def test_client_session_id_persists_when_processor_returns_without_saving(monkeypatch):
-    expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
-    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+def test_client_session_id_delegates_identity_fenced_persistence_to_processor(monkeypatch):
+    expected_id = developer_cleanup.from_segments_conversation_id('uid1', 'local-session-1')
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(side_effect=[None, {'finalization_incarnation_id': 'incarnation-1'}]),
+    )
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     persisted = MagicMock()
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    def _process(_uid, _language, conversation):
+    observed_identity = []
+
+    def _process(_uid, _language, conversation, *, expected_finalization_identity):
+        observed_identity.append(expected_finalization_identity)
         conversation.status = ConversationStatus.completed
         return conversation
 
@@ -250,13 +270,12 @@ def test_client_session_id_persists_when_processor_returns_without_saving(monkey
     response = developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-1'))
 
     assert response.id == expected_id
-    persisted.assert_called_once()
-    assert persisted.call_args.args[0] == 'uid1'
-    assert persisted.call_args.args[1]['id'] == expected_id
+    assert observed_identity == [('incarnation-1', None, None)]
+    persisted.assert_not_called()
 
 
 def test_client_session_id_retry_returns_existing_without_processing(monkeypatch):
-    expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
+    expected_id = developer_cleanup.from_segments_conversation_id('uid1', 'local-session-1')
     monkeypatch.setattr(
         conversations_db,
         'get_conversation',
@@ -274,7 +293,7 @@ def test_client_session_id_retry_returns_existing_without_processing(monkeypatch
 
 
 def test_client_session_id_concurrent_claim_loser_returns_existing_without_processing(monkeypatch):
-    expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
+    expected_id = developer_cleanup.from_segments_conversation_id('uid1', 'local-session-1')
     monkeypatch.setattr(
         conversations_db,
         'get_conversation',
@@ -292,9 +311,10 @@ def test_client_session_id_concurrent_claim_loser_returns_existing_without_proce
 
 
 def test_client_session_id_stale_claim_is_deleted_and_reprocessed(monkeypatch):
-    expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
+    expected_id = developer_cleanup.from_segments_conversation_id('uid1', 'local-session-1')
     stale_claim = {
         'id': expected_id,
+        'finalization_incarnation_id': 'stale-incarnation',
         'status': 'processing',
         'discarded': False,
         'external_data': {
@@ -303,9 +323,13 @@ def test_client_session_id_stale_claim_is_deleted_and_reprocessed(monkeypatch):
         },
     }
     delete = MagicMock()
-    process = MagicMock(side_effect=lambda _uid, _language, conversation: conversation)
-    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=stale_claim))
-    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    process = MagicMock(side_effect=lambda _uid, _language, conversation, **_kwargs: conversation)
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(side_effect=[stale_claim, {'finalization_incarnation_id': 'new-incarnation'}]),
+    )
+    monkeypatch.setattr(developer_cleanup, 'cleanup_conversation', delete)
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
     monkeypatch.setattr(developer, 'process_conversation', process)
@@ -313,16 +337,20 @@ def test_client_session_id_stale_claim_is_deleted_and_reprocessed(monkeypatch):
     response = developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-1'))
 
     assert response.id == expected_id
-    delete.assert_called_once_with('uid1', expected_id)
+    delete.assert_called_once_with('uid1', expected_id, 'stale-incarnation')
     process.assert_called_once()
 
 
 def test_client_session_id_claim_is_released_when_processing_fails(monkeypatch):
-    expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
+    expected_id = developer_cleanup.from_segments_conversation_id('uid1', 'local-session-1')
     delete = MagicMock()
-    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(side_effect=[None, {'finalization_incarnation_id': 'processing-incarnation'}]),
+    )
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
-    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(developer_cleanup, 'cleanup_conversation', delete)
     monkeypatch.setattr(developer, 'process_conversation', MagicMock(side_effect=RuntimeError('boom')))
 
     try:
@@ -332,12 +360,85 @@ def test_client_session_id_claim_is_released_when_processing_fails(monkeypatch):
     else:
         raise AssertionError('expected processing failure')
 
-    delete.assert_called_once_with('uid1', expected_id)
+    delete.assert_called_once_with('uid1', expected_id, 'processing-incarnation')
+
+
+def test_client_session_id_cleanup_failure_preserves_the_processing_error(monkeypatch):
+    expected_id = developer_cleanup.from_segments_conversation_id('uid1', 'local-session-1')
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(side_effect=[None, {'finalization_incarnation_id': 'processing-incarnation'}]),
+    )
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(
+        developer_cleanup,
+        'cleanup_conversation',
+        MagicMock(side_effect=RuntimeError('cleanup unavailable')),
+    )
+    monkeypatch.setattr(developer, 'process_conversation', MagicMock(side_effect=RuntimeError('processing boom')))
+
+    with pytest.raises(RuntimeError, match='processing boom'):
+        developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-1'))
+
+    developer_cleanup.cleanup_conversation.assert_called_once_with('uid1', expected_id, 'processing-incarnation')
+
+
+def test_cleanup_conversation_forwards_the_expected_incarnation(monkeypatch):
+    delete = MagicMock(return_value=True)
+    monkeypatch.setattr(developer_cleanup, 'delete_conversation_with_vector_cleanup', delete)
+
+    assert developer_cleanup.cleanup_conversation('uid1', 'conversation-1', 'incarnation-1')
+    delete.assert_called_once_with(
+        'uid1',
+        'conversation-1',
+        delete_source_artifacts=developer_cleanup.delete_conversation_playback_artifacts,
+        expected_finalization_incarnation_id='incarnation-1',
+    )
+
+
+def test_cleanup_conversation_translates_an_active_finalizer(monkeypatch):
+    from database.conversation_vector_cleanup import ConversationVectorCleanupBusy
+
+    monkeypatch.setattr(
+        developer_cleanup,
+        'delete_conversation_with_vector_cleanup',
+        MagicMock(side_effect=ConversationVectorCleanupBusy('fanout-active')),
+    )
+
+    with pytest.raises(developer_cleanup.ConversationCleanupUnavailable) as exc_info:
+        developer_cleanup.cleanup_conversation('uid1', 'conversation-1', 'incarnation-1')
+
+    assert isinstance(exc_info.value.__cause__, ConversationVectorCleanupBusy)
+
+
+def test_endpoint_cleanup_claims_then_deletes_the_same_descriptor(monkeypatch):
+    descriptor = object()
+    claim = MagicMock(return_value=descriptor)
+    delete = MagicMock(return_value=True)
+    monkeypatch.setattr(developer_cleanup, 'claim_conversation_vector_cleanup_descriptor', claim)
+    monkeypatch.setattr(developer_cleanup, 'delete_claimed_conversation_source', delete)
+
+    assert developer_cleanup.cleanup_conversation_for_endpoint('uid1', 'conversation-1', 'incarnation-1')
+    claim.assert_called_once_with(
+        'uid1',
+        'conversation-1',
+        expected_finalization_incarnation_id='incarnation-1',
+    )
+    delete.assert_called_once_with(
+        'uid1',
+        descriptor,
+        delete_source_artifacts=developer_cleanup.delete_conversation_playback_artifacts,
+    )
 
 
 def test_client_session_id_atomic_claim_winner_processes_once(monkeypatch):
-    process = MagicMock(side_effect=lambda _uid, _language, conversation: conversation)
-    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    process = MagicMock(side_effect=lambda _uid, _language, conversation, **_kwargs: conversation)
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(side_effect=[None, {'finalization_incarnation_id': 'incarnation-1'}]),
+    )
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
     monkeypatch.setattr(developer, 'process_conversation', process)
@@ -363,19 +464,23 @@ def test_from_segments_renews_processing_lease_during_live_processing(monkeypatc
 
     lease_renewed = threading.Event()
 
-    def fake_renew(_uid, _conversation_id):
+    def fake_renew(_uid, _conversation_id, _incarnation_id):
         lease_renewed.set()
         return True
 
-    monkeypatch.setattr(developer.lifecycle_service.jobs_db, 'renew_processing_lease', fake_renew)
+    monkeypatch.setattr(developer_cleanup, 'renew_from_segments_processing_lease', fake_renew)
     monkeypatch.setattr(developer.lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
 
-    def blocking_process(_uid, _language, conversation):
+    def blocking_process(_uid, _language, conversation, **_kwargs):
         assert lease_renewed.wait(timeout=5.0), 'lease not renewed during from-segments processing'
         conversation.status = ConversationStatus.completed
         return conversation
 
-    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(side_effect=[None, {'finalization_incarnation_id': 'incarnation-1'}]),
+    )
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
     monkeypatch.setattr(developer, 'process_conversation', blocking_process)
@@ -383,3 +488,23 @@ def test_from_segments_renews_processing_lease_during_live_processing(monkeypatc
     developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-lease'))
 
     assert lease_renewed.is_set()
+
+
+def test_from_segments_refuses_processing_after_same_id_ownership_changes(monkeypatch):
+    expected_id = developer_cleanup.from_segments_conversation_id('uid1', 'local-session-lost')
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(side_effect=[None, {'finalization_incarnation_id': 'incarnation-1'}]),
+    )
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer_cleanup, 'renew_from_segments_processing_lease', MagicMock(return_value=False))
+    process = MagicMock()
+    monkeypatch.setattr(developer, 'process_conversation', process)
+
+    with pytest.raises(developer.HTTPException) as exc_info:
+        developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-lost'))
+
+    assert exc_info.value.status_code == 409
+    assert expected_id in str(conversations_db.get_conversation.call_args_list)
+    process.assert_not_called()

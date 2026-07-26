@@ -140,6 +140,7 @@ _DEV_API_REAL_IMPORT_MODULES = (
     'utils.conversations.process_conversation',
     'utils.llm.knowledge_graph',
 )
+developer_module = None
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -180,7 +181,10 @@ def _install_legacy_safe_memory_developer_defaults(monkeypatch):
 @pytest.fixture(autouse=True)
 def _legacy_safe_memory_developer_for_lock_tests(monkeypatch):
     _install_legacy_safe_memory_developer_defaults(monkeypatch)
-    import routers.developer as developer_module
+    global developer_module
+    import routers.developer as imported_developer_module
+
+    developer_module = imported_developer_module
 
     monkeypatch.setattr(
         developer_module,
@@ -232,6 +236,7 @@ def _make_conversation(locked=False, conversation_id='conv-1'):
         'language': 'en',
         'status': 'completed',
         'source': 'friend',
+        'finalization_incarnation_id': 'incarnation-1',
     }
 
 
@@ -280,14 +285,13 @@ class TestDevApiConversationLockEnforcement:
         """D1: PATCH /v1/dev/user/conversations/{id} must raise 402 for locked."""
         import database.conversations as conversations_db
 
-        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=True))
-
         from routers.developer import update_conversation_endpoint, UpdateConversationRequest
         from fastapi import HTTPException
 
         request = UpdateConversationRequest(title='New Title')
-        with pytest.raises(HTTPException) as exc_info:
-            update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
+        with patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=True)):
+            with pytest.raises(HTTPException) as exc_info:
+                update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
         assert exc_info.value.status_code == 402
         assert 'paid plan' in exc_info.value.detail.lower()
 
@@ -295,26 +299,27 @@ class TestDevApiConversationLockEnforcement:
         """D1: PATCH should proceed for unlocked conversations."""
         import database.conversations as conversations_db
 
-        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
-        conversations_db.update_conversation_title = MagicMock()
-
         from routers.developer import update_conversation_endpoint, UpdateConversationRequest
 
-        request = UpdateConversationRequest(title='New Title')
-        update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
-        conversations_db.update_conversation_title.assert_called_once_with('test-uid', 'conv-1', 'New Title')
+        with (
+            patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=False)),
+            patch.object(conversations_db, 'update_conversation_title') as update_title,
+        ):
+            request = UpdateConversationRequest(title='New Title')
+            update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
+
+        update_title.assert_called_once_with('test-uid', 'conv-1', 'New Title')
 
     def test_delete_conversation_rejects_locked(self):
         """D2: DELETE /v1/dev/user/conversations/{id} must raise 402 for locked."""
         import database.conversations as conversations_db
 
-        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=True))
-
         from routers.developer import delete_conversation_endpoint
         from fastapi import HTTPException
 
-        with pytest.raises(HTTPException) as exc_info:
-            delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
+        with patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=True)):
+            with pytest.raises(HTTPException) as exc_info:
+                delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert exc_info.value.status_code == 402
         assert 'paid plan' in exc_info.value.detail.lower()
 
@@ -322,14 +327,53 @@ class TestDevApiConversationLockEnforcement:
         """D2: DELETE should proceed for unlocked conversations."""
         import database.conversations as conversations_db
 
-        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
-        conversations_db.delete_conversation = MagicMock()
-
-        from routers.developer import delete_conversation_endpoint
-
-        result = delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
+        with (
+            patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=False)),
+            patch.object(
+                developer_module.developer_cleanup,
+                'cleanup_conversation_for_endpoint',
+                return_value=True,
+            ) as cleanup,
+        ):
+            result = developer_module.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert result == {"success": True}
-        conversations_db.delete_conversation.assert_called_once_with('test-uid', 'conv-1')
+        cleanup.assert_called_once_with('test-uid', 'conv-1', 'incarnation-1')
+
+    def test_delete_conversation_reports_a_draining_finalizer_as_retryable(self):
+        import database.conversations as conversations_db
+        from fastapi import HTTPException
+        from utils.conversations.developer_cleanup import ConversationCleanupUnavailable
+
+        with (
+            patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=False)),
+            patch.object(
+                developer_module.developer_cleanup,
+                'cleanup_conversation_for_endpoint',
+                side_effect=ConversationCleanupUnavailable('conversation_vector_cleanup_fanout_active'),
+            ),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                developer_module.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
+
+        assert exc_info.value.status_code == 409
+
+    def test_delete_conversation_reports_a_same_id_replacement_as_conflict(self):
+        import database.conversations as conversations_db
+        from fastapi import HTTPException
+        from utils.conversations.developer_cleanup import ConversationCleanupUnavailable
+
+        with (
+            patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=False)),
+            patch.object(
+                developer_module.developer_cleanup,
+                'cleanup_conversation_for_endpoint',
+                side_effect=ConversationCleanupUnavailable('conversation_vector_cleanup_incarnation_changed'),
+            ),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                developer_module.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
+
+        assert exc_info.value.status_code == 409
 
 
 # =============================================================================

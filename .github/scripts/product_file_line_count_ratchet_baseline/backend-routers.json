@@ -4,7 +4,7 @@
     "backend/routers/chat.py": 1588,
     "backend/routers/developer.py": 2263,
     "backend/routers/mcp_sse.py": 1865,
-    "backend/routers/sync.py": 2058,
+    "backend/routers/sync.py": 1949,
     "backend/routers/users.py": 2076
   },
   "raise_justifications": {

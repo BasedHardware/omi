@@ -22,6 +22,7 @@ from scripts.firestore_workflow_policy import (  # noqa: E402
     has_direct_firestore_mutation,
     reconciliation_invocations,
 )
+from scripts import runtime_env_finalization_effect_plan_contract as finalization_effect_plan_contract  # noqa: E402
 from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     ValidationError,
     validate_account_deletion_dispatch_contract as _validate_account_deletion_dispatch_contract,
@@ -51,11 +52,7 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
 _SYNC_LEDGER_FENCE_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
 _SYNC_LEDGER_FENCE_MODES = frozenset({'legacy', 'standby', 'active'})
-_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
-    '--task-timeout': '3600s',
-    '--cpu': '2',
-    '--memory': '2Gi',
-}
+_MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {'--task-timeout': '3600s', '--cpu': '2', '--memory': '2Gi'}
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -137,6 +134,7 @@ def validate_runtime_env(
     if errors:
         return errors
 
+    errors.extend(finalization_effect_plan_contract.validate_finalization_effect_plan_mode_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))

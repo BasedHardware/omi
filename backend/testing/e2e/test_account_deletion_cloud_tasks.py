@@ -162,6 +162,15 @@ def _stub_external_deletion_boundaries(monkeypatch) -> None:
     monkeypatch.setattr(account_deletion, "delete_user_caller_ids", lambda _uid: None)
 
 
+def _successful_retained_purge(
+    _uid: str,
+    *,
+    retain_conversation_cleanup_claims: bool = False,
+) -> dict[str, list[dict[str, str]]]:
+    assert retain_conversation_cleanup_claims is True
+    return {"required_failures": [], "best_effort_failures": []}
+
+
 def _assert_enqueued_task_schema(tasks_client: _CapturedCloudTasksClient, wipe_job_id: str) -> dict[str, str]:
     """Prove the production queue request is durable, scoped, and opaque."""
 
@@ -222,7 +231,12 @@ def test_account_deletion_cloud_task_completes_once_and_redelivery_is_acked(
     _stub_external_deletion_boundaries(monkeypatch)
     purge_calls: list[str] = []
 
-    def successful_purge(uid: str) -> dict[str, list[dict[str, str]]]:
+    def successful_purge(
+        uid: str,
+        *,
+        retain_conversation_cleanup_claims: bool = False,
+    ) -> dict[str, list[dict[str, str]]]:
+        assert retain_conversation_cleanup_claims is True
         purge_calls.append(uid)
         return {"required_failures": [], "best_effort_failures": []}
 
@@ -295,7 +309,12 @@ def test_account_deletion_cloud_task_retries_required_purge_failure_without_losi
         ]
     )
 
-    def controlled_purge(uid: str) -> dict[str, list[dict[str, str]]]:
+    def controlled_purge(
+        uid: str,
+        *,
+        retain_conversation_cleanup_claims: bool = False,
+    ) -> dict[str, list[dict[str, str]]]:
+        assert retain_conversation_cleanup_claims is True
         purge_calls.append(uid)
         return next(purge_results)
 
@@ -362,7 +381,7 @@ def test_queue_not_found_preserves_auth_and_reconciles_from_the_marker(
     monkeypatch.setattr(
         account_deletion,
         "purge_derived_user_data",
-        lambda _uid: {"required_failures": [], "best_effort_failures": []},
+        _successful_retained_purge,
     )
     cloud_tasks_client.create_error = NotFound("account-deletion queue is absent")
 
@@ -410,7 +429,7 @@ def test_repeated_delete_request_joins_running_wipe_without_requeueing(
     monkeypatch.setattr(
         account_deletion,
         "purge_derived_user_data",
-        lambda _uid: {"required_failures": [], "best_effort_failures": []},
+        _successful_retained_purge,
     )
 
     first = client.delete("/v1/users/delete-account", headers=auth_headers)
@@ -453,7 +472,7 @@ def test_missing_root_document_does_not_hide_immediate_child_data(
     monkeypatch.setattr(
         account_deletion,
         "purge_derived_user_data",
-        lambda _uid: {"required_failures": [], "best_effort_failures": []},
+        _successful_retained_purge,
     )
 
     admitted = client.delete("/v1/users/delete-account", headers=auth_headers)

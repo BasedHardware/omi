@@ -105,18 +105,27 @@ def test_merge_renews_processing_lease_during_live_processing(monkeypatch):
     monkeypatch.setattr(merge, "_copy_audio_chunks_for_merge", lambda uid, convs, new_id: [])
     monkeypatch.setattr(merge, "_determine_visibility", lambda convs: 'private')
     monkeypatch.setattr(merge, "_shared_client_device_provenance", lambda convs: (None, None))
+
+    def build_conversation(**kwargs):
+        conversation = MagicMock()
+        conversation.model_dump.return_value = dict(kwargs)
+        conversation.id = kwargs['id']
+        conversation.language = kwargs.get('language')
+        return conversation
+
+    def persist_processing_conversation(_uid, payload):
+        sources[payload['id']] = {
+            **payload,
+            'finalization_incarnation_id': 'merge-incarnation-1',
+        }
+        return True
+
+    monkeypatch.setattr(merge, "Conversation", build_conversation)
     monkeypatch.setattr(
-        merge,
-        "Conversation",
-        lambda **kw: MagicMock(
-            **{
-                'model_dump.return_value': {'id': 'new-merge-id', 'language': 'en'},
-                'id': 'new-merge-id',
-                'language': 'en',
-            }
-        ),
+        merge.lifecycle_service,
+        "create_processing_conversation",
+        MagicMock(side_effect=persist_processing_conversation),
     )
-    monkeypatch.setattr(merge.lifecycle_service, "create_processing_conversation", MagicMock(return_value=True))
     monkeypatch.setattr(merge, "is_audio_merge_dispatch_enabled", lambda: False)
     monkeypatch.setattr(merge, "_delete_conversation_and_related_data", MagicMock())
 

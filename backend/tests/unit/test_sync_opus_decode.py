@@ -48,6 +48,7 @@ _stub_modules = [
     'utils.conversations.process_conversation',
     'utils.conversations.factory',
     'utils.other',
+    'utils.other.conversation_playback_storage',
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.encryption',
@@ -540,7 +541,7 @@ class TestRetrieveFilePaths:
 
         paths = retrieve_file_paths(cast(list, [self._Upload("audio_omi_opus_16000_1_fs160_1710000000.bin")]), "u1")
 
-        assert paths == [os.path.join("syncing/u1", "audio_omi_opus_16000_1_fs160_1710000000.bin")]
+        assert paths == ["syncing/u1/audio_omi_opus_16000_1_fs160_1710000000.bin"]
         assert (tmp_path / paths[0]).read_bytes() == b'payload'
 
 

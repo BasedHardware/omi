@@ -11,7 +11,6 @@ v1 remains completely unchanged.
 import asyncio
 import json
 import os
-import re
 import sys
 import threading
 import time
@@ -24,6 +23,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.routing import APIRoute
 from models.users import PlanType
+from utils.conversations import finalizer as persisted_finalizer
 from utils.executors import run_blocking as _production_run_blocking
 
 PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
@@ -1336,6 +1336,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
             'utils.other',
+            'utils.other.conversation_playback_storage',
             'utils.other.endpoints',
             'utils.other.storage',
             'utils.encryption',
@@ -1356,6 +1357,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.sync.playback',
             'utils.sync.backfill',
             'utils.sync.content_id',
+            'utils.sync.conversation_artifact_worker',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -1374,6 +1376,7 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        sys.modules['utils.other'].__path__ = []
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
         sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
@@ -1818,8 +1821,12 @@ class TestAsyncCoordinatorBehavioral:
         try:
             pipeline = stubs['pipeline']
             pipeline.RUN_LOCK_HEARTBEAT_SECONDS = 0.001
-            pipeline.RUN_LOCK_TTL_SECONDS = 0.006
-            pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.001
+            pipeline.RUN_LOCK_TTL_SECONDS = 0.05
+            pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.005
+            # Advance the lease deadline explicitly after the hung renewal is
+            # observed. A millisecond wall-clock lease can expire before the
+            # mocked coroutine starts on a busy worker.
+            pipeline.time = types.SimpleNamespace(monotonic=MagicMock(side_effect=[0.0, 0.0, 0.001, 0.05]))
             renewal_started = asyncio.Event()
 
             async def _hanging_run_blocking(_executor, _fn, *_args, **_kwargs):
@@ -3026,6 +3033,7 @@ class TestV2EndpointExecution:
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
             'utils.other',
+            'utils.other.conversation_playback_storage',
             'utils.other.endpoints',
             'utils.other.storage',
             'utils.encryption',
@@ -3046,6 +3054,7 @@ class TestV2EndpointExecution:
             'utils.sync.playback',
             'utils.sync.backfill',
             'utils.sync.content_id',
+            'utils.sync.conversation_artifact_worker',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -3062,6 +3071,7 @@ class TestV2EndpointExecution:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        sys.modules['utils.other'].__path__ = []
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
         sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
@@ -3453,16 +3463,28 @@ class TestV2EndpointExecution:
 class TestConversationFinalizerExecutor:
     """The durable finalizer must use the post-processing bulkhead."""
 
-    @staticmethod
-    def _read_finalizer_source():
-        finalizer_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'finalizer.py')
-        with open(finalizer_path, encoding='utf-8') as f:
-            return f.read()
+    @pytest.mark.asyncio
+    async def test_postprocess_mutation_runs_on_bulkhead(self, monkeypatch):
+        work = MagicMock(return_value='processed')
+        calls = []
 
-    def test_process_conversation_uses_postprocess_bulkhead(self):
-        source = self._read_finalizer_source()
-        assert 'postprocess_executor' in source
-        assert re.search(r'run_blocking\(\s+postprocess_executor,\s+process_conversation', source)
+        async def inline_run_blocking(executor, function, *args, **kwargs):
+            calls.append((executor, function, args, kwargs))
+            return function(*args, **kwargs)
+
+        monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+
+        result = await persisted_finalizer._run_postprocess_mutation(work, 'uid-1', force_process=True)
+
+        assert result == 'processed'
+        assert calls == [
+            (
+                persisted_finalizer.postprocess_executor,
+                work,
+                ('uid-1',),
+                {'force_process': True},
+            )
+        ]
 
 
 # ---------------------------------------------------------------------------

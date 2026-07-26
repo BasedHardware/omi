@@ -250,8 +250,10 @@ def _build_fakes() -> dict[str, ModuleType]:
     subjects.infer_subject_from_segments = lambda segments: (None, None)
     for name in [
         "utils.conversations.factory",
+        "utils.conversations.processing_ownership",
         "utils.conversations.transcript_chunks",
         "utils.conversations.memory_extraction_telemetry",
+        "utils.sync.conversation_artifact_protocol",
         "utils.memory.canonical_activation",
         "utils.memory.memory_service",
         "utils.memory.memory_system",
@@ -272,6 +274,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         "utils.retrieval",
         "utils.other",
         "utils.observability",
+        "utils.sync",
     ]:
         if pkg not in fakes:
             m = ModuleType(pkg)
