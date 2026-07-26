@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed when Codemagic does not intake a native macOS candidate tag."""
+"""Prove native Codemagic tag intake or dispatch one fenced fallback build."""
 
 from __future__ import annotations
 
@@ -13,18 +13,18 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 BUILDS_API = "https://api.codemagic.io/builds"
-EVIDENCE_SCHEMA = "codemagic-native-tag-intake/v1"
+EVIDENCE_SCHEMA = "codemagic-native-tag-intake/v2"
 RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 class ProviderApiError(RuntimeError):
-    """A credential-safe Codemagic visibility failure."""
+    """A credential-safe Codemagic API failure."""
 
     def __init__(self, message: str, *, retryable: bool = True) -> None:
         super().__init__(message)
@@ -61,6 +61,13 @@ def _nested_mapping(value: object, key: str) -> dict[str, Any]:
     return nested if isinstance(nested, dict) else {}
 
 
+def build_id(build: dict[str, Any]) -> str:
+    for value in (build.get("_id"), build.get("id"), build.get("buildId")):
+        if isinstance(value, str):
+            return value
+    return ""
+
+
 def build_tag(build: dict[str, Any]) -> str:
     for value in (build.get("tag"), _nested_mapping(build, "config").get("tag")):
         if isinstance(value, str):
@@ -71,8 +78,10 @@ def build_tag(build: dict[str, Any]) -> str:
 def build_workflow_id(build: dict[str, Any]) -> str:
     config = _nested_mapping(build, "config")
     for value in (
+        build.get("fileWorkflowId"),
         build.get("workflowId"),
         build.get("workflow_id"),
+        config.get("fileWorkflowId"),
         config.get("workflowId"),
         config.get("workflow_id"),
     ):
@@ -102,9 +111,8 @@ def build_commit_shas(build: dict[str, Any]) -> set[str]:
 
 
 def summarize_build(build: dict[str, Any]) -> dict[str, object]:
-    build_id = build.get("_id") or build.get("id") or build.get("buildId") or ""
     return {
-        "build_id": build_id if isinstance(build_id, str) else "",
+        "build_id": build_id(build),
         "tag": build_tag(build),
         "workflow_id": build_workflow_id(build),
         "commit_shas": sorted(build_commit_shas(build)),
@@ -120,43 +128,44 @@ def classify_builds(
     workflow_id: str,
     source_sha: str,
 ) -> dict[str, object]:
+    """Classify every reported same-tag build regardless of provider state."""
     exact_tag = [build for build in builds if build_tag(build) == release_tag]
     exact_workflow = [build for build in exact_tag if build_workflow_id(build) == workflow_id]
     observed_workflows = sorted({build_workflow_id(build) or "<unreported>" for build in exact_tag})
 
     status = "native_intake_absent"
     message = (
-        f"Codemagic returned no build for exact tag {release_tag}; inspect the app Webhooks view "
-        "and do not recreate or rewrite the immutable tag."
+        f"Codemagic returned no build for exact tag {release_tag}; the immutable tag is intact and "
+        "may be eligible for one fenced fallback dispatch."
     )
-    if exact_tag and not exact_workflow:
+    if len(exact_tag) > 1:
+        status = "duplicate_same_tag_build"
+        message = (
+            f"Codemagic has {len(exact_tag)} builds for exact tag {release_tag} across workflows "
+            f"{', '.join(observed_workflows)}; a fallback would violate the single-build fence."
+        )
+    elif exact_tag and not exact_workflow:
         status = "workflow_selector_mismatch"
         message = (
-            f"Codemagic has build records for {release_tag}, but none use workflow {workflow_id}; "
-            f"observed workflows: {', '.join(observed_workflows)}."
-        )
-    elif len(exact_workflow) > 1:
-        status = "duplicate_native_intake"
-        message = (
-            f"Codemagic created {len(exact_workflow)} builds for exact tag {release_tag} and workflow "
-            f"{workflow_id}; preserve the immutable tag and inspect provider webhook deduplication."
+            f"Codemagic has a build record for {release_tag}, but it does not use workflow {workflow_id}; "
+            f"observed workflow: {', '.join(observed_workflows)}."
         )
     elif exact_workflow:
         reported_shas = set().union(*(build_commit_shas(build) for build in exact_workflow))
         if reported_shas and source_sha not in reported_shas:
             status = "source_identity_mismatch"
             message = (
-                f"Codemagic workflow {workflow_id} intook {release_tag}, but its reported source "
-                f"does not match {source_sha}; observed: {', '.join(sorted(reported_shas))}."
+                f"Codemagic workflow {workflow_id} selected {release_tag}, but its reported source does not "
+                f"match {source_sha}; observed: {', '.join(sorted(reported_shas))}."
             )
         else:
-            status = "intake_confirmed"
+            status = "canonical_build_observed"
             source_note = (
                 f" and reported exact source {source_sha}"
                 if source_sha in reported_shas
                 else "; the immutable tag remains the source identity because this API response omitted commit SHA"
             )
-            message = f"Codemagic intook {release_tag} with workflow {workflow_id}{source_note}."
+            message = f"Codemagic has one canonical {workflow_id} build for {release_tag}{source_note}."
 
     return {
         "status": status,
@@ -165,8 +174,29 @@ def classify_builds(
         "exact_tag_build_count": len(exact_tag),
         "exact_workflow_build_count": len(exact_workflow),
         "observed_workflows": observed_workflows,
-        "matching_builds": [summarize_build(build) for build in exact_tag[:10]],
+        "matching_builds": [summarize_build(build) for build in exact_tag[:100]],
     }
+
+
+def _request_json(
+    request: urllib.request.Request,
+    *,
+    opener: Callable[..., Any],
+    error_context: str,
+) -> dict[str, Any]:
+    try:
+        with opener(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        retryable = error.code == 429 or error.code >= 500
+        raise ProviderApiError(f"{error_context} returned HTTP {error.code}", retryable=retryable) from error
+    except (urllib.error.URLError, TimeoutError) as error:
+        raise ProviderApiError(f"{error_context} was unavailable: {type(error).__name__}") from error
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ProviderApiError(f"{error_context} returned invalid JSON") from error
+    if not isinstance(payload, dict):
+        raise ProviderApiError(f"{error_context} returned an unexpected payload")
+    return payload
 
 
 def fetch_builds(
@@ -178,32 +208,83 @@ def fetch_builds(
 ) -> list[dict[str, Any]]:
     if not api_token:
         raise ProviderApiError("CODEMAGIC_API_TOKEN is not configured", retryable=False)
-    query = urllib.parse.urlencode({"appId": app_id, "tag": release_tag, "limit": 100})
+    # Follow every pagination cursor before classifying, because every state of
+    # every same-tag build participates in the duplicate/active-build fence.
+    next_url = f"{BUILDS_API}?{urllib.parse.urlencode({'appId': app_id, 'tag': release_tag, 'limit': 100})}"
+    builds: list[dict[str, Any]] = []
+    visited_urls: set[str] = set()
+    while next_url:
+        if next_url in visited_urls or len(visited_urls) >= 20:
+            raise ProviderApiError("Codemagic builds query returned an invalid pagination cursor", retryable=False)
+        visited_urls.add(next_url)
+        parsed = urllib.parse.urlparse(next_url)
+        if parsed.scheme != "https" or parsed.netloc != "api.codemagic.io" or parsed.path != "/builds":
+            raise ProviderApiError("Codemagic builds query returned an unsafe pagination cursor", retryable=False)
+        request = urllib.request.Request(
+            next_url,
+            headers={"Accept": "application/json", "x-auth-token": api_token},
+            method="GET",
+        )
+        payload = _request_json(request, opener=opener, error_context="Codemagic builds query")
+        page_builds = payload.get("builds")
+        if not isinstance(page_builds, list) or not all(isinstance(build, dict) for build in page_builds):
+            raise ProviderApiError("Codemagic builds query returned an unexpected payload")
+        builds.extend(page_builds)
+        cursor = payload.get("nextPageUrl")
+        if cursor is None:
+            next_url = ""
+        elif isinstance(cursor, str):
+            next_url = urllib.parse.urljoin(BUILDS_API, cursor)
+        else:
+            raise ProviderApiError("Codemagic builds query returned an invalid pagination cursor", retryable=False)
+    return builds
+
+
+def fetch_build(
+    *,
+    build_id_value: str,
+    api_token: str,
+    opener: Callable[..., Any] = urllib.request.urlopen,
+) -> dict[str, Any]:
+    if not build_id_value:
+        raise ValueError("build_id_value is required")
+    if not api_token:
+        raise ProviderApiError("CODEMAGIC_API_TOKEN is not configured", retryable=False)
     request = urllib.request.Request(
-        f"{BUILDS_API}?{query}",
+        f"{BUILDS_API}/{urllib.parse.quote(build_id_value, safe='')}",
         headers={"Accept": "application/json", "x-auth-token": api_token},
         method="GET",
     )
-    try:
-        with opener(request, timeout=30) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        retryable = error.code == 429 or error.code >= 500
-        raise ProviderApiError(
-            f"Codemagic builds query returned HTTP {error.code}",
-            retryable=retryable,
-        ) from error
-    except (urllib.error.URLError, TimeoutError) as error:
-        raise ProviderApiError(f"Codemagic builds query was unavailable: {type(error).__name__}") from error
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ProviderApiError("Codemagic builds query returned invalid JSON") from error
+    payload = _request_json(request, opener=opener, error_context="Codemagic build query")
+    build = payload.get("build", payload)
+    if not isinstance(build, dict):
+        raise ProviderApiError("Codemagic build query returned an unexpected payload")
+    return build
 
-    if not isinstance(payload, dict) or not isinstance(payload.get("builds"), list):
-        raise ProviderApiError("Codemagic builds query returned an unexpected payload")
-    builds = payload["builds"]
-    if not all(isinstance(build, dict) for build in builds):
-        raise ProviderApiError("Codemagic builds query returned a non-object build record")
-    return builds
+
+def request_fallback_build(
+    *,
+    app_id: str,
+    workflow_id: str,
+    release_tag: str,
+    api_token: str,
+    opener: Callable[..., Any] = urllib.request.urlopen,
+) -> str:
+    """Make the sole authorized POST; callers must have already fenced absence."""
+    if not api_token:
+        raise ProviderApiError("CODEMAGIC_API_TOKEN is not configured", retryable=False)
+    payload = json.dumps({"appId": app_id, "workflowId": workflow_id, "tag": release_tag}).encode("utf-8")
+    request = urllib.request.Request(
+        BUILDS_API,
+        data=payload,
+        headers={"Accept": "application/json", "Content-Type": "application/json", "x-auth-token": api_token},
+        method="POST",
+    )
+    response = _request_json(request, opener=opener, error_context="Codemagic fallback build dispatch")
+    returned_build_id = response.get("buildId") or response.get("_id") or response.get("id")
+    if not isinstance(returned_build_id, str) or not returned_build_id:
+        raise ProviderApiError("Codemagic fallback build dispatch did not return a build ID", retryable=False)
+    return returned_build_id
 
 
 def poll_for_intake(
@@ -217,6 +298,7 @@ def poll_for_intake(
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, object]:
+    """Observe native intake for the complete bounded window before fallback."""
     started = monotonic()
     deadline = started + timeout_seconds
     attempts = 0
@@ -237,17 +319,13 @@ def poll_for_intake(
                 workflow_id=workflow_id,
                 source_sha=source_sha,
             )
-            if decision["status"] == "intake_confirmed":
+            # One canonical build, or an unacceptable same-tag state, settles the
+            # decision immediately. Only total absence consumes the full window.
+            if decision["status"] != "native_intake_absent":
                 break
         except ProviderApiError as error:
             consecutive_errors += 1
-            api_errors.append(
-                {
-                    "attempt": attempts,
-                    "message": str(error),
-                    "retryable": error.retryable,
-                }
-            )
+            api_errors.append({"attempt": attempts, "message": str(error), "retryable": error.retryable})
             api_errors = api_errors[-10:]
             if not error.retryable:
                 break
@@ -257,7 +335,7 @@ def poll_for_intake(
             break
         sleep(min(float(poll_seconds), remaining))
 
-    if decision["status"] != "intake_confirmed" and (successful_queries == 0 or consecutive_errors > 0):
+    if decision["status"] == "native_intake_absent" and (successful_queries == 0 or consecutive_errors > 0):
         latest_error = api_errors[-1]["message"] if api_errors else "no successful query"
         decision = {
             **decision,
@@ -277,6 +355,102 @@ def poll_for_intake(
     }
 
 
+def verify_build_identity(
+    build: dict[str, Any], *, release_tag: str, workflow_id: str, source_sha: str) -> dict[str, object]:
+    errors: list[str] = []
+    if build_tag(build) != release_tag:
+        errors.append(f"returned build tag {build_tag(build)!r} does not equal {release_tag!r}")
+    if build_workflow_id(build) != workflow_id:
+        errors.append(f"returned build workflow {build_workflow_id(build)!r} does not equal {workflow_id!r}")
+    reported_shas = build_commit_shas(build)
+    if reported_shas and source_sha not in reported_shas:
+        errors.append(f"returned build source does not equal {source_sha}; observed {sorted(reported_shas)}")
+    return {"valid": not errors, "errors": errors, "build": summarize_build(build)}
+
+
+def dispatch_fallback_after_absence(
+    *,
+    fetch: Callable[[], list[dict[str, Any]]],
+    dispatch: Callable[[], str],
+    fetch_one: Callable[[str], dict[str, Any]],
+    release_tag: str,
+    workflow_id: str,
+    source_sha: str,
+    visibility_timeout_seconds: int = 120,
+    visibility_poll_seconds: int = 5,
+    monotonic: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, object]:
+    """Re-fence, POST once, then wait briefly for provider build visibility."""
+    final_fence_builds = fetch()
+    final_fence = classify_builds(
+        final_fence_builds,
+        release_tag=release_tag,
+        workflow_id=workflow_id,
+        source_sha=source_sha,
+    )
+    if final_fence["status"] == "canonical_build_observed":
+        return {"outcome": "canonical_build_observed_before_fallback", "final_fence": final_fence, "dispatch_count": 0}
+    if final_fence["status"] != "native_intake_absent":
+        return {"outcome": "fallback_fence_rejected", "final_fence": final_fence, "dispatch_count": 0}
+
+    # No retry around this POST: an ambiguous transport result is resolved only by
+    # reading the all-state same-tag build set, never by issuing a second request.
+    returned_build_id = ""
+    dispatch_error = ""
+    try:
+        returned_build_id = dispatch()
+    except ProviderApiError as error:
+        dispatch_error = str(error)
+
+    # Codemagic can acknowledge a POST before /builds indexes the new record.
+    # Keep the one-build fence intact while allowing bounded visibility lag.
+    post_dispatch_visibility = poll_for_intake(
+        fetch=fetch,
+        release_tag=release_tag,
+        workflow_id=workflow_id,
+        source_sha=source_sha,
+        timeout_seconds=visibility_timeout_seconds,
+        poll_seconds=visibility_poll_seconds,
+        monotonic=monotonic,
+        sleep=sleep,
+    )
+    final_query = post_dispatch_visibility["decision"]
+    assert isinstance(final_query, dict)
+    result: dict[str, object] = {
+        "final_fence": final_fence,
+        "dispatch_count": 1,
+        "returned_build_id": returned_build_id,
+        "dispatch_error": dispatch_error,
+        "post_dispatch_visibility": post_dispatch_visibility,
+        "final_query": final_query,
+    }
+    if final_query["status"] != "canonical_build_observed":
+        result["outcome"] = "fallback_final_query_rejected"
+        return result
+
+    canonical = final_query["matching_builds"]
+    assert isinstance(canonical, list)
+    canonical_ids = {item.get("build_id") for item in canonical if isinstance(item, dict)}
+    if dispatch_error:
+        result["outcome"] = "fallback_dispatch_ambiguous_but_canonical_build_observed"
+        return result
+    if returned_build_id not in canonical_ids:
+        result["outcome"] = "fallback_returned_build_not_canonical"
+        return result
+
+    returned_build = fetch_one(returned_build_id)
+    returned_identity = verify_build_identity(
+        returned_build,
+        release_tag=release_tag,
+        workflow_id=workflow_id,
+        source_sha=source_sha,
+    )
+    result["returned_build"] = returned_identity
+    result["outcome"] = "fallback_dispatched_and_verified" if returned_identity["valid"] else "fallback_returned_build_identity_mismatch"
+    return result
+
+
 def write_evidence(path: Path, evidence: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -290,6 +464,7 @@ def main() -> int:
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--timeout-seconds", type=int, default=600)
     parser.add_argument("--poll-seconds", type=int, default=15)
+    parser.add_argument("--dispatch-fallback-on-absence", action="store_true")
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
 
@@ -301,39 +476,64 @@ def main() -> int:
         timeout_seconds=args.timeout_seconds,
         poll_seconds=args.poll_seconds,
     )
-    result = poll_for_intake(
-        fetch=lambda: fetch_builds(
-            app_id=args.app_id,
-            release_tag=args.release_tag,
-            api_token=os.environ.get("CODEMAGIC_API_TOKEN", ""),
-        ),
+    api_token = os.environ.get("CODEMAGIC_API_TOKEN", "")
+    fetch = lambda: fetch_builds(app_id=args.app_id, release_tag=args.release_tag, api_token=api_token)
+    intake = poll_for_intake(
+        fetch=fetch,
         release_tag=args.release_tag,
         workflow_id=args.workflow_id,
         source_sha=args.source_sha,
         timeout_seconds=args.timeout_seconds,
         poll_seconds=args.poll_seconds,
     )
+    decision = intake["decision"]
+    assert isinstance(decision, dict)
+    fallback: dict[str, object] | None = None
+    outcome = str(decision["status"])
+    success = outcome == "canonical_build_observed"
+
+    if outcome == "native_intake_absent" and args.dispatch_fallback_on_absence:
+        fallback = dispatch_fallback_after_absence(
+            fetch=fetch,
+            dispatch=lambda: request_fallback_build(
+                app_id=args.app_id,
+                workflow_id=args.workflow_id,
+                release_tag=args.release_tag,
+                api_token=api_token,
+            ),
+            fetch_one=lambda build_id_value: fetch_build(build_id_value=build_id_value, api_token=api_token),
+            release_tag=args.release_tag,
+            workflow_id=args.workflow_id,
+            source_sha=args.source_sha,
+        )
+        outcome = str(fallback["outcome"])
+        success = outcome in {
+            "canonical_build_observed_before_fallback",
+            "fallback_dispatch_ambiguous_but_canonical_build_observed",
+            "fallback_dispatched_and_verified",
+        }
+
     evidence = {
         "schema": EVIDENCE_SCHEMA,
-        "observed_at": datetime.now(UTC).isoformat(),
+        "observed_at": datetime.now(timezone.utc).isoformat(),
         "app_id": args.app_id,
         "workflow_id": args.workflow_id,
         "release_tag": args.release_tag,
         "source_sha": args.source_sha,
         "timeout_seconds": args.timeout_seconds,
         "poll_seconds": args.poll_seconds,
-        **result,
+        "dispatch_fallback_on_absence": args.dispatch_fallback_on_absence,
+        "intake": intake,
+        "fallback": fallback,
+        "outcome": outcome,
     }
     write_evidence(args.evidence, evidence)
 
-    decision = result["decision"]
-    assert isinstance(decision, dict)
-    message = str(decision["message"])
-    if decision["status"] == "intake_confirmed":
-        print(message)
+    if success:
+        print(f"Codemagic candidate intake complete: {outcome}.")
         return 0
-    print(f"ERROR: {message}", file=sys.stderr)
-    print(f"Codemagic intake evidence: {args.evidence}", file=sys.stderr)
+    print(f"ERROR: {decision['message']}", file=sys.stderr)
+    print(f"Codemagic intake/fallback evidence: {args.evidence}", file=sys.stderr)
     return 1
 
 
