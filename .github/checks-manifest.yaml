@@ -29,6 +29,11 @@ checks:
     triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
+  - id: desktop-release-process-guards
+    command: ["python3", ".github/scripts/check-release-process-guards.py"]
+    triggers: [".github/workflows/desktop_qualify_beta.yml", ".github/scripts/check-release-process-guards.py", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-174: qualification must check out the exact release tag inside its isolated source directory; the guard and its focused behavioral test run on every relevant diff"
   - id: failure-class-retirement-author
     command: ["python3", ".github/scripts/test_failure_class_retirement.py"]
     triggers: [".github/scripts/failure_class_retirement.py", ".github/scripts/test_failure_class_retirement.py", ".github/workflows/repo-hygiene.yml", "scripts/failure-class", ".github/checks-manifest.yaml"]
@@ -558,8 +563,6 @@ exempt:
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
     reason: "release pipeline check requires published candidate artifacts and workflow inputs"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"
-    reason: "release-policy full-tree check, not diff-scoped"
-  - path: ".github/scripts/check-release-process-guards.py"
     reason: "release-policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check-deployment-concurrency.py"
     reason: "deployment concurrency policy full-tree check, not diff-scoped"

@@ -10,7 +10,6 @@ import re
 import subprocess
 from pathlib import Path
 
-
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SCHEMA = "desktop-release-planner-source-identity/v2"
 RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$")
@@ -23,8 +22,6 @@ DESKTOP_RELEASE_PATHS = (
     ".github/workflows/desktop_auto_release.yml",
     ".github/workflows/desktop-swift-ci.yml",
 )
-
-
 def require_sha(name: str, value: str) -> str:
     if not SHA_RE.fullmatch(value):
         raise ValueError(f"{name} must be a 40-character lowercase SHA")
@@ -119,9 +116,7 @@ def ensure_candidate_history_is_safe(
                 *DESKTOP_RELEASE_PATHS,
             ],
         ).splitlines()
-        newer_releasable_changes.extend(
-            f"{commit_sha}:{path}" for path in releasable_desktop_paths(changed_paths)
-        )
+        newer_releasable_changes.extend(f"{commit_sha}:{path}" for path in releasable_desktop_paths(changed_paths))
     if newer_releasable_changes:
         raise ValueError(
             "candidate main contains newer releasable desktop changes after the planner source: "

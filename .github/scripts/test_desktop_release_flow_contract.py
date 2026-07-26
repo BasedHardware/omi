@@ -15,6 +15,11 @@ ROOT = Path(__file__).resolve().parents[2]
 RELEASE_TAG = "v0.12.124+12124-macos"
 
 
+def clean_git_environment(env: dict[str, str]) -> dict[str, str]:
+    """Keep hook-local Git state out of isolated qualification fixtures."""
+    return {key: value for key, value in env.items() if not key.startswith("GIT_")}
+
+
 class DesktopReleaseFlowContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.workflow = (ROOT / ".github/workflows/desktop_qualify_beta.yml").read_text(encoding="utf-8")
@@ -42,7 +47,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         return subprocess.run(
             ["bash", "-c", self._workflow_script(step_name)],
             cwd=cwd,
-            env=isolated_env,
+        env=isolated_env,
             check=False,
             capture_output=True,
             text=True,
@@ -54,7 +59,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         source = root / "candidate-source"
         remote.parent.mkdir(parents=True)
         source.mkdir()
-        git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        git_env = clean_git_environment(dict(os.environ))
 
         def git(*args: str, cwd: Path = source) -> str:
             result = subprocess.run(
@@ -113,7 +118,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         fragments = {
             node.value for node in ast.walk(guard) if isinstance(node, ast.Constant) and isinstance(node.value, str)
         }
-        self.assertIn('checkout --quiet --detach "refs/tags/$RELEASE_TAG"', fragments)
+        self.assertIn('git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"', fragments)
         self.assertNotIn("ref: ${{ inputs.release_tag }}", fragments)
 
     def test_run_staging_evidence_and_cleanup_are_isolated_and_rerun_safe(self) -> None:
