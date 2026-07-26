@@ -2,8 +2,13 @@ import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
   @override
@@ -19,12 +24,130 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
     ConnectivityPlatform.instance = _TestConnectivityPlatform();
     try {
       await ServiceManager.init();
     } catch (_) {
       // Ignore if already initialized by another test.
     }
+  });
+
+  tearDown(AnalyticsManager.resetForTesting);
+
+  test('onboarding connection emits Device Connected exactly once', () async {
+    final analytics = _TestAnalyticsAdapter();
+    AnalyticsManager.configure(analytics);
+    await AnalyticsManager.init();
+    SharedPreferencesUtil().uid = 'test-user';
+    final provider = DeviceProvider();
+    addTearDown(provider.dispose);
+    final device = BtDevice(
+      id: 'AA:AA:AA:AA:AA:01',
+      name: 'User-renamed device',
+      type: DeviceType.fieldy,
+      rssi: -50,
+      firmwareRevision: '3.0.20',
+    );
+
+    await provider.setConnectedDevice(device);
+    await provider.setConnectedDevice(device);
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(analytics.events.where((event) => event == 'Device Connected'), hasLength(1));
+    final connectedProperties = analytics.eventProperties[analytics.events.indexOf('Device Connected')];
+    expect(connectedProperties['type'], 'fieldy');
+    expect(connectedProperties['device_vendor'], 'fieldlabs');
+    expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
+  });
+
+  test('Device Paired is deduped by user and device while connections recur', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'user-a'});
+    await SharedPreferencesUtil.init();
+    final analytics = _TestAnalyticsAdapter();
+    AnalyticsManager.configure(analytics);
+    await AnalyticsManager.init();
+    final provider = DeviceProvider();
+    addTearDown(provider.dispose);
+    final device = BtDevice(
+      id: 'AA:AA:AA:AA:AA:02',
+      name: 'Omi',
+      type: DeviceType.omi,
+      rssi: -50,
+      firmwareRevision: '3.0.20',
+    );
+
+    await provider.setConnectedDevice(device);
+    await provider.setConnectedDevice(device);
+    await provider.setConnectedDevice(null);
+    await provider.setConnectedDevice(device);
+    SharedPreferencesUtil().uid = 'user-b';
+    await provider.setConnectedDevice(null);
+    await provider.setConnectedDevice(device);
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(analytics.events.where((event) => event == 'Device Paired'), hasLength(2));
+    expect(analytics.events.where((event) => event == 'Device Connected'), hasLength(3));
+    for (final uid in ['user-a', 'user-b']) {
+      expect(analytics.personPropertiesByUser[uid]?['has_paired_device'], isTrue);
+      expect(DateTime.tryParse(analytics.personPropertiesByUser[uid]?['first_paired_at'] as String), isNotNull);
+    }
+  });
+
+  test('non-null to null transition emits one truthful Device Session Ended', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'session-user'});
+    await SharedPreferencesUtil.init();
+    final analytics = _TestAnalyticsAdapter();
+    AnalyticsManager.configure(analytics);
+    await AnalyticsManager.init();
+    final provider = DeviceProvider(
+      bleDiagnosticsLoader: (_) async => BleDeviceDiagnostics(
+        disconnectHistory: [
+          BleDisconnectEvent(
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+            reason: 'connection_timeout',
+            reasonCode: 8,
+            isManual: false,
+            eventType: 'disconnect',
+            lastRssi: -82,
+            connectionDurationMs: 1250,
+            appState: 'foreground',
+            timeToReconnectMs: 0,
+            rssiTrend: 'falling',
+          ),
+        ],
+        reconnectionCount: 0,
+        connectedAt: 0,
+        failToConnectCount: 0,
+      ),
+    );
+    addTearDown(provider.dispose);
+    final device = BtDevice(
+      id: 'AA:AA:AA:AA:AA:03',
+      name: 'Omi',
+      type: DeviceType.omi,
+      rssi: -50,
+      modelNumber: 'Omi DevKit 2',
+      firmwareRevision: '3.0.20',
+    );
+
+    await provider.setConnectedDevice(device);
+    await provider.setConnectedDevice(null);
+    await provider.setConnectedDevice(null);
+    await AnalyticsManager.flushPending(force: true);
+
+    final sessionEvents = [
+      for (var i = 0; i < analytics.events.length; i++)
+        if (analytics.events[i] == 'Device Session Ended') analytics.eventProperties[i],
+    ];
+    expect(sessionEvents, hasLength(1));
+    expect(sessionEvents.single, containsPair('duration_seconds', 1.25));
+    expect(sessionEvents.single, containsPair('reason', 'connection_timeout'));
+    expect(sessionEvents.single, containsPair('hci_reason_code', 8));
+    expect(sessionEvents.single, containsPair('device_vendor', 'omi'));
+    expect(sessionEvents.single, containsPair('model', 'Omi DevKit 2'));
+    expect(sessionEvents.single, containsPair('firmware_revision', '3.0.20'));
+    expect(sessionEvents.single, containsPair('reconnect_attempt_count', 0));
   });
 
   group('battery throttling', () {
@@ -228,4 +351,46 @@ void main() {
       expect(flag2, true, reason: 'Exactly 20% should not reset flag (needs > 20)');
     });
   });
+}
+
+class _TestAnalyticsAdapter implements AnalyticsAdapter {
+  final List<String> events = [];
+  final List<Map<String, Object>> eventProperties = [];
+  final List<Map<String, Object>> personProperties = [];
+  final Map<String, Map<String, Object>> personPropertiesByUser = {};
+
+  @override
+  bool get isInitialized => true;
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  void track({required String eventName, Map<String, Object>? properties}) {
+    events.add(eventName);
+    eventProperties.add(properties ?? {});
+  }
+
+  @override
+  void alias({required String newUserId}) {}
+
+  @override
+  void identify({required String userId, Map<String, Object>? userProperties}) {
+    if (userProperties != null) {
+      personProperties.add(userProperties);
+      personPropertiesByUser.putIfAbsent(userId, () => {}).addAll(userProperties);
+    }
+  }
+
+  @override
+  void setInteractionContext({String? screenName, required String target}) {}
+
+  @override
+  void enable() {}
+
+  @override
+  void disable() {}
+
+  @override
+  void reset() {}
 }

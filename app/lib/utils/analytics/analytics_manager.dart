@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
@@ -522,9 +523,55 @@ class AnalyticsManager {
     track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
   }
 
-  void deviceConnected() => track('Device Connected', properties: {..._preferences.btDevice.toJson()});
+  void deviceConnected() {
+    final device = _preferences.btDevice;
+    final vendor = device.type.analyticsVendor;
+    track('Device Connected', properties: {
+      ...device.toJson(),
+      'type': device.type.name,
+      'device_vendor': vendor,
+    });
+    setUserProperty('device_vendor', vendor);
+  }
+
+  void devicePaired(String firstPairedAt) {
+    final device = _preferences.btDevice;
+    track('Device Paired', properties: {
+      ...device.toJson(),
+      'type': device.type.name,
+      'device_vendor': device.type.analyticsVendor,
+    });
+    _setUserPropertiesBatch({
+      'has_paired_device': true,
+      'first_paired_at': firstPairedAt,
+      'device_vendor': device.type.analyticsVendor,
+    });
+  }
 
   void deviceDisconnected() => track('Device Disconnected');
+
+  void deviceSessionEnded({
+    required BtDevice device,
+    required Duration duration,
+    String? reason,
+    int? hciReasonCode,
+  }) {
+    final properties = <String, Object>{
+      'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
+      'reason': _knownDeviceValue(reason ?? ''),
+      'device_vendor': device.type.analyticsVendor,
+      'model': _knownDeviceValue(device.modelNumber),
+      'firmware_revision': _knownDeviceValue(device.firmwareRevision),
+      // The app emits at disconnect, before native auto-reconnect can attempt.
+      'reconnect_attempt_count': 0,
+    };
+    if (hciReasonCode != null && hciReasonCode >= 0) {
+      properties['hci_reason_code'] = hciReasonCode;
+    }
+    track('Device Session Ended', properties: properties);
+  }
+
+  static String _knownDeviceValue(String value) => value.isEmpty || value == 'Unknown' ? 'unknown' : value;
 
   void memoriesPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
