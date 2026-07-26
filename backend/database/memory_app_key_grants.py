@@ -6,6 +6,7 @@ from typing import Any, Optional, cast
 
 import database._client as db_client_module
 from google.cloud import firestore
+from google.cloud.firestore_v1.field_path import FieldPath
 
 StatePayload = dict[str, Any]
 
@@ -233,18 +234,18 @@ def remove_developer_api_key_memory_grant(
     if not doc_ref.get().exists:
         return
 
-    # UUID key ids contain hyphens; dotted field paths must use FieldPath so Firestore
-    # does not treat hyphen segments as invalid path components.
-    firestore_module = _firestore_module()
-    field_path = firestore_module.FieldPath(
+    # UUID key ids contain hyphens, so the nested path is escaped through FieldPath
+    # before being passed as an update key. ``update()`` only accepts string keys —
+    # a FieldPath instance raises — so the escaped API representation is used.
+    field_path = FieldPath(
         "grants",
         DEVELOPER_API_CONSUMER,
         "apps",
         DEVELOPER_API_DEFAULT_APP_ID,
         "keys",
         key_id,
-    )
-    doc_ref.update({field_path: firestore_module.DELETE_FIELD})
+    ).to_api_repr()
+    doc_ref.update({field_path: _firestore_module().DELETE_FIELD})
 
 
 __all__ = [
