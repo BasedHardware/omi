@@ -3851,6 +3851,17 @@ class FloatingControlBarManager {
     }
     persistNotificationMessageIfNeeded(notification)
 
+    // A live voice session has no eyes. Hand it the card as silent context so a spoken
+    // follow-up has a referent; the typed path gets the same thing via
+    // pendingNotificationContext.
+    NotchCardVoiceDelivery.shared.cardPresented(
+      id: notification.id,
+      text: notificationContextSuffix(
+        message: ChatMessage(text: notification.message, sender: .ai),
+        context: notification.context
+      )
+    )
+
     // The flag must survive the whole notification chain: when a queued
     // notification is presented the window is already visible from the
     // temp-show, so resetting it here would skip the re-hide in
