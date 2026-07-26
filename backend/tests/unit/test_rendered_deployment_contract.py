@@ -184,6 +184,12 @@ def test_pusher_does_not_mount_kubernetes_api_credentials(contracts: SimpleNames
 
     assert deployment is not None
     assert deployment["spec"]["template"]["spec"]["automountServiceAccountToken"] is False
+    assert deployment["spec"]["template"]["spec"]["containers"][0]["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"drop": ["ALL"]},
+        "runAsNonRoot": True,
+        "runAsUser": 10001,
+    }
 
 
 def test_pusher_rejects_a_missing_min_ready_seconds(contracts: SimpleNamespace, tmp_path: Path):

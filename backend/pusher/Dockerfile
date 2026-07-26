@@ -49,7 +49,12 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
-RUN apt-get update && apt-get -y install ffmpeg curl libjemalloc2 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get -y install ffmpeg curl libjemalloc2 && \
+    groupadd --system --gid 10001 pusher && \
+    useradd --system --uid 10001 --gid 10001 --home-dir /app pusher && \
+    mkdir -p _temp _samples _segments _speech_profiles && \
+    chown -R 10001:10001 _temp _samples _segments _speech_profiles && \
+    rm -rf /var/lib/apt/lists/*
 
 # jemalloc eliminates glibc malloc fragmentation that causes RSS to grow linearly
 # under high-churn bytearray allocations from WebSocket audio streams (#6938)
@@ -77,4 +82,5 @@ COPY backend/utils/ ./utils/
 COPY backend/pusher/ ./pusher/
 
 EXPOSE 8080
+USER 10001:10001
 CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20", "--loop", "uvloop"]
