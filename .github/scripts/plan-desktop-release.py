@@ -20,7 +20,10 @@ REQUIRED_SOURCE_CHECK_NAMES = (
     "Desktop Swift Release Compile",
 )
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
-SOURCE_CHECK_WAIT_SECONDS = 12 * 60
+# The exact-SHA aggregate can complete after the former 12-minute boundary on
+# a healthy run. Give the normal 20-minute CI budget time to settle while
+# retaining a bounded, fail-closed source-check gate.
+SOURCE_CHECK_WAIT_SECONDS = 20 * 60
 SOURCE_CHECK_POLL_SECONDS = 30
 MAX_SOURCE_STATUS_POLLS = 20
 # Short debounce so a merge is tagged within ~a minute instead of waiting ten.
