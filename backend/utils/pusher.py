@@ -4,7 +4,8 @@ import time
 import websockets
 import logging
 from enum import Enum
-from typing import Any, Callable, List, Optional, cast
+from typing import Any, Callable, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_STATE
 from utils.other.backoff import calculate_backoff_with_jitter
@@ -94,7 +95,9 @@ class PusherCircuitBreaker:
             self._update_metric()
             logger.warning("Pusher circuit breaker -> OPEN (half-open probe failed)")
 
-    def record_success(self):
+    def record_success(self, *, is_probe: bool = False):
+        if self._state != CircuitState.CLOSED and not (is_probe and self._state == CircuitState.HALF_OPEN):
+            return
         if self._state in (CircuitState.HALF_OPEN, CircuitState.OPEN):
             logger.info(f"Pusher circuit breaker -> CLOSED (success from {self._state.value})")
         self._state = CircuitState.CLOSED
@@ -151,7 +154,7 @@ async def connect_to_trigger_pusher(
 
         try:
             result = await _connect_to_trigger_pusher(uid, sample_rate)
-            breaker.record_success()
+            breaker.record_success(is_probe=is_probe)
             return result
         except asyncio.CancelledError:
             if is_probe:
@@ -177,9 +180,25 @@ async def connect_to_trigger_pusher(
 async def _connect_to_trigger_pusher(uid: str, sample_rate: int = 8000):
     try:
         logger.info(f"Connecting to Pusher transcripts trigger WebSocket... {uid}")
-        ws_host = cast(str, PusherAPI).replace("http", "ws")
+        if not PusherAPI:
+            raise ValueError('HOSTED_PUSHER_API_URL is required')
+        parsed = urlsplit(PusherAPI)
+        if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+            raise ValueError('HOSTED_PUSHER_API_URL must be an absolute HTTP URL')
+        query = urlencode(
+            (*parse_qsl(parsed.query, keep_blank_values=True), ('uid', uid), ('sample_rate', sample_rate))
+        )
+        ws_url = urlunsplit(
+            (
+                'wss' if parsed.scheme == 'https' else 'ws',
+                parsed.netloc,
+                f"{parsed.path.rstrip('/')}/v1/trigger/listen",
+                query,
+                '',
+            )
+        )
         socket = await websockets.connect(
-            f"{ws_host}/v1/trigger/listen?uid={uid}&sample_rate={sample_rate}",
+            ws_url,
             ping_interval=30,
             ping_timeout=60,
             close_timeout=3,

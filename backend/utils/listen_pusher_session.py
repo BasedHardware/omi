@@ -7,10 +7,14 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Awaitable, Callable, cast, Deque, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, cast, Deque, Dict, List, Optional, Tuple, TYPE_CHECKING
 
-from websockets.client import WebSocketClientProtocol
 from websockets.exceptions import ConnectionClosed
+
+if TYPE_CHECKING:
+    from websockets.legacy.client import WebSocketClientProtocol
+else:
+    WebSocketClientProtocol = Any
 
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_REJECTIONS, PUSHER_SESSION_DEGRADED
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
@@ -78,6 +82,8 @@ class ListenPusherSession:
         self.deps = deps
         self.pusher_ws: Optional[WebSocketClientProtocol] = None
         self.pusher_connect_lock = asyncio.Lock()
+        self.transcript_flush_lock = asyncio.Lock()
+        self.audio_flush_lock = asyncio.Lock()
         self.pusher_connected = False
         self.reconnect_state = PusherReconnectState.CONNECTED
         self.reconnect_attempts = 0
@@ -174,35 +180,36 @@ class ListenPusherSession:
             return False
 
     async def _transcript_flush(self):
-        if self.pusher_connected and self.pusher_ws and len(self.segment_buffers) > 0:
-            pending_segments = self.segment_buffers
-            self.segment_buffers = deque(maxlen=self.config.max_segment_buffer_size)
-            try:
-                data = bytearray()
-                data.extend(struct.pack("I", 102))
-                data.extend(
-                    bytes(
-                        json.dumps(
-                            {
-                                "segments": list(pending_segments),
-                                "memory_id": self.deps.get_current_conversation_id(),
-                            }
-                        ),
-                        "utf-8",
+        async with self.transcript_flush_lock:
+            if self.pusher_connected and self.pusher_ws and len(self.segment_buffers) > 0:
+                pending_segments = self.segment_buffers
+                self.segment_buffers = deque(maxlen=self.config.max_segment_buffer_size)
+                try:
+                    data = bytearray()
+                    data.extend(struct.pack("I", 102))
+                    data.extend(
+                        bytes(
+                            json.dumps(
+                                {
+                                    "segments": list(pending_segments),
+                                    "memory_id": self.deps.get_current_conversation_id(),
+                                }
+                            ),
+                            "utf-8",
+                        )
                     )
-                )
-                await self.pusher_ws.send(cast(bytes, data))
-            except (asyncio.CancelledError, Exception) as e:
-                self.segment_buffers = deque(
-                    (*pending_segments, *self.segment_buffers), maxlen=self.config.max_segment_buffer_size
-                )
-                if isinstance(e, asyncio.CancelledError):
-                    raise
-                elif isinstance(e, ConnectionClosed):
-                    logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
-                    self._mark_disconnected()
-                else:
-                    logger.error(f"Pusher transcripts failed: {e} {self.uid} {self.session_id}")
+                    await self.pusher_ws.send(cast(bytes, data))
+                except (asyncio.CancelledError, Exception) as e:
+                    self.segment_buffers = deque(
+                        (*pending_segments, *self.segment_buffers), maxlen=self.config.max_segment_buffer_size
+                    )
+                    if isinstance(e, asyncio.CancelledError):
+                        raise
+                    elif isinstance(e, ConnectionClosed):
+                        logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
+                        self._mark_disconnected()
+                    else:
+                        logger.error(f"Pusher transcripts failed: {e} {self.uid} {self.session_id}")
 
     async def transcript_consume(self):
         while self.deps.is_active():
@@ -222,54 +229,56 @@ class ListenPusherSession:
         self.audio_buffer_last_received = received_at
 
     async def _audio_bytes_flush(self):
-        current_conversation_id = self.deps.get_current_conversation_id()
-        if (
-            self.pusher_ws
-            and current_conversation_id
-            and (
-                self.last_synced_conversation_id is None or current_conversation_id != self.last_synced_conversation_id
-            )
-        ):
-            try:
-                data = bytearray()
-                data.extend(struct.pack("I", 103))
-                data.extend(bytes(current_conversation_id, "utf-8"))
-                await self.pusher_ws.send(cast(bytes, data))
-                self.last_synced_conversation_id = current_conversation_id
-            except ConnectionClosed as e:
-                logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_disconnected()
-            except Exception as e:
-                logger.error(f"Failed to send conversation_id to pusher: {e} {self.uid} {self.session_id}")
-
-        if self.pusher_connected and self.pusher_ws and self.audio_total_size > 0:
-            pending_chunks = self.audio_chunks
-            pending_total_size = self.audio_total_size
-            self.audio_chunks = deque()
-            self.audio_total_size = 0
-            try:
-                effective_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
-                buffer_duration_seconds = pending_total_size / (effective_rate * 2)
-                buffer_start_time = (self.audio_buffer_last_received or self.deps.now()) - buffer_duration_seconds
-                audio_data = b''.join(pending_chunks)
-                data = bytearray()
-                data.extend(struct.pack("I", 101))
-                data.extend(struct.pack("d", buffer_start_time))
-                data.extend(audio_data)
-                del audio_data
-                await self.pusher_ws.send(cast(bytes, data))
-            except (asyncio.CancelledError, Exception) as e:
-                self.audio_chunks.extendleft(reversed(pending_chunks))
-                self.audio_total_size += pending_total_size
-                while self.audio_total_size > self.config.max_audio_buffer_size:
-                    self.audio_total_size -= len(self.audio_chunks.popleft())
-                if isinstance(e, asyncio.CancelledError):
-                    raise
-                elif isinstance(e, ConnectionClosed):
+        async with self.audio_flush_lock:
+            current_conversation_id = self.deps.get_current_conversation_id()
+            if (
+                self.pusher_ws
+                and current_conversation_id
+                and (
+                    self.last_synced_conversation_id is None
+                    or current_conversation_id != self.last_synced_conversation_id
+                )
+            ):
+                try:
+                    data = bytearray()
+                    data.extend(struct.pack("I", 103))
+                    data.extend(bytes(current_conversation_id, "utf-8"))
+                    await self.pusher_ws.send(cast(bytes, data))
+                    self.last_synced_conversation_id = current_conversation_id
+                except ConnectionClosed as e:
                     logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
                     self._mark_disconnected()
-                else:
-                    logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
+                except Exception as e:
+                    logger.error(f"Failed to send conversation_id to pusher: {e} {self.uid} {self.session_id}")
+
+            if self.pusher_connected and self.pusher_ws and self.audio_total_size > 0:
+                pending_chunks = self.audio_chunks
+                pending_total_size = self.audio_total_size
+                self.audio_chunks = deque()
+                self.audio_total_size = 0
+                try:
+                    effective_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
+                    buffer_duration_seconds = pending_total_size / (effective_rate * 2)
+                    buffer_start_time = (self.audio_buffer_last_received or self.deps.now()) - buffer_duration_seconds
+                    audio_data = b''.join(pending_chunks)
+                    data = bytearray()
+                    data.extend(struct.pack("I", 101))
+                    data.extend(struct.pack("d", buffer_start_time))
+                    data.extend(audio_data)
+                    del audio_data
+                    await self.pusher_ws.send(cast(bytes, data))
+                except (asyncio.CancelledError, Exception) as e:
+                    self.audio_chunks.extendleft(reversed(pending_chunks))
+                    self.audio_total_size += pending_total_size
+                    while self.audio_total_size > self.config.max_audio_buffer_size:
+                        self.audio_total_size -= len(self.audio_chunks.popleft())
+                    if isinstance(e, asyncio.CancelledError):
+                        raise
+                    elif isinstance(e, ConnectionClosed):
+                        logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
+                        self._mark_disconnected()
+                    else:
+                        logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
 
     async def audio_bytes_consume(self):
         while self.deps.is_active():
@@ -549,13 +558,14 @@ class ListenPusherSession:
         segment_ids: List[str],
     ):
         """Send speaker sample extraction request to pusher with segment IDs."""
+        request = (person_id, conv_id, segment_ids)
         if not self.pusher_connected or not self.pusher_ws:
-            self.pending_speaker_sample_requests.append((person_id, conv_id, segment_ids))
+            self.pending_speaker_sample_requests.append(request)
             logger.warning(
                 f"Pusher not connected, buffered speaker sample request: person={person_id}, "
                 f"{len(segment_ids)} segments ({len(self.pending_speaker_sample_requests)} pending) {self.uid} {self.session_id}"
             )
-            return
+            return False
         try:
             data = bytearray()
             data.extend(struct.pack("I", 105))
@@ -575,8 +585,13 @@ class ListenPusherSession:
             logger.info(
                 f"Sent speaker sample request to pusher: person={person_id}, {len(segment_ids)} segments {self.uid} {self.session_id}"
             )
+            return True
         except Exception as e:
+            self.pending_speaker_sample_requests.append(request)
+            if isinstance(e, ConnectionClosed):
+                self._mark_disconnected()
             logger.error(f"Failed to send speaker sample request: {e} {self.uid} {self.session_id}")
+            return False
 
     def is_connected(self):
         return self.pusher_connected

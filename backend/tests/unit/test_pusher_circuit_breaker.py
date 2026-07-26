@@ -24,6 +24,7 @@ from utils.pusher import (
     PusherCircuitBreaker,
     PusherCircuitBreakerOpen,
     CircuitState,
+    _connect_to_trigger_pusher,
     connect_to_trigger_pusher,
     get_circuit_breaker,
 )
@@ -77,7 +78,7 @@ class TestCircuitBreakerStateTransitions:
         time.sleep(0.02)
         assert cb.state == CircuitState.HALF_OPEN
 
-        cb.record_success()
+        cb.record_success(is_probe=True)
         assert cb.state == CircuitState.CLOSED
 
     def test_half_open_failure_reopens(self):
@@ -170,7 +171,7 @@ class TestCircuitBreakerProbe:
             cb.record_failure()
         time.sleep(0.02)
         cb.acquire_probe()
-        cb.record_success()
+        cb.record_success(is_probe=True)
         assert cb._probe_in_progress is False
 
     def test_probe_failure_resets_probe_flag(self):
@@ -323,6 +324,56 @@ async def test_cancelled_half_open_probe_reopens_breaker():
     assert cb.acquire_probe() is True
 
 
+@pytest.mark.asyncio
+async def test_stale_inflight_success_does_not_close_open_breaker():
+    cb = PusherCircuitBreaker(failure_threshold=1)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def connect(uid, sample_rate):
+        if uid == "slow":
+            started.set()
+            await release.wait()
+            return MagicMock()
+        raise RuntimeError("failed")
+
+    with patch('utils.pusher.get_circuit_breaker', return_value=cb), patch(
+        'utils.pusher._connect_to_trigger_pusher', side_effect=connect
+    ):
+        stale = asyncio.create_task(connect_to_trigger_pusher(uid="slow", retries=1))
+        await started.wait()
+        with pytest.raises(RuntimeError, match="failed"):
+            await connect_to_trigger_pusher(uid="failed", retries=1)
+        assert cb.state == CircuitState.OPEN
+        release.set()
+        await stale
+
+    assert cb.state == CircuitState.OPEN
+
+
+@pytest.mark.asyncio
+async def test_connect_builds_encoded_websocket_url():
+    socket = MagicMock()
+    with patch('utils.pusher.PusherAPI', 'https://pusher.example/base?existing=1'), patch(
+        'utils.pusher.websockets.connect', return_value=socket
+    ) as connect:
+        assert await _connect_to_trigger_pusher('user&admin=true', 16000) is socket
+
+    assert connect.await_args.args[0] == (
+        'wss://pusher.example/base/v1/trigger/listen?existing=1&uid=user%26admin%3Dtrue&sample_rate=16000'
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('url', [None, 'pusher.example', 'ftp://pusher.example'])
+async def test_connect_rejects_invalid_pusher_url(url):
+    with patch('utils.pusher.PusherAPI', url), patch('utils.pusher.websockets.connect') as connect:
+        with pytest.raises(ValueError):
+            await _connect_to_trigger_pusher('user', 8000)
+
+    connect.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # Metrics integration
 # ---------------------------------------------------------------------------
@@ -349,7 +400,7 @@ def test_metric_updates_on_state_transitions():
     assert PUSHER_CIRCUIT_BREAKER_STATE._value.get() == 2  # HALF_OPEN=2
 
     # Success → CLOSED
-    cb.record_success()
+    cb.record_success(is_probe=True)
     assert PUSHER_CIRCUIT_BREAKER_STATE._value.get() == 0  # CLOSED=0
 
 
