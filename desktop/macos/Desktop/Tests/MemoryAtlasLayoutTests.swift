@@ -725,11 +725,18 @@ final class MemoryAtlasLayoutTests: XCTestCase {
   /// Regions on a real account mostly overlap near the middle, so a caption
   /// that cannot have its first choice takes another spot on its own territory
   /// rather than going unnamed — but never one that is already spoken for.
-  /// A region's outline is a claim about a border, so the map only draws one
-  /// where the border is real. A tight group that owns its patch is a place; a
-  /// sprawling one whose patch is mostly other people's entities is an average,
-  /// and ringing it states something untrue about the map.
-  func testOnlyRegionsThatOwnTheirGroundReportABorderWorthDrawing() {
+  /// A region's outline is a claim about a border, and the map now draws one
+  /// around every region — so the shape has to earn it rather than a threshold
+  /// deciding after the fact which claims to make.
+  ///
+  /// Territory is awarded per patch of canvas to whichever neighbourhood is
+  /// most present there, and only when it is clearly ahead of the runner-up.
+  /// Two consequences are the whole reason for that design, and this is what
+  /// checks they hold: no two territories can claim the same ground, and the
+  /// ground a territory does claim is mostly its own. The ellipse this replaced
+  /// could satisfy neither — two of them overlapped freely, and a sprawling
+  /// group's disc was mostly other people's entities.
+  func testEveryTerritoryTheMapDrawsIsItsOwnAndNobodyElsesToo() {
     var nodes: [KnowledgeGraphNode] = []
     var edges: [KnowledgeGraphEdge] = []
     // One group that only ever meets itself, and two that are thoroughly mixed
@@ -760,22 +767,20 @@ final class MemoryAtlasLayoutTests: XCTestCase {
 
     XCTAssertFalse(snapshot.neighbourhoods.isEmpty, "The fixture has groups to find")
     for region in snapshot.neighbourhoods {
-      XCTAssertGreaterThanOrEqual(region.purity, 0)
-      XCTAssertLessThanOrEqual(region.purity, 1)
-    }
-    // Whatever the detector made of it, a region reported as ownable must
-    // genuinely be mostly its own — that is the only thing the border promises.
-    for region in snapshot.neighbourhoods
-    where region.purity >= MemoryAtlasNeighbourhoodLabels.borderedAbovePurity {
-      let own = Set(region.memberIDs)
-      let inside = snapshot.nodes.filter {
-        hypot($0.normalizedPosition.x - region.center.x, $0.normalizedPosition.y - region.center.y)
-          <= region.radius
-      }
-      let mine = inside.filter { own.contains($0.id) }.count
+      XCTAssertFalse(region.coastline.isEmpty, "\(region.caption) is drawn, so it holds ground")
       XCTAssertGreaterThan(
-        Double(mine) / Double(max(inside.count, 1)), 0.5,
-        "A bordered region is mostly itself")
+        region.purity, 0.5,
+        "\(region.caption) is outlined, so its ground is mostly its own")
+    }
+
+    // Sampled on a grid rather than at the entities, because the claim is about
+    // the canvas: a point of empty map may belong to at most one territory.
+    for step in 0..<(60 * 60) {
+      let probe = CGPoint(x: CGFloat(step % 60) / 59, y: CGFloat(step / 60) / 59)
+      let owners = snapshot.neighbourhoods
+        .filter { memoryAtlasCoastlineContains($0.coastline, probe) }
+        .map(\.caption)
+      XCTAssertLessThanOrEqual(owners.count, 1, "\(probe) is claimed by \(owners)")
     }
   }
 
@@ -784,11 +789,11 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let stacked = (0..<3).map {
       MemoryAtlasNeighbourhood(
         id: $0, memberIDs: ["m"], caption: "Region \($0)",
-        center: CGPoint(x: 0.5, y: 0.5), radius: 0.1, purity: 1)
+        center: CGPoint(x: 0.5, y: 0.5), radius: 0.1, coastline: [], purity: 1)
     }
     let offscreen = MemoryAtlasNeighbourhood(
       id: 9, memberIDs: ["m"], caption: "Far away", center: CGPoint(x: 14, y: 14), radius: 0.1,
-      purity: 1)
+      coastline: [], purity: 1)
     let taken = CGRect(x: 340, y: 380, width: 120, height: 20)
 
     let placed = MemoryAtlasNeighbourhoodLabels.place(
@@ -815,7 +820,8 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let many = (0..<40).map { index in
       MemoryAtlasNeighbourhood(
         id: index, memberIDs: ["m"], caption: "R\(index)",
-        center: CGPoint(x: 0.1 + 0.02 * CGFloat(index), y: 0.5), radius: 0.005, purity: 1)
+        center: CGPoint(x: 0.1 + 0.02 * CGFloat(index), y: 0.5), radius: 0.005, coastline: [],
+        purity: 1)
     }
 
     let placed = MemoryAtlasNeighbourhoodLabels.place(
@@ -887,10 +893,10 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(sprawling.pan.width, 0, accuracy: 1e-9, "A centred region needs no pan")
 
     // The region's centre must land in the middle of the viewport, which is the
-    // same projection the canvas draws with.
-    let projected =
-      (0.3 * viewport.width - viewport.width / 2) * tight.zoom
-      + viewport.width / 2 + tight.pan.width
+    // same projection the canvas draws with — one scale for both axes, taken
+    // from the shorter side, so a wide window adds margin rather than stretch.
+    let span = MemoryAtlasLayoutEngine.projectionSpan(of: viewport)
+    let projected = (0.3 - 0.5) * span * tight.zoom + viewport.width / 2 + tight.pan.width
     XCTAssertEqual(projected, viewport.width / 2, accuracy: 1e-6)
   }
 

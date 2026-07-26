@@ -254,6 +254,13 @@ struct MemoryAtlasEdgePlacement: Identifiable {
   /// Deliberately unused by rendering today — preserved as spring-strength
   /// input for a future force-directed layout.
   let weight: Int
+  /// Whether both ends of this connection sit in the same neighbourhood.
+  ///
+  /// What lets the wiring itself show the grouping: drawn a little brighter
+  /// inside a region than between two, the mesh thickens where a group is
+  /// dense and thins at its edges, so the structure is legible without
+  /// reading the territory layer at all.
+  let withinNeighbourhood: Bool
 
   var id: String { edge.id }
 }
@@ -277,20 +284,43 @@ struct MemoryAtlasNeighbourhood: Identifiable, Equatable {
   let caption: String
   /// Normalized centre of its members.
   let center: CGPoint
-  /// Normalized radius covering most of them. Strays are meant to fall outside
-  /// it — a region is where a neighbourhood mostly is, not a claim of a border.
+  /// Normalized radius covering most of them. No longer the drawn shape — the
+  /// coastline is — but still what decides where a caption goes and how far the
+  /// camera pulls back when the region is entered.
   let radius: CGFloat
-  /// Of the entities standing inside this region, the share that belong to it.
+  /// The territory this neighbourhood holds, as closed rings in normalized map
+  /// coordinates. Usually one; more than one when the group lives in two places
+  /// and the map declines to invent a land bridge between them.
+  let coastline: [[CGPoint]]
+  /// Of the entities standing on this territory, the share that belong to it.
   ///
   /// Whether the region is a place or merely an average. A neighbourhood can be
   /// perfectly well detected and still be smeared through two others, and the
   /// difference is invisible in the caption: both are a list of names over a
-  /// patch of canvas. This is what the map checks before drawing an outline,
-  /// because an outline is a claim about a border and drawing one around a
-  /// patch that is half other people's entities states something untrue.
+  /// patch of canvas. Kept as the map's own check on the shape it drew, and
+  /// measured against the coastline rather than a disc so it describes the
+  /// ground actually claimed.
   let purity: Double
 
   var memberCount: Int { memberIDs.count }
+}
+
+/// Whether a point in normalized map space falls on a territory.
+///
+/// Even-odd, so a ring enclosed by another counts as the hole it is.
+func memoryAtlasCoastlineContains(_ rings: [[CGPoint]], _ point: CGPoint) -> Bool {
+  var inside = false
+  for ring in rings where ring.count >= 3 {
+    var previous = ring[ring.count - 1]
+    for current in ring {
+      if (current.y > point.y) != (previous.y > point.y) {
+        let t = (point.y - current.y) / (previous.y - current.y)
+        if point.x < current.x + t * (previous.x - current.x) { inside.toggle() }
+      }
+      previous = current
+    }
+  }
+  return inside
 }
 
 /// Makes a region's name look pressable before it is pressed.
@@ -367,25 +397,13 @@ enum MemoryAtlasNeighbourhoodLabels {
     let caption: String
     /// The painted and tappable box, in view coordinates.
     let rect: CGRect
-    /// The region's centre and extent on screen, for the tint behind it.
+    /// The region's centre and extent on screen, for placing the caption.
     let center: CGPoint
     let radii: CGSize
-    /// Carried through from the neighbourhood so the renderer can decide
-    /// whether this region has a border worth drawing.
-    let purity: Double
+    /// The territory to paint, in normalized map coordinates. Projected at
+    /// draw time rather than here, so the same rings survive a camera move.
+    let coastline: [[CGPoint]]
   }
-
-  /// How much of a region has to actually be its own before the map draws a
-  /// line around it.
-  ///
-  /// Below this the tint is still painted — the region is a real place and the
-  /// eye should find it — but without an edge, because at that point the edge
-  /// would be the least true thing on the map. On a mature account this is the
-  /// difference between the handful of neighbourhoods that are genuinely
-  /// somewhere and the large central ones that overlap each other; outlining
-  /// all of them alike drew a stack of enormous rings that said less than the
-  /// tint alone.
-  static let borderedAbovePurity = 0.62
 
   /// Past this the captions are the map. Eight territories is already more
   /// than anyone holds in their head at a glance.
@@ -412,13 +430,16 @@ enum MemoryAtlasNeighbourhoodLabels {
     viewport: CGSize,
     zoomRange: ClosedRange<CGFloat>
   ) -> (zoom: CGFloat, pan: CGSize) {
-    let span = max(radius * 2, 0.02)
-    let zoom = min(max(enteredCoverage / span, zoomRange.lowerBound), zoomRange.upperBound)
+    let extent = max(radius * 2, 0.02)
+    let zoom = min(max(enteredCoverage / extent, zoomRange.lowerBound), zoomRange.upperBound)
+    // The same single scale the canvas projects with, so the region the camera
+    // frames is the region the user is looking at.
+    let span = MemoryAtlasLayoutEngine.projectionSpan(of: viewport)
     return (
       zoom,
       CGSize(
-        width: (0.5 - center.x) * viewport.width * zoom,
-        height: (0.5 - center.y) * viewport.height * zoom)
+        width: (0.5 - center.x) * span * zoom,
+        height: (0.5 - center.y) * span * zoom)
     )
   }
 
@@ -470,7 +491,7 @@ enum MemoryAtlasNeighbourhoodLabels {
       placed.append(
         Placed(
           id: region.id, caption: region.caption, rect: rect, center: center, radii: radii,
-          purity: region.purity))
+          coastline: region.coastline))
     }
     return placed
   }
@@ -805,13 +826,21 @@ enum MemoryAtlasRenderPlanner {
         case .focus, .inspect: 3_200
         }
       }
+    // The mesh is the structure, so it is not rationed at overview any more.
+    //
+    // Thirty-six of roughly fourteen hundred connections left the whole map to
+    // be read from the positions of dots alone: clustering was there, and
+    // invisible, because the thing that shows a group is dense wiring inside it
+    // and sparse wiring out of it. Average degree on a real account is under
+    // three, so the full mesh drawn as faint hairlines is a texture rather than
+    // a thicket. The node budget above still bounds how many endpoints exist.
     let edgeLimit: Int =
       switch detailLevel {
-      case .overview: 36
-      case .neighborhood: 96
-      case .detail: 160
-      case .focus: 260
-      case .inspect: 360
+      case .overview: 2_000
+      case .neighborhood: 2_400
+      case .detail: 3_000
+      case .focus: 3_600
+      case .inspect: 4_200
       }
     // These budgets exist to keep a multi-thousand-entity graph legible. An
     // atlas small enough to name in full needs no rationing: withholding
@@ -1379,13 +1408,16 @@ enum MemoryAtlasLayoutEngine {
       let source = positions[merged.edge.sourceId] ?? MemoryAtlasCluster.starCenter
       let target = positions[merged.edge.targetId] ?? MemoryAtlasCluster.starCenter
       let cluster = clusters[merged.edge.sourceId] ?? clusters[merged.edge.targetId] ?? .concept
+      let sourceGroup = layout.communities[merged.edge.sourceId]
       return MemoryAtlasEdgePlacement(
         edge: merged.edge,
         source: source,
         target: target,
         cluster: cluster,
         relationshipLabels: merged.relationshipLabels,
-        weight: merged.weight
+        weight: merged.weight,
+        withinNeighbourhood: sourceGroup != nil
+          && sourceGroup == layout.communities[merged.edge.targetId]
       )
     }
 
@@ -1424,12 +1456,28 @@ enum MemoryAtlasLayoutEngine {
     // rounding error on a large one.
     let floor = max(6, Int(Double(placementByID.count) * 0.015))
 
+    // Every group over the floor competes for ground, including the ones too
+    // small or too crowded to end up captioned. Leaving one out would not make
+    // it disappear — it would hand its land to whichever neighbour is nearest,
+    // and draw a coast through the middle of a group that is still on screen.
+    var contenders: [Int: [CGPoint]] = [:]
+    for group in membersByGroup.keys.sorted() {
+      let members = membersByGroup[group] ?? []
+      guard members.count >= floor else { continue }
+      contenders[group] = members.compactMap { placementByID[$0]?.normalizedPosition }
+    }
+    let coastlines = MemoryAtlasIslands.coastlines(members: contenders)
+
     var regions: [MemoryAtlasNeighbourhood] = []
     for group in membersByGroup.keys.sorted() {
       let members = membersByGroup[group] ?? []
       guard members.count >= floor else { continue }
       let points = members.compactMap { placementByID[$0]?.normalizedPosition }
       guard !points.isEmpty else { continue }
+      // A group whose members are spread too thin to hold any ground has no
+      // territory to draw and no border to claim.
+      let coastline = coastlines[group] ?? []
+      guard !coastline.isEmpty else { continue }
 
       let center = CGPoint(
         x: points.map(\.x).reduce(0, +) / CGFloat(points.count),
@@ -1442,10 +1490,7 @@ enum MemoryAtlasLayoutEngine {
       var inside = 0
       var mine = 0
       for placement in placements
-      where hypot(
-        placement.normalizedPosition.x - center.x,
-        placement.normalizedPosition.y - center.y) <= radius
-      {
+      where memoryAtlasCoastlineContains(coastline, placement.normalizedPosition) {
         inside += 1
         if own.contains(placement.id) { mine += 1 }
       }
@@ -1469,6 +1514,7 @@ enum MemoryAtlasLayoutEngine {
           caption: caption(from: ranked, count: captionMembers),
           center: center,
           radius: max(radius, 0.01),
+          coastline: coastline,
           purity: inside == 0 ? 0 : Double(mine) / Double(inside)
         )
       )
@@ -1511,7 +1557,24 @@ enum MemoryAtlasLayoutEngine {
 
   /// The region the relaxed map may occupy. Isolates are parked in the margin
   /// outside it, so it stops short of the canvas edge.
-  static let layoutArea = CGRect(x: 0.12, y: 0.16, width: 0.76, height: 0.68)
+  ///
+  /// Square, because the canvas it lands on is projected square. An earlier
+  /// wide box was the map's own shape rather than the graph's: relaxation found
+  /// a roughly round arrangement and the fit then stretched it to fill a
+  /// desktop window, so the same account looked like a long smear on a wide
+  /// display and a tall one when the window was dragged narrow.
+  static let layoutArea = CGRect(x: 0.14, y: 0.14, width: 0.72, height: 0.72)
+
+  /// How many points one unit of normalized map space is worth on screen.
+  ///
+  /// Deliberately one number rather than one per axis. The relaxation works in
+  /// a square and knows nothing about the window; projecting each axis onto its
+  /// own side of the viewport distorted whatever shape it found by the window's
+  /// aspect ratio, which on a wide desktop meant every account was drawn as a
+  /// horizontal band. Taking the shorter side for both axes leaves the map's
+  /// proportions alone and spends the extra width as margin — which is what the
+  /// graph views this one is measured against do.
+  static func projectionSpan(of size: CGSize) -> CGFloat { min(size.width, size.height) }
 
   /// One phrasing for "how big is this map", so the header and the timeline
   /// footer cannot describe the same thing in two different ways.
@@ -2744,7 +2807,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     regions: [MemoryAtlasNeighbourhoodLabels.Placed]
   ) -> some View {
     Canvas(opaque: false, colorMode: .linear) { context, _ in
-      drawNeighbourhoodTints(context: &context, regions: regions)
+      drawTerritories(context: &context, size: size, regions: regions)
       drawEdges(context: &context, size: size, plan: plan)
       drawNodes(context: &context, size: size, plan: plan)
       drawCanvasLabels(context: &context, size: size, plan: plan)
@@ -2776,56 +2839,43 @@ private struct CanonicalMemoryAtlasSurface: View {
       snapshot.neighbourhoods,
       in: size,
       project: { point(for: $0, in: size) },
-      scale: CGSize(width: size.width * zoom, height: size.height * zoom),
+      scale: CGSize(
+        width: MemoryAtlasLayoutEngine.projectionSpan(of: size) * zoom,
+        height: MemoryAtlasLayoutEngine.projectionSpan(of: size) * zoom),
       avoiding: entityNames
     )
   }
 
-  /// A breath of light where a neighbourhood is, drawn under everything.
+  /// The land each neighbourhood holds, drawn under everything.
   ///
   /// Deliberately colourless. Type already owns hue on this canvas, and a
   /// second colour scale over the top of it would leave the user decoding two
   /// palettes at once — with thirty-odd regions to distinguish, one of them
-  /// unwinnable. A region reads as a lit patch of ground, not as a category.
-  private func drawNeighbourhoodTints(
+  /// unwinnable. A region reads as a patch of ground, not as a category.
+  ///
+  /// And deliberately quiet. The wiring between entities is what says how the
+  /// map is organised; territory is the annotation over it. Painted any
+  /// stronger, the two layers compete and the result is neither a graph nor a
+  /// map. The coast carries most of what little weight this layer has, because
+  /// a line is legible at a fraction of the ink a fill needs.
+  private func drawTerritories(
     context: inout GraphicsContext,
+    size: CGSize,
     regions: [MemoryAtlasNeighbourhoodLabels.Placed]
   ) {
     for region in regions {
-      let bounds = CGRect(
-        x: region.center.x - region.radii.width,
-        y: region.center.y - region.radii.height,
-        width: region.radii.width * 2,
-        height: region.radii.height * 2
-      )
-      let shape = Path(ellipseIn: bounds)
-      let reach = max(region.radii.width, region.radii.height)
-
-      // A plateau rather than a peak. A gradient falling away from the centre
-      // reads as a smudge under the densest part of the group and says nothing
-      // about where the group stops; holding the tint flat across most of the
-      // radius and releasing it near the rim is what makes the region a shape
-      // instead of a glow.
+      var shape = Path()
+      for ring in region.coastline where ring.count >= 3 {
+        shape.move(to: point(for: ring[0], in: size))
+        for vertex in ring.dropFirst() { shape.addLine(to: point(for: vertex, in: size)) }
+        shape.closeSubpath()
+      }
+      guard !shape.isEmpty else { continue }
+      // Even-odd, so an enclave inside a territory is drawn as the hole it is
+      // rather than being filled over.
       context.fill(
-        shape,
-        with: .radialGradient(
-          Gradient(stops: [
-            .init(color: OmiColors.textPrimary.opacity(0.055), location: 0),
-            .init(color: OmiColors.textPrimary.opacity(0.05), location: 0.72),
-            .init(color: OmiColors.textPrimary.opacity(0), location: 1),
-          ]),
-          center: region.center,
-          startRadius: 0,
-          endRadius: reach
-        )
-      )
-
-      // The edge itself, and only where it is true. Faint enough to read as the
-      // boundary of a territory rather than a drawn container, but the only
-      // thing on the map that says one neighbourhood ends here and the next
-      // begins — which is worth saying exactly when it is the case.
-      guard region.purity >= MemoryAtlasNeighbourhoodLabels.borderedAbovePurity else { continue }
-      context.stroke(shape, with: .color(OmiColors.textPrimary.opacity(0.11)), lineWidth: 1)
+        shape, with: .color(OmiColors.textPrimary.opacity(0.05)), style: FillStyle(eoFill: true))
+      context.stroke(shape, with: .color(OmiColors.textPrimary.opacity(0.34)), lineWidth: 1)
     }
   }
 
@@ -2884,6 +2934,7 @@ private struct CanonicalMemoryAtlasSurface: View {
 
     for cluster in snapshot.activeClusters {
       var path = Path()
+      var within = Path()
       var spokes = Path()
       for placement in plan.visibleEdges where placement.cluster == cluster {
         let source = point(for: placement.source, in: size)
@@ -2903,23 +2954,42 @@ private struct CanonicalMemoryAtlasSurface: View {
         if spokesAreBackground && touchesAnchor {
           spokes.move(to: source)
           spokes.addLine(to: target)
+        } else if placement.withinNeighbourhood && selectedNodeID == nil {
+          within.move(to: source)
+          within.addLine(to: target)
         } else {
           path.move(to: source)
           path.addLine(to: target)
         }
       }
+      // Hairlines. With the whole mesh drawn rather than a few dozen of it,
+      // the per-connection weight that used to read as one relationship now
+      // has to read as texture — at the old 0.25 the map was a wall of lines.
+      // A connection crossing between two neighbourhoods is drawn fainter than
+      // one inside a neighbourhood, so density falls off at a group's edge the
+      // way the graph says it does.
       if !path.isEmpty {
         context.stroke(
           path,
-          with: .color(cluster.color.opacity(selectedNodeID == nil ? 0.25 : 0.74)),
-          lineWidth: selectedNodeID == nil ? 0.85 : 1.7
+          with: .color(cluster.color.opacity(selectedNodeID == nil ? 0.055 : 0.74)),
+          lineWidth: selectedNodeID == nil ? 0.6 : 1.7
         )
       }
+      if !within.isEmpty {
+        context.stroke(within, with: .color(cluster.color.opacity(0.14)), lineWidth: 0.7)
+      }
+      // The account holder's own spokes, fainter again — and much fainter than
+      // they were, because the budget that used to let only a few dozen lines
+      // onto the map was holding this back by accident. Drawn in full at the
+      // old weight, eight hundred tethers to the middle of the map buried every
+      // other connection under a starburst. "You are connected to this" is the
+      // least informative thing the map can say, so it is the first thing that
+      // gives way.
       if !spokes.isEmpty {
         context.stroke(
           spokes,
-          with: .color(cluster.color.opacity(selectedNodeID == nil ? 0.07 : 0.16)),
-          lineWidth: 0.6
+          with: .color(cluster.color.opacity(selectedNodeID == nil ? 0.028 : 0.16)),
+          lineWidth: 0.5
         )
       }
     }
@@ -3751,9 +3821,10 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private func point(for normalized: CGPoint, in size: CGSize) -> CGPoint {
-    CGPoint(
-      x: (normalized.x * size.width - size.width / 2) * zoom + size.width / 2 + pan.width,
-      y: (normalized.y * size.height - size.height / 2) * zoom + size.height / 2 + pan.height
+    let span = MemoryAtlasLayoutEngine.projectionSpan(of: size)
+    return CGPoint(
+      x: (normalized.x - 0.5) * span * zoom + size.width / 2 + pan.width,
+      y: (normalized.y - 0.5) * span * zoom + size.height / 2 + pan.height
     )
   }
 

@@ -8,6 +8,14 @@ import XCTest
 /// 1,946 nodes and 2,784 edges), so a passing optimization is not accidentally
 /// tuned only for a small unit-test graph. Work-budget assertions belong here;
 /// wall-clock measurements are diagnostic because runner hardware varies.
+///
+/// The edge budgets are deliberately larger than the mesh a real account has,
+/// because the whole mesh is now what shows the map's structure and rationing
+/// it hid exactly the thing it was drawn to show. What actually bounds the
+/// paint is one level up — the node cohort, since an edge needs both of its
+/// endpoints on the map — and the segments batch into one path per type per
+/// weight, so these numbers cap the cohort's worst case rather than the number
+/// of draw calls. Keep them as the tripwire against a budget going unbounded.
 final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
   private let productionScaleNodeCount = 2_400
   private let productionScaleEdgeCount = 3_600
@@ -44,7 +52,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     let plan = makePlan(snapshot: snapshot, zoom: 1)
 
     XCTAssertEqual(plan.detailLevel, .overview)
-    assertWorkBudgets(plan, nodes: 1_200, edges: 36, labels: 12)
+    assertWorkBudgets(plan, nodes: 1_200, edges: 2_000, labels: 12)
   }
 
   func testRenderPlannerAddsTheNeighborhoodCohortWithoutDroppingOverviewDots() {
@@ -52,7 +60,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     let plan = makePlan(snapshot: snapshot, zoom: 1.5)
 
     XCTAssertEqual(plan.detailLevel, .neighborhood)
-    assertWorkBudgets(plan, nodes: 1_600, edges: 96, labels: 24)
+    assertWorkBudgets(plan, nodes: 1_600, edges: 2_400, labels: 24)
     XCTAssertEqual(plan.visibleNodes.count, 1_600)
   }
 
@@ -61,7 +69,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     let plan = makePlan(snapshot: snapshot, zoom: 2.2)
 
     XCTAssertEqual(plan.detailLevel, .detail)
-    assertWorkBudgets(plan, nodes: 2_400, edges: 160, labels: 36)
+    assertWorkBudgets(plan, nodes: 2_400, edges: 3_000, labels: 36)
     XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
   }
 
@@ -76,7 +84,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     XCTAssertEqual(MemoryAtlasZoomPolicy.maximumZoom(nodeCount: snapshot.nodes.count, compact: true), 1.35)
     XCTAssertEqual(automaticCanvasLabelZoom, 45)
     XCTAssertEqual(plan.detailLevel, .inspect)
-    assertWorkBudgets(plan, nodes: 3_200, edges: 360, labels: 96)
+    assertWorkBudgets(plan, nodes: 3_200, edges: 4_200, labels: 96)
     XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
     XCTAssertLessThan(plan.interactiveNodes.count, plan.visibleNodes.count)
     XCTAssertTrue(plan.labelNodeIDs.isEmpty)
@@ -244,11 +252,11 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
         zoom < 1.35 ? 1_200 : (zoom < 1.9 ? 1_600 : (zoom < MemoryAtlasZoomPolicy.focusModeZoom ? 2_400 : 3_200))
       let baseEdgeLimit =
         zoom < 1.35
-        ? 36
+        ? 2_000
         : (zoom < 1.9
-          ? 96
+          ? 2_400
           : (zoom < MemoryAtlasZoomPolicy.focusModeZoom
-            ? 160 : (zoom < MemoryAtlasZoomPolicy.inspectModeZoom ? 260 : 360)))
+            ? 3_000 : (zoom < MemoryAtlasZoomPolicy.inspectModeZoom ? 3_600 : 4_200)))
       let edgeLimit = frame.isMultiple(of: 3) ? min(baseEdgeLimit, 80) : baseEdgeLimit
       XCTAssertLessThanOrEqual(plan.visibleNodes.count, nodeLimit)
       XCTAssertLessThanOrEqual(plan.visibleEdges.count, edgeLimit)
