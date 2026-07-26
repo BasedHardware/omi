@@ -290,7 +290,12 @@ struct FloatingControlBarView: View {
           // expanded surface — the notch's right side, revealed on hover.
           VStack {
             NotchSystemControlsView(progress: notchSwitcherProgress)
-              .padding(.top, notchChromeHeight + OmiSpacing.xs)
+              .padding(
+                .top,
+                notchChromeHeight
+                  + FloatingControlBarWindow.notchControlPanelTopOffset(agentCount: agentPills.pills.count)
+                  + OmiSpacing.xs
+              )
               .padding(.trailing, OmiSpacing.md)
             Spacer(minLength: 0)
           }

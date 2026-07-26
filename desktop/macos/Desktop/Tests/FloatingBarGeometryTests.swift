@@ -411,13 +411,34 @@ final class FloatingBarGeometryTests: XCTestCase {
     )
   }
 
-  func testNotchHoverMenuGrowsToFitSubagentsBeyondTheControlPanel() {
-    let empty = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0)
-    let many = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 8)
-    XCTAssertGreaterThan(many, empty, "eight agent rows must not be clipped to the control-panel height")
+  /// Spawned agents own the top of the hover surface; the control panel stacks beneath
+  /// them. If the surface stopped growing per agent the panel would be drawn on top of
+  /// the agent rows.
+  func testControlPanelStacksBelowAgentRowsRatherThanOverlappingThem() {
+    XCTAssertEqual(FloatingControlBarWindow.notchControlPanelTopOffset(agentCount: 0), 0)
 
-    // A single row is shorter than the panel, so the panel sets the floor.
-    XCTAssertEqual(FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 1), empty)
+    for count in 1...8 {
+      let offset = FloatingControlBarWindow.notchControlPanelTopOffset(agentCount: count)
+      XCTAssertEqual(
+        offset,
+        FloatingControlBarWindow.notchAgentListHeight(agentCount: count),
+        "panel must start below all \(count) agent row(s)"
+      )
+      XCTAssertEqual(
+        FloatingControlBarWindow.notchHoverMenuHeight(agentCount: count),
+        offset + FloatingControlBarWindow.notchControlPanelHeight
+          + FloatingControlBarWindow.notchHoverMenuBottomMargin,
+        "surface must be tall enough for the rows plus the whole panel"
+      )
+    }
+  }
+
+  func testNotchHoverMenuGrowsWithEachAdditionalSubagent() {
+    let empty = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0)
+    let one = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 1)
+    let many = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 8)
+    XCTAssertGreaterThan(one, empty)
+    XCTAssertGreaterThan(many, one, "eight agent rows must not be clipped")
   }
 
   func testNotchChromeHeightUsesMeasuredAuxiliaryAreaHeight() {
