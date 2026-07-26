@@ -1,6 +1,5 @@
 """Canonical app/key memory grant Firestore reader (WS-G7)."""
 
-import sys
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 
@@ -37,10 +36,6 @@ def _looks_like_grants_contract(state: object) -> bool:
 
 def _default_db_client(db_client: Optional[Any]) -> Any:
     return db_client if db_client is not None else getattr(db_client_module, "db", None)
-
-
-def _firestore_module() -> Any:
-    return sys.modules.get("google.cloud.firestore", firestore)
 
 
 def read_app_key_memory_grants_state(uid: str, db_client: Any) -> AppKeyMemoryGrantStateRead:
@@ -245,7 +240,7 @@ def remove_developer_api_key_memory_grant(
         "keys",
         key_id,
     ).to_api_repr()
-    doc_ref.update({field_path: _firestore_module().DELETE_FIELD})
+    doc_ref.update({field_path: firestore.DELETE_FIELD})
 
 
 __all__ = [
