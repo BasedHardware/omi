@@ -18,6 +18,7 @@ from unittest import mock
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 MODULE_PATH = SCRIPT_DIR / "preflight_runner.py"
+PR_PREFLIGHT_MODULE_PATH = SCRIPT_DIR / "pr_preflight.py"
 REPO_ROOT = SCRIPT_DIR.parents[1]
 WRAPPER_PATH = REPO_ROOT / "scripts" / "pre-push-singleflight"
 PRE_PUSH_PATH = REPO_ROOT / "scripts" / "pre-push"
@@ -412,6 +413,100 @@ class LaunchContractTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stdout)
         self.assertIn(r"bad:\xa1", completed.stdout)
+
+    @unittest.skipUnless(os.name == "nt", "native Windows Git encoding contract")
+    def test_runner_handles_utf8_git_worktree_path_without_utf8_mode(self) -> None:
+        git = shutil.which("git")
+        self.assertIsNotNone(git)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo-\u96ea"
+            root.mkdir()
+            subprocess.run(
+                [git, "init", "--quiet"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            env = os.environ.copy()
+            env["PYTHONUTF8"] = "0"
+            env["PYTHONIOENCODING"] = "utf-8"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MODULE_PATH),
+                    "--name",
+                    "unicode-path",
+                    "--",
+                    sys.executable,
+                    "-c",
+                    "print('unicode-path-ok')",
+                ],
+                cwd=root,
+                env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stdout)
+        self.assertIn("unicode-path-ok", completed.stdout)
+
+    @unittest.skipUnless(os.name == "nt", "native Windows Git encoding contract")
+    def test_pr_preflight_handles_utf8_git_worktree_path_without_utf8_mode(self) -> None:
+        git = shutil.which("git")
+        self.assertIsNotNone(git)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo-\u96ea"
+            root.mkdir()
+            subprocess.run(
+                [git, "init", "--quiet"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                [
+                    git,
+                    "-c",
+                    "user.name=Omi portability test",
+                    "-c",
+                    "user.email=portability@example.invalid",
+                    "commit",
+                    "--allow-empty",
+                    "--quiet",
+                    "-m",
+                    "initial",
+                ],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            env = os.environ.copy()
+            env["PYTHONUTF8"] = "0"
+            env["PYTHONIOENCODING"] = "utf-8"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(PR_PREFLIGHT_MODULE_PATH),
+                    "--base",
+                    "HEAD",
+                    "--head",
+                    "HEAD",
+                    "--list",
+                ],
+                cwd=root,
+                env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stdout)
+        self.assertIn("PR preflight:", completed.stdout)
 
 
 if __name__ == "__main__":

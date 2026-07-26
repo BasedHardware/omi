@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/checks-manifest.yaml'
       - '.github/scripts/preflight_runner.py'
+      - '.github/scripts/pr_preflight.py'
       - '.github/scripts/run_checks.py'
       - '.github/scripts/test_preflight_runner.py'
       - '.github/scripts/test_run_checks.py'
@@ -19,6 +20,7 @@ on:
     paths:
       - '.github/checks-manifest.yaml'
       - '.github/scripts/preflight_runner.py'
+      - '.github/scripts/pr_preflight.py'
       - '.github/scripts/run_checks.py'
       - '.github/scripts/test_preflight_runner.py'
       - '.github/scripts/test_run_checks.py'

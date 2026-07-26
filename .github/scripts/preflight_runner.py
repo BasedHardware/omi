@@ -280,7 +280,12 @@ def default_state_dir(root: Path, name: str) -> Path:
     override = os.getenv("OMI_PREFLIGHT_STATE_DIR")
     if override:
         return Path(override).resolve() / name
-    git_dir = subprocess.check_output(["git", "rev-parse", "--absolute-git-dir"], cwd=root, text=True).strip()
+    git_dir = subprocess.check_output(
+        ["git", "rev-parse", "--absolute-git-dir"],
+        cwd=root,
+        text=True,
+        encoding="utf-8",
+    ).strip()
     return Path(git_dir) / "omi-preflight" / name
 
 
@@ -292,6 +297,7 @@ def fingerprint(root: Path, command: list[str], stdin_data: str) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
+        encoding="utf-8",
     ).stdout.strip()
     digest = hashlib.sha256()
     for value in (str(root.resolve()), head, "\0".join(command), stdin_data):
@@ -496,7 +502,13 @@ def main() -> int:
     if not command:
         print("FAIL: preflight runner requires a command after --", file=sys.stderr)
         return 2
-    root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()).resolve()
+    root = Path(
+        subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"],
+            text=True,
+            encoding="utf-8",
+        ).strip()
+    ).resolve()
     # Git supplies ref updates on a pipe. Manual preflight runs inherit a TTY;
     # treating that as empty input avoids waiting forever for an interactive EOF.
     stdin_data = "" if sys.stdin.isatty() else sys.stdin.read()
