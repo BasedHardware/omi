@@ -1,0 +1,21 @@
+desktop/macos/e2e/flows/floating-bar-functional.yaml
+  s_7918275f8e3531::t_b4d66c1467d2ca 47-49
+desktop/macos/e2e/flows/screen-recording-permission.yaml
+  s_7918275f8e3531::t_c9d591b40bc96b 29-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "af30bd5714cf039e8fdcee8cf7a9e6f62bc93760",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
