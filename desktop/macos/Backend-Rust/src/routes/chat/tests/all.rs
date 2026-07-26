@@ -1329,6 +1329,63 @@ fn pause_turn_continuation_tool_ordinals_continue_from_the_streamed_prefix() {
     );
 }
 
+/// Regression: a paused turn used to report only its continuation's usage, so the
+/// leg that actually ran the web search — its output tokens and its billed
+/// `web_search_requests` — was never recorded. Every paused turn under-billed.
+#[test]
+fn paused_turn_usage_totals_the_streamed_leg_and_the_continuation() {
+    let initial: AnthropicUsage = serde_json::from_value(json!({
+        "input_tokens": 100,
+        "cache_read_input_tokens": 20
+    }))
+    .expect("message_start usage must decode");
+    let streamed_final: AnthropicUsage = serde_json::from_value(json!({
+        "output_tokens": 40,
+        "server_tool_use": {"web_search_requests": 1}
+    }))
+    .expect("message_delta usage must decode");
+    let continuation: AnthropicUsage = serde_json::from_value(json!({
+        "input_tokens": 130,
+        "output_tokens": 25,
+        "server_tool_use": {"web_search_requests": 1}
+    }))
+    .expect("continuation usage must decode");
+
+    let total = paused_turn_total_usage(Some(&initial), Some(&streamed_final), &continuation);
+
+    assert_eq!(total.input_tokens, 230);
+    assert_eq!(total.cache_read_input_tokens, 20);
+    assert_eq!(
+        total.output_tokens, 65,
+        "the paused leg's output is billable"
+    );
+    assert_eq!(
+        total
+            .server_tool_use
+            .as_ref()
+            .map(|tool_use| tool_use.web_search_requests),
+        Some(2),
+        "both legs' web searches are billed per request"
+    );
+}
+
+/// A `message_delta` may carry no usage at all. The turn then totals what
+/// `message_start` reported plus the continuation, never less than before.
+#[test]
+fn paused_turn_usage_falls_back_to_message_start_when_the_pause_reported_none() {
+    let initial: AnthropicUsage =
+        serde_json::from_value(json!({"input_tokens": 90})).expect("usage must decode");
+    let continuation: AnthropicUsage =
+        serde_json::from_value(json!({"input_tokens": 110, "output_tokens": 7}))
+            .expect("usage must decode");
+
+    let total = paused_turn_total_usage(Some(&initial), None, &continuation);
+
+    assert_eq!(total.input_tokens, 200);
+    assert_eq!(total.output_tokens, 7);
+    assert!(total.server_tool_use.is_none());
+}
+
 #[test]
 fn test_translate_request_degrades_when_web_search_disabled() {
     let mut req = test_request(vec![user_message("Search the web for HumanPost")]);

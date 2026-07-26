@@ -153,7 +153,7 @@ async fn receive_anthropic_response(
     })
 }
 
-fn accumulate_anthropic_usage(total: &mut AnthropicUsage, usage: &AnthropicUsage) {
+pub(super) fn accumulate_anthropic_usage(total: &mut AnthropicUsage, usage: &AnthropicUsage) {
     total.input_tokens += usage.input_tokens;
     total.output_tokens += usage.output_tokens;
     total.cache_creation_input_tokens += usage.cache_creation_input_tokens;
