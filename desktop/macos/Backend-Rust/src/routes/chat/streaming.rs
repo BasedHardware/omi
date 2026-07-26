@@ -106,6 +106,67 @@ impl StreamedContentBlocks {
     }
 }
 
+/// Translate a completed `pause_turn` continuation into the OpenAI chunks the
+/// streaming client is still waiting for.
+///
+/// A continuation answers in text *and* may decide to call a client-side tool:
+/// web search is only ever exposed alongside the client's own tools
+/// (`inject_web_search`), so "search, then act" is the ordinary shape of a
+/// paused turn. Forwarding only the text would hand the client
+/// `finish_reason: tool_calls` with nothing to run.
+pub(super) fn continuation_delta_chunks(
+    resp: &AnthropicResponse,
+    stream_id: &str,
+    created: i64,
+    model: &str,
+    first_tool_ordinal: u32,
+) -> Vec<Value> {
+    let mut chunks = Vec::new();
+
+    if let Some(text) = response_text_content(resp) {
+        chunks.push(make_chunk(
+            stream_id,
+            created,
+            model,
+            ChunkDelta {
+                content: Some(text),
+                ..ChunkDelta::default()
+            },
+            None,
+            None,
+        ));
+    }
+
+    let mut ordinal = first_tool_ordinal;
+    for block in &resp.content {
+        let AnthropicContentBlock::ToolUse { id, name, input } = block else {
+            continue;
+        };
+        chunks.push(make_chunk(
+            stream_id,
+            created,
+            model,
+            ChunkDelta {
+                tool_calls: Some(vec![ChunkToolCall {
+                    index: ordinal,
+                    id: Some(id.clone()),
+                    call_type: Some("function".to_string()),
+                    function: Some(ChunkFunctionCall {
+                        name: Some(name.clone()),
+                        arguments: Some(serde_json::to_string(input).unwrap_or_default()),
+                    }),
+                }]),
+                ..ChunkDelta::default()
+            },
+            None,
+            None,
+        ));
+        ordinal += 1;
+    }
+
+    chunks
+}
+
 fn append_string_field(block: &mut Value, key: &str, suffix: &str) {
     if let Some(current) = block.get_mut(key).and_then(|value| value.as_str()) {
         let mut combined = current.to_string();
@@ -466,20 +527,13 @@ where
             .await
             {
                 Ok(anthropic_resp) => {
-                    if let Some(text) = response_text_content(&anthropic_resp) {
-                        let chunk_val = make_chunk(
-                            &stream_id,
-                            created,
-                            &model,
-                            ChunkDelta {
-                                role: None,
-                                content: Some(text),
-                                reasoning_content: None,
-                                tool_calls: None,
-                            },
-                            None,
-                            None,
-                        );
+                    for chunk_val in continuation_delta_chunks(
+                        &anthropic_resp,
+                        &stream_id,
+                        created,
+                        &model,
+                        next_tool_ordinal,
+                    ) {
                         yield Ok(sse_line(&chunk_val));
                     }
                     let finish = map_stop_reason(anthropic_resp.stop_reason.as_deref());
