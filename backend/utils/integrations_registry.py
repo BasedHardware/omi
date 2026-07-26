@@ -48,7 +48,14 @@ def resolve_integration_provider(key: str) -> Optional[Tuple[str, Dict[str, Any]
 
 
 def oauth_scopes(provider: Dict[str, Any]) -> Tuple[str, ...]:
-    """Derive one OAuth scope bundle from the provider's declared capabilities."""
+    """Derive one OAuth scope bundle from the provider's declared capabilities.
+
+    This is the single definition of what the Google consent screen asks for.
+    `google_utils.GOOGLE_OAUTH_SCOPES` — which `google_integration_has_scope`
+    checks stored grants against — is derived from this, so the scopes requested
+    and the scopes enforced cannot drift apart. Adding a capability here widens
+    the consent request, so treat any addition as a user-consent change.
+    """
     return tuple(
         dict.fromkeys(scope for required_scopes in provider['capabilities'].values() for scope in required_scopes)
     )
