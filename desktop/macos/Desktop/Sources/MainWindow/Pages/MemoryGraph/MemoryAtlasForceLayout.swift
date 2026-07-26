@@ -129,6 +129,36 @@ enum MemoryAtlasForceLayout {
   /// few partners is what turns it from a hairball into structure.
   static let coOccurrenceNeighborsPerNode = 6
 
+  /// How much a shared memory is discounted for being shared with something
+  /// that is in everything anyway.
+  ///
+  /// The account holder is not the only superhub. An account has a handful of
+  /// entities — the project, the tool, the repository — present in hundreds of
+  /// memories, and co-occurring with one of those is true of nearly everything
+  /// and separates nothing, which is the same argument that excludes the account
+  /// holder from this projection. Left alone they win a slot in almost every
+  /// entity's strongest six, so the sparsification that is supposed to expose
+  /// structure spends most of its budget re-drawing the same few hubs.
+  ///
+  /// An exponent on standard inverse document frequency rather than a switch:
+  /// 0 is no discount at all, 1 is textbook IDF.
+  ///
+  /// The largest single improvement any of these constants makes, measured over
+  /// six seeds of three fixtures — an even one, one with a few large
+  /// cross-linked groups, and one that adds five entities present in a third of
+  /// all memories. Without it, on that third fixture those five entities take
+  /// **half of every edge the map draws** and community precision collapses to
+  /// 0.435; with it they take 19% and precision is 0.866. The other two fixtures
+  /// have no such entity by construction and still improve, because the same
+  /// discount separates a merely popular entity from a genuinely related one.
+  ///
+  /// Share of entities drawn inside a neighbourhood that belong to a different
+  /// one, without → with: 0.426 → 0.316 even, 0.534 → 0.438 large-cluster,
+  /// 0.868 → 0.608 superhub. It also tightens how far the map's outliers reach
+  /// (2.126 → 2.017 on the large-cluster fixture), which is what pays back the
+  /// spread that `communitySeparation` costs.
+  static let coOccurrenceSpecificity = 1.0
+
   /// What is left of a relationship to the account holder once it is no longer
   /// allowed to decide the map.
   ///
@@ -163,9 +193,13 @@ enum MemoryAtlasForceLayout {
   /// Measured as the gap between the account holder and the twenty entities
   /// nearest them, in units of the typical gap between neighbours anywhere on
   /// the map: 5.76 without this and 6.85 with it on the account-shaped fixture.
-  /// It costs a little community precision and returns a little of it in how
-  /// far the map's outliers reach, because a crowd pushed off the centre fills
-  /// the middle of the canvas rather than the rim.
+  ///
+  /// The only constant here that is not free, and the trade is deliberate. It
+  /// costs about 0.01 of community precision (0.765 → 0.755 even, 0.922 → 0.908
+  /// large-cluster) and about 0.01 of neighbourhood distinctness, and it buys
+  /// the one thing those measures cannot see: whether a person can read the
+  /// middle of their own map. Keep the cost in view if it ever grows — what
+  /// justifies it is the clearing, not the aggregates.
   ///
   /// A share of the map rather than a fixed weight, because the crowd being
   /// held off *is* the map and its size varies by three orders of magnitude
@@ -205,10 +239,11 @@ enum MemoryAtlasForceLayout {
   /// fixtures — the even one, and one shaped like the case this exists for,
   /// three large heavily cross-linked groups amid a long tail of small ones:
   ///
-  /// - even: 0.483 without separation, 0.390 with
-  /// - large-cluster: 0.530 without, 0.477 with
+  /// - even: 0.376 without separation, 0.316 with
+  /// - large-cluster: 0.501 without, 0.438 with
+  /// - superhub: 0.666 without, 0.608 with
   ///
-  /// Community precision does not pay for it (0.740 → 0.738 and 0.912 → 0.905),
+  /// Community precision does not pay for it (0.750 → 0.755 and 0.901 → 0.908),
   /// which is what should happen: this moves whole groups, so it cannot change
   /// which entities are near each other inside one.
   ///
@@ -306,6 +341,21 @@ enum MemoryAtlasForceLayout {
       }
     }
 
+    // How much one shared memory is worth as evidence, per entity. Standard
+    // inverse document frequency: an entity present in half your memories tells
+    // you almost nothing by being present in one more.
+    //
+    // Smoothed with `1 +` so an entity in *every* memory is heavily discounted
+    // rather than annihilated — it is still a real thing that was really there,
+    // and zeroing it would delete relationships rather than rank them.
+    var evidence: [String: Double] = [:]
+    let totalMemories = max(Double(nodeIDsByMemoryID.count), 1)
+    for nodeID in memoryIDsByNodeID.keys.sorted() where nodeID != anchorID {
+      let appearances = Double(Set(memoryIDsByNodeID[nodeID] ?? []).count)
+      guard appearances > 0 else { continue }
+      evidence[nodeID] = pow(log(1 + totalMemories / appearances), coOccurrenceSpecificity)
+    }
+
     var weights: [String: Double] = [:]
     var endpoints: [String: (String, String)] = [:]
     for memoryID in nodeIDsByMemoryID.keys.sorted() {
@@ -319,8 +369,14 @@ enum MemoryAtlasForceLayout {
       let share = 1 / Double(participants.count - 1)
       for i in 0..<participants.count {
         for j in (i + 1)..<participants.count {
-          let link = Link(a: participants[i], b: participants[j], weight: share)
-          weights[link.key, default: 0] += share
+          // Both ends count: a memory shared by two specific entities is strong
+          // evidence, one shared by a specific entity and a ubiquitous one is
+          // mostly a statement about the ubiquitous one.
+          let specific =
+            share * (evidence[participants[i]] ?? 1)
+            * (evidence[participants[j]] ?? 1)
+          let link = Link(a: participants[i], b: participants[j], weight: specific)
+          weights[link.key, default: 0] += specific
           endpoints[link.key] = (link.a, link.b)
         }
       }

@@ -72,6 +72,49 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
     XCTAssertNil(links.first { $0.a == $0.b }, "An entity is not related to itself")
   }
 
+  /// The account holder is not the only superhub. An account has a handful of
+  /// entities — the project, the tool, the repository — in hundreds of memories,
+  /// and sharing a memory with one of those is true of nearly everything, so it
+  /// separates nothing. That is the same argument that excludes the account
+  /// holder from this projection, and it applies here for the same reason.
+  func testSharingAMemoryWithSomethingUbiquitousIsWeakEvidence() throws {
+    var citations: [String: [String]] = [:]
+    let everyMemory = (0..<40).map { "m\($0)" }
+    citations["omi"] = everyMemory
+    // Two entities that appear rarely, and only ever together.
+    citations["oauth"] = ["m0"]
+    citations["exfiltration"] = ["m0"]
+    // A third that is just as rare, but only ever seen alongside the ubiquitous
+    // one — the same raw co-occurrence count, far less to conclude from.
+    citations["bystander"] = ["m1"]
+    for index in 2..<40 { citations["filler\(index)"] = [everyMemory[index]] }
+
+    let links = Layout.coOccurrenceLinks(memoryIDsByNodeID: citations, excluding: nil)
+
+    let specific = try XCTUnwrap(links.first { $0.a == "exfiltration" && $0.b == "oauth" })
+    let withHub = try XCTUnwrap(links.first { $0.a == "bystander" && $0.b == "omi" })
+    XCTAssertGreaterThan(
+      specific.weight, withHub.weight,
+      "Two rare entities meeting is worth more than one of them meeting what is in everything")
+  }
+
+  /// Not a filter, for the same reason the account holder's edges are damped
+  /// rather than dropped: an entity whose only relationships are to a ubiquitous
+  /// one still has those relationships, and deleting them would strand it in the
+  /// halo as if it were connected to nothing.
+  func testAUbiquitousEntityKeepsItsRelationships() {
+    var citations: [String: [String]] = ["omi": (0..<30).map { "m\($0)" }]
+    for index in 0..<30 { citations["thing\(index)"] = ["m\(index)"] }
+
+    let links = Layout.coOccurrenceLinks(memoryIDsByNodeID: citations, excluding: nil)
+
+    XCTAssertFalse(
+      links.filter { $0.a == "omi" || $0.b == "omi" }.isEmpty,
+      "Discounted is not deleted")
+    XCTAssertTrue(
+      links.allSatisfy { $0.weight > 0 }, "A discount must not zero a real relationship")
+  }
+
   // MARK: - The account holder is not a peer
 
   /// The account holder appears in nearly every memory, so co-occurring with
