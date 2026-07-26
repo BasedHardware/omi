@@ -691,9 +691,13 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
 
       // Enable default plugins in Redis
       try {
+        const enablePluginsIdToken = await auth.currentUser?.getIdToken();
         const enableRes = await fetch('/api/enable-plugins', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(enablePluginsIdToken ? { Authorization: `Bearer ${enablePluginsIdToken}` } : {}),
+          },
           body: JSON.stringify({ uid: uid }), // Use real UID
         });
         if (!enableRes.ok) {
@@ -837,9 +841,13 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
         // Enable default plugins in Redis
         try {
+          const enablePluginsIdToken = await auth.currentUser?.getIdToken();
           const enableRes = await fetch('/api/enable-plugins', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(enablePluginsIdToken ? { Authorization: `Bearer ${enablePluginsIdToken}` } : {}),
+            },
             body: JSON.stringify({ uid: uid }), // Use real UID
           });
           if (!enableRes.ok) {
@@ -880,13 +888,20 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
       return;
     }
 
-    // Initiate the background fact storage - DO NOT await this
+    // Initiate the background fact storage - DO NOT await the fetch's response.
+    // The ID token IS awaited first, though (unlike a plain fire-and-forget fetch):
+    // the redirect below runs synchronously right after this block, so if fetch()
+    // were only called inside an unawaited async wrapper, page navigation could
+    // unload the page before the request ever actually left the browser.
+    // getIdToken() resolves near-instantly off Firebase's local cache in the common
+    // case, so this doesn't meaningfully delay the redirect.
     try {
+      const idToken = await auth.currentUser?.getIdToken().catch(() => undefined);
       fetch('/api/store-facts', {
-        // No await here!
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({ uid, memories }),
       })
@@ -996,9 +1011,20 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
       console.log(
         `[handleIntegrationClick] Triggering background /api/enable-plugins for UID: ${uid}`,
       );
+      // Resolve the ID token BEFORE calling fetch (not inside an unawaited async
+      // wrapper): the redirect below is synchronous on desktop, so if fetch() were
+      // only invoked after an unawaited await, page navigation could unload the page
+      // before the request ever actually left the browser. getIdToken() resolves
+      // near-instantly off Firebase's local cache in the common case, so this doesn't
+      // meaningfully delay the redirect - it just guarantees the request has actually
+      // started before we navigate away.
+      const enablePluginsIdToken = await auth.currentUser?.getIdToken().catch(() => undefined);
       fetch('/api/enable-plugins', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(enablePluginsIdToken ? { Authorization: `Bearer ${enablePluginsIdToken}` } : {}),
+        },
         body: JSON.stringify({ uid: uid }),
       })
         .then(async (response) => {

@@ -285,6 +285,47 @@ class TestV1TranscribeEndpoint:
         assert resp.status_code == 503
         assert "overloaded" in resp.json()["detail"].lower()
 
+    def test_v1_write_failure_still_cleans_up_temp_file_with_batch_engine(self):
+        """Regression: a _write_file failure must not leak the temp file even when
+        batch_engine is configured. Before this fix the finally block only cleaned up
+        `if batch_engine is None`, so a write failure (disk full, IO error) with a
+        batch engine present left the partially-written file in _temp/ forever - the
+        code never reached batch_engine.submit(), so batch_engine never took ownership
+        of deleting it either.
+        """
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(side_effect=AssertionError("submit must not be called on write failure"))
+
+        with patch.object(mod, "_write_file", side_effect=OSError("disk full")), patch.object(
+            mod, "_remove_file"
+        ) as mock_remove:
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("test.wav", b"fake audio data", "audio/wav")})
+
+        assert resp.status_code == 500
+        mock_remove.assert_called_once()
+        engine.submit.assert_not_called()
+
+    def test_v1_batch_submit_success_skips_cleanup_owned_by_engine(self):
+        """Sanity check for the fix above: the normal success path (batch_engine takes
+        ownership via owns_file=True) must still skip local cleanup - only the failure
+        path before submit() changes behavior.
+        """
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            assert owns_file is True
+            return {"text": "ok", "timestamp": {"segment": []}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+
+        with patch.object(mod, "_remove_file") as mock_remove:
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("test.wav", b"fake audio data", "audio/wav")})
+
+        assert resp.status_code == 200
+        mock_remove.assert_not_called()
+
 
 class TestV2TranscribeEndpoint:
 

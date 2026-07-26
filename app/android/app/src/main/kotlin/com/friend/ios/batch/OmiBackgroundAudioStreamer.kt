@@ -5,7 +5,12 @@ import com.friend.ios.BuildConfig
 import com.friend.ios.ble.OmiBleManager
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -22,6 +27,25 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
     companion object {
         private const val TAG = "OmiBle.BgAudio"
         private const val FLUTTER_PREFS = "FlutterSharedPreferences"
+
+        // Mirrors app/lib/backend/preferences.dart's FlutterSecureStorage() instance, which is
+        // configured with AndroidOptions(encryptedSharedPreferences: true). That makes the
+        // flutter_secure_storage plugin (v9.2.2, see android/app/build.gradle for the pinned
+        // androidx.security:security-crypto version) store values in a real
+        // androidx.security.crypto.EncryptedSharedPreferences file rather than its own
+        // undocumented custom cipher scheme - reproducing these exact constants/parameters here
+        // is what makes it possible to read the same value from native code. Verified against
+        // the plugin source at https://github.com/juliansteenbakker/flutter_secure_storage
+        // (flutter_secure_storage/android/.../FlutterSecureStorage.java) tag v9.2.2:
+        //   - preferences file name: "FlutterSecureStorage" (SHARED_PREFERENCES_NAME default)
+        //   - stored key = "<prefix>_<key>" where prefix is ELEMENT_PREFERENCES_KEY_PREFIX below
+        //   - MasterKey: DEFAULT_MASTER_KEY_ALIAS, AES/GCM, 256-bit, no padding
+        //   - EncryptedSharedPreferences: AES256_SIV key scheme, AES256_GCM value scheme
+        // If any of this ever drifts from the plugin's implementation (a plugin upgrade, or a
+        // change to the AndroidOptions in preferences.dart), secureStringPref() below fails
+        // closed into the legacy plaintext stringPref() fallback rather than losing the token.
+        private const val SECURE_PREFS_NAME = "FlutterSecureStorage"
+        private const val SECURE_PREFS_KEY_PREFIX = "VGhpcyBpcyB0aGUgcHJlZml4IGZvciBhIHNlY3VyZSBzdG9yYWdlCg"
         private const val DEFAULT_API_BASE_URL = "https://api.omiapi.com/"
         private const val MAX_PENDING_FRAMES = 200
         private const val RECONNECT_BACKOFF_MS = 3_000L
@@ -299,7 +323,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
     }
 
     private fun buildRequest(url: String): Request? {
-        val token = stringPref("authToken")
+        val token = secureStringPref("authToken")
         if (token.isEmpty()) {
             Log.w(TAG, "Cannot open background transcription socket without auth token")
             return null
@@ -376,6 +400,67 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
             null -> defaultValue
             else -> value.toString()
         }
+
+    // Lazily created and cached: MasterKey/EncryptedSharedPreferences construction touches the
+    // Android Keystore, which is unnecessary overhead to repeat on every request. Null means
+    // creation failed (see secureStringPref's catch) - callers must always fall back to the
+    // legacy plaintext prefs in that case, not retry every call.
+    private var secureStorageInitAttempted = false
+    private var secureStorage: SharedPreferences? = null
+
+    private fun secureStorage(): SharedPreferences? {
+        if (secureStorageInitAttempted) return secureStorage
+        secureStorageInitAttempted = true
+        secureStorage = try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyGenParameterSpec(
+                    KeyGenParameterSpec.Builder(
+                        MasterKey.DEFAULT_MASTER_KEY_ALIAS,
+                        KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+                    )
+                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setKeySize(256)
+                        .build()
+                )
+                .build()
+
+            EncryptedSharedPreferences.create(
+                context,
+                SECURE_PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "EncryptedSharedPreferences unavailable, falling back to legacy prefs: ${e.message}")
+            null
+        }
+        return secureStorage
+    }
+
+    /**
+     * Reads [key] from the same encrypted store app/lib/backend/preferences.dart's
+     * FlutterSecureStorage writes to (see the SECURE_PREFS_* constants above for how the file
+     * name and key prefix were derived). Falls back to the legacy plaintext
+     * `FlutterSharedPreferences` copy - written for exactly this purpose, see the
+     * "KNOWN RESIDUAL EXPOSURE" comment in preferences.dart - if the secure store has no value
+     * yet (not migrated) or can't be opened for any reason, so background streaming never
+     * breaks even if this read path is ever wrong.
+     */
+    private fun secureStringPref(key: String, defaultValue: String = ""): String {
+        val store = secureStorage()
+        if (store != null) {
+            val secureValue = try {
+                store.getString("${SECURE_PREFS_KEY_PREFIX}_$key", null)
+            } catch (e: Exception) {
+                Log.w(TAG, "Secure pref read failed for key=$key: ${e.message}")
+                null
+            }
+            if (!secureValue.isNullOrEmpty()) return secureValue
+        }
+        return stringPref(key, defaultValue)
+    }
 
     private fun boolPref(key: String, defaultValue: Boolean): Boolean =
         when (val value = prefValue(key)) {

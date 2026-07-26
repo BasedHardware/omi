@@ -1420,7 +1420,8 @@ def upload_file_chat(
             fc.thumbnail = thumb_path
             # cleanup file thumb
             thumb_file = Path(fc.thumb_name)
-            thumb_file.unlink()
+            if thumb_file.exists():
+                thumb_file.unlink()
 
     # save db
     files_chat_dict = [fc.model_dump() for fc in files_chat]

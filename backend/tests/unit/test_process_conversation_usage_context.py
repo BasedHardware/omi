@@ -22,6 +22,7 @@ from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource, ConversationStatus
@@ -585,6 +586,28 @@ def test_discard_call_uses_discard_feature_tracking():
     assert captured.get("ctx") is not None
     assert captured["ctx"].feature == usage_tracker.Features.CONVERSATION_DISCARD
     assert captured["ctx"].uid == "user-1"
+
+
+def test_invalid_external_integration_text_source_surfaces_as_400_not_500():
+    """Regression: _get_structured's deliberate 400 for an unrecognized text_source
+    must reach the caller as a 400, not get reclassified into a generic 500 by the
+    blanket `except Exception` around the whole function body. Before this fix the
+    HTTPException(400, "Invalid conversation source: ...") raised a few lines above was
+    itself caught by that handler and re-raised as HTTPException(500, "Error processing
+    conversation, please try again later"), breaking client-side validation/retry logic
+    for what is actually a client input error.
+    """
+    conversation = MagicMock()
+    conversation.source = ConversationSource.external_integration
+    conversation.text_source = "not_a_real_text_source"
+    conversation.started_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    conversation.external_data = None
+
+    with pytest.raises(HTTPException) as exc_info:
+        process_conversation._get_structured("user-400", "en", conversation)
+
+    assert exc_info.value.status_code == 400
+    assert "Invalid conversation source" in exc_info.value.detail
 
 
 def test_track_usage_context_resets_after_call():

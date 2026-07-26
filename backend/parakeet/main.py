@@ -197,6 +197,11 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
     t0 = time.monotonic()
     audio_dur = 0.0
     status = "success"
+    # batch_engine only takes ownership of file_path's cleanup once submit() is actually
+    # called with owns_file=True. If _write_file (or anything before that call) raises,
+    # ownership was never transferred, so the finally block below must still clean up -
+    # otherwise a partially-written temp file leaks on every such failure.
+    owns_file_transferred = False
     loop = asyncio.get_running_loop()
     try:
         data = await file.read()
@@ -213,6 +218,7 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
 
         if batch_engine is not None:
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+            owns_file_transferred = True
             result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
             return JSONResponse(content=_transcribe_from_gpu_result(result))
@@ -235,7 +241,7 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
         if status == "success" and audio_dur > 0 and elapsed > 0:
             RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
-        if batch_engine is None:
+        if not owns_file_transferred:
             await loop.run_in_executor(_io_pool, _remove_file, file_path)
 
 

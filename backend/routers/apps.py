@@ -6,6 +6,7 @@ from html import escape
 from datetime import datetime, timezone
 
 import httpx
+from firebase_admin.auth import UserNotFoundError as FirebaseUserNotFoundError
 from typing import List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError
@@ -1681,6 +1682,23 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
 
 @router.post('/v1/apps/migrate-owner', tags=['v1'], response_model=AppMigrationResponse)
 async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
+    if old_id == uid:
+        raise HTTPException(status_code=400, detail='old_id must differ from the authenticated user')
+
+    # This endpoint folds a pre-sign-in anonymous Firebase identity into the caller's real
+    # account (see app/lib/providers/auth_provider.dart linkWithGoogle/linkWithApple). old_id
+    # is client-supplied, so without this check any authenticated user could pass another
+    # user's uid and have that victim's apps and memories copied into their own account.
+    # Requiring old_id to name an *anonymous* Firebase user means it can only ever be a
+    # throwaway identity nobody else has a real claim to.
+    try:
+        old_user_info = auth.get_user(old_id)
+    except FirebaseUserNotFoundError:
+        raise HTTPException(status_code=404, detail='old_id not found')
+    old_provider_ids = [p.provider_id for p in old_user_info.provider_data]
+    if old_provider_ids:
+        raise HTTPException(status_code=403, detail='old_id is not an anonymous account and cannot be migrated')
+
     await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
 
     # Tracked background tasks (not bare asyncio.create_task): keeps a live reference

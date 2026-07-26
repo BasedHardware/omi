@@ -2,8 +2,6 @@
 Tools for fetching content from specific URLs.
 """
 
-import asyncio
-import ipaddress
 import json
 import re
 import logging
@@ -15,6 +13,7 @@ from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]
 
 from utils.http_client import get_web_fetch_client
 from utils.log_sanitizer import sanitize
+from utils.ssrf_guard import hostname_is_public
 
 logger = logging.getLogger(__name__)
 
@@ -23,19 +22,6 @@ _BLOCK_TAGS = {'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'br', 'tr',
 _MAX_CONTENT_CHARS = 8000
 _MAX_BODY_BYTES = 512 * 1024  # cap before HTML parsing
 _MAX_REDIRECTS = 5
-
-# RFC-1918, loopback, link-local (incl. cloud metadata), carrier-grade NAT, IPv6 private
-_PRIVATE_NETWORKS = [
-    ipaddress.ip_network('127.0.0.0/8'),
-    ipaddress.ip_network('10.0.0.0/8'),
-    ipaddress.ip_network('172.16.0.0/12'),
-    ipaddress.ip_network('192.168.0.0/16'),
-    ipaddress.ip_network('169.254.0.0/16'),
-    ipaddress.ip_network('100.64.0.0/10'),
-    ipaddress.ip_network('::1/128'),
-    ipaddress.ip_network('fe80::/10'),
-    ipaddress.ip_network('fc00::/7'),
-]
 
 _PARSEABLE_TYPES = ('text/html', 'text/plain', 'application/xhtml+xml', 'application/xml')
 
@@ -144,26 +130,6 @@ def _extract_json_ld(html: str) -> str:
     return '\n'.join(lines)
 
 
-def _is_private_ip(ip_str: str) -> bool:
-    try:
-        ip = ipaddress.ip_address(ip_str)
-        return any(ip in net for net in _PRIVATE_NETWORKS)
-    except ValueError:
-        return True  # unparseable → treat as blocked
-
-
-async def _hostname_is_public(hostname: str) -> bool:
-    """Resolve hostname and return True only if every IP is a public address."""
-    try:
-        loop = asyncio.get_running_loop()
-        results = await loop.getaddrinfo(hostname, None)
-        if not results:
-            return False
-        return not any(_is_private_ip(r[4][0]) for r in results)
-    except Exception:
-        return False
-
-
 class _TextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -222,7 +188,7 @@ async def _fetch_page(url: str, headers: Dict[str, str]) -> Tuple[int, str, str]
         if not hostname:
             raise ValueError('Invalid URL: no hostname')
 
-        if not await _hostname_is_public(hostname):
+        if not await hostname_is_public(hostname):
             raise ValueError('URL resolves to a private or reserved address')
 
         redirect_url = None

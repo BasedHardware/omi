@@ -74,8 +74,17 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const productUrl =
     'https://www.omi.me/products/friend-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_floating_banner';
 
+  // plugin.name/description/author are developer-controlled and rendered verbatim below
+  // via dangerouslySetInnerHTML into a raw <script> tag. JSON.stringify does not escape
+  // "</script>", so a listing containing that sequence (e.g. "</script><script>...")
+  // would break out of the JSON-LD block and execute as HTML/JS for every visitor of
+  // this page. Escaping "<" as its JSON-safe unicode form keeps the payload valid JSON
+  // (parsers treat < identically to "<") while making it impossible for the raw
+  // "</script>" bytes to appear in the emitted HTML.
+  const escapeForScriptTag = (json: string) => json.replace(/</g, '\\u003c');
+
   return {
-    __html: JSON.stringify([
+    __html: escapeForScriptTag(JSON.stringify([
       {
         '@context': 'https://schema.org',
         '@type': 'SoftwareApplication',
@@ -136,7 +145,7 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
           },
         ],
       },
-    ]),
+    ])),
   };
 }
 

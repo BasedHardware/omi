@@ -13,6 +13,8 @@ The desktop passes its own URL scheme as success_redirect_url, so dev
 themselves without the backend needing to know which is calling.
 """
 
+import html
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -24,6 +26,7 @@ import database.x_posts as x_posts_db
 from utils import x_connector
 from utils.executors import start_background_task
 from utils.other import endpoints as auth
+from utils.redirect_uri import validate_redirect_uri
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -80,6 +83,14 @@ def x_oauth_url(
 ):
     if not x_connector.is_oauth_configured():
         return OAuthUrlResponse(success=False, error='x_oauth_not_configured')
+    if success_redirect_url:
+        # success_redirect_url is round-tripped through server-side state and later
+        # rendered into the callback HTML page (see _redirect_html) as both an HTML
+        # attribute and a JS string — those are escaped correctly regardless, but
+        # restricting the scheme here also closes the open-redirect angle (e.g.
+        # https://attacker.example stealing the post-auth landing) rather than only
+        # the XSS angle.
+        validate_redirect_uri(success_redirect_url)
     try:
         url = x_connector.build_authorize_url(uid, success_redirect_url=success_redirect_url)
         return OAuthUrlResponse(success=True, auth_url=url)
@@ -88,20 +99,41 @@ def x_oauth_url(
         return OAuthUrlResponse(success=False, error='internal_error')
 
 
+def _js_string_literal(value: str) -> str:
+    """Encode *value* as a JS string literal body, safe to splice inside "...".
+
+    json.dumps handles quotes/backslashes/control chars correctly, but does not escape
+    "</script>" — a value containing that literal sequence would still close the
+    surrounding <script> tag when the response is parsed as HTML. Escaping "<" as its
+    JS-safe unicode form keeps the decoded string identical while making that sequence
+    impossible to produce in the raw HTML.
+    """
+    return json.dumps(value)[1:-1].replace('<', '\\u003c')
+
+
 def _redirect_html(deep_link: str, ok: bool, message: str) -> HTMLResponse:
     icon = '✓' if ok else '⚠️'
-    safe_link = deep_link.replace('"', '%22')
-    html = f"""<!doctype html><html><head><meta charset="utf-8">
+    # deep_link is built from state that includes a client-supplied success_redirect_url
+    # (see x_oauth_url / consume_oauth_state). Its scheme is restricted to native-app
+    # deep links or loopback HTTP by validate_redirect_uri, but the rest of the URL is
+    # still attacker-influenced, so it must be escaped correctly for BOTH contexts it's
+    # spliced into below: an HTML attribute (meta refresh) and a JS string literal
+    # (script tag) — a bare `.replace('"', ...)` (the previous implementation) escaped
+    # neither correctly and let a value containing "</script>" break out of the script
+    # block entirely.
+    attr_safe_link = html.escape(deep_link, quote=True)
+    js_safe_link = _js_string_literal(deep_link)
+    page = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>X · Omi</title>
-<meta http-equiv="refresh" content="0;url={safe_link}">
+<meta http-equiv="refresh" content="0;url={attr_safe_link}">
 <style>body{{font-family:-apple-system,system-ui,sans-serif;background:#0b0b0f;color:#eaeaea;
 display:flex;height:100vh;margin:0;align-items:center;justify-content:center;text-align:center}}
 .c{{max-width:360px}}.i{{font-size:42px}}</style></head>
-<body><div class="c"><div class="i">{icon}</div><h2>{message}</h2>
+<body><div class="c"><div class="i">{icon}</div><h2>{html.escape(message)}</h2>
 <p>Returning to Omi…</p></div>
-<script>setTimeout(function(){{window.location.href="{safe_link}";}},150);</script>
+<script>setTimeout(function(){{window.location.href="{js_safe_link}";}},150);</script>
 </body></html>"""
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=page)
 
 
 @router.get('/v1/x/oauth/callback', response_class=HTMLResponse, tags=['x'])

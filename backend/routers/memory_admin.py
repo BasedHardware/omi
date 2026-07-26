@@ -4,6 +4,7 @@ Neutral ``memory_admin`` is the source of truth. Legacy ``memory_admin``
 remains an importable alias. Registers ``/memory/admin/*`` paths.
 """
 
+import hmac
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -32,7 +33,8 @@ def _parse_expected_source_ids(expected_source_ids: Optional[str]) -> Optional[L
 
 
 def _require_admin_key(secret_key: str) -> None:
-    if secret_key != os.getenv('ADMIN_KEY'):
+    admin_key = os.getenv('ADMIN_KEY')
+    if not admin_key or not hmac.compare_digest(secret_key, admin_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
 

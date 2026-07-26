@@ -8,8 +8,28 @@ import {
   resolvePersonaIdentity,
 } from '@/lib/server/persona-chat-gateway.mjs';
 
+// This route is intentionally public (anonymous visitors can chat with a persona demo),
+// so it can't require login like /api/social-profile does. Without any limit an
+// attacker can script unbounded requests straight through to the paid OpenRouter model
+// (including the pricier claude-3.5-sonnet for "influencer" bots). Rate-limit per caller
+// IP and bound the conversation history/message size so a single request can't blow up
+// token cost either.
+const CHAT_RATE_LIMIT_MAX_REQUESTS = 20;
+const MAX_MESSAGE_LENGTH = 4000;
+const MAX_CONVERSATION_HISTORY = 40;
+
+function clientIp(req: Request): string {
+  const forwardedFor = req.headers.get('x-forwarded-for');
+  if (forwardedFor) return forwardedFor.split(',')[0].trim();
+  return req.headers.get('x-real-ip') || 'unknown';
+}
+
 export async function POST(req: Request) {
   try {
+    if (isRateLimited(`chat:${clientIp(req)}`, CHAT_RATE_LIMIT_MAX_REQUESTS)) {
+      return NextResponse.json({ message: 'Rate limit exceeded' }, { status: 429 });
+    }
+
     const { message, botId, conversationHistory } = await req.json();
 
     let chatPrompt;

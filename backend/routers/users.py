@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import uuid
 from typing import List, Dict, Any, Union, Optional
+from urllib.parse import urlparse
 import hashlib
 import os
 import asyncio
@@ -460,6 +461,11 @@ def set_user_webhook_endpoint(
     url = data.url
     if url == '' or url == ',':
         disable_user_webhook_db(uid, wtype)
+    elif urlparse(url).scheme not in ('http', 'https') or not urlparse(url).hostname:
+        # The authoritative SSRF check (private/reserved IP resolution) happens at
+        # delivery time in utils.webhooks._post_dev_webhook, since DNS can change after
+        # this is saved. This is just a cheap early reject for an obviously malformed URL.
+        raise HTTPException(status_code=400, detail='Webhook url must be a valid http:// or https:// URL')
     set_user_webhook_db(uid, wtype, url)
     return {'status': 'ok'}
 

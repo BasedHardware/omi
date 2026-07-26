@@ -1185,6 +1185,11 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
     """
     Generate a fresh account link if the previous one expired
     """
+    # account_id is client-supplied. Without checking it against the caller's own
+    # Connect account, any authenticated user could request a fresh onboarding link for
+    # another user's Stripe Connect account (IDOR / payout-hijack vector).
+    if account_id != get_stripe_connect_account_id(uid):
+        raise HTTPException(status_code=403, detail="This Stripe account does not belong to you")
     try:
         account = refresh_connect_account_link(account_id)
         return account

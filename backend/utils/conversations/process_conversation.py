@@ -303,6 +303,13 @@ def _get_structured(
                 task_intelligence_capture=task_intelligence_capture,
             )
         return structured, False
+    except HTTPException:
+        # Deliberate client-facing errors raised above (e.g. the unsupported
+        # text_source 400 at line 228) must reach the caller as-is - the blanket
+        # `except Exception` below previously re-caught them and reclassified every
+        # one as a generic 500, breaking client-side validation/retry logic and
+        # polluting server error-rate alerts with what is actually a 4xx input error.
+        raise
     except Exception as e:
         logger.error(e)
         raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
@@ -1293,7 +1300,10 @@ def process_conversation(
         if assigned_folder_id:
             folders_db.update_folder_conversation_count(uid, assigned_folder_id)
 
-        if not is_reprocess:
+        # Discarded conversations (noise/empty, should_discard_conversation) are never
+        # surfaced to the user, so external integrations must not be told one was
+        # "created" - that's a phantom notification about content the app itself hides.
+        if not is_reprocess and not discarded:
 
             def _run_webhook():
                 asyncio.run(conversation_created_webhook(uid, conversation))

@@ -253,10 +253,12 @@ def _fake_conversation_with_segments(count):
 def _segment_assign_handler(conv):
     """Return the real segments/{segment_idx}/assign handler off its APIRoute.
 
-    Two functions share the name ``set_assignee_conversation_segment`` in the module -- the second
-    (the ``assign-speaker/{speaker_id}`` route) rebinds the module global -- so the module attribute
-    points at the wrong one. The registered route captured the correct function object at decoration
-    time, so pull the handler from ``router.routes`` by path instead.
+    Historically two functions shared the name ``set_assignee_conversation_segment`` in the
+    module (the ``assign-speaker/{speaker_id}`` route has since been renamed to
+    ``assign_conversation_segments_by_speaker`` to fix an OpenAPI operation_id collision -
+    see test_segment_assign_and_speaker_assign_routes_have_distinct_function_names). Pulling
+    the handler from ``router.routes`` by path rather than by module attribute name stays the
+    more robust lookup either way, so this keeps doing that.
     """
     target = "/v1/conversations/{conversation_id}/segments/{segment_idx}/assign"
     for route in conv.router.routes:
@@ -306,3 +308,26 @@ def test_segment_assign_valid_index_still_updates(router):
     assert segments[1].is_user is True
     assert segments[0].is_user is False  # untouched
     assert result is convo
+
+
+def test_segment_assign_and_speaker_assign_routes_have_distinct_function_names(router):
+    """The two routes must no longer share the literal function name
+    ``set_assignee_conversation_segment``.
+
+    FastAPI derives each endpoint's default OpenAPI ``operation_id`` from the handler's
+    ``__name__`` when none is given explicitly. Two routes sharing a name collide on
+    that generated id, breaking OpenAPI-schema-based client codegen (the app/desktop
+    Dart model generator) even though both routes still worked correctly at runtime
+    (each captured its own function object at decoration time).
+    """
+    segment_target = "/v1/conversations/{conversation_id}/segments/{segment_idx}/assign"
+    speaker_target = "/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}"
+
+    endpoints = {}
+    for route in router.conv.router.routes:
+        path = getattr(route, "path", None)
+        if path in (segment_target, speaker_target) and "PATCH" in getattr(route, "methods", set()):
+            endpoints[path] = route.endpoint
+
+    assert set(endpoints) == {segment_target, speaker_target}
+    assert endpoints[segment_target].__name__ != endpoints[speaker_target].__name__

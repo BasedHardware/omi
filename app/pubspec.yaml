@@ -69,6 +69,11 @@ dependencies:
       ref: da8bbe1
   share_plus: 11.0.0
   shared_preferences: 2.5.3
+  # NOTE: added without running `flutter pub get` (no Flutter toolchain in the environment
+  # this was authored in) - pubspec.lock does NOT yet have a flutter_secure_storage entry.
+  # Run `flutter pub get` and commit the updated pubspec.lock before merging, or
+  # `flutter pub get --enforce-lockfile` (used by scripts/rayban_dat.sh) will fail.
+  flutter_secure_storage: ^9.2.2
   url_launcher: ^6.3.0
   wav: ^1.4.0
   path: ^1.9.0

@@ -1076,11 +1076,15 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
         return 0
 
     # Create batch for destination user
-    batch = database.batch()
     new_user_ref = database.collection(users_collection).document(new_uid)
     new_memories_ref = new_user_ref.collection(memories_collection)
 
-    # Add memories to batch
+    # Chunk writes to stay under the Firestore 500-writes-per-batch limit, same as
+    # delete_all_memories/delete_memories_batch/unlock_all_memories in this file. A single
+    # unchunked batch.commit() here raised for any user with more than 500 memories,
+    # silently migrating zero of them despite having read and prepared all of them.
+    batch = database.batch()
+    count = 0
     for memory in memories_to_migrate:
         # Enhanced memories are encrypted with a per-user key (the uid is the HKDF salt), so content
         # encrypted for prev_uid is unreadable to new_uid. Decrypt with the previous user's key and
@@ -1099,8 +1103,13 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
                 memory = {**memory, 'content': encryption.encrypt(plaintext, new_uid)}
         memory_ref = new_memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = database.batch()
+            count = 0
 
-    # Commit batch
-    batch.commit()
+    if count > 0:
+        batch.commit()
     logger.info(f'Migrated {len(memories_to_migrate)} memories from {prev_uid} to {new_uid}')
     return len(memories_to_migrate)

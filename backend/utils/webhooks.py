@@ -4,7 +4,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
 
 from database.redis_db import (
     get_user_webhook_db,
@@ -22,6 +22,7 @@ from utils.conversations.render import conversation_to_dict
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_webhook_client, get_webhook_circuit_breaker, get_webhook_semaphore
 from utils.notifications import send_notification
+from utils.ssrf_guard import hostname_is_public
 import logging
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,18 @@ async def _post_dev_webhook(
         attempt_number = attempt_index + 1
         failure_reason = None
         try:
+            # webhook_url is a developer-supplied URL fetched server-side; without this
+            # check a user could point it at an internal service or the cloud metadata
+            # endpoint (e.g. 169.254.169.254) and use the webhook payload/response as an
+            # SSRF oracle. Re-resolved on every attempt (not just once before the retry
+            # loop) so a DNS-rebinding target can't pass validation on attempt 1 and
+            # repoint to a private address by the time a later retry fires.
+            parsed = urlparse(webhook_url)
+            if parsed.scheme not in ('http', 'https') or not parsed.hostname or not await hostname_is_public(
+                parsed.hostname
+            ):
+                raise ValueError('Webhook URL resolves to a private/reserved address or uses an unsupported scheme')
+
             async with get_webhook_semaphore():
                 response = await client.post(webhook_url, **request_kwargs)
             last_response = response

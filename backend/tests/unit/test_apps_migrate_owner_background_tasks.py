@@ -20,9 +20,17 @@ pool, but the functions it calls are monkeypatched to pure Python fakes.
 
 import asyncio
 import logging
+from types import SimpleNamespace
+
+import pytest
 
 import routers.apps as apps_mod
 import utils.executors as executors_mod
+
+
+def _anonymous_user_info():
+    # firebase_admin UserRecord.provider_data is empty for an anonymous sign-in.
+    return SimpleNamespace(provider_data=[])
 
 
 def test_migrate_owner_schedules_tracked_background_tasks(monkeypatch, caplog):
@@ -42,6 +50,7 @@ def test_migrate_owner_schedules_tracked_background_tasks(monkeypatch, caplog):
     monkeypatch.setattr(apps_mod, 'migrate_app_owner_id_db', fake_migrate_app_owner_id_db)
     monkeypatch.setattr(apps_mod, 'migrate_memories', fake_migrate_memories)
     monkeypatch.setattr(apps_mod, 'update_omi_persona_connected_accounts', fake_update_persona)
+    monkeypatch.setattr(apps_mod.auth, 'get_user', lambda uid: _anonymous_user_info())
 
     # Spy on asyncio.create_task (used directly by the buggy code, and internally by
     # start_background_task in the fixed code) so the test can await whatever tasks get
@@ -80,3 +89,54 @@ def test_migrate_owner_schedules_tracked_background_tasks(monkeypatch, caplog):
     assert 'background_task failed' in caplog.text, 'a failed background migration must be logged, not dropped'
     assert 'boom-migrate-memories' in caplog.text
     assert 'boom-persona-sync' in caplog.text
+
+
+def test_migrate_owner_rejects_non_anonymous_old_id(monkeypatch):
+    """Regression: old_id is client-supplied. Without verifying it names an anonymous
+    Firebase identity, any authenticated user could pass another real user's uid as
+    old_id and have that victim's apps and memories folded into the attacker's account
+    (a full account-takeover IDOR). Only a provider-less (anonymous) account may be the
+    source of a migration.
+    """
+    migrate_called = False
+
+    def fake_migrate_app_owner_id_db(new_id, old_id):
+        nonlocal migrate_called
+        migrate_called = True
+
+    monkeypatch.setattr(apps_mod, 'migrate_app_owner_id_db', fake_migrate_app_owner_id_db)
+    monkeypatch.setattr(
+        apps_mod.auth, 'get_user', lambda uid: SimpleNamespace(provider_data=[SimpleNamespace(provider_id='google.com')])
+    )
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(apps_mod.migrate_app_owner('victim-uid', uid='attacker-uid'))
+
+    assert exc_info.value.status_code == 403
+    assert not migrate_called, 'migration must not run when old_id is not an anonymous account'
+
+
+def test_migrate_owner_rejects_missing_old_id(monkeypatch):
+    from fastapi import HTTPException
+    from firebase_admin.auth import UserNotFoundError
+
+    def raise_not_found(uid):
+        raise UserNotFoundError('no such user')
+
+    monkeypatch.setattr(apps_mod.auth, 'get_user', raise_not_found)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(apps_mod.migrate_app_owner('missing-uid', uid='attacker-uid'))
+
+    assert exc_info.value.status_code == 404
+
+
+def test_migrate_owner_rejects_self_migration():
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(apps_mod.migrate_app_owner('same-uid', uid='same-uid'))
+
+    assert exc_info.value.status_code == 400

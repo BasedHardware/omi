@@ -60,9 +60,12 @@ async def import_limitless_data(
     # Create import job
     job = await run_blocking(db_executor, create_import_job, uid, ImportSourceType.limitless)
 
-    # Save uploaded file to temp directory
+    # Save uploaded file to temp directory. file.filename is client-supplied and only
+    # checked above for a ".zip" suffix, so a name containing "../" segments earlier in
+    # the string (e.g. "../../evil.zip") would otherwise let the write escape TEMP_DIR.
     os.makedirs(TEMP_DIR, exist_ok=True)
-    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{file.filename}")
+    safe_filename = os.path.basename(file.filename)
+    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{safe_filename}")
 
     try:
         # Stream the file to disk to avoid loading it all into memory
