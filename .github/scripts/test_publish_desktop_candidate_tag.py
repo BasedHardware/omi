@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import tempfile
@@ -22,8 +23,19 @@ CANDIDATE_SHA = "a" * 40
 RELEASE_TAG = "v1.2.3+10203-macos"
 
 
+def planner_evidence(*, release_tag: str = RELEASE_TAG, candidate_sha: str = CANDIDATE_SHA) -> str:
+    return json.dumps(
+        {
+            "schema": publisher.SOURCE_IDENTITY_SCHEMA,
+            "release_tag": release_tag,
+            "candidate_source_sha": candidate_sha,
+            "origin_main_sha": candidate_sha,
+        }
+    )
+
+
 class PublishDesktopCandidateTagTests(unittest.TestCase):
-    def test_native_git_transport_preserves_annotated_evidence(self) -> None:
+    def test_native_git_transport_publishes_a_lightweight_tag_not_an_annotated_tag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source"
@@ -56,20 +68,18 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
             original_directory = Path.cwd()
             try:
                 os.chdir(source)
-                publisher.create_local_annotated_tag(
+                publisher.create_local_lightweight_tag(
                     release_tag=RELEASE_TAG,
                     candidate_sha=candidate_sha,
-                    evidence="immutable planner evidence\n",
-                    timestamp="2026-07-25T00:00:00Z",
                 )
                 publisher.publish_immutable_tag_ref(RELEASE_TAG)
             finally:
                 os.chdir(original_directory)
 
-            self.assertEqual(git("cat-file", "-t", f"refs/tags/{RELEASE_TAG}", cwd=remote), "tag")
-            evidence = git("cat-file", "-p", f"refs/tags/{RELEASE_TAG}", cwd=remote)
-            self.assertIn(f"object {candidate_sha}", evidence)
-            self.assertIn("immutable planner evidence", evidence)
+            tag_type = git("cat-file", "-t", f"refs/tags/{RELEASE_TAG}", cwd=remote)
+            self.assertEqual(tag_type, "commit")
+            self.assertNotEqual(tag_type, "tag")
+            self.assertEqual(git("rev-parse", f"{RELEASE_TAG}^{{commit}}", cwd=remote), candidate_sha)
 
     def test_publishes_only_after_refetching_exact_live_main_via_native_tag_push(self) -> None:
         with (
@@ -80,8 +90,7 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
                 repository=REPOSITORY,
                 release_tag=RELEASE_TAG,
                 candidate_sha=CANDIDATE_SHA,
-                evidence="immutable planner evidence\n",
-                timestamp="2026-07-25T00:00:00Z",
+                evidence=planner_evidence(),
             )
 
         self.assertEqual(
@@ -90,18 +99,11 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
         )
         self.assertEqual(
             run_git.call_args_list[0].args,
-            (["tag", "--annotate", "--file=-", RELEASE_TAG, CANDIDATE_SHA],),
-        )
-        self.assertEqual(run_git.call_args_list[0].kwargs["stdin"], "immutable planner evidence\n")
-        self.assertEqual(
-            run_git.call_args_list[0].kwargs["environment"]["GIT_COMMITTER_NAME"], publisher.TAGGER_NAME
-        )
-        self.assertEqual(
-            run_git.call_args_list[0].kwargs["environment"]["GIT_COMMITTER_DATE"], "2026-07-25T00:00:00Z"
+            (["tag", RELEASE_TAG, CANDIDATE_SHA],),
         )
         self.assertEqual(
             run_git.call_args_list[1],
-            call(["push", "origin", f"refs/tags/{RELEASE_TAG}:refs/tags/{RELEASE_TAG}"]),
+            call(["push", "origin", f"refs/tags/{RELEASE_TAG}"]),
         )
 
     def test_main_advance_rejection_never_pushes_the_tag(self) -> None:
@@ -114,8 +116,7 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
                     repository=REPOSITORY,
                     release_tag=RELEASE_TAG,
                     candidate_sha=CANDIDATE_SHA,
-                    evidence="immutable planner evidence\n",
-                    timestamp="2026-07-25T00:00:00Z",
+                    evidence=planner_evidence(),
                 )
         self.assertEqual(
             run_gh.call_args_list,
@@ -124,8 +125,20 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
         self.assertEqual(run_git.call_count, 1)
         self.assertEqual(
             run_git.call_args_list[0].args,
-            (["tag", "--annotate", "--file=-", RELEASE_TAG, CANDIDATE_SHA],),
+            (["tag", RELEASE_TAG, CANDIDATE_SHA],),
         )
+
+    def test_mismatched_planner_evidence_never_creates_or_pushes_a_tag(self) -> None:
+        with patch.object(publisher, "run_git") as run_git:
+            with self.assertRaisesRegex(ValueError, "release_tag does not bind this candidate"):
+                publisher.publish_candidate_tag(
+                    repository=REPOSITORY,
+                    release_tag=RELEASE_TAG,
+                    candidate_sha=CANDIDATE_SHA,
+                    evidence=planner_evidence(release_tag="v1.2.4+10204-macos"),
+                )
+
+        run_git.assert_not_called()
 
     def test_transport_failure_is_actionable_and_credential_safe(self) -> None:
         result = subprocess.CompletedProcess(
@@ -142,7 +155,7 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
                 publisher.GitTransportError,
                 r"cannot lock ref 'refs/tags/v1.2.3\+10203-macos': reference already exists",
             ) as raised:
-                publisher.run_git(["push", "origin", f"refs/tags/{RELEASE_TAG}:refs/tags/{RELEASE_TAG}"])
+                publisher.run_git(["push", "origin", f"refs/tags/{RELEASE_TAG}"])
 
         self.assertNotIn("ghp_supersecret", str(raised.exception))
         self.assertIn("<redacted>", str(raised.exception))

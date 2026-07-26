@@ -412,6 +412,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertEqual(workflow.count('CANDIDATE_SHA="$MAIN_SHA"'), 2)
         self.assertIn('BRANCH="changelog/v${VERSION}-${PLANNED_SOURCE_SHA:0:12}"', workflow)
         self.assertIn('CHANGELOG_PARENT_SHA="$(git rev-parse "${CHANGELOG_COMMIT}^1")"', workflow)
+        self.assertEqual(workflow.count('--release-tag "$RELEASE_TAG"'), 3)
         self.assertIn('--changelog-parent-sha "$CHANGELOG_PARENT_SHA"', workflow)
         self.assertIn('python3 .github/scripts/publish-desktop-candidate-tag.py', workflow)
         self.assertIn('test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"', workflow)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish an immutable annotated macOS candidate tag from exact live main."""
+"""Publish an immutable lightweight macOS candidate tag from exact live main."""
 
 from __future__ import annotations
 
@@ -8,13 +8,11 @@ import json
 import os
 import re
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 
-TAGGER_NAME = "github-actions[bot]"
-TAGGER_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$")
+SOURCE_IDENTITY_SCHEMA = "desktop-release-planner-source-identity/v2"
 SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization:\s*bearer\s+)\S+"),
     re.compile(r"(?i)(bearer\s+)\S+"),
@@ -103,24 +101,31 @@ def validate_inputs(repository: str, release_tag: str, candidate_sha: str) -> No
         raise ValueError("candidate_sha must be a 40-character lowercase SHA")
 
 
-def create_local_annotated_tag(
-    *, release_tag: str, candidate_sha: str, evidence: str, timestamp: str
-) -> None:
-    """Create an evidence-bearing tag locally; it is not a candidate until pushed."""
-    tagger_environment = {
-        # Git hooks export repository-scoped GIT_* variables. The publisher
-        # can be tested from a disposable repository, so never inherit a
-        # caller's index, directory, or worktree into local tag creation.
-        **{key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
-        "GIT_COMMITTER_NAME": TAGGER_NAME,
-        "GIT_COMMITTER_EMAIL": TAGGER_EMAIL,
-        "GIT_COMMITTER_DATE": timestamp,
+def validate_planner_evidence(*, evidence: str, release_tag: str, candidate_sha: str) -> None:
+    """Bind the separately retained planner artifact to this exact lightweight tag."""
+    try:
+        decoded = json.loads(evidence)
+    except json.JSONDecodeError as error:
+        raise ValueError("planner source identity evidence must be valid JSON") from error
+    if not isinstance(decoded, dict):
+        raise ValueError("planner source identity evidence must be a JSON object")
+
+    expected = {
+        "schema": SOURCE_IDENTITY_SCHEMA,
+        "release_tag": release_tag,
+        "candidate_source_sha": candidate_sha,
+        "origin_main_sha": candidate_sha,
     }
-    run_git(
-        ["tag", "--annotate", "--file=-", release_tag, candidate_sha],
-        stdin=evidence,
-        environment=tagger_environment,
-    )
+    for field, value in expected.items():
+        if decoded.get(field) != value:
+            raise ValueError(f"planner source identity evidence {field} does not bind this candidate")
+
+
+def create_local_lightweight_tag(*, release_tag: str, candidate_sha: str) -> None:
+    """Create a direct commit tag; it is not a candidate until pushed."""
+    # No --annotate/--message flag: Codemagic's native tag trigger requires a
+    # lightweight ref, while source provenance is retained as a workflow artifact.
+    run_git(["tag", release_tag, candidate_sha])
 
 
 def live_main_sha(repository: str) -> str:
@@ -139,7 +144,7 @@ def publish_immutable_tag_ref(release_tag: str) -> None:
     tag_ref = f"refs/tags/{release_tag}"
     # No force refspec: an existing remote candidate makes Git fail rather
     # than rewriting immutable tag evidence or retrying a stale candidate.
-    run_git(["push", "origin", f"{tag_ref}:{tag_ref}"])
+    run_git(["push", "origin", tag_ref])
 
 
 def publish_candidate_tag(
@@ -148,17 +153,12 @@ def publish_candidate_tag(
     release_tag: str,
     candidate_sha: str,
     evidence: str,
-    timestamp: str,
 ) -> None:
     validate_inputs(repository, release_tag, candidate_sha)
+    validate_planner_evidence(evidence=evidence, release_tag=release_tag, candidate_sha=candidate_sha)
     # A local tag is not a candidate. It becomes one only through the native
     # Git tag push below, which is the provider-visible Codemagic boundary.
-    create_local_annotated_tag(
-        release_tag=release_tag,
-        candidate_sha=candidate_sha,
-        evidence=evidence,
-        timestamp=timestamp,
-    )
+    create_local_lightweight_tag(release_tag=release_tag, candidate_sha=candidate_sha)
     observed_main_sha = live_main_sha(repository)
     if observed_main_sha != candidate_sha:
         raise ValueError(
@@ -177,13 +177,11 @@ def main() -> int:
     args = parser.parse_args()
 
     evidence = args.evidence.read_text(encoding="utf-8")
-    timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     publish_candidate_tag(
         repository=args.repository,
         release_tag=args.release_tag,
         candidate_sha=args.candidate_sha,
         evidence=evidence,
-        timestamp=timestamp,
     )
     print(f"Published immutable candidate tag {args.release_tag} at {args.candidate_sha}")
     return 0

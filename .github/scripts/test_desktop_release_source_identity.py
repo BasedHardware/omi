@@ -21,11 +21,13 @@ PLANNED_SHA = "a" * 40
 CANDIDATE_SHA = "b" * 40
 CHANGELOG_SHA = "c" * 40
 PR_URL = "https://github.com/BasedHardware/omi/pull/12345"
+RELEASE_TAG = "v1.2.3+10203-macos"
 
 
 class DesktopReleaseSourceIdentityTests(unittest.TestCase):
     def test_merged_changelog_records_the_exact_main_candidate_sha(self) -> None:
         evidence = identity.build_evidence(
+            release_tag=RELEASE_TAG,
             planned_source_sha=PLANNED_SHA,
             candidate_source_sha=CANDIDATE_SHA,
             origin_main_sha=CANDIDATE_SHA,
@@ -34,7 +36,8 @@ class DesktopReleaseSourceIdentityTests(unittest.TestCase):
             changelog_pr=PR_URL,
         )
 
-        self.assertEqual(evidence["schema"], "desktop-release-planner-source-identity/v1")
+        self.assertEqual(evidence["schema"], "desktop-release-planner-source-identity/v2")
+        self.assertEqual(evidence["release_tag"], RELEASE_TAG)
         self.assertEqual(evidence["mode"], "merged-changelog")
         self.assertEqual(evidence["candidate_source_sha"], CANDIDATE_SHA)
         self.assertEqual(evidence["origin_main_sha"], CANDIDATE_SHA)
@@ -42,6 +45,7 @@ class DesktopReleaseSourceIdentityTests(unittest.TestCase):
     def test_rejects_candidate_that_is_not_the_fresh_main_tip(self) -> None:
         with self.assertRaisesRegex(ValueError, "exactly match fresh origin/main"):
             identity.build_evidence(
+                release_tag=RELEASE_TAG,
                 planned_source_sha=PLANNED_SHA,
                 candidate_source_sha=CANDIDATE_SHA,
                 origin_main_sha="d" * 40,
@@ -52,12 +56,22 @@ class DesktopReleaseSourceIdentityTests(unittest.TestCase):
 
     def test_direct_path_records_current_main_after_non_desktop_commits(self) -> None:
         evidence = identity.build_evidence(
+            release_tag=RELEASE_TAG,
             planned_source_sha=PLANNED_SHA,
             candidate_source_sha=CANDIDATE_SHA,
             origin_main_sha=CANDIDATE_SHA,
         )
         self.assertEqual(evidence["mode"], "direct")
         self.assertEqual(evidence["candidate_source_sha"], CANDIDATE_SHA)
+
+    def test_rejects_a_noncanonical_candidate_tag(self) -> None:
+        with self.assertRaisesRegex(ValueError, "release_tag must be an exact"):
+            identity.build_evidence(
+                release_tag="v1.2.3-macos",
+                planned_source_sha=PLANNED_SHA,
+                candidate_source_sha=CANDIDATE_SHA,
+                origin_main_sha=CANDIDATE_SHA,
+            )
 
     def _git(self, repository: Path, *args: str) -> str:
         # The repository-wide pre-push hook exports GIT_* state while running
@@ -219,6 +233,7 @@ class DesktopReleaseSourceIdentityTests(unittest.TestCase):
                 changelog_parent_sha=original_planned_source_sha,
             )
             evidence = identity.build_evidence(
+                release_tag=RELEASE_TAG,
                 planned_source_sha=replanned_source_sha,
                 candidate_source_sha=candidate_source_sha,
                 origin_main_sha=candidate_source_sha,
