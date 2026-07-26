@@ -373,7 +373,17 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', lambda uid: None)
     monkeypatch.setattr(account_deletion.auth, 'delete_account', lambda uid: calls.append(('auth', uid)))
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', lambda uid: calls.append(('twilio', uid)))
-    monkeypatch.setattr(account_deletion, 'purge_derived_user_data', lambda uid: calls.append(('purge', uid)))
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_derived_user_data',
+        lambda uid: calls.append(('purge', uid))
+        or {
+            'required_failures': [],
+            'best_effort_failures': [],
+            'vectors_deleted': 0,
+            'recordings_deleted': 0,
+        },
+    )
     monkeypatch.setattr(
         account_deletion.users_db,
         'delete_user_data',
@@ -453,12 +463,12 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
     monkeypatch.setattr(
         account_deletion,
         'delete_transcript_chunk_vectors_batch',
-        lambda uid, ids, **kwargs: calls.append(('delete_transcript_vectors', uid, ids, kwargs)),
+        lambda uid, ids, **kwargs: calls.append(('delete_transcript_vectors', uid, ids, kwargs)) or 2,
     )
     monkeypatch.setattr(
         account_deletion,
         'delete_memory_vectors_batch',
-        lambda uid, ids: calls.append(('delete_memory_vectors', uid, ids)),
+        lambda uid, ids: calls.append(('delete_memory_vectors', uid, ids)) or 1,
     )
     monkeypatch.setattr(
         account_deletion,
@@ -471,9 +481,13 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
         lambda uid, ids: calls.append(('delete_screen_vectors', uid, ids)),
     )
     monkeypatch.setattr(
-        account_deletion, 'delete_all_conversation_recordings', lambda uid: calls.append(('recordings', uid))
+        account_deletion, 'delete_all_conversation_recordings', lambda uid: calls.append(('recordings', uid)) or 3
     )
-    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_canonical_derived_user_data',
+        MagicMock(return_value={'vector_ids': ['canonical-1', 'canonical-2']}),
+    )
 
     result = account_deletion.purge_derived_user_data('uid1')
 
@@ -490,7 +504,12 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
         ('delete_screen_vectors', 'uid1', ['s1']),
         ('recordings', 'uid1'),
     ]
-    assert result == {'required_failures': [], 'best_effort_failures': []}
+    assert result == {
+        'required_failures': [],
+        'best_effort_failures': [],
+        'vectors_deleted': 8,
+        'recordings_deleted': 3,
+    }
 
 
 def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
@@ -604,6 +623,79 @@ def test_background_wipe_user_data_does_not_complete_when_firestore_wipe_returns
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
 
 
+def test_background_wipe_emits_bounded_completion_telemetry(monkeypatch):
+    emit = MagicMock()
+    monotonic = MagicMock(side_effect=[100.0, 102.3456])
+    monkeypatch.setattr(account_deletion.time, 'monotonic', monotonic)
+    monkeypatch.setattr(account_deletion, 'emit_posthog_event', emit)
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_derived_user_data',
+        MagicMock(
+            return_value={
+                'required_failures': [],
+                'best_effort_failures': [],
+                'vectors_deleted': 7,
+                'recordings_deleted': 2,
+            }
+        ),
+    )
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock(return_value={'status': 'ok'}))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
+
+    assert account_deletion.background_wipe_user_data('uid1') is True
+
+    emit.assert_called_once_with(
+        'uid1',
+        'Account Deletion Wipe Completed',
+        {
+            'duration_seconds': 2.346,
+            'vectors_deleted': 7,
+            'recordings_deleted': 2,
+            'required_failure_count': 0,
+            'best_effort_failure_count': 0,
+            'failed_operations': [],
+        },
+    )
+    assert 'uid' not in emit.call_args.args[2]
+
+
+def test_background_wipe_emits_failed_operations_and_attempt_context(monkeypatch):
+    emit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'emit_posthog_event', emit)
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_derived_user_data',
+        MagicMock(
+            return_value={
+                'required_failures': [{'operation': 'memory_vectors', 'error': 'secret provider body'}],
+                'best_effort_failures': [],
+                'vectors_deleted': 0,
+                'recordings_deleted': 0,
+            }
+        ),
+    )
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+
+    assert account_deletion.background_wipe_user_data('uid1', retry_count=2, terminal=True) is False
+
+    emit.assert_called_once_with(
+        'uid1',
+        'Account Deletion Wipe Failed',
+        {'failed_operations': ['memory_vectors'], 'retry_count': 2, 'terminal': True},
+    )
+    assert 'secret provider body' not in str(emit.call_args)
+
+
 def test_reconcile_pending_deletion_wipes_re_enqueues(monkeypatch):
     pending = [
         {'uid': 'uid1', 'wipe_status': 'pending', 'wipe_job_id': 'job-1'},
@@ -624,6 +716,23 @@ def test_reconcile_pending_deletion_wipes_re_enqueues(monkeypatch):
     assert len(enqueued) == 2
     assert enqueued[0] == (account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1')
     assert enqueued[1] == (account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid2')
+
+
+def test_reconcile_emits_failure_when_stale_running_wipe_is_reclaimed(monkeypatch):
+    pending = [{'uid': 'uid1', 'wipe_status': 'running', 'wipe_job_id': 'job-1'}]
+    emit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'emit_posthog_event', emit)
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
+    monkeypatch.setattr(account_deletion, 'submit_with_context', MagicMock())
+
+    assert account_deletion.reconcile_pending_deletion_wipes() == {'requeued': 1, 'skipped': 0}
+
+    emit.assert_called_once_with(
+        'uid1',
+        'Account Deletion Wipe Failed',
+        {'failed_operations': ['stale_running_wipe'], 'retry_count': 0, 'terminal': False},
+    )
 
 
 def test_reconcile_pending_deletion_wipes_enqueues_cloud_tasks(monkeypatch):

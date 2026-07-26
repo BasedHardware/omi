@@ -26,6 +26,7 @@ from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
 from utils.other.storage import delete_all_conversation_recordings
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
+from utils.integration_telemetry import emit_posthog_event
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,12 @@ class PurgeFailure(TypedDict):
 class PurgeResult(TypedDict):
     required_failures: list[PurgeFailure]
     best_effort_failures: list[PurgeFailure]
+    vectors_deleted: int
+    recordings_deleted: int
+
+
+ACCOUNT_DELETION_WIPE_COMPLETED = 'Account Deletion Wipe Completed'
+ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
 
 
 def purge_derived_user_data(uid: str) -> PurgeResult:
@@ -47,7 +54,12 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
     stored in Firestore and may become unrecoverable after ``delete_user_data``.
     Best-effort failures are safe to retry independently or leave behind.
     """
-    result: PurgeResult = {'required_failures': [], 'best_effort_failures': []}
+    result: PurgeResult = {
+        'required_failures': [],
+        'best_effort_failures': [],
+        'vectors_deleted': 0,
+        'recordings_deleted': 0,
+    }
 
     def record_failure(
         kind: Literal['required_failures', 'best_effort_failures'], operation: str, error: Exception
@@ -67,6 +79,7 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         if conversation_ids:
             require_vector_index('conversation_vectors')
             delete_conversation_vectors_batch(uid, conversation_ids)
+            result['vectors_deleted'] += len(conversation_ids)
     except Exception as e:
         record_failure('required_failures', 'conversation_vectors', e)
         logger.error(f'delete_account purge conversation vectors failed for {uid}: {sanitize(str(e))}')
@@ -75,7 +88,9 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         conversation_ids = get_conversation_ids(uid)
         if conversation_ids:
             require_vector_index('transcript_chunk_vectors')
-            delete_transcript_chunk_vectors_batch(uid, conversation_ids, raise_on_failure=True)
+            result['vectors_deleted'] += (
+                delete_transcript_chunk_vectors_batch(uid, conversation_ids, raise_on_failure=True) or 0
+            )
     except Exception as e:
         record_failure('required_failures', 'transcript_chunk_vectors', e)
         logger.error(f'delete_account purge transcript chunk vectors failed for {uid}: {sanitize(str(e))}')
@@ -86,6 +101,7 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
             require_vector_index('memory_vectors')
             deleted = delete_memory_vectors_batch(uid, memory_ids)
             require_deleted_count('memory_vectors', len(memory_ids), deleted)
+            result['vectors_deleted'] += deleted or 0
     except Exception as e:
         record_failure('required_failures', 'memory_vectors', e)
         logger.error(f'delete_account purge memory vectors failed for {uid}: {sanitize(str(e))}')
@@ -95,6 +111,7 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         if action_item_ids:
             require_vector_index('action_item_vectors')
             delete_action_item_vectors_batch(uid, action_item_ids)
+            result['vectors_deleted'] += len(action_item_ids)
     except Exception as e:
         record_failure('required_failures', 'action_item_vectors', e)
         logger.error(f'delete_account purge action item vectors failed for {uid}: {sanitize(str(e))}')
@@ -104,18 +121,22 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         if screen_activity_ids:
             require_vector_index('screen_activity_vectors')
             delete_screen_activity_vectors(uid, screen_activity_ids)
+            result['vectors_deleted'] += len(screen_activity_ids)
     except Exception as e:
         record_failure('required_failures', 'screen_activity_vectors', e)
         logger.error(f'delete_account purge screen activity vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
-        delete_all_conversation_recordings(uid)
+        result['recordings_deleted'] = delete_all_conversation_recordings(uid) or 0
     except Exception as e:
         record_failure('required_failures', 'conversation_recordings', e)
         logger.error(f'delete_account purge recordings failed for {uid}: {sanitize(str(e))}')
 
     try:
-        purge_canonical_derived_user_data(uid)
+        canonical_result = purge_canonical_derived_user_data(uid)
+        vector_ids = canonical_result.get('vector_ids', [])
+        if isinstance(vector_ids, list):
+            result['vectors_deleted'] += len(cast(list[object], vector_ids))
     except Exception as e:
         record_failure('required_failures', 'canonical_derived_data', e)
         logger.error(f'delete_account purge canonical vectors failed for {uid}: {sanitize(str(e))}')
@@ -142,7 +163,47 @@ def _required_failures_from_purge_result(purge_result: object) -> list[PurgeFail
     return failures
 
 
-def background_wipe_user_data(uid: str) -> bool:
+def _purge_failures(purge_result: object) -> tuple[list[PurgeFailure], list[PurgeFailure]]:
+    if not isinstance(purge_result, dict):
+        return [], []
+    result = cast(dict[str, object], purge_result)
+
+    def failures(key: str) -> list[PurgeFailure]:
+        value = result.get(key, [])
+        if not isinstance(value, list):
+            return []
+        bounded: list[PurgeFailure] = []
+        for item in cast(list[object], value):
+            if not isinstance(item, dict):
+                continue
+            item_dict = cast(dict[str, object], item)
+            bounded.append({'operation': str(item_dict.get('operation', 'unknown')), 'error': ''})
+        return bounded
+
+    return failures('required_failures'), failures('best_effort_failures')
+
+
+def _emit_deletion_telemetry(uid: str, event: str, properties: dict[str, object]) -> None:
+    logger.info(
+        'account_deletion_telemetry event=%s duration_seconds=%s vectors_deleted=%s recordings_deleted=%s '
+        'required_failure_count=%s best_effort_failure_count=%s failed_operations=%s retry_count=%s terminal=%s',
+        event,
+        properties.get('duration_seconds'),
+        properties.get('vectors_deleted'),
+        properties.get('recordings_deleted'),
+        properties.get('required_failure_count'),
+        properties.get('best_effort_failure_count'),
+        properties.get('failed_operations'),
+        properties.get('retry_count'),
+        properties.get('terminal'),
+    )
+    emit_posthog_event(uid, event, properties)
+
+
+def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = False) -> bool:
+    started_at = time.monotonic()
+    current_operation = 'wipe_running_marker'
+    purge_result: object = {}
     try:
         # Transition to ``running`` so the reconciler can distinguish a
         # genuinely orphaned ``pending`` marker (queued but never started)
@@ -153,7 +214,9 @@ def background_wipe_user_data(uid: str) -> bool:
         # irreversible step below. In particular, do not cancel billing or
         # remove Firebase Auth from the request thread: a queue NotFound must
         # leave an account usable and recoverable.
+        current_operation = 'billing_subscription'
         _cancel_subscription_for_account_deletion(uid)
+        current_operation = 'firebase_auth'
         try:
             auth.delete_account(uid)
         except Exception as e:
@@ -163,12 +226,15 @@ def background_wipe_user_data(uid: str) -> bool:
             else:
                 raise
         # Twilio caller IDs first, while the phone_numbers subcollection still carries twilio_sid metadata.
+        current_operation = 'twilio_caller_ids'
         delete_user_caller_ids(uid)
+        current_operation = 'derived_data'
         purge_result = purge_derived_user_data(uid)
         required_failures = _required_failures_from_purge_result(purge_result)
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)
             raise RuntimeError(f'required derived purge failed: {failed_operations}')
+        current_operation = 'firestore_user_data'
         wipe_result = users_db.delete_user_data(uid)
         if wipe_result.get('status') != 'ok':
             raise RuntimeError('authoritative Firestore user-data wipe did not complete')
@@ -181,12 +247,39 @@ def background_wipe_user_data(uid: str) -> bool:
             users_db.mark_user_deletion_wipe_failed(uid)
         except Exception as persist_err:
             logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
+        required_failures, best_effort_failures = _purge_failures(purge_result)
+        failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures] or [
+            current_operation
+        ]
+        _emit_deletion_telemetry(
+            uid,
+            ACCOUNT_DELETION_WIPE_FAILED,
+            {
+                'failed_operations': failed_operations,
+                'retry_count': max(0, retry_count),
+                'terminal': terminal,
+            },
+        )
         return False
     else:
         try:
             users_db.mark_user_deletion_wipe_completed(uid)
         except Exception as e:
             logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(e))}')
+        required_failures, best_effort_failures = _purge_failures(purge_result)
+        purge_result_dict = purge_result
+        _emit_deletion_telemetry(
+            uid,
+            ACCOUNT_DELETION_WIPE_COMPLETED,
+            {
+                'duration_seconds': round(time.monotonic() - started_at, 3),
+                'vectors_deleted': purge_result_dict.get('vectors_deleted', 0),
+                'recordings_deleted': purge_result_dict.get('recordings_deleted', 0),
+                'required_failure_count': len(required_failures),
+                'best_effort_failure_count': len(best_effort_failures),
+                'failed_operations': [failure['operation'] for failure in required_failures + best_effort_failures],
+            },
+        )
         return True
 
 
@@ -394,6 +487,12 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
         if claimed_uid is None:
             skipped += 1
             continue
+        if record.get('wipe_status') == 'running':
+            _emit_deletion_telemetry(
+                uid,
+                ACCOUNT_DELETION_WIPE_FAILED,
+                {'failed_operations': ['stale_running_wipe'], 'retry_count': 0, 'terminal': False},
+            )
         wipe_job_id = record.get('wipe_job_id')
         if not isinstance(wipe_job_id, str) or not wipe_job_id:
             try:
