@@ -714,6 +714,30 @@ extension SBOnboardingModel {
     }
   }
 
+  /// Emits the terminal outcome for an onboarding connect verify-probe
+  /// (Calendar/Gmail). `needsSignIn` is the reconnect-required signal;
+  /// `.error` maps to the generic `unknown` class because the bounded status
+  /// enum does not carry the native failure subclass. The Apps-tab import path
+  /// emits the precise native class for the same connectors.
+  static func emitConnectVerifyOutcome(
+    connectorID: String,
+    connected: Bool,
+    needsSignIn: Bool,
+    durationMs: Int
+  ) {
+    let integrationName = IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID)
+    if connected {
+      AnalyticsManager.shared.integrationConnectSucceeded(
+        integrationName: integrationName, connectorID: connectorID,
+        surface: .onboarding, stage: "verify", durationMs: durationMs)
+    } else {
+      let errorClass: IntegrationConnectTelemetry.ErrorClass = needsSignIn ? .notSignedIn : .unknown
+      AnalyticsManager.shared.integrationConnectFailed(
+        integrationName: integrationName, connectorID: connectorID,
+        surface: .onboarding, stage: "verify", errorClass: errorClass, durationMs: durationMs)
+    }
+  }
+
   func connectContext(_ id: String) {
     guard contextStates[id] != "connecting", contextStates[id] != "on" else { return }
     // The view owns import-sheet presentation. Keep this guard so another
@@ -724,7 +748,15 @@ extension SBOnboardingModel {
     switch id {
     case "calendar":
       Task { [weak self] in
+        let startedAt = Date()
+        AnalyticsManager.shared.integrationConnectAttempted(
+          integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: "calendar"),
+          connectorID: "calendar",
+          surface: .onboarding,
+          stage: "verify"
+        )
         let s = await CalendarReaderService.shared.verifyConnection()
+        let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
         let needsSignIn = {
           switch s {
           case .connected, .error:
@@ -733,6 +765,14 @@ extension SBOnboardingModel {
             return true
           }
         }()
+        // Outcome telemetry for the onboarding connect probe. The bounded
+        // status enum is the only signal here; the precise native failure class
+        // is not recoverable from `CalendarConnectionStatus`, so needsSignIn
+        // maps to the reconnect-required class and `.error` to unknown. The
+        // Apps-tab import path carries the precise class.
+        Self.emitConnectVerifyOutcome(
+          connectorID: "calendar", connected: s.isConnected, needsSignIn: needsSignIn,
+          durationMs: durationMs)
         self?.resolveGoogleConnect(
           "calendar",
           connected: s.isConnected,
@@ -742,7 +782,15 @@ extension SBOnboardingModel {
       }
     case "gmail":
       Task { [weak self] in
+        let startedAt = Date()
+        AnalyticsManager.shared.integrationConnectAttempted(
+          integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: "gmail"),
+          connectorID: "gmail",
+          surface: .onboarding,
+          stage: "verify"
+        )
         let s = await GmailReaderService.shared.verifyConnection()
+        let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
         let needsSignIn = {
           switch s {
           case .connected, .error:
@@ -751,6 +799,9 @@ extension SBOnboardingModel {
             return true
           }
         }()
+        Self.emitConnectVerifyOutcome(
+          connectorID: "gmail", connected: s.isConnected, needsSignIn: needsSignIn,
+          durationMs: durationMs)
         self?.resolveGoogleConnect(
           "gmail",
           connected: s.isConnected,

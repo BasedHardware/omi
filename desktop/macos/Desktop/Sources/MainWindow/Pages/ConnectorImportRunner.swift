@@ -30,9 +30,32 @@ final class ConnectorImportRunner: ObservableObject {
     var errorMessage: String?
   }
 
+  /// Bounded, privacy-safe metrics threaded from a connector operation to the
+  /// terminal telemetry emit. Only closed dimensions — never the operation's
+  /// user-facing `message` (that stays in `RunState` for the UI). See
+  /// ``IntegrationConnectTelemetry`` for the contract.
+  struct RunMetrics: Equatable {
+    var sourceCount: Int?
+    var memoryCount: Int?
+    var failureClass: IntegrationConnectTelemetry.ErrorClass?
+    var wasFirstSync: Bool = false
+
+    init(
+      sourceCount: Int? = nil,
+      memoryCount: Int? = nil,
+      failureClass: IntegrationConnectTelemetry.ErrorClass? = nil,
+      wasFirstSync: Bool = false
+    ) {
+      self.sourceCount = sourceCount
+      self.memoryCount = memoryCount
+      self.failureClass = failureClass
+      self.wasFirstSync = wasFirstSync
+    }
+  }
+
   enum RunOutcome {
-    case success(message: String)
-    case failure(message: String)
+    case success(message: String, metrics: RunMetrics = RunMetrics())
+    case failure(message: String, metrics: RunMetrics = RunMetrics())
   }
 
   /// Live progress reporting handed to a run's operation. Updates are
@@ -53,6 +76,7 @@ final class ConnectorImportRunner: ObservableObject {
 
   private var tasks: [String: Task<Void, Never>] = [:]
   private var runTokens: [String: UUID] = [:]
+  private var runStartedAt: [String: Date] = [:]
 
   func isRunning(_ connectorID: String) -> Bool {
     tasks[connectorID] != nil
@@ -78,6 +102,16 @@ final class ConnectorImportRunner: ObservableObject {
       progressDetail: progressDetail,
       statusMessage: nil,
       errorMessage: nil
+    )
+    runStartedAt[connectorID] = Date()
+    // Funnel numerator: one Attempted per real user-initiated connect, emitted
+    // at the single authoritative start boundary so every surface (Apps tab,
+    // and future onboarding callers) is measured identically.
+    AnalyticsManager.shared.integrationConnectAttempted(
+      integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+      connectorID: connectorID,
+      surface: .apps,
+      stage: "import"
     )
 
     let sink = ProgressSink(runner: self, connectorID: connectorID, runToken: token)
@@ -108,15 +142,43 @@ final class ConnectorImportRunner: ObservableObject {
   private func finish(connectorID: String, runToken: UUID, outcome: RunOutcome) {
     guard runTokens[connectorID] == runToken, var state = runs[connectorID] else { return }
     tasks[connectorID] = nil
+    let startedAt = runStartedAt[connectorID]
+    runStartedAt[connectorID] = nil
+    let durationMs = startedAt.map { max(0, Int(Date().timeIntervalSince($0) * 1000)) }
     switch outcome {
-    case .success(let message):
+    case .success(let message, let metrics):
       state.phase = .succeeded
       state.statusMessage = message
       state.errorMessage = nil
-    case .failure(let message):
+      AnalyticsManager.shared.integrationConnectSucceeded(
+        integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+        connectorID: connectorID,
+        surface: .apps,
+        stage: "import",
+        durationMs: durationMs,
+        sourceCount: metrics.sourceCount,
+        memoryCount: metrics.memoryCount,
+        wasFirstSync: metrics.wasFirstSync
+      )
+    case .failure(let message, let metrics):
       state.phase = .failed
       state.statusMessage = nil
       state.errorMessage = message
+      // Prefer the connector-native failure class threaded from the operation
+      // (precise); fall back to the shared sanitizer over the user-facing
+      // message for connectors without a native taxonomy.
+      let errorClass =
+        metrics.failureClass
+        ?? IntegrationConnectTelemetry.ErrorClass.fromMessage(message)
+      AnalyticsManager.shared.integrationConnectFailed(
+        integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+        connectorID: connectorID,
+        surface: .apps,
+        stage: "import",
+        errorClass: errorClass,
+        durationMs: durationMs,
+        wasFirstSync: metrics.wasFirstSync
+      )
     }
     runs[connectorID] = state
   }
