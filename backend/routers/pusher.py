@@ -39,7 +39,12 @@ from utils.webhooks import (
 )
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts, is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
-from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS, PUSHER_QUEUE_DROPS
+from utils.metrics import (
+    PUSHER_ACTIVE_WS_CONNECTIONS,
+    PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
+    PUSHER_QUEUE_DROPPED_BYTES,
+    PUSHER_QUEUE_DROPS,
+)
 from utils.readiness import ReadinessGate
 from utils.observability.journeys import JourneyAttempt, JourneyOutcome, record_capture_finalization_terminal
 from utils.speaker_identification import extract_speaker_samples
@@ -82,17 +87,68 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds
 BG_DRAIN_TIMEOUT = 30.0  # seconds
 MIN_SAMPLE_RATE = 8000
 MAX_SAMPLE_RATE = 48000
+BUFFERED_AUDIO_MAX_BYTES = 20 * 1024 * 1024
+PRIVATE_CLOUD_PENDING_MAX_CONVERSATIONS = PRIVATE_CLOUD_QUEUE_MAX_SIZE
 
 _QueueItem = TypeVar('_QueueItem')
 
 
-def _append_bounded(queue: Deque[_QueueItem], item: _QueueItem, queue_name: str) -> bool:
+class _ByteBudget:
+    def __init__(self, limit: int):
+        self.limit = limit
+        self.used = 0
+
+    def reserve(self, size: int) -> bool:
+        if size < 0 or self.used + size > self.limit:
+            return False
+        self.used += size
+        return True
+
+    def release(self, size: int) -> None:
+        self.used = max(0, self.used - size)
+
+
+def _record_queue_drop(queue_name: str, size: int = 0) -> None:
+    PUSHER_QUEUE_DROPS.labels(queue=queue_name).inc()
+    if size:
+        PUSHER_QUEUE_DROPPED_BYTES.labels(queue=queue_name).inc(size)
+
+
+def _append_bounded(
+    queue: Deque[_QueueItem],
+    item: _QueueItem,
+    queue_name: str,
+    *,
+    byte_budget: Optional[_ByteBudget] = None,
+    size_of: Optional[Any] = None,
+) -> bool:
     dropped = len(queue) == queue.maxlen
     if dropped:
-        queue.popleft()
-        PUSHER_QUEUE_DROPS.labels(queue=queue_name).inc()
+        removed = queue.popleft()
+        removed_size = size_of(removed) if size_of else 0
+        if byte_budget:
+            byte_budget.release(removed_size)
+        _record_queue_drop(queue_name, removed_size)
     queue.append(item)
     return dropped
+
+
+def _extend_bounded(buffer: bytearray, data: bytes, queue_name: str, byte_budget: _ByteBudget) -> bool:
+    if not byte_budget.reserve(len(data)):
+        _record_queue_drop(queue_name, len(data))
+        return False
+    buffer.extend(data)
+    return True
+
+
+def _bound_private_pending(pending: Dict[str, Dict[str, Any]], byte_budget: _ByteBudget) -> None:
+    if len(pending) < PRIVATE_CLOUD_PENDING_MAX_CONVERSATIONS:
+        return
+    oldest_id = next(iter(pending))
+    removed = pending.pop(oldest_id)
+    removed_size = len(removed['data'])
+    byte_budget.release(removed_size)
+    _record_queue_drop('private_cloud_pending', removed_size)
 
 
 def _frame_header(data: bytes) -> int:
@@ -104,6 +160,13 @@ def _frame_header(data: bytes) -> int:
     if header_type == 101 and len(data) < 12:
         raise ValueError('audio frame is incomplete')
     return header_type
+
+
+def _json_object(data: bytes) -> Dict[str, Any]:
+    value = json.loads(bytes(data[4:]).decode("utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError('frame payload must be an object')
+    return value
 
 
 def pusher_session_outcome(close_code: int, *, application_failed: bool = False) -> JourneyOutcome:
@@ -137,7 +200,6 @@ class _PrivateCloudChunk(TypedDict):
     data: bytes
     conversation_id: str
     timestamp: float
-    retries: int
 
 
 async def _dispatch_transcript_item(uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str]) -> None:
@@ -410,6 +472,7 @@ async def _websocket_util_trigger(
     # chunk for one user is strictly better than killing the pod.
     private_cloud_queue: deque[_PrivateCloudChunk] = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
+    audio_budget = _ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
 
     async def process_private_cloud_queue() -> None:
         """Background task that batches private cloud sync uploads by conversation_id.
@@ -420,6 +483,7 @@ async def _websocket_util_trigger(
         - The websocket disconnects (shutdown flush).
         """
         nonlocal websocket_active
+        nonlocal application_failed
 
         # Pending batches keyed by conversation_id
         pending: Dict[str, Dict[str, Any]] = {}
@@ -427,6 +491,7 @@ async def _websocket_util_trigger(
         def _add_to_batch(chunk_info: _PrivateCloudChunk) -> None:
             conv_id = chunk_info['conversation_id']
             if conv_id not in pending:
+                _bound_private_pending(pending, audio_budget)
                 pending[conv_id] = {
                     'data': bytearray(),
                     'conversation_id': conv_id,
@@ -439,6 +504,7 @@ async def _websocket_util_trigger(
 
         async def _flush_batch(conv_id: str):
             """Upload a batched chunk and update audio files."""
+            nonlocal application_failed
             batch = pending.pop(conv_id, None)
             if not batch or len(batch['data']) == 0:
                 return
@@ -488,6 +554,7 @@ async def _websocket_util_trigger(
                                 )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
+                audio_budget.release(len(chunk_data))
             except Exception as e:
                 if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
                     batch['retries'] = retries + 1
@@ -496,6 +563,9 @@ async def _websocket_util_trigger(
                     pending[conv_id] = batch
                     logger.error(f"Private cloud batch upload failed (retry {retries + 1}): {e} {uid} {conv_id}")
                 else:
+                    audio_budget.release(len(chunk_data))
+                    PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS.inc()
+                    application_failed = True
                     logger.info(
                         f"Private cloud batch upload failed after {PRIVATE_CLOUD_SYNC_MAX_RETRIES} retries, dropping: {e} {uid} {conv_id}"
                     )
@@ -623,6 +693,8 @@ async def _websocket_util_trigger(
                         await send_audio_bytes_developer_webhook(uid, item['sample_rate'], item['data'])
                 except Exception as e:
                     logger.error(f"Error processing audio bytes: {e} {uid}")
+                finally:
+                    audio_budget.release(len(item['data']))
 
     async def receive_tasks() -> None:
         nonlocal websocket_active
@@ -676,9 +748,10 @@ async def _websocket_util_trigger(
                                 'data': bytes(private_cloud_sync_buffer),
                                 'conversation_id': current_conversation_id,
                                 'timestamp': private_cloud_chunk_start_time or time.time(),
-                                'retries': 0,
                             },
                             'private_cloud',
+                            byte_budget=audio_budget,
+                            size_of=lambda chunk: len(chunk['data']),
                         )
                         logger.info(
                             f"Flushed private cloud buffer on conversation switch: {len(private_cloud_sync_buffer)} bytes {uid}"
@@ -691,9 +764,13 @@ async def _websocket_util_trigger(
 
                 # Transcript - queue for batched processing
                 if header_type == 102:
-                    res = json.loads(bytes(data[4:]).decode("utf-8"))
+                    res = _json_object(data)
                     segments = res.get('segments')
                     memory_id = res.get('memory_id')
+                    if not isinstance(segments, list) or not all(isinstance(segment, dict) for segment in segments):
+                        raise ValueError('segments must be a list of objects')
+                    if memory_id is not None and not isinstance(memory_id, str):
+                        raise ValueError('memory_id must be a string')
                     # A transcript's memory_id must NOT overwrite the session's authoritative
                     # current_conversation_id (which is set only by header 103). Doing so let a stale
                     # lifecycle event carrying an older conversation's memory_id rebind a newer recording
@@ -712,12 +789,27 @@ async def _websocket_util_trigger(
 
                 # Process conversation request
                 if header_type == 104:
-                    res = json.loads(bytes(data[4:]).decode("utf-8"))
+                    res = _json_object(data)
                     conversation_id = res.get('conversation_id')
                     language = res.get('language', 'en')
                     byok_keys = res.get('byok_keys') or None
                     finalization_job_id = res.get('finalization_job_id')
                     dispatch_generation = res.get('dispatch_generation')
+                    if conversation_id is not None and not isinstance(conversation_id, str):
+                        raise ValueError('conversation_id must be a string')
+                    if not isinstance(language, str):
+                        raise ValueError('language must be a string')
+                    if byok_keys is not None and (
+                        not isinstance(byok_keys, dict)
+                        or not all(isinstance(key, str) and isinstance(value, str) for key, value in byok_keys.items())
+                    ):
+                        raise ValueError('byok_keys must be an object')
+                    if finalization_job_id is not None and not isinstance(finalization_job_id, str):
+                        raise ValueError('finalization_job_id must be a string')
+                    if dispatch_generation is not None and (
+                        isinstance(dispatch_generation, bool) or not isinstance(dispatch_generation, int)
+                    ):
+                        raise ValueError('dispatch_generation must be an integer')
                     if conversation_id:
                         logger.info(f"Pusher received process_conversation request: {conversation_id} {uid}")
                         # Durable finalization already has a Firestore owner. It
@@ -740,10 +832,18 @@ async def _websocket_util_trigger(
 
                 # Speaker sample extraction request - queue for background processing
                 if header_type == 105:
-                    res = json.loads(bytes(data[4:]).decode("utf-8"))
+                    res = _json_object(data)
                     person_id = res.get('person_id')
                     conv_id = res.get('conversation_id')
                     segment_ids = res.get('segment_ids', [])
+                    if person_id is not None and not isinstance(person_id, str):
+                        raise ValueError('person_id must be a string')
+                    if conv_id is not None and not isinstance(conv_id, str):
+                        raise ValueError('conversation_id must be a string')
+                    if not isinstance(segment_ids, list) or not all(
+                        isinstance(segment_id, str) for segment_id in segment_ids
+                    ):
+                        raise ValueError('segment_ids must be a list of strings')
                     if person_id and conv_id and segment_ids:
                         if len(speaker_sample_queue) >= SPEAKER_SAMPLE_QUEUE_WARN_SIZE:
                             logger.warning(f"Warning: speaker_sample_queue size {len(speaker_sample_queue)} {uid}")
@@ -771,9 +871,9 @@ async def _websocket_util_trigger(
                     # Only accumulate audio buffers if there's a consumer (app trigger or webhook)
                     # Without this guard, buffers grow ~16KB/s indefinitely for users with no audio apps
                     if has_audio_apps_enabled:
-                        trigger_audiobuffer.extend(audio_data)
+                        _extend_bounded(trigger_audiobuffer, audio_data, 'audio_app_buffer', audio_budget)
                     if audio_bytes_webhook_delay_seconds is not None:
-                        audiobuffer.extend(audio_data)
+                        _extend_bounded(audiobuffer, audio_data, 'audio_webhook_buffer', audio_budget)
 
                     # Private cloud sync - queue chunks for background processing
                     if private_cloud_sync_enabled and current_conversation_id:
@@ -781,7 +881,12 @@ async def _websocket_util_trigger(
                             # Use timestamp from first buffer of this 5-second chunk
                             private_cloud_chunk_start_time = buffer_start_timestamp
 
-                        private_cloud_sync_buffer.extend(audio_data)
+                        _extend_bounded(
+                            private_cloud_sync_buffer,
+                            audio_data,
+                            'private_cloud_buffer',
+                            audio_budget,
+                        )
                         # Queue chunk every PRIVATE_CLOUD_CHUNK_DURATION seconds
                         if len(private_cloud_sync_buffer) >= sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION:
                             if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
@@ -795,9 +900,10 @@ async def _websocket_util_trigger(
                                     'data': bytes(private_cloud_sync_buffer),
                                     'conversation_id': current_conversation_id,
                                     'timestamp': cast(float, private_cloud_chunk_start_time),
-                                    'retries': 0,
                                 },
                                 'private_cloud',
+                                byte_budget=audio_budget,
+                                size_of=lambda chunk: len(chunk['data']),
                             )
                             private_cloud_sync_buffer = bytearray()
                             private_cloud_chunk_start_time = None
@@ -817,6 +923,8 @@ async def _websocket_util_trigger(
                                 'data': trigger_audiobuffer.copy(),
                             },
                             'audio_bytes',
+                            byte_budget=audio_budget,
+                            size_of=lambda item: len(item['data']),
                         )
                         audio_bytes_event.set()  # Wake consumer immediately
                         trigger_audiobuffer = bytearray()
@@ -834,6 +942,8 @@ async def _websocket_util_trigger(
                                 'data': audiobuffer.copy(),
                             },
                             'audio_bytes',
+                            byte_budget=audio_budget,
+                            size_of=lambda item: len(item['data']),
                         )
                         audio_bytes_event.set()  # Wake consumer immediately
                         audiobuffer = bytearray()
@@ -863,9 +973,10 @@ async def _websocket_util_trigger(
                         'data': bytes(private_cloud_sync_buffer),
                         'conversation_id': current_conversation_id,
                         'timestamp': private_cloud_chunk_start_time or time.time(),
-                        'retries': 0,
                     },
                     'private_cloud',
+                    byte_budget=audio_budget,
+                    size_of=lambda chunk: len(chunk['data']),
                 )
                 logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
             websocket_active = False
