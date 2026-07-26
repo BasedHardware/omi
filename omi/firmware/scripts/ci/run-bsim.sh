@@ -29,6 +29,9 @@ if [ ! -x "$OMI_EXE" ]; then
   OMI_EXE="$WORKSPACE/build-bsim-omi/bsim/zephyr/zephyr.exe"
 fi
 CLIENT_EXE="$WORKSPACE/build-bsim-client/zephyr/zephyr.exe"
+if [ ! -x "$CLIENT_EXE" ]; then
+  CLIENT_EXE="$WORKSPACE/build-bsim-client/client/zephyr/zephyr.exe"
+fi
 PHY_EXE="$BSIM_OUT_PATH/bin/bs_2G4_phy_v1"
 test -x "$OMI_EXE"
 test -x "$CLIENT_EXE"
