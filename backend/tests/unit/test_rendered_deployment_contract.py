@@ -173,6 +173,19 @@ def test_pusher_explicit_zero_min_ready_seconds_renders(contracts: SimpleNamespa
     assert deployment["spec"]["minReadySeconds"] == 0
 
 
+@pytest.mark.parametrize("environment", ("dev", "prod"))
+def test_pusher_does_not_mount_kubernetes_api_credentials(contracts: SimpleNamespace, environment: str):
+    helm = shutil.which("helm")
+    assert helm is not None, "helm must be installed for the rendered deployment contract"
+    contract = next(contract for contract in contracts.CONTRACTS if contract.service == "pusher")
+
+    documents = contracts.render_chart(contract, environment, helm)
+    deployment = contracts.deployment_for(documents, contracts.release_name(contract, environment))
+
+    assert deployment is not None
+    assert deployment["spec"]["template"]["spec"]["automountServiceAccountToken"] is False
+
+
 def test_pusher_rejects_a_missing_min_ready_seconds(contracts: SimpleNamespace, tmp_path: Path):
     helm = shutil.which("helm")
     assert helm is not None, "helm must be installed for the rendered deployment contract"
