@@ -23,6 +23,7 @@ use super::request_translation::{
 use super::response_or_500;
 use super::streaming::handle_streaming;
 use super::transport::{handle_non_streaming, new_anthropic_client};
+use super::CHAT_CONTRACT_VERSION;
 
 pub(super) fn chat_metering_response(decision: &RateDecision) -> Option<Response> {
     match decision {
@@ -65,7 +66,6 @@ const CHAT_COMPLETIONS_MAX_BODY_SIZE: usize = 16 * 1024 * 1024;
 const OMI_REQUEST_ID_HEADER: &str = "x-omi-request-id";
 const RESPONSE_REQUEST_ID_HEADER: &str = "x-request-id";
 const OMI_CHAT_CONTRACT_HEADER: &str = "x-omi-chat-contract-version";
-const OMI_CHAT_CONTRACT_VERSION: &str = "1";
 /// Per-turn effort directive from the desktop app (relayed by the pi-mono
 /// extension). Header wins over the OpenAI-compatible body field.
 const OMI_REASONING_EFFORT_HEADER: &str = "x-omi-reasoning-effort";
@@ -101,7 +101,7 @@ fn inbound_request_id(headers: &HeaderMap) -> String {
 fn supports_chat_contract(headers: &HeaderMap) -> bool {
     headers
         .get(OMI_CHAT_CONTRACT_HEADER)
-        .map(|value| value.as_bytes() == OMI_CHAT_CONTRACT_VERSION.as_bytes())
+        .map(|value| value.as_bytes() == CHAT_CONTRACT_VERSION.as_bytes())
         .unwrap_or(true)
 }
 
@@ -116,7 +116,7 @@ fn attach_request_id(response: &mut Response, request_id: &str) {
 fn attach_chat_contract_version(response: &mut Response) {
     response.headers_mut().insert(
         OMI_CHAT_CONTRACT_HEADER,
-        HeaderValue::from_static(OMI_CHAT_CONTRACT_VERSION),
+        HeaderValue::from_static(CHAT_CONTRACT_VERSION),
     );
 }
 

@@ -13,6 +13,8 @@ REQUIRED = (
     "confirm:",
     "promote-stable",
     "environment: prod",
+    "Verify live desktop-backend chat compatibility",
+    '.chat_contract_version == "1"',
     "Select and validate the exact trusted qualification",
     "Fetch exact retained qualified manifest",
     '"https://api.omi.me/v2/desktop/releases/$RELEASE_TAG"',
@@ -36,6 +38,7 @@ REQUIRED = (
 )
 
 ORDERED_STEPS = (
+    "Verify live desktop-backend chat compatibility",
     "Select and validate the exact trusted qualification",
     "Fetch exact retained qualified manifest",
     "Read current pointers and capture workflow-owned CAS inputs",

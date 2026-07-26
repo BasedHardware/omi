@@ -114,6 +114,27 @@ jobs:
           TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           test "$TARGET_SHA" = "$(git rev-parse 'HEAD^{commit}')"
           echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+      - name: Verify live desktop-backend chat compatibility
+        env:
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 \
+            https://desktop-backend-hhibjajaja-uc.a.run.app/health \
+            > "$QUALIFICATION_STAGE/desktop-backend-health.json"
+          jq -e '
+            .status == "healthy"
+            and .service == "omi-desktop-backend"
+            and .chat_contract_version == "1"
+          ' "$QUALIFICATION_STAGE/desktop-backend-health.json" >/dev/null
+          jq '{
+            chat_contract_version,
+            schema_version: 1,
+            service,
+            status
+          }' "$QUALIFICATION_STAGE/desktop-backend-health.json" \
+            > "$QUALIFICATION_STAGE/desktop-backend-compatibility.json"
+          rm -f "$QUALIFICATION_STAGE/desktop-backend-health.json"
       - name: Fetch candidate release inputs into this run only
         working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
@@ -170,7 +191,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: desktop-qualification-evidence-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/qualification-evidence.json
+          path: |
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/qualification-evidence.json
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/desktop-backend-compatibility.json
           if-no-files-found: error
           overwrite: false
       - name: Attach immutable qualification evidence

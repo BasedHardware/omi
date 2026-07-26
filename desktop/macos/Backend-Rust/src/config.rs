@@ -75,6 +75,10 @@ pub struct Config {
     pub desktop_release_sha: Option<String>,
     /// Release channel this backend revision serves.
     pub desktop_release_channel: Option<String>,
+    /// Immutable source SHA of this desktop-backend binary.
+    pub desktop_backend_release_sha: Option<String>,
+    /// Deployment lane for this desktop-backend binary.
+    pub desktop_backend_release_channel: Option<String>,
     /// When true, route Gemini calls through Vertex AI instead of AI Studio.
     /// Uses service account auth (GOOGLE_APPLICATION_CREDENTIALS) instead of API key.
     pub use_vertex_ai: bool,
@@ -143,6 +147,8 @@ impl Config {
             desktop_release_tag: env::var("OMI_DESKTOP_RELEASE_TAG").ok(),
             desktop_release_sha: env::var("OMI_DESKTOP_RELEASE_SHA").ok(),
             desktop_release_channel: env::var("OMI_DESKTOP_RELEASE_CHANNEL").ok(),
+            desktop_backend_release_sha: env::var("OMI_DESKTOP_BACKEND_RELEASE_SHA").ok(),
+            desktop_backend_release_channel: env::var("OMI_DESKTOP_BACKEND_RELEASE_CHANNEL").ok(),
             use_vertex_ai: env::var("USE_VERTEX_AI")
                 .map(|v| v != "false" && v != "0")
                 .unwrap_or(true),
