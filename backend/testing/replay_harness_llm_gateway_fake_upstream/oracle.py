@@ -15,7 +15,6 @@ import json
 import logging
 import os
 import threading
-import time
 import warnings
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -23,12 +22,10 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+import httpx
+
 # The pinned Starlette/httpx combination emits an import-time warning. The
 # oracle's stdout is reserved for its structural evidence JSON.
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    from starlette.testclient import TestClient
-
 from llm_gateway.gateway.executor import ProviderRegistry
 from llm_gateway.gateway.providers import OpenAICompatibleChatCompletionProvider
 from llm_gateway.main import app
@@ -162,39 +159,64 @@ def _valid_gateway_request() -> dict[str, object]:
     return {"model": "omi:auto:chat-structured", "messages": [{"role": "user", "content": ""}]}
 
 
-def run_oracle() -> dict[str, Any]:
-    """Run the gateway against its controlled loopback upstream."""
+def _loopback_http_client(**kwargs: Any) -> httpx.AsyncClient:
+    """Construct a client that cannot read ambient proxy settings.
+
+    This harness owns both endpoints.  Inheriting a developer or CI proxy here
+    could route the fake provider request outside the process instead of to
+    127.0.0.1, so every harness-owned client opts out explicitly.
+    """
+
+    return httpx.AsyncClient(trust_env=False, **kwargs)
+
+
+async def _post_with_deadline(
+    client: Any,
+    *,
+    path: str,
+    payload: dict[str, object],
+    headers: dict[str, str],
+    deadline_seconds: float = ROUND_TRIP_DEADLINE_SECONDS,
+) -> httpx.Response:
+    """Bound the request itself, rather than checking elapsed time afterward."""
+
+    try:
+        async with asyncio.timeout(deadline_seconds):
+            return await client.post(path, json=payload, headers=headers)
+    except TimeoutError as error:
+        raise OracleFailure("gateway loopback round trip exceeded its bounded deadline") from error
+
+
+async def _run_gateway_oracle(upstream: _LoopbackOpenAI) -> dict[str, Any]:
+    """Drive the real ASGI app and fake provider while both clients are live."""
 
     previous_overrides = dict(app.dependency_overrides)
     registry: ProviderRegistry | None = None
     try:
-        with _temporary_environment(
-            {
-                "OMI_LLM_GATEWAY_SERVICE_TOKEN": "loopback-test-token",
-                "OPENAI_API_KEY": "loopback-test-key",
-            }
-        ), _bounded_evidence_logging(), _LoopbackOpenAI() as upstream:
+        async with _loopback_http_client() as provider_http_client:
             registry = ProviderRegistry(
                 {
-                    "openai": OpenAICompatibleChatCompletionProvider(base_url=upstream.base_url),
+                    "openai": OpenAICompatibleChatCompletionProvider(
+                        base_url=upstream.base_url,
+                        http_client=provider_http_client,
+                    ),
                 }
             )
             # This override is test-owned. Production construction remains the
             # cached registry in llm_gateway.routers.dependencies.
             app.dependency_overrides[dependencies.get_provider_registry] = lambda: registry
 
-            with TestClient(app) as client:
-                started_at = time.monotonic()
-                response = client.post(
-                    GATEWAY_PATH,
-                    json=_valid_gateway_request(),
+            transport = httpx.ASGITransport(app=app, raise_app_exceptions=True)
+            async with _loopback_http_client(transport=transport, base_url="http://gateway.test") as client:
+                response = await _post_with_deadline(
+                    client,
+                    path=GATEWAY_PATH,
+                    payload=_valid_gateway_request(),
                     headers={
                         "Authorization": "Bearer loopback-test-token",
                         "X-Omi-Service-Caller": "backend",
                     },
                 )
-                if time.monotonic() - started_at > ROUND_TRIP_DEADLINE_SECONDS:
-                    raise OracleFailure("gateway loopback round trip exceeded its bounded deadline")
                 if _status_class(response.status_code) != "2xx":
                     raise OracleFailure("gateway did not return a successful status class")
                 response_body = response.json()
@@ -207,9 +229,10 @@ def run_oracle() -> dict[str, Any]:
 
                 # An external caller cannot change the provider target. The router
                 # rejects this unknown field before the provider terminal path runs.
-                redirect_response = client.post(
-                    GATEWAY_PATH,
-                    json={**_valid_gateway_request(), "upstream_url": upstream.base_url},
+                redirect_response = await _post_with_deadline(
+                    client,
+                    path=GATEWAY_PATH,
+                    payload={**_valid_gateway_request(), "upstream_url": upstream.base_url},
                     headers={
                         "Authorization": "Bearer loopback-test-token",
                         "X-Omi-Service-Caller": "backend",
@@ -245,7 +268,19 @@ def run_oracle() -> dict[str, Any]:
         app.dependency_overrides.clear()
         app.dependency_overrides.update(previous_overrides)
         if registry is not None:
-            asyncio.run(registry.aclose())
+            await registry.aclose()
+
+
+def run_oracle() -> dict[str, Any]:
+    """Run the gateway against its controlled loopback upstream."""
+
+    with _temporary_environment(
+        {
+            "OMI_LLM_GATEWAY_SERVICE_TOKEN": "loopback-test-token",
+            "OPENAI_API_KEY": "loopback-test-key",
+        }
+    ), _bounded_evidence_logging(), _LoopbackOpenAI() as upstream:
+        return asyncio.run(_run_gateway_oracle(upstream))
 
 
 def main() -> int:
