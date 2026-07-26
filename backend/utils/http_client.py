@@ -14,6 +14,7 @@ import asyncio
 import logging
 import time
 from collections import defaultdict
+from collections.abc import Callable
 
 import httpx
 
@@ -40,8 +41,8 @@ class WebhookCircuitBreaker:
     no asyncio primitives.  Safe to call from multiple threads / event loops
     (e.g. asyncio.run() in sync FastAPI endpoints, executor threads).
     httpx.AsyncClient instances are likewise thread-safe (httpcore is
-    thread-safe).  Per-loop semaphores are keyed by loop ID so they work
-    correctly across different event loops.
+    thread-safe), but their pooled connections are not portable across event
+    loops, so both they and the semaphores are keyed by loop ID.
     """
 
     __slots__ = ('_failures', '_last_failure_time', '_last_access_time', '_state', '_half_open_in_flight', '_url')
@@ -233,13 +234,51 @@ def get_llm_gateway_semaphore() -> asyncio.Semaphore:
 # Shared httpx.AsyncClient instances
 # ---------------------------------------------------------------------------
 
-_webhook_client: httpx.AsyncClient | None = None
-_maps_client: httpx.AsyncClient | None = None
-_auth_client: httpx.AsyncClient | None = None
-_stt_client: httpx.AsyncClient | None = None
-_tts_client: httpx.AsyncClient | None = None
-_web_fetch_client: httpx.AsyncClient | None = None
-_llm_gateway_client: httpx.AsyncClient | None = None
+_clients: dict[int, tuple[asyncio.AbstractEventLoop, dict[str, httpx.AsyncClient]]] = {}
+_loopless_clients: dict[str, httpx.AsyncClient] = {}
+
+
+def _get_client(name: str, factory: Callable[[], httpx.AsyncClient]) -> httpx.AsyncClient:
+    """Get or create a shared client owned by the current event loop.
+
+    Clients are per-loop for the same reason as `_get_semaphore`: a pooled
+    keep-alive connection belongs to the event loop that opened it. Sync
+    FastAPI endpoints run `asyncio.run()`, which closes its loop on return, so
+    a process-wide client ends up holding connections whose loop is gone. The
+    next request on a live loop makes the pool discard one, and closing it
+    calls `write_eof()` on a freed uvloop handle — `RuntimeError: unable to
+    perform operation on <TCPTransport closed=True ...>; the handler is
+    closed`, which httpcore re-raises at the caller. In prod that surfaced as
+    intermittent HTTP 500s on `/v1/apps/enable` and dropped app-integration
+    webhook deliveries (~270/day).
+
+    A finished loop's entry is dropped when the next loop appears — its
+    clients cannot be closed (that is the same dead-handle error) and its
+    sockets went down with the loop. Each entry keeps the loop itself, both to
+    recognise that moment and so no two live entries can share an id.
+
+    The main FastAPI event loop keeps one stable entry, so async callers — the
+    hot paths — reuse their pool exactly as before.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop: configuration inspection, not requests.
+        by_name = _loopless_clients
+    else:
+        entry = _clients.get(id(loop))
+        if entry is None or entry[0] is not loop:
+            for cached_id, (cached_loop, _) in list(_clients.items()):
+                if cached_loop.is_closed():
+                    del _clients[cached_id]
+            entry = (loop, {})
+            _clients[id(loop)] = entry
+        by_name = entry[1]
+    client = by_name.get(name)
+    if client is None:
+        client = factory()
+        by_name[name] = client
+    return client
 
 
 def get_webhook_client() -> httpx.AsyncClient:
@@ -248,24 +287,24 @@ def get_webhook_client() -> httpx.AsyncClient:
     Uses aggressive connect timeout (2s) and 30s read timeout to match
     the previous per-call timeout=30 that partner webhooks relied on.
     """
-    global _webhook_client
-    if _webhook_client is None:
-        _webhook_client = httpx.AsyncClient(
+    return _get_client(
+        'webhook',
+        lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=2.0),
             limits=httpx.Limits(max_connections=64, max_keepalive_connections=16),
-        )
-    return _webhook_client
+        ),
+    )
 
 
 def get_maps_client() -> httpx.AsyncClient:
     """Return a shared async HTTP client for Google Maps geocoding."""
-    global _maps_client
-    if _maps_client is None:
-        _maps_client = httpx.AsyncClient(
+    return _get_client(
+        'maps',
+        lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=2.0),
             limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
-        )
-    return _maps_client
+        ),
+    )
 
 
 def get_auth_client() -> httpx.AsyncClient:
@@ -281,24 +320,24 @@ def get_auth_client() -> httpx.AsyncClient:
     client). Auth token-exchange volume is low, so paying a TLS handshake per
     request is a fine trade for eliminating the stale-socket failures.
     """
-    global _auth_client
-    if _auth_client is None:
-        _auth_client = httpx.AsyncClient(
+    return _get_client(
+        'auth',
+        lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=2.0),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=0),
-        )
-    return _auth_client
+        ),
+    )
 
 
 def get_stt_client() -> httpx.AsyncClient:
     """Return a shared async HTTP client for STT/ML services (long timeout)."""
-    global _stt_client
-    if _stt_client is None:
-        _stt_client = httpx.AsyncClient(
+    return _get_client(
+        'stt',
+        lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(300.0, connect=5.0),
             limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
-        )
-    return _stt_client
+        ),
+    )
 
 
 def get_tts_client() -> httpx.AsyncClient:
@@ -311,13 +350,13 @@ def get_tts_client() -> httpx.AsyncClient:
     volume is low enough that paying a TLS handshake per request is fine,
     and the correctness win is worth it.
     """
-    global _tts_client
-    if _tts_client is None:
-        _tts_client = httpx.AsyncClient(
+    return _get_client(
+        'tts',
+        lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(60.0, connect=5.0),
             limits=httpx.Limits(max_connections=32, max_keepalive_connections=0),
-        )
-    return _tts_client
+        ),
+    )
 
 
 def get_web_fetch_client() -> httpx.AsyncClient:
@@ -326,50 +365,45 @@ def get_web_fetch_client() -> httpx.AsyncClient:
     Isolated from the webhook pool so slow/stalled external pages don't
     compete with partner webhook delivery slots.
     """
-    global _web_fetch_client
-    if _web_fetch_client is None:
-        _web_fetch_client = httpx.AsyncClient(
+    return _get_client(
+        'web_fetch',
+        lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(15.0, connect=5.0),
             limits=httpx.Limits(max_connections=16, max_keepalive_connections=4),
-        )
-    return _web_fetch_client
+        ),
+    )
 
 
 def get_llm_gateway_client() -> httpx.AsyncClient:
     """Return the shared async client for the internal LLM gateway."""
-    global _llm_gateway_client
-    if _llm_gateway_client is None:
-        _llm_gateway_client = httpx.AsyncClient(
+    return _get_client(
+        'llm_gateway',
+        lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(20.0, connect=3.0),
             limits=httpx.Limits(max_connections=24, max_keepalive_connections=12),
-        )
-    return _llm_gateway_client
+        ),
+    )
 
 
 async def close_all_clients():
-    """Close all shared HTTP clients. Call at app shutdown."""
-    global _webhook_client, _maps_client, _auth_client, _stt_client, _tts_client, _web_fetch_client, _llm_gateway_client
-    for client in (
-        _webhook_client,
-        _maps_client,
-        _auth_client,
-        _stt_client,
-        _tts_client,
-        _web_fetch_client,
-        _llm_gateway_client,
-    ):
-        if client is not None:
-            try:
-                await client.aclose()
-            except Exception as e:
-                logger.warning(f"Error closing HTTP client: {e}")
-    _webhook_client = None
-    _maps_client = None
-    _auth_client = None
-    _tts_client = None
-    _stt_client = None
-    _web_fetch_client = None
-    _llm_gateway_client = None
+    """Close all shared HTTP clients. Call at app shutdown.
+
+    Only this loop's clients can be closed: another loop's connections are
+    already gone with it, and awaiting aclose() on them raises the dead-handle
+    RuntimeError described in `_get_client`.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    _, own_clients = _clients.pop(id(loop), (None, {})) if loop is not None else (None, {})
+    for client in own_clients.values():
+        try:
+            await client.aclose()
+        except Exception as e:
+            logger.warning(f"Error closing HTTP client: {e}")
+    _clients.clear()
+    _loopless_clients.clear()
     # Reset stateful registries
     _semaphores.clear()
     _webhook_circuit_breakers.clear()
