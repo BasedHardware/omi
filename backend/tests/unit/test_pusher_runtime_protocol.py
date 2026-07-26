@@ -9,6 +9,7 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
+import routers.pusher_protocol as pusher_protocol
 
 
 class FakeWebSocket:
@@ -37,8 +38,8 @@ def runtime(monkeypatch):
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
     monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: False)
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
-    monkeypatch.setattr(pusher, 'PUSHER_QUEUE_DROPS', MagicMock())
-    monkeypatch.setattr(pusher, 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', MagicMock())
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())
     monkeypatch.setattr(pusher, 'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS', MagicMock())
 
 
@@ -77,10 +78,10 @@ async def test_malformed_frame_closes_with_unsupported_data(runtime, frame):
 
 def test_bounded_append_reports_and_drops_oldest(monkeypatch):
     metric = MagicMock()
-    monkeypatch.setattr(pusher, 'PUSHER_QUEUE_DROPS', metric)
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', metric)
     queue = deque(['old'], maxlen=1)
 
-    assert pusher._append_bounded(queue, 'new', 'transcript') is True
+    assert pusher_protocol.append_bounded(queue, 'new', 'transcript') is True
 
     assert list(queue) == ['new']
     metric.labels.assert_called_once_with(queue='transcript')
@@ -90,13 +91,13 @@ def test_bounded_append_reports_and_drops_oldest(monkeypatch):
 def test_audio_budget_rejects_bytes_above_shared_limit(monkeypatch):
     drops = MagicMock()
     dropped_bytes = MagicMock()
-    monkeypatch.setattr(pusher, 'PUSHER_QUEUE_DROPS', drops)
-    monkeypatch.setattr(pusher, 'PUSHER_QUEUE_DROPPED_BYTES', dropped_bytes)
-    budget = pusher._ByteBudget(4)
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', drops)
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPPED_BYTES', dropped_bytes)
+    budget = pusher_protocol.ByteBudget(4)
     buffer = bytearray()
 
-    assert pusher._extend_bounded(buffer, b'1234', 'audio', budget) is True
-    assert pusher._extend_bounded(buffer, b'5', 'audio', budget) is False
+    assert pusher_protocol.extend_bounded(buffer, b'1234', 'audio', budget) is True
+    assert pusher_protocol.extend_bounded(buffer, b'5', 'audio', budget) is False
 
     assert buffer == b'1234'
     assert budget.used == 4
@@ -104,18 +105,19 @@ def test_audio_budget_rejects_bytes_above_shared_limit(monkeypatch):
 
 
 def test_private_pending_evicts_oldest_and_releases_bytes(monkeypatch):
-    monkeypatch.setattr(pusher, 'PUSHER_QUEUE_DROPS', MagicMock())
-    monkeypatch.setattr(pusher, 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())
-    budget = pusher._ByteBudget(100)
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', MagicMock())
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())
+    budget = pusher_protocol.ByteBudget(100)
     pending = {
-        str(index): {'data': bytearray(b'12')} for index in range(pusher.PRIVATE_CLOUD_PENDING_MAX_CONVERSATIONS)
+        str(index): {'data': bytearray(b'12')}
+        for index in range(pusher_protocol.PRIVATE_CLOUD_PENDING_MAX_CONVERSATIONS)
     }
     assert budget.reserve(sum(len(item['data']) for item in pending.values()))
 
-    pusher._bound_private_pending(pending, budget)
+    pusher_protocol.bound_private_pending(pending, budget)
 
     assert '0' not in pending
-    assert len(pending) == pusher.PRIVATE_CLOUD_PENDING_MAX_CONVERSATIONS - 1
+    assert len(pending) == pusher_protocol.PRIVATE_CLOUD_PENDING_MAX_CONVERSATIONS - 1
     assert budget.used == 2 * len(pending)
 
 
