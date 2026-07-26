@@ -86,15 +86,18 @@ jobs:
         env:
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          ref: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           source_dir="$QUALIFICATION_STAGE/source"
           test -d "$QUALIFICATION_STAGE"
           test ! -e "$source_dir"
+          test -n "$ref"
+          test "$ref" = "$RELEASE_TAG"
           git init --quiet "$source_dir"
           git -C "$source_dir" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           GIT_TERMINAL_PROMPT=0 git -C "$source_dir" fetch --force --prune --tags origin
-          git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"
+          git -C "$source_dir" checkout --quiet --detach "refs/tags/$ref"
       - id: app-token
         uses: actions/create-github-app-token@v3
         with:
