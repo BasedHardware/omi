@@ -130,6 +130,9 @@ QUALIFICATION_CLEANUP_STATUS="not-acquired"
 QUALIFICATION_SUCCESS=0
 QUALIFICATION_LEASE_ID=""
 QUALIFICATION_LEASE_TOKEN=""
+QUALIFICATION_CACHE_LEASE_ID=""
+QUALIFICATION_CACHE_LEASE_TOKEN=""
+QUALIFICATION_CACHE_LEASE_RELEASED=0
 QUALIFICATION_LEASE_ROOT="${OMI_QUALIFICATION_LEASE_ROOT:-${TMPDIR:-/tmp}/omi-desktop-qualification}"
 QUALIFICATION_RETAINED_RUNS="${OMI_QUALIFICATION_RETAINED_RUNS:-3}"
 QUALIFICATION_RETENTION_AGE_SECONDS="${OMI_QUALIFICATION_RETENTION_AGE_SECONDS:-1209600}"
@@ -229,10 +232,54 @@ gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,i
 python3 "$KEYVALUE_PY" preflight-release "$RELEASE_FILE" "$RELEASE_TAG"
 
 SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
-WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"
 RUN_SCOPE="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-attempt}-${BASHPID:-$$}"
 RUN_SCOPE="${RUN_SCOPE//[^A-Za-z0-9]/-}"
 QUALIFICATION_LEASE_ID="qualification-${SHA:0:12}-${RUN_SCOPE:0:32}"
+QUALIFICATION_CACHE_LEASE_ID="cache-${SHA:0:12}-${RUN_SCOPE:0:32}"
+
+qualification_cache_field() {
+  local field="$1" cache_json="$2" value
+  if value="$(printf '%s' "$cache_json" | python3 -c '
+import json
+import sys
+
+field = sys.argv[1]
+value = json.loads(sys.stdin.read()).get(field)
+if not isinstance(value, str) or not value:
+    raise SystemExit(1)
+print(value)
+' "$field" 2>/dev/null)"; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  echo "qualification failed: Swift cache lease returned no valid ${field}" >&2
+  return 1
+}
+
+CACHE_JSON="$(
+  "$SCRIPT_DIR/qualification-swift-cache.sh" prepare \
+    "$SHA" "$REPO_ROOT" "$QUALIFICATION_CACHE_LEASE_ID" "$$"
+)"
+WORKTREE="$(qualification_cache_field source "$CACHE_JSON")"
+QUALIFICATION_CACHE_LEASE_TOKEN="$(qualification_cache_field token "$CACHE_JSON")"
+
+early_cleanup() {
+  local exit_code=$?
+  trap - EXIT
+  if [[ "$KEEP_STACK" -eq 0 && -n "$QUALIFICATION_LEASE_TOKEN" && -d "$WORKTREE" ]]; then
+    "$LEASE_COMMAND" release \
+      "$WORKTREE" "$QUALIFICATION_LEASE_ID" "$QUALIFICATION_LEASE_TOKEN" \
+      "$QUALIFICATION_RETAINED_RUNS" "$QUALIFICATION_RETENTION_AGE_SECONDS" || exit_code=1
+  fi
+  if [[ "$KEEP_STACK" -eq 0 && -n "$QUALIFICATION_CACHE_LEASE_TOKEN" && "$QUALIFICATION_CACHE_LEASE_RELEASED" -eq 0 ]]; then
+    "$SCRIPT_DIR/qualification-swift-cache.sh" release \
+      "$SHA" "$QUALIFICATION_CACHE_LEASE_ID" "$$" "$QUALIFICATION_CACHE_LEASE_TOKEN" || exit_code=1
+  fi
+  qualification_stage_remove "$QUALIFICATION_STAGE" || true
+  exit "$exit_code"
+}
+trap early_cleanup EXIT
+
 QUALIFICATION_PORT_OFFSET="${OMI_QUALIFICATION_PORT_OFFSET:-}"
 if [[ -z "$QUALIFICATION_PORT_OFFSET" ]]; then
   QUALIFICATION_PORT_OFFSET="$(python3 - "$SHA" "$QUALIFICATION_LEASE_ID" <<'PY'
@@ -323,12 +370,15 @@ DESKTOP_LAUNCH_RECORD="$QUALIFICATION_LOG_DIR/desktop-app.json"
 LAUNCH_SIGNAL_FILE="$QUALIFICATION_LOG_DIR/desktop-launch.signal"
 if [[ -n "$QUALIFICATION_CLEANUP_CONTEXT" ]]; then
   umask 077
-  python3 - "$QUALIFICATION_CLEANUP_CONTEXT" "$QUALIFICATION_LEASE_ID" "$QUALIFICATION_LEASE_TOKEN" "$WORKTREE" "$QUALIFICATION_RETAINED_RUNS" "$QUALIFICATION_RETENTION_AGE_SECONDS" <<'PY'
+  python3 - "$QUALIFICATION_CLEANUP_CONTEXT" "$QUALIFICATION_LEASE_ID" "$QUALIFICATION_LEASE_TOKEN" "$WORKTREE" "$QUALIFICATION_RETAINED_RUNS" "$QUALIFICATION_RETENTION_AGE_SECONDS" "$SHA" "$QUALIFICATION_CACHE_LEASE_ID" "$$" "$QUALIFICATION_CACHE_LEASE_TOKEN" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-path, lease_id, token, worktree, retained_runs, retention_age = map(str, sys.argv[1:])
+(
+    path, lease_id, token, worktree, retained_runs, retention_age,
+    cache_source_sha, cache_lease_id, cache_owner_pid, cache_token,
+) = map(str, sys.argv[1:])
 target = Path(path)
 target.parent.mkdir(parents=True, exist_ok=True)
 target.write_text(json.dumps({
@@ -337,6 +387,10 @@ target.write_text(json.dumps({
     "worktree": worktree,
     "retained_runs": int(retained_runs),
     "retention_age_seconds": int(retention_age),
+    "cache_source_sha": cache_source_sha,
+    "cache_lease_id": cache_lease_id,
+    "cache_owner_pid": int(cache_owner_pid),
+    "cache_token": cache_token,
 }, sort_keys=True) + "\n", encoding="utf-8")
 target.chmod(0o600)
 PY
@@ -618,6 +672,12 @@ run_qualification_cleanup() {
       QUALIFICATION_CLEANUP_STATUS="release-failed"
       return 1
     fi
+    if ! "$SCRIPT_DIR/qualification-swift-cache.sh" release \
+      "$SHA" "$QUALIFICATION_CACHE_LEASE_ID" "$$" "$QUALIFICATION_CACHE_LEASE_TOKEN"; then
+      QUALIFICATION_CLEANUP_STATUS="cache-release-failed"
+      return 1
+    fi
+    QUALIFICATION_CACHE_LEASE_RELEASED=1
     QUALIFICATION_CLEANUP_STATUS="released"
   elif [[ "$KEEP_STACK" -eq 1 && -n "$QUALIFICATION_LEASE_TOKEN" ]]; then
     echo "qualification stack retained under lease $QUALIFICATION_LEASE_ID for safe later reclamation"

@@ -7,9 +7,11 @@ umask 077
 
 usage() {
   cat <<'USAGE'
-Usage: qualification-swift-cache.sh prepare <40-char-source-sha> <source-repository>
+Usage:
+  qualification-swift-cache.sh prepare <40-char-source-sha> <source-repository> <lease-id> <owner-pid>
+  qualification-swift-cache.sh release <40-char-source-sha> <lease-id> <owner-pid> <lease-token>
 
-Prints the persistent exact-SHA source path on stdout. Diagnostics go to stderr.
+Prepare prints a JSON source/lease capability on stdout. Diagnostics go to stderr.
 
 Environment (test overrides are intentionally explicit):
   OMI_QUALIFICATION_SWIFT_CACHE_ROOT   Root (default: ~/Library/Caches/OmiDesktop/qualification-swiftpm-v2)
@@ -20,19 +22,53 @@ Environment (test overrides are intentionally explicit):
 USAGE
 }
 
-[[ $# -eq 3 && "$1" == "prepare" ]] || { usage >&2; exit 2; }
+[[ $# -eq 5 ]] || { usage >&2; exit 2; }
+ACTION="$1"
 SOURCE_SHA="$2"
-SOURCE_REPOSITORY="$3"
 [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
   echo "qualification Swift cache: invalid source SHA: $SOURCE_SHA" >&2
   exit 2
 }
+if [[ "$ACTION" == "prepare" ]]; then
+  SOURCE_REPOSITORY="$3"
+  LEASE_ID="$4"
+  OWNER_PID="$5"
+else
+  LEASE_ID="$3"
+  OWNER_PID="$4"
+  LEASE_TOKEN="$5"
+fi
+[[ "$LEASE_ID" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,95}$ ]] || {
+  echo "qualification Swift cache: invalid lease ID: $LEASE_ID" >&2
+  exit 2
+}
+[[ "$OWNER_PID" =~ ^[1-9][0-9]*$ ]] || {
+  echo "qualification Swift cache: invalid owner PID: $OWNER_PID" >&2
+  exit 2
+}
+
+CACHE_ROOT="${OMI_QUALIFICATION_SWIFT_CACHE_ROOT:-$HOME/Library/Caches/OmiDesktop/qualification-swiftpm-v2}"
+CACHE_CONTROL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/qualification-cache-reclaim.py"
+
+if [[ "$ACTION" == "release" ]]; then
+  [[ -x "$CACHE_CONTROL" ]] || {
+    echo "qualification Swift cache: missing cache lease authority: $CACHE_CONTROL" >&2
+    exit 1
+  }
+  python3 "$CACHE_CONTROL" lease-release \
+    --cache-root "$CACHE_ROOT" \
+    --source-sha "$SOURCE_SHA" \
+    --lease-id "$LEASE_ID" \
+    --owner-pid "$OWNER_PID" \
+    --token "$LEASE_TOKEN"
+  exit 0
+fi
+[[ "$ACTION" == "prepare" ]] || { usage >&2; exit 2; }
 git -C "$SOURCE_REPOSITORY" rev-parse --git-dir >/dev/null 2>&1 || {
   echo "qualification Swift cache: source repository is not Git: $SOURCE_REPOSITORY" >&2
   exit 1
 }
 
-CACHE_ROOT="${OMI_QUALIFICATION_SWIFT_CACHE_ROOT:-$HOME/Library/Caches/OmiDesktop/qualification-swiftpm-v2}"
 CACHE_DIR="$CACHE_ROOT/$SOURCE_SHA"
 PERSISTENT_SOURCE="$CACHE_DIR/source"
 PACKAGE_DIR="$PERSISTENT_SOURCE/desktop/macos/Desktop"
@@ -102,6 +138,11 @@ PY
   echo "qualification Swift cache: refusing symlinked cache path component: $symlinked_component" >&2
   exit 1
 }
+[[ -x "$CACHE_CONTROL" ]] || {
+  echo "qualification Swift cache: missing cache lease authority: $CACHE_CONTROL" >&2
+  exit 1
+}
+python3 "$CACHE_CONTROL" wait-for-reclaim --cache-root "$CACHE_ROOT" --timeout-seconds 60
 LOCK_DIR="$CACHE_ROOT/.${SOURCE_SHA}.lock"
 for _ in {1..1200}; do
   if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -246,5 +287,12 @@ else
   PERSISTENT_SOURCE="$CACHE_DIR/source"
 fi
 
+LEASE_JSON="$(
+  python3 "$CACHE_CONTROL" lease-acquire \
+    --cache-root "$CACHE_ROOT" \
+    --source-sha "$SOURCE_SHA" \
+    --lease-id "$LEASE_ID" \
+    --owner-pid "$OWNER_PID"
+)"
 echo "qualification Swift cache $CACHE_STATE: source=$SOURCE_SHA path=$PERSISTENT_SOURCE" >&2
-printf '%s\n' "$PERSISTENT_SOURCE"
+printf '%s\n' "$LEASE_JSON"
