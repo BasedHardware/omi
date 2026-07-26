@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2375,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2638,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2679,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4829,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2584,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 1536,
@@ -9,7 +9,7 @@
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": "Agent completion presentation now follows the canonical terminal lifecycle used by PTT and chat.",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "The Second Brain onboarding, reach-error, and notch-moment UI keeps the hover menu agent-only and routes idle notch taps through main chat.",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "The live-suggestion notch card is a distinct assistantId branch alongside the existing reach-error and notch-moment cards, so it renders quietly rather than reusing the bell-and-Execute notification chrome.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Second Brain continuous-chat routing shares window geometry with agent-only hover sizing and canonical idle-notch chat ownership.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "DEBUG owner-boundary tests need a capture-free effect-handler install seam; shared ensureAutomationBarConfigured() removes duplicated automation setup while adding that seam (BasedHardware/omi#10499).",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Adds bounded realtime mint-failure outcome correlation and close-resolution telemetry so release health distinguishes started recovery from exhaustion; telemetry-only, no lifecycle change (#10425).",
