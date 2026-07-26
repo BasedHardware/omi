@@ -19,11 +19,12 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
   /// complete entity↔memory incidence structure the client only ever used to
   /// populate the evidence list.
   func testCoOccurrenceFindsRelatednessTheExtractorNeverDrewAnEdgeFor() {
-    let links = Layout.coOccurrenceLinks(memoryIDsByNodeID: [
-      "sang": ["m1", "m2", "m3"],
-      "kory": ["m1", "m2", "m3"],
-      "stranger": ["m9"],
-    ])
+    let links = Layout.coOccurrenceLinks(
+      memoryIDsByNodeID: [
+        "sang": ["m1", "m2", "m3"],
+        "kory": ["m1", "m2", "m3"],
+        "stranger": ["m9"],
+      ], excluding: nil)
 
     let pair = links.first { $0.a == "kory" && $0.b == "sang" }
     XCTAssertNotNil(pair, "Entities sharing three memories are related whether or not a verb exists")
@@ -34,10 +35,12 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
   /// Each shared memory contributes 1/(k-1), so a pair that only ever meets in
   /// crowds stays weaker than a pair that meets alone.
   func testGroupMembershipIsWeightedDownAgainstOneToOneCoOccurrence() throws {
-    let crowd = Layout.coOccurrenceLinks(memoryIDsByNodeID: [
-      "a": ["group"], "b": ["group"], "c": ["group"], "d": ["group"], "e": ["group"],
-    ])
-    let couple = Layout.coOccurrenceLinks(memoryIDsByNodeID: ["a": ["solo"], "b": ["solo"]])
+    let crowd = Layout.coOccurrenceLinks(
+      memoryIDsByNodeID: [
+        "a": ["group"], "b": ["group"], "c": ["group"], "d": ["group"], "e": ["group"],
+      ], excluding: nil)
+    let couple = Layout.coOccurrenceLinks(
+      memoryIDsByNodeID: ["a": ["solo"], "b": ["solo"]], excluding: nil)
 
     let crowdWeight = try XCTUnwrap(crowd.first { $0.a == "a" && $0.b == "b" }).weight
     let coupleWeight = try XCTUnwrap(couple.first { $0.a == "a" && $0.b == "b" }).weight
@@ -51,22 +54,113 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
       $0["e\($1)"] = ["noise"]
     }
 
-    XCTAssertTrue(Layout.coOccurrenceLinks(memoryIDsByNodeID: wall).isEmpty)
+    XCTAssertTrue(Layout.coOccurrenceLinks(memoryIDsByNodeID: wall, excluding: nil).isEmpty)
   }
 
-  /// An entity can cite the same memory twice — the anchor does, whenever a
-  /// generic "Me" node is folded into it and brings its memories along. Counted
-  /// naively, the duplicate inflates the participant count past the noise cap
-  /// and the memory is discarded, taking every relationship it implied with it.
+  /// An entity can cite the same memory twice. Counted naively, the duplicate
+  /// inflates the participant count past the noise cap and the memory is
+  /// discarded, taking every relationship it implied with it — a whole cluster
+  /// vanishing because one node listed one memory twice.
   func testAnEntityCitingTheSameMemoryTwiceDoesNotDiscardThatMemory() {
     var citations: [String: [String]] = [:]
     for index in 0..<Layout.maximumEntitiesPerMemory { citations["e\(index)"] = ["shared"] }
     citations["e0"] = ["shared", "shared"]
 
-    let links = Layout.coOccurrenceLinks(memoryIDsByNodeID: citations)
+    let links = Layout.coOccurrenceLinks(memoryIDsByNodeID: citations, excluding: nil)
 
     XCTAssertFalse(links.isEmpty, "A duplicated citation must not push the memory past the cap")
     XCTAssertNil(links.first { $0.a == $0.b }, "An entity is not related to itself")
+  }
+
+  // MARK: - The account holder is not a peer
+
+  /// The account holder appears in nearly every memory, so co-occurring with
+  /// them is true of almost every entity and separates none of them. Left in
+  /// the projection they become every entity's strongest partner, which is
+  /// exactly the "everything is related to me" hairball the layout exists to
+  /// avoid.
+  func testTheAnchorEarnsNoCoOccurrence() {
+    let links = Layout.coOccurrenceLinks(
+      memoryIDsByNodeID: [
+        "me": ["m1", "m2", "m3"],
+        "sang": ["m1", "m2"],
+        "kory": ["m1", "m3"],
+      ], excluding: "me")
+
+    XCTAssertNil(
+      links.first { $0.a == "me" || $0.b == "me" },
+      "Being in the same memory as the account holder says nothing about an entity")
+    XCTAssertNotNil(links.first { $0.a == "kory" && $0.b == "sang" })
+  }
+
+  /// The second half of the damage, and the less obvious one: as a participant
+  /// the account holder inflates every memory's headcount, so the 1/(k-1) share
+  /// that real relationships earn from it is diluted by their presence.
+  func testDroppingTheAnchorStrengthensEveryoneElsesRelationships() throws {
+    let citations = ["me": ["dinner"], "sang": ["dinner"], "kory": ["dinner"]]
+
+    let asPeer = Layout.coOccurrenceLinks(memoryIDsByNodeID: citations, excluding: nil)
+    let asObserver = Layout.coOccurrenceLinks(memoryIDsByNodeID: citations, excluding: "me")
+
+    let diluted = try XCTUnwrap(asPeer.first { $0.a == "kory" && $0.b == "sang" }).weight
+    let whole = try XCTUnwrap(asObserver.first { $0.a == "kory" && $0.b == "sang" }).weight
+    XCTAssertGreaterThan(whole, diluted, "Two people at dinner are not a three-way crowd")
+  }
+
+  /// The edges the extractor drew to the account holder are real assertions, so
+  /// they survive — but loosened. At full strength a few hundred of them aim at
+  /// one pinned point, and the map collapses onto it.
+  func testRelationshipsToTheAnchorAreLoosenedNotDropped() throws {
+    let links = [
+      Link(a: "me", b: "omi", weight: 4),
+      Link(a: "omi", b: "github", weight: 4),
+    ]
+
+    let tethered = Layout.tetherToAnchor(links, anchorID: "me")
+
+    let toAnchor = try XCTUnwrap(tethered.first { $0.a == "me" || $0.b == "me" })
+    let elsewhere = try XCTUnwrap(tethered.first { $0.a == "github" || $0.b == "github" })
+    XCTAssertEqual(toAnchor.weight, 4 * Layout.anchorTetherStrength, accuracy: 1e-12)
+    XCTAssertGreaterThan(toAnchor.weight, 0, "A tether, not a deletion")
+    XCTAssertEqual(elsewhere.weight, 4, accuracy: 1e-12, "Only the anchor's own links are damped")
+  }
+
+  /// The property all of that exists for, measured the only way it can be.
+  ///
+  /// Whether related things end up together is statistical, not a property any
+  /// handful of nodes can demonstrate: a couple of dense groups stay separate
+  /// under any weighting, so a small fixture passes whatever the layout does.
+  /// This builds an account-shaped graph instead — a thousand entities in
+  /// planted communities, memories that are mostly about one community at a
+  /// time, an extractor that draws an edge for only some of what it sees, and
+  /// an account holder present in most memories — and asks the question the map
+  /// is actually for: *of the ten entities drawn nearest to this one, how many
+  /// belong with it?*
+  ///
+  /// Chance is 1 in 44. Treating the account holder as an ordinary peer scores
+  /// 0.59; excluding them from co-occurrence and loosening their drawn edges
+  /// scores 0.76. The floor below is slack enough to survive ordinary tuning
+  /// and tight enough to catch the exclusion being lost, which measures 0.66.
+  ///
+  /// It does *not* pin the tether — undamping it scores 0.72, still above the
+  /// floor. That is deliberate: the floor guards the map staying legible, and
+  /// tightening it to 0.75 to catch one constant would make every future
+  /// tuning change look like a regression. `anchorTetherStrength` is pinned
+  /// exactly by `testRelationshipsToTheAnchorAreLoosenedNotDropped` instead.
+  func testRelatedEntitiesAreDrawnTogetherOnAnAccountShapedGraph() throws {
+    let graph = PlantedCommunityGraph(nodeCount: 1096, communities: 44, memories: 1044)
+
+    let result = Layout.layout(
+      nodeIDs: graph.nodeIDs,
+      links: Layout.merge(graph.explicitLinks + graph.coOccurrenceLinks),
+      anchorID: graph.anchorID,
+      typeTargets: graph.typeTargets,
+      area: area)
+
+    let precision = graph.communityPrecision(of: result)
+    XCTAssertGreaterThan(
+      precision, 0.70,
+      "Neighbourhoods stopped meaning anything (chance is \(1.0 / 44.0))")
   }
 
   /// Two marks landing on exactly the same point is the one case the separation
@@ -170,6 +264,14 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
   /// Type is a tint and a nudge, never a partition. A person whose only
   /// relationships are with one project has to be free to sit inside that
   /// project's neighbourhood instead of being filed under People.
+  ///
+  /// This is also the guard on neighbourhood cohesion not eating the map. An
+  /// earlier version pulled every node toward its neighbourhood's centre point
+  /// rather than containing it within the neighbourhood's radius, which
+  /// squeezed a small map onto a single point — the fit then blew that point
+  /// back up to fill the canvas and the separation pass spread the remains on
+  /// an even grid, producing a confident-looking map with every distance
+  /// destroyed. This test is what caught it.
   func testStrongRelationshipsOverrideTheTypeField() throws {
     let concepts = (1...6).map { "c\($0)" }
     var links: [Link] = []
@@ -197,6 +299,54 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
     XCTAssertLessThan(
       toCluster, toPetal,
       "The type field must not overrule the structure it is decorating")
+  }
+
+  // MARK: - Neighbourhoods
+
+  /// Nobody tells the map how many neighbourhoods an account has, and nothing
+  /// good happens if it guesses: two projects that share one person are two
+  /// projects, and a fixed target of *k* groups would either split one of them
+  /// or fuse both.
+  func testNeighbourhoodsAreFoundWithoutBeingToldHowMany() throws {
+    let left = (0..<6).map { "left\($0)" }
+    let right = (0..<6).map { "right\($0)" }
+    var links: [Link] = []
+    for group in [left, right] {
+      for i in 0..<group.count {
+        for j in (i + 1)..<group.count { links.append(Link(a: group[i], b: group[j], weight: 5)) }
+      }
+    }
+    // The one person who works on both, which is what makes this a graph and
+    // not two graphs.
+    links.append(Link(a: "left0", b: "right0", weight: 1))
+
+    let found = Layout.detectCommunities(coreIDs: left + right, neighbors: adjacency(of: links))
+
+    XCTAssertEqual(Set(found.values).count, 2, "Two projects joined by one person are two projects")
+    XCTAssertEqual(Set(left.map { found[$0] }).count, 1)
+    XCTAssertEqual(Set(right.map { found[$0] }).count, 1)
+    XCTAssertNotEqual(found["left1"], found["right1"])
+  }
+
+  /// Neighbourhoods move nodes, so an unstable grouping is an unstable map. The
+  /// server does not promise an edge order, and Swift seeds string hashing per
+  /// process, so anything read from a dictionary's iteration order would drift
+  /// between launches on an unchanged account.
+  func testNeighbourhoodsDoNotDependOnTheOrderRelationshipsArriveIn() {
+    let ids = (0..<14).map { "n\($0)" }
+    var links: [Link] = []
+    for i in 0..<ids.count {
+      for j in (i + 1)..<ids.count where (i / 7) == (j / 7) {
+        links.append(Link(a: ids[i], b: ids[j], weight: 3))
+      }
+    }
+    links.append(Link(a: "n0", b: "n13", weight: 1))
+
+    let forwards = Layout.detectCommunities(coreIDs: ids, neighbors: adjacency(of: links))
+    let backwards = Layout.detectCommunities(
+      coreIDs: ids, neighbors: adjacency(of: links.reversed()))
+
+    XCTAssertEqual(forwards, backwards)
   }
 
   // MARK: - Determinism
@@ -316,6 +466,17 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
   }
 
   // MARK: - Helpers
+
+  /// The neighbour lists `layout` builds internally, so a detection test can be
+  /// written against a link set like every other test here.
+  private func adjacency(of links: [Link]) -> [String: [(id: String, weight: Double)]] {
+    var neighbors: [String: [(id: String, weight: Double)]] = [:]
+    for link in links {
+      neighbors[link.a, default: []].append((link.b, link.weight))
+      neighbors[link.b, default: []].append((link.a, link.weight))
+    }
+    return neighbors
+  }
 
   private func distance(_ a: CGPoint, _ b: CGPoint) -> Double {
     Double(hypot(a.x - b.x, a.y - b.y))

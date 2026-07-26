@@ -74,11 +74,11 @@ enum MemoryAtlasForceLayout {
   /// fired, not even on a six-node ring.
   ///
   /// 90 steps is where quality stops paying for itself. Measured on a
-  /// 1,096-entity graph with planted communities, the share of a node's ten
-  /// nearest on-screen neighbours that genuinely belong to its community runs
-  /// 0.726 at 60 steps, 0.741 at 90, and 0.750 at 240 — against 0.023 for
-  /// chance. Nearly three times the work buys nine thousandths, and this runs
-  /// inside a SwiftUI `init`.
+  /// 1,096-entity graph with planted communities and a realistic account
+  /// holder, the share of a node's ten nearest on-screen neighbours that
+  /// genuinely belong to its community runs 0.746 at 60 steps, 0.773 at 90, and
+  /// 0.774 at 240 — against 0.023 for chance. Nearly three times the work buys
+  /// one thousandth, and this runs inside a SwiftUI `init`.
   static let steps = 90
 
   /// The type field is deliberately an order of magnitude weaker than the
@@ -110,6 +110,33 @@ enum MemoryAtlasForceLayout {
   /// Co-occurrence is dense by nature. Keeping only each entity's strongest
   /// few partners is what turns it from a hairball into structure.
   static let coOccurrenceNeighborsPerNode = 6
+
+  /// What is left of a relationship to the account holder once it is no longer
+  /// allowed to decide the map.
+  ///
+  /// Excluding them from co-occurrence removes the meaningless half of their
+  /// pull, but the edges the extractor actually drew are real assertions, and
+  /// at full strength a few hundred of them still aim at one pinned point and
+  /// collapse the map onto it. Damped, they act as a tether: an entity related
+  /// to nothing but you still hangs near the middle instead of being flung to
+  /// the rim, and everything else is free to group by what it is *actually*
+  /// related to.
+  ///
+  /// Not zero, and measured rather than guessed: on a planted-community graph
+  /// with a realistic ego, community precision peaks around here (0.756) and
+  /// falls off on both sides — 0.717 at full strength, 0.751 with no tether at
+  /// all.
+  static let anchorTetherStrength = 0.1
+
+  /// How hard a detected neighbourhood pulls itself together, against the
+  /// spreading the rest of the simulation does.
+  ///
+  /// Measured on the account-shaped fixture, as the mean distance within a
+  /// neighbourhood over the mean distance across the whole map: 0.27 with no
+  /// cohesion, 0.20 here, 0.17 at twice this. Community precision peaks here
+  /// too (0.79), and doubling it again buys 0.002 while pulling groups into
+  /// balls tight enough to read as decoration rather than structure.
+  static let communityCohesion = 1.0
 
   // MARK: - Deriving relatedness
 
@@ -146,9 +173,21 @@ enum MemoryAtlasForceLayout {
   /// Each shared memory contributes `1 / (k - 1)`, the standard collaboration
   /// weighting — otherwise one eight-person meeting would assert eight strong
   /// friendships, and group events would dominate the whole map.
-  static func coOccurrenceLinks(memoryIDsByNodeID: [String: [String]]) -> [Link] {
+  ///
+  /// - Parameter anchorID: the account holder, excluded from the projection.
+  ///   They are a participant in nearly every memory by construction, so
+  ///   "co-occurs with you" is true of almost everything and distinguishes
+  ///   nothing — it is the one relationship in the graph that carries no
+  ///   information. Left in, it does double damage: it makes the account
+  ///   holder every entity's strongest partner, and it inflates `k` for every
+  ///   memory, so the relationships that *are* informative each get a smaller
+  ///   share of it.
+  static func coOccurrenceLinks(
+    memoryIDsByNodeID: [String: [String]],
+    excluding anchorID: String?
+  ) -> [Link] {
     var nodeIDsByMemoryID: [String: [String]] = [:]
-    for nodeID in memoryIDsByNodeID.keys.sorted() {
+    for nodeID in memoryIDsByNodeID.keys.sorted() where nodeID != anchorID {
       for memoryID in memoryIDsByNodeID[nodeID] ?? [] {
         nodeIDsByMemoryID[memoryID, default: []].append(nodeID)
       }
@@ -203,6 +242,20 @@ enum MemoryAtlasForceLayout {
     return links.filter { keptKeys.contains($0.key) }
   }
 
+  /// Loosens every relationship that touches the account holder.
+  ///
+  /// Applied inside `layout` rather than at the call site, so the rule holds
+  /// for whatever mix of signals a caller merges: nothing that touches the
+  /// anchor gets to decide where the rest of the map goes. See
+  /// `anchorTetherStrength` for why the answer is "loosened", not "removed".
+  static func tetherToAnchor(_ links: [Link], anchorID: String?) -> [Link] {
+    guard let anchorID else { return links }
+    return links.map { link in
+      guard link.a == anchorID || link.b == anchorID else { return link }
+      return Link(a: link.a, b: link.b, weight: link.weight * anchorTetherStrength)
+    }
+  }
+
   /// Sums duplicate pairs into one link. Callers combine signals by simply
   /// concatenating link sets and merging.
   static func merge(_ links: [Link]) -> [Link] {
@@ -248,8 +301,13 @@ enum MemoryAtlasForceLayout {
     // floating-point addition is not associative, so leaving the server's
     // encounter order in place would let the same graph delivered in a
     // different order drift into a visibly different map over 90 steps.
-    let merged = merge(links.filter { known.contains($0.a) && known.contains($0.b) })
-      .sorted { $0.key < $1.key }
+    //
+    // Damping happens here rather than at the call site so the rule holds for
+    // whatever mix of signals a caller merges: nothing that touches the anchor
+    // gets to decide the map.
+    let merged = tetherToAnchor(
+      merge(links.filter { known.contains($0.a) && known.contains($0.b) }), anchorID: anchorID
+    ).sorted { $0.key < $1.key }
 
     var neighbors: [String: [(id: String, weight: Double)]] = [:]
     for link in merged {
@@ -303,10 +361,27 @@ enum MemoryAtlasForceLayout {
       return SIMD2<Double>((Double(target.x) - 0.5) * 2, (Double(target.y) - 0.5) * 2)
     }
 
+    // Neighbourhoods, and the force that makes them visible. Relaxation alone
+    // recovers structure but spreads it evenly, because that is what
+    // Fruchterman–Reingold optimises for: a graph whose groups are perfectly
+    // recoverable still draws as an even haze. Naming the groups and letting
+    // each one pull itself together is what turns recoverable structure into
+    // structure you can see without being told where to look.
+    //
+    // The anchor is excluded: pinned at the centre and belonging to whichever
+    // group its remaining tether happens to favour, it would drag that one
+    // group onto the middle of the map.
+    let communityOf = detectCommunities(coreIDs: coreIDs, neighbors: neighbors)
+    let communities = coreIDs.enumerated().map { index, id in
+      index == pinnedIndex ? -1 : (communityOf[id] ?? -1)
+    }
+
     relax(
       points: &points,
       springs: normalizedSprings,
       fieldTargets: fieldTargets,
+      communities: communities,
+      communityCount: (communities.max() ?? -1) + 1,
       pinnedIndex: pinnedIndex,
       steps: steps)
 
@@ -494,6 +569,147 @@ enum MemoryAtlasForceLayout {
     return points
   }
 
+  // MARK: - Communities
+
+  /// Groups the graph into neighbourhoods, by modularity (Louvain).
+  ///
+  /// Modularity asks whether a group has more internal relationships than it
+  /// would by chance given its members' degrees, which is the right question
+  /// here: without the degree term, "everyone who ever appeared with Omi" wins
+  /// every time, because the popular entities are popular everywhere.
+  ///
+  /// Label propagation was tried first and is a third of the code, but it
+  /// collapses on this shape of graph — on a thousand-entity account-shaped
+  /// fixture it merged 558 of 810 entities into one label, and the pairs it
+  /// grouped were related no more often than chance. Modularity resists that
+  /// by construction: absorbing an unrelated entity costs more than it pays.
+  ///
+  /// Determinism is the whole game, because these groups move nodes. Nodes are
+  /// visited in `coreIDs` order (the caller sorts), candidate groups in index
+  /// order, and a tie leaves a node where it is.
+  static func detectCommunities(
+    coreIDs: [String],
+    neighbors: [String: [(id: String, weight: Double)]],
+    levels: Int = 10
+  ) -> [String: Int] {
+    guard !coreIDs.isEmpty else { return [:] }
+    var indexOf: [String: Int] = [:]
+    for (index, id) in coreIDs.enumerated() { indexOf[id] = index }
+
+    var adjacency: [[(node: Int, weight: Double)]] = Array(repeating: [], count: coreIDs.count)
+    for (index, id) in coreIDs.enumerated() {
+      for neighbor in neighbors[id] ?? [] {
+        guard let other = indexOf[neighbor.id], other != index else { continue }
+        adjacency[index].append((other, neighbor.weight))
+      }
+    }
+    var selfLoops = [Double](repeating: 0, count: coreIDs.count)
+
+    // Which group each original node currently belongs to, followed down
+    // through however many levels of aggregation the graph supports.
+    var membership = Array(0..<coreIDs.count)
+    for _ in 0..<levels {
+      let (partition, groups) = mergeByModularity(adjacency: adjacency, selfLoops: selfLoops)
+      guard groups < adjacency.count else { break }
+      membership = membership.map { partition[$0] }
+      (adjacency, selfLoops) = collapse(
+        adjacency: adjacency, selfLoops: selfLoops, into: partition, groups: groups)
+    }
+
+    var result: [String: Int] = [:]
+    for (index, id) in coreIDs.enumerated() { result[id] = membership[index] }
+    return result
+  }
+
+  /// One Louvain level: move each node to whichever neighbouring group its
+  /// membership improves most, until nothing improves.
+  ///
+  /// The gain from moving node `i` into group `C` is `w(i, C) - Σtot(C)·k(i)/2m`
+  /// — what `i` actually shares with `C`, less what a graph with the same
+  /// degrees would have produced by accident.
+  private static func mergeByModularity(
+    adjacency: [[(node: Int, weight: Double)]],
+    selfLoops: [Double],
+    rounds: Int = 20
+  ) -> (partition: [Int], groups: Int) {
+    let count = adjacency.count
+    var degree = [Double](repeating: 0, count: count)
+    for index in 0..<count {
+      degree[index] = adjacency[index].reduce(0) { $0 + $1.weight } + 2 * selfLoops[index]
+    }
+    let twiceTotal = degree.reduce(0, +)
+    guard twiceTotal > 0 else { return (Array(0..<count), count) }
+
+    var group = Array(0..<count)
+    var groupDegree = degree
+    for _ in 0..<rounds {
+      var moved = false
+      for index in 0..<count {
+        let current = group[index]
+        groupDegree[current] -= degree[index]
+
+        var shared: [Int: Double] = [:]
+        for edge in adjacency[index] { shared[group[edge.node], default: 0] += edge.weight }
+
+        var best = current
+        var bestGain = (shared[current] ?? 0) - groupDegree[current] * degree[index] / twiceTotal
+        for candidate in shared.keys.sorted() {
+          let gain =
+            (shared[candidate] ?? 0) - groupDegree[candidate] * degree[index] / twiceTotal
+          if gain > bestGain + 1e-12 {
+            bestGain = gain
+            best = candidate
+          }
+        }
+
+        groupDegree[best] += degree[index]
+        if best != current {
+          group[index] = best
+          moved = true
+        }
+      }
+      if !moved { break }
+    }
+
+    var dense: [Int: Int] = [:]
+    var partition = [Int](repeating: 0, count: count)
+    for index in 0..<count {
+      if dense[group[index]] == nil { dense[group[index]] = dense.count }
+      partition[index] = dense[group[index]]!
+    }
+    return (partition, dense.count)
+  }
+
+  /// Rebuilds the graph with each group as a single node, so the next level can
+  /// look for groups *of* groups. Internal weight becomes a self-loop, which is
+  /// what carries a group's own density up to the next level.
+  private static func collapse(
+    adjacency: [[(node: Int, weight: Double)]],
+    selfLoops: [Double],
+    into partition: [Int],
+    groups: Int
+  ) -> ([[(node: Int, weight: Double)]], [Double]) {
+    var collapsedSelfLoops = [Double](repeating: 0, count: groups)
+    var collapsedEdges: [[Int: Double]] = Array(repeating: [:], count: groups)
+    for index in 0..<adjacency.count {
+      let source = partition[index]
+      collapsedSelfLoops[source] += selfLoops[index]
+      for edge in adjacency[index] {
+        let target = partition[edge.node]
+        if source == target {
+          // Every undirected relationship appears once from each end.
+          collapsedSelfLoops[source] += edge.weight / 2
+        } else {
+          collapsedEdges[source][target, default: 0] += edge.weight
+        }
+      }
+    }
+    let rebuilt = collapsedEdges.map { edges in
+      edges.keys.sorted().map { (node: $0, weight: edges[$0]!) }
+    }
+    return (rebuilt, collapsedSelfLoops)
+  }
+
   // MARK: - Relaxation
 
   /// Compresses the weight range so the strongest relationship pulls harder
@@ -514,6 +730,8 @@ enum MemoryAtlasForceLayout {
     points: inout [SIMD2<Double>],
     springs: [(i: Int, j: Int, weight: Double)],
     fieldTargets: [SIMD2<Double>?],
+    communities: [Int],
+    communityCount: Int,
     pinnedIndex: Int?,
     steps: Int
   ) {
@@ -526,6 +744,14 @@ enum MemoryAtlasForceLayout {
     var displacements = [SIMD2<Double>](repeating: .zero, count: count)
     var traversal: [Int] = []
     traversal.reserveCapacity(64)
+    var centroids = [SIMD2<Double>](repeating: .zero, count: max(communityCount, 1))
+    var populations = [Double](repeating: 0, count: max(communityCount, 1))
+    var radii = [Double](repeating: 0, count: max(communityCount, 1))
+    // Skipped for a single group: holding one group together is centre gravity
+    // by another name, and there is nothing for it to be held apart *from*.
+    // Not load-bearing — containment is what keeps a lone group from
+    // imploding, and it does that whether or not this shortcut is taken.
+    let cohering = communityCohesion > 0 && communityCount > 1
 
     for step in 0..<steps {
       for i in 0..<count { displacements[i] = .zero }
@@ -545,9 +771,38 @@ enum MemoryAtlasForceLayout {
         if spring.j != pinnedIndex { displacements[spring.j] -= force }
       }
 
+      if cohering {
+        for index in 0..<centroids.count {
+          centroids[index] = .zero
+          populations[index] = 0
+        }
+        for i in 0..<count where communities[i] >= 0 {
+          centroids[communities[i]] += points[i]
+          populations[communities[i]] += 1
+        }
+        for index in 0..<centroids.count where populations[index] > 0 {
+          centroids[index] /= populations[index]
+          // The room a group of this size needs at the simulation's own ideal
+          // spacing. Containing a group to its natural radius keeps it together
+          // without squeezing it: pulling toward a bare centroid instead would
+          // collapse the group to a point, and on a map with few groups it
+          // would collapse the whole thing — after which the separation pass
+          // re-scatters the wreckage on an even grid and every trace of
+          // structure is gone.
+          radii[index] = k * sqrt(populations[index] / .pi)
+        }
+      }
+
       for i in 0..<count where i != pinnedIndex {
         if let target = fieldTargets[i] {
           displacements[i] += (target - points[i]) * typeFieldStrength
+        }
+        if cohering, communities[i] >= 0, populations[communities[i]] > 1 {
+          let offset = points[i] - centroids[communities[i]]
+          let stray = simd_length(offset) - radii[communities[i]]
+          if stray > 0 {
+            displacements[i] -= (offset / simd_length(offset)) * stray * communityCohesion
+          }
         }
         displacements[i] -= points[i] * centerGravity
       }

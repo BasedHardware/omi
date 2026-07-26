@@ -597,6 +597,22 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertTrue(ids.contains("david"), "anchor is always visible regardless of time cursor")
   }
 
+  // MARK: - The account holder's own connections
+
+  /// Everything is connected to the account holder, so drawing those lines like
+  /// any other relationship puts a few hundred straight spokes across every
+  /// neighbourhood and the map reads as a star regardless of where its entities
+  /// sit. They recede — except when the account holder is what is selected,
+  /// where "what am I connected to" is precisely the question being asked.
+  func testTheAccountHoldersConnectionsRecedeUntilTheyAreTheSubject() {
+    let recede = MemoryAtlasLayoutEngine.anchorConnectionsRecede
+
+    XCTAssertTrue(recede("david", nil), "Nothing selected: the map is being read as a whole")
+    XCTAssertTrue(recede("david", "singapore"), "Someone else selected: still not the subject")
+    XCTAssertFalse(recede("david", "david"), "Selecting yourself must show your connections")
+    XCTAssertFalse(recede(nil, "singapore"), "No account holder, no spokes to hold back")
+  }
+
   private func sampleGraph() -> KnowledgeGraphResponse {
     KnowledgeGraphResponse(
       nodes: [

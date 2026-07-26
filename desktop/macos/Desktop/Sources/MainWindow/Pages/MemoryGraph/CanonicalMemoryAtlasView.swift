@@ -1011,17 +1011,15 @@ enum MemoryAtlasLayoutEngine {
     // extractor drew, and the memories two entities were extracted from
     // together. The second matters more than it sounds — it finds
     // relationships nobody wrote down, which is most of them.
+    //
+    // The anchor is deliberately absent: they appear in nearly every memory, so
+    // projecting them would make "was in a memory with you" the strongest
+    // signal about every entity, which is the one thing that is true of all of
+    // them. `coOccurrenceLinks` enforces this itself; not building the entry
+    // just avoids collecting memories only to drop them.
     var memoryIDsByNodeID: [String: [String]] = [:]
-    if let anchor { memoryIDsByNodeID[anchor.id] = anchor.memoryIds }
     for groupNodes in grouped.values {
       for node in groupNodes { memoryIDsByNodeID[node.id] = node.memoryIds }
-    }
-    // A self-node folded into the anchor brings its memories with it, or the
-    // anchor loses the co-occurrence its own entity earned.
-    if let anchorID = anchor?.id {
-      for node in nodes where collapsedIDs.contains(node.id) {
-        memoryIDsByNodeID[anchorID, default: []].append(contentsOf: node.memoryIds)
-      }
     }
 
     let relatedness =
@@ -1032,7 +1030,8 @@ enum MemoryAtlasLayoutEngine {
             memoryCount: $0.edge.memoryIds.count
           )
         })
-      + MemoryAtlasForceLayout.coOccurrenceLinks(memoryIDsByNodeID: memoryIDsByNodeID)
+      + MemoryAtlasForceLayout.coOccurrenceLinks(
+        memoryIDsByNodeID: memoryIDsByNodeID, excluding: anchor?.id)
 
     // Type stops deciding where a node goes and becomes a weak field it can
     // overrule: the constellation centres are now only somewhere a node drifts
@@ -1118,6 +1117,20 @@ enum MemoryAtlasLayoutEngine {
   /// The region the relaxed map may occupy. Isolates are parked in the margin
   /// outside it, so it stops short of the canvas edge.
   static let layoutArea = CGRect(x: 0.12, y: 0.16, width: 0.76, height: 0.68)
+
+  /// Whether the account holder's own connections should recede into the
+  /// background rather than being drawn like every other relationship.
+  ///
+  /// They are the least informative lines on the map — everything is connected
+  /// to you — and by far the most numerous, so at full strength a few hundred
+  /// straight spokes cross every neighbourhood and the map reads as a star no
+  /// matter where its entities actually sit. The exception is the one moment
+  /// they *are* the subject: selecting the account holder is asking "what am I
+  /// connected to", and the answer has to be drawn.
+  static func anchorConnectionsRecede(anchorID: String?, selectedNodeID: String?) -> Bool {
+    guard let anchorID else { return false }
+    return selectedNodeID != anchorID
+  }
 
   /// Where each type actually ended up, rather than where it was assigned.
   ///
@@ -2308,8 +2321,13 @@ private struct CanonicalMemoryAtlasSurface: View {
     plan: MemoryAtlasRenderPlan
   ) {
     let paintBounds = canvasPaintBounds(for: size)
+    let anchorID = snapshot.anchorNodeID
+    let spokesAreBackground = MemoryAtlasLayoutEngine.anchorConnectionsRecede(
+      anchorID: anchorID, selectedNodeID: selectedNodeID)
+
     for cluster in snapshot.activeClusters {
       var path = Path()
+      var spokes = Path()
       for placement in plan.visibleEdges where placement.cluster == cluster {
         let source = point(for: placement.source, in: size)
         let target = point(for: placement.target, in: size)
@@ -2323,15 +2341,30 @@ private struct CanonicalMemoryAtlasSurface: View {
         // box cannot cross the viewport. This is paint-only culling: the plan
         // and its stable entity cohort remain unchanged.
         guard segmentBounds.intersects(paintBounds) else { continue }
-        path.move(to: source)
-        path.addLine(to: target)
+        let touchesAnchor =
+          placement.edge.sourceId == anchorID || placement.edge.targetId == anchorID
+        if spokesAreBackground && touchesAnchor {
+          spokes.move(to: source)
+          spokes.addLine(to: target)
+        } else {
+          path.move(to: source)
+          path.addLine(to: target)
+        }
       }
-      guard !path.isEmpty else { continue }
-      context.stroke(
-        path,
-        with: .color(cluster.color.opacity(selectedNodeID == nil ? 0.25 : 0.74)),
-        lineWidth: selectedNodeID == nil ? 0.85 : 1.7
-      )
+      if !path.isEmpty {
+        context.stroke(
+          path,
+          with: .color(cluster.color.opacity(selectedNodeID == nil ? 0.25 : 0.74)),
+          lineWidth: selectedNodeID == nil ? 0.85 : 1.7
+        )
+      }
+      if !spokes.isEmpty {
+        context.stroke(
+          spokes,
+          with: .color(cluster.color.opacity(selectedNodeID == nil ? 0.07 : 0.16)),
+          lineWidth: 0.6
+        )
+      }
     }
   }
 
