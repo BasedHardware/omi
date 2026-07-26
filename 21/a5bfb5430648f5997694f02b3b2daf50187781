@@ -1,0 +1,33 @@
+desktop/macos/Desktop/Tests/FloatingControlBarStateTests.swift
+  s_7918275f8e3531::t_a468a4fe513c59 86-89,94-99
+  s_7918275f8e3531::t_4b21ede6db67fa 100-101
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_7918275f8e3531::t_f840bddd9db09a 289-302
+desktop/macos/Desktop/Tests/FloatingBarGeometryTests.swift
+  s_7918275f8e3531::t_c5bde4b0a495ce 403-406,409-410,414-420
+  s_7918275f8e3531::t_256783e4cd2fb1 421-422
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_7918275f8e3531::t_4a3baee807f896 115-117,120-123
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
+  s_7918275f8e3531::t_b9eabcdd81bcac 145-152,155-159
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchSystemControlsView.swift
+  s_7918275f8e3531::t_af5a08d31114e7 77-121
+  s_7918275f8e3531::t_7ef5019a84adc0 15
+  s_7918275f8e3531::t_4ad43bf2ad5a86 33-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "21a5bfb5430648f5997694f02b3b2daf50187781",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
