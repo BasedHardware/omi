@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import tempfile
 import unittest
@@ -49,17 +50,6 @@ class DesktopReleaseSourceIdentityTests(unittest.TestCase):
                 changelog_pr=PR_URL,
             )
 
-    def test_rejects_changelog_commit_with_a_different_recorded_parent(self) -> None:
-        with self.assertRaisesRegex(ValueError, "changelog parent must match the planner source SHA"):
-            identity.build_evidence(
-                planned_source_sha=PLANNED_SHA,
-                candidate_source_sha=CANDIDATE_SHA,
-                origin_main_sha=CANDIDATE_SHA,
-                changelog_parent_sha="d" * 40,
-                changelog_commit=CHANGELOG_SHA,
-                changelog_pr=PR_URL,
-            )
-
     def test_direct_path_records_current_main_after_non_desktop_commits(self) -> None:
         evidence = identity.build_evidence(
             planned_source_sha=PLANNED_SHA,
@@ -70,12 +60,17 @@ class DesktopReleaseSourceIdentityTests(unittest.TestCase):
         self.assertEqual(evidence["candidate_source_sha"], CANDIDATE_SHA)
 
     def _git(self, repository: Path, *args: str) -> str:
+        # The repository-wide pre-push hook exports GIT_* state while running
+        # selected checks. Test repositories must not inherit that state from
+        # their caller or their commits can target the wrong index/worktree.
+        environment = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
         return subprocess.run(
             ["git", "-C", str(repository), *args],
             check=True,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=environment,
         ).stdout.strip()
 
     def _commit(self, repository: Path, path: str, contents: str, message: str) -> str:
@@ -177,6 +172,65 @@ class DesktopReleaseSourceIdentityTests(unittest.TestCase):
                     changelog_parent_sha=planned_source_sha,
                 )
             self.assertNotEqual(stale_parent_sha, planned_source_sha)
+
+    def test_replans_after_concurrent_desktop_change_without_losing_changelog_evidence(self) -> None:
+        """Model SCA-146: a newer desktop merge races a regular changelog merge."""
+        directory, repository, original_planned_source_sha = self._repository_with_planned_source()
+        with directory:
+            main_branch = self._git(repository, "branch", "--show-current")
+            replanned_source_sha = self._commit(
+                repository,
+                "desktop/macos/Desktop/Sources/Newer.swift",
+                "let newerDesktopChange = true\n",
+                "newer desktop source",
+            )
+            self._git(repository, "checkout", "-b", "changelog", original_planned_source_sha)
+            changelog_commit = self._commit(
+                repository,
+                "desktop/macos/changelog/2026-07-25.json",
+                "{}\n",
+                "consolidate changelog",
+            )
+            self._git(repository, "checkout", main_branch)
+            self._git(
+                repository,
+                "merge",
+                "--no-ff",
+                "changelog",
+                "-m",
+                "regular changelog merge",
+            )
+            candidate_source_sha = self._git(repository, "rev-parse", "HEAD")
+
+            with self.assertRaisesRegex(ValueError, "newer releasable desktop changes"):
+                identity.ensure_candidate_history_is_safe(
+                    repository_root=repository,
+                    planned_source_sha=original_planned_source_sha,
+                    candidate_source_sha=candidate_source_sha,
+                    changelog_commit=changelog_commit,
+                    changelog_parent_sha=original_planned_source_sha,
+                )
+
+            identity.ensure_candidate_history_is_safe(
+                repository_root=repository,
+                planned_source_sha=replanned_source_sha,
+                candidate_source_sha=candidate_source_sha,
+                changelog_commit=changelog_commit,
+                changelog_parent_sha=original_planned_source_sha,
+            )
+            evidence = identity.build_evidence(
+                planned_source_sha=replanned_source_sha,
+                candidate_source_sha=candidate_source_sha,
+                origin_main_sha=candidate_source_sha,
+                changelog_parent_sha=original_planned_source_sha,
+                changelog_commit=changelog_commit,
+                changelog_pr=PR_URL,
+            )
+
+        self.assertEqual(evidence["mode"], "replanned-changelog")
+        self.assertEqual(evidence["planned_source_sha"], replanned_source_sha)
+        self.assertEqual(evidence["replanned_from_source_sha"], original_planned_source_sha)
+        self.assertEqual(evidence["changelog_commit"], changelog_commit)
 
 
 if __name__ == "__main__":

@@ -33,10 +33,14 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         cwd: Path,
         env: dict[str, str],
     ) -> subprocess.CompletedProcess[str]:
+        # Git invokes hooks with repository-scoped GIT_* variables. This test
+        # runs workflow commands in an independent disposable repository, so
+        # do not let the hook's index/worktree leak into that shell.
+        isolated_env = {name: value for name, value in env.items() if not name.startswith("GIT_")}
         return subprocess.run(
             ["bash", "-c", self._workflow_script(step_name)],
             cwd=cwd,
-            env=env,
+            env=isolated_env,
             check=False,
             capture_output=True,
             text=True,
@@ -156,6 +160,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
                 check=True,
                 capture_output=True,
                 text=True,
+                env={name: value for name, value in os.environ.items() if not name.startswith("GIT_")},
             ).stdout.strip()
             self.assertEqual(checked_out_sha, candidate_sha)
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "must remain untouched\n")
