@@ -5,7 +5,6 @@ from typing import Any, Optional, cast
 
 import database._client as db_client_module
 from google.cloud import firestore
-from google.cloud.firestore_v1.field_path import FieldPath
 
 StatePayload = dict[str, Any]
 
@@ -228,6 +227,10 @@ def remove_developer_api_key_memory_grant(
     # If the grant document does not exist, there is nothing to remove.
     if not doc_ref.get().exists:
         return
+
+    # Imported here, not at module scope: several suites stub google.cloud.firestore_v1
+    # with a plain module, which makes a top-level submodule import fail at collection.
+    from google.cloud.firestore_v1.field_path import FieldPath
 
     # UUID key ids contain hyphens, so the nested path is escaped through FieldPath
     # before being passed as an update key. ``update()`` only accepts string keys —
