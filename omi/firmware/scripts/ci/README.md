@@ -61,11 +61,15 @@ from any branch). The publish step also refuses to overwrite an existing
   Outputs `dfu_application.zip`, `merged.hex`, `merged_CPUNET.hex`.
 - `check-cv1-version-sync.sh` / `set-cv1-version.sh` — validate or atomically update
   the DIS and MCUboot versions as one release identity.
+- `check-cv1-ble-buffer-contract.sh` — rejects a network-controller Link Layer
+  TX pool smaller than either CV1 host ACL TX pool.
 - `sync-cv1-release-version.sh` — production workflow boundary that preserves a
   reviewed `+N` build number unless the release operator supplied an explicit
   base-version override.
 - `test-check-cv1-version-sync.sh` — hermetic coverage for matching, drift,
   malformed, normal-release preservation, and explicit-override paths.
+- `test-check-cv1-ble-buffer-contract.sh` — hermetic coverage for the aligned
+  buffer configuration and its historical undersized-controller failure.
 - `make-release-body.sh` — renders the GitHub Release body + `KEY_VALUE` block.
 
 ## Notes

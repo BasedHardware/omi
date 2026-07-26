@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: cv1-firmware-ble-buffer-contract-tests
+    command: ["bash", "omi/firmware/scripts/ci/test-check-cv1-ble-buffer-contract.sh"]
+    triggers: ["omi/firmware/omi/omi.conf", "omi/firmware/omi/sysbuild/ipc_radio.conf", "omi/firmware/scripts/ci/check-cv1-ble-buffer-contract.sh", "omi/firmware/scripts/ci/test-check-cv1-ble-buffer-contract.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Jul 25 2026 CV1 physical throughput run found a six-packet controller pool below both ten-packet host ACL TX pools, matching the observed large-notification throughput ceiling"
   - id: cv1-firmware-version-sync-tests
     command: ["bash", "omi/firmware/scripts/ci/test-check-cv1-version-sync.sh"]
     triggers: ["omi/firmware/omi/omi.conf", "omi/firmware/scripts/ci/check-cv1-version-sync.sh", "omi/firmware/scripts/ci/set-cv1-version.sh", "omi/firmware/scripts/ci/sync-cv1-release-version.sh", "omi/firmware/scripts/ci/test-check-cv1-version-sync.sh", "omi/firmware/scripts/ci/build-cv1.sh", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
