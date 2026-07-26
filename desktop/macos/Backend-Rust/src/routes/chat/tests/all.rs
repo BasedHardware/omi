@@ -1103,6 +1103,50 @@ fn test_pause_turn_stream_accumulator_preserves_raw_content_for_continuation() {
     );
 }
 
+/// Regression: a thinking block replayed on a `pause_turn` continuation must carry the
+/// signature Anthropic streamed for it. The accumulator handled `text_delta`,
+/// `thinking_delta` and `input_json_delta` but dropped `signature_delta`, so an adaptive
+/// (typed-chat) turn that paused mid web search was resent with an unsigned thinking block
+/// and rejected upstream — the user saw the partial answer end in an "Upstream provider
+/// error" instead of the searched answer.
+#[test]
+fn test_pause_turn_stream_accumulator_preserves_thinking_signature() {
+    let mut blocks = StreamedContentBlocks::default();
+    blocks.start_block(0, json!({"type": "thinking", "thinking": ""}));
+    blocks.append_delta(0, &json!({"type": "thinking_delta", "thinking": "Check "}));
+    blocks.append_delta(0, &json!({"type": "thinking_delta", "thinking": "the web"}));
+    blocks.append_delta(0, &json!({"type": "signature_delta", "signature": "ErrU"}));
+    blocks.append_delta(0, &json!({"type": "signature_delta", "signature": "hd8="}));
+    blocks.stop_block(0);
+    blocks.start_block(
+        1,
+        json!({
+            "type": "server_tool_use",
+            "id": "srvtoolu_123",
+            "name": "web_search",
+            "input": {}
+        }),
+    );
+    blocks.append_delta(
+        1,
+        &json!({"type": "input_json_delta", "partial_json": "{\"query\":\"NYC weather\"}"}),
+    );
+    blocks.stop_block(1);
+
+    assert_eq!(
+        blocks.into_value(),
+        json!([
+            {"type": "thinking", "thinking": "Check the web", "signature": "ErrUhd8="},
+            {
+                "type": "server_tool_use",
+                "id": "srvtoolu_123",
+                "name": "web_search",
+                "input": {"query": "NYC weather"}
+            }
+        ])
+    );
+}
+
 #[test]
 fn test_pause_turn_continuation_preserves_raw_assistant_content_and_tools() {
     let req = test_request(vec![user_message(
