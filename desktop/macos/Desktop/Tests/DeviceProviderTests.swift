@@ -23,9 +23,9 @@ final class DeviceProviderTests: XCTestCase {
 
   func testLoadsPersistedPairedDeviceFromInjectedDefaults() {
     let defaults = makeDefaults()
-    defaults.set(testDevice.id, forKey: "pairedDeviceId")
-    defaults.set(testDevice.name, forKey: "pairedDeviceName")
-    defaults.set(testDevice.type.rawValue, forKey: "pairedDeviceType")
+    defaults.set(testDevice.id, forKey: .pairedDeviceId)
+    defaults.set(testDevice.name, forKey: .pairedDeviceName)
+    defaults.set(testDevice.type.rawValue, forKey: .pairedDeviceType)
     defer { removeDefaults(defaults) }
 
     let provider = makeProvider(defaults: defaults)
@@ -43,9 +43,9 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertTrue(provider.isConnected)
     XCTAssertEqual(provider.connectedDevice, testDevice)
     XCTAssertEqual(provider.pairedDevice, testDevice)
-    XCTAssertEqual(defaults.string(forKey: "pairedDeviceId"), testDevice.id)
-    XCTAssertEqual(defaults.string(forKey: "pairedDeviceName"), testDevice.name)
-    XCTAssertEqual(defaults.string(forKey: "pairedDeviceType"), testDevice.type.rawValue)
+    XCTAssertEqual(defaults.string(forKey: .pairedDeviceId), testDevice.id)
+    XCTAssertEqual(defaults.string(forKey: .pairedDeviceName), testDevice.name)
+    XCTAssertEqual(defaults.string(forKey: .pairedDeviceType), testDevice.type.rawValue)
   }
 
   func testFirstSuccessfulPairEmitsOnceAndReconnectOnlyRefreshesPersonProperties() async {
@@ -86,9 +86,9 @@ final class DeviceProviderTests: XCTestCase {
 
   func testPersistedPairReconnectDoesNotEmitDevicePaired() async {
     let defaults = makeDefaults()
-    defaults.set(testDevice.id, forKey: "pairedDeviceId")
-    defaults.set(testDevice.name, forKey: "pairedDeviceName")
-    defaults.set(testDevice.type.rawValue, forKey: "pairedDeviceType")
+    defaults.set(testDevice.id, forKey: .pairedDeviceId)
+    defaults.set(testDevice.name, forKey: .pairedDeviceName)
+    defaults.set(testDevice.type.rawValue, forKey: .pairedDeviceType)
     defer { removeDefaults(defaults) }
     var capturedEventNames: [String] = []
     var latestUserProperties: [String: Any] = [:]
@@ -136,7 +136,7 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertNil(provider.connectedDevice)
     XCTAssertNil(provider.activeConnection)
     XCTAssertNil(provider.pairedDevice)
-    XCTAssertNil(defaults.string(forKey: "pairedDeviceId"))
+    XCTAssertNil(defaults.string(forKey: .pairedDeviceId))
     XCTAssertEqual(provider.errorMessage, "Failed to connect: Connection failed: boom")
   }
 
@@ -359,9 +359,9 @@ final class DeviceProviderTests: XCTestCase {
 
   func testStartReconnectingAttemptsPersistedPairingImmediately() async {
     let defaults = makeDefaults()
-    defaults.set(testDevice.id, forKey: "pairedDeviceId")
-    defaults.set(testDevice.name, forKey: "pairedDeviceName")
-    defaults.set(testDevice.type.rawValue, forKey: "pairedDeviceType")
+    defaults.set(testDevice.id, forKey: .pairedDeviceId)
+    defaults.set(testDevice.name, forKey: .pairedDeviceName)
+    defaults.set(testDevice.type.rawValue, forKey: .pairedDeviceType)
     defer { removeDefaults(defaults) }
     var attemptedDevices: [BtDevice] = []
     let provider = DeviceProvider(
@@ -435,9 +435,9 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertFalse(provider.isConnected)
     XCTAssertNil(provider.connectedDevice)
     XCTAssertNil(provider.pairedDevice)
-    XCTAssertNil(defaults.string(forKey: "pairedDeviceId"))
-    XCTAssertNil(defaults.string(forKey: "pairedDeviceName"))
-    XCTAssertNil(defaults.string(forKey: "pairedDeviceType"))
+    XCTAssertNil(defaults.string(forKey: .pairedDeviceId))
+    XCTAssertNil(defaults.string(forKey: .pairedDeviceName))
+    XCTAssertNil(defaults.string(forKey: .pairedDeviceType))
   }
 
   private var testDevice: BtDevice {
