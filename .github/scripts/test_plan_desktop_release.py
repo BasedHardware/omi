@@ -246,6 +246,43 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("timed out after 20s", gate.reason or "")
         sleep.assert_called_once_with(10)
 
+    def test_extended_wait_admits_observed_late_exact_sha_success(self) -> None:
+        # Run 30179919353 timed out at the former 12-minute boundary, then its
+        # final exact-SHA aggregate completed successfully 5m40s later. Model
+        # that state transition through the production polling seam: a failed
+        # check would still return "blocked" immediately (covered above).
+        observed_success_after_seconds = 12 * 60 + 5 * 60 + 40
+        elapsed_seconds = 0
+
+        def monotonic() -> int:
+            return elapsed_seconds
+
+        def sleep(seconds: int) -> None:
+            nonlocal elapsed_seconds
+            elapsed_seconds += seconds
+
+        def source_checks(_repository: str, _sha: str) -> planner.SourceCheckGate:
+            if elapsed_seconds >= observed_success_after_seconds:
+                return planner.SourceCheckGate("ready")
+            return planner.SourceCheckGate("waiting", "Desktop Swift Build & Tests is in_progress")
+
+        with (
+            patch.object(planner, "required_source_checks_gate", side_effect=source_checks),
+            patch.object(planner.time, "monotonic", side_effect=monotonic),
+            patch.object(planner.time, "sleep", side_effect=sleep) as poll,
+        ):
+            gate = planner.wait_for_required_source_checks(
+                REPOSITORY,
+                SOURCE_SHA,
+                wait_seconds=planner.SOURCE_CHECK_WAIT_SECONDS,
+                poll_seconds=planner.SOURCE_CHECK_POLL_SECONDS,
+            )
+
+        self.assertEqual(gate.state, "ready")
+        self.assertGreater(elapsed_seconds, observed_success_after_seconds)
+        self.assertLess(elapsed_seconds, planner.SOURCE_CHECK_WAIT_SECONDS)
+        self.assertEqual(poll.call_args_list[-1].args, (planner.SOURCE_CHECK_POLL_SECONDS,))
+
     def test_existing_exact_source_tag_preserves_active_or_published_candidate(self) -> None:
         for lifecycle in ("active", "published"):
             with self.subTest(lifecycle=lifecycle):
@@ -359,7 +396,8 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
-        self.assertEqual(workflow.count("--source-check-wait-seconds 720"), 2)
+        self.assertEqual(planner.SOURCE_CHECK_WAIT_SECONDS, 20 * 60)
+        self.assertEqual(workflow.count("--source-check-wait-seconds 1200"), 2)
         self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 2)
         self.assertLess(
             workflow.index("Create and regular-merge PR to sync changelog back to main"),
