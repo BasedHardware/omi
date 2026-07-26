@@ -6,7 +6,7 @@
 checks:
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["scripts/dev-harness/**", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/dev-harness/**", "desktop/macos/scripts/qualification-local-proof.sh", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/scripts/omi-fault-inject.sh", "desktop/macos/scripts/release-keyvalue.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hermetic dev-harness stack backs release qualification; the Jul 22 2026 beta qualification outage added a docker/native typesense runtime that must stay behaviorally covered"
   - id: pre-push-final-pr-diff
@@ -524,7 +524,7 @@ checks:
     reason: "SCA-17 prevents duplicate desktop promotion authorities and requires post-traffic production release-vector verification"
   - id: desktop-qualification-bootstrap-contract
     command: ["bash", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh"]
-    triggers: ["desktop/macos/scripts/qualify-desktop-beta.sh", "desktop/macos/scripts/prepare-qualification-profile.sh", "desktop/macos/scripts/qualification-swift-cache.sh", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/desktop_qualify_beta.yml", "desktop/macos/scripts/qualify-desktop-beta.sh", "desktop/macos/scripts/qualification-local-proof.sh", "desktop/macos/scripts/prepare-qualification-profile.sh", "desktop/macos/scripts/qualification-swift-cache.sh", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "Trusted qualification requires an exact-SHA persistent source, isolated named-bundle, unchanged gates, and phase-bound bootstrap contracts"
