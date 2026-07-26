@@ -89,7 +89,9 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
 
     def test_m1_qualification_binds_the_immutable_tag(self) -> None:
         for fragment in (
-            'checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
+            'checkout --quiet --detach "refs/tags/$ref"',
+            "ref: ${{ inputs.release_tag }}",
+            'test "$ref" = "$RELEASE_TAG"',
             'git rev-parse "$RELEASE_TAG^{commit}"',
             "git rev-parse 'HEAD^{commit}'",
             "check-desktop-auto-beta-candidate.py",
@@ -107,6 +109,9 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             "Finalize only this authenticated qualification lease",
             "if: always()",
             "qualification-lease release",
+            "runner-capacity.json",
+            "M1 qualification runner capacity guard refused to start",
+            "33554432",
             "desktop-qualification-evidence-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}",
             "overwrite: false",
             "qualification-evidence-${TARGET_SHA}-${digest}.json",
@@ -142,6 +147,9 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
                 "GITHUB_SERVER_URL": server.as_uri(),
                 "GITHUB_REPOSITORY": "BasedHardware/omi",
                 "RELEASE_TAG": RELEASE_TAG,
+                "ref": RELEASE_TAG,
+                "OMI_QUALIFICATION_MINIMUM_FREE_KIB": "1",
+                "OMI_QUALIFICATION_MINIMUM_FREE_INODES": "1",
             }
             stage_result = self._run_workflow_script(
                 "Create run-isolated qualification staging",
@@ -188,6 +196,8 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
                 "GITHUB_RUN_ID": run_id,
                 "GITHUB_RUN_ATTEMPT": run_attempt,
                 "QUALIFICATION_STAGE": str(stage),
+                "OMI_QUALIFICATION_MINIMUM_FREE_KIB": "1",
+                "OMI_QUALIFICATION_MINIMUM_FREE_INODES": "1",
             }
             stage_result = self._run_workflow_script(
                 "Create run-isolated qualification staging",
@@ -215,6 +225,48 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             )
             self.assertNotEqual(unsafe_result.returncode, 0)
             self.assertFalse((unsafe_stage / "cleanup-evidence.json").exists())
+
+    def test_low_runner_capacity_fails_before_checkout_with_durable_cleanup_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runner_temp = root / "runner-temp"
+            runner_temp.mkdir()
+            run_id = "30185755794"
+            run_attempt = "1"
+            stage = runner_temp / "desktop-beta-qualification" / f"{run_id}-{run_attempt}"
+            env = {
+                **os.environ,
+                "RUNNER_TEMP": str(runner_temp),
+                "GITHUB_RUN_ID": run_id,
+                "GITHUB_RUN_ATTEMPT": run_attempt,
+                "QUALIFICATION_STAGE": str(stage),
+                "OMI_QUALIFICATION_MINIMUM_FREE_KIB": str(2**63 - 1),
+                "OMI_QUALIFICATION_MINIMUM_FREE_INODES": "1",
+            }
+
+            capacity_result = self._run_workflow_script(
+                "Create run-isolated qualification staging",
+                cwd=runner_temp,
+                env=env,
+            )
+            self.assertNotEqual(capacity_result.returncode, 0)
+            self.assertIn("M1 qualification runner capacity guard refused to start", capacity_result.stdout)
+            self.assertFalse((stage / "source").exists(), "capacity failure must precede candidate checkout")
+            capacity = json.loads((stage / "runner-capacity.json").read_text(encoding="utf-8"))
+            self.assertEqual(capacity["status"], "failed")
+            self.assertEqual(capacity["guard"], "runner-capacity-preflight")
+            self.assertNotIn("failure_class", capacity)
+            self.assertIn("insufficient-free-kib", capacity["failure_reasons"])
+            self.assertEqual(capacity["minimum_free_kib"], 2**63 - 1)
+
+            finalize_result = self._run_workflow_script(
+                "Finalize only this authenticated qualification lease",
+                cwd=runner_temp,
+                env=env,
+            )
+            self.assertEqual(finalize_result.returncode, 0, finalize_result.stderr)
+            cleanup = json.loads((stage / "cleanup-evidence.json").read_text(encoding="utf-8"))
+            self.assertEqual(cleanup, {"cleanup_status": "no-lease-acquired"})
 
     def test_normal_codemagic_candidate_build_still_dispatches_m1_workflow(self) -> None:
         self.assertIn("omi-desktop-swift-release:", self.codemagic)
