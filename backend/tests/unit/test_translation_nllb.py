@@ -389,16 +389,16 @@ def test_gemini_adapter_maps_request_and_response_without_network():
     ]
 
 
-def test_gemini_adapter_uses_flash_lite_model(monkeypatch):
+def test_gemini_adapter_uses_translation_feature_client(monkeypatch):
     calls: list[str] = []
     client = object()
     monkeypatch.setattr(
-        'utils.translation_core.providers.get_or_create_gemini_llm',
-        lambda model: calls.append(model) or client,
+        'utils.translation_core.providers.get_llm',
+        lambda feature: calls.append(feature) or client,
     )
 
     assert GeminiTranslationProvider()._get_client() is client
-    assert calls == ['gemini-3.1-flash-lite']
+    assert calls == ['translation']
 
 
 def test_gemini_adapter_wraps_sdk_failures_as_typed_provider_errors():
