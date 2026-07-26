@@ -34,6 +34,10 @@ AUTO_RELEASE_QUIET_SECONDS = 60
 DESKTOP_RELEASE_PATHS = (
     "desktop/macos",
     "codemagic.yaml",
+    # The M1 qualification job checks out the immutable candidate tag and
+    # imports this exact lifecycle module. Keep the scope to that tag-bound
+    # runtime surface; other dev-harness and backend changes are not releases.
+    "scripts/dev-harness/dev_harness/qualification.py",
     ".github/scripts/plan-desktop-release.py",
     ".github/scripts/desktop-release-source-identity.py",
     ".github/scripts/publish-desktop-candidate-tag.py",

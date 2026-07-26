@@ -18,6 +18,7 @@ on:
     paths:
       - 'desktop/macos/**'
       - 'codemagic.yaml'
+      - 'scripts/dev-harness/dev_harness/qualification.py'
       - '.github/scripts/plan-desktop-release.py'
       - '.github/scripts/desktop-release-source-identity.py'
       - '.github/scripts/publish-desktop-candidate-tag.py'
