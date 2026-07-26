@@ -67,6 +67,13 @@ from routers import (
     focus_sessions,
     advice,
     chat_sessions,
+    desktop_agent_vm,
+    desktop_chat,
+    desktop_core,
+    desktop_proxy,
+    desktop_realtime,
+    desktop_screen_crisp,
+    desktop_tts_updates,
     scores,
     tts,
     memory_admin,
@@ -194,6 +201,13 @@ app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
 app.include_router(task_recommendations.router)
+app.include_router(desktop_core.router)
+app.include_router(desktop_agent_vm.router)
+app.include_router(desktop_chat.router)
+app.include_router(desktop_proxy.router)
+app.include_router(desktop_realtime.router)
+app.include_router(desktop_screen_crisp.router)
+app.include_router(desktop_tts_updates.router)
 
 
 methods_timeout = {
