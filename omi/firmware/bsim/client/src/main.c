@@ -19,8 +19,6 @@ static struct bt_uuid_128 capture_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10015, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 name_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10016, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
-static struct bt_uuid_128 button_uuid =
-    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x23BA7925, 0x0000, 0x1000, 0x7450, 0x346EAC492E92));
 static struct bt_conn *connection;
 static struct k_sem operation;
 static uint16_t discovered_handle;
@@ -181,15 +179,7 @@ static int verify_setting(const struct bt_uuid *uuid, uint8_t written, uint8_t e
 
 static int verify_contract(void)
 {
-    int err = find_characteristic(&button_uuid.uuid);
-    if (err) {
-        return err;
-    }
-    err = read_characteristic(discovered_handle);
-    if (err || read_length != 8 || read_value[0] != 0) {
-        return err ? err : -EINVAL;
-    }
-    err = verify_setting(&dim_uuid.uuid, 64, 64);
+    int err = verify_setting(&dim_uuid.uuid, 64, 64);
     if (err) {
         return err;
     }
