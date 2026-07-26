@@ -11,6 +11,7 @@ DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 KEYVALUE_PY="$SCRIPT_DIR/release-keyvalue.py"
 STAGE_HELPER="$SCRIPT_DIR/qualification-stage.sh"
+LEASE_COMMAND="$SCRIPT_DIR/qualification-lease-command.sh"
 # shellcheck source=qualification-stage.sh
 source "$STAGE_HELPER"
 
@@ -219,30 +220,31 @@ provision_backend_venv() {
 if command -v uv >/dev/null 2>&1; then
   provision_backend_venv "$WORKTREE"
 else
-  echo "uv not found; dev-harness python resolves via global python3"
+  echo "uv not found; qualification lease requires the backend virtualenv" >&2
 fi
 
-LEASE_JSON="$(
-  cd "$WORKTREE"
-  PYTHONPATH="scripts/dev-harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m dev_harness.cli qualification-lease acquire \
-    --lease-id "$QUALIFICATION_LEASE_ID" \
-    --owner-pid "$$" \
-    --port-offset "$QUALIFICATION_PORT_OFFSET" \
-    --retained-runs "$QUALIFICATION_RETAINED_RUNS"
-)"
-QUALIFICATION_LEASE_TOKEN="$(python3 - "$LEASE_JSON" <<'PY'
+qualification_lease_field() {
+  local field="$1" lease_json="$2" value
+  if value="$(printf '%s' "$lease_json" | python3 -c '
 import json
 import sys
-print(json.loads(sys.argv[1])["token"])
-PY
-)"
-QUALIFICATION_LOG_DIR="$(python3 - "$LEASE_JSON" <<'PY'
-import json
-import sys
-from pathlib import Path
-print(Path(json.loads(sys.argv[1])["log_dir"]))
-PY
-)"
+
+field = sys.argv[1]
+value = json.loads(sys.stdin.read()).get(field)
+if not isinstance(value, str) or not value:
+    raise SystemExit(1)
+print(value)
+' "$field" 2>/dev/null)"; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  echo "qualification failed: lease acquisition returned no valid ${field}" >&2
+  return 1
+}
+
+LEASE_JSON="$("$LEASE_COMMAND" acquire "$WORKTREE" "$QUALIFICATION_LEASE_ID" "$$" "$QUALIFICATION_PORT_OFFSET" "$QUALIFICATION_RETAINED_RUNS")"
+QUALIFICATION_LEASE_TOKEN="$(qualification_lease_field token "$LEASE_JSON")"
+QUALIFICATION_LOG_DIR="$(qualification_lease_field log_dir "$LEASE_JSON")"
 # This capability is distinct from the lease token. It is passed only to the
 # launched named app and binds the detached LaunchServices process to this run.
 DESKTOP_LAUNCH_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
@@ -540,15 +542,7 @@ run_qualification_cleanup() {
     fi
   fi
   if [[ "$KEEP_STACK" -eq 0 && -n "$QUALIFICATION_LEASE_TOKEN" && -d "$WORKTREE" ]]; then
-    if ! (
-      cd "$WORKTREE"
-      export OMI_HARNESS_OWNERSHIP_TOKEN="$QUALIFICATION_LEASE_TOKEN"
-      PYTHONPATH="scripts/dev-harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m dev_harness.cli qualification-lease release \
-        --lease-id "$QUALIFICATION_LEASE_ID" \
-        --token "$QUALIFICATION_LEASE_TOKEN" \
-        --retained-runs "$QUALIFICATION_RETAINED_RUNS" \
-        --retention-age-seconds "$QUALIFICATION_RETENTION_AGE_SECONDS"
-    ) >/dev/null 2>&1; then
+    if ! "$LEASE_COMMAND" release "$WORKTREE" "$QUALIFICATION_LEASE_ID" "$QUALIFICATION_LEASE_TOKEN" "$QUALIFICATION_RETAINED_RUNS" "$QUALIFICATION_RETENTION_AGE_SECONDS"; then
       QUALIFICATION_CLEANUP_STATUS="release-failed"
       return 1
     fi

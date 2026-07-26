@@ -97,7 +97,7 @@ jobs:
           git init --quiet "$source_dir"
           git -C "$source_dir" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           GIT_TERMINAL_PROMPT=0 git -C "$source_dir" fetch --force --prune --tags origin
-          git -C "$source_dir" checkout --quiet --detach "refs/tags/$ref"
+          git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"
       - id: app-token
         uses: actions/create-github-app-token@v3
         with:
@@ -208,7 +208,7 @@ jobs:
             worktree=$(jq -r .worktree "$context"); lease_id=$(jq -r .lease_id "$context"); token=$(jq -r .token "$context")
             retained=$(jq -r .retained_runs "$context"); age=$(jq -r .retention_age_seconds "$context")
             echo "::add-mask::$token"
-            (cd "$worktree" && OMI_HARNESS_OWNERSHIP_TOKEN="$token" PYTHONPATH=scripts/dev-harness python3 -m dev_harness.cli qualification-lease release --lease-id "$lease_id" --token "$token" --retained-runs "$retained" --retention-age-seconds "$age")
+            OMI_HARNESS_OWNERSHIP_TOKEN="$token" "$worktree/desktop/macos/scripts/qualification-lease-command.sh" release "$worktree" "$lease_id" "$token" "$retained" "$age"
             jq -n --arg lease_id "$lease_id" '{lease_id: $lease_id, cleanup_status: "released"}' > "$cleanup"
           else
             printf '%s\n' '{"cleanup_status":"no-lease-acquired"}' > "$cleanup"
