@@ -2,6 +2,6 @@
   "version": "0.12.125",
   "date": "2026-07-26",
   "changes": [
-    "Fixed cloud agent sync dropping screen text and search embeddings, which made some screenshots unfindable by the agent"
+    "Fixed typed chat getting stuck while Omi searched the public web"
   ]
 }
