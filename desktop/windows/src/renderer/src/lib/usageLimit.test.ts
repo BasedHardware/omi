@@ -24,6 +24,14 @@ const quota = (p: Partial<ChatUsageQuota>): ChatUsageQuota => ({
   ...p
 })
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
 beforeEach(() => {
   __resetUsageLimitSession()
   h.isByokActiveCached.mockReturnValue(false)
@@ -63,6 +71,46 @@ describe('maybeTriggerChatQuotaPopup', () => {
   it('stays silent when the quota probe fails', async () => {
     const fetchQuota = vi.fn().mockRejectedValue(new Error('network'))
     expect(await maybeTriggerChatQuotaPopup(fetchQuota)).toBe(false)
+  })
+
+  it('serializes concurrent exhausted probes and raises the popup only once', async () => {
+    const pending = deferred<ChatUsageQuota>()
+    const fetchQuota = vi.fn().mockReturnValue(pending.promise)
+    const seen: (UsageLimitReason | null)[] = []
+    onUsageLimit((reason) => seen.push(reason))
+
+    const first = maybeTriggerChatQuotaPopup(fetchQuota)
+    const second = maybeTriggerChatQuotaPopup(fetchQuota)
+    await Promise.resolve()
+    expect(fetchQuota).toHaveBeenCalledTimes(1)
+
+    pending.resolve(quota({ used: 30, limit: 30, allowed: false }))
+    expect(await first).toBe(true)
+    expect(await second).toBe(false)
+    expect(fetchQuota).toHaveBeenCalledTimes(1)
+    expect(seen.filter((reason) => reason === 'chat')).toHaveLength(1)
+  })
+
+  it('runs a queued probe after an earlier allowed result settles', async () => {
+    const firstQuota = deferred<ChatUsageQuota>()
+    const secondQuota = deferred<ChatUsageQuota>()
+    const fetchQuota = vi
+      .fn()
+      .mockReturnValueOnce(firstQuota.promise)
+      .mockReturnValueOnce(secondQuota.promise)
+
+    const first = maybeTriggerChatQuotaPopup(fetchQuota)
+    const second = maybeTriggerChatQuotaPopup(fetchQuota)
+    await Promise.resolve()
+    expect(fetchQuota).toHaveBeenCalledTimes(1)
+
+    firstQuota.resolve(quota({ used: 29, limit: 30, allowed: true }))
+    expect(await first).toBe(false)
+    await Promise.resolve()
+    expect(fetchQuota).toHaveBeenCalledTimes(2)
+
+    secondQuota.resolve(quota({ used: 30, limit: 30, allowed: false }))
+    expect(await second).toBe(true)
   })
 })
 

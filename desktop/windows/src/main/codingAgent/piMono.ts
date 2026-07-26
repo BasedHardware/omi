@@ -684,7 +684,8 @@ export class PiMonoAdapter {
     // for signature parity but not invoked here.
     _onToolCall: ToolExecutor,
     signal?: AbortSignal,
-    relayContext?: PiMonoRelayContext
+    relayContext?: PiMonoRelayContext,
+    onDispatched?: () => void
   ): Promise<PromptResult> {
     if (!this.sessions.has(sessionId)) {
       throw new Error(`pi-mono session is no longer active: ${sessionId}`)
@@ -740,6 +741,7 @@ export class PiMonoAdapter {
     }
 
     this.sendCommand(cmd)
+    onDispatched?.()
 
     // Wait for turn_end event mapped to THIS generation
     return new Promise<PromptResult>((resolve, reject) => {
@@ -1368,7 +1370,8 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
           disableSwiftBackedTools: context.metadata?.disableSwiftBackedTools === true,
           bridgePipe: relay?.pipePath,
           bridgeToken: relay?.token
-        }
+        },
+        () => sink({ type: 'hosted_request_started' })
       )
 
       return {
