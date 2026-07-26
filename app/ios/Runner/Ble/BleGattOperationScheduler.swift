@@ -307,6 +307,52 @@ enum BleReconnectBackoff {
   }
 }
 
+enum BleReconnectTrigger {
+  case unexpectedDisconnect
+  case failedConnect
+}
+
+enum BleReconnectDispatch: Equatable {
+  case connectNow
+  case retryWithBackoff
+  case waitForPowerOn
+}
+
+/// Keeps a CoreBluetooth connection request pending before iOS suspends the
+/// app. A pending `connect` is system-owned and does not time out, so an
+/// unexpected disconnect must reissue it synchronously. Actual connection
+/// failures still use bounded backoff to avoid a retry storm.
+enum BleReconnectDispatchPolicy {
+  static func action(
+    after trigger: BleReconnectTrigger,
+    centralIsPoweredOn: Bool
+  ) -> BleReconnectDispatch {
+    guard centralIsPoweredOn else {
+      return .waitForPowerOn
+    }
+    return trigger == .unexpectedDisconnect ? .connectNow : .retryWithBackoff
+  }
+}
+
+/// Owns the identity boundary for peripherals that may be reconnected without
+/// another user action. CoreBluetooth restoration is equivalent to a prior
+/// successful connection even when this process has not received `didConnect`.
+final class BleReconnectEligibility {
+  private var eligiblePeripheralUuids: Set<String> = []
+
+  func recordConnected(_ peripheralUuid: String) {
+    eligiblePeripheralUuids.insert(peripheralUuid)
+  }
+
+  func recordRestored(_ peripheralUuid: String) {
+    eligiblePeripheralUuids.insert(peripheralUuid)
+  }
+
+  func contains(_ peripheralUuid: String) -> Bool {
+    eligiblePeripheralUuids.contains(peripheralUuid)
+  }
+}
+
 /// Owns reconnect backoff across the complete BLE readiness lifecycle.
 ///
 /// A CoreBluetooth transport connection is not yet a usable device: service and

@@ -595,6 +595,42 @@ private func testReconnectBackoffIsBounded() {
   expect(BleReconnectBackoff.delay(forAttempt: 100) == 30, "backoff cap must hold for long outages")
 }
 
+private func testUnexpectedDisconnectKeepsPersistentConnectionRequestAlive() {
+  expect(
+    BleReconnectDispatchPolicy.action(
+      after: .unexpectedDisconnect,
+      centralIsPoweredOn: true
+    ) == .connectNow,
+    "unexpected disconnect must reissue connect before a background app can suspend")
+  expect(
+    BleReconnectDispatchPolicy.action(
+      after: .failedConnect,
+      centralIsPoweredOn: true
+    ) == .retryWithBackoff,
+    "an actual connection failure must retain bounded retry backoff")
+  expect(
+    BleReconnectDispatchPolicy.action(
+      after: .unexpectedDisconnect,
+      centralIsPoweredOn: false
+    ) == .waitForPowerOn,
+    "CoreBluetooth work must wait while the central is powered off")
+}
+
+private func testRestoredPeripheralIsImmediatelyReconnectEligible() {
+  let eligibility = BleReconnectEligibility()
+
+  expect(
+    !eligibility.contains("restored"),
+    "an unrelated scan result must not be reconnect eligible")
+  eligibility.recordRestored("restored")
+  expect(
+    eligibility.contains("restored"),
+    "CoreBluetooth restoration must preserve reconnect eligibility before didConnect")
+  expect(
+    !eligibility.contains("unrelated"),
+    "restoration must not make unrelated peripherals reconnect eligible")
+}
+
 private func testReconnectBackoffResetsOnlyAfterDeviceReady() {
   let lifecycle = BleReconnectLifecycle()
 
@@ -639,6 +675,8 @@ private enum BleGattOperationSchedulerTests {
     testNotificationTransitionRunsOppositeLatestState()
     testFailedNotificationTransitionWaitsForSessionRecovery()
     testReconnectBackoffIsBounded()
+    testUnexpectedDisconnectKeepsPersistentConnectionRequestAlive()
+    testRestoredPeripheralIsImmediatelyReconnectEligible()
     testReconnectBackoffResetsOnlyAfterDeviceReady()
     print("BleGattOperationSchedulerTests: PASS")
   }

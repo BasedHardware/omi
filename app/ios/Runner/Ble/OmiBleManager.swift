@@ -69,8 +69,8 @@ final class OmiBleManager: NSObject {
   /// Connection start time per peripheral UUID.
   private var connectionStartTimes: [String: Int64] = [:]
 
-  /// Tracks peripherals that have connected at least once (for reconnection counting).
-  private var everConnected: Set<String> = []
+  /// Tracks peripherals that have connected or were restored by CoreBluetooth.
+  private let reconnectEligibility = BleReconnectEligibility()
 
   /// Most recent RSSI sample per peripheral, captured in didReadRSSI. Used to
   /// annotate disconnect events so we can tell range/interference-driven drops
@@ -215,14 +215,14 @@ final class OmiBleManager: NSObject {
   /// Re-issue `connect()` on any previously-connected peripheral that isn't
   /// currently connected and wasn't manually disconnected. Scan-discovered
   /// peripherals that never completed a connection are excluded via the
-  /// `everConnected` guard so we don't try to connect to unrelated devices
+  /// reconnect-eligibility guard so we don't try to connect to unrelated devices
   /// picked up during a scan. Safe to call whenever the app returns to the
   /// foreground — `centralManager.connect` is idempotent and pending connects
   /// cost nothing while iOS waits at the chipset level.
   func reconnectStalePeripherals() {
     guard centralManager.state == .poweredOn else { return }
     for (uuid, peripheral) in peripherals {
-      guard everConnected.contains(uuid) else { continue }
+      guard reconnectEligibility.contains(uuid) else { continue }
       if manuallyDisconnected.contains(uuid) { continue }
       if peripheral.state == .connected || peripheral.state == .connecting { continue }
       NSLog(
@@ -547,6 +547,25 @@ final class OmiBleManager: NSObject {
     }
     reconnectWorkItems[uuid] = workItem
     DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+  }
+
+  /// Reissue the system-owned connection request before iOS suspends us after
+  /// a background disconnect. CoreBluetooth keeps a pending request alive; a
+  /// delayed work item may never run once the app is suspended.
+  private func requestPersistentReconnect(for peripheral: CBPeripheral) {
+    let uuid = peripheralUuidString(peripheral)
+    guard
+      !manuallyDisconnected.contains(uuid),
+      centralManager.state == .poweredOn,
+      peripheral.state == .disconnected
+    else {
+      return
+    }
+
+    reconnectWorkItems.removeValue(forKey: uuid)?.cancel()
+    NSLog("[OmiBle] Reissuing persistent reconnect for \(uuid)")
+    peripheral.delegate = self
+    centralManager.connect(peripheral, options: nil)
   }
 
   private func activateSession(for peripheral: CBPeripheral) {
@@ -1014,6 +1033,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
       var uuids: [String] = []
       for peripheral in restoredPeripherals {
         let uuid = peripheralUuidString(peripheral)
+        reconnectEligibility.recordRestored(uuid)
         peripheral.delegate = self
         peripherals[uuid] = peripheral
         uuids.append(uuid)
@@ -1059,12 +1079,12 @@ extension OmiBleManager: CBCentralManagerDelegate {
     NSLog("[OmiBle] didConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid)")
 
     // Track reconnections (not first connect)
-    if everConnected.contains(uuid) {
+    if reconnectEligibility.contains(uuid) {
       incrementReconnectionCount(uuid: uuid)
       // Backfill the prior unexpected event with how long it took to recover.
       backfillTimeToReconnect(uuid: uuid)
     }
-    everConnected.insert(uuid)
+    reconnectEligibility.recordConnected(uuid)
     connectionStartTimes[uuid] = Int64(Date().timeIntervalSince1970 * 1000)
     cancelScheduledReconnect(uuid: uuid, resetAttempt: false)
     reconnectLifecycle(for: uuid).transportConnected()
@@ -1101,8 +1121,18 @@ extension OmiBleManager: CBCentralManagerDelegate {
       _ in
     }
 
-    if !isManual, everConnected.contains(uuid) {
-      scheduleReconnect(for: peripheral)
+    if !isManual, reconnectEligibility.contains(uuid) {
+      switch BleReconnectDispatchPolicy.action(
+        after: .failedConnect,
+        centralIsPoweredOn: central.state == .poweredOn
+      ) {
+      case .retryWithBackoff:
+        scheduleReconnect(for: peripheral)
+      case .connectNow:
+        requestPersistentReconnect(for: peripheral)
+      case .waitForPowerOn:
+        break
+      }
     }
   }
 
@@ -1140,9 +1170,21 @@ extension OmiBleManager: CBCentralManagerDelegate {
       _ in
     }
 
-    // Auto-reconnect unless manually disconnected
+    // Register a persistent CoreBluetooth connection request synchronously.
+    // Waiting even 500 ms here is long enough for iOS to suspend a background
+    // app after Bluetooth is turned off, stranding the reconnect until launch.
     if !isManual {
-      scheduleReconnect(for: peripheral)
+      switch BleReconnectDispatchPolicy.action(
+        after: .unexpectedDisconnect,
+        centralIsPoweredOn: central.state == .poweredOn
+      ) {
+      case .connectNow:
+        requestPersistentReconnect(for: peripheral)
+      case .retryWithBackoff:
+        scheduleReconnect(for: peripheral)
+      case .waitForPowerOn:
+        break
+      }
     }
   }
 }
