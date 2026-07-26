@@ -34,6 +34,23 @@ class AnalyticsManager {
     memoryAssistantTelemetryCaptureForTests?(event, properties)
   }
 
+  /// Test observer for integration-connect telemetry. Mirrors the
+  /// MemoryAssistant seam: nil in production; tests install a scoped capture
+  /// to observe the real event/payload without a mutable unsafe global.
+  private var integrationConnectTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  /// Install a scoped test observer for integration-connect telemetry. Tests
+  /// must clear it in teardown; production behavior remains the PostHog call.
+  func setIntegrationConnectTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    integrationConnectTelemetryCaptureForTests = capture
+  }
+
+  private func captureIntegrationConnectTelemetryForTests(_ event: String, properties: [String: Any]) {
+    integrationConnectTelemetryCaptureForTests?(event, properties)
+  }
+
   // MARK: - Initialization
 
   func initialize() {
@@ -141,6 +158,66 @@ class AnalyticsManager {
 
   func signedOut() {
     PostHogManager.shared.signedOut()
+  }
+
+  // MARK: - Integration Connect Events
+
+  /// Privacy-safe macOS integration-connect funnel. Mirrors the Flutter
+  /// `Integration Connect Attempted/Succeeded/Failed` event names for
+  /// cross-platform PostHog aggregation; dimensions are bounded by
+  /// ``IntegrationConnectTelemetry``. See that type for the full contract.
+  func integrationConnectAttempted(
+    integrationName: String,
+    connectorID: String,
+    surface: IntegrationConnectTelemetry.Surface,
+    stage: String
+  ) {
+    let payload = IntegrationConnectTelemetry.attemptedPayload(
+      integrationName: integrationName, connectorID: connectorID,
+      surface: surface, stage: stage)
+    captureIntegrationConnectTelemetryForTests(
+      IntegrationConnectTelemetry.attemptedEventName, properties: payload)
+    PostHogManager.shared.track(
+      IntegrationConnectTelemetry.attemptedEventName, properties: payload)
+  }
+
+  func integrationConnectSucceeded(
+    integrationName: String,
+    connectorID: String,
+    surface: IntegrationConnectTelemetry.Surface,
+    stage: String,
+    durationMs: Int? = nil,
+    sourceCount: Int? = nil,
+    memoryCount: Int? = nil,
+    wasFirstSync: Bool = false
+  ) {
+    let payload = IntegrationConnectTelemetry.succeededPayload(
+      integrationName: integrationName, connectorID: connectorID,
+      surface: surface, stage: stage, durationMs: durationMs,
+      sourceCount: sourceCount, memoryCount: memoryCount, wasFirstSync: wasFirstSync)
+    captureIntegrationConnectTelemetryForTests(
+      IntegrationConnectTelemetry.succeededEventName, properties: payload)
+    PostHogManager.shared.track(
+      IntegrationConnectTelemetry.succeededEventName, properties: payload)
+  }
+
+  func integrationConnectFailed(
+    integrationName: String,
+    connectorID: String,
+    surface: IntegrationConnectTelemetry.Surface,
+    stage: String,
+    errorClass: IntegrationConnectTelemetry.ErrorClass,
+    durationMs: Int? = nil,
+    wasFirstSync: Bool = false
+  ) {
+    let payload = IntegrationConnectTelemetry.failedPayload(
+      integrationName: integrationName, connectorID: connectorID,
+      surface: surface, stage: stage, errorClass: errorClass,
+      durationMs: durationMs, wasFirstSync: wasFirstSync)
+    captureIntegrationConnectTelemetryForTests(
+      IntegrationConnectTelemetry.failedEventName, properties: payload)
+    PostHogManager.shared.track(
+      IntegrationConnectTelemetry.failedEventName, properties: payload)
   }
 
   // MARK: - Monitoring Events
