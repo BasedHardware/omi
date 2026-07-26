@@ -658,7 +658,10 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                 "NEXT_PUBLIC_RAPIDAPI_KEY",
                 "NEXT_PUBLIC_RAPIDAPI_HOST",
                 "NEXT_PUBLIC_LINKEDIN_API_KEY",
+                "ANTHROPIC_API_KEY",
                 "CLAUDE_API_KEY",
+                "OPENAI_API_KEY",
+                "OPENROUTER_API_KEY",
             ),
         )
         live_bindings = {
