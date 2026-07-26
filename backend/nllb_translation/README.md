@@ -1,6 +1,6 @@
 # NLLB Translation Service
 
-Self-hosted translation using **Meta NLLB-200** (No Language Left Behind) — a 200-language neural machine translation model running on GPU via CTranslate2. Replaces Google Cloud Translation V3 for realtime transcript translation in the Omi listen pipeline.
+Self-hosted translation using **Meta NLLB-200** (No Language Left Behind) — a 200-language neural machine translation model running on GPU via CTranslate2. Replaces Gemini 3.1 Flash-Lite for realtime transcript translation in the Omi listen pipeline.
 
 ## Architecture
 
@@ -12,7 +12,7 @@ backend-listen (transcribe.py)
                     └── CTranslate2 + SentencePiece (GPU inference)
 ```
 
-The backend auto-detects source language via `langdetect` before each NLLB call, passing the detected BCP-47 code as `source_language_code` so the model receives proper source language tokens. If NLLB fails, the backend falls back to Google Cloud Translation V3 automatically.
+The backend auto-detects source language via `langdetect` before each NLLB call, passing the detected BCP-47 code as `source_language_code` so the model receives proper source language tokens. If NLLB fails, the backend falls back to Gemini 3.1 Flash-Lite automatically.
 
 ## API
 
