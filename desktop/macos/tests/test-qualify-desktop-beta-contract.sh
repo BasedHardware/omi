@@ -6,6 +6,7 @@ QUALIFIER="$SCRIPT_DIR/../scripts/qualify-desktop-beta.sh"
 CORE_HARNESS="$SCRIPT_DIR/../scripts/desktop-core-harness.sh"
 PROFILE_PREP="$SCRIPT_DIR/../scripts/prepare-qualification-profile.sh"
 SWIFT_CACHE="$SCRIPT_DIR/../scripts/qualification-swift-cache.sh"
+LEASE_COMMAND="$SCRIPT_DIR/../scripts/qualification-lease-command.sh"
 APP_CONFIG="$SCRIPT_DIR/../scripts/app-config.sh"
 RUN_SH="$SCRIPT_DIR/../run.sh"
 
@@ -75,8 +76,10 @@ require_order "$QUALIFIER" \
 require_text 'terminate_qualification_desktop "$BUNDLE"'
 require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
 require_text 'WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"'
-require_text 'qualification-lease acquire'
-require_text 'qualification-lease release'
+require_text 'qualification-lease "$action"' "$LEASE_COMMAND"
+require_text 'acquire)' "$LEASE_COMMAND"
+require_text 'release)' "$LEASE_COMMAND"
+require_text 'qualification-lease-command.sh' "$QUALIFIER"
 require_text 'OMI_HARNESS_PORT_OFFSET="$QUALIFICATION_PORT_OFFSET"'
 require_text 'OMI_AUTOMATION_PORT="$((47777 + QUALIFICATION_PORT_OFFSET))"'
 require_text 'QUALIFICATION_RETAINED_RUNS="${OMI_QUALIFICATION_RETAINED_RUNS:-3}"'
@@ -137,6 +140,10 @@ if [[ ! -x "$PROFILE_PREP" ]]; then
 fi
 if [[ ! -x "$SWIFT_CACHE" ]]; then
   echo "FAIL: missing executable exact-source qualification Swift cache helper" >&2
+  exit 1
+fi
+if [[ ! -x "$LEASE_COMMAND" ]]; then
+  echo "FAIL: missing executable qualification lease command helper" >&2
   exit 1
 fi
 
