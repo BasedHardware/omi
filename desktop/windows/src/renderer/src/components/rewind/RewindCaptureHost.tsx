@@ -1,10 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
-import type { RewindSettings, RewindCaptureDirective } from '../../../../shared/types'
+import type {
+  RewindSettings,
+  RewindCaptureDirective,
+  RewindCaptureQuality
+} from '../../../../shared/types'
 
-// Cap the longest sampled edge — plenty for a timeline + OCR, and keeps each
-// canvas grab + JPEG encode cheap.
-const MAX_EDGE = 1600
-const JPEG_QUALITY = 0.6
+// What each quality tier costs and buys. `maxWidth`/`maxHeight` cap the live
+// stream (the steady-state cost of having capture on); `maxEdge` caps the
+// sampled canvas and `jpegQuality` the encode — both raised with the tier, since
+// a sharper stream re-compressed at 0.6 into a 1600px canvas would be spent for
+// nothing. 720p at 0.6 is unreadable for small on-screen text, which is why OCR
+// misses it (#10489); the sharper tiers are the fix, opt-in because they decode
+// and store more all day long.
+const QUALITY_TIERS: Record<
+  RewindCaptureQuality,
+  { maxWidth: number; maxHeight: number; maxEdge: number; jpegQuality: number }
+> = {
+  standard: { maxWidth: 1280, maxHeight: 720, maxEdge: 1600, jpegQuality: 0.6 },
+  high: { maxWidth: 1920, maxHeight: 1080, maxEdge: 1920, jpegQuality: 0.72 },
+  max: { maxWidth: 2560, maxHeight: 1440, maxEdge: 2560, jpegQuality: 0.82 }
+}
 // Wait before re-opening a stream whose track died, so a source that is
 // unavailable in bursts (display asleep, GPU reset) can't spin getUserMedia.
 const RESTART_DELAY_MS = 2000
@@ -56,10 +71,12 @@ export function RewindCaptureHost(): React.JSX.Element {
   // stream down (sleep/lock). Fall back to the base interval before first directive.
   const effectiveIntervalMs = directive?.intervalMs ?? settings?.intervalMs ?? 1000
   const paused = directive?.paused ?? false
+  const quality = settings?.captureQuality ?? 'standard'
 
   useEffect(() => {
     const enabled = !!settings?.captureEnabled && !paused
     const intervalMs = effectiveIntervalMs
+    const tier = QUALITY_TIERS[quality] ?? QUALITY_TIERS.standard
     let cancelled = false
     // Bumped on every teardown so a grab still in flight (a save is an IPC
     // round-trip) can't reschedule itself onto a stream that is already gone —
@@ -99,18 +116,17 @@ export function RewindCaptureHost(): React.JSX.Element {
       try {
         const v = videoRef.current
         if (v && isLive() && v.videoWidth && v.videoHeight && !savingRef.current) {
-          const scale = Math.min(1, MAX_EDGE / Math.max(v.videoWidth, v.videoHeight))
+          const scale = Math.min(1, tier.maxEdge / Math.max(v.videoWidth, v.videoHeight))
           const w = Math.round(v.videoWidth * scale)
           const h = Math.round(v.videoHeight * scale)
-          const canvas =
-            canvasRef.current ?? (canvasRef.current = document.createElement('canvas'))
+          const canvas = canvasRef.current ?? (canvasRef.current = document.createElement('canvas'))
           if (canvas.width !== w) canvas.width = w
           if (canvas.height !== h) canvas.height = h
           const ctx = canvas.getContext('2d')
           if (ctx) {
             ctx.drawImage(v, 0, 0, w, h)
             const blob = await new Promise<Blob | null>((r) =>
-              canvas.toBlob(r, 'image/jpeg', JPEG_QUALITY)
+              canvas.toBlob(r, 'image/jpeg', tier.jpegQuality)
             )
             if (blob && !cancelled && gen === generation) {
               savingRef.current = true
@@ -147,11 +163,12 @@ export function RewindCaptureHost(): React.JSX.Element {
               chromeMediaSourceId: sourceId,
               // The live stream is decoded continuously in the renderer, so its
               // resolution + frame rate set the steady-state cost of having
-              // capture on. Keep both low: 720p is enough for a timeline + OCR of
-              // normal-size text, and we only sample every few seconds, so 1fps
-              // capture is plenty. (Was 1080p@30fps → froze; 1080p@2fps → laggy.)
-              maxWidth: 1280,
-              maxHeight: 720,
+              // capture on. Resolution follows the user's quality tier (720p by
+              // default); the frame rate stays at 1fps regardless — we sample
+              // every few seconds, and frame rate is what made this expensive
+              // before (1080p@30fps → froze; 1080p@2fps → laggy).
+              maxWidth: tier.maxWidth,
+              maxHeight: tier.maxHeight,
               maxFrameRate: 1
             }
           }
@@ -181,7 +198,9 @@ export function RewindCaptureHost(): React.JSX.Element {
       cancelled = true
       stop()
     }
-  }, [settings?.captureEnabled, effectiveIntervalMs, paused])
+    // `quality` is a stream constraint, so changing it re-opens the stream —
+    // otherwise the new tier would only take effect at the next app launch.
+  }, [settings?.captureEnabled, effectiveIntervalMs, paused, quality])
 
   return (
     <video

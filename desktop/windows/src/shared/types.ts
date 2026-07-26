@@ -2046,6 +2046,11 @@ export type RewindSearchGroup = {
  *  treat 'unknown' as not-granted — never as a grant. */
 export type MicPermissionState = 'granted' | 'denied' | 'unknown'
 
+/** Resolution/JPEG tier the capture host samples at. The live stream is decoded
+ *  continuously while capture is on, so this is the one setting that trades CPU
+ *  and disk for OCR-readable small text. 'standard' is the proven 720p default. */
+export type RewindCaptureQuality = 'standard' | 'high' | 'max'
+
 export type RewindSettings = {
   captureEnabled: boolean
   intervalMs: number
@@ -2053,6 +2058,7 @@ export type RewindSettings = {
   /** App names to never screenshot (case-insensitive substring match against the
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
+  captureQuality: RewindCaptureQuality
 }
 
 /** Runtime capture directive pushed main→renderer, derived from OS power/lock state.
