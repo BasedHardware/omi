@@ -14,7 +14,11 @@ final class SuggestionGatePolicyTests: XCTestCase {
     isAppExcluded: Bool = false,
     isSnoozed: Bool = false,
     lastEvaluationAt: Date? = nil,
-    cooldown: TimeInterval = 180
+    cooldown: TimeInterval = 180,
+    dwell: TimeInterval = 999,
+    requiredDwell: TimeInterval = 30,
+    evaluationsToday: Int = 0,
+    dailyBudget: Int = 40
   ) -> SuggestionGateDecision {
     SuggestionGatePolicy.decide(
       isEnabled: isEnabled,
@@ -22,7 +26,11 @@ final class SuggestionGatePolicyTests: XCTestCase {
       isSnoozed: isSnoozed,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
-      cooldown: cooldown
+      cooldown: cooldown,
+      dwell: dwell,
+      requiredDwell: requiredDwell,
+      evaluationsToday: evaluationsToday,
+      dailyBudget: dailyBudget
     )
   }
 
@@ -76,6 +84,119 @@ final class SuggestionGatePolicyTests: XCTestCase {
 
   func testFirstEverEvaluationIsNotBlockedByAbsentHistory() {
     XCTAssertEqual(decide(lastEvaluationAt: nil, cooldown: 86400), .evaluate)
+  }
+
+  // MARK: - Cost gates
+
+  /// Switching apps is not a request for advice — people do it hundreds of times a day.
+  func testPassingThroughAWindowDoesNotEvaluate() {
+    XCTAssertEqual(decide(dwell: 0), .skippedDwell)
+    XCTAssertEqual(decide(dwell: 29.9), .skippedDwell)
+    XCTAssertEqual(decide(dwell: 30), .evaluate)
+  }
+
+  /// Dwell must outrank cooldown: a context the user has not settled in should not consume
+  /// the cooldown slot that a context they are actually working in would use.
+  func testDwellIsCheckedBeforeCooldown() {
+    XCTAssertEqual(decide(lastEvaluationAt: now, dwell: 0), .skippedDwell)
+  }
+
+  func testDailyBudgetCapsSpendRegardlessOfActivity() {
+    XCTAssertEqual(decide(evaluationsToday: 39, dailyBudget: 40), .evaluate)
+    XCTAssertEqual(decide(evaluationsToday: 40, dailyBudget: 40), .skippedDailyBudget)
+    XCTAssertEqual(decide(evaluationsToday: 400, dailyBudget: 40), .skippedDailyBudget)
+  }
+
+  /// The budget is the last gate: a blocked-for-another-reason context must not be
+  /// reported as budget-exhausted, or the logs mislead about why nothing fires.
+  func testEarlierGatesReportTheirOwnReasonAtBudgetExhaustion() {
+    XCTAssertEqual(decide(isEnabled: false, evaluationsToday: 999), .skippedDisabled)
+    XCTAssertEqual(decide(isAppExcluded: true, evaluationsToday: 999), .skippedExcludedApp)
+    XCTAssertEqual(decide(dwell: 0, evaluationsToday: 999), .skippedDwell)
+  }
+}
+
+/// The ceiling has to be a real daily number, not a counter that only resets on relaunch.
+final class SuggestionDailyBudgetTests: XCTestCase {
+  private let noon = Date(timeIntervalSince1970: 1_800_000_000)
+
+  func testCountAccumulatesWithinADay() {
+    var budget = SuggestionDailyBudget()
+    XCTAssertEqual(budget.countToday(now: noon), 0)
+    budget.recordEvaluation(now: noon)
+    budget.recordEvaluation(now: noon.addingTimeInterval(60))
+    XCTAssertEqual(budget.countToday(now: noon.addingTimeInterval(120)), 2)
+  }
+
+  func testCountResetsOnTheNextCalendarDay() {
+    var budget = SuggestionDailyBudget()
+    budget.recordEvaluation(now: noon)
+    budget.recordEvaluation(now: noon)
+    XCTAssertEqual(budget.countToday(now: noon), 2)
+
+    let tomorrow = noon.addingTimeInterval(24 * 60 * 60)
+    XCTAssertEqual(budget.countToday(now: tomorrow), 0, "budget must reset, not carry over")
+
+    budget.recordEvaluation(now: tomorrow)
+    XCTAssertEqual(budget.countToday(now: tomorrow), 1)
+  }
+
+  func testRecordingAcrossADayBoundaryStartsTheNewDayAtOne() {
+    var budget = SuggestionDailyBudget()
+    budget.recordEvaluation(now: noon)
+    budget.recordEvaluation(now: noon.addingTimeInterval(24 * 60 * 60))
+    XCTAssertEqual(budget.countToday(now: noon.addingTimeInterval(24 * 60 * 60)), 1)
+  }
+}
+
+/// Gemini bills images as 768px tiles, so resolution is money.
+final class SuggestionFramePreviewTests: XCTestCase {
+  private func jpeg(width: Int, height: Int) throws -> Data {
+    let context = try XCTUnwrap(
+      CGContext(
+        data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+    context.setFillColor(CGColor(red: 0.4, green: 0.6, blue: 0.8, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    let image = try XCTUnwrap(context.makeImage())
+    let out = NSMutableData()
+    let dest = try XCTUnwrap(
+      CGImageDestinationCreateWithData(out, "public.jpeg" as CFString, 1, nil))
+    CGImageDestinationAddImage(dest, image, nil)
+    XCTAssertTrue(CGImageDestinationFinalize(dest))
+    return out as Data
+  }
+
+  private func pixelSize(of data: Data) throws -> (width: Int, height: Int) {
+    let source = try XCTUnwrap(CGImageSourceCreateWithData(data as CFData, nil))
+    let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+    return (image.width, image.height)
+  }
+
+  func testOversizedFrameIsDownscaledToTheTileBudget() throws {
+    let large = try jpeg(width: 3000, height: 1950)
+    let preview = SuggestionFramePreview.downscaledJPEG(from: large)
+
+    XCTAssertEqual(try pixelSize(of: preview).width, SuggestionFramePreview.maxWidth)
+    XCTAssertLessThan(preview.count, large.count, "downscaling must actually shrink the payload")
+  }
+
+  func testAspectRatioIsPreserved() throws {
+    let preview = SuggestionFramePreview.downscaledJPEG(from: try jpeg(width: 3000, height: 1500))
+    let size = try pixelSize(of: preview)
+    XCTAssertEqual(Double(size.width) / Double(size.height), 2.0, accuracy: 0.02)
+  }
+
+  func testAlreadySmallFrameIsPassedThroughUntouched() throws {
+    let small = try jpeg(width: 800, height: 600)
+    XCTAssertEqual(SuggestionFramePreview.downscaledJPEG(from: small), small)
+  }
+
+  /// A frame we cannot decode must still be sent — the suggestion is worth more than the
+  /// saving, and silently dropping it would look like the feature is broken.
+  func testUndecodableDataIsReturnedUnchangedRatherThanDropped() {
+    let garbage = Data([0x00, 0x01, 0x02, 0x03])
+    XCTAssertEqual(SuggestionFramePreview.downscaledJPEG(from: garbage), garbage)
   }
 }
 

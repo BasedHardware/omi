@@ -38,9 +38,20 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   private let geminiClient: GeminiClient
 
-  /// How long the user must remain in a context before it is worth evaluating. Stops the
-  /// assistant firing at someone cmd-tabbing through five apps.
+  /// How long the user must stay in a context before it is worth spending on. People
+  /// switch apps hundreds of times a day and almost none of those are a request for
+  /// advice; half a minute of dwell is the difference between passing through a window and
+  /// working in it.
+  private static let requiredDwell: TimeInterval = 30.0
+
+  /// Hard ceiling on paid evaluations per day, so cost is a number we choose rather than a
+  /// function of how much the user alt-tabs.
+  private static let dailyEvaluationBudget = 40
+
+  /// Frames are still accepted this early so dwell can be measured from the switch.
   private let settleInterval: TimeInterval = 6.0
+
+  private var dailyBudget = SuggestionDailyBudget()
 
   /// Set by `onContextSwitch`, consumed by the first frame that passes the gate.
   private var pendingContextSwitchAt: Date?
@@ -68,7 +79,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   init(apiKey: String? = nil) throws {
     self.geminiClient = try GeminiClient(
       apiKey: apiKey,
-      model: ModelQoS.Gemini.proactive,
+      model: ModelQoS.Gemini.suggestions,
       fallbackModel: "gemini-2.5-flash"
     )
   }
@@ -97,29 +108,47 @@ actor SuggestionAssistant: ProactiveAssistant {
     let snoozed = await MainActor.run { FloatingControlBarManager.shared.isSnoozed }
     let cooldown = await cooldownInterval
 
+    let now = Date()
+    let dwell = pendingContextSwitchAt.map { now.timeIntervalSince($0) } ?? 0
+
     let decision = SuggestionGatePolicy.decide(
       isEnabled: enabled,
       isAppExcluded: excluded,
       isSnoozed: snoozed,
-      now: Date(),
+      now: now,
       lastEvaluationAt: lastEvaluationAt,
-      cooldown: cooldown
+      cooldown: cooldown,
+      dwell: dwell,
+      requiredDwell: Self.requiredDwell,
+      evaluationsToday: dailyBudget.countToday(now: now),
+      dailyBudget: Self.dailyEvaluationBudget
     )
 
     guard decision.allowsEvaluation else {
-      // A blocked switch is consumed, not retried on every subsequent frame — otherwise a
-      // cooldown-blocked context would re-check on each capture tick for the whole window.
-      if decision != .skippedCooldown {
+      // Dwell and cooldown are "not yet", so the pending context survives to be retried on
+      // a later frame. Everything else is "not at all" and is consumed here, otherwise a
+      // blocked context re-checks on every capture tick.
+      if decision != .skippedCooldown && decision != .skippedDwell {
         clearPendingContext()
       }
       log("Suggestion: skipped (\(decision)) app=\(frame.appName)")
       return nil
     }
 
-    clearPendingContext()
-    lastEvaluationAt = Date()
-
+    // Grounding is assembled BEFORE the spend decision, because it is free and it is the
+    // spend decision. If Omi knows nothing about this context it has no advantage over the
+    // user's own eyes, and a suggestion from that position is the ~25%-CTR noise that got
+    // the old surface switched off.
     let grounding = await assembleGrounding(for: frame)
+    guard !grounding.isEmpty else {
+      clearPendingContext()
+      log("Suggestion: skipped (skippedNoGrounding) app=\(frame.appName)")
+      return nil
+    }
+
+    clearPendingContext()
+    lastEvaluationAt = now
+    dailyBudget.recordEvaluation(now: now)
 
     do {
       return try await evaluate(frame: frame, grounding: grounding)
@@ -241,9 +270,10 @@ actor SuggestionAssistant: ProactiveAssistant {
     let prompt = buildPrompt(frame: frame, grounding: grounding)
     let systemPrompt = await systemPrompt
 
+    let preview = SuggestionFramePreview.downscaledJPEG(from: frame.jpegData)
     let response = try await geminiClient.sendRequest(
       prompt: prompt,
-      imageData: frame.jpegData,
+      imageData: preview,
       systemPrompt: systemPrompt,
       responseSchema: Self.responseSchema
     )

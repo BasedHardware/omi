@@ -1,4 +1,7 @@
+import CoreGraphics
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 // MARK: - Suggestion Category
 
@@ -109,6 +112,12 @@ enum SuggestionGateDecision: Equatable, Sendable {
   case skippedExcludedApp
   case skippedCooldown
   case skippedSnoozed
+  /// The user has not settled in this context long enough to be working in it.
+  case skippedDwell
+  /// Today's evaluation budget is spent.
+  case skippedDailyBudget
+  /// Omi knows nothing about this context, so it could only state the obvious.
+  case skippedNoGrounding
 
   var allowsEvaluation: Bool { self == .evaluate }
 }
@@ -117,21 +126,104 @@ enum SuggestionGateDecision: Equatable, Sendable {
 /// model, no I/O — so the cost contract ("no context switch, no Gemini call") is provable
 /// in a unit test.
 enum SuggestionGatePolicy {
+  /// Ordered cheapest-first, and every branch is free. Switching apps is not evidence that
+  /// the user wants advice — people cmd-tab hundreds of times a day — so dwell and the
+  /// daily budget do most of the work here, and the caller adds a grounding check before
+  /// spending anything.
   static func decide(
     isEnabled: Bool,
     isAppExcluded: Bool,
     isSnoozed: Bool,
     now: Date,
     lastEvaluationAt: Date?,
-    cooldown: TimeInterval
+    cooldown: TimeInterval,
+    dwell: TimeInterval,
+    requiredDwell: TimeInterval,
+    evaluationsToday: Int,
+    dailyBudget: Int
   ) -> SuggestionGateDecision {
     guard isEnabled else { return .skippedDisabled }
     guard !isAppExcluded else { return .skippedExcludedApp }
     guard !isSnoozed else { return .skippedSnoozed }
+    guard dwell >= requiredDwell else { return .skippedDwell }
     if let lastEvaluationAt, now.timeIntervalSince(lastEvaluationAt) < cooldown {
       return .skippedCooldown
     }
+    guard evaluationsToday < dailyBudget else { return .skippedDailyBudget }
     return .evaluate
+  }
+}
+
+/// Tracks how many paid evaluations happened today, so the ceiling is a real number rather
+/// than an emergent property of how much the user switches windows.
+struct SuggestionDailyBudget: Sendable {
+  private(set) var count = 0
+  private var dayStart: Date?
+
+  /// Returns the count for `now`, resetting when the calendar day rolls over.
+  mutating func countToday(now: Date, calendar: Calendar = .current) -> Int {
+    let today = calendar.startOfDay(for: now)
+    if dayStart != today {
+      dayStart = today
+      count = 0
+    }
+    return count
+  }
+
+  mutating func recordEvaluation(now: Date, calendar: Calendar = .current) {
+    _ = countToday(now: now, calendar: calendar)
+    count += 1
+  }
+}
+
+// MARK: - Image Cost
+
+/// Gemini bills an image as 768px tiles. A full-resolution window capture (up to 3000px)
+/// is ~12 tiles; the same screen at 1280px is ~4. Judging "is there one sentence worth
+/// saying here" does not need the extra 8 tiles, so the frame is downscaled before it is
+/// ever sent.
+enum SuggestionFramePreview {
+  static let maxWidth = 1280
+
+  /// Returns downscaled JPEG data, or the original when it is already small enough or
+  /// cannot be decoded — the suggestion is worth more than the saving.
+  static func downscaledJPEG(from data: Data, maxWidth: Int = maxWidth) -> Data {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+      let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+    else { return data }
+
+    guard image.width > maxWidth else { return data }
+
+    let scale = Double(maxWidth) / Double(image.width)
+    let width = maxWidth
+    let height = max(1, Int(Double(image.height) * scale))
+
+    guard
+      let context = CGContext(
+        data: nil,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+      )
+    else { return data }
+
+    context.interpolationQuality = .medium
+    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+    guard let scaled = context.makeImage() else { return data }
+
+    let output = NSMutableData()
+    guard
+      let destination = CGImageDestinationCreateWithData(
+        output, "public.jpeg" as CFString, 1, nil)
+    else { return data }
+    CGImageDestinationAddImage(
+      destination, scaled, [kCGImageDestinationLossyCompressionQuality: 0.7] as CFDictionary)
+    guard CGImageDestinationFinalize(destination) else { return data }
+    return output as Data
   }
 }
 
