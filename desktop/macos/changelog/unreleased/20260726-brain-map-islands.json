@@ -1,0 +1,3 @@
+{
+  "change": "Brain Map neighbourhoods are drawn as islands with real coastlines instead of overlapping ovals, so a group that lives in two places shows as two islands and ground two groups share is left as water between them"
+}
