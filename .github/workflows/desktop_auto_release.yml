@@ -67,7 +67,7 @@ jobs:
         run: |
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
-            --source-check-wait-seconds 720 \
+            --source-check-wait-seconds 1200 \
             --source-check-poll-seconds 30
 
       - name: Show release plan
@@ -114,7 +114,7 @@ jobs:
 
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
-            --source-check-wait-seconds 720 \
+            --source-check-wait-seconds 1200 \
             --source-check-poll-seconds 30
 
       - name: Checkout exact releasable desktop source
