@@ -14,6 +14,7 @@ final class DeviceProviderTests: XCTestCase {
   private var defaultsToRemove: [UserDefaults] = []
 
   override func tearDown() async throws {
+    AnalyticsManager.shared.setDevicePairingTelemetryCaptureForTests(nil)
     for defaults in defaultsToRemove {
       removeDefaults(defaults)
     }
@@ -45,6 +46,69 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertEqual(defaults.string(forKey: "pairedDeviceId"), testDevice.id)
     XCTAssertEqual(defaults.string(forKey: "pairedDeviceName"), testDevice.name)
     XCTAssertEqual(defaults.string(forKey: "pairedDeviceType"), testDevice.type.rawValue)
+  }
+
+  func testFirstSuccessfulPairEmitsOnceAndReconnectOnlyRefreshesPersonProperties() async {
+    let defaults = makeDefaults()
+    defer { removeDefaults(defaults) }
+    var capturedEvents: [String] = []
+    var capturedEventProperties: [[String: Any]] = []
+    var capturedUserProperties: [[String: Any]] = []
+    AnalyticsManager.shared.setDevicePairingTelemetryCaptureForTests {
+      event, eventProperties, userProperties in
+      if let event {
+        capturedEvents.append(event)
+        capturedEventProperties.append(eventProperties)
+      }
+      capturedUserProperties.append(userProperties)
+    }
+    let provider = makeProvider(defaults: defaults)
+
+    await provider.connect(to: testDevice)
+    await provider.disconnect()
+    await provider.connect(to: testDevice)
+
+    XCTAssertEqual(capturedEvents, ["Device Paired"])
+    XCTAssertEqual(capturedEventProperties[0]["device_vendor"] as? String, "omi")
+    XCTAssertEqual(capturedEventProperties[0]["device_type"] as? String, "omi")
+    XCTAssertEqual(capturedEventProperties[0]["model"] as? String, "omi")
+    XCTAssertEqual(capturedEventProperties[0]["is_first_pair"] as? Bool, true)
+    XCTAssertEqual(capturedUserProperties.count, 2)
+    XCTAssertEqual(capturedUserProperties[0]["has_paired_device"] as? Bool, true)
+    XCTAssertEqual(capturedUserProperties[0]["paired_device_type"] as? String, "omi")
+    XCTAssertEqual(capturedUserProperties[0]["device_vendor"] as? String, "omi")
+    XCTAssertNotNil(capturedUserProperties[0]["first_paired_at"] as? String)
+    XCTAssertEqual(
+      capturedUserProperties[1]["first_paired_at"] as? String,
+      capturedUserProperties[0]["first_paired_at"] as? String
+    )
+  }
+
+  func testPersistedPairReconnectDoesNotEmitDevicePaired() async {
+    let defaults = makeDefaults()
+    defaults.set(testDevice.id, forKey: "pairedDeviceId")
+    defaults.set(testDevice.name, forKey: "pairedDeviceName")
+    defaults.set(testDevice.type.rawValue, forKey: "pairedDeviceType")
+    defer { removeDefaults(defaults) }
+    var capturedEventNames: [String] = []
+    var latestUserProperties: [String: Any] = [:]
+    AnalyticsManager.shared.setDevicePairingTelemetryCaptureForTests {
+      event, _, userProperties in
+      if let event {
+        capturedEventNames.append(event)
+      }
+      latestUserProperties = userProperties
+    }
+    let provider = makeProvider(defaults: defaults, autoReconnectEnabled: true)
+
+    provider.startReconnecting()
+    await waitUntil { provider.isConnected }
+    provider.stopReconnecting()
+
+    XCTAssertEqual(capturedEventNames, [])
+    XCTAssertEqual(latestUserProperties["has_paired_device"] as? Bool, true)
+    XCTAssertEqual(latestUserProperties["paired_device_type"] as? String, "omi")
+    XCTAssertEqual(latestUserProperties["device_vendor"] as? String, "omi")
   }
 
   func testFailedConnectionCleansUpTransientStateAndDoesNotPersistPairing() async {
