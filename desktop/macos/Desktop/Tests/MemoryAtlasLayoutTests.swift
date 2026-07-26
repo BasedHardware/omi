@@ -83,8 +83,16 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let nodes = (0..<40).map {
       KnowledgeGraphNode(id: "c\($0)", label: "Concept \($0)", nodeType: .concept)
     }
+    // Chained so every node but the two chain ends has two distinct
+    // neighbors and stays on the phyllotaxis spiral this test exercises.
+    // (An edgeless graph now makes every node an isolate, which the
+    // leaf/isolate fix deliberately moves into the margin gutter instead —
+    // see the isolate placement tests below.)
+    let edges = (0..<39).map {
+      KnowledgeGraphEdge(id: "e\($0)", sourceId: "c\($0)", targetId: "c\($0 + 1)", label: "related_to")
+    }
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
-      graph: KnowledgeGraphResponse(nodes: nodes, edges: []),
+      graph: KnowledgeGraphResponse(nodes: nodes, edges: edges),
       userName: "David"
     )
 
@@ -278,6 +286,104 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(first.edges.map(\.relationshipLabels), second.edges.map(\.relationshipLabels))
     XCTAssertEqual(first.edges.map(\.weight), second.edges.map(\.weight))
     XCTAssertEqual(first.nodes.map(\.normalizedPosition), second.nodes.map(\.normalizedPosition))
+  }
+
+  // MARK: - Leaf and isolate placement (Fix 2)
+
+  func testDegreeOneNodeIsPlacedCloserToItsSingleNeighborThanToItsTypeClusterCenter() throws {
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
+        KnowledgeGraphNode(id: "server", label: "Stably Server", nodeType: .organization),
+        KnowledgeGraphNode(id: "leaf1", label: "Onboarding doc", nodeType: .concept),
+        KnowledgeGraphNode(id: "leaf2", label: "Runbook", nodeType: .concept),
+        KnowledgeGraphNode(id: "leaf3", label: "Postmortem", nodeType: .concept),
+        KnowledgeGraphNode(id: "leaf4", label: "Design doc", nodeType: .concept),
+        KnowledgeGraphNode(id: "leaf5", label: "Style guide", nodeType: .concept),
+      ],
+      edges: [
+        KnowledgeGraphEdge(id: "david-server", sourceId: "david", targetId: "server", label: "works_at"),
+        KnowledgeGraphEdge(id: "e1", sourceId: "server", targetId: "leaf1", label: "produced"),
+        KnowledgeGraphEdge(id: "e2", sourceId: "server", targetId: "leaf2", label: "produced"),
+        KnowledgeGraphEdge(id: "e3", sourceId: "server", targetId: "leaf3", label: "produced"),
+        KnowledgeGraphEdge(id: "e4", sourceId: "server", targetId: "leaf4", label: "produced"),
+        KnowledgeGraphEdge(id: "e5", sourceId: "server", targetId: "leaf5", label: "produced"),
+      ]
+    )
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+    let server = try XCTUnwrap(snapshot.nodeByID["server"])
+    let conceptCenter = snapshot.center(for: .concept)
+    XCTAssertEqual(server.degree, 6, "the anchor plus five leaves")
+
+    func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x - b.x, a.y - b.y) }
+
+    for leafID in ["leaf1", "leaf2", "leaf3", "leaf4", "leaf5"] {
+      let leaf = try XCTUnwrap(snapshot.nodeByID[leafID])
+      XCTAssertEqual(leaf.degree, 1)
+      XCTAssertLessThan(
+        distance(leaf.normalizedPosition, server.normalizedPosition),
+        distance(leaf.normalizedPosition, conceptCenter),
+        "\(leafID) should read as a burr on its hub, not a member of the concept constellation"
+      )
+    }
+    // Fanned deterministically, not stacked on one point.
+    let leafPositions = Set(
+      ["leaf1", "leaf2", "leaf3", "leaf4", "leaf5"].map { id -> String in
+        let position = snapshot.nodeByID[id]!.normalizedPosition
+        return "\(position.x),\(position.y)"
+      })
+    XCTAssertEqual(leafPositions.count, 5)
+  }
+
+  func testDegreeZeroNodeIsNotPlacedInATypeSpiral() throws {
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
+        KnowledgeGraphNode(id: "server", label: "Stably Server", nodeType: .organization),
+        KnowledgeGraphNode(id: "orphan", label: "Untouched note", nodeType: .concept),
+      ],
+      edges: [
+        KnowledgeGraphEdge(id: "david-server", sourceId: "david", targetId: "server", label: "works_at")
+      ]
+    )
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+    let orphan = try XCTUnwrap(snapshot.nodeByID["orphan"])
+    let conceptSpiralCenter = snapshot.center(for: .concept)
+
+    XCTAssertEqual(orphan.degree, 0)
+    // The isolate gutter is a fixed bottom margin band; the phyllotaxis spiral
+    // for a lone concept node would instead sit exactly at its cluster
+    // center (index 0 of the spiral).
+    XCTAssertNotEqual(orphan.normalizedPosition, conceptSpiralCenter)
+    XCTAssertGreaterThanOrEqual(orphan.normalizedPosition.y, 0.8)
+    // Still inside the existing clamp bounds.
+    XCTAssertGreaterThanOrEqual(orphan.normalizedPosition.x, 0.04)
+    XCTAssertLessThanOrEqual(orphan.normalizedPosition.x, 0.96)
+    XCTAssertLessThanOrEqual(orphan.normalizedPosition.y, 0.92)
+  }
+
+  func testLeafAndIsolatePlacementIsDeterministicAcrossRepeatedSnapshots() {
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
+        KnowledgeGraphNode(id: "server", label: "Server", nodeType: .organization),
+        KnowledgeGraphNode(id: "leaf", label: "Doc", nodeType: .concept),
+        KnowledgeGraphNode(id: "orphan", label: "Orphan", nodeType: .thing),
+      ],
+      edges: [
+        KnowledgeGraphEdge(id: "david-server", sourceId: "david", targetId: "server", label: "works_at"),
+        KnowledgeGraphEdge(id: "server-leaf", sourceId: "server", targetId: "leaf", label: "produced"),
+      ]
+    )
+
+    let first = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+    let second = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+
+    XCTAssertEqual(first.nodes.map(\.normalizedPosition), second.nodes.map(\.normalizedPosition))
+    XCTAssertEqual(first.nodeByID["leaf"]?.normalizedPosition, second.nodeByID["leaf"]?.normalizedPosition)
+    XCTAssertEqual(first.nodeByID["orphan"]?.normalizedPosition, second.nodeByID["orphan"]?.normalizedPosition)
   }
 
   func testTimelineSpansCreatedAtRangeAndCountsEveryEntity() {
@@ -509,8 +615,15 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let nodes = (0..<26).map {
       KnowledgeGraphNode(id: "c\($0)", label: "Concept \($0)", nodeType: .concept)
     }
+    // Chained so these stay spiral-placed hub nodes rather than isolates —
+    // an edgeless graph is now deliberately parked in the margin gutter by
+    // the leaf/isolate fix, which is a much denser packing than this
+    // collision-budget regression was written to exercise.
+    let edges = (0..<25).map {
+      KnowledgeGraphEdge(id: "e\($0)", sourceId: "c\($0)", targetId: "c\($0 + 1)", label: "related_to")
+    }
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
-      graph: KnowledgeGraphResponse(nodes: nodes, edges: []),
+      graph: KnowledgeGraphResponse(nodes: nodes, edges: edges),
       userName: "David"
     )
     let plan = MemoryAtlasRenderPlanner.makePlan(

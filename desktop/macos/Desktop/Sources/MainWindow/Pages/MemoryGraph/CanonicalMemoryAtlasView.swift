@@ -996,10 +996,16 @@ enum MemoryAtlasLayoutEngine {
     // The server can emit several edges for what is really one relationship
     // between two entities — e.g. "includes" and "with" for the same pair —
     // which otherwise doubles both the drawn line and the inspector's
-    // Connections row for it. Merge by unordered endpoint pair so
-    // `edgesByNodeID`/`neighborIDsByNodeID` (built from this list by
-    // `MemoryAtlasSnapshot.init`) resolve to one placement per neighbor.
+    // Connections row for it. Merge by unordered endpoint pair before laying
+    // out nodes, so a node's distinct-neighbor count (not its raw edge-touch
+    // count) is what decides leaf/isolate placement below.
     let mergedEdges = mergeParallelEdges(reroutedEdges)
+
+    var neighborIDs: [String: Set<String>] = [:]
+    for merged in mergedEdges {
+      neighborIDs[merged.edge.sourceId, default: []].insert(merged.edge.targetId)
+      neighborIDs[merged.edge.targetId, default: []].insert(merged.edge.sourceId)
+    }
 
     var placements: [MemoryAtlasNodePlacement] = []
     if let anchor {
@@ -1008,11 +1014,20 @@ enum MemoryAtlasLayoutEngine {
           node: anchor,
           cluster: nil,
           normalizedPosition: MemoryAtlasCluster.starCenter,
-          degree: degree[anchor.id] ?? 0,
+          degree: neighborIDs[anchor.id]?.count ?? 0,
           clusterRank: 0
         )
       )
     }
+
+    // First pass: the phyllotaxis-spiral position for every non-anchor node,
+    // exactly as before leaf/isolate treatment existed. This remains the
+    // final position for a "hub" node (two or more distinct neighbors), and
+    // is also the fallback below for a leaf whose neighbor cannot itself be
+    // resolved to a stable position.
+    var drafts: [PositionedDraft] = []
+    var basePositionByID: [String: CGPoint] = [:]
+    if let anchor { basePositionByID[anchor.id] = MemoryAtlasCluster.starCenter }
 
     for cluster in activeClusters {
       let sorted = (grouped[cluster] ?? []).sorted {
@@ -1023,22 +1038,55 @@ enum MemoryAtlasLayoutEngine {
       }
 
       for (index, node) in sorted.enumerated() {
-        placements.append(
-          MemoryAtlasNodePlacement(
-            node: node,
-            cluster: cluster,
-            normalizedPosition: position(
-              center: clusterCenters[cluster] ?? MemoryAtlasCluster.starCenter,
-              index: index,
-              count: sorted.count,
-              activeClusterCount: activeClusters.count,
-              nodeID: node.id
-            ),
-            degree: degree[node.id] ?? 0,
-            clusterRank: index
-          )
+        let basePosition = position(
+          center: clusterCenters[cluster] ?? MemoryAtlasCluster.starCenter,
+          index: index,
+          count: sorted.count,
+          activeClusterCount: activeClusters.count,
+          nodeID: node.id
         )
+        basePositionByID[node.id] = basePosition
+        drafts.append(PositionedDraft(node: node, cluster: cluster, basePosition: basePosition, clusterRank: index))
       }
+    }
+
+    // Second pass: leaves and isolates override the spiral position. A leaf's
+    // only spatial information is who its single neighbor is, so it lands as
+    // a short stub off that neighbor instead of at a position derived only
+    // from its own type and id hash. An isolate carries no relational
+    // information at all, so it is parked in a deliberate canvas margin
+    // instead of implying membership in a type constellation it has no edge
+    // into. Both keep their type's `cluster` (it drives color); only their
+    // position leaves the type petal.
+    for draft in drafts {
+      let neighborCount = neighborIDs[draft.node.id]?.count ?? 0
+      let finalPosition: CGPoint
+      if neighborCount == 0 {
+        finalPosition = isolatePosition(nodeID: draft.node.id)
+      } else if neighborCount == 1, let parentID = neighborIDs[draft.node.id]?.first {
+        let parentIsAnchor = parentID == anchor?.id
+        let parentIsHub = (neighborIDs[parentID]?.count ?? 0) >= 2
+        if parentIsAnchor || parentIsHub, let parentPosition = basePositionByID[parentID] {
+          finalPosition = leafStubPosition(parentPosition: parentPosition, nodeID: draft.node.id)
+        } else {
+          // A mutual pair of leaves (each other's only neighbor) has no
+          // stable hub to stub off of — fall back to the ordinary spiral
+          // position rather than chase an undefined parent.
+          finalPosition = draft.basePosition
+        }
+      } else {
+        finalPosition = draft.basePosition
+      }
+
+      placements.append(
+        MemoryAtlasNodePlacement(
+          node: draft.node,
+          cluster: draft.cluster,
+          normalizedPosition: finalPosition,
+          degree: neighborCount,
+          clusterRank: draft.clusterRank
+        )
+      )
     }
 
     let positions = Dictionary(lastWriteWins: placements.map { ($0.id, $0.normalizedPosition) })
@@ -1067,6 +1115,15 @@ enum MemoryAtlasLayoutEngine {
       anchorNodeID: anchor?.id,
       clusterCenters: clusterCenters
     )
+  }
+
+  /// A node's phyllotaxis-spiral candidate position before leaf/isolate
+  /// treatment is applied.
+  private struct PositionedDraft {
+    let node: KnowledgeGraphNode
+    let cluster: MemoryAtlasCluster
+    let basePosition: CGPoint
+    let clusterRank: Int
   }
 
   /// One placement's worth of collapsed parallel edges: the representative
@@ -1231,6 +1288,41 @@ enum MemoryAtlasLayoutEngine {
     let radiusX = radiusY * 0.58
     let x = center.x + cos(angle) * radiusX
     let y = center.y + sin(angle) * radiusY
+    return CGPoint(
+      x: min(max(x, 0.04), 0.96),
+      y: min(max(y, 0.08), 0.92)
+    )
+  }
+
+  /// A degree-1 node's only spatial information is who its single neighbor
+  /// is. Fanning it a short, fixed distance off that neighbor at a
+  /// deterministic per-node angle reads as a burr on a hub — the intended
+  /// effect for an entity whose one relationship is the whole story — rather
+  /// than as an independent constellation member plotted by hash alone.
+  private static func leafStubPosition(parentPosition: CGPoint, nodeID: String) -> CGPoint {
+    let angle = stableFraction(nodeID) * 2 * .pi
+    // Short relative to a typical orbit radius (~0.05–0.15, up to ~0.4 for a
+    // sparse single-cluster atlas) so a leaf reads as attached to its parent
+    // rather than as a peer node next to it.
+    let stubLength = 0.024
+    let x = parentPosition.x + cos(angle) * stubLength
+    let y = parentPosition.y + sin(angle) * stubLength * 0.75
+    return CGPoint(
+      x: min(max(x, 0.04), 0.96),
+      y: min(max(y, 0.08), 0.92)
+    )
+  }
+
+  /// A degree-0 node has no relationship to place it by, so scattering it
+  /// among the type spirals would imply structure it does not have. Two
+  /// independent hashes of the same id scatter every isolate inside a fixed
+  /// bottom-margin band instead — a deliberate "unconnected" gutter, distinct
+  /// from the constellations, rather than noise mixed into them.
+  private static func isolatePosition(nodeID: String) -> CGPoint {
+    let xFraction = stableFraction(nodeID)
+    let yFraction = stableFraction(nodeID + "#isolate-gutter")
+    let x = 0.06 + xFraction * 0.88
+    let y = 0.86 + yFraction * 0.06
     return CGPoint(
       x: min(max(x, 0.04), 0.96),
       y: min(max(y, 0.08), 0.92)
