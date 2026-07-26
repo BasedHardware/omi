@@ -369,9 +369,9 @@ async fn selected_peripheral(id: &str) -> Result<Peripheral, String> {
             .map_err(|_| "Bluetooth connection timed out".to_owned())?
             .map_err(|error| error.to_string())?;
     }
-    peripheral
-        .discover_services()
+    tokio::time::timeout(Duration::from_secs(10), peripheral.discover_services())
         .await
+        .map_err(|_| "Bluetooth service discovery timed out".to_owned())?
         .map_err(|error| error.to_string())?;
     Ok(peripheral)
 }
@@ -383,9 +383,9 @@ async fn read_setting(id: &str, uuid: &str) -> Result<Vec<u8>, String> {
         .into_iter()
         .find(|characteristic| characteristic.uuid.to_string() == uuid)
         .ok_or_else(|| format!("selected firmware does not expose {uuid}"))?;
-    peripheral
-        .read(&characteristic)
+    tokio::time::timeout(Duration::from_secs(10), peripheral.read(&characteristic))
         .await
+        .map_err(|_| "Bluetooth characteristic read timed out".to_owned())?
         .map_err(|error| error.to_string())
 }
 
@@ -396,10 +396,13 @@ async fn write_setting(id: &str, uuid: &str, value: &[u8]) -> Result<(), String>
         .into_iter()
         .find(|characteristic| characteristic.uuid.to_string() == uuid)
         .ok_or_else(|| format!("selected firmware does not expose {uuid}"))?;
-    peripheral
-        .write(&characteristic, value, WriteType::WithResponse)
-        .await
-        .map_err(|error| error.to_string())
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        peripheral.write(&characteristic, value, WriteType::WithResponse),
+    )
+    .await
+    .map_err(|_| "Bluetooth characteristic write timed out".to_owned())?
+    .map_err(|error| error.to_string())
 }
 
 pub fn read_device_name(id: &str) -> Result<String, String> {
