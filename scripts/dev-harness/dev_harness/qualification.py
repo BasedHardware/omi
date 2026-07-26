@@ -242,6 +242,10 @@ def _validated_fault_record(state_root: Path, ownership_token: str) -> dict[str,
     fault_state = state_root / FAULT_STATE_DIRNAME
     if not fault_state.exists():
         return None
+    if os.name == "nt":
+        raise QualificationLeaseError(
+            "Qualification fault-inject cleanup requires POSIX process provenance; retaining lease state"
+        )
     if (
         fault_state.is_symlink()
         or not fault_state.is_dir()

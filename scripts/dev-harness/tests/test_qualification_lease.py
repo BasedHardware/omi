@@ -8,6 +8,7 @@ import socket
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -118,6 +119,25 @@ def test_active_lease_serializes_qualification_runs(monkeypatch: pytest.MonkeyPa
     qualification.release(repo_root=REPO_ROOT, lease_id="qualification-one", token=str(first["token"]))
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows-specific fail-closed behavior")
+def test_windows_fault_state_is_retained_without_posix_process_provenance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    lease_id = "qualification-windows-fault"
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    acquired = qualification.acquire(repo_root=REPO_ROOT, lease_id=lease_id, owner_pid=os.getpid(), port_offset=1000)
+    fault_state = root / "state" / lease_id / qualification.FAULT_STATE_DIRNAME
+    fault_state.mkdir()
+
+    with pytest.raises(qualification.QualificationLeaseError, match="requires POSIX process provenance"):
+        qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+
+    assert (root / "qualification-lease.json").is_file()
+    assert fault_state.is_dir()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
 def test_release_stops_the_exact_lease_owned_fault_inject_listener(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -142,6 +162,7 @@ def test_release_stops_the_exact_lease_owned_fault_inject_listener(
     assert (root / "state" / lease_id / qualification.COMPLETION_FILENAME).is_file()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
 def test_fault_listener_preflight_proves_cleanup_before_retaining_the_active_lease(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -184,6 +205,7 @@ def test_fault_listener_preflight_proves_cleanup_before_retaining_the_active_lea
     qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
 
 
+@pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
 def test_fault_listener_preflight_retains_replaced_listener_and_reports_host_prerequisite(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -240,8 +262,7 @@ def test_fault_listener_preflight_retains_replaced_listener_and_reports_host_pre
         if foreign.poll() is None:
             foreign.terminate()
             foreign.wait(timeout=10)
-
-
+@pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
 def test_release_refuses_and_retains_an_unproven_listener_on_the_recorded_fault_port(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
