@@ -218,6 +218,7 @@ final class MemoryHubBrainMapRoutingTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/MainWindow/Pages/MemoriesPage.swift")
+    // omi-test-quality: source-inspection -- static contract: the panel's placement in the SwiftUI hierarchy is not observable at runtime; this asserts the structural choice while the routing behaviour itself is exercised through the view model.
     let source = try String(contentsOf: url, encoding: .utf8)
 
     guard let start = source.range(of: "struct MemoryDetailPanel: View {") else {

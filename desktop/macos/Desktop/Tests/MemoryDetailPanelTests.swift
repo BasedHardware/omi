@@ -105,6 +105,7 @@ final class MemoryDetailPanelTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/MainWindow/Pages/MemoriesPage.swift")
+    // omi-test-quality: source-inspection -- static contract: whether the memory detail surface is a panel or a sheet is a SwiftUI view-tree fact with no runtime accessor; the behaviour it guards is covered separately by the view-model tests.
     return try String(contentsOf: url, encoding: .utf8)
   }
 

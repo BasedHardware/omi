@@ -222,6 +222,7 @@ final class MemoryAtlasConnectionSelectionTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent(
         "Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift")
+    // omi-test-quality: source-inspection -- static contract: the atlas inspector is a SwiftUI view that only exists inside a rendered window, so its wiring has no runnable seam; these cases are labelled STATIC CHECKER and assert structure, not behaviour.
     return try String(contentsOf: url, encoding: .utf8)
   }
 }
