@@ -1,0 +1,21 @@
+integrations/omi-even/bridge/tests/test_fastpath.py
+  s_e939211e79c9f1::t_4a4bf8c02099d1 238-265
+integrations/omi-even/bridge/fastpath.py
+  s_e939211e79c9f1::t_918d9fc893d984 219-234,237-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "1006de87063f6ce38cf14bddea1b0b7b76419cf9",
+  "prompts": {},
+  "sessions": {
+    "s_e939211e79c9f1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7063973-7aff-42e3-a630-daf5ea69dbc0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
