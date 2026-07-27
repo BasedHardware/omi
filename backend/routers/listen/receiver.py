@@ -73,6 +73,21 @@ logger = logging.getLogger(__name__)
 # to terminate a zombie "Listening" session promptly, far below ws_receive_timeout.
 STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
 
+# Longest frame the Opus format can carry, in milliseconds.
+OPUS_MAX_FRAME_MS = 120
+
+
+def opus_decode_capacity(sample_rate: int) -> int:
+    """Samples to hand `Decoder.decode` as its output-buffer size.
+
+    Opus packets are self-describing: `frame_size` is only the capacity of the buffer the
+    decoder writes into, and it never emits more samples than the packet actually holds, so
+    a 10 ms frame still decodes to 10 ms under a larger buffer. Sizing it to the negotiated
+    frame duration instead made libopus answer `buffer too small` for every longer frame a
+    client sent, and the receiver dropped the whole session's audio one frame at a time.
+    """
+    return sample_rate // 1000 * OPUS_MAX_FRAME_MS
+
 
 def _get_opuslib() -> Any:
     if opuslib is None:
@@ -362,7 +377,9 @@ class ListenReceiver:
         audio = data[1:]
         if request.codec == 'opus' and self.multi_opus_decoders[channel_index]:
             try:
-                audio = self.multi_opus_decoders[channel_index].decode(bytes(audio), request.sample_rate // 50)
+                audio = self.multi_opus_decoders[channel_index].decode(
+                    bytes(audio), opus_decode_capacity(request.sample_rate)
+                )
             except Exception as error:
                 logger.warning(
                     'Listen audio frame decode failed codec=opus channel=%s type=%s',
@@ -502,7 +519,9 @@ class ListenReceiver:
                     try:
                         decoded: bytes = data
                         if request.codec == 'opus':
-                            decoded = self.opus_decoder.decode(bytes(data), frame_size=self.host.frame_size)
+                            decoded = self.opus_decoder.decode(
+                                bytes(data), frame_size=opus_decode_capacity(request.sample_rate)
+                            )
                         elif request.codec == 'aac':
                             decoded = self.aac_decoder.decode(bytes(data))
                         elif request.codec == 'lc3':
