@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location(
@@ -131,9 +132,7 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
             },
         )
         with self.assertRaisesRegex(ValueError, "belongs in"):
-            RATCHET.validate_baseline(
-                baseline({router: 1600}), RATCHET.baseline_shard_relative(floating_control_bar)
-            )
+            RATCHET.validate_baseline(baseline({router: 1600}), RATCHET.baseline_shard_relative(floating_control_bar))
         with self.assertRaisesRegex(ValueError, "duplicate baseline entry"):
             RATCHET.aggregate_baseline_shards(
                 {
@@ -187,6 +186,29 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
 
         self.assertEqual(legacy_ref, legacy)
         self.assertEqual(sharded_ref, legacy)
+
+    def test_baseline_git_reads_decode_utf8_explicitly(self) -> None:
+        router = "backend/routers/large.py"
+        expected = baseline({router: 1600}, {router: "Unicode guard: \u96ea"})
+        shard_relative = RATCHET.baseline_shard_relative(router)
+        completed = subprocess.CompletedProcess
+
+        with patch.object(
+            RATCHET.subprocess,
+            "run",
+            side_effect=[
+                completed([], 0, stdout=f"{shard_relative}\n", stderr=""),
+                completed([], 0, stdout=RATCHET.serialize_baseline(expected), stderr=""),
+                completed([], 0, stdout="", stderr=""),
+                completed([], 0, stdout=RATCHET.serialize_baseline(expected), stderr=""),
+            ],
+        ) as run:
+            self.assertEqual(RATCHET.baseline_at_ref(self.root, "sharded"), expected)
+            self.assertEqual(RATCHET.baseline_at_ref(self.root, "legacy"), expected)
+
+        self.assertEqual(len(run.call_args_list), 4)
+        for call in run.call_args_list:
+            self.assertEqual(call.kwargs.get("encoding"), "utf-8")
 
 
 if __name__ == "__main__":
