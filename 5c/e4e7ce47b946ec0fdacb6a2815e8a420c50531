@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  s_7918275f8e3531::t_d2b392b5f31585 36-51
+desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  s_7918275f8e3531::t_fea0ed7a9517ed 154,480
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "5ce4e7ce47b946ec0fdacb6a2815e8a420c50531",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
