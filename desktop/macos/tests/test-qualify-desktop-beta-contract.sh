@@ -126,9 +126,13 @@ require_order "$QUALIFIER" \
   'wait_for_desktop_launch "$LAUNCH_SIGNAL_FILE"' \
   'SECONDS=0' \
   'wait_for_bridge "$AUTOMATION_PORT"'
+# The middle needle carries the env-forwarding expansion added by 4a68e31c83,
+# which is what broke the previous literal `open "$APP_PATH"`. The contract is
+# unchanged and still exact: run.sh dispatches an `open` of the built bundle
+# between announcing the start and signalling that the launch went out.
 require_order "$RUN_SH" \
   'step "Starting app..."' \
-  'open "$APP_PATH"' \
+  'open ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH"' \
   'signal_desktop_launch'
 
 if [[ ! -x "$PROFILE_PREP" ]]; then
