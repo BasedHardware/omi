@@ -19,6 +19,46 @@ def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[st
     return []
 
 
+def _validate_production_secret_bridge(text: str, *, workflow: str) -> list[str]:
+    errors: list[str] = []
+    for fragment in (
+        "Preflight production desktop secret resource names",
+        "# Temporary bridge pending Rust -> Python backend consolidation.",
+        'gcloud secrets describe "$secret"',
+        "--format='none'",
+        "GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest",
+        "FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest",
+        "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest",
+        "REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest",
+        "REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest",
+        "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST",
+    ):
+        if fragment not in text:
+            errors.append(f"{workflow}: missing temporary production secret bridge {fragment!r}")
+    for forbidden in (
+        "GEMINI_API_KEY=GEMINI_API_KEY:latest",
+        "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
+        "REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest",
+        "REDIS_DB_HOST=REDIS_DB_HOST:latest",
+        "REDIS_DB_PORT=REDIS_DB_PORT:latest",
+        "PINECONE_API_KEY=",
+        "PINECONE_HOST=",
+    ):
+        if forbidden in text:
+            errors.append(f"{workflow}: forbidden production secret binding {forbidden!r}")
+    errors.extend(
+        _ordered(
+            text,
+            (
+                "Preflight production desktop secret resource names",
+                "Build and push immutable Docker image",
+            ),
+            workflow=workflow,
+        )
+    )
+    return errors
+
+
 def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
     workflow = "desktop_backend_prod.yml" if production else "desktop_backend_auto_dev.yml"
     errors: list[str] = []
@@ -110,6 +150,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 errors.append(
                     f"{workflow}: desktop-backend must remain outside the Python backend vector: {forbidden!r}"
                 )
+        errors.extend(_validate_production_secret_bridge(text, workflow=workflow))
     else:
         for fragment in (
             "group: desktop-backend-auto-dev",
