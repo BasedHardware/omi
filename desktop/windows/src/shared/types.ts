@@ -1,20 +1,3 @@
-<<<<<<< Updated upstream
-=======
-export type SignGloss = {
-  gloss: string
-  duration: number
-  timestamp: number
-  swr?: string
-}
-
-export type TranslationResult = {
-  originalText: string
-  poseUrl?: string
-  assetType?: 'video' | 'pose'
-  glosses: SignGloss[]
-  swrFull?: string
-}
-
 export type DeepgramTtsOptions = {
   text: string
   voice?: string
@@ -27,8 +10,6 @@ export type DeepgramTtsResult = {
   contentType?: string
   error?: string
 }
-
->>>>>>> Stashed changes
 export type CaptureSource = {
   id: string
   name: string
@@ -325,11 +306,7 @@ export type OmiBridgeApi = {
   // window are separate renderers with independent caches.
   notifyConversationsChanged: () => void
   onConversationsChanged: (cb: () => void) => () => void
-<<<<<<< Updated upstream
-=======
-  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => () => void
   deepgramTtsSynthesize: (options: DeepgramTtsOptions) => Promise<DeepgramTtsResult>
->>>>>>> Stashed changes
   screenSynthFramesSince: () => Promise<ScreenFrameLite[]>
   screenSynthGetState: () => Promise<ScreenSynthState>
   screenSynthSetState: (patch: Partial<ScreenSynthState>) => Promise<ScreenSynthState>

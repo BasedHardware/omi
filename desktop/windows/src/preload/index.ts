@@ -16,14 +16,9 @@ import type {
   RewindSettings,
   InsightPayload,
   AutomationPlan,
-<<<<<<< Updated upstream
-  StepResult
-=======
   StepResult,
-  TranslationResult,
   DeepgramTtsOptions,
   DeepgramTtsResult
->>>>>>> Stashed changes
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -157,18 +152,9 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
-<<<<<<< Updated upstream
-  }
-=======
-  },
-  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, result: TranslationResult): void => cb(result)
-    ipcRenderer.on('omi-sign-update', listener)
-    return () => ipcRenderer.removeListener('omi-sign-update', listener)
   },
   deepgramTtsSynthesize: (options: DeepgramTtsOptions): Promise<DeepgramTtsResult> =>
     ipcRenderer.invoke('deepgram:ttsSynthesize', options)
->>>>>>> Stashed changes
 }
 
 const omiOverlay: OmiOverlayApi = {
