@@ -1,0 +1,33 @@
+integrations/omi-even/bridge/server.py
+  s_e939211e79c9f1::t_ca3f35afaf0a26 180-184,188-190
+  s_e939211e79c9f1::t_b5bddcf875831f 56-59
+integrations/omi-even/bridge/fastpath.py
+  s_e939211e79c9f1::t_a51ef8a968506c 138-201
+  s_e939211e79c9f1::t_bb26f7016c9c0e 285-291,295,298-344,361-362
+  s_e939211e79c9f1::t_497849f621fb06 419-425,427,430-431
+  s_e939211e79c9f1::t_86c5490c9cbe97 397-403
+  s_e939211e79c9f1::t_c734299865a38d 61-65
+  s_e939211e79c9f1::t_62cec3b0a98b1d 115
+  s_e939211e79c9f1::t_31120b99220498 292-294,296-297
+  s_e939211e79c9f1::t_f963ccb3664fa9 69-95
+  s_e939211e79c9f1::t_c9d7dba25efe03 214-217
+integrations/omi-even/bridge/tests/test_fastpath.py
+  s_e939211e79c9f1::t_5f43b5544cd836 208-215,219-238
+  s_e939211e79c9f1::t_5fdd15e6c5095c 104-105,108,114-116,118-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "7c961b9cd1cf2f3aee2300677b4d94aa4b10b643",
+  "prompts": {},
+  "sessions": {
+    "s_e939211e79c9f1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7063973-7aff-42e3-a630-daf5ea69dbc0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
