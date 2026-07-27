@@ -309,7 +309,7 @@ int app_settings_clear_sd_ring_quarantine(void)
         return err;
     }
 
-    sd_ring_quarantine = (app_sd_ring_quarantine_t) {0};
+    memset(&sd_ring_quarantine, 0, sizeof(sd_ring_quarantine));
     sd_ring_quarantine_load_error = 0;
     return 0;
 }

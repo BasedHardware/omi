@@ -403,7 +403,7 @@ static int fake_rtc_clear(void *context)
     if (fake->fault == RTC_FAULT_CLEAR) {
         return -EIO;
     }
-    fake->marker = (rtc_elapsed_marker_t) {0};
+    memset(&fake->marker, 0, sizeof(fake->marker));
     return 0;
 }
 
@@ -1334,13 +1334,13 @@ static void test_reboot_quarantine_recovery_is_conservative_and_idempotent(void)
     };
     torn_partial.replacement_valid = true;
     assert(sd_ring_reconcile_quarantine(&committed, 11U, &torn_partial) == 0);
-    assert_cursor_eq(&committed,
-                     &(sd_ring_cursor_t) {
-                         .read_seq = 0U,
-                         .write_seq = 5U,
-                         .dropped_packets = 0U,
-                         .capacity_packets = 16U,
-                     });
+    const sd_ring_cursor_t expected_committed = {
+        .read_seq = 0U,
+        .write_seq = 5U,
+        .dropped_packets = 0U,
+        .capacity_packets = 16U,
+    };
+    assert_cursor_eq(&committed, &expected_committed);
 }
 
 static void test_terminal_reconnect_flushes_never_mutate_media(void)
