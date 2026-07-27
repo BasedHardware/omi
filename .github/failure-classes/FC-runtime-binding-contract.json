@@ -3,6 +3,10 @@
   "id": "FC-runtime-binding-contract",
   "violated_contract": "A service's checked-in Cloud Run runtime contract must classify every live binding as a declared secret, preserved secret, literal environment value, or retired binding; it must never synthesize a Secret Manager reference from an inherited environment variable.",
   "canonical_prevention": "Maintain one explicit, mutually exclusive runtime-binding contract. Candidate preflight validates declared and preserved Secret Manager bindings, while deployment automatically merges reviewed literal values and removes only enumerated retired bindings.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/check-desktop-backend-release-policy.py",
+    ".github/scripts/test_check_desktop_backend_release_policy.py"
+  ],
   "evidence_prs": [9997],
   "scope_hints": [
     "config/public-build-contract.json",
