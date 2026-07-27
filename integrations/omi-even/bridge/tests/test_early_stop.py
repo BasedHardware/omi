@@ -86,6 +86,9 @@ def test_empty_and_whitespace_never_stop_the_stream():
 @pytest.mark.asyncio
 async def test_the_agent_path_passes_the_predicate_through(monkeypatch):
     """Wiring check: forgetting `enough=` costs seconds and changes nothing visible."""
+    # The endpoint now prefers the fast retrieval path, which returns before the
+    # agent is ever consulted. This test is about the agent path, so ask for it.
+    monkeypatch.setenv('OMI_EVEN_FULL_AGENT', '1')
     seen = {}
 
     class FakeOmi:

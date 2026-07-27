@@ -135,6 +135,11 @@ def bridge(monkeypatch, tmp_path):
     monkeypatch.setattr(server, 'auth', FakeAuth())
     monkeypatch.setattr(server, 'CaptureSession', _Session)
     monkeypatch.setattr(server, '_CONTRACT_LOG', str(tmp_path / 'add-agent-capture.log'))
+    # These tests cover the full agent path -- deadlines, truncation, error
+    # handling. The endpoint now prefers the fast retrieval path, so opt back in
+    # explicitly rather than let the fast path silently answer instead.
+    # Fast-path behavior is covered by tests/test_fastpath.py.
+    monkeypatch.setenv('OMI_EVEN_FULL_AGENT', '1')
 
     yield SimpleNamespace(
         client=TestClient(server.app),

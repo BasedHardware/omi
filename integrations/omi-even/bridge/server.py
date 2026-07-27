@@ -33,6 +33,7 @@ from fastapi.responses import JSONResponse
 from capture import CaptureSession
 from display import DEFAULT_LIMIT as DISPLAY_LIMIT
 from display import fit_for_glasses, openai_chat_completion, paginate
+from fastpath import fast_answer
 from omi_auth import AuthError, OmiAuth
 from omi_client import OmiClient
 
@@ -161,7 +162,24 @@ def _display_is_full(raw: str) -> bool:
 
 
 async def _answer_for_glasses(question: str) -> str:
-    """Ask Omi and reduce the answer to something the G2 can actually show."""
+    """Ask Omi and reduce the answer to something the G2 can actually show.
+
+    Defaults to the fast retrieval path, because Even's client timeout is short
+    enough that the full agent answer is never seen: proven on hardware, a 0.4s
+    reply renders and a 5.6s one does not, despite returning 200 OK.
+    Set OMI_EVEN_FULL_AGENT=1 to use `/v2/messages` instead, for a client that
+    can wait.
+    """
+    if not os.getenv('OMI_EVEN_FULL_AGENT'):
+        started = time.monotonic()
+        try:
+            answer = await fast_answer(omi, question)
+            fitted = fit_for_glasses(answer, limit=DISPLAY_LIMIT)
+            log.info('fastpath answered in %.1fs (%d chars shown)', time.monotonic() - started, len(fitted))
+            return fitted or "I don't have anything on that."
+        except Exception as exc:  # noqa: BLE001 - fall back rather than fail
+            log.warning('fastpath failed (%s); falling back to the agent', exc)
+
     result = await omi.chat(question, deadline_s=AGENT_DEADLINE_S, enough=_display_is_full)
 
     if result.error:
@@ -225,6 +243,19 @@ async def _handle_agent(request: Request) -> JSONResponse:
         return JSONResponse({'error': {'message': 'No user message found'}}, status_code=400)
 
     log.info('agent question: %.120s', question)
+
+    # Diagnostic: answer instantly, skipping Omi entirely. Even's client timeout
+    # is undocumented, so if a real answer never renders but this one does, the
+    # cause is latency rather than the response shape or the routing.
+    if os.getenv('OMI_EVEN_FAST_TEST'):
+        log.info('FAST_TEST enabled -- replying instantly without calling Omi')
+        return JSONResponse(
+            openai_chat_completion(
+                'omi bridge replying instantly. If you can read this, the bridge '
+                'works and slow answers were timing out.',
+                model=payload.get('model') or 'omi',
+            )
+        )
     try:
         answer = await _answer_for_glasses(question)
     except AuthError as exc:

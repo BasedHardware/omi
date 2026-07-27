@@ -311,6 +311,25 @@ class OmiClient:
             payload = payload.get('daily_summaries') or payload.get('items') or []
         return payload[:limit] if isinstance(payload, list) else []
 
+    async def tool_search(self, tool: str, payload: dict) -> str:
+        """Call one of Omi's direct retrieval tools and return its text result.
+
+        These skip the agent loop entirely. Measured against the live account:
+        memories 1.5s, conversations 0.8s, versus 6-18s for `/v2/messages`. That
+        difference is what makes an answer arrive before Even's client gives up.
+        """
+        headers = {**await self._headers(), 'Content-Type': 'application/json'}
+        async with httpx.AsyncClient(timeout=_JSON_TIMEOUT) as client:
+            response = await client.post(
+                f'{self._base}/v1/tools/{tool}', headers=headers, json=payload
+            )
+        if response.status_code != 200:
+            raise RuntimeError(f'{tool} failed: HTTP {response.status_code}')
+        body = response.json() or {}
+        if body.get('is_error'):
+            raise RuntimeError(f'{tool} reported an error')
+        return body.get('result_text', '')
+
     async def usage_quota(self) -> dict:
         headers = await self._headers()
         async with httpx.AsyncClient(timeout=_JSON_TIMEOUT) as client:
