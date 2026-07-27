@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "FC-absent-rollout-state-as-denial",
+  "violated_contract": "An absent optional rollout-state document means the account was never enrolled, which is a served state rather than a denial; a fail-closed default-memory read gate must not refuse a read the account's authoritative legacy surface can serve.",
+  "canonical_prevention": "Interpret every default-memory read decision through the one shared legacy-fallback contract, which serves the legacy surface only for an explicit legacy-safe decision or a deny whose sole reason is the absent rollout-state document, and keeps every other deny reason fail-closed so an indeterminate state is never mistaken for never-enrolled.",
+  "canonical_prevention_artifact": [
+    "backend/utils/memory/default_read_rollout.py",
+    "backend/tests/unit/test_default_read_rollout_decision.py"
+  ],
+  "evidence_prs": [
+    10094,
+    10095,
+    10485
+  ],
+  "scope_hints": [
+    "backend/utils/memory/default_read_rollout.py",
+    "backend/utils/mcp_memories.py",
+    "backend/utils/retrieval/tool_services/**",
+    "backend/utils/retrieval/tools/**",
+    "backend/routers/developer.py"
+  ],
+  "status": "open"
+}
