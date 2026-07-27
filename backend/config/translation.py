@@ -15,7 +15,7 @@ class TranslationProvider(str, Enum):
     @staticmethod
     def get_display_name(value: 'TranslationProvider') -> str:
         if value == TranslationProvider.google:
-            return 'Gemini 3.1 Flash-Lite'
+            return 'Gemini 2.5 Flash-Lite'
         if value == TranslationProvider.nllb:
             return 'NLLB-200 (self-hosted)'
         return str(value)

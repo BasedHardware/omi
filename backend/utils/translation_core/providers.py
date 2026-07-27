@@ -68,6 +68,7 @@ class GeminiTranslationBatch(BaseModel):
 
 class GeminiTranslationProvider:
     provider = TranslationProvider.google
+    model_name = 'gemini-2.5-flash-lite'
 
     def __init__(self, client_factory: Callable[[], Any] | None = None) -> None:
         self._client_factory = client_factory or _create_gemini_translation_client

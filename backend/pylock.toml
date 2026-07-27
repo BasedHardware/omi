@@ -435,12 +435,7 @@ name = "google-cloud-tasks"
 version = "2.16.4"
 sdist = { url = "https://files.pythonhosted.org/packages/e8/b7/93c04dc64b66aabb9560a72a518f98a2b61b91cbba115ed5e466313ce2b8/google-cloud-tasks-2.16.4.tar.gz", upload-time = 2024-07-08T19:25:29Z, size = 306730, hashes = { sha256 = "61033c1edd7dc5aa3b9fbe5c8deb64be0c50e0baee9d9465f3f8b75b2cda55b9" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/40/63/55c80136afe926a2adcb94fb6b5cfcb4be66f8f30b6ed692d2c9bb07e42f/google_cloud_tasks-2.16.4-py2.py3-none-any.whl", upload-time = 2024-07-08T19:25:27Z, size = 259545, hashes = { sha256 = "7db2b364ded9c2e0143b2794d1ae53ef7461a99567698e3e4ba9e02b614e1adb" } }]
-
-[[packages]]
-name = "google-cloud-translate"
-version = "3.20.2"
-sdist = { url = "https://files.pythonhosted.org/packages/97/e8/6357631b843d38e696da0a3cce12f51e4d7cbb41f1d8872524f6fb9c4644/google_cloud_translate-3.20.2.tar.gz", upload-time = 2025-03-17T11:37:42Z, size = 254012, hashes = { sha256 = "b54384ee55f4bc5d966cee0e10b0814ffee1375c1f2af70b9220d3bcf58d85f8" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/a4/ed/6fe8c1e2c02504d4dcbb678b4f472ce3c985bdf0223189a15cdc3ff4c161/google_cloud_translate-3.20.2-py3-none-any.whl", upload-time = 2025-03-17T11:37:41Z, size = 198465, hashes = { sha256 = "6208d6a740ecdcf9076c31994510eb02697261d89fd68fad6bc87f4dea29dce2" } }]
+[{ url = "https://files.pythonhosted.org/packages/a4/ed/6fe8c1e2c02504d4dcbb678b4f472ce3c985bdf0223189a15cdc3ff4c161/google_cloud_translate-3.20.2-py3-none-any.whl", upload-time = 2025-03-17T11:37:41Z, size = 198465, hashes = { sha256 = "6208d6a740ecdcf9076c31994510eb02697261d89fd68fad6bc87f4dea29dce2" } }]
 
 [[packages]]
 name = "google-crc32c"
