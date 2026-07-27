@@ -499,6 +499,42 @@ def _is_too_vague(question: str) -> bool:
     return len(terms) == 1 and max(len(t) for t in terms) <= 4
 
 
+async def gather_facts(client, question: str) -> list[str]:
+    """The retrieved lines behind an answer, best first.
+
+    Split out from `fast_answer` so the same material can either be shown as-is
+    or handed to a composer -- see `compose.py`, which turns these into prose
+    using Omi's own LLM.
+    """
+    kind = _classify(question)
+    if kind == 'actions':
+        rows = await client.action_items(limit=25)
+        open_items = [r for r in rows if not r.get('completed')]
+        open_items.sort(key=lambda r: str(r.get('created_at') or ''), reverse=True)
+        return [str(r.get('description', '')).strip() for r in open_items if r.get('description')][:8]
+
+    if kind == 'conversations':
+        target = _target_days(question)
+        text = await _search_or_empty(
+            client, 'conversations/search', {'query': question, 'limit': 8, 'include_transcript': False}
+        )
+        compact = _compact_conversations(text, limit=8, only_days=target)
+        return [line.lstrip('-').strip() for line in compact.splitlines() if line.strip()]
+
+    memories_text, conversations_text = await asyncio.gather(
+        _search_or_empty(client, 'memories/search', {'query': question, 'limit': 10}),
+        _search_or_empty(
+            client, 'conversations/search', {'query': question, 'limit': 4, 'include_transcript': False}
+        ),
+    )
+    facts = _clean_bullets(memories_text)
+    if _looks_relevant(question, conversations_text):
+        for extra in _conversation_titles(conversations_text):
+            if extra not in facts:
+                facts.append(extra)
+    return facts[:10]
+
+
 async def fast_answer(client, question: str) -> str:
     """Answer from Omi's stores directly, in roughly two seconds."""
     kind = _classify(question)

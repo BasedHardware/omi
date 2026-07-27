@@ -33,7 +33,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from capture import CaptureSession
 from display import DEFAULT_LIMIT as DISPLAY_LIMIT
 from display import fit_for_glasses, openai_chat_completion, paginate
-from fastpath import fast_answer
+from compose import compose_or_none
+from fastpath import fast_answer, gather_facts
 from omi_auth import AuthError, OmiAuth
 from omi_client import OmiClient
 
@@ -56,6 +57,10 @@ AGENT_DEADLINE_S = float(os.getenv('OMI_EVEN_DEADLINE', '20'))
 # Ceiling for the fast path. Answers that took 5.6s+ were never rendered on the
 # glasses, so anything approaching that is already lost -- better to say so.
 FAST_DEADLINE_S = float(os.getenv('OMI_EVEN_FAST_DEADLINE', '5'))
+
+# Retrieval plus one compose call measured 2.9s end to end. This bounds the pair,
+# leaving headroom under the ~5s the glasses tolerate.
+COMPOSE_DEADLINE_S = float(os.getenv('OMI_EVEN_COMPOSE_DEADLINE', '4.5'))
 
 _CONTRACT_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'add-agent-capture.log')
 
@@ -184,7 +189,24 @@ async def _answer_for_glasses(question: str) -> str:
             # glasses show nothing at all. One query was measured at 14s when a
             # server-side date window made the search pathologically slow, which
             # is exactly the outcome this path exists to prevent.
-            answer = await asyncio.wait_for(fast_answer(omi, question), timeout=FAST_DEADLINE_S)
+            facts = await asyncio.wait_for(gather_facts(omi, question), timeout=FAST_DEADLINE_S)
+
+            # Compose the facts into prose with Omi's own LLM. Bullets were never
+            # what was wanted; this reads like Omi and still lands in ~3s.
+            # Whatever budget retrieval did not use is what remains for it.
+            remaining = COMPOSE_DEADLINE_S - (time.monotonic() - started)
+            if facts and remaining > 1.0 and not os.getenv('OMI_EVEN_NO_COMPOSE'):
+                composed = await compose_or_none(auth, OMI_API_BASE, question, facts, remaining)
+                if composed:
+                    fitted = fit_for_glasses(composed, limit=DISPLAY_LIMIT)
+                    log.info(
+                        'composed answer in %.1fs (%d chars shown)', time.monotonic() - started, len(fitted)
+                    )
+                    return fitted
+
+            # Fallback: show the retrieved lines. Worse than prose, better than
+            # nothing, and reached whenever compose is rate limited or slow.
+            answer = await asyncio.wait_for(fast_answer(omi, question), timeout=2.0)
             fitted = fit_for_glasses(answer, limit=DISPLAY_LIMIT)
             log.info('fastpath answered in %.1fs (%d chars shown)', time.monotonic() - started, len(fitted))
             return fitted or "I don't have anything on that."
