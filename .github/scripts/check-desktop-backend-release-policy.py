@@ -39,6 +39,8 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         '--expected-contract-version="$CHAT_CONTRACT_VERSION"',
         "Capture current serving revision",
         "Resolve exact no-traffic candidate URL",
+        "Mint candidate probe identity",
+        "firebase_release_probe_token.py",
         "Restore prior traffic after a failed promotion",
         "DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED=true",
         "failure() && env.DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED == 'true'",
@@ -60,6 +62,14 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         else "Route traffic to accepted desktop-backend revision"
     )
     verify_step = "Verify production serving identity" if production else "Verify development backend release identity"
+    probe_identity_steps = (
+        ("Mint candidate probe identity",)
+        if production
+        else (
+            "Stage candidate probe signer",
+            "Mint candidate probe identity",
+        )
+    )
     errors.extend(
         _ordered(
             text,
@@ -68,6 +78,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 "Wait for no-traffic candidate readiness",
                 "Verify candidate image lineage",
                 "Resolve exact no-traffic candidate URL",
+                *probe_identity_steps,
                 chat_step,
                 "Prove candidate managed realtime provider paths",
                 route_step,
@@ -110,6 +121,11 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "EXPECTED_GCP_PROJECT_ID: based-hardware-dev",
             "DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+            "${{ secrets.GCP_SERVICE_ACCOUNT }}",
+            'chmod 600 "$signer_file"',
+            "base64 --decode",
+            '--signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE"',
+            'rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"',
         ):
             if fragment not in text:
                 errors.append(f"{workflow}: missing development traffic guard {fragment!r}")
