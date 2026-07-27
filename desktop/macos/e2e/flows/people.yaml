@@ -10,6 +10,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleReview.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleMemoryWriter.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleThreadIngest.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppReader.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageText.swift
 preconditions:
   - auth_ready
 

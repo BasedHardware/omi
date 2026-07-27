@@ -72,6 +72,11 @@ enum DefaultsKey: String {
   /// cheap without re-running the pipeline more than once per throttle window.
   case peopleGraphLastRebuild = "peopleGraphLastRebuild"
   case peopleIMessageExportLastRun = "peopleIMessageExportLastRun"
+  /// Throttle bookkeeping for the on-device WhatsApp reader (epoch seconds).
+  /// Independent of the iMessage export throttle so each connector re-reads its
+  /// own database on its own cadence, even though both share the single Full Disk
+  /// Access grant and the `peopleIMessageExport` consent flag.
+  case peopleWhatsAppExportLastRun = "peopleWhatsAppExportLastRun"
   /// Throttle bookkeeping for writing derived relationship-fact memories (epoch
   /// seconds). Independent of the graph-rebuild throttle so the memory writer
   /// runs on its own cadence after the graph settles.

@@ -320,13 +320,18 @@ enum PeopleThreadIngest {
         // Readable-message counts + newest date per chat.
         var counts: [Int64: Int] = [:]
         var newest: [Int64: Int64] = [:]
+        // Count messages that carry a body in EITHER column. On modern macOS `m.text` is usually
+        // NULL and the string lives in `attributedBody`, so a text-only count wildly undercounts a
+        // thread (and can push a real relationship below `minThreadMessages`). Counting rows with a
+        // non-empty `text` OR a present `attributedBody` restores a realistic per-thread total; the
+        // exact body is decoded later by `readThread` via `IMessageText.body`.
         let aggCursor = try Row.fetchCursor(
           db,
           sql: """
               SELECT cmj.chat_id AS cid, COUNT(*) AS cnt, MAX(m.date) AS maxdate
               FROM message m JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
               WHERE (m.associated_message_type = 0 OR m.associated_message_type IS NULL)
-                AND m.text IS NOT NULL AND length(trim(m.text)) > 0
+                AND ((m.text IS NOT NULL AND length(trim(m.text)) > 0) OR m.attributedBody IS NOT NULL)
               GROUP BY cmj.chat_id
             """)
         while let row = try aggCursor.next() {
@@ -361,20 +366,27 @@ enum PeopleThreadIngest {
     let recentDesc: [RawMessage] =
       (try? dbQueue.read { db -> [RawMessage] in
         var out: [RawMessage] = []
+        // Select both body columns. On modern macOS `m.text` is usually NULL and the message string
+        // lives only in the `attributedBody` typedstream BLOB, so the old text-only filter captured
+        // almost nothing recent. Include any row that has EITHER, then resolve the body in Swift via
+        // `IMessageText.body` (rows that decode to nothing — e.g. attachment-only — are dropped).
         let cursor = try Row.fetchCursor(
           db,
           sql: """
-              SELECT m.text AS text, m.is_from_me AS from_me, m.date AS date
+              SELECT m.text AS text, m.attributedBody AS attributed_body, m.is_from_me AS from_me, m.date AS date
               FROM message m JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
               WHERE cmj.chat_id = ?
                 AND (m.associated_message_type = 0 OR m.associated_message_type IS NULL)
-                AND m.text IS NOT NULL AND length(trim(m.text)) > 0
+                AND ((m.text IS NOT NULL AND length(trim(m.text)) > 0) OR m.attributedBody IS NOT NULL)
               ORDER BY m.date DESC
               LIMIT ?
             """,
           arguments: [chatId, limit])
         while let row = try cursor.next() {
-          guard let text = (row["text"] as? String), !text.trimmingCharacters(in: .whitespaces).isEmpty
+          guard
+            let text = IMessageText.body(
+              text: row["text"] as? String, attributedBody: row["attributed_body"] as? Data),
+            !text.trimmingCharacters(in: .whitespaces).isEmpty
           else { continue }
           out.append(
             RawMessage(

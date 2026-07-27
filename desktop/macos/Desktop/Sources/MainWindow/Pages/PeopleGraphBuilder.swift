@@ -39,6 +39,9 @@ enum PeopleGraphBuilder {
   /// after an explicit user action (e.g. enabling iMessage mapping) to bypass the throttle.
   static func syncIfNeeded(uid: String?, force: Bool = false) async {
     await IMessageExporter.exportIfRequested(force: force)
+    // WhatsApp shares the single Full Disk Access grant and the same `peopleIMessageExport` consent
+    // flag, so opting in to on-device message mapping re-reads it too. Own throttle; off-main.
+    await WhatsAppReader.exportIfRequested(force: force)
     await rebuildIfNeeded(uid: uid, force: force)
     // Write derived graph-structural relationship facts (who-knows-whom via shared groups/circles)
     // into the user's memory store. Self-gated on the same iMessage consent flag and its own
@@ -97,12 +100,17 @@ enum PeopleGraphBuilder {
       return
     }
 
-    let exportURL = userDir.appendingPathComponent("imessage_export.json")
-    guard let root = readExport(at: exportURL) else {
-      // Export not produced yet (e.g. first run before FDA/export completes) — no-op.
-      log("PeopleGraphBuilder: no readable imessage_export.json at \(exportURL.path); skipping")
+    // Read every on-device connector export present, tag each with its channel, and merge them into
+    // one root so identity resolution, edges, and communities are computed across all channels at
+    // once (a person on both iMessage and WhatsApp resolves to a single node).
+    let imessage = readExport(at: userDir.appendingPathComponent("imessage_export.json"))
+    let whatsapp = readExport(at: userDir.appendingPathComponent("whatsapp_export.json"))
+    guard imessage != nil || whatsapp != nil else {
+      // No export produced yet (e.g. first run before FDA/export completes) — no-op.
+      log("PeopleGraphBuilder: no readable imessage/whatsapp export in \(userDir.path); skipping")
       return
     }
+    let root = mergedRoot(imessage: imessage, whatsapp: whatsapp)
 
     let contactsByPhone = loadContactsByPhone()
 
@@ -149,12 +157,22 @@ enum PeopleGraphBuilder {
       groups = (try? c.decode([Group].self, forKey: .groups)) ?? []
     }
 
+    /// Direct construction used when merging multiple channel exports into one root.
+    init(handles: [Handle], groups: [Group]) {
+      self.handles = handles
+      self.groups = groups
+    }
+
     struct Handle: Decodable {
       let handle: String
       let phoneLast10: String?
       let contactName: String?
       let messageCount: Int
       let lastDate: String?
+      /// Which connector this handle came from ("imessage" / "whatsapp"). Not part of the on-disk
+      /// export shape — stamped in-memory at merge time — so it defaults to "imessage" for the
+      /// iMessage export, which carries no channel field.
+      var channel: String = "imessage"
 
       enum CodingKeys: String, CodingKey {
         case handle
@@ -172,12 +190,21 @@ enum PeopleGraphBuilder {
         messageCount = (try? c.decode(Int.self, forKey: .messageCount)) ?? 0
         lastDate = try? c.decodeIfPresent(String.self, forKey: .lastDate)
       }
+
+      func withChannel(_ channel: String) -> Handle {
+        var copy = self
+        copy.channel = channel
+        return copy
+      }
     }
 
     struct Group: Decodable {
       let displayName: String
       let memberCount: Int?
       let members: [Member]
+      /// Source connector for this group ("imessage" / "whatsapp"); stamped at merge time so edge
+      /// `sources` and community `channel` carry honest provenance. Defaults to "imessage".
+      var channel: String = "imessage"
 
       enum CodingKeys: String, CodingKey {
         case displayName = "display_name"
@@ -190,6 +217,12 @@ enum PeopleGraphBuilder {
         displayName = (try? c.decode(String.self, forKey: .displayName)) ?? ""
         memberCount = try? c.decodeIfPresent(Int.self, forKey: .memberCount)
         members = (try? c.decode([Member].self, forKey: .members)) ?? []
+      }
+
+      func withChannel(_ channel: String) -> Group {
+        var copy = self
+        copy.channel = channel
+        return copy
       }
     }
 
@@ -215,6 +248,24 @@ enum PeopleGraphBuilder {
     return try? JSONDecoder().decode(ExportRoot.self, from: data)
   }
 
+  /// Combine the per-connector exports into one root, stamping each handle/group with its channel so
+  /// every downstream computation (canonical people, edges, communities) runs once over all sources.
+  /// Nil inputs are skipped; identity dedupe across channels then happens naturally in
+  /// `buildCanonicalPeople` (same `phone_last10` ⇒ one person, regardless of channel).
+  static func mergedRoot(imessage: ExportRoot?, whatsapp: ExportRoot?) -> ExportRoot {
+    var handles: [ExportRoot.Handle] = []
+    var groups: [ExportRoot.Group] = []
+    if let im = imessage {
+      handles += im.handles.map { $0.withChannel("imessage") }
+      groups += im.groups.map { $0.withChannel("imessage") }
+    }
+    if let wa = whatsapp {
+      handles += wa.handles.map { $0.withChannel("whatsapp") }
+      groups += wa.groups.map { $0.withChannel("whatsapp") }
+    }
+    return ExportRoot(handles: handles, groups: groups)
+  }
+
   // MARK: - Canonical people
 
   struct Canon {
@@ -223,6 +274,11 @@ enum PeopleGraphBuilder {
     var messageCount: Int
     var identified: Bool
     var lastDate: String?
+    /// Per-channel message counts ("imessage" / "whatsapp" → count). Drives the multi-channel
+    /// breakdown in `createPeople`; a person seen on both channels gets one card with two channels.
+    var messagesByChannel: [String: Int] = [:]
+    /// Per-channel most-recent message date, used to pick the channel for `lastTouch`.
+    var lastByChannel: [String: String] = [:]
   }
 
   /// Resolved people plus the lookup maps used to turn a group member (handle / phone) into a
@@ -255,10 +311,14 @@ enum PeopleGraphBuilder {
     var phoneSample: [String: String] = [:]  // representative handle string for a fallback name
     var phoneContactName: [String: String] = [:]  // name carried by the export itself (if any)
     var phoneLast: [String: String] = [:]  // most-recent message ISO date per phone
+    var phoneMsgCh: [String: [String: Int]] = [:]  // phone → channel → count
+    var phoneLastCh: [String: [String: String]] = [:]  // phone → channel → newest ISO date
     var emailMsg: [String: Int] = [:]
     var emailSample: [String: String] = [:]
     var emailContactName: [String: String] = [:]
     var emailLast: [String: String] = [:]
+    var emailMsgCh: [String: [String: Int]] = [:]
+    var emailLastCh: [String: [String: String]] = [:]
 
     // Keep the newest ISO-8601 date. The exporter writes a fixed `.withInternetDateTime`
     // format, so lexicographic comparison equals chronological ordering.
@@ -267,29 +327,45 @@ enum PeopleGraphBuilder {
       if let cur = store[key], cur >= d { return }
       store[key] = d
     }
+    // Same newest-wins rule, but keyed per (identity, channel).
+    func keepNewerChannel(_ store: inout [String: [String: String]], _ key: String, _ channel: String, _ date: String?)
+    {
+      guard let d = nonEmpty(date) else { return }
+      if let cur = store[key]?[channel], cur >= d { return }
+      store[key, default: [:]][channel] = d
+    }
 
     for h in root.handles {
+      let msgs = max(h.messageCount, 0)
       if let ph = phoneKey(explicit: h.phoneLast10, handle: h.handle) {
-        phoneMsg[ph, default: 0] += max(h.messageCount, 0)
+        phoneMsg[ph, default: 0] += msgs
+        phoneMsgCh[ph, default: [:]][h.channel, default: 0] += msgs
         if phoneSample[ph] == nil { phoneSample[ph] = h.handle }
         if let cn = nonEmpty(h.contactName), phoneContactName[ph] == nil { phoneContactName[ph] = cn }
         keepNewer(&phoneLast, ph, h.lastDate)
+        keepNewerChannel(&phoneLastCh, ph, h.channel, h.lastDate)
       } else {
         let key = h.handle.lowercased()
         guard !key.isEmpty else { continue }
-        emailMsg[key, default: 0] += max(h.messageCount, 0)
+        emailMsg[key, default: 0] += msgs
+        emailMsgCh[key, default: [:]][h.channel, default: 0] += msgs
         if emailSample[key] == nil { emailSample[key] = h.handle }
         if let cn = nonEmpty(h.contactName), emailContactName[key] == nil { emailContactName[key] = cn }
         keepNewer(&emailLast, key, h.lastDate)
+        keepNewerChannel(&emailLastCh, key, h.channel, h.lastDate)
       }
     }
     for g in root.groups {
       for m in g.members {
         if let ph = phoneKey(explicit: m.phoneLast10, handle: m.handle) {
           if phoneMsg[ph] == nil { phoneMsg[ph] = 0 }
+          // Record the channel a group-only person appeared on, at zero direct messages, so their
+          // card still shows the right channel dot.
+          if phoneMsgCh[ph]?[g.channel] == nil { phoneMsgCh[ph, default: [:]][g.channel] = 0 }
           if phoneSample[ph] == nil { phoneSample[ph] = m.handle ?? ph }
         } else if let hh = m.handle?.lowercased(), !hh.isEmpty {
           if emailMsg[hh] == nil { emailMsg[hh] = 0 }
+          if emailMsgCh[hh]?[g.channel] == nil { emailMsgCh[hh, default: [:]][g.channel] = 0 }
           if emailSample[hh] == nil { emailSample[hh] = m.handle ?? hh }
         }
       }
@@ -297,7 +373,10 @@ enum PeopleGraphBuilder {
 
     var people = People()
 
-    func upsert(id: String, name: String, messages: Int, identified: Bool, lastDate: String?) {
+    func upsert(
+      id: String, name: String, messages: Int, identified: Bool, lastDate: String?,
+      byChannel: [String: Int], lastByChannel: [String: String]
+    ) {
       if var existing = people.canonByID[id] {
         existing.messageCount += messages
         existing.identified = existing.identified || identified
@@ -306,10 +385,15 @@ enum PeopleGraphBuilder {
         if let d = nonEmpty(lastDate), existing.lastDate.map({ $0 < d }) ?? true {
           existing.lastDate = d
         }
+        for (ch, count) in byChannel { existing.messagesByChannel[ch, default: 0] += count }
+        for (ch, d) in lastByChannel where existing.lastByChannel[ch].map({ $0 < d }) ?? true {
+          existing.lastByChannel[ch] = d
+        }
         people.canonByID[id] = existing
       } else {
         people.canonByID[id] = Canon(
-          id: id, name: name, messageCount: messages, identified: identified, lastDate: nonEmpty(lastDate))
+          id: id, name: name, messageCount: messages, identified: identified, lastDate: nonEmpty(lastDate),
+          messagesByChannel: byChannel, lastByChannel: lastByChannel)
       }
       people.idName[id] = people.canonByID[id]?.name ?? name
     }
@@ -319,14 +403,18 @@ enum PeopleGraphBuilder {
       let resolved = contactsByPhone[ph] ?? phoneContactName[ph]
       let name = resolved ?? phoneSample[ph] ?? ph
       let id = slug(name)
-      upsert(id: id, name: name, messages: phoneMsg[ph] ?? 0, identified: resolved != nil, lastDate: phoneLast[ph])
+      upsert(
+        id: id, name: name, messages: phoneMsg[ph] ?? 0, identified: resolved != nil, lastDate: phoneLast[ph],
+        byChannel: phoneMsgCh[ph] ?? [:], lastByChannel: phoneLastCh[ph] ?? [:])
       people.idByPhone[ph] = id
     }
     for hh in emailMsg.keys.sorted() {
       let resolved = emailContactName[hh]
       let name = resolved ?? emailSample[hh] ?? hh
       let id = slug(name)
-      upsert(id: id, name: name, messages: emailMsg[hh] ?? 0, identified: resolved != nil, lastDate: emailLast[hh])
+      upsert(
+        id: id, name: name, messages: emailMsg[hh] ?? 0, identified: resolved != nil, lastDate: emailLast[hh],
+        byChannel: emailMsgCh[hh] ?? [:], lastByChannel: emailLastCh[hh] ?? [:])
       people.idByEmail[hh] = id
     }
 
@@ -350,7 +438,9 @@ enum PeopleGraphBuilder {
     var connectionsByID: [String: [[String: Any]]] = [:]  // person id → [{id,name,weight,sources,context}]
     var idName: [String: String] = [:]
     var peopleInGraph = 0
-    var groupsUsed = 0
+    /// Number of graph-contributing groups per channel ("imessage" / "whatsapp"), surfaced in the
+    /// social-graph stats so the UI can show which connectors fed the graph.
+    var groupsUsedByChannel: [String: Int] = [:]
   }
 
   /// Unordered pair key (a <= b) for edge aggregation.
@@ -372,7 +462,7 @@ enum PeopleGraphBuilder {
     var edgeW: [Pair: Double] = [:]
     var edgeSrc: [Pair: Set<String>] = [:]
     var edgeCtx: [Pair: [String: Int]] = [:]
-    var groupsUsed = 0
+    var groupsUsedByChannel: [String: Int] = [:]
 
     // Each shared group of resolved size m contributes 1/(m-1) to every member pair.
     for g in root.groups {
@@ -383,7 +473,7 @@ enum PeopleGraphBuilder {
       let members = ids.sorted()
       let m = members.count
       guard m >= 2, m <= maxGroup else { continue }
-      groupsUsed += 1
+      groupsUsedByChannel[g.channel, default: 0] += 1
       let contrib = 1.0 / Double(m - 1)
       let label = g.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
       let lower = label.lowercased()
@@ -392,7 +482,9 @@ enum PeopleGraphBuilder {
         for j in (i + 1)..<members.count {
           let key = Pair(members[i], members[j])
           edgeW[key, default: 0] += contrib
-          edgeSrc[key, default: []].insert("imessage")
+          // Real provenance: an edge from a WhatsApp group is sourced "whatsapp"; a pair that
+          // co-occurs on both channels carries both, corroborating the "knows" relationship.
+          edgeSrc[key, default: []].insert(g.channel)
           if !generic { edgeCtx[key, default: [:]][label, default: 0] += 1 }
         }
       }
@@ -448,7 +540,7 @@ enum PeopleGraphBuilder {
     graph.edges = edges
     graph.idName = people.idName
     graph.peopleInGraph = adj.count
-    graph.groupsUsed = groupsUsed
+    graph.groupsUsedByChannel = groupsUsedByChannel
 
     // circles + per-person circle chip (label = most-central members by closeness)
     for (i, comp) in comps.enumerated() {
@@ -539,7 +631,7 @@ enum PeopleGraphBuilder {
       guard known.count >= 2 else { continue }
       result.list.append([
         "name": name,
-        "channel": "imessage",
+        "channel": g.channel,
         "category": categorize(name),
         "size_total": g.memberCount ?? g.members.count,
         "known_members": known,
@@ -582,7 +674,7 @@ enum PeopleGraphBuilder {
         "edges": graph.edges.count,
         "circles": graph.circles.count,
         "people_in_graph": graph.peopleInGraph,
-        "groups_used": ["imessage": graph.groupsUsed],
+        "groups_used": graph.groupsUsedByChannel,
       ],
       "edges": graph.edges.map {
         ["a": $0.a, "b": $0.b, "weight": $0.weight, "sources": $0.sources, "context": $0.context]
@@ -618,31 +710,51 @@ enum PeopleGraphBuilder {
     return !persons.isEmpty
   }
 
+  /// Human label for an on-device channel key (e.g. "whatsapp" → "WhatsApp").
+  static func channelLabel(_ key: String) -> String {
+    switch key {
+    case "imessage": return "iMessage"
+    case "whatsapp": return "WhatsApp"
+    default: return key.prefix(1).uppercased() + key.dropFirst()
+    }
+  }
+
   /// Pure people-list creation (no IO): turns the canonical people plus derived graph/communities
-  /// into the array of person dictionaries `PeoplePage`'s `PeopleIntelPerson` decodes. Everyone is
-  /// a single on-device iMessage channel today; `closeness` is a proxy = total iMessage
-  /// `message_count`. Sorted by closeness desc (id as a stable tiebreak).
+  /// into the array of person dictionaries `PeoplePage`'s `PeopleIntelPerson` decodes. A person seen
+  /// on more than one connector gets one card with a channel entry per connector (that is the
+  /// multi-channel view); `closeness` is a proxy = total `message_count` across channels. Sorted by
+  /// closeness desc (id as a stable tiebreak).
   static func createPeople(people: People, graph: Graph, communities: Communities) -> [[String: Any]] {
     people.canonByID.values
       .map { canon -> [String: Any] in
         let id = canon.id
-        var channel: [String: Any] = [
-          "key": "imessage",
-          "label": "iMessage",
-          "count": canon.messageCount,
-        ]
-        if let last = canon.lastDate { channel["last"] = last }
+        // One channel entry per connector this person was seen on, biggest first (stable by key).
+        let byChannel =
+          canon.messagesByChannel.isEmpty
+          ? ["imessage": canon.messageCount] : canon.messagesByChannel
+        let channels: [[String: Any]] =
+          byChannel
+          .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+          .map { key, count -> [String: Any] in
+            var channel: [String: Any] = ["key": key, "label": channelLabel(key), "count": count]
+            if let last = canon.lastByChannel[key] { channel["last"] = last }
+            return channel
+          }
 
         var person: [String: Any] = [
           "id": id,
           "name": canon.name,
           "closeness": Double(canon.messageCount),
-          "channels": [channel],
+          "channels": channels,
         ]
         // Only claim a contact name when we actually resolved a human (Contacts / export name).
         if canon.identified { person["contactName"] = canon.name }
         if let last = canon.lastDate {
-          person["lastTouch"] = ["channel": "imessage", "date": last]
+          // Attribute the last touch to whichever channel carried that newest date.
+          let lastChannel =
+            canon.lastByChannel.first(where: { $0.value == last })?.key
+            ?? channels.first?["key"] as? String ?? "imessage"
+          person["lastTouch"] = ["channel": lastChannel, "date": last]
         }
         // Graph-derived social fields (same shape the merge path folds onto backend cards).
         if let conns = graph.connectionsByID[id] { person["connections"] = conns }

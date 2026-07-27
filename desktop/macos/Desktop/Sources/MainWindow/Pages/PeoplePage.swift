@@ -862,15 +862,35 @@ struct PeoplePage: View {
   // WhatsApp / Telegram: the on-device engine does not read either yet, so these are honestly
   // "Coming soon" — not "connected". Don't imply a signal we don't have.
   private var whatsappCard: some View {
-    ConnectorCard(
+    let granted = connectors.fullDiskAccess
+    let enabled = connectors.imessageMappingEnabled
+    // WhatsApp shares the same Full Disk Access grant and on-device mapping opt-in as iMessage,
+    // and is read by WhatsAppReader once enabled.
+    let statusText: String
+    let actionTitle: String
+    let action: () -> Void
+    if !granted {
+      statusText = "Needs Full Disk Access"
+      actionTitle = "Grant"
+      action = { connectors.openFullDiskAccessSettings() }
+    } else if !enabled {
+      statusText = "Reads WhatsApp on-device only"
+      actionTitle = "Enable"
+      action = { connectors.enableIMessageMapping() }
+    } else {
+      statusText = "Mapping · on-device"
+      actionTitle = "Open Settings"
+      action = { connectors.openFullDiskAccessSettings() }
+    }
+    return ConnectorCard(
       name: "WhatsApp",
       systemIcon: "bubble.left.and.bubble.right.fill",
       tint: PeopleChannelPalette.color(for: "whatsapp"),
-      isConnected: false,
-      statusText: "Coming soon",
-      actionTitle: nil,
-      actionEnabled: false,
-      action: {}
+      isConnected: granted && enabled,
+      statusText: statusText,
+      actionTitle: actionTitle,
+      actionEnabled: true,
+      action: action
     )
   }
 
