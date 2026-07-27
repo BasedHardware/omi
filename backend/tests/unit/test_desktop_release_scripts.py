@@ -335,7 +335,7 @@ def test_qualification_evidence_cli_accepts_the_beta_artifact_pair_end_to_end():
             text=True,
         )
         assert result.returncode == 0, result.stderr or result.stdout
-        written = json.loads(evidence_out.read_text())
+        written = json.loads(evidence_out.read_text(encoding="utf-8"))
         assert set(written["artifacts"]) == {"Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"}
 
 
@@ -437,9 +437,9 @@ def test_stable_repair_bundle_requires_the_release_publication_time():
 
 
 def test_qualification_is_serialized_by_tag_and_retried_without_release_body_state():
-    codemagic = CODEMAGIC_CONFIG.read_text()
+    codemagic = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
     dispatch = codemagic[codemagic.index("      - name: Dispatch trusted macOS beta qualification") :]
-    qualification = QUALIFY_BETA_WORKFLOW.read_text()
+    qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
 
     assert "duplicate dispatches" in dispatch
     assert 'gh release edit "$CM_TAG"' not in dispatch
@@ -459,7 +459,7 @@ def test_qualification_is_serialized_by_tag_and_retried_without_release_body_sta
 
 
 def test_qualification_publishes_the_single_artifact_pair_and_immutable_evidence_for_server_readback():
-    qualification = QUALIFY_BETA_WORKFLOW.read_text()
+    qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
 
     for asset in ("Omi.zip", "omi.dmg"):
         assert asset in qualification
@@ -472,7 +472,7 @@ def test_qualification_publishes_the_single_artifact_pair_and_immutable_evidence
 
 
 def test_stable_promotion_remains_manual_only():
-    workflow = PROMOTE_PROD_WORKFLOW.read_text()
+    workflow = PROMOTE_PROD_WORKFLOW.read_text(encoding="utf-8")
 
     assert "on:\n  workflow_dispatch:" in workflow
     assert "\n  schedule:" not in workflow
@@ -482,11 +482,11 @@ def test_stable_promotion_remains_manual_only():
 
 
 def test_stable_promotion_policy_guard_matches_the_workflow_owned_contract():
-    assert promotion_policy.validate(PROMOTE_PROD_WORKFLOW.read_text()) == []
+    assert promotion_policy.validate(PROMOTE_PROD_WORKFLOW.read_text(encoding="utf-8")) == []
 
 
 def test_stable_workflow_reads_current_beta_and_owns_its_cas_inputs():
-    workflow = PROMOTE_PROD_WORKFLOW.read_text()
+    workflow = PROMOTE_PROD_WORKFLOW.read_text(encoding="utf-8")
 
     assert "Read current pointers and capture workflow-owned CAS inputs" in workflow
     assert "Fetch exact retained qualified manifest" in workflow
@@ -502,7 +502,7 @@ def test_stable_workflow_reads_current_beta_and_owns_its_cas_inputs():
 
 
 def test_stable_workflow_selects_its_own_trusted_qualification():
-    workflow = PROMOTE_PROD_WORKFLOW.read_text()
+    workflow = PROMOTE_PROD_WORKFLOW.read_text(encoding="utf-8")
     assert (
         'actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&status=completed&per_page=100'
         in workflow
@@ -537,7 +537,7 @@ def test_beta_pointer_lost_response_retry_remains_exact_and_generation_stable():
 
 def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
     """Static wiring contract: a stable pointer is never advanced ahead of its repair artifact."""
-    workflow = PROMOTE_PROD_WORKFLOW.read_text()
+    workflow = PROMOTE_PROD_WORKFLOW.read_text(encoding="utf-8")
 
     immutable_repair = workflow.index("      - name: Publish immutable stable repair installer")
     pointer = workflow.index("      - name: Advance explicit stable pointer")
