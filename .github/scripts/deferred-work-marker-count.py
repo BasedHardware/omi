@@ -104,7 +104,7 @@ def added_lines(base: str, path: str) -> list[tuple[int, str]]:
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
+        encoding="utf-8",
     )
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or f"git diff failed for {path}")
@@ -170,7 +170,7 @@ def marker_counts_at_base(base: str, path: str) -> Counter[str]:
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
-        text=True,
+        encoding="utf-8",
     )
     if result.returncode:
         return Counter()
