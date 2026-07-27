@@ -21,6 +21,7 @@ from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Structured
 from models.structured_extraction import ActionItemsExtraction, StructuredExtraction
 from .clients import get_llm, get_llm_gateway_chat_structured, parser
+from .discard_parser import DiscardConversation, LenientDiscardParser
 from utils.byok import has_byok_keys
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
@@ -83,10 +84,6 @@ def _has_gpt56_cacheable_static_prefix(content: str) -> bool:
 # =============================================
 # The implementation moved to conversation_folder.py; that route still uses
 # get_llm('conv_folder') as the production model/provider plug-in seam.
-
-
-class DiscardConversation(BaseModel):
-    discard: bool = Field(description="If the conversation should be discarded or not")
 
 
 class SpeakerIdMatch(BaseModel):
@@ -595,7 +592,7 @@ Content:
 {format_instructions}'''.replace(
         '    ', ''
     ).strip()
-    custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)
+    custom_parser = LenientDiscardParser(pydantic_object=DiscardConversation)
     prompt_values = {
         'full_context': full_context,
         'duration_context': duration_context,
