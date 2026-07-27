@@ -152,3 +152,42 @@ final class MemoryAtlasRenderPlanCache {
       && zoom >= MemoryAtlasZoomPolicy.automaticCanvasLabelZoom(nodeCount: snapshot.nodes.count)
   }
 }
+
+/// The immutable, expensive part of one Brain Map revision.
+///
+/// A graph response can be large enough that calculating a content digest,
+/// relaxing its layout, sorting its replay connections, and rebuilding the
+/// camera-plan cache is real work. A SwiftUI view initializer is not a safe
+/// owner for any of it: initializers run again whenever unrelated observed
+/// state publishes (for example, a memory sync while the Brain Map is open).
+///
+/// This object is prepared once for a fetched graph revision and then passed
+/// unchanged through every render of that revision. It deliberately owns the
+/// mutable render-plan cache as well, so a gesture retains its cached cohort
+/// instead of recreating it for each frame.
+final class MemoryAtlasProjection: @unchecked Sendable {
+  let graph: KnowledgeGraphResponse
+  let snapshot: MemoryAtlasSnapshot
+  let renderPlanCache: MemoryAtlasRenderPlanCache
+  let connectionBirthFractions: [Double]
+
+  init(graph: KnowledgeGraphResponse, userName: String?) {
+    self.graph = graph
+    let snapshot = MemoryAtlasSnapshotCache.shared.snapshot(for: graph, userName: userName)
+    self.snapshot = snapshot
+    renderPlanCache = MemoryAtlasRenderPlanCache(snapshot: snapshot)
+
+    if let timeline = snapshot.timeline {
+      connectionBirthFractions = snapshot.edges.map { placement in
+        let endpointBirth =
+          [placement.edge.sourceId, placement.edge.targetId].map { nodeID in
+            nodeID == snapshot.anchorNodeID ? 0 : (timeline.playbackFractionByNodeID[nodeID] ?? 1)
+          }.max() ?? 1
+        return max(timeline.fraction(for: placement.edge.createdAt), endpointBirth)
+      }
+      .sorted()
+    } else {
+      connectionBirthFractions = []
+    }
+  }
+}

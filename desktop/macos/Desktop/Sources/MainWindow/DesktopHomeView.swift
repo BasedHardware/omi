@@ -1367,34 +1367,16 @@ private struct MemoryHubPage: View {
   private var brainMapDestination: some View {
     switch brainMapPresentationMode {
     case .canonicalAtlas:
-      CanonicalMemoryAtlasTabView(
-        viewModel: viewModelContainer.memoryGraphViewModel,
-        // Evidence is read in place in the Brain Map's own inspector. The
-        // earlier behavior switched the hub to Memories, which threw away the
-        // camera, the time cursor, and the selection just to read one memory.
-        evidenceProvider: { memoryIds in
-          // Resolved against the local cache, not the visible page: that page
-          // is a tier-filtered, device-scoped slice, so an entity's evidence
-          // was routinely reported missing while sitting on disk.
-          MemoryAtlasEvidence.resolve(
-            memoryIds, in: await memoriesViewModel.memories(withIDs: memoryIds))
-        },
-        // Reading evidence stays in the Brain Map; acting on a memory does not.
-        // The destination only changes once the memory is actually open, so a
-        // citation the cache cannot resolve never strands the user on the
-        // Memories page with nothing selected.
-        onOpenMemory: { memoryId in
-          Task { @MainActor in
-            guard await memoriesViewModel.openMemory(id: memoryId) else { return }
-            destinationRawValue = MemoryHubDestination.memories.rawValue
-          }
-        },
-        // Escape out of the map itself lands on the hub — the level the Brain
-        // Map is a destination of, one step back like every other Escape. The
-        // map calls this directly rather than letting the key travel up to the
-        // window: a canvas takes no focus, so nothing up there ever hears it.
+      // The Memory view model publishes for list/sync changes that do not
+      // alter the Brain Map. Keep the expensive Canvas subtree out of those
+      // parent transactions; it independently observes the graph view model
+      // and still updates immediately for a graph revision or rebuild.
+      CanonicalBrainMapDestination(
+        graphViewModel: viewModelContainer.memoryGraphViewModel,
+        memoriesViewModel: memoriesViewModel,
         onLeave: { destinationRawValue = MemoryHubDestination.memories.rawValue }
       )
+      .equatable()
     case .legacyBrainMap:
       MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
     case .undetermined:
@@ -1407,6 +1389,40 @@ private struct MemoryHubPage: View {
         ProgressView().tint(OmiColors.textTertiary)
       }
       .accessibilityIdentifier("brain_map_resolving_cohort")
+    }
+  }
+
+  /// An update island around the Canvas-heavy Brain Map.
+  ///
+  /// `MemoryHubPage` has to observe `MemoriesViewModel` long enough to resolve
+  /// the canonical cohort, but its normal list refreshes must not rebuild the
+  /// map's SwiftUI graph. Reference identity is intentional: evidence reads
+  /// and open actions use the current model at invocation time, while the map
+  /// itself observes `MemoryGraphViewModel` for the only state that changes its
+  /// projection.
+  private struct CanonicalBrainMapDestination: View, Equatable {
+    let graphViewModel: MemoryGraphViewModel
+    let memoriesViewModel: MemoriesViewModel
+    let onLeave: () -> Void
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+      lhs.graphViewModel === rhs.graphViewModel && lhs.memoriesViewModel === rhs.memoriesViewModel
+    }
+
+    var body: some View {
+      CanonicalMemoryAtlasTabView(
+        viewModel: graphViewModel,
+        evidenceProvider: { memoryIDs in
+          MemoryAtlasEvidence.resolve(memoryIDs, in: await memoriesViewModel.memories(withIDs: memoryIDs))
+        },
+        onOpenMemory: { memoryID in
+          Task { @MainActor in
+            guard await memoriesViewModel.openMemory(id: memoryID) else { return }
+            onLeave()
+          }
+        },
+        onLeave: onLeave
+      )
     }
   }
 

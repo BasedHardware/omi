@@ -317,6 +317,34 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     XCTAssertEqual(cache.plannerInvocationCount, 2)
   }
 
+  func testProjectionKeepsTheSnapshotAndGestureCacheAcrossViewTransactions() {
+    let graph = makeProductionScaleGraph()
+    let projection = MemoryAtlasProjection(graph: graph, userName: "Atlas Owner")
+    let viewport = CGSize(width: 1_200, height: 800)
+
+    XCTAssertEqual(projection.snapshot.nodes.count, productionScaleNodeCount)
+    XCTAssertEqual(projection.snapshot.edges.count, productionScaleEdgeCount)
+    XCTAssertEqual(projection.connectionBirthFractions.count, productionScaleEdgeCount)
+    XCTAssertEqual(projection.connectionBirthFractions, projection.connectionBirthFractions.sorted())
+
+    for frame in 0..<120 {
+      _ = projection.renderPlanCache.makePlan(
+        viewportSize: viewport,
+        zoom: 2.2 + CGFloat(frame) * 0.002,
+        pan: CGSize(width: CGFloat(frame), height: -CGFloat(frame)),
+        compact: false,
+        selectedNodeID: nil,
+        matchingNodeIDs: nil,
+        matchingEdges: nil,
+        asOf: nil,
+        isCameraMoving: true
+      )
+    }
+
+    XCTAssertEqual(projection.renderPlanCache.plannerInvocationCount, 1)
+    XCTAssertEqual(projection.renderPlanCache.transientReuseCount, 119)
+  }
+
   func testZoomOnlyAddsStableEntityCohorts() {
     let snapshot = makeProductionScaleSnapshot()
     let zooms: [CGFloat] = [1, 1.35, 1.9, 3.2, 7.5]

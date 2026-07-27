@@ -160,6 +160,10 @@ class MemoryGraphViewModel: ObservableObject {
   @Published var isEmpty = true
   @Published var selectedNodeId: String?
   @Published private(set) var graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
+  /// Prepared off the main actor and retained for the complete lifetime of a
+  /// canonical graph revision. The SwiftUI Brain Map can re-render freely
+  /// without rebuilding the relationship layout or losing its gesture cache.
+  @Published private(set) var canonicalAtlasProjection: MemoryAtlasProjection?
 
   let scene = SCNScene()
   let cameraNode = SCNNode()
@@ -306,7 +310,12 @@ class MemoryGraphViewModel: ObservableObject {
           extra: ["user_visible": true]
         )
       }
+      let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let projection = await Task.detached(priority: .userInitiated) {
+        MemoryAtlasProjection(graph: response, userName: givenName.isEmpty ? nil : givenName)
+      }.value
       guard generation == sessionGeneration else { return }
+      canonicalAtlasProjection = projection
       graphResponse = response
       isEmpty = response.nodes.isEmpty
       hasLoadedCanonicalAtlas = true
@@ -346,6 +355,12 @@ class MemoryGraphViewModel: ObservableObject {
         guard generation == sessionGeneration else { return false }
 
         if !response.nodes.isEmpty {
+          let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let projection = await Task.detached(priority: .userInitiated) {
+            MemoryAtlasProjection(graph: response, userName: givenName.isEmpty ? nil : givenName)
+          }.value
+          guard generation == sessionGeneration else { return false }
+          canonicalAtlasProjection = projection
           graphResponse = response
           isEmpty = false
           hasLoadedCanonicalAtlas = true
@@ -655,6 +670,7 @@ class MemoryGraphViewModel: ObservableObject {
     isEmpty = true
     selectedNodeId = nil
     graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
+    canonicalAtlasProjection = nil
     isAnimating = false
     lastLoadedAt = .distantPast
     isPreparing = false

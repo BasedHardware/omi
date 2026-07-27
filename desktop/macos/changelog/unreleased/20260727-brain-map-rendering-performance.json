@@ -1,0 +1,3 @@
+{
+  "change": "Improved Brain Map responsiveness by preparing graph layouts off the UI path and isolating the map from background memory refreshes"
+}

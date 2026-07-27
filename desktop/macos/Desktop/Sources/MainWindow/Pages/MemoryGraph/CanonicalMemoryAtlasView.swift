@@ -2020,11 +2020,12 @@ struct CanonicalMemoryAtlasPage: View {
   /// cannot drift. Free after the first build — the cache is keyed on graph
   /// content and the surface has already paid for it.
   private var headerCountLabel: String {
-    let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let snapshot = MemoryAtlasSnapshotCache.shared.snapshot(
-      for: viewModel.graphResponse, userName: givenName.isEmpty ? nil : givenName)
+    if let projection = viewModel.canonicalAtlasProjection {
+      return MemoryAtlasLayoutEngine.countLabel(
+        entities: projection.snapshot.nodes.count, connections: projection.snapshot.edges.count)
+    }
     return MemoryAtlasLayoutEngine.countLabel(
-      entities: snapshot.nodes.count, connections: snapshot.edges.count)
+      entities: viewModel.graphResponse.nodes.count, connections: viewModel.graphResponse.edges.count)
   }
 
   var body: some View {
@@ -2073,7 +2074,8 @@ struct CanonicalMemoryAtlasPage: View {
       Divider().overlay(OmiColors.border.opacity(0.25))
 
       CanonicalMemoryAtlasSurface(
-        graph: viewModel.graphResponse,
+        graph: viewModel.canonicalAtlasProjection?.graph ?? viewModel.graphResponse,
+        projection: viewModel.canonicalAtlasProjection,
         compact: false,
         evidenceProvider: evidenceProvider,
         onOpenMemory: onOpenMemory,
@@ -2110,7 +2112,8 @@ struct CanonicalMemoryAtlasTabView: View {
 
   var body: some View {
     CanonicalMemoryAtlasSurface(
-      graph: viewModel.graphResponse,
+      graph: viewModel.canonicalAtlasProjection?.graph ?? viewModel.graphResponse,
+      projection: viewModel.canonicalAtlasProjection,
       compact: false,
       evidenceProvider: evidenceProvider,
       onOpenMemory: onOpenMemory,
@@ -2133,6 +2136,10 @@ struct CanonicalMemoryAtlasTabView: View {
 
 private struct CanonicalMemoryAtlasSurface: View {
   let graph: KnowledgeGraphResponse
+  /// Normal app surfaces pass the prebuilt projection from their view model.
+  /// Export previews retain the lightweight fallback so they remain
+  /// self-contained fixtures.
+  let projection: MemoryAtlasProjection?
   let compact: Bool
   /// Resolves the memory ids an entity cites into readable evidence for the
   /// inspector. The surface stays independent of the memories layer; callers
@@ -2210,6 +2217,7 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   init(
     graph: KnowledgeGraphResponse,
+    projection: MemoryAtlasProjection? = nil,
     compact: Bool,
     evidenceProvider: @escaping ([String]) async -> [MemoryAtlasEvidence] = { _ in [] },
     onOpenMemory: ((String) -> Void)? = nil,
@@ -2229,6 +2237,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     previewEvidence: [MemoryAtlasEvidence] = []
   ) {
     self.graph = graph
+    self.projection = projection
     self.compact = compact
     self.evidenceProvider = evidenceProvider
     self.onOpenMemory = onOpenMemory
@@ -2242,17 +2251,21 @@ private struct CanonicalMemoryAtlasSurface: View {
     _selectedEdgeID = State(initialValue: previewSelectedEdgeID)
     _evidence = State(initialValue: previewEvidence)
     _requestedEvidenceIDs = State(initialValue: previewEvidence.map(\.id))
-    let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-    // Memoized: SwiftUI re-runs this initializer on every parent re-render, and
-    // the layout now relaxes the whole graph rather than evaluating a formula
-    // per node.
-    let atlasSnapshot = MemoryAtlasSnapshotCache.shared.snapshot(
-      for: graph,
-      userName: givenName.isEmpty ? nil : givenName
-    )
+    let atlasSnapshot: MemoryAtlasSnapshot
+    if let projection {
+      atlasSnapshot = projection.snapshot
+    } else {
+      let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+      atlasSnapshot = MemoryAtlasSnapshotCache.shared.snapshot(
+        for: graph,
+        userName: givenName.isEmpty ? nil : givenName
+      )
+    }
     snapshot = atlasSnapshot
-    renderPlanCache = MemoryAtlasRenderPlanCache(snapshot: atlasSnapshot)
-    if let timeline = atlasSnapshot.timeline {
+    renderPlanCache = projection?.renderPlanCache ?? MemoryAtlasRenderPlanCache(snapshot: atlasSnapshot)
+    if let projection {
+      connectionBirthFractions = projection.connectionBirthFractions
+    } else if let timeline = atlasSnapshot.timeline {
       connectionBirthFractions = atlasSnapshot.edges.map { placement in
         let endpointBirth =
           [placement.edge.sourceId, placement.edge.targetId].map { nodeID in
@@ -2758,7 +2771,12 @@ private struct CanonicalMemoryAtlasSurface: View {
   private func territory(
     in size: CGSize, plan: MemoryAtlasRenderPlan
   ) -> (islands: [MemoryAtlasNeighbourhoodLabels.Placed], quietened: Set<String>) {
-    guard !compact, matchingNodeIDs == nil,
+    // The replay and live camera gestures deliberately suppress SwiftUI
+    // labels/targets. Re-solving caption placement during those frames would
+    // still walk every visible entity against every coastline, despite none of
+    // those captions being shown. Keep the camera/replay path to Canvas-only
+    // work; territories return as soon as the frame settles.
+    guard !isCameraMoving, !compact, matchingNodeIDs == nil,
       MemoryAtlasNeighbourhoodLabels.areVisible(
         detailLevel: plan.detailLevel, hasSelection: selectedNodeID != nil,
         isInsideNeighbourhood: enteredRegionID != nil)
