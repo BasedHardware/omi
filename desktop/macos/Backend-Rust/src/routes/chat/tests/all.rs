@@ -217,6 +217,7 @@ fn test_anthropic_usage_to_openai() {
     assert_eq!(openai.prompt_tokens, 130); // 100 + 10 + 20
     assert_eq!(openai.completion_tokens, 50);
     assert_eq!(openai.total_tokens, 180);
+    assert_eq!(openai.web_search_requests, 0);
 }
 
 #[test]
@@ -249,6 +250,7 @@ fn test_compute_cost_includes_web_search_requests() {
     // tokens: 0.003 + 0.0075, web search: 3 * $0.01
     let expected = 0.003 + 0.0075 + 0.03;
     assert!((cost - expected).abs() < 1e-10);
+    assert_eq!(anthropic_usage_to_openai(&usage).web_search_requests, 3);
 }
 
 #[test]
@@ -2084,6 +2086,7 @@ fn test_make_chunk_with_usage() {
         prompt_tokens: 10,
         completion_tokens: 20,
         total_tokens: 30,
+        web_search_requests: 0,
         prompt_tokens_details: None,
     };
     let chunk = make_chunk(
@@ -2097,6 +2100,7 @@ fn test_make_chunk_with_usage() {
     assert_eq!(chunk["usage"]["prompt_tokens"], 10);
     assert_eq!(chunk["usage"]["completion_tokens"], 20);
     assert_eq!(chunk["usage"]["total_tokens"], 30);
+    assert_eq!(chunk["usage"]["web_search_requests"], 0);
 }
 
 #[test]

@@ -66,7 +66,7 @@ Beta candidates are cut **on every macOS-affecting merge to `main`** (`push` tri
 3. **Qualification** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication, but executed only by `qualify-m1-studio` (label `omi-qual-m1-studio`). The global non-cancelling `desktop-beta-qualification-m1` lock queues all candidates and never cancels local cleanup. It rebuilds the exact tag, runs hermetic T2 and fault injection, and writes evidence. No Codemagic or M4 path can qualify. See `desktop/macos/docs/qualification-environment.md` for lease, port, retention, and cleanup controls; its local stack reaps only matching lease-token/process-group/port provenance and leaves foreign listeners alone.
 4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — a separate `workflow_run` starts only after successful qualification, derives and validates the immutable `v*-macos` tag against the qualification SHA, then invokes the same internal-only backend admission authority. The backend captures the server-owned Beta admission generation before validating digest-matched evidence, then atomically verifies that the reservation and pause state are unchanged while registering the immutable manifest and advancing the explicit beta pointer. If that handoff fails after qualification, use only `desktop_recover_beta.yml` with the exact tag, `confirm=recover-beta`, and a reason.
 
-The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; merging desktop code does not deploy the prod backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
+The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; it is not the Rust desktop-backend release vector. Development Rust delivery is owned by `desktop_backend_auto_dev.yml`; protected production Rust delivery and retained-revision recovery are owned by `desktop_backend_prod.yml` and `desktop_backend_recover_prod.yml`. Merging desktop code does not deploy either production backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
 
 Signed artifact smoke scope:
 - Always-on release audit covers bundle identity, version/tag alignment, signing/Keychain entitlements, Sparkle metadata, backend URL leakage, helper/runtime packaging, artifact readability, and local storage package surface.
@@ -78,7 +78,7 @@ Signed artifact smoke scope:
 Stable is manual:
 - Automatic qualification never promotes Stable. `desktop_promote_prod.yml` remains `workflow_dispatch` only and protected by the `prod` environment.
 - Run it with the current qualified Beta `release_tag` and `confirm=promote-stable`. It reads and compare-and-swaps the current Stable pointer itself, advances only that pointer, updates the existing legacy/static bridges, and verifies hashes and feed output.
-- Backend deployments remain independent in their established workflows. Do not manually edit release visibility or pointers outside the promotion workflow.
+- Python backend and Rust desktop-backend deployments remain independent in their named workflows. Stable promotion checks live desktop chat-contract compatibility but does not deploy either backend. Do not manually edit release visibility or pointers outside the promotion workflow.
 
 **Codemagic CLI & API:**
 - Token: `$CODEMAGIC_API_TOKEN` (set in `~/.zshrc`)
