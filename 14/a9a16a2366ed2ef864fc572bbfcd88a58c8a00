@@ -1,0 +1,85 @@
+integrations/omi-even/app/src/audio.ts
+  s_e939211e79c9f1::t_a4f0ef1137e19b 1-99
+integrations/omi-even/app/src/ask-recorder.ts
+  s_e939211e79c9f1::t_380988c8d967fe 208-212
+  s_e939211e79c9f1::t_19c23eb9dd3bf9 1-134,138,141-150,152-155,157-207,213-215
+  s_e939211e79c9f1::t_39bb126581384d 135-137,139-140,151,156
+integrations/omi-even/app/scripts/mock-bridge.mjs
+  s_e939211e79c9f1::t_01f12e066d4a75 95,205-206,231,239,403
+  s_e939211e79c9f1::t_3ea7cd60344808 96
+  s_525e97d8f6425e::t_0277b80b112659 5-8,16-21,72-75,78-94,97-99,195-204,207,218-230,232-238,240-241,244-248,265-286,290,294,302-316,353-359,396-402,404-409
+integrations/omi-even/app/src/config.ts
+  s_e939211e79c9f1::t_91c3e7252f5df5 13-14,16,18-19,21-26
+  s_e939211e79c9f1::t_dc50fcac416dab 70-105
+integrations/omi-even/app/scripts/unit-test.mjs
+  s_e939211e79c9f1::t_aa44bd71c92ec6 277-278,280,284-285
+  s_e939211e79c9f1::t_5eb898dc40bc89 4-5,22-23,40-54
+  s_e939211e79c9f1::t_ecac3974170d59 55,205-276,279,281-283,286-452,455
+  s_525e97d8f6425e::t_509d75c9324782 56,456
+integrations/omi-even/app/src/main.ts
+  s_e939211e79c9f1::t_5395e363b5cdd1 3,7-11,17-18,30-33,35,42,46-49,58-68,76-82,91-112,122-124,135-137,164,168-186,188,190-207,227-237,254-257,304-306,331-336,343-359,382-422,424,426-428,430,441,443,448,491-495,501-542,567-569,571-653,658-662,668-669,677-678,680-683,693-698,700,729-732,826-852,898-903,905-912,916,919-929
+  s_e939211e79c9f1::t_8d77a9064c7507 880-889
+  s_e939211e79c9f1::t_bf3973a867636a 299-302
+  s_e939211e79c9f1::t_dc0193699275c6 853
+  s_e939211e79c9f1::t_82a1461221b670 930
+integrations/omi-even/app/src/bridge-client.ts
+  s_e939211e79c9f1::t_c9b0158aee584c 103-121
+  s_e939211e79c9f1::t_763b3d38df2d85 7
+  s_e939211e79c9f1::t_842767903be56f 122-124
+integrations/omi-even/app/src/protocol.ts
+  s_e939211e79c9f1::t_51883ad326cd9d 3-18,25-26,28-34
+  s_e939211e79c9f1::t_315f488c4387de 45-53,62-64
+  s_e939211e79c9f1::t_64c1d85c6e6c50 106-113
+integrations/omi-even/app/scripts/verify-simulator.mjs
+  s_e939211e79c9f1::t_b91d3a63b95888 57,66
+  s_e939211e79c9f1::t_99e35bd2687ec7 32,58-63
+  s_e939211e79c9f1::t_889a7de103c721 528-529
+  s_e939211e79c9f1::t_e1bf5a21039b75 530-531,533,564-566,568-571,573,583-584,586,588-590,592,594,644-726,779-782,784,790-791,793,795,798-802,804,806,809-811
+  s_e939211e79c9f1::t_0645af4bcaf7aa 830
+  s_e939211e79c9f1::t_cbf887dacdc2e3 544,561,582,774,828
+  s_e939211e79c9f1::t_4736e8873b54ca 547
+  s_525e97d8f6425e::t_ef299ad75a9071 18-31,33-35,229-247,253,516-518,521,524-526,532,534-543,545-546,548-560,562-563,567,572,574-581,585,587,591,593,595,597,746-750,754-760,767-773,775-778,783,785-789,792,794,796-797,803,805,807-808,812-827,862-867
+integrations/omi-even/app/README.md
+  s_e939211e79c9f1::t_b89b3920796f53 244-248
+  s_e939211e79c9f1::t_3cffda562602c2 109-111,113-122
+  s_e939211e79c9f1::t_7c5497f05ac957 3,14,22,26-27,32-56
+  s_e939211e79c9f1::t_dacb1c179fb67f 134-139,145-166
+  s_e939211e79c9f1::t_d045365eb0c69c 57
+  s_e939211e79c9f1::t_df9404c7d50f4c 241-243
+  s_e939211e79c9f1::t_6dd3a31e9f7619 249-251
+  s_e62cc04a9a8b97::t_2cdbd21bb4cb21 225-240,252-254
+integrations/omi-even/app/app.json
+  s_525e97d8f6425e::t_83abdc53128c4d 16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "14a9a16a2366ed2ef864fc572bbfcd88a58c8a00",
+  "prompts": {},
+  "sessions": {
+    "s_525e97d8f6425e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81424a8f-9e27-4689-8547-3152f2473712",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_e62cc04a9a8b97": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a2f5cf1117a49814c",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_e939211e79c9f1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7063973-7aff-42e3-a630-daf5ea69dbc0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
