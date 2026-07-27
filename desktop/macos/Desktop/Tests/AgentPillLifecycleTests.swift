@@ -985,6 +985,12 @@ import XCTest
     )
     XCTAssertFalse(source.contains("viewportResizeDetector"))
     XCTAssertFalse(source.contains("handleViewportSizeChange"))
+    // omi-test-quality: source-inspection -- static contract: geometry inside
+    // the LazyVStack must not feed transcript layout values back into state;
+    // the behavioral scroll/active-mark coverage lives in
+    // ChatPromptTimelineTests and ChatScrollLiveEdgeTests.
+    XCTAssertFalse(source.contains(".onGeometryChange(for: ChatTranscriptContentFrame.self)"))
+    XCTAssertFalse(source.contains("transcriptGeometry.setRowOffset("))
     XCTAssertTrue(
       source.contains(
         "    scrollMode = .followingBottom\n    hasActivityBelow = false\n    userIsScrolling = false"))
@@ -1004,6 +1010,8 @@ import XCTest
       scrollSource.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
     XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow(proxy: proxy)"))
     XCTAssertTrue(scrollSource.contains("for delay in [0.05, 0.16, 0.32]"))
+    XCTAssertTrue(scrollSource.contains("documentFrameObservation"))
+    XCTAssertTrue(scrollSource.contains("documentHeight: documentHeight"))
     XCTAssertFalse(viewSource.contains("private func agentChatViewportResizeDetector"))
     XCTAssertFalse(viewSource.contains("private func scrollToBottomSettled(_ proxy: ScrollViewProxy)"))
   }

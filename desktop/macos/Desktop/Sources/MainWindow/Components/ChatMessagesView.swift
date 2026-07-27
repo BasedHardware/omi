@@ -127,7 +127,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
   // MARK: - Scroll State
 
-  @State private var isUserAtBottom = true
   /// Source of truth for scroll intent. Geometry/layout changes alone must NOT
   /// switch this to `.freeScrolling` — only physical user input (wheel/trackpad,
   /// mouse, or keyboard scroll-navigation).
@@ -244,15 +243,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // chrome Text (agent card headers, tool summaries, timestamps) can peg the
       // main thread in GraphHost layout. Message bodies opt in via OmiMarkdown.
       .background(scrollDetectors)
-      .coordinateSpace(name: ChatTranscriptSpace.content)
-      .onGeometryChange(for: ChatTranscriptContentFrame.self) { geometry in
-        ChatTranscriptContentFrame(
-          height: geometry.size.height,
-          scrollTop: -geometry.frame(in: .named(ChatTranscriptSpace.viewport)).minY
-        )
-      } action: { frame in
-        transcriptGeometry.setContent(height: frame.height, scrollTop: frame.scrollTop)
-      }
 
       // Invisible anchor lives OUTSIDE the LazyVStack so it is always
       // eagerly rendered. Inside LazyVStack it may not exist in the view
@@ -338,7 +328,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         hasActivityBelow = false
         scrollMode = .followingBottom
         userIsScrolling = false
-        isUserAtBottom = true
         transcriptGeometry.reset()
         transcriptGeometry.setMessages(messages)
       }
@@ -570,12 +559,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         )
         .padding(.top, ChatTranscriptLayout.topAdjustment(at: index, in: displayMessages))
         .id(message.id)
-        .onGeometryChange(for: CGFloat.self) {
-          $0.frame(in: .named(ChatTranscriptSpace.content)).minY
-        } action: { offset in
-          guard message.sender == .user else { return }
-          transcriptGeometry.setRowOffset(offset, for: message.id)
-        }
       }
     }
   }
@@ -622,9 +605,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // wide transcripts where the rail is actually visible. Keep this host in
       // the document view so it can reach the enclosing NSScrollView.
       ChatTimelineScrollerSuppressionHost(isSuppressed: hidesNativeScrollIndicator)
-      ScrollPositionDetector { atBottom in
-        isUserAtBottom = atBottom
-        if atBottom {
+      ScrollPositionDetector { position in
+        transcriptGeometry.setContent(
+          height: position.documentHeight,
+          scrollTop: position.scrollTop
+        )
+        if position.isAtBottom {
           transcriptGeometry.setFollowingLiveEdge(true)
         }
         // Resume live following when the reader scrolls back to the
@@ -632,7 +618,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         // again; only atBottom == false is ambiguous (it can be a
         // geometry/layout change, not user intent) and must NOT switch
         // to .freeScrolling on its own.
-        if atBottom && scrollMode == .freeScrolling {
+        if position.isAtBottom && scrollMode == .freeScrolling {
           cancelAllPendingScrolls()
           userIsScrolling = false
           scrollMode = .followingBottom

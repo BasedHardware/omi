@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a chat rendering freeze that could occur while sending or scrolling through a conversation"
+}
