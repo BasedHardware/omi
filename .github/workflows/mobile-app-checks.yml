@@ -288,6 +288,10 @@ jobs:
           # android/gradle/wrapper/gradle-wrapper.properties instead.
           gradle-version: '8.14.2'
 
+      - name: Configure Flutter SDK for Gradle
+        working-directory: app
+        run: printf 'flutter.sdk=%s\n' "$FLUTTER_ROOT" > android/local.properties
+
       - name: Run Android native unit tests
         working-directory: app
         run: gradle -p android testDevDebugUnitTest
