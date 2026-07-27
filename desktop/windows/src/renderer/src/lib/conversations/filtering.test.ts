@@ -179,7 +179,12 @@ describe('groupConversationsByDate', () => {
       row({ id: 'older', sortAt: new Date(2026, 0, 5, 10).getTime() })
     ]
     const sections = groupConversationsByDate(rows, NOW)
-    expect(sections.map((s) => s.label)).toEqual(['Today', 'Yesterday', 'Jan 5, 2026'])
+    const olderLabel = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }).format(new Date(2026, 0, 5))
+    expect(sections.map((s) => s.label)).toEqual(['Today', 'Yesterday', olderLabel])
     // Within Today, newest first.
     expect(sections[0].rows.map((r) => r.id)).toEqual(['today-pm', 'today-am'])
   })
