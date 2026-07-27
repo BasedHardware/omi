@@ -8,8 +8,8 @@ enum ChatPromptTimelineMetrics {
   /// marks are hairlines, and a hairline is not a hover target.
   static let railWidth: CGFloat = 40
   /// The rail only earns its place where the transcript's own column is not
-  /// already using the width. Sized so that a rail centred in the gutter still
-  /// clears the macOS overlay scroller riding the shell's edge.
+  /// already using the width. Sized so that a rail centred in the gutter has
+  /// room to read as a deliberate navigation control.
   static let minimumGutter: CGFloat = 56
 
   static let restWidth: CGFloat = 8
@@ -20,7 +20,7 @@ enum ChatPromptTimelineMetrics {
   static let restOpacity: Double = 0.18
   static let proximityOpacity: Double = 0.5
   static let hoveredOpacity: Double = 0.95
-  /// The mark being read is coloured, not sized. Growing it would mean the rail
+  /// The mark being read is lit, not sized. Growing it would mean the rail
   /// reshapes itself as the reader scrolls, and size is the language hover
   /// already speaks — two meanings on one channel read as noise.
   static let activeOpacity: Double = 1.0
@@ -42,12 +42,10 @@ enum ChatPromptTimelineMetrics {
   static let previewGap: CGFloat = 10
   static let previewEdgeInset: CGFloat = 8
 
-  /// How far the rail's trailing edge sits from the transcript's, so the resting
-  /// marks land on the gutter's centre line. The marks are trailing-aligned in
-  /// the rail and grow leftwards from there, so it is the resting width that has
-  /// to be centred, not the strip that catches the cursor.
-  static func trailingOffset(gutter: CGFloat) -> CGFloat {
-    max(0, gutter / 2 - restWidth / 2)
+  /// Keep the rail's right tip on the same page edge as the composer. The marks
+  /// grow leftward into the unused transcript gutter.
+  static func trailingOffset(gutter _: CGFloat) -> CGFloat {
+    ChatComposerLayout.pageMargin
   }
 
   static let proximityAnimation: Animation = .interactiveSpring(response: 0.18, dampingFraction: 0.86)
@@ -97,14 +95,14 @@ enum ChatPromptTimelineMetrics {
 
   static func markOpacity(isHovered: Bool, isActive: Bool, proximity: CGFloat) -> Double {
     if isHovered { return hoveredOpacity }
-    // The active mark carries its own colour, so it has to stay legible even
+    // The active mark stays fully lit, so it has to stay legible even
     // with the cursor nowhere near the rail.
     if isActive { return activeOpacity }
     return restOpacity + (proximityOpacity - restOpacity) * Double(min(max(proximity, 0), 1))
   }
 
-  static func markColor(isActive: Bool) -> Color {
-    isActive ? OmiColors.error : .white
+  static func markColor(isActive _: Bool) -> Color {
+    .white
   }
 
   /// The mark the cursor is on, or nil in the gaps between them.
@@ -279,9 +277,7 @@ struct ChatPromptTimelineOverlay: View {
   let onSelect: (String) -> Void
 
   var body: some View {
-    if geometry.marks.count >= ChatPromptTimelineModel.minimumMarks,
-      geometry.gutter >= ChatPromptTimelineMetrics.minimumGutter
-    {
+    if geometry.showsPromptTimeline {
       ChatPromptTimeline(
         marks: geometry.marks,
         activeMarkID: geometry.activeMarkID,
@@ -323,6 +319,18 @@ struct ChatPromptTimelineOverlay: View {
     }
     .buttonStyle(.plain)
     .keyboardShortcut(key, modifiers: .command)
+  }
+}
+
+/// Keeps the legacy AppKit scroller out of the transcript only while the
+/// prompt timeline is visible. It observes the small geometry object rather
+/// than `ChatMessagesView`, so ordinary scroll movement still does not
+/// re-evaluate the full message list.
+struct ChatPromptTimelineScrollerSuppression: View {
+  @ObservedObject var geometry: ChatTranscriptGeometry
+
+  var body: some View {
+    ChatTimelineScrollerSuppressionHost(isSuppressed: geometry.showsPromptTimeline)
   }
 }
 

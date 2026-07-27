@@ -38,6 +38,12 @@ enum ChatMarkMotion: Equatable {
   }
 }
 
+enum ChatOmiMarkPlacement {
+  static func finalAssistantMessageID(in messages: [ChatMessage]) -> String? {
+    messages.last(where: { $0.sender == .ai })?.id
+  }
+}
+
 struct ChatOmiMark: View {
   enum Anchor {
     case leading

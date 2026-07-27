@@ -57,6 +57,19 @@ enum ChatConversationSwitch {
   }
 }
 
+enum ChatTranscriptLayout {
+  static let regularRowSpacing: CGFloat = OmiSpacing.lg
+  static let consecutiveUserRowSpacing: CGFloat = OmiSpacing.sm
+
+  static func topAdjustment(at index: Int, in messages: [ChatMessage]) -> CGFloat {
+    guard index > 0, messages.indices.contains(index) else { return 0 }
+    let previous = messages[index - 1]
+    let current = messages[index]
+    guard previous.sender == .user, current.sender == .user else { return 0 }
+    return consecutiveUserRowSpacing - regularRowSpacing
+  }
+}
+
 /// Reusable chat messages scroll view extracted from ChatPage.
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
 struct ChatMessagesView<WelcomeContent: View>: View {
@@ -90,7 +103,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
   /// Horizontal inset of the message column. Home passes 0 so bubbles align
   /// exactly with the ask bar's edges; other surfaces keep the default gutter.
-  var horizontalContentPadding: CGFloat = OmiSpacing.xxl
+  var horizontalContentPadding: CGFloat = ChatComposerLayout.transcriptEdgeInset
   /// Vertical transcript inset. Home uses a tighter value because its page
   /// shell already provides the breathing room beneath the floating top bar.
   var verticalContentPadding: CGFloat = OmiSpacing.xl
@@ -206,7 +219,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       LazyVStack(spacing: OmiSpacing.lg) {
         loadMoreButton
         messageContent
-        workingIndicator
       }
       .padding(.horizontal, horizontalContentPadding)
       .padding(.trailing, trailingContentPadding)
@@ -523,10 +535,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     } else {
       let dupeIds = duplicateMessageIds
       let displayMessages = AgentLifecycleDisplayProjection.project(messages)
-      ForEach(displayMessages) { message in
+      let finalAssistantMessageID = ChatOmiMarkPlacement.finalAssistantMessageID(in: displayMessages)
+      ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
         ChatBubble(
           message: message,
           app: app,
+          showsOmiMark: message.id == finalAssistantMessageID,
           onRate: { rating in
             onRate(message.id, rating)
           },
@@ -538,6 +552,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           onOpenAgent: onOpenAgent,
           onOpenAgentRef: onOpenAgentRef
         )
+        .padding(.top, ChatTranscriptLayout.topAdjustment(at: index, in: displayMessages))
         .id(message.id)
         .onGeometryChange(for: CGFloat.self) {
           $0.frame(in: .named(ChatTranscriptSpace.content)).minY
@@ -546,17 +561,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           transcriptGeometry.setRowOffset(offset, for: message.id)
         }
       }
-    }
-  }
-
-  @ViewBuilder
-  private var workingIndicator: some View {
-    if contentColumnWidth != nil && (!messages.isEmpty || isSending) {
-      ChatWorkingIndicator(
-        label: isSending ? ChatWorkingStatus.label(for: messages.last) : nil,
-        motion: ChatWorkingStatus.motion(for: messages.last)
-      )
-      .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 
@@ -598,6 +602,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   // coordinator then correctly finds the enclosing NSScrollView.
   private var scrollDetectors: some View {
     ZStack {
+      // The custom prompt rail replaces the native vertical scroller only on
+      // wide transcripts where the rail is actually visible. Keep this host in
+      // the document view so it can reach the enclosing NSScrollView.
+      ChatPromptTimelineScrollerSuppression(geometry: transcriptGeometry)
       ScrollPositionDetector { atBottom in
         isUserAtBottom = atBottom
         // Resume live following when the reader scrolls back to the

@@ -71,7 +71,7 @@ struct FilterToggle: View {
           .lineLimit(1)
       }
       .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
+      .frame(height: AppsHeaderMetrics.controlHeight)
       .background(
         Capsule(style: .continuous)
           .fill(Color.white.opacity(isActive ? 0.14 : 0.06))
@@ -103,12 +103,12 @@ struct SmallHeaderButton: View {
           .frame(width: AppsHeaderMetrics.controlIconSize)
           .foregroundColor(color)
         Text(label)
-          .scaledFont(size: OmiType.caption, weight: .medium)
+          .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(OmiColors.textSecondary)
           .lineLimit(1)
       }
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.vertical, OmiSpacing.xs)
+      .padding(.horizontal, OmiSpacing.md)
+      .frame(height: AppsHeaderMetrics.controlHeight)
       .background(
         Capsule(style: .continuous)
           .fill(Color.white.opacity(isHovering ? 0.12 : 0.06))

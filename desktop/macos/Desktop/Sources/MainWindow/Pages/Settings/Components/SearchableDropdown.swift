@@ -43,6 +43,8 @@ struct SearchableDropdown: View {
   var minWidth: CGFloat = 0
   var maxWidth: CGFloat = 320
   var maxHeight: CGFloat = 300
+  var controlHeight: CGFloat? = nil
+  var usesHeaderChrome = false
   let onSelect: (SearchableDropdownOption) -> Void
 
   @State private var isPresented = false
@@ -120,7 +122,7 @@ struct SearchableDropdown: View {
   private var dropdownLabel: some View {
     HStack(spacing: OmiSpacing.xs) {
       Text(selectedTitle)
-        .scaledFont(size: OmiType.caption, weight: .medium)
+        .scaledFont(size: usesHeaderChrome ? OmiType.body : OmiType.caption, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
         .lineLimit(1)
 
@@ -128,13 +130,16 @@ struct SearchableDropdown: View {
         .scaledFont(size: OmiType.micro, weight: .semibold)
         .foregroundColor(OmiColors.textTertiary)
     }
-    .padding(.horizontal, OmiSpacing.sm)
-    .padding(.vertical, OmiSpacing.xs)
-    .frame(minWidth: minWidth)
+    .padding(.horizontal, usesHeaderChrome ? OmiSpacing.md : OmiSpacing.sm)
+    .padding(.vertical, usesHeaderChrome ? 0 : OmiSpacing.xs)
+    .frame(minWidth: minWidth, minHeight: controlHeight)
     .background(
-      Capsule()
-        .fill(OmiColors.backgroundSecondary.opacity(0.7))
-        .overlay(Capsule().stroke(OmiColors.border.opacity(0.8), lineWidth: 1))
+      Capsule(style: .continuous)
+        .fill(usesHeaderChrome ? Color.white.opacity(0.06) : OmiColors.backgroundSecondary.opacity(0.7))
+        .overlay(
+          Capsule(style: .continuous)
+            .stroke(usesHeaderChrome ? Color.white.opacity(0.08) : OmiColors.border.opacity(0.8), lineWidth: 1)
+        )
     )
   }
 

@@ -44,6 +44,13 @@ final class ChatTranscriptGeometry: ObservableObject {
   /// Width available outside the readable column, on one side.
   @Published private(set) var gutter: CGFloat = 0
 
+  /// The exact condition shared by the rail and native-scroller suppression.
+  /// Narrow transcript surfaces keep their ordinary AppKit scrollbar.
+  var showsPromptTimeline: Bool {
+    marks.count >= ChatPromptTimelineModel.minimumMarks
+      && gutter >= ChatPromptTimelineMetrics.minimumGutter
+  }
+
   private var sources: [ChatPromptSource] = []
   private var offsets: [String: CGFloat] = [:]
   private var documentHeight: CGFloat = 0
@@ -148,7 +155,10 @@ final class ChatTranscriptGeometry: ObservableObject {
     let resolved = ChatPromptTimelineModel.activeMarkID(
       marks: marks,
       viewportTopFraction: scrollTop / documentHeight,
-      viewportHeightFraction: viewport.height / documentHeight
+      viewportHeightFraction: viewport.height / documentHeight,
+      isAtBottom: ChatScrollLiveEdge.isAtBottom(
+        visibleMaxY: scrollTop + viewport.height,
+        documentHeight: documentHeight)
     )
     if resolved != activeMarkID { activeMarkID = resolved }
   }

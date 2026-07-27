@@ -2206,8 +2206,16 @@ private struct NotchAgentPillsRowView: View {
       isListening: isVoiceListening,
       isThinking: isThinking
     )
-    .frame(width: 28, height: 21)
+    // Keep every PTT dot inside the same 21pt identity slot as the resting
+    // Omi mark. The slot is frontmost and trails the visible left lobe, so the
+    // physical notch/header surface cannot cover or crop the waveform.
+    .frame(
+      width: NotchVoiceMorphGeometry.markSize.width,
+      height: NotchVoiceMorphGeometry.markSize.height
+    )
+    .zIndex(1)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+    .accessibilityIdentifier("notch_voice_morph_mark")
     .accessibilityLabel("Subagent status")
     .accessibilityHint("Hover to fan out subagents, click to keep them open")
     .onAppear { syncPillStatusObservers() }

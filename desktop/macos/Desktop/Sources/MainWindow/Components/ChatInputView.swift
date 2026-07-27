@@ -20,28 +20,23 @@ enum ChatComposerLayout {
   static let shellInset: CGFloat = OmiSpacing.sm
   /// Shared page margin for the regular chat composer.
   static let pageMargin: CGFloat = OmiSpacing.lg
+  /// The transcript uses the same visible edge as the composer shell.
+  static let transcriptEdgeInset: CGFloat = pageMargin
   /// The height over which transcript content fades into the composer.
-  static let fadeHeight: CGFloat = OmiSpacing.xl
+  /// Keep this transition tight: a large translucent raster reads as a
+  /// pixelated glow around the input on non-Retina displays.
+  static let fadeHeight: CGFloat = OmiSpacing.md
   static let shellRadius: CGFloat = 18
 }
 
-/// A translucent transition between a scrolling transcript and its composer.
-/// The clear leading edge lets the final message recede naturally instead of
-/// being abruptly clipped by an opaque toolbar.
+/// Intentionally transparent: transcript content must not be obscured by a
+/// decorative composer glow.
 struct ChatComposerFade: View {
   var body: some View {
-    LinearGradient(
-      stops: [
-        .init(color: .clear, location: 0),
-        .init(color: OmiColors.backgroundPrimary.opacity(0.72), location: 0.58),
-        .init(color: OmiColors.backgroundPrimary, location: 1),
-      ],
-      startPoint: .top,
-      endPoint: .bottom
-    )
-    .frame(height: ChatComposerLayout.fadeHeight)
-    .allowsHitTesting(false)
-    .accessibilityHidden(true)
+    Color.clear
+      .frame(height: ChatComposerLayout.fadeHeight)
+      .allowsHitTesting(false)
+      .accessibilityHidden(true)
   }
 }
 

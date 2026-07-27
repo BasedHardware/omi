@@ -13,6 +13,118 @@ enum ChatScrollLiveEdge {
   }
 }
 
+/// Owns the legacy scroller state while a prompt rail is visible. The original
+/// state is restored when the rail disappears, so narrower transcript surfaces
+/// retain their normal AppKit scrolling affordance.
+@MainActor
+final class ChatPromptTimelineScrollerController {
+  private weak var scrollView: NSScrollView?
+  private var originalHasVerticalScroller: Bool?
+  private var isSuppressed = false
+
+  func attach(to scrollView: NSScrollView) {
+    guard self.scrollView !== scrollView else {
+      applyVisibility()
+      return
+    }
+    restore()
+    self.scrollView = scrollView
+    applyVisibility()
+  }
+
+  func setSuppressed(_ isSuppressed: Bool) {
+    self.isSuppressed = isSuppressed
+    applyVisibility()
+  }
+
+  func restore() {
+    if let originalHasVerticalScroller, let scrollView {
+      scrollView.hasVerticalScroller = originalHasVerticalScroller
+    }
+    originalHasVerticalScroller = nil
+    scrollView = nil
+  }
+
+  private func applyVisibility() {
+    guard let scrollView else { return }
+    if isSuppressed {
+      if originalHasVerticalScroller == nil {
+        originalHasVerticalScroller = scrollView.hasVerticalScroller
+      }
+      scrollView.hasVerticalScroller = false
+    } else if let originalHasVerticalScroller {
+      scrollView.hasVerticalScroller = originalHasVerticalScroller
+      self.originalHasVerticalScroller = nil
+    }
+  }
+}
+
+/// A zero-chrome AppKit bridge mounted inside the transcript document view.
+/// It reaches the enclosing SwiftUI NSScrollView and hides its legacy vertical
+/// scroller while the custom prompt rail is available.
+struct ChatTimelineScrollerSuppressionHost: NSViewRepresentable {
+  let isSuppressed: Bool
+
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView()
+    context.coordinator.setSuppressed(isSuppressed)
+    DispatchQueue.main.async {
+      context.coordinator.attach(toEnclosingScrollViewOf: view)
+    }
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    context.coordinator.setSuppressed(isSuppressed)
+    DispatchQueue.main.async {
+      context.coordinator.attach(toEnclosingScrollViewOf: nsView)
+    }
+  }
+
+  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    coordinator.restore()
+  }
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
+  }
+
+  final class Coordinator: NSObject, @unchecked Sendable {
+    private let controller = ChatPromptTimelineScrollerController()
+
+    func setSuppressed(_ isSuppressed: Bool) {
+      MainActor.assumeIsolated {
+        controller.setSuppressed(isSuppressed)
+      }
+    }
+
+    func attach(toEnclosingScrollViewOf view: NSView) {
+      MainActor.assumeIsolated {
+        var current: NSView? = view
+        while let candidate = current {
+          if let scrollView = candidate as? NSScrollView {
+            controller.attach(to: scrollView)
+            return
+          }
+          current = candidate.superview
+        }
+      }
+    }
+
+    func restore() {
+      MainActor.assumeIsolated {
+        controller.restore()
+      }
+    }
+
+    deinit {
+      MainActor.assumeIsolated {
+        controller.restore()
+      }
+    }
+  }
+}
+
 /// Detects scroll position changes by observing the underlying NSScrollView.
 struct ScrollPositionDetector: NSViewRepresentable {
   let onScrollPositionChange: (Bool) -> Void  // true if at bottom

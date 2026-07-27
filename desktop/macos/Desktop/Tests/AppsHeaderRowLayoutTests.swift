@@ -32,6 +32,45 @@ final class AppsHeaderRowLayoutTests: XCTestCase {
     }
   }
 
+  func testAppsToolbarControlsShareTheSearchFieldHeight() {
+    let recorder = AppsHeaderLayoutRecorder()
+    let host = NSHostingView(
+      rootView: HStack(spacing: OmiSpacing.md) {
+        AppsHeaderLayoutProbe(recorder: recorder, slot: .search) {
+          Color.clear
+            .frame(width: 240, height: AppsHeaderMetrics.controlHeight)
+        }
+        AppsHeaderLayoutProbe(recorder: recorder, slot: .installed) {
+          FilterToggle(icon: "arrow.down.circle", label: "Installed", isActive: false) {}
+        }
+        AppsHeaderLayoutProbe(recorder: recorder, slot: .category) {
+          SearchableDropdown(
+            title: "Category",
+            label: "Category",
+            options: [SearchableDropdownOption(id: "", title: "All Categories")],
+            selectedId: "",
+            minWidth: 180,
+            controlHeight: AppsHeaderMetrics.controlHeight,
+            usesHeaderChrome: true
+          ) { _ in }
+        }
+        AppsHeaderLayoutProbe(recorder: recorder, slot: .create) {
+          SmallHeaderButton(icon: "app.badge.fill", label: "Create App", color: OmiColors.textSecondary) {}
+        }
+      }
+      .fixedSize()
+    )
+    host.frame = NSRect(x: 0, y: 0, width: 900, height: 80)
+    host.layoutSubtreeIfNeeded()
+
+    for slot in [AppsHeaderLayoutSlot.search, .installed, .category, .create] {
+      guard let frame = recorder.frame(of: slot) else {
+        return XCTFail("\(slot) never laid out")
+      }
+      XCTAssertEqual(frame.height, AppsHeaderMetrics.controlHeight, accuracy: 0.5)
+    }
+  }
+
   private func layOut(width: CGFloat, recorder: AppsHeaderLayoutRecorder) {
     let host = NSHostingView(
       rootView: AppsHeaderRow(
@@ -70,6 +109,9 @@ private struct AppsHeaderFilterFixture: View {
 private enum AppsHeaderLayoutSlot {
   case search
   case filters
+  case installed
+  case category
+  case create
 }
 
 private final class AppsHeaderLayoutRecorder: @unchecked Sendable {
