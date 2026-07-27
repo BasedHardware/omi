@@ -73,14 +73,20 @@ final class PTTInputDeviceProbeTests: XCTestCase {
 
     let mainActorProgress = expectation(description: "main actor kept making progress")
     mainActorProgress.expectedFulfillmentCount = 3
+    let snapshotReads = expectation(description: "turn-start snapshot reads completed")
+    snapshotReads.expectedFulfillmentCount = 3
     for _ in 0..<3 {
       DispatchQueue.main.async {
-        // The exact call PTT turn start makes must complete while the HAL is wedged.
-        XCTAssertNil(PTTInputDeviceRouting.currentSnapshot(selectedUID: "wedged-uid"))
         mainActorProgress.fulfill()
       }
+      DispatchQueue.global().async {
+        // Exercise the exact turn-start read off-main so a regression times out
+        // without blocking the main actor that must release the wedged probe.
+        XCTAssertNil(PTTInputDeviceRouting.currentSnapshot(selectedUID: "wedged-uid"))
+        snapshotReads.fulfill()
+      }
     }
-    await fulfillment(of: [mainActorProgress], timeout: 5)
+    await fulfillment(of: [mainActorProgress, snapshotReads], timeout: 5)
 
     release.signal()
     await fulfillment(of: [finished], timeout: 5)
