@@ -5,12 +5,15 @@ from contextlib import asynccontextmanager
 
 import firebase_admin
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from database.google_credentials import prepare_google_credentials
 from routers import (
+    auth,
     desktop_agent_vm,
     desktop_chat,
     desktop_core,
+    desktop_deprecated,
     desktop_proxy,
     desktop_realtime,
     desktop_screen_crisp,
@@ -41,10 +44,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(desktop_core.router)
+app.include_router(auth.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
 app.include_router(desktop_proxy.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(desktop_tts_updates.router)
+app.include_router(desktop_deprecated.router)
