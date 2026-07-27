@@ -455,10 +455,20 @@ chmod +x "{python}"
             guard.parent.mkdir(parents=True, exist_ok=True)
             guard.write_text("# fixture\n", encoding="utf-8")
 
-            result = subprocess.run(["bash", str(copied_runner)], text=True, capture_output=True, check=False)
+            bash = bash_executable()
+            result = subprocess.run(
+                [bash, str(copied_runner)],
+                text=True,
+                capture_output=True,
+                encoding="utf-8",
+                check=False,
+            )
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((root / "guard-args.txt").read_text(encoding="utf-8").strip(), str(guard))
+            self.assertEqual(
+                (root / "guard-args.txt").read_text(encoding="utf-8").strip(),
+                shell_path(guard, bash),
+            )
 
         self.assertRegex(
             (REPO_ROOT / "backend/requirements.txt").read_text(encoding="utf-8"),
