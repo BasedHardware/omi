@@ -11,7 +11,7 @@
 // For local testing, set OMI_UPDATER_DEV=1 and provide dev-app-update.yml. That
 // keeps electron-updater on the developer-supplied feed.
 import { app, net, type BrowserWindow } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import { autoUpdater, type CancellationToken } from 'electron-updater'
 import { setTrayUpdateReady } from './tray'
 import { markQuitting } from './lifecycle'
 import { getAppSettings, onAppSettingsChanged } from './appSettings'
@@ -31,6 +31,8 @@ let pendingUpdate: { version: string } | null = null
 let selectedChannel: WindowsUpdateChannel = 'stable'
 let feedSelector: WindowsUpdateFeedSelector | null = null
 let updateCheckTail: Promise<void> = Promise.resolve()
+let activeDownload: { channel: WindowsUpdateChannel; cancellationToken: CancellationToken } | null =
+  null
 
 type ElectronUpdateCheckResult = Awaited<ReturnType<typeof autoUpdater.checkForUpdates>>
 
@@ -47,7 +49,17 @@ async function prepareUpdateFeed(): Promise<void> {
 function runPreparedUpdateCheck(): Promise<ElectronUpdateCheckResult> {
   const operation = updateCheckTail.then(async (): Promise<ElectronUpdateCheckResult> => {
     await prepareUpdateFeed()
-    return autoUpdater.checkForUpdates()
+    const result = await autoUpdater.checkForUpdates()
+    if (!result?.isUpdateAvailable || !result.cancellationToken) return result
+
+    const download = { channel: selectedChannel, cancellationToken: result.cancellationToken }
+    activeDownload = download
+    try {
+      await autoUpdater.downloadUpdate(download.cancellationToken)
+    } finally {
+      if (activeDownload === download) activeDownload = null
+    }
+    return result
   })
   updateCheckTail = operation.then(
     (): undefined => undefined,
@@ -100,7 +112,7 @@ export function initAutoUpdater(
   if (!app.isPackaged && !devForced) return
   started = true
 
-  autoUpdater.autoDownload = true
+  autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
   if (devForced) autoUpdater.forceDevUpdateConfig = true
 
@@ -119,11 +131,13 @@ export function initAutoUpdater(
   }
 
   autoUpdater.on('update-downloaded', (info) => {
+    if (activeDownload && activeDownload.channel !== selectedChannel) return
     const version = typeof info?.version === 'string' ? info.version : ''
     pendingUpdate = { version }
     const win = getMainWindow()
     if (win && !win.isDestroyed()) win.webContents.send('update:ready', { version })
     setTrayUpdateReady(true)
+    autoUpdater.autoInstallOnAppQuit = true
     console.log('[updater] update downloaded and staged for next quit:', version)
   })
 
@@ -155,6 +169,10 @@ export function initAutoUpdater(
     const change = resolveBetaChannelChange(selectedChannel, settings.betaUpdatesEnabled)
     if (!change.changed) return
     selectedChannel = change.channel
+    if (activeDownload && activeDownload.channel !== selectedChannel) {
+      autoUpdater.autoInstallOnAppQuit = false
+      activeDownload.cancellationToken.cancel()
+    }
     autoUpdater.allowPrerelease = selectedChannel === 'beta'
     feedSelector?.select(selectedChannel)
     console.log(

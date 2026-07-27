@@ -29,6 +29,7 @@ const autoUpdater = vi.hoisted(() => ({
   setFeedURL: vi.fn(),
   on: vi.fn(),
   checkForUpdates: vi.fn().mockResolvedValue({ updateInfo: { version: '9.9.9' } }),
+  downloadUpdate: vi.fn().mockResolvedValue([]),
   quitAndInstall: vi.fn()
 }))
 vi.mock('electron-updater', () => ({ autoUpdater }))
@@ -147,6 +148,41 @@ describe('updater feed and beta channel wiring', () => {
 })
 
 describe('installUpdateNow', () => {
+  it('cancels and ignores a beta download that finishes after opting out', async () => {
+    const betaDownload = deferred<string[]>()
+    const cancellationToken = { cancel: vi.fn() }
+    autoUpdater.checkForUpdates.mockReset()
+    autoUpdater.checkForUpdates
+      .mockResolvedValueOnce({
+        isUpdateAvailable: true,
+        updateInfo: { version: '2.0.0' },
+        cancellationToken
+      })
+      .mockResolvedValue({ updateInfo: { version: '1.0.1' } })
+    autoUpdater.downloadUpdate.mockReset()
+    autoUpdater.downloadUpdate.mockReturnValueOnce(betaDownload.promise)
+    autoUpdater.autoInstallOnAppQuit = true
+
+    setAppSettings({ betaUpdatesEnabled: true })
+    const checking = checkForUpdatesNow()
+    await vi.waitFor(() =>
+      expect(autoUpdater.downloadUpdate).toHaveBeenCalledWith(cancellationToken)
+    )
+
+    setAppSettings({ betaUpdatesEnabled: false })
+    expect(cancellationToken.cancel).toHaveBeenCalledOnce()
+    const downloaded = autoUpdater.on.mock.calls.find(
+      (call) => call[0] === 'update-downloaded'
+    )?.[1] as (info: { version: string }) => void
+    downloaded({ version: '2.0.0' })
+    betaDownload.resolve([])
+    await checking
+
+    expect(getPendingUpdate()).toBeNull()
+    expect(autoUpdater.autoInstallOnAppQuit).toBe(false)
+    expect(installUpdateNow()).toBe(false)
+  })
+
   it('does nothing when no update is staged', () => {
     expect(getPendingUpdate()).toBeNull()
     expect(installUpdateNow()).toBe(false)
