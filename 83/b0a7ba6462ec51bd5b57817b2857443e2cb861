@@ -1,0 +1,32 @@
+desktop/macos/Desktop/Tests/UntrustedNotificationContextTests.swift
+  s_7918275f8e3531::t_f74d7e341fa69c 1-97,99-126
+  s_7918275f8e3531::t_5907a0c6f4419d 127-133
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_7918275f8e3531::t_81adca760ac199 4757-4783
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift
+  s_7918275f8e3531::t_4505417442ff3c 113-118
+desktop/macos/Desktop/Tests/NotchCardVoiceDeliveryTests.swift
+  s_7918275f8e3531::t_c2867e1865ced0 66-70,73,77,81-82,87-89
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
+  s_7918275f8e3531::t_dcfb34e87d372c 32-43,47-48
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_7918275f8e3531::t_3a0927d87ebb60 5,13
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_7918275f8e3531::t_e787bd49803882 4,12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "83b0a7ba6462ec51bd5b57817b2857443e2cb861",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
