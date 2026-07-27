@@ -6,9 +6,19 @@
 checks:
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["scripts/dev-harness/**", "desktop/macos/scripts/qualification-local-proof.sh", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/scripts/omi-fault-inject.sh", "desktop/macos/scripts/release-keyvalue.py", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/dev-harness/**", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/scripts/omi-fault-inject.sh", "desktop/macos/scripts/release-keyvalue.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hermetic dev-harness stack backs release qualification; the Jul 22 2026 beta qualification outage added a docker/native typesense runtime that must stay behaviorally covered"
+  - id: pre-tag-readiness-contract
+    command: ["bash", "desktop/macos/tests/test-pre-tag-readiness-contract.sh"]
+    triggers: ["desktop/macos/scripts/pre-tag-readiness.sh", "desktop/macos/tests/test-pre-tag-readiness-contract.sh", ".github/scripts/verify-pre-tag-readiness.py", ".github/scripts/test_verify_pre_tag_readiness.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "trusted-M1 readiness must retain exact-SHA cache/lease ownership and cannot emit a passing receipt before authenticated cleanup"
+  - id: verify-pre-tag-readiness-tests
+    command: ["python3", ".github/scripts/test_verify_pre_tag_readiness.py"]
+    triggers: [".github/scripts/verify-pre-tag-readiness.py", ".github/scripts/test_verify_pre_tag_readiness.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the receipt verifier must reject stale, non-offline, failed, and promotion-bearing readiness evidence before a tag mutation"
   - id: pre-push-final-pr-diff
     command: ["bash", "scripts/test-pre-push-diff-base.sh"]
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
@@ -534,7 +544,7 @@ checks:
     reason: "SCA-17 prevents duplicate desktop promotion authorities and requires post-traffic production release-vector verification"
   - id: desktop-qualification-bootstrap-contract
     command: ["bash", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh"]
-    triggers: [".github/workflows/desktop_qualify_beta.yml", "desktop/macos/scripts/qualify-desktop-beta.sh", "desktop/macos/scripts/qualification-local-proof.sh", "desktop/macos/scripts/prepare-qualification-profile.sh", "desktop/macos/scripts/qualification-cache-reclaim.py", "desktop/macos/scripts/qualification-swift-cache.sh", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/desktop_qualify_beta.yml", "desktop/macos/scripts/qualify-desktop-beta.sh", "desktop/macos/scripts/prepare-qualification-profile.sh", "desktop/macos/scripts/qualification-cache-reclaim.py", "desktop/macos/scripts/qualification-swift-cache.sh", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "Trusted qualification requires an exact-SHA persistent source, isolated named-bundle, unchanged gates, and phase-bound bootstrap contracts"
