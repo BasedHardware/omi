@@ -48,18 +48,20 @@ class TestOAuthPermissionContract:
             )
 
     def test_persona_chat_has_permission_text(self):
-        """P2 regression test for PR #8531: PERSONA_CHAT was silently
-        omitted from the oauth permission list."""
+        """persona_chat capability must surface an OAuth permission.
+
+        Declared as an additive 'persona_chat' capability (backward-compatible
+        with the released app-client contract) rather than an ActionType enum
+        value, so the permission is gated on app.capabilities instead of an
+        action_type branch (originally PR #8531).
+        """
         oauth_src = _read("routers/oauth.py")
-        assert "ActionType.PERSONA_CHAT.value" in oauth_src, (
-            "PERSONA_CHAT must have a permission branch in oauth.py " "(cubic-found regression on PR #8531)."
-        )
-        # The branch must actually append a permission — not be a no-op.
-        # Match the elif block and assert it contains permissions.append(.
         m = re.search(
-            r"elif action_type_value == ActionType\.PERSONA_CHAT\.value:.*?(?=elif|if)",
+            r'if "persona_chat" in app\.capabilities:\s*'
+            r'permissions\.append\({"icon": "🤖", "text": "Reply to messages on your behalf using your persona\."}\)',
             oauth_src,
-            re.DOTALL,
         )
-        assert m, "PERSONA_CHAT branch missing"
-        assert "permissions.append" in m.group(0), "PERSONA_CHAT branch exists but does not call permissions.append"
+        assert m, (
+            "persona_chat capability must append the 'Reply to messages on your behalf' "
+            "permission in oauth.py."
+        )

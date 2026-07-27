@@ -1096,8 +1096,7 @@
           "create_facts",
           "read_memories",
           "read_conversations",
-          "read_tasks",
-          "persona_chat"
+          "read_tasks"
         ],
         "title": "ActionType",
         "type": "string"
@@ -6460,6 +6459,29 @@
         "title": "Conversation",
         "type": "object"
       },
+      "ConversationActionItemsCountResponse": {
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "incomplete": {
+            "title": "Incomplete",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "completed",
+          "incomplete"
+        ],
+        "title": "ConversationActionItemsCountResponse",
+        "type": "object"
+      },
       "ConversationActionItemsDeleteResponse": {
         "properties": {
           "deleted_count": {
@@ -6691,6 +6713,45 @@
           "discarded"
         ],
         "title": "ConversationCreateResponse",
+        "type": "object"
+      },
+      "ConversationFinalizationStatusResponse": {
+        "description": "Customer-visible projection of one durable finalization job.",
+        "properties": {
+          "attempt_count": {
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task_retry_count": {
+            "title": "Task Retry Count",
+            "type": "integer"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "terminal",
+          "retryable",
+          "attempt_count",
+          "task_retry_count"
+        ],
+        "title": "ConversationFinalizationStatusResponse",
         "type": "object"
       },
       "ConversationMutationResponse": {
@@ -10776,6 +10837,14 @@
       },
       "FullConversation": {
         "properties": {
+          "apps_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppResult"
+            },
+            "title": "Apps Results",
+            "type": "array"
+          },
           "finished_at": {
             "anyOf": [
               {
@@ -15327,7 +15396,9 @@
           "basic",
           "unlimited",
           "architect",
-          "operator"
+          "operator",
+          "plus",
+          "unlimited_v2"
         ],
         "title": "PlanType",
         "type": "string"
@@ -17341,6 +17412,14 @@
       },
       "SimpleConversation": {
         "properties": {
+          "apps_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppResult"
+            },
+            "title": "Apps Results",
+            "type": "array"
+          },
           "finished_at": {
             "anyOf": [
               {
@@ -17892,7 +17971,13 @@
           },
           "plan": {
             "$ref": "#/components/schemas/PlanType",
-            "default": "basic"
+            "default": "basic",
+            "enum": [
+              "basic",
+              "unlimited",
+              "architect",
+              "operator"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
@@ -31383,6 +31468,96 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/action-items/count": {
+      "get": {
+        "description": "Return total / completed / incomplete action-item counts for one conversation.\n\nA task-progress badge (e.g. 2 of 3 done) for a conversation without paging its items.",
+        "operationId": "get_conversation_action_items_count_v1_conversations__conversation_id__action_items_count_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationActionItemsCountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Action Items Count",
+        "tags": [
+          "action-items"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/action-items/{action_item_idx}": {
       "patch": {
         "operationId": "update_action_item_description_v1_conversations__conversation_id__action_items__action_item_idx__patch",
@@ -31982,6 +32157,95 @@
           }
         ],
         "summary": "Set Conversation Events State",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/finalization": {
+      "get": {
+        "operationId": "get_conversation_finalization_status_v1_conversations__conversation_id__finalization_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationFinalizationStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Finalization Status",
         "tags": [
           "conversations"
         ]

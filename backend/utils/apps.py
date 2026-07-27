@@ -1082,14 +1082,19 @@ def app_can_create_conversation(app: Optional[Dict[str, Any]]) -> bool:
     return app_has_action(app, 'create_conversation')
 
 
-def app_can_persona_chat(app: dict) -> bool:
+def app_can_persona_chat(app: Optional[Dict[str, Any]]) -> bool:
     """Check if an app can invoke persona chat on behalf of the user.
 
     Used by /v2/integrations/{app_id}/user/persona-chat — gates the
-    endpoint so only apps that opt in (via external_integration.actions
-    containing {'action': 'persona_chat'}) can drive the user's persona.
+    endpoint so only apps that opt in (via the 'persona_chat' capability)
+    can drive the user's persona. Declared as a capability (additive to
+    App.capabilities) rather than an ActionType enum value, so adding it
+    does not break the released app-client OpenAPI contract.
     """
-    return app_has_action(app, 'persona_chat')
+    if not app:
+        return False
+    capabilities = app.get('capabilities') or set()
+    return 'persona_chat' in capabilities
 
 
 def is_user_app_enabled(uid: str, app_id: str) -> bool:

@@ -261,20 +261,20 @@ from utils.apps import app_can_persona_chat  # noqa: E402
 # 1. Pure capability check
 # ---------------------------------------------------------------------------
 class TestAppCanPersonaChat:
-    def test_returns_true_when_action_declared(self):
-        app = {"external_integration": {"actions": [{"action": "persona_chat"}]}}
+    def test_returns_true_when_capability_declared(self):
+        app = {"capabilities": {"persona_chat"}}
         assert app_can_persona_chat(app) is True
 
-    def test_returns_false_when_no_actions(self):
-        app = {"external_integration": {"actions": []}}
+    def test_returns_false_when_capability_absent(self):
+        app = {"capabilities": set()}
         assert app_can_persona_chat(app) is False
 
-    def test_returns_false_when_external_integration_missing(self):
-        app = {"external_integration": None}
+    def test_returns_false_when_capabilities_missing(self):
+        app = {}
         assert app_can_persona_chat(app) is False
 
-    def test_returns_false_when_other_action_declared(self):
-        app = {"external_integration": {"actions": [{"action": "create_conversation"}]}}
+    def test_returns_false_when_other_capability_declared(self):
+        app = {"capabilities": {"chat"}}
         assert app_can_persona_chat(app) is False
 
     def test_returns_false_for_none(self):
@@ -361,8 +361,8 @@ def _valid_app_dict(app_id="app-1", *, with_persona_chat_capability=True):
         "author": "tester",
         "description": "Test",
         "image": "https://example.com/img.png",
-        "capabilities": {"persona"} if with_persona_chat_capability else set(),
-        "external_integration": {"actions": [{"action": "persona_chat"}] if with_persona_chat_capability else []},
+        "capabilities": ({"persona", "persona_chat"} if with_persona_chat_capability else set()),
+        "external_integration": {"actions": []},
     }
 
 
