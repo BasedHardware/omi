@@ -117,6 +117,11 @@ def _parse_session_file(path: Path) -> dict | None:
     except (OSError, json.JSONDecodeError) as exc:
         log.debug('could not read session file %s: %s', path, exc)
         return None
+    if not isinstance(raw, dict):
+        # Valid JSON, wrong file. Read as "no session" so the caller re-exports
+        # and ends with the actionable AuthError instead of an AttributeError.
+        log.debug('session file %s is %s, not an object', path, type(raw).__name__)
+        return None
     flat = {}
     for key, entry in raw.items():
         flat[key] = entry.get('value') if isinstance(entry, dict) else entry
