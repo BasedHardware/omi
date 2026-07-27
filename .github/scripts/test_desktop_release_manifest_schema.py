@@ -41,12 +41,18 @@ def _matches(subschema: dict, value: str) -> bool:
     Mirrors the two keywords these `$defs` actually use. A richer subschema would
     be silently under-validated, so the type is asserted rather than assumed.
     """
-    assert subschema.get("type") == "string", f"expected a string subschema, got {subschema.get('type')!r}"
+    assert set(subschema) == {"type", "pattern"}, f"unsupported string subschema shape: {subschema!r}"
+    assert subschema["type"] == "string", f"expected a string subschema, got {subschema['type']!r}"
     pattern = subschema["pattern"]
+    assert isinstance(pattern, str), f"expected a string pattern, got {type(pattern).__name__}"
     return isinstance(value, str) and re.search(pattern, value) is not None
 
 
 class ArtifactUrlDefinitions(unittest.TestCase):
+    def test_rejects_a_richer_subschema(self):
+        with self.assertRaisesRegex(AssertionError, "unsupported string subschema shape"):
+            _matches({"type": "string", "pattern": "^value$", "minLength": 1}, "value")
+
     def test_accepts_the_canonical_stable_artifact_urls(self):
         defs = _load_schema()["$defs"]
         self.assertTrue(_matches(defs["zipUrl"], STABLE_ZIP), "zipUrl rejected the canonical Stable zip")
