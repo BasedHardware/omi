@@ -268,7 +268,9 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("onSelectDestination(destination)"))
     XCTAssertTrue(source.contains("selectedExportDestination = destination"))
     XCTAssertTrue(source.contains("if appProvider.apps.isEmpty && !appProvider.isLoading"))
-    XCTAssertTrue(source.contains("ViewThatFits(in: .horizontal)"))
+    // Responsive layout was extracted into AppsHeaderRow (AppsPageHeaderControls.swift);
+    // AppsPage now delegates to it instead of inlining ViewThatFits.
+    XCTAssertTrue(source.contains("AppsHeaderRow("))
     XCTAssertTrue(source.contains("private var searchField: some View"))
     XCTAssertTrue(source.contains("private var filterControls: some View"))
     XCTAssertFalse(source.contains("struct AppsCatalogContent: View"))
