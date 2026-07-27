@@ -337,6 +337,14 @@ export interface JournalTerminalizeTurnMessage extends ProtocolEnvelope {
   };
 }
 
+export interface JournalRepairTurnsMessage extends ProtocolEnvelope {
+  type: "journal_repair_turns";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  turnIds: string[];
+}
+
 export function journalTerminalizationDisposition(input: unknown): "accept" | "discard" {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Journal terminalization input must be an object");
@@ -452,6 +460,7 @@ export type InboundMessage =
   | JournalImportRemoteTurnMessage
   | JournalUpdateTurnMessage
   | JournalTerminalizeTurnMessage
+  | JournalRepairTurnsMessage
   | JournalListTurnsMessage
   | JournalClearTurnsMessage
   | EnsureAgentSpawnJournalMessage
@@ -877,7 +886,7 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear";
+  operation: "record" | "record_exchange" | "import_remote" | "update" | "repair" | "list" | "clear";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;

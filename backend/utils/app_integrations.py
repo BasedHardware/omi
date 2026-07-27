@@ -64,6 +64,7 @@ import database.conversations as conversations_db
 from utils.conversations.render import conversation_to_dict, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.mentor_notifications import process_mentor_notification
+from utils.observability.fallback import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,17 @@ logger = logging.getLogger(__name__)
 
 class ExternalIntegrationFanoutError(RuntimeError):
     """At least one durable finalization webhook did not acknowledge delivery."""
+
+
+# A retry only helps when the destination may answer differently next time.
+# Webhook health tracking (`record_app_webhook_failure`) owns the permanent
+# case: it warns the app owner and auto-disables the webhook after 72h.
+_RETRYABLE_DELIVERY_STATUSES = frozenset({408, 425, 429})
+
+
+def _delivery_failure_is_retryable(status_code: int) -> bool:
+    """Whether a non-2xx webhook response leaves the finalization job retryable."""
+    return status_code >= 500 or status_code in _RETRYABLE_DELIVERY_STATUSES
 
 
 def _notify_app_owner(app_id: str, title: str, body: str):
@@ -238,7 +250,21 @@ async def trigger_external_integrations(
                     f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
                 )
                 if require_delivery:
-                    failed_deliveries.append(app.id)
+                    if _delivery_failure_is_retryable(response.status_code):
+                        failed_deliveries.append(app.id)
+                    else:
+                        # The destination rejected this payload permanently (expired
+                        # OAuth token, deleted target, malformed for that app). Every
+                        # retry repeats it verbatim, so keeping the conversation's
+                        # finalization job retryable would only strand the
+                        # conversation until the job dead-letters.
+                        record_fallback(
+                            component='webhook',
+                            from_mode='durable_delivery',
+                            to_mode='dropped',
+                            reason='auth' if response.status_code in (401, 403) else 'policy',
+                            outcome='degraded',
+                        )
                 return
 
             cb.record_success()

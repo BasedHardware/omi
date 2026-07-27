@@ -47,8 +47,5 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Create non-production credentials placeholder
-        run: printf '%s\n' '{}' > desktop/macos/Backend-Rust/google-credentials.json
-
       - name: Build desktop backend image
         run: docker build --file desktop/macos/Backend-Rust/Dockerfile --tag omi-desktop-backend-pr:${{ github.sha }} desktop/macos/Backend-Rust

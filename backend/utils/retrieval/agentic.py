@@ -55,6 +55,10 @@ from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
+from database.redis_db import get_cached_user_geolocation
+from database.users import get_user_location_context_consent
+from models.geolocation import Geolocation
+from utils.conversations.location import async_get_google_maps_city
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
 import logging
@@ -425,6 +429,25 @@ def _inject_current_datetime(anthropic_messages: list, datetime_block: str) -> l
     return anthropic_messages
 
 
+async def get_mobile_city(uid: str, platform: Optional[str]) -> Optional[str]:
+    if platform is None or platform.strip().lower() not in {'ios', 'android'}:
+        return None
+    try:
+        consent = await run_blocking(db_executor, get_user_location_context_consent, uid)
+        if consent is None or not consent.is_active():
+            return None
+        geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
+        if not geolocation:
+            return None
+        validated_geolocation = Geolocation.model_validate(geolocation)
+        return await async_get_google_maps_city(validated_geolocation.latitude, validated_geolocation.longitude)
+    except (KeyError, TypeError, ValueError):
+        return None
+    except Exception as error:
+        logger.warning('Mobile city context unavailable error_type=%s', type(error).__name__)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Core Anthropic agent streaming loop
 # ---------------------------------------------------------------------------
@@ -672,6 +695,8 @@ async def execute_agentic_chat_stream(
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
     platform: Optional[str] = None,
+    current_datetime_block: Optional[str] = None,
+    tz: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
@@ -684,7 +709,8 @@ async def execute_agentic_chat_stream(
         # These helpers perform Firestore and LangSmith I/O before the producer task exists,
         # so they share the first-event deadline instead of leaving the SSE body silent.
         async with asyncio.timeout(AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS):
-            tz = await run_blocking(db_executor, get_user_timezone, uid)
+            tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
+            city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             system_prompt = await run_blocking(
                 db_executor, _get_agentic_qa_prompt, uid, app, messages, context=context, tz=tz, platform=platform
             )
@@ -755,7 +781,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # Convert messages to Anthropic format. The current datetime is injected into the user
     # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
     anthropic_messages = _messages_to_anthropic(messages)
-    anthropic_messages = _inject_current_datetime(anthropic_messages, get_current_datetime_block(uid, tz=tz))
+    anthropic_messages = _inject_current_datetime(
+        anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
+    )
 
     callback = AsyncStreamingCallback()
 

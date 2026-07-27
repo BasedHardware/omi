@@ -975,7 +975,9 @@ extension RealtimeHubController {
     // identity fence that guarded the original PTT turn.
     voiceResponseID = RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
       preservingReconnectAudio: preservingReconnectAudio,
-      pendingReconnect: reconnectAudioBuffer)
+      pendingReconnect: reconnectAudioBuffer,
+      preservingBargeInReplacement: preservingBargeInReplacement,
+      pendingBargeInReplacement: replacementAudioBuffer)
     sessionProvider = nil
     sessionAuth = nil
     sessionOwnerBinding = nil

@@ -325,6 +325,101 @@ def _stop_owned_fault_record(record: dict[str, object] | None) -> None:
         )
 
 
+def _write_fault_preflight_report(
+    path: Path,
+    *,
+    lease_id: str,
+    status: str,
+    port: int | None,
+    failure_reason: str | None = None,
+    detail: str | None = None,
+) -> None:
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "gate": "fault-listener-provenance-cleanup",
+        "classification": "runner-hygiene-cleanup",
+        "lease_id": lease_id,
+        "status": status,
+        "port": port,
+        "failure_reason": failure_reason,
+    }
+    if detail:
+        payload["detail"] = detail
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _write_lease(path, payload)
+    path.chmod(0o600)
+
+
+def _fault_preflight_failure_reason(exc: Exception) -> str:
+    detail = str(exc).lower()
+    if "lineage is unproven" in detail or "ownership changed" in detail:
+        return "unproven-listener-lineage"
+    if "token" in detail:
+        return "lease-token-mismatch"
+    if "port still open" in detail or "process still running" in detail:
+        return "owned-listener-cleanup-incomplete"
+    if "state" in detail or "pid" in detail:
+        return "invalid-listener-provenance"
+    return "host-prerequisite-unmet"
+
+
+def preflight_fault_cleanup(*, repo_root: Path, lease_id: str, token: str, result_path: Path) -> dict[str, object]:
+    """Prove and reclaim a disposable listener before expensive qualification."""
+
+    root = _validate_root(lease_root_from_env(), repo_root)
+    observed_port: int | None = None
+    try:
+        with _locked(root):
+            path = _lease_path(root)
+            lease = _read_lease(path)
+            if lease is None:
+                raise QualificationLeaseError("Qualification fault-listener preflight requires an active lease")
+            recorded_id, state_root, recorded_repo, _owner_pid, recorded_token = _lease_provenance(lease, root)
+            if recorded_id != lease_id or recorded_token != token:
+                raise QualificationLeaseError("Qualification lease token does not match the active lease")
+            if recorded_repo != _real(repo_root):
+                raise QualificationLeaseError("Qualification lease belongs to a different source worktree")
+            fault_record = _validated_fault_record(state_root, recorded_token)
+            if fault_record is None:
+                raise QualificationLeaseError("Qualification fault-listener preflight found no recorded listener")
+            observed_port = int(fault_record["port"])
+            _stop_owned_fault_record(fault_record)
+            alive, listeners = _validate_fault_process(fault_record)
+            if alive or listeners:
+                raise QualificationLeaseError(
+                    "Qualification fault-listener preflight could not prove cleanup completion"
+                )
+            fault_state = state_root / FAULT_STATE_DIRNAME
+            for evidence in (fault_state / "pid", fault_state / "meta"):
+                evidence.unlink()
+            report = {
+                "schema_version": 1,
+                "gate": "fault-listener-provenance-cleanup",
+                "classification": "runner-hygiene-cleanup",
+                "lease_id": lease_id,
+                "status": "passed",
+                "port": observed_port,
+                "failure_reason": None,
+            }
+            _write_fault_preflight_report(
+                result_path,
+                lease_id=lease_id,
+                status="passed",
+                port=observed_port,
+            )
+            return report
+    except (QualificationLeaseError, safety.SafetyError) as exc:
+        _write_fault_preflight_report(
+            result_path,
+            lease_id=lease_id,
+            status="failed",
+            port=observed_port,
+            failure_reason=_fault_preflight_failure_reason(exc),
+            detail=str(exc),
+        )
+        raise
+
+
 def _is_exact_typesense_docker_proxy(record: dict[str, object], lease_id: str | None) -> bool:
     """Prove Docker's external port proxy belongs to this exact lease container."""
 
@@ -530,12 +625,16 @@ def acquire(
             try:
                 records, process_manifest, port_manifest = _validated_owned_records(old_state, old_repo, old_id, old_token)
                 fault_record = _validated_fault_record(old_state, old_token)
-            except safety.SafetyError:
-                _quarantine_stale_lease_pointer(path, root, existing)
-            else:
                 _stop_owned_fault_record(fault_record)
                 _stop_owned_records(records, process_manifest, port_manifest, old_id)
                 _safe_remove_state(old_state, old_repo, old_id)
+            except (safety.SafetyError, QualificationLeaseError):
+                # A dead owner cannot keep the admission pointer indefinitely.
+                # If any provenance or listener-lineage check fails, preserve the
+                # state/log evidence and retire only the pointer. In particular,
+                # do not retry or broaden process cleanup after a refused signal.
+                _quarantine_stale_lease_pointer(path, root, existing)
+            else:
                 old_logs = root / "logs" / old_id
                 if old_logs.is_dir():
                     shutil.rmtree(old_logs)

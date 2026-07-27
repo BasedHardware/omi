@@ -8,7 +8,6 @@ import json
 import subprocess
 import sys
 
-
 UNRELEASED_CHANGELOG_PREFIX = "desktop/macos/changelog/unreleased/"
 CHANGELOG_PREFIX = "desktop/macos/changelog/"
 DESKTOP_PREFIX = "desktop/macos/"
@@ -16,7 +15,10 @@ EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/CHANGELOG.json",
     "desktop/macos/AGENTS.md",
     "desktop/macos/docs/release.md",
+    "desktop/macos/docs/qualification-environment.md",
     "desktop/macos/scripts/qualify-desktop-beta.sh",
+    # Capacity/lease authority for the same internal qualification runner.
+    "desktop/macos/scripts/qualification-cache-reclaim.py",
     # Sibling qualification-runner helper to qualify-desktop-beta.sh: internal
     # release infrastructure with no user-facing app surface.
     "desktop/macos/scripts/qualification-swift-cache.sh",
@@ -26,6 +28,16 @@ EXEMPT_DESKTOP_PATHS = {
     # Pre-tag readiness gate script: internal release infrastructure (runs on the
     # trusted M1 before tagging), no user-facing app surface.
     "desktop/macos/scripts/pre-tag-readiness.sh",
+    # CI-only offline M1 qualification lifecycle proof: internal release
+    # infrastructure (pre-dispatch before canonical qualification), no
+    # user-facing app surface.
+    "desktop/macos/scripts/qualification-local-proof.sh",
+    # Release-keyvalue metadata tooling: internal release-channel metadata,
+    # never ships in the desktop app.
+    "desktop/macos/scripts/release-keyvalue.py",
+    # Internal qualification environment documentation for CI runners; not a
+    # user-facing app note.
+    "desktop/macos/docs/qualification-environment.md",
     # CI-only flow-validation script and its shared action-source inventory do
     # not alter the desktop application a user receives.
     "desktop/macos/scripts/desktop-flow-lint.py",
@@ -90,7 +102,9 @@ def validate_unreleased_fragment(head_ref: str, path: str) -> None:
 
     if isinstance(data.get("change"), str) and data["change"].strip():
         return
-    if isinstance(data.get("changes"), list) and any(isinstance(entry, str) and entry.strip() for entry in data["changes"]):
+    if isinstance(data.get("changes"), list) and any(
+        isinstance(entry, str) and entry.strip() for entry in data["changes"]
+    ):
         return
 
     raise SystemExit(f"FAIL: {path} must contain a non-empty 'change' string or 'changes' list")

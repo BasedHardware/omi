@@ -1,3 +1,0 @@
-{
-  "change": "Improved internal diagnostics so failed chat tool calls are recorded alongside successful ones"
-}

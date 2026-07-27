@@ -20,6 +20,7 @@ from routers.conversation_finalization import _parse_task_payload
 import routers.conversation_finalization as finalization_router
 import routers.pusher as pusher_router
 from utils.conversations import lifecycle as lifecycle_service
+from utils import app_integrations
 from utils import cloud_tasks
 from utils.conversations.finalizer import ConversationFinalizationDisposition, ConversationFinalizationError
 import utils.conversations.finalizer as persisted_finalizer
@@ -1399,3 +1400,77 @@ async def test_finalizer_runs_derived_effects_only_after_winning_claim(monkeypat
     derived_runner.assert_called_once()
     integrations.assert_awaited_once()
     complete.assert_called_once_with('job-1', 2, 3)
+
+
+@pytest.mark.anyio
+async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(monkeypatch):
+    """A user's broken app webhook (expired token, deleted target) answers every
+    retry identically, so it must not strand the conversation in `processing`
+    until the finalization job dead-letters. The real fanout runs here."""
+
+    async def inline_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    conversation = SimpleNamespace(
+        id='conversation-1',
+        status=ConversationStatus.processing,
+        language='en',
+        discarded=False,
+        is_locked=False,
+        source=None,
+    )
+    complete = MagicMock(return_value=True)
+
+    def contract_faithful_process(_uid, _lang, conv, **kwargs):
+        if observer := kwargs.get('persistence_observer'):
+            observer(True)
+        if effects_observer := kwargs.get('derived_effects_observer'):
+            effects_observer(MagicMock())
+        return conv
+
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+    )
+    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
+    monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    monkeypatch.setattr(persisted_finalizer, 'process_conversation', contract_faithful_process)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(
+        persisted_finalizer.lifecycle_service,
+        'claim_finalization_fanout',
+        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+    )
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
+
+    app = MagicMock()
+    app.id = 'omi-google-drive-integration'
+    app.enabled = True
+    app.uid = None
+    app.external_integration.webhook_url = 'https://app.test/hook'
+    app.triggers_on_conversation_creation.return_value = True
+    webhook_client = AsyncMock()
+    webhook_client.post = AsyncMock(return_value=MagicMock(status_code=401, text='re-authenticate'))
+    monkeypatch.setattr(app_integrations, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [app])
+    monkeypatch.setattr(app_integrations, 'conversation_to_dict', lambda conv: {'id': conv.id})
+    monkeypatch.setattr(app_integrations, 'get_webhook_client', lambda: webhook_client)
+    monkeypatch.setattr(app_integrations, 'is_app_webhook_disabled', lambda app_id: False)
+    record_failure = MagicMock(return_value=0)
+    monkeypatch.setattr(app_integrations, 'record_app_webhook_failure', record_failure)
+    monkeypatch.setattr(app_integrations, '_handle_webhook_health_action', MagicMock())
+
+    disposition = await persisted_finalizer.finalize_persisted_conversation(
+        'uid-1',
+        'conversation-1',
+        finalization_job_id='job-1',
+        dispatch_generation=2,
+        lease_epoch=3,
+    )
+
+    assert disposition == ConversationFinalizationDisposition.completed
+    complete.assert_called_once_with('job-1', 2, 3)
+    # The failure is still owned by webhook health, which disables the app after 72h.
+    record_failure.assert_called_once_with('omi-google-drive-integration', 401, 'HTTP 401')

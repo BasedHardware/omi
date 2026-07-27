@@ -985,6 +985,14 @@ def cmd_qualification_lease(args: argparse.Namespace) -> int:
             retention_age_seconds=args.retention_age_seconds,
         )
         return 0
+    if args.lease_action == "preflight-fault-cleanup":
+        qualification.preflight_fault_cleanup(
+            repo_root=repo_root,
+            lease_id=args.lease_id,
+            token=args.token,
+            result_path=Path(args.result),
+        )
+        return 0
     raise AssertionError(f"Unexpected qualification lease action {args.lease_action!r}")
 
 
@@ -1019,6 +1027,14 @@ def build_parser() -> argparse.ArgumentParser:
     release.add_argument("--retained-runs", type=int, default=qualification.DEFAULT_RETAINED_RUNS)
     release.add_argument("--retention-age-seconds", type=int, default=qualification.DEFAULT_RETENTION_MAX_AGE_SECONDS)
     release.set_defaults(func=cmd_qualification_lease)
+    fault_preflight = lease_sub.add_parser(
+        "preflight-fault-cleanup",
+        help="Validate and reclaim the exact lease-owned disposable fault listener",
+    )
+    fault_preflight.add_argument("--lease-id", required=True)
+    fault_preflight.add_argument("--token", required=True)
+    fault_preflight.add_argument("--result", required=True)
+    fault_preflight.set_defaults(func=cmd_qualification_lease)
     return parser
 
 

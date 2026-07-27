@@ -14,8 +14,9 @@ shape conversion and its retrieval-policy injection points.
 
 Provider translation must not reach SSE framing. Public-web prompt routing for
 the agent runtime lives in `desktop/macos/agent`; this gateway exposes
-`web_search` as a normal server tool on supported agentic turns and lets the
-model choose it instead of keyword-injecting retrieval instructions here.
+`web_search` as a normal server tool on supported agentic turns. Request
+translation is the enforcement boundary for explicit private/no-web context,
+including client-tool continuations, and must omit the external tool there.
 
 ## Tests
 

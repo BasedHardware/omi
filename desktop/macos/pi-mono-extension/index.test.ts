@@ -35,6 +35,8 @@ import {
   __resetOmiPipeForTest,
   omiRequestIdFromRelayContext,
   omiReasoningEffortFromRelayContext,
+  applyOmiProviderHeaders,
+  OMI_CHAT_CONTRACT_VERSION,
 } from "./index.ts";
 import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { agentControlCapabilityManifest } from "../agent/src/runtime/control-tool-manifest.ts";
@@ -62,6 +64,22 @@ test("reasoning effort relay: strict two-token allowlist", () => {
   assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"max"}'), undefined);
   assert.equal(omiReasoningEffortFromRelayContext('{"requestId":"req_1"}'), undefined);
   assert.equal(omiReasoningEffortFromRelayContext("not json"), undefined);
+});
+
+test("provider headers always advertise the versioned chat contract", () => {
+  const headers: Record<string, string> = {};
+  applyOmiProviderHeaders(headers, undefined);
+  assert.equal(headers["x-omi-chat-contract-version"], OMI_CHAT_CONTRACT_VERSION);
+
+  applyOmiProviderHeaders(
+    headers,
+    JSON.stringify({ requestId: "req_1", reasoningEffort: "adaptive" }),
+  );
+  assert.deepEqual(headers, {
+    "x-omi-chat-contract-version": "1",
+    "x-omi-request-id": "req_1",
+    "x-omi-reasoning-effort": "adaptive",
+  });
 });
 
 test("classifyBash: allows normal dev commands", () => {

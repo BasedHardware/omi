@@ -35,53 +35,7 @@ jobs:
           (umask 077; mkdir -p "$QUALIFICATION_STAGE/assets")
           test ! -L "$QUALIFICATION_STAGE"
           test "$(python3 -c 'import os, stat, sys; print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode))[2:])' "$QUALIFICATION_STAGE")" = 700
-          # This must run before the candidate checkout: a terminal runner loss can
-          # prevent later `always()` steps from producing cleanup evidence.
-          # Detect constrained capacity early enough to preserve a per-run report.
-          # Keep the guard here instead of a checked-in helper because this workflow
-          # deliberately has no repository checkout before its candidate binding.
-          python3 - "$RUNNER_TEMP" "$QUALIFICATION_STAGE/runner-capacity.json" <<'PY'
-          import json
-          import os
-          import sys
-
-          path, report_path = sys.argv[1:]
-          minimum_free_kib = int(os.environ.get("OMI_QUALIFICATION_MINIMUM_FREE_KIB", "33554432"))
-          minimum_free_inodes = int(os.environ.get("OMI_QUALIFICATION_MINIMUM_FREE_INODES", "65536"))
-          if minimum_free_kib < 1 or minimum_free_inodes < 1:
-              raise SystemExit("Qualification capacity minimums must be positive")
-
-          filesystem = os.statvfs(path)
-          available_kib = (filesystem.f_bavail * filesystem.f_frsize) // 1024
-          available_inodes = filesystem.f_favail
-          failures = []
-          if available_kib < minimum_free_kib:
-              failures.append("insufficient-free-kib")
-          if available_inodes < minimum_free_inodes:
-              failures.append("insufficient-free-inodes")
-          report = {
-              "available_inodes": available_inodes,
-              "available_kib": available_kib,
-              "failure_reasons": failures,
-              "guard": "runner-capacity-preflight",
-              "minimum_free_inodes": minimum_free_inodes,
-              "minimum_free_kib": minimum_free_kib,
-              "schema_version": 1,
-              "status": "failed" if failures else "passed",
-          }
-          with open(report_path, "w", encoding="utf-8") as handle:
-              json.dump(report, handle, sort_keys=True)
-              handle.write("\n")
-
-          if failures:
-              print(
-                  "::error::M1 qualification runner capacity guard refused to start "
-                  f"(available_kib={available_kib}, required_kib={minimum_free_kib}, "
-                  f"available_inodes={available_inodes}, required_inodes={minimum_free_inodes})"
-              )
-              raise SystemExit(1)
-          PY
-      - name: Checkout candidate into this run only
+      - name: Checkout cache reclaim authority from exact candidate
         working-directory: ${{ runner.temp }}
         env:
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
@@ -96,7 +50,45 @@ jobs:
           test "$ref" = "$RELEASE_TAG"
           git init --quiet "$source_dir"
           git -C "$source_dir" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
-          GIT_TERMINAL_PROMPT=0 git -C "$source_dir" fetch --force --prune --tags origin
+          git -C "$source_dir" sparse-checkout init --no-cone
+          git -C "$source_dir" sparse-checkout set desktop/macos/scripts/qualification-cache-reclaim.py
+          GIT_TERMINAL_PROMPT=0 git -C "$source_dir" fetch --force --depth=1 --filter=blob:none origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"
+          test -x "$source_dir/desktop/macos/scripts/qualification-cache-reclaim.py"
+      - name: Reclaim idle qualification cache and enforce runner capacity
+        working-directory: ${{ runner.temp }}
+        env:
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
+          OMI_QUALIFICATION_MINIMUM_FREE_KIB: 33554432
+          OMI_QUALIFICATION_MINIMUM_FREE_INODES: 65536
+        run: |
+          set -euo pipefail
+          expected="$RUNNER_TEMP/desktop-beta-qualification/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test "$QUALIFICATION_STAGE" = "$expected"
+          test -d "$QUALIFICATION_STAGE/source"
+          cache_root="${OMI_QUALIFICATION_SWIFT_CACHE_ROOT:-$HOME/Library/Caches/OmiDesktop/qualification-swiftpm-v2}"
+          lease_root="${OMI_QUALIFICATION_LEASE_ROOT:-${TMPDIR:-/tmp}/omi-desktop-qualification}"
+          python3 "$QUALIFICATION_STAGE/source/desktop/macos/scripts/qualification-cache-reclaim.py" reclaim \
+            --cache-root "$cache_root" \
+            --qualification-lease-root "$lease_root" \
+            --capacity-path "$RUNNER_TEMP" \
+            --minimum-free-kib "${OMI_QUALIFICATION_MINIMUM_FREE_KIB:-33554432}" \
+            --minimum-free-inodes "${OMI_QUALIFICATION_MINIMUM_FREE_INODES:-65536}" \
+            --minimum-age-seconds 21600 \
+            --max-entries 8 \
+            --max-reclaim-kib 67108864 \
+            --report "$QUALIFICATION_STAGE/runner-capacity.json"
+      - name: Expand exact candidate checkout
+        working-directory: ${{ runner.temp }}
+        env:
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          source_dir="$QUALIFICATION_STAGE/source"
+          test -d "$source_dir/.git"
+          GIT_TERMINAL_PROMPT=0 git -C "$source_dir" fetch --force --prune --tags --filter=blob:none origin
+          git -C "$source_dir" sparse-checkout disable
           git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"
       - id: app-token
         uses: actions/create-github-app-token@v3
@@ -114,6 +106,27 @@ jobs:
           TARGET_SHA=$(git rev-parse "$RELEASE_TAG^{commit}")
           test "$TARGET_SHA" = "$(git rev-parse 'HEAD^{commit}')"
           echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+      - name: Verify live desktop-backend chat compatibility
+        env:
+          QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 \
+            https://desktop-backend-hhibjajaja-uc.a.run.app/health \
+            > "$QUALIFICATION_STAGE/desktop-backend-health.json"
+          jq -e '
+            .status == "healthy"
+            and .service == "omi-desktop-backend"
+            and .chat_contract_version == "1"
+          ' "$QUALIFICATION_STAGE/desktop-backend-health.json" >/dev/null
+          jq '{
+            chat_contract_version,
+            schema_version: 1,
+            service,
+            status
+          }' "$QUALIFICATION_STAGE/desktop-backend-health.json" \
+            > "$QUALIFICATION_STAGE/desktop-backend-compatibility.json"
+          rm -f "$QUALIFICATION_STAGE/desktop-backend-health.json"
       - name: Fetch candidate release inputs into this run only
         working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
@@ -150,6 +163,8 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
           OMI_QUALIFICATION_CLEANUP_CONTEXT: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/lease-context.json
+          OMI_QUALIFICATION_TIMINGS_FILE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/phase-timings.json
+          OMI_QUALIFICATION_FAULT_PREFLIGHT_REPORT: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/fault-listener-preflight.json
         run: |
           set -euo pipefail
           desktop/macos/scripts/qualify-desktop-beta.sh --automatic --github-actions-artifact --signed-smoke-result "$QUALIFICATION_STAGE/desktop-smoke-result.json" --candidate-gate-result "$QUALIFICATION_STAGE/candidate-gate.json" "$RELEASE_TAG"
@@ -170,7 +185,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: desktop-qualification-evidence-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/qualification-evidence.json
+          path: |
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/qualification-evidence.json
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/desktop-backend-compatibility.json
           if-no-files-found: error
           overwrite: false
       - name: Attach immutable qualification evidence
@@ -207,8 +224,12 @@ jobs:
           if [ -f "$context" ]; then
             worktree=$(jq -r .worktree "$context"); lease_id=$(jq -r .lease_id "$context"); token=$(jq -r .token "$context")
             retained=$(jq -r .retained_runs "$context"); age=$(jq -r .retention_age_seconds "$context")
+            cache_sha=$(jq -r .cache_source_sha "$context"); cache_lease_id=$(jq -r .cache_lease_id "$context")
+            cache_owner_pid=$(jq -r .cache_owner_pid "$context"); cache_token=$(jq -r .cache_token "$context")
             echo "::add-mask::$token"
+            echo "::add-mask::$cache_token"
             OMI_HARNESS_OWNERSHIP_TOKEN="$token" "$worktree/desktop/macos/scripts/qualification-lease-command.sh" release "$worktree" "$lease_id" "$token" "$retained" "$age"
+            "$worktree/desktop/macos/scripts/qualification-swift-cache.sh" release "$cache_sha" "$cache_lease_id" "$cache_owner_pid" "$cache_token"
             jq -n --arg lease_id "$lease_id" '{lease_id: $lease_id, cleanup_status: "released"}' > "$cleanup"
           else
             printf '%s\n' '{"cleanup_status":"no-lease-acquired"}' > "$cleanup"
@@ -220,6 +241,8 @@ jobs:
           path: |
             ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/runner-capacity.json
             ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/cleanup-evidence.json
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/fault-listener-preflight.json
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/phase-timings.json
           if-no-files-found: error
           overwrite: false
 

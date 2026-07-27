@@ -1,0 +1,489 @@
+name: Deploy Desktop Backend to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Exact merged main SHA with a successful first-attempt Release Eligibility proof'
+        required: true
+      confirm:
+        description: 'Type deploy-desktop-backend-prod'
+        required: true
+      reason:
+        description: 'Operator reason for this production deployment'
+        required: true
+      skip_eligibility_proof:
+        description: 'Break-glass: deploy a merged main SHA without Release Eligibility proof'
+        required: false
+        default: false
+        type: boolean
+      break_glass_confirm:
+        description: 'Type deploy-without-proof when skip_eligibility_proof is set'
+        required: false
+        default: ''
+      break_glass_reason:
+        description: 'Why the eligibility proof is unavailable'
+        required: false
+        default: ''
+
+concurrency:
+  group: desktop-backend-prod
+  # Never cancel a Cloud Run traffic mutation or its rollback verification.
+  cancel-in-progress: false
+
+env:
+  SERVICE: desktop-backend
+  REGION: us-central1
+  FIREBASE_AUTH_PROJECT_ID: based-hardware
+  EXPECTED_GCP_PROJECT_ID: based-hardware
+  PRODUCTION_DESKTOP_BACKEND_URL: https://desktop-backend-hhibjajaja-uc.a.run.app
+  CANDIDATE_TAG: desktop-prod-candidate
+  CHAT_CONTRACT_VERSION: '1'
+
+jobs:
+  deploy:
+    environment: prod
+    permissions:
+      actions: 'read'
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest-m
+    steps:
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Checkout immutable deployment controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .workflow-source
+
+      - name: Stage immutable desktop backend controls
+        run: |
+          set -euo pipefail
+          controls="$RUNNER_TEMP/desktop-backend-deploy-controls"
+          rm -rf "$controls"
+          mkdir -p "$controls/.github/scripts" "$controls/backend/scripts" "$controls/scripts"
+          cp .workflow-source/.github/scripts/desktop_backend_candidate_probe.py "$controls/.github/scripts/"
+          cp .workflow-source/.github/scripts/verify_desktop_backend_image_lineage.py "$controls/.github/scripts/"
+          cp .workflow-source/backend/scripts/firebase_release_probe_token.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/scripts/resolve_cloud_run_tagged_url.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/scripts/wait_cloud_run_candidate_readiness.py "$controls/backend/scripts/"
+          cp .workflow-source/scripts/voice-provider-probe.sh "$controls/scripts/"
+          rm -rf .workflow-source
+          echo "DESKTOP_BACKEND_CONTROLS=$controls" >> "$GITHUB_ENV"
+
+      - name: Checkout fresh main for source admission
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Admit exact production source
+        id: admitted-source
+        env:
+          DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
+          CONFIRM: ${{ github.event.inputs.confirm }}
+          REASON: ${{ github.event.inputs.reason }}
+          SKIP_PROOF: ${{ github.event.inputs.skip_eligibility_proof }}
+          BREAK_GLASS_CONFIRM: ${{ github.event.inputs.break_glass_confirm }}
+          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha_pattern='^[0-9a-f]{40}$'
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "ERROR: production desktop-backend deploy controls must run from main." >&2
+            exit 1
+          fi
+          if [[ "$CONFIRM" != "deploy-desktop-backend-prod" ]]; then
+            echo "ERROR: confirm must be deploy-desktop-backend-prod." >&2
+            exit 1
+          fi
+          if [[ -z "${REASON// }" ]]; then
+            echo "ERROR: reason must be non-empty." >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_SHA" =~ $sha_pattern || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            echo "ERROR: release_sha must be one non-zero, lowercase, full commit SHA." >&2
+            exit 1
+          fi
+
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          if ! git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"; then
+            echo "ERROR: release_sha is not an ancestor of fresh origin/main." >&2
+            exit 1
+          fi
+
+          if [[ "${SKIP_PROOF:-false}" == "true" ]]; then
+            if [[ "$BREAK_GLASS_CONFIRM" != "deploy-without-proof" ]]; then
+              echo "ERROR: skip_eligibility_proof requires break_glass_confirm=deploy-without-proof." >&2
+              exit 1
+            fi
+            if [[ -z "${BREAK_GLASS_REASON// }" ]]; then
+              echo "ERROR: skip_eligibility_proof requires a non-empty break_glass_reason." >&2
+              exit 1
+            fi
+            echo "::warning::Release Eligibility proof skipped for ${DEPLOY_SHA}; see protected dispatch inputs for the reason."
+            echo "break_glass=true" >> "$GITHUB_OUTPUT"
+          else
+            proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
+            gh api -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
+              > "$proof_path"
+            python3 .github/scripts/verify_backend_release_admission.py \
+              --sha "$DEPLOY_SHA" \
+              --repository "$GITHUB_REPOSITORY" \
+              --workflow-runs "$proof_path" \
+              --require-first-attempt
+            echo "break_glass=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          git checkout --detach "$DEPLOY_SHA"
+          checked_out_sha="$(git rev-parse 'HEAD^{commit}')"
+          if [[ "$checked_out_sha" != "$DEPLOY_SHA" ]]; then
+            echo "ERROR: checked-out SHA $checked_out_sha does not match admitted SHA $DEPLOY_SHA." >&2
+            exit 1
+          fi
+          image_tag="${checked_out_sha:0:12}"
+          revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          reason_digest="$(printf '%s' "$REASON" | sha256sum | cut -d' ' -f1)"
+          {
+            echo "source_sha=$checked_out_sha"
+            echo "image_tag=$image_tag"
+            echo "revision=desktop-backend-$revision_suffix"
+            echo "revision_suffix=$revision_suffix"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Desktop backend production admission"
+            echo "- Source SHA: \`$checked_out_sha\`"
+            echo "- Operator reason SHA-256: \`$reason_digest\`"
+            echo "- Break glass: ${SKIP_PROOF:-false}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Login to GCR
+        run: gcloud auth configure-docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Validate production desktop backend authority
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ "$PROJECT_ID" != "$EXPECTED_GCP_PROJECT_ID" ]]; then
+            echo "ERROR: production environment resolved project $PROJECT_ID, expected $EXPECTED_GCP_PROJECT_ID." >&2
+            exit 1
+          fi
+          current_url="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.url)')"
+          if [[ "$current_url" != "$PRODUCTION_DESKTOP_BACKEND_URL" ]]; then
+            echo "ERROR: production service URL $current_url is not the canonical $PRODUCTION_DESKTOP_BACKEND_URL." >&2
+            exit 1
+          fi
+          gcloud secrets versions access latest \
+            --project="$PROJECT_ID" \
+            --secret=DESKTOP_GOOGLE_CALENDAR_API_KEY > /tmp/desktop-google-calendar-api-key
+          python3 - <<'PY'
+          from pathlib import Path
+
+          value = Path("/tmp/desktop-google-calendar-api-key").read_bytes()
+          if value.endswith(b"\n"):
+              raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY must not include a trailing newline")
+          if len(value) != 39 or not value.startswith(b"AIza"):
+              raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY does not look like a Google API key")
+          PY
+
+      - name: Capture current serving revision
+        id: previous-traffic
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          service_json="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json)"
+          previous_revision="$(SERVICE_JSON="$service_json" python3 - <<'PY'
+          import json
+          import os
+
+          service = json.loads(os.environ["SERVICE_JSON"])
+          targets = [
+              target.get("revisionName", "")
+              for target in service.get("status", {}).get("traffic", [])
+              if target.get("percent") == 100 and target.get("revisionName")
+          ]
+          if len(targets) != 1:
+              raise SystemExit("production desktop-backend must have exactly one 100% serving revision")
+          print(targets[0])
+          PY
+          )"
+          echo "revision=$previous_revision" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push immutable Docker image
+        id: build-image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./desktop/macos/Backend-Rust
+          file: ./desktop/macos/Backend-Rust/Dockerfile
+          push: true
+          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.admitted-source.outputs.image_tag }}
+          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
+          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+
+      - name: Deploy production candidate at zero traffic
+        id: deploy-candidate
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
+          no_traffic: true
+          flags: >-
+            --allow-unauthenticated
+            --revision-suffix=${{ steps.admitted-source.outputs.revision_suffix }}
+            --tag=${{ env.CANDIDATE_TAG }}
+            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
+          env_vars: |
+            FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
+            BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
+            OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
+            OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=production
+          secrets: |
+            GEMINI_API_KEY=GEMINI_API_KEY:latest
+            OPENAI_API_KEY=OPENAI_API_KEY:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
+            REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest
+            FIREBASE_API_KEY=FIREBASE_API_KEY:latest
+            PINECONE_API_KEY=PINECONE_API_KEY:latest
+            REDIS_DB_HOST=REDIS_DB_HOST:latest
+            REDIS_DB_PORT=REDIS_DB_PORT:latest
+            PINECONE_HOST=PINECONE_HOST:latest
+            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
+            DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
+            GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
+
+      - name: Wait for no-traffic candidate readiness
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/wait_cloud_run_candidate_readiness.py" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --service="$SERVICE" \
+            --revision="${{ steps.admitted-source.outputs.revision }}" \
+            --timeout-seconds=150 \
+            --poll-interval-seconds=5
+
+      - name: Verify candidate image lineage
+        id: verify-image-lineage
+        env:
+          BUILD_IMAGE_REF: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          runtime_image_ref="$(gcloud run revisions describe "${{ steps.admitted-source.outputs.revision }}" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.imageDigest)')"
+          runtime_digest="$(python3 "$DESKTOP_BACKEND_CONTROLS/.github/scripts/verify_desktop_backend_image_lineage.py" \
+            --build-image-ref="$BUILD_IMAGE_REF" \
+            --runtime-image-ref="$runtime_image_ref" \
+            --source-sha="${{ steps.admitted-source.outputs.source_sha }}" \
+            --revision="${{ steps.admitted-source.outputs.revision }}" \
+            --evidence-path=artifacts/desktop-backend-prod-readback.json)"
+          echo "runtime_digest=$runtime_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve exact no-traffic candidate URL
+        id: candidate-url
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          candidate_url="$(python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/resolve_cloud_run_tagged_url.py" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --service="$SERVICE" \
+            --revision="${{ steps.admitted-source.outputs.revision }}" \
+            --tag="$CANDIDATE_TAG")"
+          echo "url=$candidate_url" >> "$GITHUB_OUTPUT"
+
+      - name: Mint candidate probe identity
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          token_file="$(mktemp "$RUNNER_TEMP/omi-desktop-backend-probe.XXXXXX")"
+          chmod 600 "$token_file"
+          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/firebase_release_probe_token.py" \
+            --secret-project "$PROJECT_ID" \
+            --firebase-project="$FIREBASE_AUTH_PROJECT_ID" \
+            --token-output="$token_file"
+          echo "DESKTOP_BACKEND_PROBE_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+
+      - name: Prove candidate chat and web-search compatibility
+        run: |
+          set -euo pipefail
+          python3 "$DESKTOP_BACKEND_CONTROLS/.github/scripts/desktop_backend_candidate_probe.py" \
+            --base-url="${{ steps.candidate-url.outputs.url }}" \
+            --bearer-token-file="$DESKTOP_BACKEND_PROBE_TOKEN_FILE" \
+            --expected-release-sha="${{ steps.admitted-source.outputs.source_sha }}" \
+            --expected-release-channel=production \
+            --expected-contract-version="$CHAT_CONTRACT_VERSION" \
+            --expected-revision="${{ steps.admitted-source.outputs.revision }}" \
+            --expected-image-digest="${{ steps.verify-image-lineage.outputs.runtime_digest }}" \
+            --candidate-tag="$CANDIDATE_TAG" \
+            --workflow-run-id="$GITHUB_RUN_ID" \
+            --evidence-path=artifacts/desktop-backend-prod-candidate.json
+
+      - name: Prove candidate managed realtime provider paths
+        run: |
+          set -euo pipefail
+          for provider in openai gemini; do
+            for attempt in 1 2 3; do
+              probe_exit=0
+              "$DESKTOP_BACKEND_CONTROLS/scripts/voice-provider-probe.sh" "$provider" "${{ steps.candidate-url.outputs.url }}" \
+                --bearer-token-file="$DESKTOP_BACKEND_PROBE_TOKEN_FILE" || probe_exit=$?
+              if [[ "$probe_exit" -eq 0 ]]; then
+                break
+              fi
+              if [[ "$probe_exit" -ne 75 || "$attempt" -eq 3 ]]; then
+                echo "Managed realtime provider proof failed for $provider." >&2
+                exit "$probe_exit"
+              fi
+              echo "Retrying $provider provider proof after a retryable upstream failure ($attempt/3)."
+              sleep 5
+            done
+          done
+
+      - name: Route traffic to accepted production revision
+        id: route-traffic
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REVISION: ${{ steps.admitted-source.outputs.revision }}
+        run: |
+          set -euo pipefail
+          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/resolve_cloud_run_tagged_url.py" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --service="$SERVICE" \
+            --revision="$REVISION" \
+            --tag="$CANDIDATE_TAG" >/dev/null
+          echo "DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED=true" >> "$GITHUB_ENV"
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$REVISION=100" \
+            --quiet
+
+      - name: Verify production serving identity
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          service_json="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json)"
+          serving_revision="$(SERVICE_JSON="$service_json" python3 - <<'PY'
+          import json
+          import os
+
+          service = json.loads(os.environ["SERVICE_JSON"])
+          targets = [
+              target.get("revisionName", "")
+              for target in service.get("status", {}).get("traffic", [])
+              if target.get("percent") == 100 and target.get("revisionName")
+          ]
+          if len(targets) != 1:
+              raise SystemExit("production desktop-backend traffic is not bound to one revision")
+          print(targets[0])
+          PY
+          )"
+          if [[ "$serving_revision" != "${{ steps.admitted-source.outputs.revision }}" ]]; then
+            echo "ERROR: serving revision $serving_revision does not match admitted candidate." >&2
+            exit 1
+          fi
+          python3 "$DESKTOP_BACKEND_CONTROLS/.github/scripts/desktop_backend_candidate_probe.py" \
+            --health-only \
+            --base-url="$PRODUCTION_DESKTOP_BACKEND_URL" \
+            --expected-release-sha="${{ steps.admitted-source.outputs.source_sha }}" \
+            --expected-release-channel=production \
+            --expected-contract-version="$CHAT_CONTRACT_VERSION" \
+            --evidence-path=artifacts/desktop-backend-prod-serving.json
+
+      - name: Restore prior traffic after a failed promotion
+        if: failure() && env.DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED == 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PREVIOUS_REVISION: ${{ steps.previous-traffic.outputs.revision }}
+        run: |
+          set -euo pipefail
+          test -n "$PREVIOUS_REVISION"
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$PREVIOUS_REVISION=100" \
+            --quiet
+          restored_revision="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.traffic[percent=100].revisionName)')"
+          if [[ "$restored_revision" != "$PREVIOUS_REVISION" ]]; then
+            echo "ERROR: rollback verification found $restored_revision, expected $PREVIOUS_REVISION." >&2
+            exit 1
+          fi
+          echo "::warning title=Desktop backend traffic restored::Restored 100% traffic to $PREVIOUS_REVISION."
+
+      - name: Remove accepted candidate tag
+        if: success() && steps.route-traffic.outcome == 'success'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --remove-tags="$CANDIDATE_TAG" \
+            --quiet
+
+      - name: Upload desktop backend acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-backend-prod-${{ steps.admitted-source.outputs.image_tag }}-${{ github.run_attempt }}
+          path: artifacts/desktop-backend-prod-*.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Remove probe token
+        if: always()
+        run: |
+          if [[ -n "${DESKTOP_BACKEND_PROBE_TOKEN_FILE:-}" ]]; then
+            rm -f "$DESKTOP_BACKEND_PROBE_TOKEN_FILE"
+          fi
+
+      - name: Record accepted production deployment
+        if: success()
+        run: |
+          {
+            echo "- Accepted revision: \`${{ steps.admitted-source.outputs.revision }}\`"
+            echo "- Backend source SHA: \`${{ steps.admitted-source.outputs.source_sha }}\`"
+            echo "- Chat contract: \`$CHAT_CONTRACT_VERSION\`"
+            echo "- Previous revision: \`${{ steps.previous-traffic.outputs.revision }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

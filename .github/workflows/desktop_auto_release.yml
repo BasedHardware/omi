@@ -22,7 +22,9 @@ on:
       - '.github/scripts/plan-desktop-release.py'
       - '.github/scripts/desktop-release-source-identity.py'
       - '.github/scripts/publish-desktop-candidate-tag.py'
+      - '.github/scripts/verify-pre-tag-readiness.py'
       - '.github/workflows/desktop_auto_release.yml'
+      - '.github/workflows/desktop_qualify_beta.yml'
       - '.github/workflows/desktop-swift-ci.yml'
   schedule:
     # Poll every 15 min. The push trigger fires immediately on merge, but at that
@@ -74,34 +76,33 @@ jobs:
       - name: Show release plan
         run: echo "${{ steps.plan.outputs.reason }}"
 
-  # Continuous deployment: candidate creation is gated only by the cheap, hosted
-  # CI checks the planner verifies (`Release Eligibility`, `Desktop Swift Build &
-  # Tests`, `Desktop Swift Release Compile` on the exact source SHA). The heavy
-  # validation runs AFTER the candidate exists, in the two-machine qualification
-  # pipeline (desktop_qualify_beta.yml) — a candidate that fails qualification is
-  # simply never promoted to Beta, so no self-hosted pre-candidate gate is needed.
-  # (The former trusted-M1 pre-tag-readiness gate was a single point of failure in
-  # front of immutable tag creation and contradicted "create on every change, then
-  # qualify"; desktop/macos/scripts/pre-tag-readiness.sh remains for local use.)
+  # Candidate publication is one serialized trusted-M1 transaction: after the
+  # immutable final-source binding it runs offline readiness, verifies that
+  # receipt, then performs the only tag mutation. No cross-job handoff can leave
+  # a stale receipt or duplicate M1 lifecycle in the gap.
   tag-release:
     needs: [plan-release]
     if: needs.plan-release.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]
     concurrency:
       group: desktop-auto-release-tag-main
       cancel-in-progress: false
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
       - name: Generate Omi Bot token
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      # The native tag must be pushed by the Omi Bot installation, rather than
+      # the workflow's GITHUB_TOKEN. GitHub suppresses recursively generated
+      # events for GITHUB_TOKEN, which leaves Codemagic no tag webhook to build.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Recheck desktop release queue before tagging
         id: recheck
@@ -124,6 +125,7 @@ jobs:
         with:
           ref: ${{ steps.recheck.outputs.source_sha }}
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Compute next version and consolidate changelog
         if: steps.recheck.outputs.should_release == 'true'
@@ -365,6 +367,34 @@ jobs:
           if-no-files-found: error
           overwrite: false
 
+      - name: Run ownership-scoped M1 pre-tag readiness
+        if: steps.final-plan.outputs.should_release == 'true'
+        env:
+          OMI_READINESS_LANE: ci
+        run: |
+          set -euo pipefail
+          desktop/macos/scripts/pre-tag-readiness.sh \
+            --source-repository "$GITHUB_WORKSPACE" \
+            --evidence "$RUNNER_TEMP/desktop-pre-tag-readiness.json" \
+            "${{ steps.identity.outputs.candidate_sha }}"
+
+      - name: Verify M1 readiness receipt
+        if: steps.final-plan.outputs.should_release == 'true'
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/verify-pre-tag-readiness.py verify \
+            --evidence "$RUNNER_TEMP/desktop-pre-tag-readiness.json" \
+            --source-sha "${{ steps.identity.outputs.candidate_sha }}"
+
+      - name: Retain redacted M1 readiness receipt
+        if: always() && steps.final-plan.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-pre-tag-readiness-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-pre-tag-readiness.json
+          if-no-files-found: error
+          overwrite: false
+
       - name: Publish immutable tag from exact live main source
         if: steps.final-plan.outputs.should_release == 'true'
         env:
@@ -390,3 +420,30 @@ jobs:
 
           git fetch --no-tags origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"
+
+      - name: Verify native Codemagic tag intake or dispatch fenced fallback
+        if: steps.final-plan.outputs.should_release == 'true'
+        env:
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+        run: |
+          # The helper waits the complete native-intake budget first. It posts at
+          # most one tag-bound fallback only after a final all-state same-tag
+          # absence fence; any existing same-tag build remains canonical.
+          python3 .github/scripts/check-codemagic-tag-intake.py \
+            --app-id "66c95e6ec76853c447b8bcbb" \
+            --workflow-id "omi-desktop-swift-release" \
+            --release-tag "${{ steps.version.outputs.release_tag }}" \
+            --source-sha "${{ steps.identity.outputs.candidate_sha }}" \
+            --timeout-seconds 600 \
+            --poll-seconds 15 \
+            --dispatch-fallback-on-absence \
+            --evidence "$RUNNER_TEMP/codemagic-native-tag-intake.json"
+
+      - name: Retain native Codemagic tag intake evidence
+        if: always() && steps.final-plan.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: codemagic-native-tag-intake-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/codemagic-native-tag-intake.json
+          if-no-files-found: error
+          overwrite: false

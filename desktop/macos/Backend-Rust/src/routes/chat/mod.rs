@@ -15,6 +15,12 @@ mod transport;
 
 pub(crate) use route::chat_completions_routes;
 
+/// Versioned desktop client ↔ chat gateway compatibility contract.
+///
+/// Health exposes this same value so release workflows can reject an
+/// incompatible backend before routing customer traffic.
+pub(crate) const CHAT_CONTRACT_VERSION: &str = "1";
+
 pub(super) fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
     crate::routes::response_or_500("chat_completions", builder, body)
 }

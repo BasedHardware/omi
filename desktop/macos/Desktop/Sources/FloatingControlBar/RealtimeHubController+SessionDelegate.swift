@@ -32,29 +32,6 @@ extension RealtimeHubController {
     return true
   }
 
-  func acceptsTurnEvent(
-    _ identity: RealtimeHubEventIdentity?,
-    source: RealtimeHubSession
-  ) -> Bool {
-    guard isCurrentSession(source), let identity else { return false }
-    guard VoiceTurnCoordinator.shared.requireCurrentOwner(for: identity.turnID) != nil else {
-      log("RealtimeHub: dropping provider event after authenticated owner changed")
-      return false
-    }
-    guard identity.turnID == VoiceTurnCoordinator.shared.activeTurnID,
-      RealtimeHubEventOwnership.accepts(
-        identity,
-        activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
-        activeResponseID: voiceResponseID)
-    else {
-      log(
-        "RealtimeHub: dropping stale provider event turn=\(identity.turnID) "
-          + "response=\(identity.responseID)")
-      return false
-    }
-    return true
-  }
-
   func sendToolResultIfCurrent(
     source: RealtimeHubSession,
     callId: String,

@@ -5,12 +5,17 @@ on:
     branches: [ "main" ]
     paths:
       - 'desktop/macos/Backend-Rust/**'
+      - '.github/workflows/desktop_backend_auto_dev.yml'
+      - '.github/scripts/desktop_backend_candidate_probe.py'
+      - '.github/scripts/verify_desktop_backend_image_lineage.py'
+      - 'backend/scripts/resolve_cloud_run_tagged_url.py'
+      - 'backend/scripts/wait_cloud_run_candidate_readiness.py'
       - 'backend/scripts/firebase_release_probe_token.py'
       - 'scripts/voice-provider-probe.sh'
   workflow_dispatch:
     inputs:
-      skip_provider_probe:
-        description: 'Skip the managed realtime-provider probe during an active upstream outage'
+      candidate_only:
+        description: 'Build a zero-traffic candidate without running acceptance or changing traffic'
         required: false
         default: false
         type: boolean
@@ -19,7 +24,10 @@ env:
   SERVICE: desktop-backend
   REGION: us-central1
   FIREBASE_AUTH_PROJECT_ID: based-hardware
-  DEFAULT_DESKTOP_BACKEND_BASE_API_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app
+  EXPECTED_GCP_PROJECT_ID: based-hardware-dev
+  DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app
+  CANDIDATE_TAG: desktop-dev-candidate
+  CHAT_CONTRACT_VERSION: '1'
 
 concurrency:
   group: desktop-backend-auto-dev
@@ -41,6 +49,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Resolve immutable candidate identity
+        id: candidate-identity
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "ERROR: development desktop-backend deploys only from main." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          source_sha="$(git rev-parse 'HEAD^{commit}')"
+          main_sha="$(git rev-parse 'origin/main^{commit}')"
+          if [[ "$source_sha" != "$main_sha" ]]; then
+            echo "ERROR: checked-out SHA $source_sha is stale; current origin/main is $main_sha." >&2
+            exit 1
+          fi
+          image_tag="${source_sha:0:12}"
+          revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "source_sha=$source_sha"
+            echo "image_tag=$image_tag"
+            echo "revision=desktop-backend-$revision_suffix"
+            echo "revision_suffix=$revision_suffix"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Google Auth
         id: auth
         uses: google-github-actions/auth@v3
@@ -53,9 +85,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
-
       - name: Resolve desktop OAuth base API URL
         id: desktop-base-api-url
         env:
@@ -64,13 +93,31 @@ jobs:
           set -euo pipefail
           BASE_API_URL="${DESKTOP_BACKEND_BASE_API_URL//[[:space:]]/}"
           if [ -z "$BASE_API_URL" ]; then
-            BASE_API_URL="$DEFAULT_DESKTOP_BACKEND_BASE_API_URL"
+            BASE_API_URL="$DEVELOPMENT_DESKTOP_BACKEND_URL"
           fi
           if [ -z "$BASE_API_URL" ]; then
             echo "Desktop OAuth BASE_API_URL could not be resolved" >&2
             exit 1
           fi
           echo "base_api_url=$BASE_API_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Validate development desktop backend authority
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ "$PROJECT_ID" != "$EXPECTED_GCP_PROJECT_ID" ]]; then
+            echo "ERROR: development environment resolved project $PROJECT_ID, expected $EXPECTED_GCP_PROJECT_ID." >&2
+            exit 1
+          fi
+          current_url="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.url)')"
+          if [[ "$current_url" != "$DEVELOPMENT_DESKTOP_BACKEND_URL" ]]; then
+            echo "ERROR: development service URL $current_url is not $DEVELOPMENT_DESKTOP_BACKEND_URL." >&2
+            exit 1
+          fi
 
       - name: Validate desktop Calendar API key secret
         env:
@@ -90,29 +137,63 @@ jobs:
               raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY does not look like a Google API key")
           PY
 
+      - name: Capture current serving revision
+        id: previous-traffic
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          service_json="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json)"
+          previous_revision="$(SERVICE_JSON="$service_json" python3 - <<'PY'
+          import json
+          import os
+
+          service = json.loads(os.environ["SERVICE_JSON"])
+          targets = [
+              target.get("revisionName", "")
+              for target in service.get("status", {}).get("traffic", [])
+              if target.get("percent") == 100 and target.get("revisionName")
+          ]
+          if len(targets) != 1:
+              raise SystemExit("desktop-backend must have exactly one 100% serving revision")
+          print(targets[0])
+          PY
+          )"
+          echo "revision=$previous_revision" >> "$GITHUB_OUTPUT"
+
       - name: Build and Push Docker image
+        id: build-image
         uses: docker/build-push-action@v7
         with:
           context: ./desktop/macos/Backend-Rust
           file: ./desktop/macos/Backend-Rust/Dockerfile
           push: true
-          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.candidate-identity.outputs.image_tag }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
       - name: Deploy desktop-backend to Cloud Run
+        id: deploy-candidate
         uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-          flags: '--allow-unauthenticated'
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
+          no_traffic: true
+          flags: >-
+            --allow-unauthenticated
+            --revision-suffix=${{ steps.candidate-identity.outputs.revision_suffix }}
+            --tag=${{ env.CANDIDATE_TAG }}
+            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
           env_vars: |
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
-            GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
-            OMI_DESKTOP_RELEASE_SHA=${{ github.sha }}
-            OMI_DESKTOP_RELEASE_CHANNEL=development
+            OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
+            OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development
           secrets: |
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
@@ -127,124 +208,104 @@ jobs:
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
 
-      - name: Route traffic to deployed desktop-backend revision
+      - name: Wait for no-traffic candidate readiness
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          python3 backend/scripts/wait_cloud_run_candidate_readiness.py \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --service="$SERVICE" \
+            --revision="${{ steps.candidate-identity.outputs.revision }}" \
+            --timeout-seconds=150 \
+            --poll-interval-seconds=5
+
+      - name: Verify candidate image lineage
+        id: verify-image-lineage
+        env:
+          BUILD_IMAGE_REF: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          runtime_image_ref="$(gcloud run revisions describe "${{ steps.candidate-identity.outputs.revision }}" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.imageDigest)')"
+          runtime_digest="$(python3 .github/scripts/verify_desktop_backend_image_lineage.py \
+            --build-image-ref="$BUILD_IMAGE_REF" \
+            --runtime-image-ref="$runtime_image_ref" \
+            --source-sha="${{ steps.candidate-identity.outputs.source_sha }}" \
+            --revision="${{ steps.candidate-identity.outputs.revision }}" \
+            --evidence-path=artifacts/desktop-backend-dev-readback.json)"
+          echo "runtime_digest=$runtime_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve exact no-traffic candidate URL
+        id: candidate-url
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           set -euo pipefail
-          REVISION="$(gcloud run services describe "$SERVICE" \
+          candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
             --project="$PROJECT_ID" \
             --region="$REGION" \
-            --format='value(status.latestCreatedRevisionName)')"
-          if [ -z "$REVISION" ]; then
-            echo "Could not determine latest desktop-backend revision" >&2
-            exit 1
-          fi
-          gcloud run services update-traffic "$SERVICE" \
-            --project="$PROJECT_ID" \
-            --region="$REGION" \
-            --to-revisions="$REVISION=100" \
-            --quiet
-          TRAFFIC_JSON="$(gcloud run services describe "$SERVICE" \
-            --project="$PROJECT_ID" \
-            --region="$REGION" \
-            --format=json)"
-          SERVING_REVISION="$(TRAFFIC_JSON="$TRAFFIC_JSON" python3 - <<'PY'
-          import json
-          import os
+            --service="$SERVICE" \
+            --revision="${{ steps.candidate-identity.outputs.revision }}" \
+            --tag="$CANDIDATE_TAG")"
+          echo "url=$candidate_url" >> "$GITHUB_OUTPUT"
 
-          service = json.loads(os.environ["TRAFFIC_JSON"])
-          for target in service.get("status", {}).get("traffic", []):
-              if target.get("percent") == 100:
-                  print(target.get("revisionName", ""))
-                  break
-          PY
-          )"
-          if [ "$SERVING_REVISION" != "$REVISION" ]; then
-            echo "desktop-backend traffic is serving $SERVING_REVISION, expected $REVISION" >&2
-            exit 1
-          fi
-
-      - name: Verify development backend release identity
+      - name: Stage candidate probe signer
+        if: github.event.inputs.candidate_only != 'true'
         env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          EXPECTED_SHA: ${{ github.sha }}
+          FIREBASE_PROBE_SIGNER_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
-          SERVICE_URL=$(gcloud run services describe "$SERVICE" \
-            --region "$REGION" \
-            --project "$PROJECT_ID" \
-            --format='value(status.url)')
+          signer_file="$(mktemp "$RUNNER_TEMP/omi-firebase-probe-signer.XXXXXX")"
+          trap 'rm -f "$signer_file"' ERR
+          chmod 600 "$signer_file"
+          printf '%s' "$FIREBASE_PROBE_SIGNER_B64" | base64 --decode > "$signer_file"
+          echo "DESKTOP_BACKEND_PROBE_SIGNER_FILE=$signer_file" >> "$GITHUB_ENV"
+          trap - ERR
 
-          for attempt in $(seq 1 30); do
-            HEALTH_JSON=$(curl -fsS --max-time 15 "${SERVICE_URL%/}/health" || true)
-            if [ -n "$HEALTH_JSON" ]; then
-              if HEALTH_JSON="$HEALTH_JSON" EXPECTED_SHA="$EXPECTED_SHA" python3 - <<'PY'
-          import json
-          import os
-          import sys
-
-          health = json.loads(os.environ["HEALTH_JSON"])
-          expected = {
-              "release_sha": os.environ["EXPECTED_SHA"],
-              "release_channel": "development",
-          }
-          mismatches = {
-              key: {"expected": value, "actual": health.get(key)}
-              for key, value in expected.items()
-              if health.get(key) != value
-          }
-          if mismatches:
-              print(json.dumps({"health": health, "mismatches": mismatches}, indent=2))
-              sys.exit(1)
-          print(json.dumps(health, indent=2))
-          PY
-              then
-                echo "Verified development desktop-backend identity at $SERVICE_URL/health" >> "$GITHUB_STEP_SUMMARY"
-                exit 0
-              fi
-            fi
-            echo "Waiting for development backend identity ($attempt/30)..."
-            sleep 10
-          done
-
-          echo "Development desktop-backend did not report the deployed release identity." >&2
-          exit 1
-
-      - name: Prove managed realtime provider paths
+      - name: Mint candidate probe identity
+        if: github.event.inputs.candidate_only != 'true'
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          SKIP_PROVIDER_PROBE: ${{ github.event.inputs.skip_provider_probe || 'false' }}
         run: |
           set -euo pipefail
-          if [[ "$SKIP_PROVIDER_PROBE" == "true" ]]; then
-            echo "::warning title=Managed realtime provider probe skipped::skip_provider_probe=true was requested during a provider outage."
-            echo "### Managed realtime provider probe skipped" >> "$GITHUB_STEP_SUMMARY"
-            echo "Reason: workflow_dispatch input skip_provider_probe=true" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          SERVICE_URL=$(gcloud run services describe "$SERVICE" \
-            --region "$REGION" \
-            --project "$PROJECT_ID" \
-            --format='value(status.url)')
-          if [[ -z "$SERVICE_URL" ]]; then
-            echo "Could not resolve the deployed desktop-backend URL for the provider probe." >&2
-            exit 1
-          fi
-
-          token_file="$(mktemp "$RUNNER_TEMP/omi-voice-provider-probe.XXXXXX")"
-          trap 'rm -f "$token_file"' EXIT
+          token_file="$(mktemp "$RUNNER_TEMP/omi-desktop-backend-probe.XXXXXX")"
+          chmod 600 "$token_file"
           python3 backend/scripts/firebase_release_probe_token.py \
             --secret-project "$PROJECT_ID" \
             --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
+            --signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE" \
             --token-output "$token_file"
+          echo "DESKTOP_BACKEND_PROBE_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
 
+      - name: Prove candidate chat compatibility
+        if: github.event.inputs.candidate_only != 'true'
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/desktop_backend_candidate_probe.py \
+            --base-url="${{ steps.candidate-url.outputs.url }}" \
+            --bearer-token-file="$DESKTOP_BACKEND_PROBE_TOKEN_FILE" \
+            --expected-release-sha="${{ steps.candidate-identity.outputs.source_sha }}" \
+            --expected-release-channel=development \
+            --expected-contract-version="$CHAT_CONTRACT_VERSION" \
+            --expected-revision="${{ steps.candidate-identity.outputs.revision }}" \
+            --expected-image-digest="${{ steps.verify-image-lineage.outputs.runtime_digest }}" \
+            --candidate-tag="$CANDIDATE_TAG" \
+            --workflow-run-id="$GITHUB_RUN_ID" \
+            --evidence-path=artifacts/desktop-backend-dev-candidate.json
+
+      - name: Prove candidate managed realtime provider paths
+        if: github.event.inputs.candidate_only != 'true'
+        run: |
+          set -euo pipefail
           for provider in openai gemini; do
             for attempt in 1 2 3; do
               probe_exit=0
-              scripts/voice-provider-probe.sh "$provider" "$SERVICE_URL" \
-                --bearer-token-file "$token_file" || probe_exit=$?
+              scripts/voice-provider-probe.sh "$provider" "${{ steps.candidate-url.outputs.url }}" \
+                --bearer-token-file="$DESKTOP_BACKEND_PROBE_TOKEN_FILE" || probe_exit=$?
               if [[ "$probe_exit" -eq 0 ]]; then
                 break
               fi
@@ -257,5 +318,140 @@ jobs:
             done
           done
 
+      - name: Keep candidate-only revision at zero traffic
+        if: github.event.inputs.candidate_only == 'true'
+        run: |
+          echo "::warning title=Candidate not promoted::Candidate-only mode leaves this revision at 0% traffic."
+          echo "Candidate ${{ steps.candidate-identity.outputs.revision }} remains available for diagnosis." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Route traffic to accepted desktop-backend revision
+        id: route-traffic
+        if: github.event.inputs.candidate_only != 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REVISION: ${{ steps.candidate-identity.outputs.revision }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main="$(git rev-parse 'origin/main^{commit}')"
+          if [[ "$current_main" != "${{ steps.candidate-identity.outputs.source_sha }}" ]]; then
+            echo "ERROR: candidate is stale because origin/main advanced to $current_main; traffic remains unchanged." >&2
+            exit 1
+          fi
+          python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --service="$SERVICE" \
+            --revision="$REVISION" \
+            --tag="$CANDIDATE_TAG" >/dev/null
+          echo "DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED=true" >> "$GITHUB_ENV"
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$REVISION=100" \
+            --quiet
+          traffic_json="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json)"
+          serving_revision="$(TRAFFIC_JSON="$traffic_json" python3 - <<'PY'
+          import json
+          import os
+
+          service = json.loads(os.environ["TRAFFIC_JSON"])
+          targets = [
+              target.get("revisionName", "")
+              for target in service.get("status", {}).get("traffic", [])
+              if target.get("percent") == 100 and target.get("revisionName")
+          ]
+          if len(targets) != 1:
+              raise SystemExit("desktop-backend traffic is not bound to one revision")
+          print(targets[0])
+          PY
+          )"
+          if [ "$serving_revision" != "$REVISION" ]; then
+            echo "desktop-backend traffic is serving $serving_revision, expected $REVISION" >&2
+            exit 1
+          fi
+
+      - name: Verify development backend release identity
+        if: github.event.inputs.candidate_only != 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          gcloud run services describe "$SERVICE" \
+            --region "$REGION" \
+            --project "$PROJECT_ID" \
+            --format=json > "$RUNNER_TEMP/desktop-backend-service.json"
+          service_url="$(jq -r '.status.url // empty' "$RUNNER_TEMP/desktop-backend-service.json")"
+          test -n "$service_url"
+          python3 .github/scripts/desktop_backend_candidate_probe.py \
+            --health-only \
+            --base-url="$service_url" \
+            --expected-release-sha="${{ steps.candidate-identity.outputs.source_sha }}" \
+            --expected-release-channel=development \
+            --expected-contract-version="$CHAT_CONTRACT_VERSION" \
+            --evidence-path=artifacts/desktop-backend-dev-serving.json
+          echo "Verified development desktop-backend identity at $service_url/health" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore prior traffic after a failed promotion
+        if: failure() && env.DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED == 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PREVIOUS_REVISION: ${{ steps.previous-traffic.outputs.revision }}
+        run: |
+          set -euo pipefail
+          test -n "$PREVIOUS_REVISION"
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$PREVIOUS_REVISION=100" \
+            --quiet
+          restored_revision="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.traffic[percent=100].revisionName)')"
+          if [[ "$restored_revision" != "$PREVIOUS_REVISION" ]]; then
+            echo "ERROR: rollback verification found $restored_revision, expected $PREVIOUS_REVISION." >&2
+            exit 1
+          fi
+          echo "::warning title=Desktop backend traffic restored::Restored 100% traffic to $PREVIOUS_REVISION."
+
+      - name: Remove accepted candidate tag
+        if: success() && steps.route-traffic.outcome == 'success'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --remove-tags="$CANDIDATE_TAG" \
+            --quiet
+
+      - name: Upload desktop backend acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-backend-dev-${{ steps.candidate-identity.outputs.image_tag }}-${{ github.run_attempt }}
+          path: artifacts/desktop-backend-dev-*.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Remove probe token
+        if: always()
+        run: |
+          if [[ -n "${DESKTOP_BACKEND_PROBE_TOKEN_FILE:-}" ]]; then
+            rm -f "$DESKTOP_BACKEND_PROBE_TOKEN_FILE"
+          fi
+          if [[ -n "${DESKTOP_BACKEND_PROBE_SIGNER_FILE:-}" ]]; then
+            rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"
+          fi
+
       - name: Show Output
-        run: echo "Desktop backend deployed to development environment"
+        run: |
+          if [[ "${{ github.event.inputs.candidate_only }}" == "true" ]]; then
+            echo "Desktop backend candidate built for development; traffic unchanged."
+          else
+            echo "Desktop backend accepted and deployed to development."
+          fi

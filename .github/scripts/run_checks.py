@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import glob
 import json
 import platform as _platform_mod
 import subprocess
@@ -135,6 +136,8 @@ def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
         for pattern in check.triggers:
             if not pattern or pattern.count("[") != pattern.count("]"):
                 errors.append(f"{check.id}: invalid trigger glob: {pattern!r}")
+            elif pattern != "all" and not glob.has_magic(pattern) and not (root / pattern).exists():
+                errors.append(f"{check.id}: explicit trigger path does not exist: {pattern}")
         if not check.lanes:
             errors.append(f"{check.id}: lanes must not be empty")
         invalid_lanes = sorted(set(check.lanes) - {"local", "ci"})

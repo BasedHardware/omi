@@ -142,3 +142,42 @@ async def async_resolve_geolocation(geolocation: Optional[Geolocation]) -> Optio
         logger.error('async_resolve_geolocation enrichment failed: %s', e)
         return geolocation
     return enriched or geolocation
+
+
+async def async_get_google_maps_city(latitude: float, longitude: float) -> Optional[str]:
+    cache_key = f"geocode-city:{latitude:.3f},{longitude:.3f}"
+    try:
+        cached = r.get(cache_key)
+        if cached:
+            return cached.decode() if isinstance(cached, bytes) else str(cached)
+    except Exception as error:
+        logger.warning('Failed to read city geocode cache error_type=%s', type(error).__name__)
+
+    key = os.getenv('GOOGLE_MAPS_API_KEY')
+    try:
+        async with get_maps_semaphore():
+            response = await get_maps_client().get(
+                "https://maps.googleapis.com/maps/api/geocode/json",
+                params={"latlng": f"{latitude},{longitude}", "key": key},
+            )
+        data = response.json()
+    except Exception as error:
+        logger.error('City geocoding failed error_type=%s', type(error).__name__)
+        return None
+
+    if data.get('status') != 'OK' or not data.get('results'):
+        return None
+    parts = {}
+    for component in data['results'][0].get('address_components') or []:
+        for component_type in component.get('types') or []:
+            if component_type in {'locality', 'postal_town', 'administrative_area_level_1', 'country'}:
+                parts.setdefault(component_type, component.get('long_name'))
+    city = parts.get('locality') or parts.get('postal_town')
+    if not city:
+        return None
+    result = ', '.join(part for part in (city, parts.get('administrative_area_level_1'), parts.get('country')) if part)
+    try:
+        r.set(cache_key, result, ex=172800)
+    except Exception as error:
+        logger.warning('Failed to cache city geocode error_type=%s', type(error).__name__)
+    return result

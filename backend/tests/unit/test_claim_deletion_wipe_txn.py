@@ -45,6 +45,7 @@ _fake_client_mod = types.ModuleType('database._client')
 setattr(_fake_client_mod, 'db', MagicMock())
 setattr(_fake_client_mod, 'delete_collection_recursive', MagicMock())
 setattr(_fake_client_mod, 'document_id_from_seed', MagicMock())
+setattr(_fake_client_mod, 'get_firestore_client', MagicMock())
 _install_stub('database._client', _fake_client_mod)
 
 # Stub database.firestore_cache and database.redis_db since database/users.py
@@ -55,6 +56,7 @@ for _mod_name in ('database.firestore_cache', 'database.redis_db'):
         'CachePolicy',
         'get_or_fetch',
         'invalidate',
+        'delete_cached_user_geolocation',
         'try_acquire_client_device_write_lock',
         'try_acquire_user_platform_write_lock',
     ):

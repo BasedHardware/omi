@@ -44,6 +44,31 @@ def test_delete_account_maps_unexpected_service_error_to_500():
     assert exc.value.detail == 'Could not delete account. Please try again.'
 
 
+def test_invalid_geolocation_is_ignored_without_cache_access():
+    cache_read = MagicMock()
+    cache_write = MagicMock()
+
+    with patch.object(users_router, 'get_cached_user_geolocation', cache_read), patch.object(
+        users_router, 'cache_user_geolocation', cache_write
+    ):
+        result = users_router.set_user_geolocation(
+            users_router.GeolocationInput(latitude=90.1, longitude=0), uid='uid1'
+        )
+
+    assert result == {'status': 'ok', 'message': 'Location ignored because its coordinates are invalid.'}
+    cache_read.assert_not_called()
+    cache_write.assert_not_called()
+
+
+def test_location_context_consent_requires_disclosure_before_enabling():
+    with pytest.raises(HTTPException) as exc:
+        users_router.set_location_context_consent(
+            users_router.LocationContextConsentUpdate(enabled=True, disclosure_accepted=False), uid='uid1'
+        )
+
+    assert exc.value.status_code == 422
+
+
 def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
     calls = []
 

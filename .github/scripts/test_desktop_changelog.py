@@ -16,9 +16,7 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-_SPEC = importlib.util.spec_from_file_location(
-    "desktop_changelog", Path(__file__).with_name("desktop-changelog.py")
-)
+_SPEC = importlib.util.spec_from_file_location("desktop_changelog", Path(__file__).with_name("desktop-changelog.py"))
 changelog = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(changelog)
 
@@ -71,7 +69,9 @@ class ChangelogRequirementTests(unittest.TestCase):
     def test_internal_release_controls_are_exempt_but_product_source_is_not(self) -> None:
         for path in (
             "desktop/macos/docs/release.md",
+            "desktop/macos/docs/qualification-environment.md",
             "desktop/macos/scripts/qualify-desktop-beta.sh",
+            "desktop/macos/scripts/qualification-cache-reclaim.py",
             # Sibling qualification-runner helper (EXEMPT_DESKTOP_PATHS).
             "desktop/macos/scripts/qualification-swift-cache.sh",
             "desktop/macos/scripts/qualification-lease-command.sh",

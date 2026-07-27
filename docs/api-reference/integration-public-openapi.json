@@ -869,6 +869,8 @@
             "title": "Google Place Id"
           },
           "latitude": {
+            "maximum": 90.0,
+            "minimum": -90.0,
             "title": "Latitude",
             "type": "number"
           },
@@ -884,6 +886,8 @@
             "title": "Location Type"
           },
           "longitude": {
+            "maximum": 180.0,
+            "minimum": -180.0,
             "title": "Longitude",
             "type": "number"
           }

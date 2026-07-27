@@ -217,6 +217,7 @@ fn test_anthropic_usage_to_openai() {
     assert_eq!(openai.prompt_tokens, 130); // 100 + 10 + 20
     assert_eq!(openai.completion_tokens, 50);
     assert_eq!(openai.total_tokens, 180);
+    assert_eq!(openai.web_search_requests, 0);
 }
 
 #[test]
@@ -249,6 +250,7 @@ fn test_compute_cost_includes_web_search_requests() {
     // tokens: 0.003 + 0.0075, web search: 3 * $0.01
     let expected = 0.003 + 0.0075 + 0.03;
     assert!((cost - expected).abs() < 1e-10);
+    assert_eq!(anthropic_usage_to_openai(&usage).web_search_requests, 3);
 }
 
 #[test]
@@ -869,12 +871,12 @@ fn test_translate_request_tool_result() {
 }
 
 #[test]
-fn test_translate_request_with_tools() {
+fn test_translate_request_public_lookup_keeps_web_search_available() {
     let req = ChatCompletionRequest {
         model: "omi-sonnet".to_string(),
         messages: vec![ChatMessage {
             role: "user".to_string(),
-            content: Some(json!("Hi")),
+            content: Some(json!("Search the web for current HumanPost news")),
             name: None,
             tool_calls: None,
             tool_call_id: None,
@@ -909,9 +911,8 @@ fn test_translate_request_with_tools() {
     )
     .unwrap();
     let tools = result.tools.unwrap();
-    // The model chooses web_search from the normal tool set. This keeps the
-    // stream incremental instead of pre-routing a turn to the buffered
-    // server-tool continuation path.
+    // An allowed public turn keeps web_search in the normal incremental tool
+    // set instead of pre-routing the request to a buffered continuation path.
     assert_eq!(tools.len(), 2);
     assert_eq!(
         serde_json::to_value(&tools[0]).unwrap()["name"],
@@ -1436,7 +1437,7 @@ fn test_translate_request_guessed_freshness_answers_without_web_search() {
 }
 
 #[test]
-fn test_translate_request_private_lookup_keeps_web_search_available_to_the_model() {
+fn test_translate_request_private_lookup_excludes_web_search() {
     let mut req = test_request(vec![user_message("Search my conversations for HumanPost")]);
     req.tools = Some(vec![ToolDefinition {
         tool_type: "function".to_string(),
@@ -1455,16 +1456,80 @@ fn test_translate_request_private_lookup_keeps_web_search_available_to_the_model
     )
     .unwrap();
     let tools = result.tools.unwrap();
-    assert_eq!(tools.len(), 2);
+    assert_eq!(tools.len(), 1);
     assert_eq!(
         serde_json::to_value(&tools[0]).unwrap()["name"],
-        "web_search"
-    );
-    assert_eq!(
-        serde_json::to_value(&tools[1]).unwrap()["name"],
         "search_conversations"
     );
     assert!(result.tool_choice.is_none());
+}
+
+#[test]
+fn test_private_context_policy_survives_mixed_tool_continuation() {
+    // The follow-up request replays a client tool result. It must retain the
+    // original private/no-web boundary instead of treating the `tool` tail as
+    // a fresh unrestricted agentic turn.
+    let mut req = test_request(vec![
+        user_message("Search my conversations for HumanPost"),
+        ChatMessage {
+            role: "assistant".to_string(),
+            content: None,
+            name: None,
+            tool_calls: Some(vec![ToolCall {
+                id: "call_private".to_string(),
+                call_type: "function".to_string(),
+                function: FunctionCall {
+                    name: "search_conversations".to_string(),
+                    arguments: r#"{"query":"HumanPost"}"#.to_string(),
+                },
+            }]),
+            tool_call_id: None,
+        },
+        ChatMessage {
+            role: "tool".to_string(),
+            content: Some(json!("private conversation result")),
+            name: None,
+            tool_calls: None,
+            tool_call_id: Some("call_private".to_string()),
+        },
+    ]);
+    req.tools = Some(vec![
+        ToolDefinition {
+            tool_type: "function".to_string(),
+            function: FunctionDefinition {
+                name: "search_conversations".to_string(),
+                description: Some("Search private conversations".to_string()),
+                parameters: None,
+            },
+        },
+        ToolDefinition {
+            tool_type: "function".to_string(),
+            function: FunctionDefinition {
+                name: "create_task".to_string(),
+                description: Some("Create a private follow-up task".to_string()),
+                parameters: None,
+            },
+        },
+    ]);
+
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+    let tools = result.tools.unwrap();
+    let tool_names = tools
+        .iter()
+        .map(|tool| serde_json::to_value(tool).unwrap()["name"].clone())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        tool_names,
+        vec![json!("search_conversations"), json!("create_task")]
+    );
+    assert!(!tool_names.contains(&json!("web_search")));
 }
 
 #[test]
@@ -2084,6 +2149,7 @@ fn test_make_chunk_with_usage() {
         prompt_tokens: 10,
         completion_tokens: 20,
         total_tokens: 30,
+        web_search_requests: 0,
         prompt_tokens_details: None,
     };
     let chunk = make_chunk(
@@ -2097,6 +2163,7 @@ fn test_make_chunk_with_usage() {
     assert_eq!(chunk["usage"]["prompt_tokens"], 10);
     assert_eq!(chunk["usage"]["completion_tokens"], 20);
     assert_eq!(chunk["usage"]["total_tokens"], 30);
+    assert_eq!(chunk["usage"]["web_search_requests"], 0);
 }
 
 #[test]

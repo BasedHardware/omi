@@ -9,6 +9,7 @@ SWIFT_CACHE="$SCRIPT_DIR/../scripts/qualification-swift-cache.sh"
 LEASE_COMMAND="$SCRIPT_DIR/../scripts/qualification-lease-command.sh"
 APP_CONFIG="$SCRIPT_DIR/../scripts/app-config.sh"
 RUN_SH="$SCRIPT_DIR/../run.sh"
+WORKFLOW="$SCRIPT_DIR/../../../.github/workflows/desktop_qualify_beta.yml"
 
 require_text() {
   local pattern="$1"
@@ -75,9 +76,14 @@ require_order "$QUALIFIER" \
   'if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]'
 require_text 'terminate_qualification_desktop "$BUNDLE"'
 require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
-require_text 'WORKTREE="$("$SCRIPT_DIR/qualification-swift-cache.sh" prepare "$SHA" "$REPO_ROOT")"'
+require_text '"$SCRIPT_DIR/qualification-swift-cache.sh" prepare'
+require_text 'QUALIFICATION_CACHE_LEASE_ID'
+require_text 'QUALIFICATION_CACHE_LEASE_TOKEN'
+require_text '"$SCRIPT_DIR/qualification-swift-cache.sh" release'
+require_text 'qualification-cache-reclaim.py' "$SWIFT_CACHE"
 require_text 'qualification-lease "$action"' "$LEASE_COMMAND"
 require_text 'acquire)' "$LEASE_COMMAND"
+require_text 'preflight-fault-cleanup)' "$LEASE_COMMAND"
 require_text 'release)' "$LEASE_COMMAND"
 require_text 'qualification-lease-command.sh' "$QUALIFIER"
 require_text 'OMI_HARNESS_PORT_OFFSET="$QUALIFICATION_PORT_OFFSET"'
@@ -97,7 +103,7 @@ require_text './scripts/desktop-core-harness.sh --self-check --skip-backend-cont
 require_text './scripts/desktop-core-harness.sh --tier 2 --bundle "$BUNDLE" --port "$AUTOMATION_PORT" --keep-stack'
 require_text 'python3 "$KEYVALUE_PY" check-manifest "$EVIDENCE/manifest.json"'
 require_text './scripts/desktop-core-harness.sh --fault-suite --port "$((AUTOMATION_PORT + 1))"'
-require_text 'manifest.get("passed") is not True or manifest.get("tier") != "fault"'
+require_text 'python3 "$KEYVALUE_PY" check-fault-manifest "$FAULT_EVIDENCE/manifest.json"'
 require_text 'evidence["automatic_gates"] = ["signed-artifact", "static-self-check", "tier-2", "fault-suite"]'
 require_text 'if [[ "$LATEST_TAG" != "$RELEASE_TAG" ]]'
 require_text 'python3 "$KEYVALUE_PY" update-qualified-beta'
@@ -133,6 +139,35 @@ require_order "$RUN_SH" \
   'step "Starting app..."' \
   'open "$APP_PATH"' \
   'signal_desktop_launch'
+
+# Runner-only listener cleanup must prove its exact token/PID/port lineage before
+# the expensive app build or any user-flow suite. Unknown listeners still fail
+# closed, and phase timings make the 20-minute target measurable without
+# weakening artifact, Tier-2, or fault evidence.
+require_order "$QUALIFIER" \
+  'phase_begin "fault-listener-preflight" "runner-hygiene-cleanup"' \
+  '"$LEASE_COMMAND" preflight-fault-cleanup' \
+  'phase_begin "desktop-preparation" "runner-hygiene-cleanup"' \
+  'phase_begin "tier-2-user-flows" "user-visible-behavioral-fault"' \
+  'phase_begin "fault-user-flow" "user-visible-behavioral-fault"' \
+  'phase_begin "final-cleanup" "runner-hygiene-cleanup"'
+require_text '"target_seconds": 1200'
+require_text 'OMI_QUALIFICATION_TIMINGS_FILE' "$QUALIFIER"
+require_text 'OMI_QUALIFICATION_FAULT_PREFLIGHT_REPORT' "$QUALIFIER"
+require_text '/phase-timings.json' "$SCRIPT_DIR/../../../.github/workflows/desktop_qualify_beta.yml"
+require_text '/fault-listener-preflight.json' "$SCRIPT_DIR/../../../.github/workflows/desktop_qualify_beta.yml"
+
+# The canonical qualification owns the only M1 qualification lease lifecycle.
+# Its ordered preflight/final cleanup is retained as artifact evidence; no
+# standalone local-proof job may create an earlier duplicate lease.
+if grep -Fq 'local-proof-m1' "$WORKFLOW" || grep -Fq 'qualification-local-proof.sh' "$WORKFLOW"; then
+  echo "FAIL: qualification workflow must not retain a duplicate local-proof lifecycle" >&2
+  exit 1
+fi
+require_order "$WORKFLOW" \
+  'qualify-m1-studio:' \
+  'fault-listener-preflight.json' \
+  'phase-timings.json'
 
 if [[ ! -x "$PROFILE_PREP" ]]; then
   echo "FAIL: missing executable qualification profile preparation helper" >&2
