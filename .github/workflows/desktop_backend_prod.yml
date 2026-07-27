@@ -47,7 +47,7 @@ jobs:
       actions: 'read'
       contents: 'read'
       id-token: 'write'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - name: Delete huge unnecessary tools folder
         run: rm -rf /opt/hostedtoolcache
@@ -65,6 +65,7 @@ jobs:
           rm -rf "$controls"
           mkdir -p "$controls/.github/scripts" "$controls/backend/scripts" "$controls/scripts"
           cp .workflow-source/.github/scripts/desktop_backend_candidate_probe.py "$controls/.github/scripts/"
+          cp .workflow-source/.github/scripts/verify_desktop_backend_image_lineage.py "$controls/.github/scripts/"
           cp .workflow-source/backend/scripts/firebase_release_probe_token.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/resolve_cloud_run_tagged_url.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/wait_cloud_run_candidate_readiness.py "$controls/backend/scripts/"
@@ -290,37 +291,24 @@ jobs:
             --timeout-seconds=150 \
             --poll-interval-seconds=5
 
-      - name: Verify candidate image digest
+      - name: Verify candidate image lineage
+        id: verify-image-lineage
         env:
+          BUILD_IMAGE_REF: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          EXPECTED_DIGEST: ${{ steps.build-image.outputs.digest }}
         run: |
           set -euo pipefail
-          actual_digest="$(gcloud run revisions describe "${{ steps.admitted-source.outputs.revision }}" \
+          runtime_image_ref="$(gcloud run revisions describe "${{ steps.admitted-source.outputs.revision }}" \
             --project="$PROJECT_ID" \
             --region="$REGION" \
             --format='value(status.imageDigest)')"
-          if [[ "$actual_digest" != "$EXPECTED_DIGEST" ]]; then
-            echo "ERROR: candidate image digest $actual_digest does not match build $EXPECTED_DIGEST." >&2
-            exit 1
-          fi
-          mkdir -p artifacts
-          ACTUAL_DIGEST="$actual_digest" EXPECTED_DIGEST="$EXPECTED_DIGEST" python3 - <<'PY'
-          import json
-          import os
-
-          evidence = {
-              "actual_image_digest": os.environ["ACTUAL_DIGEST"],
-              "expected_image_digest": os.environ["EXPECTED_DIGEST"],
-              "revision": "${{ steps.admitted-source.outputs.revision }}",
-              "schema_version": 1,
-              "source_sha": "${{ steps.admitted-source.outputs.source_sha }}",
-              "status": "passed",
-          }
-          with open("artifacts/desktop-backend-prod-readback.json", "w", encoding="utf-8") as handle:
-              json.dump(evidence, handle, indent=2, sort_keys=True)
-              handle.write("\n")
-          PY
+          runtime_digest="$(python3 "$DESKTOP_BACKEND_CONTROLS/.github/scripts/verify_desktop_backend_image_lineage.py" \
+            --build-image-ref="$BUILD_IMAGE_REF" \
+            --runtime-image-ref="$runtime_image_ref" \
+            --source-sha="${{ steps.admitted-source.outputs.source_sha }}" \
+            --revision="${{ steps.admitted-source.outputs.revision }}" \
+            --evidence-path=artifacts/desktop-backend-prod-readback.json)"
+          echo "runtime_digest=$runtime_digest" >> "$GITHUB_OUTPUT"
 
       - name: Resolve exact no-traffic candidate URL
         id: candidate-url
@@ -359,7 +347,7 @@ jobs:
             --expected-release-channel=production \
             --expected-contract-version="$CHAT_CONTRACT_VERSION" \
             --expected-revision="${{ steps.admitted-source.outputs.revision }}" \
-            --expected-image-digest="${{ steps.build-image.outputs.digest }}" \
+            --expected-image-digest="${{ steps.verify-image-lineage.outputs.runtime_digest }}" \
             --candidate-tag="$CANDIDATE_TAG" \
             --workflow-run-id="$GITHUB_RUN_ID" \
             --evidence-path=artifacts/desktop-backend-prod-candidate.json

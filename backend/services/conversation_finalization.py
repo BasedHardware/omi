@@ -11,7 +11,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from google.api_core.exceptions import InvalidArgument
+
 from database import conversation_finalization_jobs as jobs_db
+from database._client import is_document_size_limit_error
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
@@ -160,9 +163,36 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
                 # terminalize on first sight.  Only a successful stamp counts as
                 # ``migrated``; a CAS loss (already stamped / status changed /
                 # absent) is an expected ``skipped`` fencing, never a migration.
-                stamped = jobs_db.stamp_processing_admission_if_absent(
-                    uid, conversation_id, firestore_client=firestore_client
-                )
+                try:
+                    stamped = jobs_db.stamp_processing_admission_if_absent(
+                        uid, conversation_id, firestore_client=firestore_client
+                    )
+                except InvalidArgument as error:
+                    if not is_document_size_limit_error(error):
+                        raise
+                    # The row is at Firestore's 1 MiB document ceiling, so the
+                    # fence can never be stamped: migration would fail on every
+                    # future sweep and the conversation would stay `processing`
+                    # for good. Terminalize it on the server-owned last-write
+                    # instant instead — that shrinking write is the one update
+                    # the document still accepts.
+                    record_fallback(
+                        component='pusher',
+                        from_mode='admission_stamp',
+                        to_mode='unstampable_terminal',
+                        reason='other',
+                        outcome='degraded',
+                        log=logger,
+                    )
+                    if jobs_db.complete_unstampable_orphan_conversation(
+                        uid, conversation_id, stale_after=stale_after, firestore_client=firestore_client
+                    ):
+                        result['completed'] += 1
+                        LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='completed').inc()
+                    else:
+                        result['skipped'] += 1
+                        LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='skipped').inc()
+                    continue
                 if stamped:
                     result['migrated'] += 1
                     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='migrated').inc()

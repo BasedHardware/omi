@@ -3,6 +3,14 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
+
+# Git exports repository-local environment variables to hooks. Clear them
+# before creating the fixture repository so `git init <path>` cannot re-open
+# and mutate the caller's shared repository (especially from a linked worktree).
+while IFS= read -r var; do
+  unset "$var"
+done < <(git rev-parse --local-env-vars)
+
 TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-make-setup.XXXXXX")"
 trap 'rm -rf "$TMPDIR"' EXIT
 

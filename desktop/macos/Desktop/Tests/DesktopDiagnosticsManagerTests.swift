@@ -701,8 +701,10 @@ import XCTest
     }
 
     func testFallbackNamedAreasAreNotCollapsedToOther() throws {
-      for area in ["screen_capture", "memory_scope", "desktop_update", "tts_fallback", "task_workflow", "auth_storage"]
-      {
+      for area in [
+        "screen_capture", "memory_scope", "desktop_update", "tts_fallback", "task_workflow",
+        "auth_storage", "ptt_input_routing",
+      ] {
         DesktopDiagnosticsManager.shared.resetForTests()
         DesktopDiagnosticsManager.shared.recordFallback(
           area: area, from: "a", to: "b", reason: "capability_mismatch", outcome: .degraded)

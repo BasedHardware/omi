@@ -30,7 +30,7 @@ jobs:
     environment: ${{ github.event.inputs.environment }}
     permissions:
       contents: 'read'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - name: Validate Firestore migration input
         env:

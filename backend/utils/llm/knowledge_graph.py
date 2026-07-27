@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Dict, Any, Optional, cast
 import threading
 import uuid
@@ -34,6 +35,41 @@ class ExtractedEdge(BaseModel):
 class KnowledgeGraphExtraction(BaseModel):
     nodes: List[ExtractedNode] = Field(description="Entities mentioned in the memory", default=[])
     edges: List[ExtractedEdge] = Field(description="Relationships between entities", default=[])
+
+
+# The prompt lists the user's existing nodes so the model reuses their ids instead of
+# inventing duplicates. Firestore returns the whole collection and a mature graph runs
+# to thousands of nodes: at 5,788 nodes the rendered prompt reached ~641k characters and
+# the provider rejected it with a 400, so extraction failed permanently for exactly the
+# users with the richest graphs. Cap the listing — merging still resolves against every
+# existing node via label_to_node_id below, so a node left out of the prompt is still
+# deduplicated by label or alias.
+MAX_PROMPT_EXISTING_NODES = 500
+
+
+def _node_recency(node: Dict[str, Any]) -> float:
+    for key in ('updated_at', 'created_at'):
+        value = node.get(key)
+        if isinstance(value, datetime):
+            return value.timestamp()
+    return 0.0
+
+
+def _existing_nodes_prompt_json(existing_nodes: List[Dict[str, Any]]) -> str:
+    nodes = existing_nodes
+    if len(nodes) > MAX_PROMPT_EXISTING_NODES:
+        nodes = sorted(nodes, key=_node_recency, reverse=True)[:MAX_PROMPT_EXISTING_NODES]
+
+    summary = [
+        {
+            'id': node['id'],
+            'label': node['label'],
+            'type': node.get('node_type', 'concept'),
+            'aliases': node.get('aliases', []),
+        }
+        for node in nodes
+    ]
+    return json.dumps(summary) if summary else "None yet"
 
 
 EXTRACTION_PROMPT = """Analyze the following memory like a human brain processing new information. Extract key entities and their relationships, focusing on logical connections and cognitive patterns.
@@ -84,18 +120,7 @@ def extract_knowledge_from_memory(
     strict_parse: bool = False,
 ) -> Optional[Dict[str, Any]]:
     existing_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)
-    existing_nodes_summary: List[Dict[str, Any]] = []
-    for node in existing_nodes:
-        existing_nodes_summary.append(
-            {
-                'id': node['id'],
-                'label': node['label'],
-                'type': node.get('node_type', 'concept'),
-                'aliases': node.get('aliases', []),
-            }
-        )
-
-    existing_nodes_json = json.dumps(existing_nodes_summary) if existing_nodes_summary else "None yet"
+    existing_nodes_json = _existing_nodes_prompt_json(existing_nodes)
 
     try:
         parser = PydanticOutputParser(pydantic_object=KnowledgeGraphExtraction)
@@ -189,18 +214,7 @@ def rebuild_knowledge_graph(
             return {'nodes': [], 'edges': []}
 
         existing_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)
-        existing_nodes_summary: List[Dict[str, Any]] = []
-        for node in existing_nodes:
-            existing_nodes_summary.append(
-                {
-                    'id': node['id'],
-                    'label': node['label'],
-                    'type': node.get('node_type', 'concept'),
-                    'aliases': node.get('aliases', []),
-                }
-            )
-
-        existing_nodes_json = json.dumps(existing_nodes_summary) if existing_nodes_summary else "None yet"
+        existing_nodes_json = _existing_nodes_prompt_json(existing_nodes)
 
         try:
             parser = PydanticOutputParser(pydantic_object=KnowledgeGraphExtraction)

@@ -67,7 +67,6 @@ async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_tran
         ),
         limits=SimpleNamespace(ws_receive_timeout=1.0),
         is_multi_channel=False,
-        frame_size=320,
         use_custom_stt=True,
         audio_bytes_send=None,
         transcripts=SimpleNamespace(enqueue=received_segments.extend),

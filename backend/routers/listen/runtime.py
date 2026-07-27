@@ -116,7 +116,6 @@ class ListenSessionRuntime:
         self.private_cloud_sync_enabled = False
         self.has_speech_profile = False
         self.conversation_creation_timeout = request.conversation_timeout
-        self.frame_size = 160
         self.lc3_frame_duration_us: Optional[int] = None
         self.task_supervisor = WebSocketTaskSupervisor(
             uid=request.uid, label='listen', gauge=BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
@@ -283,7 +282,6 @@ class ListenSessionRuntime:
         )
         decision = normalize_codec_frame(request.codec)
         self.request = replace(request, codec=decision.codec)
-        self.frame_size = decision.frame_size
         self.lc3_frame_duration_us = decision.lc3_frame_duration_us
         self._build_components()
         if not self.user_has_credits:

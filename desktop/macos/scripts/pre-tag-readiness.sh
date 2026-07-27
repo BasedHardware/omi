@@ -25,6 +25,7 @@ CACHE_LEASE_TOKEN=""
 READINESS_LEASE_ID=""
 READINESS_LEASE_TOKEN=""
 WORKTREE=""
+AGENT_DIR=""
 HARNESS_EVIDENCE=""
 READINESS_COMPLETE=0
 READINESS_CLEANUP_OK=0
@@ -147,8 +148,39 @@ print(value)
   return 1
 }
 
+owned_agent_directory_is_real() {
+  local component candidate
+  [[ -n "$WORKTREE" && -n "$AGENT_DIR" && "$AGENT_DIR" == "$WORKTREE/desktop/macos/agent" ]] || {
+    echo "pre-tag-readiness: agent dependency path is outside the owned exact source" >&2
+    return 1
+  }
+  candidate="$WORKTREE"
+  [[ -d "$candidate" && ! -L "$candidate" ]] || {
+    echo "pre-tag-readiness: owned exact source root is not a real directory" >&2
+    return 1
+  }
+  for component in desktop macos agent; do
+    candidate="$candidate/$component"
+    [[ -d "$candidate" && ! -L "$candidate" ]] || {
+      echo "pre-tag-readiness: owned agent dependency ancestor is missing or symlinked: $component" >&2
+      return 1
+    }
+  done
+}
+
 release_owned_capabilities() {
   local failed=0
+  if [[ -n "$AGENT_DIR" ]]; then
+    if ! owned_agent_directory_is_real; then
+      failed=1
+    elif [[ -e "$AGENT_DIR/node_modules" || -L "$AGENT_DIR/node_modules" ]]; then
+      # npm ci may leave a partial ignored tree when it fails. The cache lease is
+      # still held here, so remove this run's exact-source residue before either
+      # capability can be released. rm -r on a symlink unlinks the symlink rather
+      # than following it.
+      rm -rf -- "$AGENT_DIR/node_modules" || failed=1
+    fi
+  fi
   if [[ -n "$READINESS_LEASE_TOKEN" && -n "$WORKTREE" ]]; then
     "$LEASE_COMMAND" release \
       "$WORKTREE" "$READINESS_LEASE_ID" "$READINESS_LEASE_TOKEN" \
@@ -229,6 +261,26 @@ export OMI_LOCAL_STATE_ROOT="$LEASE_ROOT/state"
 export OMI_LOCAL_INSTANCE="$READINESS_LEASE_ID"
 export OMI_HARNESS_PORT_OFFSET="$PORT_OFFSET"
 export OMI_HARNESS_OWNERSHIP_TOKEN="$READINESS_LEASE_TOKEN"
+
+# The cached exact-source worktree deliberately excludes ignored dependency
+# trees. The readiness self-check executes a focused Vitest contract, so install
+# its lockfile-pinned dependencies only after both cache and host leases are
+# acquired. This prevents an incidental runner checkout from deciding readiness.
+AGENT_DIR="$WORKTREE/desktop/macos/agent"
+owned_agent_directory_is_real || exit 1
+[[ -f "$AGENT_DIR/package.json" && -f "$AGENT_DIR/package-lock.json" ]] || {
+  echo "pre-tag-readiness: exact source is missing the agent npm manifests" >&2
+  exit 1
+}
+(
+  cd "$AGENT_DIR"
+  env -u NODE_ENV -u NPM_CONFIG_OMIT -u npm_config_omit -u NPM_CONFIG_PRODUCTION -u npm_config_production \
+    npm ci --include=dev --no-fund --no-audit
+)
+[[ -x "$AGENT_DIR/node_modules/.bin/vitest" ]] || {
+  echo "pre-tag-readiness: lockfile-pinned agent Vitest dependency is unavailable" >&2
+  exit 1
+}
 (
   cd "$WORKTREE/desktop/macos"
   OMI_READINESS_LANE="$LANE" ./scripts/desktop-core-harness.sh --readiness

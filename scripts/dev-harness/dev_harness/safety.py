@@ -14,10 +14,46 @@ import re
 import signal
 import socket
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlparse
+
+if os.name == "nt":
+    import ctypes
+    from ctypes import wintypes
+
+    _SYNCHRONIZE = 0x00100000
+    _WAIT_OBJECT_0 = 0
+    _WAIT_TIMEOUT = 258
+    _WAIT_FAILED = 0xFFFFFFFF
+    _ERROR_ACCESS_DENIED = 5
+    _ERROR_INVALID_PARAMETER = 87
+
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _open_process = _kernel32.OpenProcess
+    _open_process.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    _open_process.restype = wintypes.HANDLE
+    _wait_for_single_object = _kernel32.WaitForSingleObject
+    _wait_for_single_object.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    _wait_for_single_object.restype = wintypes.DWORD
+    _close_handle = _kernel32.CloseHandle
+    _close_handle.argtypes = (wintypes.HANDLE,)
+    _close_handle.restype = wintypes.BOOL
+    _get_system_directory = _kernel32.GetSystemDirectoryW
+    _get_system_directory.argtypes = (wintypes.LPWSTR, wintypes.UINT)
+    _get_system_directory.restype = wintypes.UINT
+
+    def _windows_powershell_executable() -> Path:
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = _get_system_directory(buffer, len(buffer))
+        if length == 0:
+            raise ctypes.WinError(ctypes.get_last_error())
+        if length >= len(buffer):
+            raise OSError("Windows system directory exceeds the supported path length")
+        return Path(buffer.value) / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+
 
 DEFAULT_LOCAL_FIREBASE_PROJECT_ID = "demo-omi-local"
 DEFAULT_FIRESTORE_DATABASE_ID = "(default)"
@@ -351,6 +387,27 @@ def load_json_file(path: Path) -> object:
 def process_exists(pid: int) -> bool:
     if pid <= 0:
         return False
+    if os.name == "nt":
+        handle = _open_process(_SYNCHRONIZE, False, pid)
+        if not handle:
+            error = ctypes.get_last_error()
+            if error == _ERROR_INVALID_PARAMETER:
+                return False
+            if error == _ERROR_ACCESS_DENIED:
+                return True
+            raise ctypes.WinError(error)
+        try:
+            wait_result = _wait_for_single_object(handle, 0)
+            if wait_result == _WAIT_TIMEOUT:
+                return True
+            if wait_result == _WAIT_OBJECT_0:
+                return False
+            if wait_result == _WAIT_FAILED:
+                raise ctypes.WinError(ctypes.get_last_error())
+            raise SafetyError(f"Unexpected Windows process wait result for PID {pid}: {wait_result}")
+        finally:
+            if not _close_handle(handle) and sys.exc_info()[0] is None:
+                raise ctypes.WinError(ctypes.get_last_error())
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -361,6 +418,39 @@ def process_exists(pid: int) -> bool:
 
 
 def command_line_for_pid(pid: int) -> str:
+    if os.name == "nt":
+        if pid <= 0:
+            return ""
+        command = (
+            "$ErrorActionPreference = 'Stop'; "
+            "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
+            f"$process = Get-CimInstance Win32_Process -Filter 'ProcessId = {int(pid)}'; "
+            "if ($null -eq $process) { exit 1 }; "
+            "[Console]::Out.Write($process.CommandLine)"
+        )
+        try:
+            result = subprocess.run(
+                [
+                    str(_windows_powershell_executable()),
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    command,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+                check=False,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            return result.stdout.strip() if result.returncode == 0 else ""
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+
     proc_cmdline = Path("/proc") / str(pid) / "cmdline"
     if proc_cmdline.exists():
         return proc_cmdline.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace").strip()
