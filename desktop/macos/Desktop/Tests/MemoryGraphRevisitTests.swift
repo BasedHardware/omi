@@ -14,9 +14,9 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertTrue(container.contains("memoryGraphViewModel.resetSessionState()"))
     // The Brain Map is reachable only from its own hub tab now — the inline
     // Memories card is gone — so MemoriesPage no longer receives the graph view
-    // model at all. What must stay true is that every surface that does render
-    // the graph gets the persistent, container-owned instance.
-    XCTAssertFalse(home.contains("graphViewModel: viewModelContainer.memoryGraphViewModel"))
+    // model at all. Both the canonical destination and legacy fallback must use
+    // the persistent, container-owned instance.
+    XCTAssertTrue(home.contains("graphViewModel: viewModelContainer.memoryGraphViewModel"))
     XCTAssertTrue(home.contains("viewModel: viewModelContainer.memoryGraphViewModel"))
     XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
     // Static wiring tripwire: the Memory menu keeps the shared destination

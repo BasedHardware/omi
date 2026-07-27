@@ -69,22 +69,22 @@ final class MemoryAtlasEvidenceNavigationTests: XCTestCase {
   }
 
   func testStaticCheckerTheHubOnlyLeavesTheGraphOnceTheMemoryIsOpen() throws {
-    // STATIC CHECKER. The navigation is a binding write inside a SwiftUI view.
-    // Switching destinations first would strand the user on the Memories page
-    // with an empty panel whenever a citation is not on this device.
+    // STATIC CHECKER. The canonical hub supplies its leave action to the map.
+    // Calling it before the cached memory opens would strand the user on the
+    // Memories page with an empty panel whenever a citation is not on this device.
     let source = try homeSource()
-    guard let handler = source.range(of: "onOpenMemory: { memoryId in") else {
-      return XCTFail("The hub must route cited memories through one handler")
+    guard let destination = source.range(of: "private struct CanonicalBrainMapDestination: View, Equatable {") else {
+      return XCTFail("The hub must route cited memories through its canonical destination")
     }
-    let body = String(source[handler.lowerBound...].prefix(400))
+    let body = String(source[destination.lowerBound...].prefix(2_000))
 
     guard
-      let guardProbe = body.range(of: "guard await memoriesViewModel.openMemory(id: memoryId)"),
-      let navigateProbe = body.range(of: "destinationRawValue = MemoryHubDestination.memories")
+      let guardProbe = body.range(of: "guard await memoriesViewModel.openMemory(id: memoryID)"),
+      let leaveProbe = body.range(of: "onLeave()")
     else {
-      return XCTFail("The hub must open the memory and then switch destinations")
+      return XCTFail("The hub must open the memory and then leave the graph")
     }
-    XCTAssertLessThan(guardProbe.lowerBound, navigateProbe.lowerBound)
+    XCTAssertLessThan(guardProbe.lowerBound, leaveProbe.lowerBound)
   }
 
   private func atlasSource() throws -> String {

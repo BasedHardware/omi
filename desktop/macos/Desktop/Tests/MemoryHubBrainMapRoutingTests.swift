@@ -201,7 +201,7 @@ final class MemoryHubBrainMapRoutingTests: XCTestCase {
       (source.components(separatedBy: "CanonicalMemoryAtlasTabView(").last ?? "").prefix(1000))
 
     XCTAssertTrue(
-      atlasBlock.contains("memoriesViewModel.memories(withIDs: memoryIds)"),
+      atlasBlock.contains("memoriesViewModel.memories(withIDs:"),
       "Citations must resolve against the local cache")
     XCTAssertFalse(
       atlasBlock.contains("in: memoriesViewModel.memories)"),
