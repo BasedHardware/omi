@@ -28,7 +28,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from capture import CaptureSession
 from display import DEFAULT_LIMIT as DISPLAY_LIMIT
@@ -61,6 +61,9 @@ _CONTRACT_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'add-ag
 
 # Larger than any answer Omi produces; used to strip markup without truncating.
 _UNLIMITED = 1_000_000
+
+# Stable id across a stream's chunks, as the OpenAI format expects.
+_STREAM_ID = 'chatcmpl-omi-stream'
 
 auth = OmiAuth()
 omi = OmiClient(auth, OMI_API_BASE)
@@ -233,6 +236,55 @@ def _record_contract(request: Request, raw: bytes) -> None:
         log.debug('contract capture failed: %s', exc)
 
 
+def _sse_chunk(text: str, model: str, *, finish: str | None = None) -> str:
+    """One OpenAI streaming chunk."""
+    payload = {
+        'id': _STREAM_ID,
+        'object': 'chat.completion.chunk',
+        'created': int(time.time()),
+        'model': model,
+        'choices': [{'index': 0, 'delta': ({'content': text} if text else {}), 'finish_reason': finish}],
+    }
+    return f'data: {json.dumps(payload)}\n\n'
+
+
+async def _stream_agent_answer(question: str, model: str):
+    """Stream Omi's real, composed answer as it is produced.
+
+    The reason this exists: Even's client gives up on a slow *response*, and
+    Omi's agent needs 6-18s to produce one. If the client measures time to first
+    byte instead of total time, opening the stream immediately buys the agent all
+    the time it needs -- and the answer is Omi's own, not a pile of raw search
+    hits.
+
+    An empty role chunk goes out first, before any Omi call, so bytes are on the
+    wire within milliseconds.
+    """
+    yield _sse_chunk('', model)
+
+    sent = 0
+    try:
+        async for event in omi.chat_stream(question):
+            if event.kind == 'data' and event.text:
+                yield _sse_chunk(event.text, model)
+                sent += len(event.text)
+            elif event.kind == 'error':
+                yield _sse_chunk(f'Omi error: {event.text}'[:200], model)
+                break
+            elif event.kind == 'done':
+                # `done` is authoritative; emit only the tail not already sent.
+                remainder = (event.text or '')[sent:]
+                if remainder:
+                    yield _sse_chunk(remainder, model)
+                break
+    except Exception as exc:  # noqa: BLE001 - a broken stream must still terminate
+        log.exception('streaming answer failed')
+        yield _sse_chunk(f'Bridge error: {type(exc).__name__}', model)
+
+    yield _sse_chunk('', model, finish='stop')
+    yield 'data: [DONE]\n\n'
+
+
 async def _handle_agent(request: Request) -> JSONResponse:
     raw = await request.body()
     _record_contract(request, raw)
@@ -254,6 +306,18 @@ async def _handle_agent(request: Request) -> JSONResponse:
         return JSONResponse({'error': {'message': 'No user message found'}}, status_code=400)
 
     log.info('agent question: %.120s', question)
+
+    # Streaming mode: Omi's own answer, unabridged, with the connection opened
+    # immediately so a slow agent cannot trip a time-to-first-byte timeout.
+    # Whether Even's client honours a streamed response is undocumented, so this
+    # is opt-in until proven on hardware.
+    if os.getenv('OMI_EVEN_STREAM') or payload.get('stream') is True:
+        log.info('answering as a stream')
+        return StreamingResponse(
+            _stream_agent_answer(question, payload.get('model') or 'omi'),
+            media_type='text/event-stream',
+            headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+        )
 
     # Diagnostic: answer instantly, skipping Omi entirely. Even's client timeout
     # is undocumented, so if a real answer never renders but this one does, the

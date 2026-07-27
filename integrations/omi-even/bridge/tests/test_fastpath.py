@@ -102,7 +102,8 @@ def test_relevance_metadata_is_stripped_and_weak_hits_dropped():
     raw = (
         "Found 3 memories matching 'x':\n\n"
         '- Archit works with David on the trial engagement. (relevance: 0.62, category: interesting, date: 2026-07-27)\n'
-        '- A barely related note about something else. (relevance: 0.31, category: system, date: 2026-07-08)\n'
+        # Below the 0.15 floor: this is the random tail, not a weak-but-real hit.
+        '- A barely related note about something else. (relevance: 0.04, category: system, date: 2026-07-08)\n'
     )
     lines = _clean_bullets(raw)
     assert lines == ['Archit works with David on the trial engagement.']
@@ -293,3 +294,96 @@ async def test_a_real_short_question_still_works():
     client = FakeClient(memories='- David is your colleague. (relevance: 0.80)')
     answer = await fast_answer(client, 'Who is David?')
     assert 'David is your colleague.' in answer
+
+
+# ------------------------------------------- the dominant retrieval failure
+
+
+def test_indexed_file_paths_are_never_returned_as_memories():
+    """The single biggest cause of useless answers.
+
+    An indexer files every local document into the memory store as a `system`
+    memory. Measured against the live account, those were 7/10 results for
+    "pickleball", 9/10 for "burgers", and 10/10 for "what I learned in July" --
+    which is why that question answered "nothing at all".
+    """
+    raw = (
+        "Found 4 memories matching 'burgers':\n\n"
+        "- The user's local downloads include ~/Downloads/cheese/groundedshakes.md (md). "
+        '(relevance: 0.24, category: system, date: 2026-07-07)\n'
+        '- The user works on a local project named lecture01-code. '
+        '(relevance: 0.26, category: system, date: 2026-07-08)\n'
+        '- Liiban organized a group dinner at Wally with Aryaveer and Archit. '
+        '(relevance: 0.22, category: system, date: 2026-07-05)\n'
+    )
+    lines = _clean_bullets(raw)
+    assert lines == ['Liiban organized a group dinner at Wally with Aryaveer and Archit.']
+    assert not any('Downloads' in line or 'lecture01' in line for line in lines)
+
+
+def test_a_real_memory_below_the_old_threshold_survives():
+    """The relevance floor was set to 0.40 and was simply wrong.
+
+    Genuinely useful memories score 0.22-0.48 on this account, so that floor
+    discarded most of the good ones and left only file-path noise, which scored
+    no worse. Category is the real discriminator, not the number.
+    """
+    raw = (
+        '- Liiban organized a group dinner at Wally with Aryaveer and Archit. '
+        '(relevance: 0.22, category: interesting, date: 2026-07-05)\n'
+    )
+    assert _clean_bullets(raw), 'a 0.22 memory is useful and must not be dropped'
+
+
+def test_conversation_titles_are_extracted_for_merging():
+    """Conversations carry what happened; memories carry standing facts.
+
+    Searching memories alone answered "burgers" with a downloads-folder path
+    while conversations held "A group orders fast food ... burgers, fries".
+    """
+    from fastpath import _conversation_titles
+
+    raw = (
+        "Found 1 conversations matching 'burgers':\n\n"
+        'Conversation #1\n'
+        '05 Jul 2026 at 19:00 America/New_York (Social)\n'
+        'A group orders fast food and discusses burgers, fries and sauces\n'
+        '- Some detail line\n'
+    )
+    titles = _conversation_titles(raw)
+    assert titles == ['A group orders fast food and discusses burgers, fries and sauces']
+
+
+def test_a_real_memory_in_the_system_category_is_kept():
+    """`system` is the DEFAULT extraction category, not a noise marker.
+
+    Rejecting the category wholesale -- which is the obvious first move -- throws
+    away real memories, because the backend labels most extracted facts `system`
+    (utils/memory_ingestion/adapters/typed_extraction_prompt.py:201). The backend's
+    own cleanup keys on content instead, and so does this.
+    """
+    raw = (
+        '- Archit and Sami courted Pasha at A1 Base for a partnership. '
+        '(relevance: 0.30, category: system, date: 2026-07-02)\n'
+    )
+    assert _clean_bullets(raw) == ['Archit and Sami courted Pasha at A1 Base for a partnership.']
+
+
+@pytest.mark.parametrize(
+    'line',
+    [
+        "- The user's local documents include ~/Documents/x/y.md (md). (relevance: 0.4)",
+        '- The user works on a local project named lecture01-code. (relevance: 0.4)',
+        '- 2,800 local files indexed across their machine. (relevance: 0.4)',
+        '- focused on Terminal for 40 minutes (relevance: 0.4)',
+        '- distracted on Twitter for 10 minutes (relevance: 0.4)',
+    ],
+)
+def test_local_file_inventory_lines_are_dropped(line):
+    assert _clean_bullets(line) == []
+
+
+def test_a_project_mention_without_a_path_survives():
+    """The double anchor: mentioning a project is real, a path makes it inventory."""
+    raw = '- Archit is building the omi-even bridge for smart glasses. (relevance: 0.35)\n'
+    assert _clean_bullets(raw), 'a genuine project memory must not be swept up'

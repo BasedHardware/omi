@@ -29,6 +29,14 @@ import re
 
 log = logging.getLogger(__name__)
 
+# Defined early: several module-level regexes below interpolate _MONTH_ALT,
+# and module code runs top to bottom.
+_MONTHS = {
+    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+}
+_MONTH_ALT = '|'.join(_MONTHS)
+
 # "Found 5 memories matching 'David Zhang':" -- restates the question, wasting a
 # quarter of the screen.
 _PREAMBLE_RE = re.compile(r'^Found\s+\d+\s+\w+\s+matching\s+.*?:\s*', re.IGNORECASE | re.DOTALL)
@@ -38,9 +46,50 @@ _PREAMBLE_RE = re.compile(r'^Found\s+\d+\s+\w+\s+matching\s+.*?:\s*', re.IGNOREC
 _META_RE = re.compile(r'\s*\((?:relevance|category|date)[^)]*\)\s*$', re.IGNORECASE)
 _RELEVANCE_RE = re.compile(r'relevance:\s*([0-9.]+)')
 
-# Below this, hits are near-random: the live "David Zhang" query returned a
-# downloads-folder path at 0.38 alongside the real colleague fact at 0.48.
-_MIN_RELEVANCE = 0.40
+# Relevance is a weak signal here and was originally set far too high. Measured
+# against the live account, genuinely useful memories score 0.22-0.48, so a 0.40
+# floor was discarding most of the good ones. What actually separates signal from
+# noise is the category (below), not the score, so this only rejects the truly
+# random tail.
+_MIN_RELEVANCE = 0.15
+
+# The dominant failure in memory search: the desktop onboarding file scan writes
+# one memory per indexed local file, and those crowd out real ones. Measured hits
+# per 10 results -- pickleball 7/10 noise, burgers 9/10, "what I learned in July"
+# 10/10, which is why that question answered "nothing".
+#
+# Filtering on `category: system` was the obvious move and is WRONG: `system` is
+# the default bucket for extracted memories
+# (`utils/memory_ingestion/adapters/typed_extraction_prompt.py:201`), so rejecting
+# it discards real ones too. The backend's own cleanup keys on content instead --
+# these patterns follow `backend/utils/memory/legacy_backfill.py:127` and
+# `desktop/windows/src/renderer/src/lib/memoryCleanup.ts:20`.
+_FILE_NOISE_RE = re.compile(
+    r'(\b\d[\d,]*\s+local files indexed\b'
+    r'|\bworks on a local project named\b'
+    r"|\bthe user'?s? (local )?(documents|downloads|files|projects|repos(itories)?|folders)\b"
+    r'|\ba recently modified local file\b'
+    r'|^\s*focused on\b'
+    r'|^\s*distracted on\b'
+    r'|^\s*email from\b'
+    r"|^\s*uses(\s+[\w&+()'-]+){1,4}\s*$)",
+    re.IGNORECASE,
+)
+
+# The double anchor the desktop cleanup uses: a memory that merely mentions a
+# project is real, but one that also carries a filesystem path is inventory.
+_PATH_HINT_RE = re.compile(r'[~/\\]')
+_LOCAL_INDEX_STEM_RE = re.compile(
+    r"the user'?s? (local )?(projects?|files?|repos(itories)?|directories|folders|code(bases?)?)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_file_inventory(line: str) -> bool:
+    """True for a memory that is really an entry from the local-file indexer."""
+    if _FILE_NOISE_RE.search(line):
+        return True
+    return bool(_LOCAL_INDEX_STEM_RE.search(line) and _PATH_HINT_RE.search(line))
 
 # Word groups that decide which store to read. Checked in order, most specific
 # first, because "what did I do yesterday" is about conversations even though it
@@ -106,6 +155,11 @@ def _clean_bullets(result_text: str, min_relevance: float = _MIN_RELEVANCE) -> l
         if not line:
             continue
 
+        # Content first: a file-indexing artifact is noise at any relevance, and
+        # it is the single biggest source of useless answers.
+        if _is_file_inventory(line):
+            continue
+
         match = _RELEVANCE_RE.search(line)
         score = float(match.group(1)) if match else 1.0
         if score < min_relevance:
@@ -167,6 +221,34 @@ def _target_days(question: str) -> set[str]:
     return set()
 
 
+# A bare month name -- "everything I learned for July" -- with no day attached.
+_BARE_MONTH_RE = re.compile(rf'\b(?:in|for|during|about|over)\s+({_MONTH_ALT})\w*\b', re.IGNORECASE)
+
+
+def _explicit_month(question: str) -> tuple[int, int] | None:
+    """(year, month) for a month named without a day.
+
+    "Tell me everything I learned for July" carries a clear time reference that
+    the day-level parser cannot see, so it fell through to a semantic memory
+    search and answered "Nothing in your memories about that."
+    """
+    from datetime import datetime
+
+    if _explicit_date(question):
+        return None  # a full date already handles this
+
+    match = _BARE_MONTH_RE.search(question)
+    if not match:
+        return None
+    month = _MONTHS.get(match.group(1).lower()[:3])
+    if not month:
+        return None
+
+    today = datetime.now().astimezone().date()
+    year = today.year if month <= today.month else today.year - 1
+    return year, month
+
+
 # "23 Jul 2026 at 16:08 America/New_York (Technology)" begins each result block.
 _CONV_DATE_RE = re.compile(r'^\s*(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\b')
 
@@ -196,6 +278,36 @@ def _blocks_matching_days(result_text: str, days: set[str]) -> str:
         if stamp and any(stamp.lstrip('0') == day.lstrip('0') for day in days):
             kept.append(text)
     return '\n'.join(kept)
+
+
+def _conversation_titles(result_text: str, limit: int = 3) -> list[str]:
+    """The one-line summary each conversation block leads with.
+
+    A conversation's title is its most information-dense line -- "A group orders
+    fast food and discusses what they got, including burgers, fries, sauces" --
+    so it is what belongs next to a memory bullet.
+    """
+    body = _PREAMBLE_RE.sub('', result_text or '').strip()
+    if _NO_RESULTS_RE.match(body):
+        return []
+
+    titles: list[str] = []
+    expecting = False
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if re.match(r'^\s*Conversation\s*#\d+', line, re.IGNORECASE):
+            expecting = True  # the date line comes next, then the title
+            continue
+        if not line or _CONV_NOISE_RE.match(line):
+            continue
+        if expecting:
+            candidate = line.lstrip('#-').strip()
+            if candidate and not _is_junk(candidate) and candidate not in titles:
+                titles.append(candidate)
+            expecting = False
+        if len(titles) >= limit:
+            break
+    return titles
 
 
 def _compact_conversations(result_text: str, limit: int = 4, only_days: set[str] | None = None) -> str:
@@ -282,11 +394,6 @@ def _day_bounds(days_ago_start: int, days_ago_end: int) -> dict[str, str]:
     }
 
 
-_MONTHS = {
-    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-}
-_MONTH_ALT = '|'.join(_MONTHS)
 # "4 July", "July 4", "4th of July", "on Jul 4th" -- both orders, optional
 # ordinal suffix, optional "of".
 # `\w*` after each month prefix absorbs the rest of the full name. Without it on
@@ -431,20 +538,31 @@ async def fast_answer(client, question: str) -> str:
             return 'Nothing recorded for that day.'
         return 'Nothing in your conversations about that.'
 
-    # Default: memories only.
-    #
-    # There used to be a conversation fallback here for when memory recall was
-    # thin, and it actively made answers worse. "Who is the president of the USA"
-    # returned a conversation about wallpapers -- and a word-overlap guard could
-    # not catch it, because that transcript really does contain both "president"
-    # and "USA" somewhere. The deeper issue is that such a question is not a
-    # memory question at all: answering it needs world knowledge, which this path
-    # has no LLM for. Admitting that beats confidently returning something
-    # unrelated.
-    memories_text = await _search_or_empty(client, 'memories/search', {'query': question, 'limit': 8})
+    # Both stores, in parallel, because they hold different things and neither is
+    # sufficient alone. Memories carry standing facts ("David is a colleague");
+    # conversations carry what actually happened ("a group orders burgers, fries,
+    # sauces"). Searching only memories answered "burgers" with a downloads-folder
+    # path, while conversations had the real thing. Running them together costs
+    # the slower of the two rather than their sum.
+    memories_text, conversations_text = await asyncio.gather(
+        _search_or_empty(client, 'memories/search', {'query': question, 'limit': 10}),
+        _search_or_empty(
+            client, 'conversations/search', {'query': question, 'limit': 4, 'include_transcript': False}
+        ),
+    )
+
     lines = _clean_bullets(memories_text)
 
-    if lines:
-        return _format(lines, '', limit=3)
+    # Conversations are only merged in when they clearly concern the question.
+    # Unguarded, this search always returns its nearest neighbour, which is how
+    # "who is the president of the USA" once answered with a chat about
+    # wallpapers -- a transcript that genuinely contains both words.
+    if _looks_relevant(question, conversations_text):
+        for extra in _conversation_titles(conversations_text):
+            if extra not in lines:
+                lines.append(extra)
 
-    return "Nothing in your memories about that."
+    if lines:
+        return _format(lines, '', limit=4)
+
+    return 'Nothing in your memories about that.'
