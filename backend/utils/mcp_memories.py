@@ -9,6 +9,7 @@ from utils.memory.default_read_rollout import (
     DefaultReadRolloutDecision,
     MemoryReadDecision,
     build_default_read_rollout_observability,
+    legacy_read_fallback_authorized,
 )
 from utils.memory.default_read_surface import (
     DefaultReadSearchResult,
@@ -17,7 +18,6 @@ from utils.memory.default_read_surface import (
     rollout_decision_from_legacy_args,
 )
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.observability import record_fallback
 
 ACTIVITY_TAGS = {
     'activity',
@@ -124,19 +124,11 @@ def mcp_legacy_read_authorized(result: 'McpMemorySearchResult | McpMemoryListRes
     this only on the non-canonical branch after `pin_memory_system`, where the
     absent doc is the expected un-enrolled state and legacy reads are
     authoritative. Every other deny reason stays fail-closed.
+
+    Thin MCP-shaped wrapper over the shared `legacy_read_fallback_authorized`
+    contract, which owns the reason set and the fallback telemetry.
     """
-    if result.read_decision == MemoryReadDecision.USE_LEGACY_SAFE:
-        return True
-    if result.read_decision == MemoryReadDecision.DENY_MEMORY and result.fallback_reason == 'missing_rollout_state':
-        record_fallback(
-            component='other',
-            from_mode='memory_default_read',
-            to_mode='legacy_memories',
-            reason='policy',
-            outcome='recovered',
-        )
-        return True
-    return False
+    return legacy_read_fallback_authorized(result.read_decision, result.fallback_reason)
 
 
 def _mcp_search_result(result: DefaultReadSearchResult) -> McpMemorySearchResult:

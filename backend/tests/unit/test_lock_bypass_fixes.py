@@ -300,7 +300,11 @@ def _force_legacy_memory_paths(module):
     from utils.memory import memory_service
     from utils.memory.memory_system import MemorySystem
 
-    legacy = SimpleNamespace(read_decision=MemoryReadDecision.USE_LEGACY_SAFE, memories=[], text=None)
+    # fallback_reason is declared on every real decision result (chat/MCP/developer), so the
+    # double carries it too — the legacy-fallback contract reads it alongside read_decision.
+    legacy = SimpleNamespace(
+        read_decision=MemoryReadDecision.USE_LEGACY_SAFE, memories=[], text=None, fallback_reason=None
+    )
     allowed_write = SimpleNamespace(allowed=True, detail={})
     module.pin_memory_system = MagicMock(return_value=MemorySystem.LEGACY)
     if hasattr(module, 'read_default_read_rollout'):
