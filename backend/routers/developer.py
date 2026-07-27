@@ -370,7 +370,7 @@ def get_memories(
             lambda batch_offset, batch_limit: [
                 m.model_dump(mode='json')
                 for m in memorydb_list_with_locked_preview(
-                    MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
+                    MemoryService(db_client=db).read_pinned(uid, memory_system, batch_limit, batch_offset)
                 )
             ],
             limit=limit,
