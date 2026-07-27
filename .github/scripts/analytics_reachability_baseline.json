@@ -67,6 +67,9 @@
       "floatingBarQuerySent": 2,
       "floatingBarToggled": 4,
       "identify": 3,
+      "integrationConnectAttempted": 3,
+      "integrationConnectFailed": 2,
+      "integrationConnectSucceeded": 2,
       "knowledgeGraphBuildCompleted": 2,
       "launchAtLoginChanged": 4,
       "memoryAssistantAnalysisRun": 2,
@@ -184,6 +187,7 @@
       "permissionDenied",
       "searchBarFocused",
       "setDevicePairingTelemetryCaptureForTests",
+      "setIntegrationConnectTelemetryCaptureForTests",
       "setMemoryAssistantTelemetryCaptureForTests"
     ],
     "windows": []

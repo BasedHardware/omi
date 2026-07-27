@@ -62,6 +62,17 @@ class AnalyticsReachabilityTests(unittest.TestCase):
                 """])
         self.assertEqual(calls, {"live": 1, "wrapper": 1})
 
+    def test_swift_property_visibility_does_not_leak_onto_the_next_method(self) -> None:
+        methods = swift_methods("""
+              class AnalyticsManager {
+                private var capture: (@MainActor (String, [String: Any]) -> Void)?
+
+                /// Doc comment between the property and the method.
+                func setCapture(_ value: (@MainActor (String, [String: Any]) -> Void)?) { capture = value }
+              }
+            """)
+        self.assertTrue(next(method for method in methods if method.name == "setCapture").public)
+
     def test_windows_counts_only_imported_production_aliases(self) -> None:
         manager = """
           export function trackEvent(event: string, properties = {}): void { fetch(event, properties) }

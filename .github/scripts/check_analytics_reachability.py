@@ -182,7 +182,9 @@ def swift_methods(source: str) -> list[Method]:
         elif depth == 1 and value == "func" and index + 1 < end:
             name = tokens[index + 1].value
             modifier_start = index - 1
-            while modifier_start > start and tokens[modifier_start].value not in {"}", "{", ";"}:
+            # `var`/`let` terminate the scan too: a stored property declared just above a func
+            # (`private var x: T?` then `func setX(...)`) would otherwise donate its `private`.
+            while modifier_start > start and tokens[modifier_start].value not in {"}", "{", ";", "var", "let"}:
                 modifier_start -= 1
             modifiers = {token.value for token in tokens[modifier_start + 1 : index]}
             brace = next(i for i in range(index + 2, end) if tokens[i].value == "{")
