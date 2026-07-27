@@ -5,8 +5,10 @@ desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
   s_7918275f8e3531::t_81adca760ac199 4757-4783
 desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift
   s_7918275f8e3531::t_4505417442ff3c 113-118
+  s_7918275f8e3531::t_3a18f4337253eb 121-124
 desktop/macos/Desktop/Tests/NotchCardVoiceDeliveryTests.swift
   s_7918275f8e3531::t_c2867e1865ced0 66-70,73,77,81-82,87-89
+  s_7918275f8e3531::t_f529cf05c237c3 76,78-80,83-86,90-101
 desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
   s_7918275f8e3531::t_dcfb34e87d372c 32-43,47-48
 .github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
