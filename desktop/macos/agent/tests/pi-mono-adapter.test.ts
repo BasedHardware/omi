@@ -286,11 +286,21 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
 
     (adapter as any).handleMessageUpdate({
-      assistantMessageEvent: { type: "text_delta", delta: response },
+      assistantMessageEvent: { type: "text_delta", delta: "I don't have direct internet/" },
     });
+    expect(events.filter((event) => event.type === "text_delta")).toEqual([]);
+    (adapter as any).handleMessageUpdate({
+      assistantMessageEvent: {
+        type: "text_delta",
+        delta: "web access, but I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.",
+      },
+    });
+    const expected = "I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.";
+    expect(events.filter((event) => event.type === "text_delta")).toEqual([
+      { type: "text_delta", text: expected },
+    ]);
     (adapter as any).handleTurnEnd(makeTurnEndEvent(response));
 
-    const expected = "I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.";
     await expect(prompt).resolves.toMatchObject({ text: expected });
     expect(events.filter((event) => event.type === "text_delta")).toEqual([
       { type: "text_delta", text: expected },
@@ -650,6 +660,31 @@ describe("PiMonoAdapter prompt correlation", () => {
       expect.objectContaining({
         type: "error",
         message: "adapter failed",
+        adapterSessionId: "session-1",
+      })
+    );
+  });
+
+  it("normalizes bare provider HTTP status errors before surfacing them", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "fail with backend 5xx" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleEvent(JSON.stringify(makeErrorTurnEndEvent('500 "omi-fault-inject"')));
+
+    await expect(prompt).rejects.toThrow('HTTP 500 "omi-fault-inject"');
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "error",
+        message: 'HTTP 500 "omi-fault-inject"',
         adapterSessionId: "session-1",
       })
     );

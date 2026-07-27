@@ -73,6 +73,21 @@ logger = logging.getLogger(__name__)
 # to terminate a zombie "Listening" session promptly, far below ws_receive_timeout.
 STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
 
+# Longest frame the Opus format can carry, in milliseconds.
+OPUS_MAX_FRAME_MS = 120
+
+
+def opus_decode_capacity(sample_rate: int) -> int:
+    """Samples to hand `Decoder.decode` as its output-buffer size.
+
+    Opus packets are self-describing: `frame_size` is only the capacity of the buffer the
+    decoder writes into, and it never emits more samples than the packet actually holds, so
+    a 10 ms frame still decodes to 10 ms under a larger buffer. Sizing it to the negotiated
+    frame duration instead made libopus answer `buffer too small` for every longer frame a
+    client sent, and the receiver dropped the whole session's audio one frame at a time.
+    """
+    return sample_rate // 1000 * OPUS_MAX_FRAME_MS
+
 
 def _get_opuslib() -> Any:
     if opuslib is None:
@@ -362,7 +377,9 @@ class ListenReceiver:
         audio = data[1:]
         if request.codec == 'opus' and self.multi_opus_decoders[channel_index]:
             try:
-                audio = self.multi_opus_decoders[channel_index].decode(bytes(audio), request.sample_rate // 50)
+                audio = self.multi_opus_decoders[channel_index].decode(
+                    bytes(audio), opus_decode_capacity(request.sample_rate)
+                )
             except Exception as error:
                 logger.warning(
                     'Listen audio frame decode failed codec=opus channel=%s type=%s',
@@ -393,18 +410,24 @@ class ListenReceiver:
                 )
                 if sent:
                     self.host.state.dg_usage_ms_pending += dg_usage_ms
-        self.channel_mix_buffers[channel_index].extend(pcm)
-        decision = decide_multi_channel_mix(
-            self.channel_mix_buffers, audio_bytes_enabled=self.host.audio_bytes_send is not None
-        )
-        if decision.should_mix:
-            mixed = mix_n_channel_buffers(
-                [bytearray(buffer[: decision.min_len]) for buffer in self.channel_mix_buffers]
+        # Only accumulate channel audio for the pusher mix when an audio-bytes consumer is attached.
+        # decide_multi_channel_mix and the teardown flush both gate on this same condition, so
+        # without a consumer nothing ever drains these per-channel buffers. Appending regardless (the
+        # old behavior) left them growing for the whole session (~64 KB/s for stereo) until the
+        # worker ran out of memory, taking every co-located live session down with it.
+        if self.host.audio_bytes_send is not None:
+            self.channel_mix_buffers[channel_index].extend(pcm)
+            decision = decide_multi_channel_mix(
+                self.channel_mix_buffers, audio_bytes_enabled=self.host.audio_bytes_send is not None
             )
-            if mixed and self.host.audio_bytes_send is not None:
-                self.host.audio_bytes_send(mixed, self.host.state.last_audio_received_time or time.time())
-            for buffer in self.channel_mix_buffers:
-                del buffer[: decision.min_len]
+            if decision.should_mix:
+                mixed = mix_n_channel_buffers(
+                    [bytearray(buffer[: decision.min_len]) for buffer in self.channel_mix_buffers]
+                )
+                if mixed and self.host.audio_bytes_send is not None:
+                    self.host.audio_bytes_send(mixed, self.host.state.last_audio_received_time or time.time())
+                for buffer in self.channel_mix_buffers:
+                    del buffer[: decision.min_len]
 
     async def _handle_text(self, message: str) -> None:
         try:
@@ -496,7 +519,9 @@ class ListenReceiver:
                     try:
                         decoded: bytes = data
                         if request.codec == 'opus':
-                            decoded = self.opus_decoder.decode(bytes(data), frame_size=self.host.frame_size)
+                            decoded = self.opus_decoder.decode(
+                                bytes(data), frame_size=opus_decode_capacity(request.sample_rate)
+                            )
                         elif request.codec == 'aac':
                             decoded = self.aac_decoder.decode(bytes(data))
                         elif request.codec == 'lc3':

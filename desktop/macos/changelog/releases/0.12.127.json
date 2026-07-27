@@ -1,0 +1,7 @@
+{
+  "version": "0.12.127",
+  "date": "2026-07-26",
+  "changes": [
+    "Improved reliability of macOS Beta qualification on the dedicated M1 Studio"
+  ]
+}

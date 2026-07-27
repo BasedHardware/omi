@@ -832,10 +832,24 @@ struct RealtimeHubToolFailure: Equatable {
 enum RealtimeHubReconnectIdentityPolicy {
   static func responseIDAfterSessionDetach(
     preservingReconnectAudio: Bool,
-    pendingReconnect: RealtimeReconnectAudioBuffer?
+    pendingReconnect: RealtimeReconnectAudioBuffer?,
+    preservingBargeInReplacement: Bool,
+    pendingBargeInReplacement: RealtimeReplacementAudioBuffer?
   ) -> VoiceResponseID? {
-    guard preservingReconnectAudio, let pendingReconnect else { return nil }
-    return pendingReconnect.responseID
+    let reconnectResponseID =
+      preservingReconnectAudio ? pendingReconnect?.responseID : nil
+    let replacementResponseID =
+      preservingBargeInReplacement ? pendingBargeInReplacement?.responseID : nil
+    switch (reconnectResponseID, replacementResponseID) {
+    case (.some(let reconnect), .some(let replacement)):
+      // These buffers should never coexist. If they ever do, only an exact
+      // shared identity is safe to retain across the physical handoff.
+      return reconnect == replacement ? reconnect : nil
+    case (.some(let responseID), .none), (.none, .some(let responseID)):
+      return responseID
+    case (.none, .none):
+      return nil
+    }
   }
 
   /// Production boundary that admits/fences provider session callbacks before
@@ -861,13 +875,36 @@ enum RealtimeHubReconnectIdentityPolicy {
 }
 
 enum RealtimeHubEventOwnership {
+  enum Admission: Equatable {
+    case accept
+    case dropStaleTurn
+    case rejectCurrentTurnResponse
+  }
+
+  static func admission(
+    _ identity: RealtimeHubEventIdentity?,
+    activeTurnID: VoiceTurnID?,
+    activeResponseID: VoiceResponseID?
+  ) -> Admission {
+    guard let identity, identity.turnID == activeTurnID else {
+      return .dropStaleTurn
+    }
+    guard identity.responseID == activeResponseID else {
+      return .rejectCurrentTurnResponse
+    }
+    return .accept
+  }
+
   static func accepts(
     _ identity: RealtimeHubEventIdentity?,
     activeTurnID: VoiceTurnID?,
     activeResponseID: VoiceResponseID?
   ) -> Bool {
-    guard let identity else { return false }
-    return identity.turnID == activeTurnID && identity.responseID == activeResponseID
+    admission(
+      identity,
+      activeTurnID: activeTurnID,
+      activeResponseID: activeResponseID
+    ) == .accept
   }
 }
 

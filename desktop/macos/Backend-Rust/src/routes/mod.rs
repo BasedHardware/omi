@@ -11,7 +11,6 @@ pub mod llm_stub;
 pub mod proxy;
 pub mod rate_limit;
 pub mod realtime;
-mod retrieval_policy;
 pub mod screen_activity;
 pub mod tts;
 pub mod updates;

@@ -181,7 +181,7 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
     auth_context = SimpleNamespace(uid="auth-user")
     authorization = SimpleNamespace(allowed=True)
     memory_service = MagicMock()
-    memory_service.read.return_value = []
+    memory_service.read_pinned.return_value = []
     with (
         patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization) as authorize,
         patch.object(rest, "pin_memory_system", return_value=rest.MemorySystem.CANONICAL) as pin,
@@ -191,7 +191,12 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
 
     pin.assert_called_once_with("auth-user", db_client=rest.db)
     authorize.assert_called_once_with(auth_context, db_client=rest.db)
-    memory_service.read.assert_called_once_with("auth-user", limit=100, offset=0)
+    memory_service.read_pinned.assert_called_once_with(
+        "auth-user",
+        rest.MemorySystem.CANONICAL,
+        100,
+        0,
+    )
 
 
 async def _run_blocking_inline(_executor, func, *args, **kwargs):

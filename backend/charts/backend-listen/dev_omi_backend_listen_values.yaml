@@ -43,7 +43,11 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  env: dev
+  # Reconnect and circuit-breaker aggregates are emitted by backend-listen.
+  # Keep those scrape targets in the same development-only evidence plane as
+  # the Pusher targets.
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -122,7 +126,7 @@ env:
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
-    value: "true"
+    value: "false"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
     value: "false"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE

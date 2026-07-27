@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode},
     response::Response,
     routing::post,
     Json, Router,
@@ -10,16 +10,20 @@ use serde_json::json;
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
+use crate::fallback::{record_fallback, FallbackOutcome};
 use crate::models::chat_completions::*;
 use crate::routes::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
 use crate::routes::rate_limit::{requires_server_metering, RateDecision};
-use crate::routes::retrieval_policy::{caller_disabled_tools, retrieval_policy, RetrievalSource};
 use crate::AppState;
 
-use super::request_translation::{translate_request_inner, web_search_enabled, ReasoningEffort};
+use super::request_translation::{
+    server_tool_available_from, should_record_web_search_fallback, translate_request_inner,
+    web_search_enabled, ReasoningEffort,
+};
 use super::response_or_500;
-use super::streaming::{handle_server_tool_streaming, handle_streaming};
+use super::streaming::handle_streaming;
 use super::transport::{handle_non_streaming, new_anthropic_client};
+use super::CHAT_CONTRACT_VERSION;
 
 pub(super) fn chat_metering_response(decision: &RateDecision) -> Option<Response> {
     match decision {
@@ -61,6 +65,7 @@ const CHAT_COMPLETIONS_MAX_BODY_SIZE: usize = 16 * 1024 * 1024;
 
 const OMI_REQUEST_ID_HEADER: &str = "x-omi-request-id";
 const RESPONSE_REQUEST_ID_HEADER: &str = "x-request-id";
+const OMI_CHAT_CONTRACT_HEADER: &str = "x-omi-chat-contract-version";
 /// Per-turn effort directive from the desktop app (relayed by the pi-mono
 /// extension). Header wins over the OpenAI-compatible body field.
 const OMI_REASONING_EFFORT_HEADER: &str = "x-omi-reasoning-effort";
@@ -93,12 +98,26 @@ fn inbound_request_id(headers: &HeaderMap) -> String {
         .unwrap_or_else(|| ulid::Ulid::new().to_string())
 }
 
+fn supports_chat_contract(headers: &HeaderMap) -> bool {
+    headers
+        .get(OMI_CHAT_CONTRACT_HEADER)
+        .map(|value| value.as_bytes() == CHAT_CONTRACT_VERSION.as_bytes())
+        .unwrap_or(true)
+}
+
 fn attach_request_id(response: &mut Response, request_id: &str) {
     if let Ok(value) = request_id.parse() {
         response
             .headers_mut()
             .insert(RESPONSE_REQUEST_ID_HEADER, value);
     }
+}
+
+fn attach_chat_contract_version(response: &mut Response) {
+    response.headers_mut().insert(
+        OMI_CHAT_CONTRACT_HEADER,
+        HeaderValue::from_static(CHAT_CONTRACT_VERSION),
+    );
 }
 
 async fn chat_completions(
@@ -118,6 +137,7 @@ async fn chat_completions(
     let response = chat_completions_inner(state, user, headers, req).await;
     response.map(|mut response| {
         attach_request_id(&mut response, &request_id);
+        attach_chat_contract_version(&mut response);
         response
     })
 }
@@ -130,6 +150,15 @@ async fn chat_completions_inner(
 ) -> Result<Response, StatusCode> {
     let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
+
+    if !supports_chat_contract(&headers) {
+        tracing::warn!(
+            event = "chat_contract_version_unsupported",
+            version = ?headers.get(OMI_CHAT_CONTRACT_HEADER),
+            "chat completion rejected"
+        );
+        return Err(StatusCode::UPGRADE_REQUIRED);
+    }
 
     if llm_stub_enabled() {
         return Ok(stub_chat_completions_response(&req));
@@ -145,39 +174,10 @@ async fn chat_completions_inner(
         StatusCode::BAD_REQUEST
     })?;
 
+    // Web search availability is not a turn-level gate. The model decides
+    // whether to call the tool when it is supported; otherwise it still owes a
+    // normal answer instead of leaving a client request waiting on a forced path.
     let web_search_enabled = web_search_enabled();
-    let policy = retrieval_policy(&req.messages);
-    // Only an explicit "search the web" is worth failing the turn over. A
-    // heuristic guess degrades to a normal answer in `translate_request_inner`.
-    if policy.requires(RetrievalSource::PublicWeb)
-        && policy.web_requirement_is_explicit()
-        && !caller_disabled_tools(&req)
-        && (!web_search_enabled || route.upstream_model.starts_with("claude-haiku"))
-    {
-        tracing::warn!(
-            event = "retrieval_policy",
-            required_web = true,
-            reason = policy.reason(),
-            web_search_exposed = false,
-            web_search_forced = false,
-            "required public web search is unavailable"
-        );
-        return Ok(response_or_500(
-            Response::builder()
-                .status(StatusCode::SERVICE_UNAVAILABLE)
-                .header("content-type", "application/json"),
-            Body::from(
-                json!({
-                    "error": {
-                        "message": "Public web search is temporarily unavailable. Please try again.",
-                        "type": "web_search_unavailable",
-                        "code": 503
-                    }
-                })
-                .to_string(),
-            ),
-        ));
-    }
 
     // BYOK: check for user-provided Anthropic API key (issue #7357).
     // When present, use the user's key and skip server-key rate limiting.
@@ -220,6 +220,10 @@ async fn chat_completions_inner(
 
     // Translate request
     let reasoning_effort = inbound_reasoning_effort(&headers, &req);
+    let record_web_search_fallback = should_record_web_search_fallback(
+        &req,
+        web_search_enabled && !route.upstream_model.starts_with("claude-haiku"),
+    );
     let anthropic_req = translate_request_inner(
         &req,
         route.upstream_model,
@@ -230,24 +234,22 @@ async fn chat_completions_inner(
         tracing::warn!("chat_completions: request translation error: {}", e);
         StatusCode::BAD_REQUEST
     })?;
+    if record_web_search_fallback {
+        record_fallback(
+            "chat_retrieval",
+            "anthropic_web_search",
+            server_tool_available_from(&anthropic_req.tools),
+            "capability_mismatch",
+            FallbackOutcome::Degraded,
+        );
+    }
 
     // Bound connection establishment so a network blip can't hang the request; the
     // total-response timeout is applied per-call (non-streaming only) inside the retry
     // helper so it never aborts a long streaming reply.
     let client = new_anthropic_client();
 
-    if req.stream && anthropic_req.requires_public_web {
-        handle_server_tool_streaming(
-            &client,
-            &api_key,
-            &anthropic_req,
-            route,
-            &user,
-            &state,
-            is_byok,
-        )
-        .await
-    } else if req.stream {
+    if req.stream {
         handle_streaming(
             &client,
             &api_key,
@@ -286,7 +288,9 @@ mod tests {
         response::Response,
     };
 
-    use super::{attach_request_id, inbound_request_id};
+    use super::{
+        attach_chat_contract_version, attach_request_id, inbound_request_id, supports_chat_contract,
+    };
 
     #[test]
     fn preserves_a_valid_opaque_request_id() {
@@ -316,5 +320,26 @@ mod tests {
         attach_request_id(&mut response, "req_01AB-cd");
 
         assert_eq!(response.headers()["x-request-id"], "req_01AB-cd");
+    }
+
+    #[test]
+    fn accepts_legacy_and_current_chat_contracts_but_rejects_unknown_versions() {
+        let mut headers = HeaderMap::new();
+        assert!(supports_chat_contract(&headers));
+
+        headers.insert("x-omi-chat-contract-version", HeaderValue::from_static("1"));
+        assert!(supports_chat_contract(&headers));
+
+        headers.insert("x-omi-chat-contract-version", HeaderValue::from_static("2"));
+        assert!(!supports_chat_contract(&headers));
+    }
+
+    #[test]
+    fn advertises_the_supported_chat_contract_on_responses() {
+        let mut response = Response::new(Body::empty());
+
+        attach_chat_contract_version(&mut response);
+
+        assert_eq!(response.headers()["x-omi-chat-contract-version"], "1");
     }
 }

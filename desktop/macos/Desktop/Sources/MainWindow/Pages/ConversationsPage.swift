@@ -236,6 +236,7 @@ struct ConversationsPage: View {
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.top, OmiSpacing.lg)
       .padding(.bottom, OmiSpacing.md)
+      .background(OmiColors.backgroundPrimary)
 
       // The whole page below the header scrolls together. Floating action bars
       // (load-more, merge) stay pinned to the bottom via the ZStack overlay.
@@ -349,7 +350,7 @@ struct ConversationsPage: View {
         }
       }
     } label: {
-      HStack(spacing: OmiSpacing.xxs) {
+      HStack(spacing: OmiSpacing.xs) {
         Image(systemName: isMultiSelectMode ? "checkmark.circle" : "checkmark.circle.badge.questionmark")
           .scaledFont(size: OmiType.caption)
         Text(isMultiSelectMode ? "Done" : "Select")
@@ -370,7 +371,7 @@ struct ConversationsPage: View {
     Button {
       NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
     } label: {
-      HStack(spacing: OmiSpacing.xxs) {
+      HStack(spacing: OmiSpacing.xs) {
         Image(systemName: "note.text")
           .scaledFont(size: OmiType.caption)
         Text("Quick Note")

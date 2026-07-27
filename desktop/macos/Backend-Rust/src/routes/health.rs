@@ -9,6 +9,7 @@ use axum::{
 };
 use serde::Serialize;
 
+use crate::routes::chat::CHAT_CONTRACT_VERSION;
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -22,6 +23,11 @@ pub struct HealthResponse {
     pub release_sha: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub release_channel: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend_release_sha: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend_release_channel: Option<String>,
+    pub chat_contract_version: &'static str,
 }
 
 #[derive(Serialize)]
@@ -47,6 +53,9 @@ async fn health_check(State(state): State<AppState>) -> Json<HealthResponse> {
         release_tag: state.config.desktop_release_tag.clone(),
         release_sha: state.config.desktop_release_sha.clone(),
         release_channel: state.config.desktop_release_channel.clone(),
+        backend_release_sha: state.config.desktop_backend_release_sha.clone(),
+        backend_release_channel: state.config.desktop_backend_release_channel.clone(),
+        chat_contract_version: CHAT_CONTRACT_VERSION,
     })
 }
 
@@ -139,6 +148,11 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(redis.status, "ready");
         assert_eq!(redis.failure_class, None);
+    }
+
+    #[test]
+    fn health_contract_version_matches_the_chat_route() {
+        assert_eq!(CHAT_CONTRACT_VERSION, "1");
     }
 
     #[test]

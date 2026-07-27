@@ -1,0 +1,7 @@
+{
+  "version": "0.12.133",
+  "date": "2026-07-26",
+  "changes": [
+    "Fixed chat failures so backend status codes are clearly identified as HTTP errors"
+  ]
+}

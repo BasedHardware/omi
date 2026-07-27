@@ -49,7 +49,10 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  env: dev
+  # The development Prometheus job keeps this target in the development
+  # evidence plane as a second boundary alongside its namespace selector.
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -395,7 +398,13 @@ volumeMounts: []
 
 nodeSelector: {}
 
-tolerations: []
+# The dedicated dev Pusher pool is tainted to keep other workloads out. The
+# existing affinity below still confines this workload to matching Pusher nodes.
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: pusher
+    effect: NoSchedule
 
 affinity:
   nodeAffinity:

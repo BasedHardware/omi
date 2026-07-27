@@ -109,6 +109,11 @@ pub struct Usage {
     pub prompt_tokens: i64,
     pub completion_tokens: i64,
     pub total_tokens: i64,
+    /// Bounded proof that the provider executed the gateway-owned public web tool.
+    ///
+    /// OpenAI-compatible clients ignore unknown usage fields. Release probes use
+    /// this count to distinguish a real web turn from a model-only answer.
+    pub web_search_requests: i64,
     // OpenAI-standard cached-token reporting. Populated from Anthropic's
     // cache_read_input_tokens so prompt-cache hits propagate through pi-mono
     // (usage.cacheRead) to the Swift query trace. Omitted when zero.
@@ -204,11 +209,6 @@ pub struct AnthropicRequest {
     pub tools: Option<Vec<AnthropicToolDef>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<serde_json::Value>,
-    /// Gateway-owned execution metadata. A public-web turn may use Anthropic's
-    /// long-running server tool and therefore needs internal pause-turn
-    /// continuation before an OpenAI-compatible response is emitted.
-    #[serde(skip)]
-    pub requires_public_web: bool,
 }
 
 /// A tool definition in an Anthropic request: either a client-executed custom
@@ -521,6 +521,10 @@ pub fn anthropic_usage_to_openai(usage: &AnthropicUsage) -> Usage {
         prompt_tokens,
         completion_tokens,
         total_tokens: prompt_tokens + completion_tokens,
+        web_search_requests: usage
+            .server_tool_use
+            .as_ref()
+            .map_or(0, |server_tools| server_tools.web_search_requests),
         prompt_tokens_details,
     }
 }

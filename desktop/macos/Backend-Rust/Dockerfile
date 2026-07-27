@@ -43,9 +43,6 @@ RUN apt-get update && apt-get install -y \
 # Copy binary from builder
 COPY --from=builder /app/target/release/omi-desktop-backend /app/omi-desktop-backend
 
-# Copy Google credentials for Firestore access
-COPY google-credentials.json /app/google-credentials.json
-
 # Expose port
 EXPOSE 8080
 

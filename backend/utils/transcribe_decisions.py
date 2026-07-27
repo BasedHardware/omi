@@ -39,7 +39,6 @@ class RecordingSessionReconnectAction(str, Enum):
 @dataclass(frozen=True)
 class CodecFrameDecision:
     codec: str
-    frame_size: int
     lc3_chunk_size: Optional[int]
     lc3_frame_duration_us: Optional[int]
 
@@ -73,15 +72,20 @@ def should_include_speech_profile(include_speech_profile: bool, is_multi_channel
 
 
 def normalize_codec_frame(codec: str) -> CodecFrameDecision:
-    frame_size = 160
+    """Map a client codec parameter onto the decoder to build.
+
+    The `_fsNNN` suffixes name the frame duration the client encodes with. Opus packets are
+    self-describing, so its variants collapse to the same decoder; only LC3 needs the frame
+    duration handed to it up front.
+    """
     lc3_chunk_size = None
     lc3_frame_duration_us = None
 
     if codec == 'opus_fs320':
-        return CodecFrameDecision('opus', 320, lc3_chunk_size, lc3_frame_duration_us)
+        return CodecFrameDecision('opus', lc3_chunk_size, lc3_frame_duration_us)
     if codec == 'lc3_fs1030':
-        return CodecFrameDecision('lc3', frame_size, 30, 10000)
-    return CodecFrameDecision(codec, frame_size, lc3_chunk_size, lc3_frame_duration_us)
+        return CodecFrameDecision('lc3', 30, 10000)
+    return CodecFrameDecision(codec, lc3_chunk_size, lc3_frame_duration_us)
 
 
 OPUS_SUPPORTED_SAMPLE_RATES = frozenset({8000, 12000, 16000, 24000, 48000})

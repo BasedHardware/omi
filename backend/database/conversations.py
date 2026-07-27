@@ -18,7 +18,7 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
-from ._client import db, get_firestore_client
+from ._client import db, delete_collection_recursive, get_firestore_client
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -712,6 +712,36 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_ref.update(prepared_data)
 
 
+def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, firestore_client: Any = None) -> bool:
+    """Atomically claim the one analytics success slot for a conversation.
+
+    The marker lives in Firestore under the authoritative conversation document,
+    rather than in a best-effort cache. ``create`` is atomic: the caller that
+    creates the marker is the only caller allowed to capture the optional
+    analytics event; an existing marker means a retry/re-finalization must not
+    emit again. It deliberately has no TTL, so Redis loss, cache eviction, and
+    arbitrary retry windows cannot re-open the slot.
+
+    Callers must treat storage errors as *not acquired*. This is telemetry-only:
+    failing closed avoids a possible duplicate and must never interrupt the
+    underlying conversation extraction.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    marker_ref = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .collection('analytics_markers')
+        .document('conversation_memories_extracted')
+    )
+    try:
+        marker_ref.create({'created_at': firestore.SERVER_TIMESTAMP})
+        return True
+    except AlreadyExists:
+        return False
+
+
 def create_audio_files_from_chunks(
     uid: str,
     conversation_id: str,
@@ -949,18 +979,18 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
 
 
 def delete_conversation(uid, conversation_id):
-    """
-    Delete a conversation and its photos subcollection.
+    """Delete a conversation and every subcollection underneath it.
 
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
+    Firestore does not cascade, and a conversation owns more than ``photos``: the per-provider
+    post-processing transcripts (verbatim segment text), the Hume emotion predictions, and the
+    analytics marker. Purging only photos left those behind as data no query can reach — not even
+    the account-deletion wipe, which walks *existing* documents and never sees a deleted parent.
+    Children are enumerated live, so a subcollection added later is purged too.
     """
-    # Delete photos subcollection first
-    delete_conversation_photos(uid, conversation_id)
-
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    for sub in conversation_ref.collections():
+        delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
 
 

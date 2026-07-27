@@ -1142,7 +1142,7 @@ final class DesktopAutomationActionRegistry {
           "message": message,
           "memories": "\(result.memoryCount ?? 0)",
         ]
-      case .failure(let message):
+      case .failure(let message, failureClass: _):
         return ["outcome": "failure", "message": message]
       }
     }

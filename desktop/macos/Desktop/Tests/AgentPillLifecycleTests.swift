@@ -321,8 +321,8 @@ import XCTest
     XCTAssertTrue(typingSource.contains("struct TypingIndicator: View"))
     XCTAssertTrue(typingSource.contains("OmiThinkingMark()"))
     XCTAssertTrue(typingSource.contains(".linear(duration: 0.9).repeatForever(autoreverses: false)"))
-    XCTAssertTrue(notchSource.contains("private struct NotchThinkingMark: View"))
-    XCTAssertTrue(notchSource.contains("OmiThinkingMark()"))
+    XCTAssertTrue(notchSource.contains("NotchVoiceMorphMark("))
+    XCTAssertTrue(notchSource.contains("isThinking: showingNotchThinking"))
     XCTAssertFalse(notchSource.contains("Text(\"Thinking\")"))
     XCTAssertFalse(typingSource.contains("animationPhase"))
     XCTAssertFalse(typingSource.contains("scaleEffect(animationPhase"))
@@ -430,7 +430,7 @@ import XCTest
         "let targetSize = self.currentSurfaceSizeForCurrentScreen(frameIncludesVoiceGlow: wasActive)"))
   }
 
-  func testNotchPTTUsesCompactWaveformOnly() throws {
+  func testNotchPTTUsesTheAlwaysMountedVoiceMorphMark() throws {
     let source = try floatingControlBarViewSource()
 
     guard let lobeRange = source.range(of: "private var notchAgentLobe: some View"),
@@ -440,7 +440,9 @@ import XCTest
     }
     let lobeSource = String(source[lobeRange.lowerBound..<controlRange.lowerBound])
 
-    XCTAssertTrue(lobeSource.contains("VoiceWaveformBars(isActive: true)"))
+    XCTAssertTrue(lobeSource.contains("NotchAgentPillsRowView("))
+    XCTAssertTrue(lobeSource.contains("isVoiceListening: showingNotchWaveform"))
+    XCTAssertFalse(lobeSource.contains("VoiceWaveformBars(isActive: true)"))
     XCTAssertFalse(lobeSource.contains("showingNotchPttHint"))
     XCTAssertTrue(source.contains("pttStatusBanner"))
     XCTAssertTrue(source.contains("state.isVoiceListening && state.pttHintText.isEmpty"))
@@ -451,8 +453,10 @@ import XCTest
     let view = try floatingControlBarViewSource()
     let response = try aiResponseViewSource()
     let waveformSites = view.components(separatedBy: "VoiceWaveformBars(").count - 1
-    // Chrome morph lobe + optional idle pill voiceListeningView.
-    XCTAssertEqual(waveformSites, 2)
+    // The always-mounted notch mark owns its waveform morph. The remaining
+    // bars belong only to the optional non-notch voiceListeningView.
+    XCTAssertEqual(waveformSites, 1)
+    XCTAssertTrue(view.contains("NotchVoiceMorphMark("))
     XCTAssertTrue(view.contains("private var notchAgentLobe: some View"))
     XCTAssertTrue(view.contains("private var voiceListeningView: some View"))
     XCTAssertTrue(
@@ -547,10 +551,10 @@ import XCTest
     XCTAssertTrue(windowSource.contains("state.isNotchHoverMenuVisible ? .openMenuRetention : .activationOnly"))
     XCTAssertTrue(source.contains("isChatChromePinned || shouldShowNotchHoverMenu"))
     XCTAssertTrue(source.contains("static let maxAgents = FloatingControlBarWindow.notchAgentListMaxVisibleAgents"))
-    XCTAssertTrue(source.contains("static let dotDiameterRatio: CGFloat = 0.18"))
-    XCTAssertTrue(source.contains("static let ringRadiusRatio: CGFloat = 0.33"))
-    XCTAssertTrue(source.contains("NotchAgentOmiIndicatorView(pills: stackedPills)"))
-    XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
+    XCTAssertTrue(source.contains("NotchVoiceMorphMark("))
+    XCTAssertTrue(source.contains("isListening: isVoiceListening"))
+    XCTAssertTrue(source.contains("isThinking: isThinking"))
+    XCTAssertTrue(source.contains("dotColors: stackedPills.prefix"))
     XCTAssertTrue(source.contains("NotchAgentMorphField("))
     XCTAssertTrue(source.contains("NotchAgentListRow("))
     XCTAssertTrue(source.contains("title: pill.title"))
@@ -611,7 +615,7 @@ import XCTest
     XCTAssertTrue(source.contains("@State private var notchLogoHovering = false"))
     XCTAssertTrue(source.contains("private func setNotchLogoHovering(_ hovering: Bool)"))
     XCTAssertTrue(source.contains("private var notchAgentLogoHitTarget: some View"))
-    XCTAssertTrue(source.contains("The Omi mark always belongs to the compact notch header."))
+    XCTAssertTrue(source.contains("One always-mounted identity mark owns idle, PTT, and thinking"))
     XCTAssertTrue(source.contains("ZStack(alignment: .trailing)"))
     XCTAssertTrue(source.contains("static let logoFrameSize: CGFloat = 21"))
     XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))

@@ -32,7 +32,7 @@ from models.conversation_enums import (
     ConversationStatus,
     ExternalIntegrationConversationSource,
 )
-from models.geolocation import Geolocation
+from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
 from models.structured import Structured
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from models.transcript_segment import TranscriptSegment
@@ -370,7 +370,7 @@ def get_memories(
             lambda batch_offset, batch_limit: [
                 m.model_dump(mode='json')
                 for m in memorydb_list_with_locked_preview(
-                    MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
+                    MemoryService(db_client=db).read_pinned(uid, memory_system, batch_limit, batch_offset)
                 )
             ],
             limit=limit,
@@ -1273,7 +1273,7 @@ class CreateConversationRequest(BaseModel):
         default=None, description="When the conversation finished (defaults to started_at + 5 minutes)"
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
-    geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+    geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
 
 
 class ConversationResponse(BaseModel):
@@ -1329,7 +1329,7 @@ class CreateConversationFromTranscriptRequest(BaseModel):
         default=None, description="When conversation finished (calculated from segments duration if not provided)"
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
-    geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+    geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
     client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
     client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
 
@@ -1538,7 +1538,7 @@ def create_conversation(
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
     # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
-    geolocation = resolve_geolocation(request.geolocation)
+    geolocation = resolve_geolocation(validated_geolocation_or_none(request.geolocation))
 
     # Language defaults
     language_code = request.language or 'en'
@@ -1718,7 +1718,7 @@ def _create_conversation_from_segments(
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
     # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
-    geolocation = resolve_geolocation(request.geolocation)
+    geolocation = resolve_geolocation(validated_geolocation_or_none(request.geolocation))
 
     # Language defaults
     language_code = request.language or 'en'

@@ -98,6 +98,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// scrollbar doesn't clip right-aligned user pills when horizontalContentPadding
   /// is 0; the left edge stays aligned with the ask bar. Default 0.
   var trailingContentPadding: CGFloat = 0
+  /// Readable cap on the message column. The scroll view remains full-width so
+  /// the native scroller stays on the window edge and the prompt timeline can
+  /// occupy the resulting gutter without replacing it.
+  var contentColumnWidth: CGFloat? = nil
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -160,12 +164,39 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Used to detect conversation switches so session-scoped @State can be reset.
   @State private var trackedConversationId: String?
 
+  /// Measured transcript geometry for the prompt timeline. This view deliberately
+  /// does not observe the object; only the overlay subscribes, so scrolling does
+  /// not re-evaluate every message row.
+  @State private var transcriptGeometry = ChatTranscriptGeometry()
+
   var body: some View {
     ScrollViewReader { proxy in
       ZStack(alignment: .bottom) {
         scrollContent(proxy: proxy)
         scrollToBottomButton(proxy: proxy)
       }
+      .overlay(alignment: .trailing) {
+        ChatPromptTimelineOverlay(geometry: transcriptGeometry) { markID in
+          jumpToPrompt(markID, proxy: proxy)
+        }
+      }
+      .onGeometryChange(for: CGSize.self) {
+        $0.size
+      } action: { size in
+        transcriptGeometry.setViewport(size, columnWidth: contentColumnWidth)
+      }
+    }
+  }
+
+  /// A direct timeline choice leaves live-follow mode and places the selected
+  /// prompt at the top of the viewport.
+  private func jumpToPrompt(_ markID: String, proxy: ScrollViewProxy) {
+    cancelAllPendingScrolls()
+    userIsScrolling = false
+    scrollMode = .freeScrolling
+    hasActivityBelow = false
+    OmiMotion.withGated(ChatPromptTimelineMetrics.jumpAnimation) {
+      proxy.scrollTo(markID, anchor: .top)
     }
   }
 
@@ -175,14 +206,26 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       LazyVStack(spacing: OmiSpacing.lg) {
         loadMoreButton
         messageContent
+        workingIndicator
       }
       .padding(.horizontal, horizontalContentPadding)
       .padding(.trailing, trailingContentPadding)
       .padding(.vertical, verticalContentPadding)
+      .frame(maxWidth: contentColumnWidth ?? .infinity)
+      .frame(maxWidth: .infinity)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
       // chrome Text (agent card headers, tool summaries, timestamps) can peg the
       // main thread in GraphHost layout. Message bodies opt in via OmiMarkdown.
       .background(scrollDetectors)
+      .coordinateSpace(name: ChatTranscriptSpace.content)
+      .onGeometryChange(for: ChatTranscriptContentFrame.self) { geometry in
+        ChatTranscriptContentFrame(
+          height: geometry.size.height,
+          scrollTop: -geometry.frame(in: .named(ChatTranscriptSpace.viewport)).minY
+        )
+      } action: { frame in
+        transcriptGeometry.setContent(height: frame.height, scrollTop: frame.scrollTop)
+      }
 
       // Invisible anchor lives OUTSIDE the LazyVStack so it is always
       // eagerly rendered. Inside LazyVStack it may not exist in the view
@@ -194,9 +237,17 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           .id("bottom-anchor")
       }
     }
+    .coordinateSpace(name: ChatTranscriptSpace.viewport)
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
+      transcriptGeometry.setMessages(messages)
       handleMessagesCountChange(oldCount: oldCount, newCount: newCount, proxy: proxy)
+    }
+    // Refresh reply previews only once a streamed answer settles. Rebuilding
+    // sources for every token would re-walk the entire transcript.
+    .onChange(of: messages.last?.isStreaming) { wasStreaming, isStreaming in
+      guard wasStreaming == true, isStreaming != true else { return }
+      transcriptGeometry.setMessages(messages)
     }
     // A journal restore may be populated by background events while the
     // loader is still collecting its canonical snapshot. Reveal it only after
@@ -260,9 +311,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         scrollMode = .followingBottom
         userIsScrolling = false
         isUserAtBottom = true
+        transcriptGeometry.reset()
+        transcriptGeometry.setMessages(messages)
       }
     }
     .onAppear {
+      transcriptGeometry.setMessages(messages)
       if !isLoadingInitial, !messages.isEmpty {
         handleInitialRestore(proxy: proxy)
       }
@@ -485,7 +539,24 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           onOpenAgentRef: onOpenAgentRef
         )
         .id(message.id)
+        .onGeometryChange(for: CGFloat.self) {
+          $0.frame(in: .named(ChatTranscriptSpace.content)).minY
+        } action: { offset in
+          guard message.sender == .user else { return }
+          transcriptGeometry.setRowOffset(offset, for: message.id)
+        }
       }
+    }
+  }
+
+  @ViewBuilder
+  private var workingIndicator: some View {
+    if contentColumnWidth != nil && (!messages.isEmpty || isSending) {
+      ChatWorkingIndicator(
+        label: isSending ? ChatWorkingStatus.label(for: messages.last) : nil,
+        motion: ChatWorkingStatus.motion(for: messages.last)
+      )
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 
@@ -545,6 +616,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         scrollMode = .freeScrolling
         userIsScrolling = true
         hasActivityBelow = false
+        transcriptGeometry.releaseSelection()
         cancelAllPendingScrolls()
         let endWork = DispatchWorkItem {
           userIsScrolling = false

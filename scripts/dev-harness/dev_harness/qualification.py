@@ -9,6 +9,7 @@ import os
 import secrets
 import shutil
 import signal
+import stat
 import subprocess
 import tempfile
 import time
@@ -23,6 +24,8 @@ LEASE_OWNER = "omi-desktop-qualification"
 DEFAULT_RETAINED_RUNS = 3
 DEFAULT_RETENTION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 COMPLETION_FILENAME = "qualification-completed.json"
+QUARANTINE_DIRNAME = "quarantined-lease-pointers"
+FAULT_STATE_DIRNAME = "fault"
 STOP_PHASES: tuple[tuple[signal.Signals, float], ...] = (
     (signal.SIGINT, 8),
     (signal.SIGTERM, 5),
@@ -84,6 +87,26 @@ def _write_lease(path: Path, payload: dict[str, object]) -> None:
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+def _quarantine_stale_lease_pointer(path: Path, root: Path, lease: dict[str, object]) -> Path:
+    """Retire only a dead lease pointer when its state cannot prove safe cleanup.
+
+    The active pointer is moved under the root lock to preserve its exact diagnostic
+    contents. The associated state and logs remain untouched: without a valid
+    ownership sentinel, neither deletion nor process signalling is authorized.
+    """
+
+    lease_id = safety.validate_instance_name(str(lease["lease_id"]))
+    token_digest = hashlib.sha256(str(lease["token"]).encode("utf-8")).hexdigest()
+    quarantine = root / QUARANTINE_DIRNAME
+    quarantine.mkdir(mode=0o700, parents=True, exist_ok=True)
+    destination = quarantine / f"{lease_id}-{int(time.time_ns())}-{token_digest}.json"
+    if destination.exists():
+        raise QualificationLeaseError(f"Refusing to overwrite quarantined qualification lease evidence: {destination}")
+    path.replace(destination)
+    destination.chmod(0o400)
+    return destination
 
 
 def _lease_provenance(lease: dict[str, object], root: Path) -> tuple[str, Path, Path, int, str]:
@@ -160,6 +183,241 @@ def _validated_owned_records(
             )
         validated.append(record)
     return validated, process_manifest, port_manifest
+
+
+def _read_fault_metadata(path: Path) -> dict[str, str]:
+    try:
+        file_stat = path.stat()
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise QualificationLeaseError(f"Cannot validate qualification fault-inject state: {exc}") from exc
+    if path.is_symlink() or not path.is_file() or file_stat.st_uid != os.getuid():
+        raise QualificationLeaseError("Qualification fault-inject state is not an owner-controlled regular file")
+    if stat.S_IMODE(file_stat.st_mode) & 0o077:
+        raise QualificationLeaseError("Qualification fault-inject state is not owner-only")
+    fields: dict[str, str] = {}
+    for line in lines:
+        if "=" not in line:
+            raise QualificationLeaseError("Qualification fault-inject state is malformed")
+        key, value = line.split("=", 1)
+        if not key or key in fields:
+            raise QualificationLeaseError("Qualification fault-inject state is malformed")
+        fields[key] = value
+    return fields
+
+
+def _validated_fault_record(state_root: Path, ownership_token: str) -> dict[str, object] | None:
+    """Authenticate the optional fault listener rooted inside this exact lease."""
+
+    fault_state = state_root / FAULT_STATE_DIRNAME
+    if not fault_state.exists():
+        return None
+    if (
+        fault_state.is_symlink()
+        or not fault_state.is_dir()
+        or _real(fault_state) != _real(state_root) / FAULT_STATE_DIRNAME
+    ):
+        raise QualificationLeaseError("Qualification fault-inject state escaped its recorded lease root")
+    try:
+        directory_stat = fault_state.stat()
+    except OSError as exc:
+        raise QualificationLeaseError(f"Cannot validate qualification fault-inject state: {exc}") from exc
+    if directory_stat.st_uid != os.getuid() or stat.S_IMODE(directory_stat.st_mode) & 0o077:
+        raise QualificationLeaseError("Qualification fault-inject state directory is not owner-only")
+
+    pid_path, meta_path = fault_state / "pid", fault_state / "meta"
+    if not pid_path.exists() and not meta_path.exists():
+        return None
+    if not pid_path.is_file() or not meta_path.is_file():
+        raise QualificationLeaseError("Qualification fault-inject state is incomplete")
+    fields = _read_fault_metadata(meta_path)
+    try:
+        pid_stat = pid_path.stat()
+        pid_text = pid_path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise QualificationLeaseError(f"Cannot validate qualification fault-inject PID: {exc}") from exc
+    if pid_path.is_symlink() or pid_stat.st_uid != os.getuid() or stat.S_IMODE(pid_stat.st_mode) & 0o077:
+        raise QualificationLeaseError("Qualification fault-inject PID is not owner-only")
+    try:
+        pid = int(pid_text)
+        recorded_pid = int(fields.get("pid", "-1"))
+        process_group = int(fields.get("pgid", "-1"))
+        port = int(fields.get("port", "-1"))
+    except ValueError as exc:
+        raise QualificationLeaseError("Qualification fault-inject state has invalid numeric provenance") from exc
+    if pid <= 0 or recorded_pid != pid or process_group != pid:
+        raise QualificationLeaseError("Qualification fault-inject process lineage is invalid")
+    if not 1 <= port <= 65535:
+        raise QualificationLeaseError("Qualification fault-inject port is invalid")
+    if fields.get("token") != ownership_token:
+        raise QualificationLeaseError("Qualification fault-inject token does not match the active lease")
+    if fields.get("url") != f"http://127.0.0.1:{port}":
+        raise QualificationLeaseError("Qualification fault-inject endpoint is not the recorded loopback port")
+
+    record: dict[str, object] = {
+        "service": "fault-inject",
+        "pid": pid,
+        "process_group": process_group,
+        "port": port,
+        "ownership_marker": f"omi-fault-inject:{ownership_token}",
+    }
+    _validate_fault_process(record)
+    return record
+
+
+def _validate_fault_process(record: dict[str, object]) -> tuple[bool, tuple[int, ...]]:
+    """Re-prove the exact token-bound fault process and its current listener."""
+
+    pid = int(record["pid"])
+    process_group = int(record["process_group"])
+    port = int(record["port"])
+    marker = str(record["ownership_marker"])
+    listeners = safety.listening_pids(port)
+    alive = safety.process_exists(pid)
+    if listeners and listeners != (pid,):
+        raise QualificationLeaseError(
+            "Refusing to signal a qualification fault-inject listener whose lease lineage is unproven"
+        )
+    if alive:
+        if marker not in safety.command_line_for_pid(pid) or os.getpgid(pid) != process_group or process_group != pid:
+            raise QualificationLeaseError(
+                "Refusing to signal a qualification fault-inject process whose lease lineage is unproven"
+            )
+    elif listeners:
+        raise QualificationLeaseError(
+            "Refusing to signal a qualification fault-inject listener whose lease lineage is unproven"
+        )
+    return alive, listeners
+
+
+def _stop_owned_fault_record(record: dict[str, object] | None) -> None:
+    if record is None:
+        return
+    process_group = int(record["process_group"])
+    service, port = str(record["service"]), int(record["port"])
+    for sig, wait_seconds in STOP_PHASES:
+        alive, listeners = _validate_fault_process(record)
+        if not alive and not listeners:
+            return
+        if alive:
+            try:
+                os.killpg(process_group, sig)
+            except (ProcessLookupError, PermissionError) as exc:
+                raise QualificationLeaseError(
+                    f"Cannot signal recorded qualification fault-inject group: {exc}"
+                ) from exc
+        deadline = time.monotonic() + wait_seconds
+        while time.monotonic() < deadline:
+            alive, listeners = _validate_fault_process(record)
+            if not alive and not listeners:
+                return
+            time.sleep(0.2)
+    alive, listeners = _validate_fault_process(record)
+    if listeners:
+        raise QualificationLeaseError(
+            f"Qualification fault-inject port still open after cleanup; retaining incomplete lease state: "
+            f"{service}:{port} (listeners {','.join(map(str, listeners))})"
+        )
+    if alive:
+        raise QualificationLeaseError(
+            f"Qualification fault-inject process still running after cleanup; retaining incomplete lease state: "
+            f"{service} pid={record['pid']}"
+        )
+
+
+def _write_fault_preflight_report(
+    path: Path,
+    *,
+    lease_id: str,
+    status: str,
+    port: int | None,
+    failure_reason: str | None = None,
+    detail: str | None = None,
+) -> None:
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "gate": "fault-listener-provenance-cleanup",
+        "classification": "runner-hygiene-cleanup",
+        "lease_id": lease_id,
+        "status": status,
+        "port": port,
+        "failure_reason": failure_reason,
+    }
+    if detail:
+        payload["detail"] = detail
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _write_lease(path, payload)
+    path.chmod(0o600)
+
+
+def _fault_preflight_failure_reason(exc: Exception) -> str:
+    detail = str(exc).lower()
+    if "lineage is unproven" in detail or "ownership changed" in detail:
+        return "unproven-listener-lineage"
+    if "token" in detail:
+        return "lease-token-mismatch"
+    if "port still open" in detail or "process still running" in detail:
+        return "owned-listener-cleanup-incomplete"
+    if "state" in detail or "pid" in detail:
+        return "invalid-listener-provenance"
+    return "host-prerequisite-unmet"
+
+
+def preflight_fault_cleanup(*, repo_root: Path, lease_id: str, token: str, result_path: Path) -> dict[str, object]:
+    """Prove and reclaim a disposable listener before expensive qualification."""
+
+    root = _validate_root(lease_root_from_env(), repo_root)
+    observed_port: int | None = None
+    try:
+        with _locked(root):
+            path = _lease_path(root)
+            lease = _read_lease(path)
+            if lease is None:
+                raise QualificationLeaseError("Qualification fault-listener preflight requires an active lease")
+            recorded_id, state_root, recorded_repo, _owner_pid, recorded_token = _lease_provenance(lease, root)
+            if recorded_id != lease_id or recorded_token != token:
+                raise QualificationLeaseError("Qualification lease token does not match the active lease")
+            if recorded_repo != _real(repo_root):
+                raise QualificationLeaseError("Qualification lease belongs to a different source worktree")
+            fault_record = _validated_fault_record(state_root, recorded_token)
+            if fault_record is None:
+                raise QualificationLeaseError("Qualification fault-listener preflight found no recorded listener")
+            observed_port = int(fault_record["port"])
+            _stop_owned_fault_record(fault_record)
+            alive, listeners = _validate_fault_process(fault_record)
+            if alive or listeners:
+                raise QualificationLeaseError(
+                    "Qualification fault-listener preflight could not prove cleanup completion"
+                )
+            fault_state = state_root / FAULT_STATE_DIRNAME
+            for evidence in (fault_state / "pid", fault_state / "meta"):
+                evidence.unlink()
+            report = {
+                "schema_version": 1,
+                "gate": "fault-listener-provenance-cleanup",
+                "classification": "runner-hygiene-cleanup",
+                "lease_id": lease_id,
+                "status": "passed",
+                "port": observed_port,
+                "failure_reason": None,
+            }
+            _write_fault_preflight_report(
+                result_path,
+                lease_id=lease_id,
+                status="passed",
+                port=observed_port,
+            )
+            return report
+    except (QualificationLeaseError, safety.SafetyError) as exc:
+        _write_fault_preflight_report(
+            result_path,
+            lease_id=lease_id,
+            status="failed",
+            port=observed_port,
+            failure_reason=_fault_preflight_failure_reason(exc),
+            detail=str(exc),
+        )
+        raise
 
 
 def _is_exact_typesense_docker_proxy(record: dict[str, object], lease_id: str | None) -> bool:
@@ -364,13 +622,23 @@ def acquire(
                 raise QualificationLeaseError(
                     f"Qualification lease {old_id!r} is held by live PID {old_owner}; refusing concurrent stack use"
                 )
-            records, process_manifest, port_manifest = _validated_owned_records(old_state, old_repo, old_id, old_token)
-            _stop_owned_records(records, process_manifest, port_manifest, old_id)
-            _safe_remove_state(old_state, old_repo, old_id)
-            old_logs = root / "logs" / old_id
-            if old_logs.is_dir():
-                shutil.rmtree(old_logs)
-            path.unlink(missing_ok=True)
+            try:
+                records, process_manifest, port_manifest = _validated_owned_records(old_state, old_repo, old_id, old_token)
+                fault_record = _validated_fault_record(old_state, old_token)
+                _stop_owned_fault_record(fault_record)
+                _stop_owned_records(records, process_manifest, port_manifest, old_id)
+                _safe_remove_state(old_state, old_repo, old_id)
+            except (safety.SafetyError, QualificationLeaseError):
+                # A dead owner cannot keep the admission pointer indefinitely.
+                # If any provenance or listener-lineage check fails, preserve the
+                # state/log evidence and retire only the pointer. In particular,
+                # do not retry or broaden process cleanup after a refused signal.
+                _quarantine_stale_lease_pointer(path, root, existing)
+            else:
+                old_logs = root / "logs" / old_id
+                if old_logs.is_dir():
+                    shutil.rmtree(old_logs)
+                path.unlink(missing_ok=True)
 
         state_root = _real(root / "state" / lease_id)
         if state_root.exists():
@@ -423,6 +691,8 @@ def release(
         records, process_manifest, port_manifest = _validated_owned_records(
             state_root, recorded_repo, recorded_id, recorded_token
         )
+        fault_record = _validated_fault_record(state_root, recorded_token)
+        _stop_owned_fault_record(fault_record)
         _stop_owned_records(records, process_manifest, port_manifest, recorded_id)
         path.unlink(missing_ok=True)
         _mark_completed(state_root, recorded_repo, recorded_id, recorded_token)

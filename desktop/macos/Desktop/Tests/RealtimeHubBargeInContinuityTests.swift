@@ -669,7 +669,9 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
     let retainedResponseID = RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
       preservingReconnectAudio: true,
-      pendingReconnect: pendingReconnect)
+      pendingReconnect: pendingReconnect,
+      preservingBargeInReplacement: false,
+      pendingBargeInReplacement: nil)
     XCTAssertEqual(retainedResponseID, responseID)
     XCTAssertTrue(
       RealtimeHubEventOwnership.accepts(
@@ -685,11 +687,58 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertNil(
       RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
         preservingReconnectAudio: false,
-        pendingReconnect: pendingReconnect))
+        pendingReconnect: pendingReconnect,
+        preservingBargeInReplacement: false,
+        pendingBargeInReplacement: nil))
     XCTAssertNil(
       RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
         preservingReconnectAudio: true,
-        pendingReconnect: nil))
+        pendingReconnect: nil,
+        preservingBargeInReplacement: false,
+        pendingBargeInReplacement: nil))
+  }
+
+  func testBargeInReplacementKeepsBufferedResponseIdentityForFreshSocket() {
+    let turnID = VoiceTurnID()
+    let responseID = VoiceResponseID("barge-in-response")
+    let pendingReplacement = RealtimeReplacementAudioBuffer(
+      turnID: turnID,
+      responseID: responseID,
+      identity: VoiceEffectIdentity(turnID: turnID, effectID: 1))
+
+    let retainedResponseID = RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
+      preservingReconnectAudio: false,
+      pendingReconnect: nil,
+      preservingBargeInReplacement: true,
+      pendingBargeInReplacement: pendingReplacement)
+
+    XCTAssertEqual(retainedResponseID, responseID)
+    XCTAssertEqual(
+      RealtimeHubEventOwnership.admission(
+        RealtimeHubEventIdentity(turnID: turnID, responseID: responseID),
+        activeTurnID: turnID,
+        activeResponseID: retainedResponseID),
+      .accept)
+  }
+
+  func testCurrentTurnResponseMismatchIsNotClassifiedAsAnOldTurnCallback() {
+    let turnID = VoiceTurnID()
+    let event = RealtimeHubEventIdentity(
+      turnID: turnID,
+      responseID: VoiceResponseID("provider-response"))
+
+    XCTAssertEqual(
+      RealtimeHubEventOwnership.admission(
+        event,
+        activeTurnID: turnID,
+        activeResponseID: nil),
+      .rejectCurrentTurnResponse)
+    XCTAssertEqual(
+      RealtimeHubEventOwnership.admission(
+        event,
+        activeTurnID: VoiceTurnID(),
+        activeResponseID: event.responseID),
+      .dropStaleTurn)
   }
 
   func testGeminiInputTranscriptCannotCrossCompletedTurnBoundary() {

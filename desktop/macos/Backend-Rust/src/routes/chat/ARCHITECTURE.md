@@ -12,9 +12,11 @@ Anthropic HTTP, retries, and pause-turn continuation. `sse` owns byte framing
 and OpenAI chunk serialization. `request_translation` owns Anthropic/OpenAI
 shape conversion and its retrieval-policy injection points.
 
-Provider translation must not reach SSE framing. Retrieval classification stays
-in the sibling `routes::retrieval_policy` module; this package only owns the
-chat-specific gate and injection call sites.
+Provider translation must not reach SSE framing. Public-web prompt routing for
+the agent runtime lives in `desktop/macos/agent`; this gateway exposes
+`web_search` as a normal server tool on supported agentic turns. Request
+translation is the enforcement boundary for explicit private/no-web context,
+including client-tool continuations, and must omit the external tool there.
 
 ## Tests
 

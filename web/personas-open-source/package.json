@@ -6,12 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "node --test src/lib/server/*.test.mjs",
     "lint": "next lint",
     "lint:fix": "eslint ./src --ext .jsx,.js,.ts,.tsx --quiet --fix --ignore-path ./.eslintignore",
     "lint:format": "prettier  --loglevel warn --write \"./**/*.{js,jsx,ts,tsx,css,md,json}\" "
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-scroll-area": "^1.2.9",
@@ -24,7 +24,6 @@
     "lucide-react": "^0.515.0",
     "mixpanel-browser": "^2.56.0",
     "next": "15.5.18",
-    "openai": "^4.73.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-icons": "^5.5.0",

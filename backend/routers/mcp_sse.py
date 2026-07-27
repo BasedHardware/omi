@@ -831,7 +831,7 @@ def execute_tool(
             filtered = collect_filtered_memories(
                 lambda batch_offset, batch_limit: [
                     m.model_dump(mode='json')
-                    for m in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
+                    for m in MemoryService(db_client=db).read_pinned(user_id, memory_system, batch_limit, batch_offset)
                 ],
                 limit=limit,
                 offset=offset,
