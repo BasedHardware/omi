@@ -143,9 +143,10 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     let viewport = CGSize(width: 1_200, height: 800)
     let focusedPosition = CGPoint(x: 0.357_342, y: 0.422_746)
     let startingZoom: CGFloat = 4
+    let projectionSpan = MemoryAtlasLayoutEngine.projectionSpan(of: viewport)
     let startingPan = CGSize(
-      width: (0.5 - focusedPosition.x) * viewport.width * startingZoom,
-      height: (0.5 - focusedPosition.y) * viewport.height * startingZoom
+      width: (0.5 - focusedPosition.x) * projectionSpan * startingZoom,
+      height: (0.5 - focusedPosition.y) * projectionSpan * startingZoom
     )
     let maximumZoom = MemoryAtlasZoomPolicy.fullyLabelledZoom(nodeCount: 1_946)
     let endingPan = MemoryAtlasZoomPolicy.panPreservingCenterZoom(

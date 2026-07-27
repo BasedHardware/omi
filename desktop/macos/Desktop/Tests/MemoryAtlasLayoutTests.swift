@@ -1230,9 +1230,12 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     // anonymous dots. A name that collides below its mark now flips above
     // instead of being dropped. Two near-coincident marks can still lose one
     // name — with the dots overlapping, a second name there would be less
-    // readable than none — so this asserts the anonymous tail is gone, not
-    // that collision handling became perfect.
-    XCTAssertGreaterThanOrEqual(plan.labelNodeIDs.count, 24)
+    // readable than none — so this asserts that the great majority of the
+    // atlas is named on the actual square drawing surface, not that collision
+    // handling became perfect. A wide window must use that same square
+    // projection rather than pretending its extra horizontal margin creates
+    // space for labels.
+    XCTAssertGreaterThanOrEqual(plan.labelNodeIDs.count, 22)
     // The flip-above affordance used to be load-bearing here: the old layout
     // placed marks close enough that names collided below them, and flipping
     // was the only way the last few were admitted. Marks in a small atlas are
