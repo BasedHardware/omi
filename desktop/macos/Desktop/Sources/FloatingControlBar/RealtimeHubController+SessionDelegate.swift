@@ -618,6 +618,7 @@ extension RealtimeHubController {
   func hubDidOpenInputWindow(source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
     AgentCompletionVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
+    NotchCardVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
   }
 
   func hubDidConnect(source: RealtimeHubSession) {
@@ -625,6 +626,7 @@ extension RealtimeHubController {
     lastWarmAt = Date()
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
     AgentCompletionVoiceDelivery.shared.voiceSessionDidConnect()
+    NotchCardVoiceDelivery.shared.voiceSessionDidConnect()
     let replayedReconnectTurn = reconnectAudioBuffer != nil
     let replayedReplacementTurn = replacementAudioBuffer != nil
     if replayedReplacementTurn {

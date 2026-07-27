@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import CoreGraphics
 import SwiftUI
 import XCTest
@@ -46,15 +47,19 @@ final class ChatPromptTimelineHoverLayoutTests: XCTestCase {
 
   /// The rightmost column the marks paint, in pixels, or nil if they painted
   /// nothing inside the rail at all.
-  private func markTrailingEdge(hoveredIndex: Int?) -> Int? {
+  private func markTrailingEdge(
+    hoveredIndex: Int?,
+    trailingInset: CGFloat = ChatComposerLayout.pageMargin
+  ) -> Int? {
     let width =
       ChatPromptTimelineMetrics.railWidth
-      + ChatPromptTimelineMetrics.trailingOffset(gutter: gutter)
+      + ChatPromptTimelineMetrics.trailingOffset(for: trailingInset)
     let height: CGFloat = 600
     let renderer = ImageRenderer(
       content: ChatPromptTimeline(
-        marks: marks, activeMarkID: "q1", gutter: gutter, hoveredIndex: hoveredIndex
-      ) { _ in }
+        marks: marks, activeMarkID: "q1", gutter: gutter, hoveredIndex: hoveredIndex,
+        onSelect: { _ in }, trailingInset: trailingInset
+      )
       .frame(width: width, height: height)
     )
     renderer.scale = 1
@@ -97,10 +102,18 @@ final class ChatPromptTimelineHoverLayoutTests: XCTestCase {
   func testTheRailIsOnlyEverItsOwnWidth() {
     let expected =
       ChatPromptTimelineMetrics.railWidth
-      + ChatPromptTimelineMetrics.trailingOffset(gutter: gutter)
+      + ChatPromptTimelineMetrics.trailingOffset(for: ChatComposerLayout.pageMargin)
 
     XCTAssertEqual(railWidth(hoveredIndex: nil), expected, accuracy: 0.5)
     XCTAssertEqual(railWidth(hoveredIndex: 0), expected, accuracy: 0.5)
+  }
+
+  func testHomeRailRightEdgeIsFlushWithTheAskBarOuterEdge() throws {
+    let edge = try XCTUnwrap(
+      markTrailingEdge(hoveredIndex: nil, trailingInset: 0),
+      "no Home rail marks were drawn")
+
+    XCTAssertEqual(edge, Int(ChatPromptTimelineMetrics.railWidth) - 1)
   }
 
   private func railWidth(hoveredIndex: Int?) -> CGFloat {
@@ -276,6 +289,16 @@ final class ChatPromptTimelineActiveMarkTests: XCTestCase {
     XCTAssertEqual(active(top: -0.2), "q0")
   }
 
+  func testAtBottomLightsTheLastPromptEvenWhenItIsBelowTheReadingLine() {
+    XCTAssertEqual(
+      ChatPromptTimelineModel.activeMarkID(
+        marks: marks,
+        viewportTopFraction: 0.7,
+        viewportHeightFraction: 0.3,
+        isAtBottom: true),
+      "q2")
+  }
+
   func testSteppingWalksTheMarksAndStopsAtBothEnds() {
     XCTAssertEqual(step(from: "q0", by: 1), "q1")
     XCTAssertEqual(step(from: "q1", by: -1), "q0")
@@ -344,6 +367,64 @@ final class ChatTranscriptGeometrySelectionTests: XCTestCase {
     geometry.releaseSelection()
 
     XCTAssertEqual(geometry.activeMarkID, "q2", "the rail never returned to tracking the reader")
+  }
+
+  func testAtLiveEdgeTheLastPromptStaysLit() {
+    let geometry = loadedGeometry()
+
+    // q2 is at 80% and the one-third reading line would still be over q1.
+    geometry.setContent(height: documentHeight, scrollTop: 600)
+
+    XCTAssertEqual(geometry.activeMarkID, "q2")
+  }
+
+  func testInitialRestoreLightsTheNewestPromptBeforeBottomGeometrySettles() {
+    let geometry = loadedGeometry()
+
+    // The initial scroll is deferred until after the first layout pass. The
+    // visible state must already describe the live edge, not the old top line.
+    geometry.setContent(height: documentHeight, scrollTop: 0)
+
+    XCTAssertEqual(geometry.activeMarkID, "q2")
+  }
+
+  func testStreamingCompletionKeepsTheNewestPromptLitAtTheLiveEdge() {
+    let geometry = loadedGeometry()
+    geometry.setContent(height: documentHeight, scrollTop: 0)
+    let streaming = [
+      ChatMessage(id: "q0", text: "first", sender: .user),
+      ChatMessage(id: "a0", text: "short", sender: .ai),
+      ChatMessage(id: "q1", text: "second", sender: .user),
+      ChatMessage(id: "a1", text: "long", sender: .ai),
+      ChatMessage(id: "q2", text: "third", sender: .user),
+      ChatMessage(id: "a2", text: "answering", sender: .ai, isStreaming: true),
+    ]
+
+    geometry.setMessages(streaming)
+    geometry.setMessages(
+      streaming.map { message in
+        var message = message
+        message.isStreaming = false
+        return message
+      })
+
+    XCTAssertEqual(geometry.activeMarkID, "q2")
+  }
+
+  func testMinorRowGeometryJitterDoesNotRepublishTimelineMarks() {
+    let geometry = loadedGeometry()
+    geometry.setContent(height: documentHeight, scrollTop: 0)
+    var publications = 0
+    let subscription = geometry.$marks.dropFirst().sink { _ in
+      publications += 1
+    }
+
+    // A static final-answer mark can cause harmless sub-pixel/point layout
+    // jitter. That must not drive a rail publication or another LazyVStack pass.
+    geometry.setRowOffset(803, for: "q2")
+
+    XCTAssertEqual(publications, 0)
+    withExtendedLifetime(subscription) {}
   }
 
   /// Switching conversations retires the ids a pin was holding.
@@ -424,20 +505,26 @@ final class ChatPromptTimelineMetricsTests: XCTestCase {
     XCTAssertTrue(positions.allSatisfy { $0 >= 0 && $0 <= 4 }, "got \(positions)")
   }
 
-  /// Centred in the gutter, so the resting stack sits midway between the
-  /// transcript's column and the shell's own scroller rather than pinned to
-  /// either.
-  func testTheRestingMarksSitOnTheGuttersCentreLine() {
-    let gutter: CGFloat = 120
-    let trailing = ChatPromptTimelineMetrics.trailingOffset(gutter: gutter)
-    let restingCentre = trailing + ChatPromptTimelineMetrics.restWidth / 2
-
-    XCTAssertEqual(restingCentre, gutter / 2, accuracy: 0.001)
+  func testTheRailRightEdgeTracksTheOwningComposerInset() {
+    XCTAssertEqual(
+      ChatPromptTimelineMetrics.trailingOffset(for: ChatComposerLayout.pageMargin),
+      ChatComposerLayout.pageMargin
+    )
+    XCTAssertEqual(
+      ChatPromptTimelineMetrics.trailingOffset(for: 0),
+      0
+    )
   }
 
   func testAVanishingGutterNeverPushesTheRailOffTheTranscript() {
-    XCTAssertEqual(ChatPromptTimelineMetrics.trailingOffset(gutter: 0), 0)
-    XCTAssertGreaterThanOrEqual(ChatPromptTimelineMetrics.trailingOffset(gutter: 4), 0)
+    XCTAssertEqual(
+      ChatPromptTimelineMetrics.trailingOffset(for: -10),
+      0
+    )
+    XCTAssertEqual(
+      ChatPromptTimelineMetrics.trailingOffset(for: ChatComposerLayout.pageMargin),
+      ChatComposerLayout.pageMargin
+    )
   }
 
   func testTheProximityRampPeaksUnderTheCursorAndDiesOffAtItsReach() {
@@ -490,13 +577,12 @@ final class ChatPromptTimelineMetricsTests: XCTestCase {
 
   /// Size means "the cursor is here" and nothing else. Sizing the active mark
   /// too would have the rail reshape itself as the reader scrolls.
-  func testTheActiveMarkIsColouredRatherThanResized() {
+  func testTheActiveMarkIsLitRatherThanResized() {
     XCTAssertEqual(
       ChatPromptTimelineMetrics.markWidth(isHovered: false, proximity: 0),
       ChatPromptTimelineMetrics.restWidth)
-    XCTAssertNotEqual(
-      ChatPromptTimelineMetrics.markColor(isActive: true),
-      ChatPromptTimelineMetrics.markColor(isActive: false))
+    XCTAssertEqual(ChatPromptTimelineMetrics.markColor(isActive: true), .white)
+    XCTAssertEqual(ChatPromptTimelineMetrics.markColor(isActive: false), .white)
   }
 
   /// With the cursor off the rail entirely, every other mark fades to its
@@ -536,5 +622,39 @@ final class ChatPromptTimelineMetricsTests: XCTestCase {
       ChatPromptTimelineMetrics.previewCenterY(
         anchorY: 300, cardHeight: 70, railHeight: railHeight),
       300, accuracy: 0.001)
+  }
+}
+
+@MainActor
+final class ChatPromptTimelineScrollerControllerTests: XCTestCase {
+  func testCustomTimelineHidesAndRestoresTheLegacyVerticalScroller() {
+    let scrollView = NSScrollView()
+    scrollView.hasVerticalScroller = true
+    let controller = ChatPromptTimelineScrollerController()
+
+    controller.attach(to: scrollView)
+    controller.setSuppressed(true)
+
+    XCTAssertFalse(scrollView.hasVerticalScroller)
+    XCTAssertTrue(scrollView.verticalScroller?.isHidden ?? false)
+    XCTAssertEqual(scrollView.verticalScroller?.alphaValue, 0)
+
+    XCTAssertFalse(controller.setSuppressed(true), "duplicate geometry updates must be a no-op")
+
+    controller.setSuppressed(false)
+
+    XCTAssertTrue(scrollView.hasVerticalScroller)
+  }
+
+  func testRestoringPreservesAnInitiallyHiddenScroller() {
+    let scrollView = NSScrollView()
+    scrollView.hasVerticalScroller = false
+    let controller = ChatPromptTimelineScrollerController()
+
+    controller.attach(to: scrollView)
+    controller.setSuppressed(true)
+    controller.restore()
+
+    XCTAssertFalse(scrollView.hasVerticalScroller)
   }
 }

@@ -26,6 +26,10 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+NotificationSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+ScreenCaptureHealth.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/SettingsSyncManager.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistantSettings.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
+  - desktop/macos/Desktop/Sources/ModelQoS.swift
 preconditions:
   - auth_ready
 

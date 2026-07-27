@@ -332,6 +332,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     sound: NotificationSound = .default,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
+    suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     screenshotData: Data? = nil,
     deliverSystemBanner: Bool = false,
     respectFrequency: Bool = true,
@@ -416,6 +417,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       sound: sound,
       context: context,
       action: action,
+      suggestionTelemetryIdentity: suggestionTelemetryIdentity,
       screenshotData: screenshotData
     )
 

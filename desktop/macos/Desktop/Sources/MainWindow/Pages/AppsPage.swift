@@ -137,6 +137,27 @@ enum AppsPageCategoryFilter {
   }
 }
 
+enum AppsFilteredResultsPresentation: Equatable {
+  case loading
+  case empty
+  case results
+  case failure
+
+  static func resolve(
+    queryState: AppFilterResultsQueryState,
+    resultsCount: Int
+  ) -> AppsFilteredResultsPresentation {
+    switch queryState {
+    case .unknown, .loading:
+      return .loading
+    case .completed:
+      return resultsCount == 0 ? .empty : .results
+    case .failed:
+      return .failure
+    }
+  }
+}
+
 struct AppsPage: View {
   @ObservedObject var appProvider: AppProvider
   var appState: AppState? = nil
@@ -178,73 +199,7 @@ struct AppsPage: View {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: OmiSpacing.xxl) {
             if hasActiveFilters {
-              // Show filtered/search results in a flat grid
-              if appProvider.isSearching {
-                // Loading state for category filter
-                VStack(spacing: OmiSpacing.lg) {
-                  ProgressView()
-                    .scaleEffect(1.2)
-                  Text("Loading...")
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.textTertiary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 200)
-              } else if filteredApps.isEmpty {
-                VStack(spacing: OmiSpacing.md) {
-                  Image(systemName: "magnifyingglass")
-                    .scaledFont(size: 32)
-                    .foregroundColor(OmiColors.textTertiary)
-                  Text("No apps found")
-                    .scaledFont(size: OmiType.subheading, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 200)
-              } else {
-                // Back button for "See more" view
-                if viewAllSection != nil {
-                  Button(action: { viewAllSection = nil }) {
-                    HStack(spacing: OmiSpacing.xs) {
-                      Image(systemName: "chevron.left")
-                        .scaledFont(size: OmiType.caption, weight: .medium)
-                      Text("Back")
-                        .scaledFont(size: OmiType.body, weight: .medium)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
-                  }
-                  .buttonStyle(.plain)
-                }
-
-                AppGridSection(
-                  title: filterResultsTitle,
-                  apps: filteredApps,
-                  appProvider: appProvider,
-                  onSelectApp: selectApp
-                )
-
-                // Infinite scroll: load more when reaching bottom
-                if appProvider.hasMoreFilteredApps {
-                  HStack {
-                    Spacer()
-                    if appProvider.isLoadingMore {
-                      ProgressView()
-                        .scaleEffect(0.8)
-                      Text("Loading more...")
-                        .scaledFont(size: OmiType.body)
-                        .foregroundColor(OmiColors.textTertiary)
-                    } else {
-                      Color.clear
-                        .frame(height: 1)
-                        .onAppear {
-                          Task {
-                            await appProvider.loadMoreFilteredApps()
-                          }
-                        }
-                    }
-                    Spacer()
-                  }
-                  .padding(.vertical, OmiSpacing.lg)
-                }
-              }
+              filteredAppsContent
             } else {
               switch initialSection {
               case .imports:
@@ -526,7 +481,7 @@ struct AppsPage: View {
       }
     }
     .padding(.horizontal, OmiSpacing.md)
-    .frame(minHeight: AppsHeaderMetrics.controlHeight)
+    .frame(height: AppsHeaderMetrics.controlHeight)
     .background(
       Capsule(style: .continuous)
         .fill(Color.white.opacity(0.06))
@@ -559,7 +514,9 @@ struct AppsPage: View {
       label: "Category",
       options: AppsPageCategoryFilter.categoryDropdownOptions(categories: appProvider.categories),
       selectedId: AppsPageCategoryFilter.selectedCategoryDropdownId(appProvider.selectedCategory),
-      minWidth: 180
+      minWidth: 180,
+      controlHeight: AppsHeaderMetrics.controlHeight,
+      usesHeaderChrome: true
     ) { option in
       viewAllSection = nil
       switch AppsPageCategoryFilter.categorySelection(forOptionId: option.id) {
@@ -632,6 +589,106 @@ struct AppsPage: View {
       return "\(category.title) (\(apps.count))"
     }
     return "Results (\(apps.count))"
+  }
+
+  private var filteredAppsPresentation: AppsFilteredResultsPresentation {
+    let queryState: AppFilterResultsQueryState =
+      viewAllSection == nil
+      ? appProvider.filteredAppsQueryState
+      : .completed
+    return AppsFilteredResultsPresentation.resolve(
+      queryState: queryState,
+      resultsCount: filteredApps.count
+    )
+  }
+
+  @ViewBuilder
+  private var filteredAppsContent: some View {
+    switch filteredAppsPresentation {
+    case .loading:
+      VStack(spacing: OmiSpacing.lg) {
+        ProgressView()
+          .scaleEffect(1.2)
+        Text("Searching...")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+      .frame(maxWidth: .infinity, minHeight: 200)
+    case .empty:
+      VStack(spacing: OmiSpacing.md) {
+        Image(systemName: "magnifyingglass")
+          .scaledFont(size: 32)
+          .foregroundColor(OmiColors.textTertiary)
+        Text("No apps found")
+          .scaledFont(size: OmiType.subheading, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+      }
+      .frame(maxWidth: .infinity, minHeight: 200)
+    case .failure:
+      VStack(spacing: OmiSpacing.md) {
+        Image(systemName: "exclamationmark.circle")
+          .scaledFont(size: 32)
+          .foregroundColor(OmiColors.textTertiary)
+        Text("Couldn't load apps")
+          .scaledFont(size: OmiType.subheading, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+        Button("Try Again") {
+          Task { await appProvider.searchApps() }
+        }
+        .buttonStyle(.bordered)
+      }
+      .frame(maxWidth: .infinity, minHeight: 200)
+    case .results:
+      filteredAppsGrid
+    }
+  }
+
+  @ViewBuilder
+  private var filteredAppsGrid: some View {
+    // Back button for "See more" view.
+    if viewAllSection != nil {
+      Button(action: { viewAllSection = nil }) {
+        HStack(spacing: OmiSpacing.xs) {
+          Image(systemName: "chevron.left")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+          Text("Back")
+            .scaledFont(size: OmiType.body, weight: .medium)
+        }
+        .foregroundColor(OmiColors.textSecondary)
+      }
+      .buttonStyle(.plain)
+    }
+
+    AppGridSection(
+      title: filterResultsTitle,
+      apps: filteredApps,
+      appProvider: appProvider,
+      onSelectApp: selectApp
+    )
+
+    // Infinite scroll: load more when reaching bottom.
+    if appProvider.hasMoreFilteredApps {
+      HStack {
+        Spacer()
+        if appProvider.isLoadingMore {
+          ProgressView()
+            .scaleEffect(0.8)
+          Text("Loading more...")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textTertiary)
+        } else {
+          Color.clear
+            .frame(height: 1)
+            .onAppear {
+              Task {
+                await appProvider.loadMoreFilteredApps()
+              }
+            }
+        }
+        Spacer()
+      }
+      .padding(.vertical, OmiSpacing.lg)
+    }
   }
 
   private var loadingShimmerView: some View {

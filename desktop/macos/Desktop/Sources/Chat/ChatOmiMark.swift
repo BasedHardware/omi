@@ -38,37 +38,90 @@ enum ChatMarkMotion: Equatable {
   }
 }
 
+enum ChatOmiMarkPlacement {
+  /// The mark lives in an overlay so it never shifts an assistant bubble's
+  /// leading edge. Reserve its vertical footprint in the owning row, though:
+  /// an empty streaming reply otherwise has zero height and clips the mark at
+  /// the transcript's live edge.
+  static let reservedRowHeight: CGFloat = 32
+
+  static func finalAssistantMessageID(in messages: [ChatMessage]) -> String? {
+    messages.last(where: { $0.sender == .ai })?.id
+  }
+
+  static func rowHeight(showsMark: Bool) -> CGFloat {
+    showsMark ? reservedRowHeight : 0
+  }
+}
+
 struct ChatOmiMark: View {
   enum Anchor {
     case leading
     case centered
   }
 
+  enum FrameSchedule: Equatable {
+    case staticResting
+    case animated(ChatMarkMotion)
+  }
+
   var motion: ChatMarkMotion?
   var size: CGFloat = 30
   var anchor: Anchor = .leading
 
-  @State private var model = ChatMarkModel()
+  @State private var model: ChatMarkModel
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  private var isWorking: Bool { motion != nil }
+  @MainActor
+  init(
+    motion: ChatMarkMotion?,
+    size: CGFloat = 30,
+    anchor: Anchor = .leading,
+    model: ChatMarkModel = ChatMarkModel()
+  ) {
+    self.motion = motion
+    self.size = size
+    self.anchor = anchor
+    _model = State(initialValue: model)
+  }
 
   var body: some View {
-    TimelineView(
-      .animation(minimumInterval: isWorking ? nil : 1.0 / 20.0, paused: reduceMotion)
-    ) { timeline in
+    mark
+      .frame(width: size * ChatMarkModel.widthRatio, height: size)
+      .padding(.leading, anchor == .leading ? -size * ChatMarkModel.leftAnchor : 0)
+      .accessibilityHidden(true)
+  }
+
+  static func frameSchedule(motion: ChatMarkMotion?, reduceMotion: Bool) -> FrameSchedule {
+    guard let motion, !reduceMotion else { return .staticResting }
+    return .animated(motion)
+  }
+
+  @ViewBuilder
+  private var mark: some View {
+    switch Self.frameSchedule(motion: motion, reduceMotion: reduceMotion) {
+    case .staticResting:
       Canvas { context, canvasSize in
-        model.advance(
-          to: timeline.date,
-          motion: motion,
-          reduceMotion: reduceMotion
+        model.draw(
+          into: &context,
+          size: canvasSize,
+          base: size,
+          anchor: anchor,
+          resting: true
         )
-        model.draw(into: &context, size: canvasSize, base: size, anchor: anchor)
+      }
+    case .animated(let motion):
+      TimelineView(.animation(minimumInterval: nil, paused: false)) { timeline in
+        Canvas { context, canvasSize in
+          model.advance(
+            to: timeline.date,
+            motion: motion,
+            reduceMotion: false
+          )
+          model.draw(into: &context, size: canvasSize, base: size, anchor: anchor)
+        }
       }
     }
-    .frame(width: size * ChatMarkModel.widthRatio, height: size)
-    .padding(.leading, anchor == .leading ? -size * ChatMarkModel.leftAnchor : 0)
-    .accessibilityHidden(true)
   }
 }
 
@@ -84,7 +137,6 @@ final class ChatMarkModel {
   private static let dotDiameterRatio: CGFloat = 0.18
   private static let ringRadiusRatio: CGFloat = 0.33
   private static let startAngle = -Double.pi
-  private static let restingSpin: Double = 2 * .pi / 18
 
   static let widthRatio: CGFloat = 1.7
   static let centerX: CGFloat = 0.55
@@ -98,11 +150,19 @@ final class ChatMarkModel {
   private var wasWorking = false
   private var lastTime: CFTimeInterval?
 
+  #if DEBUG
+    private(set) var debugAdvanceCount = 0
+  #endif
+
   var snapshot: ChatMarkModelSnapshot {
     ChatMarkModelSnapshot(intensity: intensity, phase: phase, motion: motion)
   }
 
   func advance(to date: Date, motion requested: ChatMarkMotion?, reduceMotion: Bool) {
+    #if DEBUG
+      debugAdvanceCount += 1
+    #endif
+
     let now = date.timeIntervalSinceReferenceDate
     let dt = lastTime.map { min(0.05, max(0, now - $0)) } ?? (1.0 / 60.0)
     lastTime = now
@@ -123,7 +183,7 @@ final class ChatMarkModel {
     wasWorking = working
 
     intensity += ((working ? 1 : 0) - intensity) * min(1, dt * 3.2)
-    rotation += dt * (Self.restingSpin + motion.spin * intensity)
+    rotation += dt * motion.spin * intensity
 
     guard intensity > 0.001 else {
       phase = 0
@@ -143,7 +203,8 @@ final class ChatMarkModel {
     into context: inout GraphicsContext,
     size: CGSize,
     base: CGFloat,
-    anchor: ChatOmiMark.Anchor
+    anchor: ChatOmiMark.Anchor,
+    resting: Bool = false
   ) {
     let dotDiameter = base * Self.dotDiameterRatio
     let ringRadius = base * Self.ringRadiusRatio
@@ -157,10 +218,10 @@ final class ChatMarkModel {
     let lineStep = (lineEnd - lineStart) / CGFloat(Self.count - 1)
 
     for index in 0..<Self.count {
-      let frame = frame(dot: index)
+      let frame = resting ? DotFrame() : frame(dot: index)
       let angle =
         2 * Double.pi * Double(index) / Double(Self.count)
-        + Self.startAngle + rotation
+        + Self.startAngle + (resting ? 0 : rotation)
       let ringX = centerX + ringRadius * CGFloat(frame.radiusX) * CGFloat(cos(angle))
       let ringY = centerY + ringRadius * CGFloat(frame.radiusY) * CGFloat(sin(angle))
       let lineX = lineStart + lineStep * CGFloat(index)

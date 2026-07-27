@@ -50,7 +50,9 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
       // DashboardPage's capture toggle now delegates to CaptureListeningLogic,
       // which owns the register-first screen-recording grant.
       "Sources/MainWindow/CaptureListeningLogic.swift",
-      "Sources/OmiApp.swift",
+      // OmiApp's menu-bar toggle now delegates to SystemCaptureControls, which owns the
+      // register-first screen-recording grant for both the menu bar and the notch cluster.
+      "Sources/FloatingControlBar/SystemCaptureControls.swift",
       "Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift",
       "Sources/MainWindow/RewindOnlyView.swift",
     ] {

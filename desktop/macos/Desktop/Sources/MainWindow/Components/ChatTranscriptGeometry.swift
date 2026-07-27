@@ -34,21 +34,33 @@ struct ChatTranscriptContentFrame: Equatable {
 /// are published, each behind a did-it-really-change guard.
 @MainActor
 final class ChatTranscriptGeometry: ObservableObject {
-  /// Sub-pixel measurement noise must not re-enter layout through the values it
-  /// feeds. Both thresholds are below what a reader could see move.
+  /// Row placement is measured during every SwiftUI layout pass. Ignore small
+  /// jitter so an unrelated animated subview cannot republish the whole rail.
   private static let heightEpsilon: CGFloat = 4
-  private static let offsetEpsilon: CGFloat = 1
+  private static let rowOffsetEpsilon: CGFloat = 4
+  private static let gutterEpsilon: CGFloat = 1
 
   @Published private(set) var marks: [ChatPromptMark] = []
   @Published private(set) var activeMarkID: String?
   /// Width available outside the readable column, on one side.
   @Published private(set) var gutter: CGFloat = 0
 
+  /// The exact condition shared by the rail and native-scroller suppression.
+  /// Narrow transcript surfaces keep their ordinary AppKit scrollbar.
+  var showsPromptTimeline: Bool {
+    marks.count >= ChatPromptTimelineModel.minimumMarks
+      && gutter >= ChatPromptTimelineMetrics.minimumGutter
+  }
+
   private var sources: [ChatPromptSource] = []
   private var offsets: [String: CGFloat] = [:]
   private var documentHeight: CGFloat = 0
   private var scrollTop: CGFloat = 0
   private var viewport: CGSize = .zero
+  /// Starts true because an opened transcript immediately restores to its live
+  /// edge. Only physical reader input hands active-mark authority back to the
+  /// reading line.
+  private var isFollowingLiveEdge = true
   /// A prompt the reader picked outright, which outranks what the reading line
   /// happens to be over.
   private var pinnedMarkID: String?
@@ -64,7 +76,7 @@ final class ChatTranscriptGeometry: ObservableObject {
   }
 
   func setRowOffset(_ offset: CGFloat, for id: String) {
-    if let existing = offsets[id], abs(existing - offset) < Self.offsetEpsilon { return }
+    if let existing = offsets[id], abs(existing - offset) < Self.rowOffsetEpsilon { return }
     offsets[id] = offset
     rebuildMarks()
   }
@@ -88,7 +100,17 @@ final class ChatTranscriptGeometry: ObservableObject {
       refreshActiveMark()
     }
     viewport.width = size.width
-    if abs(gutter - measured) >= Self.offsetEpsilon { gutter = measured }
+    if abs(gutter - measured) >= Self.gutterEpsilon { gutter = measured }
+  }
+
+  /// Follows the scroll controller's explicit intent rather than waiting for a
+  /// layout pass to prove the bottom position. That prevents the final prompt
+  /// from briefly lighting the penultimate mark after initial restore or a new
+  /// message.
+  func setFollowingLiveEdge(_ isFollowing: Bool) {
+    guard isFollowingLiveEdge != isFollowing else { return }
+    isFollowingLiveEdge = isFollowing
+    refreshActiveMark()
   }
 
   /// The reader picked a prompt, from the rail or from ⌘↑ / ⌘↓.
@@ -99,6 +121,7 @@ final class ChatTranscriptGeometry: ObservableObject {
   /// below the one that was clicked. An outright choice is not a guess to be
   /// overruled by geometry, so it holds until the reader scrolls away from it.
   func selectMark(_ id: String) {
+    isFollowingLiveEdge = false
     pinnedMarkID = id
     if activeMarkID != id { activeMarkID = id }
   }
@@ -118,6 +141,7 @@ final class ChatTranscriptGeometry: ObservableObject {
     offsets.removeAll()
     documentHeight = 0
     scrollTop = 0
+    isFollowingLiveEdge = true
     sources = []
     pinnedMarkID = nil
     if !marks.isEmpty { marks = [] }
@@ -145,10 +169,18 @@ final class ChatTranscriptGeometry: ObservableObject {
       if activeMarkID != nil { activeMarkID = nil }
       return
     }
+    if isFollowingLiveEdge {
+      let newest = marks.last?.id
+      if activeMarkID != newest { activeMarkID = newest }
+      return
+    }
     let resolved = ChatPromptTimelineModel.activeMarkID(
       marks: marks,
       viewportTopFraction: scrollTop / documentHeight,
-      viewportHeightFraction: viewport.height / documentHeight
+      viewportHeightFraction: viewport.height / documentHeight,
+      isAtBottom: ChatScrollLiveEdge.isAtBottom(
+        visibleMaxY: scrollTop + viewport.height,
+        documentHeight: documentHeight)
     )
     if resolved != activeMarkID { activeMarkID = resolved }
   }

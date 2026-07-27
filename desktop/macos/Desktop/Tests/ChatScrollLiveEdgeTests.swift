@@ -13,4 +13,8 @@ final class ChatScrollLiveEdgeTests: XCTestCase {
   func testExactLiveEdgeResumesFollowing() {
     XCTAssertTrue(ChatScrollLiveEdge.isAtBottom(visibleMaxY: 1_000, documentHeight: 1_000))
   }
+
+  func testExplicitJumpSettlesAfterTheNextLayoutTurn() {
+    XCTAssertEqual(ChatScrollLiveEdge.explicitJumpSettlingDelay, 0.05)
+  }
 }
