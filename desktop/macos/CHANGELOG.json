@@ -5,7 +5,8 @@
       "version": "0.12.140",
       "date": "2026-07-27",
       "changes": [
-        "Bug fixes and improvements"
+        "A long chat now has a timeline in the transcript gutter: hover it to see your earlier prompts, click one to jump straight back to it",
+        "Chat now shows a polished Omi working mark for live tool activity, push-to-talk smoothly morphs the notch mark into its live waveform and back, and Conversations and Apps use cleaner neutral header controls"
       ]
     },
     {
