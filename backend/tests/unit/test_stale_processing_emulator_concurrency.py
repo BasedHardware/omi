@@ -288,3 +288,50 @@ def test_deferred_reacquire_prevents_orphan_terminalization():
     assert final_data.get('processing_admitted_at') != old_admitted, 'lease should be renewed'
 
     _cleanup_conversation(uid, cid)
+
+
+# ---------------------------------------------------------------------------
+# 4. Unstampable (1 MiB) orphan: the server-owned update_time stands in for the
+#    admission fence the document is too large to carry
+# ---------------------------------------------------------------------------
+
+
+def test_unstampable_orphan_is_fenced_by_the_server_owned_update_time():
+    """A legacy row whose document rejects the admission stamp is terminalized
+    only once no writer has touched it for the staleness window. ``update_time``
+    is server-owned and read inside the transaction, so a live writer (or a row
+    that has since acquired a fence or a durable owner) is never terminalized.
+
+    The emulator does not enforce the 1 MiB document ceiling, so the oversize
+    rejection itself is covered hermetically in
+    ``test_stale_processing_reconciliation.py``; what only real Firestore can
+    prove is that the snapshot carries a usable ``update_time`` and that the
+    fences hold against it."""
+    uid = 'test-race-user'
+    cid = 'unstampable-conv-1'
+    _cleanup_conversation(uid, cid)
+
+    client = _client()
+    conv_ref = client.collection('users').document(uid).collection('conversations').document(cid)
+    conv_ref.set({'id': cid, 'status': 'processing', 'has_content': True})
+
+    # Just written: inside the staleness window, so it is fenced out.
+    assert jobs_db.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=900)) is False
+    assert (conv_ref.get().to_dict() or {}).get('status') == 'processing'
+
+    # A durable finalization owner fences it out even once stale.
+    conv_ref.update({'finalization_job_id': 'job-1'})
+    assert jobs_db.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=0)) is False
+    assert (conv_ref.get().to_dict() or {}).get('status') == 'processing'
+
+    # Unowned and untouched for the window: exactly one terminal, transcript intact.
+    conv_ref.update({'finalization_job_id': firestore.DELETE_FIELD})
+    assert jobs_db.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=0)) is True
+    final_data = conv_ref.get().to_dict() or {}
+    assert final_data.get('status') == 'completed'
+    assert final_data.get('has_content') is True
+
+    # A terminalized row is never terminalized twice.
+    assert jobs_db.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=0)) is False
+
+    _cleanup_conversation(uid, cid)
