@@ -743,8 +743,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                  child:
-                      const Center(child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white)),
+                  child: const Center(
+                    child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
+                  ),
                 ),
               ),
             ),

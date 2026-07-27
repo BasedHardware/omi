@@ -31,6 +31,18 @@ fi
 )
 
 (
+  export OMI_DESKTOP_API_URL="https://desktop-override.test"
+  export OMI_PYTHON_API_URL="https://python-override.test"
+  eval "$YOLO_FUNCTION"
+  apply_yolo_env
+
+  test "$OMI_SKIP_BACKEND" = "1"
+  test "$OMI_SKIP_TUNNEL" = "1"
+  test "$OMI_DESKTOP_API_URL" = "https://desktop-override.test"
+  test "$OMI_PYTHON_API_URL" = "https://python-override.test"
+)
+
+(
   export IS_NAMED_BUNDLE=true LOCAL_PROFILE=false
   unset OMI_SKIP_BACKEND OMI_SKIP_TUNNEL OMI_DESKTOP_API_URL OMI_PYTHON_API_URL
   eval "$NAMED_DEFAULT_FUNCTION"

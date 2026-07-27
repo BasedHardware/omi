@@ -102,8 +102,13 @@ enum MemoryHubLayoutPolicy {
   static func usesAvailableWidth(
     conversationID: String?,
     presentedConversationID: String?,
-    transcriptDrawerOpen: Bool
+    transcriptDrawerOpen: Bool,
+    memoryDetailOpen: Bool = false
   ) -> Bool {
+    // A memory opened into the side inspector needs the same extra width a
+    // transcript drawer does: the list keeps its readable column and the panel
+    // takes the space beside it instead of squeezing the list.
+    if memoryDetailOpen { return true }
     guard let conversationID else { return false }
     return transcriptDrawerOpen && conversationID == presentedConversationID
   }

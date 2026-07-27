@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Brain Map opening blank, and stopped it triggering an unrequested knowledge-graph rebuild, when the account's cohort had not been resolved yet"
+}

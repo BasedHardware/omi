@@ -1,0 +1,3 @@
+{
+  "change": "Brain Map now places single-connection entities as small burrs next to their one relationship and parks unconnected entities in a margin, instead of scattering them through the type constellations"
+}

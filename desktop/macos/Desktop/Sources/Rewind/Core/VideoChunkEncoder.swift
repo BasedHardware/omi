@@ -676,7 +676,7 @@ actor VideoChunkEncoder {
 
     // Keep this actor-isolated: autoreleasepool's closure is treated as a sending
     // boundary by Swift 6, which cannot safely retain the AVFoundation adaptor.
-    let pixelBuffer = try createPixelBuffer(from: image, size: outputSize, adaptor: adaptor)
+    let pixelBuffer = try Self.createPixelBuffer(from: image, size: outputSize, adaptor: adaptor)
 
     // frameOffsetInChunk is the index of the frame being written RIGHT NOW; it is
     // incremented in addFrame only AFTER this write succeeds (so a failed write does
@@ -965,7 +965,7 @@ actor VideoChunkEncoder {
     return max(350_000, min(8_000_000, Int(bitrate)))
   }
 
-  private func createPixelBuffer(
+  private nonisolated static func createPixelBuffer(
     from image: CGImage,
     size: CGSize,
     adaptor: AVAssetWriterInputPixelBufferAdaptor
