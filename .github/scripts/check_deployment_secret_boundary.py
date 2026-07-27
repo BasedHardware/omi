@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Iterable
 
-
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_POLICY = ROOT / "config" / "deployment-setting-classification.json"
 EXPRESSION = re.compile(r"\$\{\{\s*(secrets|vars)\.([A-Z][A-Z0-9_]*)\s*}}")
@@ -62,11 +61,7 @@ def _deployment_paths(root: Path) -> set[str]:
             paths.add(relative)
     charts = root / "backend" / "charts"
     if charts.is_dir():
-        paths.update(
-            repository_relative_path(path, root)
-            for path in charts.glob("*/*_values.yaml")
-            if path.is_file()
-        )
+        paths.update(repository_relative_path(path, root) for path in charts.glob("*/*_values.yaml") if path.is_file())
     return paths
 
 
@@ -80,7 +75,7 @@ def _base_paths(root: Path, base: str) -> set[str]:
         ["git", "ls-tree", "-r", "--name-only", base],
         cwd=root,
         check=True,
-        text=True,
+        encoding="utf-8",
         stdout=subprocess.PIPE,
         env=_git_environment(),
     )
@@ -88,7 +83,8 @@ def _base_paths(root: Path, base: str) -> set[str]:
     return {
         path
         for path in paths
-        if path.startswith(".github/workflows/") and path.endswith((".yml", ".yaml"))
+        if path.startswith(".github/workflows/")
+        and path.endswith((".yml", ".yaml"))
         or path == "backend/deploy/runtime_env.yaml"
         or re.fullmatch(r"backend/charts/[^/]+/[^/]+_values\.yaml", path) is not None
     }
@@ -98,7 +94,7 @@ def _read_base_file(root: Path, base: str, relative_path: str) -> str | None:
     result = subprocess.run(
         ["git", "show", f"{base}:{relative_path}"],
         cwd=root,
-        text=True,
+        encoding="utf-8",
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         env=_git_environment(),
@@ -280,7 +276,9 @@ def validate_bindings(
     # Public build configuration is an explicit migration target, not legacy
     # debt. Reject it even when a pre-ratchet line still exists in the base.
     to_validate = new_or_changed | {
-        binding for binding in current if binding.source == "github_secrets" and _classification(policy, binding.name) == "public_build"
+        binding
+        for binding in current
+        if binding.source == "github_secrets" and _classification(policy, binding.name) == "public_build"
     }
     for binding in sorted(to_validate):
         kind = _classification(policy, binding.name)
@@ -291,7 +289,9 @@ def validate_bindings(
         if kind in expected or _exception_allows(policy, binding):
             continue
         if binding.source == "github_secrets" and kind == "public_build":
-            errors.append(f"{binding.path}: public_build setting {binding.name} must use vars.{binding.name}, not secrets.{binding.name}")
+            errors.append(
+                f"{binding.path}: public_build setting {binding.name} must use vars.{binding.name}, not secrets.{binding.name}"
+            )
         else:
             expected_text = " or ".join(sorted(expected))
             errors.append(
