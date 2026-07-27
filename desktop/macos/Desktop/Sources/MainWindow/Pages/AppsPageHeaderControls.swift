@@ -120,6 +120,10 @@ struct SmallHeaderButton: View {
       .fixedSize(horizontal: true, vertical: false)
     }
     .buttonStyle(.plain)
+    // The inner label needs its own fixed height for the capsule background,
+    // while this outer frame makes the button's AppKit layout footprint match
+    // the adjacent search and filter controls.
+    .frame(height: AppsHeaderMetrics.controlHeight)
     .onHover { hovering in
       OmiMotion.withGated(.easeOut(duration: 0.12)) { isHovering = hovering }
     }

@@ -78,45 +78,48 @@ struct SearchableDropdown: View {
   }
 
   var body: some View {
-    if options.count > threshold {
-      Button {
-        isPresented.toggle()
-      } label: {
-        dropdownLabel
-      }
-      .buttonStyle(.plain)
-      .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-        SearchableDropdownPopover(
-          title: title,
-          options: options,
-          selectedId: selectedId,
-          query: $query,
-          maxHeight: maxHeight
-        ) { option in
-          onSelect(option)
-          query = ""
-          isPresented = false
+    Group {
+      if options.count > threshold {
+        Button {
+          isPresented.toggle()
+        } label: {
+          dropdownLabel
         }
-        .frame(width: popoverWidth)
-      }
-      .onChange(of: isPresented) { _, presented in
-        if !presented {
-          query = ""
-        }
-      }
-    } else {
-      Menu {
-        ForEach(options) { option in
-          Button(option.title) {
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+          SearchableDropdownPopover(
+            title: title,
+            options: options,
+            selectedId: selectedId,
+            query: $query,
+            maxHeight: maxHeight
+          ) { option in
             onSelect(option)
+            query = ""
+            isPresented = false
+          }
+          .frame(width: popoverWidth)
+        }
+        .onChange(of: isPresented) { _, presented in
+          if !presented {
+            query = ""
           }
         }
-      } label: {
-        dropdownLabel
+      } else {
+        Menu {
+          ForEach(options) { option in
+            Button(option.title) {
+              onSelect(option)
+            }
+          }
+        } label: {
+          dropdownLabel
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
       }
-      .menuStyle(.borderlessButton)
-      .fixedSize()
     }
+    .frame(height: controlHeight)
   }
 
   private var dropdownLabel: some View {

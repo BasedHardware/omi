@@ -67,7 +67,12 @@ final class AppsHeaderRowLayoutTests: XCTestCase {
       guard let frame = recorder.frame(of: slot) else {
         return XCTFail("\(slot) never laid out")
       }
-      XCTAssertEqual(frame.height, AppsHeaderMetrics.controlHeight, accuracy: 0.5)
+      XCTAssertEqual(
+        frame.height,
+        AppsHeaderMetrics.controlHeight,
+        accuracy: 0.5,
+        "\(slot) should occupy the shared Apps toolbar height"
+      )
     }
   }
 
