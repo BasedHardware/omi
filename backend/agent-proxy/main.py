@@ -28,7 +28,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from firebase_admin import auth, credentials, firestore
-from google.cloud.firestore import ArrayUnion
+from google.cloud.firestore import DELETE_FIELD, ArrayUnion
 from google.cloud.firestore_v1 import Query
 from utils.executors import (
     critical_executor,
@@ -138,6 +138,10 @@ def _refresh_vm(uid: str) -> Optional[Dict[str, Any]]:
 # --------------- GCE helpers ---------------
 
 
+class VmNotFoundError(Exception):
+    """The GCE instance backing the user's agentVm record no longer exists."""
+
+
 def _get_gce_access_token() -> str:
     """Get a GCE access token via Application Default Credentials."""
     creds, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])  # type: ignore[reportUnknownMemberType]
@@ -146,11 +150,19 @@ def _get_gce_access_token() -> str:
 
 
 async def _check_gce_status(vm_name: str, zone: str) -> str:
-    """Check the actual GCE instance status."""
+    """Check the actual GCE instance status.
+
+    A 404 is reported as `NOT_FOUND` rather than folded into `UNKNOWN`: the
+    instance is gone (the agent-vm reaper deletes aged TERMINATED VMs), which
+    is unrecoverable here and needs the stale Firestore record cleared, while
+    `UNKNOWN` means "could not tell" and must leave the record alone.
+    """
     token = await run_blocking(critical_executor, _get_gce_access_token)
     url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code == 404:
+            return "NOT_FOUND"
         if resp.status_code != 200:
             return "UNKNOWN"
         return resp.json().get("status", "UNKNOWN")
@@ -168,6 +180,8 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
 
     async with httpx.AsyncClient(timeout=180) as client:
         instance_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
+        if instance_resp.status_code == 404:
+            raise VmNotFoundError(vm_name)
         already_running = instance_resp.status_code == 200 and instance_resp.json().get("status") == "RUNNING"
         if already_running:
             logger.info(f"[vm-start] {vm_name} is already RUNNING; resolving its external IP")
@@ -255,6 +269,19 @@ def _update_firestore_vm(uid: str, ip: str | None, status: str) -> None:
     _get_firestore_db().collection('users').document(uid).update(update)
 
 
+def _clear_agent_vm(uid: str) -> None:
+    """Delete the user's agentVm record once its GCE instance is gone.
+
+    The reaper deletes aged TERMINATED `omi-agent-*` instances but leaves the
+    Firestore record saying `ready` with the old IP, and nothing here can
+    recreate an instance. Keeping the record makes every later connect dial a
+    dead address and makes the desktop provision endpoint report `exists`, so
+    the user's agent stays broken forever. Clearing it is what lets a client
+    provision a new VM — the same repair `GET /v2/agent/status` already does.
+    """
+    _get_firestore_db().collection('users').document(uid).update({"agentVm": DELETE_FIELD})
+
+
 async def _reset_vm(vm_name: str, zone: str) -> None:
     """Hard-reset a RUNNING VM whose agent process is unresponsive."""
     token = await run_blocking(critical_executor, _get_gce_access_token)
@@ -296,6 +323,14 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
         except Exception:
             return vm  # Can't check, assume it's fine
 
+        if gce_status == "NOT_FOUND":
+            # Instance reaped: neither restart nor reset can bring it back, and
+            # leaving the record makes the caller wait out the full health
+            # timeout before failing. Clear it so a client can provision anew.
+            logger.warning(f"[agent-proxy] VM {vm_name} no longer exists in GCE — clearing stale agentVm record")
+            await run_blocking(db_executor, _clear_agent_vm, uid)
+            return None
+
         if gce_status == "RUNNING":
             if health_failed:
                 # VM is RUNNING but agent process is dead — hard reset
@@ -322,6 +357,10 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
         await run_blocking(db_executor, _update_firestore_vm, uid, ip, "ready")
         logger.info(f"[agent-proxy] VM {vm_name} restarted, ip={ip}")
         return await run_blocking(db_executor, _refresh_vm, uid)
+    except VmNotFoundError:
+        logger.warning(f"[agent-proxy] VM {vm_name} no longer exists in GCE — clearing stale agentVm record")
+        await run_blocking(db_executor, _clear_agent_vm, uid)
+        return None
     except Exception as e:
         logger.error(f"[agent-proxy] Failed to restart VM {vm_name}: {e}")
         await run_blocking(db_executor, _update_firestore_vm, uid, None, "error")
