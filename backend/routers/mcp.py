@@ -55,9 +55,8 @@ import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
     list_default_mcp_memories,
-    mcp_denied_read_reason,
+    mcp_denied_read_payload,
     mcp_legacy_read_authorized,
-    mcp_memory_read_denied_detail,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
@@ -270,18 +269,6 @@ class SearchedMemory(CleanerMemory):
     relevance_score: float
 
 
-def _raise_if_memory_read_denied(result) -> None:
-    """Surface a denied default-memory read as a 403 carrying its reason.
-
-    Returns without raising only when the decision is a non-serving rollout state rather
-    than a denial, which keeps that caller's existing empty result.
-    """
-    reason = mcp_denied_read_reason(result)
-    if reason is None:
-        return
-    raise HTTPException(status_code=403, detail=mcp_memory_read_denied_detail(reason))
-
-
 @router.get("/v1/mcp/memories/search", tags=["mcp"], response_model=List[SearchedMemory])
 def search_memories(
     query: str,
@@ -315,7 +302,9 @@ def search_memories(
     if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
         return vector_search_results.memories
     if not mcp_legacy_read_authorized(vector_search_results):
-        _raise_if_memory_read_denied(vector_search_results)
+        denied = mcp_denied_read_payload(vector_search_results)
+        if denied is not None:
+            raise HTTPException(status_code=403, detail=denied)
         return []
 
     return memory_service.search_mcp(uid, query, limit=limit)
@@ -412,7 +401,9 @@ def get_memories(
     if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
         return memory_list_results.memories
     if not mcp_legacy_read_authorized(memory_list_results):
-        _raise_if_memory_read_denied(memory_list_results)
+        denied = mcp_denied_read_payload(memory_list_results)
+        if denied is not None:
+            raise HTTPException(status_code=403, detail=denied)
         return []
 
     result = collect_filtered_memories(
