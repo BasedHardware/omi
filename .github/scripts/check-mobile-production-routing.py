@@ -26,7 +26,7 @@ RETIRED_GKE_DESKTOP_BACKEND_CHART_ROOTS = (
 RETIRED_GKE_DESKTOP_BACKEND_WORKFLOW_ROOT = ".github/workflows"
 RETIRED_GKE_DESKTOP_BACKEND_MANIFEST_SUFFIXES = {".tpl", ".yaml", ".yml"}
 RETIRED_GKE_DESKTOP_BACKEND_MARKERS = ("desktop-api.omi.me", "desktop-backend")
-GKE_WORKFLOW_MARKERS = ("gcloud container", "helm ", "kubectl ")
+GKE_WORKFLOW_MARKERS = ("gcloud container clusters", "helm ", "kubectl ")
 LEGACY_BETA_ROUTING_PATHS = (
     "codemagic.yaml",
     "app/lib/env/dev_env.dart",
