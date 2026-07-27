@@ -625,12 +625,16 @@ def acquire(
             try:
                 records, process_manifest, port_manifest = _validated_owned_records(old_state, old_repo, old_id, old_token)
                 fault_record = _validated_fault_record(old_state, old_token)
-            except safety.SafetyError:
-                _quarantine_stale_lease_pointer(path, root, existing)
-            else:
                 _stop_owned_fault_record(fault_record)
                 _stop_owned_records(records, process_manifest, port_manifest, old_id)
                 _safe_remove_state(old_state, old_repo, old_id)
+            except (safety.SafetyError, QualificationLeaseError):
+                # A dead owner cannot keep the admission pointer indefinitely.
+                # If any provenance or listener-lineage check fails, preserve the
+                # state/log evidence and retire only the pointer. In particular,
+                # do not retry or broaden process cleanup after a refused signal.
+                _quarantine_stale_lease_pointer(path, root, existing)
+            else:
                 old_logs = root / "logs" / old_id
                 if old_logs.is_dir():
                     shutil.rmtree(old_logs)
