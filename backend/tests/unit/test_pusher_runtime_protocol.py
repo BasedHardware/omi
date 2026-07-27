@@ -9,7 +9,7 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
-import routers.pusher_protocol as pusher_protocol
+import utils.pusher_protocol as pusher_protocol
 
 
 class FakeWebSocket:

@@ -10,8 +10,8 @@ from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
 from database import users as users_db
-from routers.pusher_finalization import process_conversation_task
-from routers.pusher_protocol import (
+from utils.pusher_finalization import process_conversation_task
+from utils.pusher_protocol import (
     BUFFERED_AUDIO_MAX_BYTES,
     MAX_SAMPLE_RATE,
     MIN_SAMPLE_RATE,
