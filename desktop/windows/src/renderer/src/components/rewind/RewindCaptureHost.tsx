@@ -84,6 +84,7 @@ export function RewindCaptureHost(): React.JSX.Element {
     let generation = 0
     let captureRunning = false
     let queuedGeneration: number | null = null
+    let activeSourceId: string | null = null
 
     const stop = (): void => {
       generation++
@@ -94,6 +95,7 @@ export function RewindCaptureHost(): React.JSX.Element {
       }
       streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = null
+      activeSourceId = null
       if (videoRef.current) videoRef.current.srcObject = null
     }
 
@@ -105,20 +107,69 @@ export function RewindCaptureHost(): React.JSX.Element {
     // sampler kept drawing a dead <video>, so the timeline filled with blank frames
     // and capture never came back. Re-open the stream instead. Our own teardown
     // uses track.stop(), which does not fire 'ended', so this can't self-trigger.
-    const onTrackEnded = (): void => {
-      if (cancelled) return
+    const onTrackEnded = (track: MediaStreamTrack): void => {
+      if (cancelled || !streamRef.current?.getVideoTracks().includes(track)) return
       console.warn('[rewind] capture track ended — reopening stream')
       stop()
       timerRef.current = setTimeout(() => void start(), RESTART_DELAY_MS)
     }
 
+    const replaceStream = async (sourceId: string, gen: number): Promise<boolean> => {
+      const stream = await (
+        navigator.mediaDevices as unknown as {
+          getUserMedia: (c: unknown) => Promise<MediaStream>
+        }
+      ).getUserMedia({
+        audio: false,
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: sourceId,
+            // Resolution follows the user's quality tier; every display stays
+            // at 1fps so following focus does not add another persistent stream.
+            maxWidth: tier.maxWidth,
+            maxHeight: tier.maxHeight,
+            maxFrameRate: 1
+          }
+        }
+      })
+      if (cancelled || gen !== generation) {
+        stream.getTracks().forEach((track) => track.stop())
+        return false
+      }
+
+      const previous = streamRef.current
+      previous?.getTracks().forEach((track) => track.stop())
+      streamRef.current = stream
+      activeSourceId = sourceId
+      stream
+        .getVideoTracks()
+        .forEach((track) => track.addEventListener('ended', () => onTrackEnded(track)))
+      const video = videoRef.current
+      if (video) {
+        video.srcObject = stream
+        await video.play().catch(() => undefined)
+      }
+      if (cancelled || gen !== generation) {
+        stream.getTracks().forEach((track) => track.stop())
+        return false
+      }
+      return true
+    }
+
     const captureOnce = async (gen: number): Promise<void> => {
       if (cancelled || gen !== generation) return
-      const v = videoRef.current
-      if (!v || !isLive() || !v.videoWidth || !v.videoHeight || savingRef.current) return
-
-      savingRef.current = true
       try {
+        const targetSourceId = await window.omi.rewindCaptureSourceId()
+        if (targetSourceId && targetSourceId !== activeSourceId) {
+          const replaced = await replaceStream(targetSourceId, gen)
+          if (!replaced) return
+        }
+
+        const v = videoRef.current
+        if (!v || !isLive() || !v.videoWidth || !v.videoHeight || savingRef.current) return
+
+        savingRef.current = true
         const scale = Math.min(1, tier.maxEdge / Math.max(v.videoWidth, v.videoHeight))
         const w = Math.round(v.videoWidth * scale)
         const h = Math.round(v.videoHeight * scale)
@@ -131,8 +182,11 @@ export function RewindCaptureHost(): React.JSX.Element {
           const blob = await new Promise<Blob | null>((r) =>
             canvas.toBlob(r, 'image/jpeg', tier.jpegQuality)
           )
-          if (blob && !cancelled && gen === generation) {
-            await window.omi.rewindSaveFrame(new Uint8Array(await blob.arrayBuffer()))
+          if (blob && activeSourceId && !cancelled && gen === generation) {
+            await window.omi.rewindSaveFrame(
+              new Uint8Array(await blob.arrayBuffer()),
+              activeSourceId
+            )
           }
         }
       } catch (e) {
@@ -185,43 +239,10 @@ export function RewindCaptureHost(): React.JSX.Element {
 
     const start = async (): Promise<void> => {
       try {
-        const sourceId = await window.omi.rewindPrimarySourceId()
+        const sourceId = await window.omi.rewindCaptureSourceId()
         if (!sourceId || cancelled) return
-        const stream = await (
-          navigator.mediaDevices as unknown as {
-            getUserMedia: (c: unknown) => Promise<MediaStream>
-          }
-        ).getUserMedia({
-          audio: false,
-          video: {
-            mandatory: {
-              chromeMediaSource: 'desktop',
-              chromeMediaSourceId: sourceId,
-              // The live stream is decoded continuously in the renderer, so its
-              // resolution + frame rate set the steady-state cost of having
-              // capture on. Resolution follows the user's quality tier (720p by
-              // default); the frame rate stays at 1fps regardless — we sample
-              // every few seconds, and frame rate is what made this expensive
-              // before (1080p@30fps → froze; 1080p@2fps → laggy).
-              maxWidth: tier.maxWidth,
-              maxHeight: tier.maxHeight,
-              maxFrameRate: 1
-            }
-          }
-        })
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop())
-          return
-        }
-        streamRef.current = stream
-        stream.getVideoTracks().forEach((t) => t.addEventListener('ended', onTrackEnded))
         const gen = generation
-        const v = videoRef.current
-        if (v) {
-          v.srcObject = stream
-          await v.play().catch(() => undefined)
-        }
-        scheduleNext(gen)
+        if (await replaceStream(sourceId, gen)) scheduleNext(gen)
       } catch (e) {
         console.error('[rewind] failed to start capture:', (e as Error).message)
       }

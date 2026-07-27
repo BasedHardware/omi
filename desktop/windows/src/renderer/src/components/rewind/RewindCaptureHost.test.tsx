@@ -35,10 +35,12 @@ let getUserMedia: ReturnType<typeof vi.fn>
 let saveFrame: ReturnType<typeof vi.fn>
 let captureNowListener: (() => void) | null
 let unsubscribeCaptureNow: ReturnType<typeof vi.fn>
+let captureSourceId: string
 
 beforeEach(() => {
   vi.useFakeTimers()
   tracks = []
+  captureSourceId = 'screen:0:0'
   captureNowListener = null
   unsubscribeCaptureNow = vi.fn(() => {
     captureNowListener = null
@@ -56,6 +58,7 @@ beforeEach(() => {
     rewindGetCaptureDirective: async () => ({ paused: false, intervalMs: INTERVAL_MS }),
     onRewindCaptureDirective: () => () => undefined,
     rewindPrimarySourceId: async () => 'screen:0:0',
+    rewindCaptureSourceId: async () => captureSourceId,
     rewindSaveFrame: saveFrame,
     onRewindCaptureNow: (cb: () => void) => {
       captureNowListener = cb
@@ -334,6 +337,37 @@ describe('RewindCaptureHost — foreground capture', () => {
     expect(saveFrame).toHaveBeenCalledTimes(1)
     await tick(1)
     expect(saveFrame).toHaveBeenCalledTimes(2)
+  })
+
+  it('reopens the stream on the foreground window display before capturing', async () => {
+    render(<RewindCaptureHost />)
+    await settle()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+
+    captureSourceId = 'screen:1:0'
+    await requestCaptureNow()
+
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+    expect(
+      (
+        getUserMedia.mock.calls[1][0] as {
+          video: { mandatory: { chromeMediaSourceId: string } }
+        }
+      ).video.mandatory.chromeMediaSourceId
+    ).toBe('screen:1:0')
+    expect(tracks[0].readyState).toBe('ended')
+    expect(tracks[1].readyState).toBe('live')
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+    expect(saveFrame).toHaveBeenCalledWith(expect.any(Uint8Array), 'screen:1:0')
+
+    // A queued 'ended' event from the replaced track must not tear down the new
+    // display stream.
+    await act(async () => {
+      tracks[0].die()
+    })
+    await tick(RESTART_DELAY_MS)
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+    expect(tracks[1].readyState).toBe('live')
   })
 
   it('coalesces foreground requests while a save is in flight', async () => {
