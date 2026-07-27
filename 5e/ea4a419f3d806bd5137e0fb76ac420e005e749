@@ -1,0 +1,43 @@
+integrations/evenhub-g2/app.json
+  s_e939211e79c9f1::t_61ddd2f9e475b5 1-11
+integrations/evenhub-g2/index.html
+  s_e939211e79c9f1::t_70d9a582847404 6-11
+  s_e939211e79c9f1::t_0715ca5113ec5b 3-5
+  s_e939211e79c9f1::t_1c2643ef9298f1 12-14
+  s_e939211e79c9f1::t_706c5f780fc989 1-2
+integrations/evenhub-g2/package.json
+  s_e939211e79c9f1::t_84ae52209c66bf 4-12
+  s_e939211e79c9f1::t_0f4c85570b8eeb 1-3,13-24
+integrations/evenhub-g2/scripts/verify-simulator.mjs
+  s_e939211e79c9f1::t_d6ab1f78f2c798 1-210,221,225-226,228-236,238,246-330
+  s_e939211e79c9f1::t_a955b5351407e5 211-220,222-224,227,237,239-245
+integrations/evenhub-g2/README.md
+  s_e939211e79c9f1::t_518ab14f2a0e34 1-86
+integrations/evenhub-g2/vite.config.ts
+  s_e939211e79c9f1::t_d1d453b37d62e8 1-17
+integrations/evenhub-g2/src/main.ts
+  s_e939211e79c9f1::t_d8cb8806afa59c 1-48,62,65-85
+  s_e939211e79c9f1::t_5df3120d2ff387 49-61,63-64
+integrations/evenhub-g2/.gitignore
+  s_e939211e79c9f1::t_ec0e064ca88886 1-24
+integrations/evenhub-g2/package-lock.json
+  s_e939211e79c9f1::t_ee1391f9ebb008 1-1755
+integrations/evenhub-g2/tsconfig.json
+  s_e939211e79c9f1::t_13b68377cb1af8 1-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "5eea4a419f3d806bd5137e0fb76ac420e005e749",
+  "prompts": {},
+  "sessions": {
+    "s_e939211e79c9f1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7063973-7aff-42e3-a630-daf5ea69dbc0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
