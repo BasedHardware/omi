@@ -35,6 +35,17 @@ def planner_evidence(*, release_tag: str = RELEASE_TAG, candidate_sha: str = CAN
 
 
 class PublishDesktopCandidateTagTests(unittest.TestCase):
+    def test_tag_job_uses_the_omi_bot_credential_for_every_checkout(self) -> None:
+        # omi-test-quality: source-inspection -- static workflow-auth wiring for
+        # SCA-155; the external GitHub/Codemagic webhook boundary has no local seam.
+        workflow = (SCRIPT.parents[1] / "workflows" / "desktop_auto_release.yml").read_text(encoding="utf-8")
+        tag_job = workflow.split("  tag-release:\n", 1)[1]
+        self.assertLess(tag_job.index("- name: Generate Omi Bot token"), tag_job.index("- name: Checkout"))
+        self.assertEqual(tag_job.count("token: ${{ steps.app-token.outputs.token }}"), 2)
+        self.assertIn("Verify native Codemagic tag intake or dispatch fenced fallback", tag_job)
+        self.assertIn("check-codemagic-tag-intake.py", tag_job)
+        self.assertIn("if: always() && steps.final-plan.outputs.should_release == 'true'", tag_job)
+
     def test_native_git_transport_publishes_a_lightweight_tag_not_an_annotated_tag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
