@@ -576,7 +576,7 @@ def test_diff_scope_includes_changed_transitive_helper_lines(scanner, tmp_path):
     finding = results["medium_file_io"][0]
     sink_line = finding["calls"][0]["sink_line"]
     scope = {
-        "ranges": {str(source_path): [(sink_line, sink_line)]},
+        "ranges": {scanner._normalize_path(str(source_path)): [(sink_line, sink_line)]},
         "import_changed_files": set(),
     }
 
