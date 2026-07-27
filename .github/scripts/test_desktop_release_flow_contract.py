@@ -113,6 +113,18 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         ):
             self.assertIn(fragment, self.workflow)
 
+    def test_m1_qualification_requires_live_desktop_backend_contract(self) -> None:
+        for fragment in (
+            "Verify live desktop-backend chat compatibility",
+            '.chat_contract_version == "1"',
+            "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+            "desktop-backend-compatibility.json",
+        ):
+            self.assertIn(fragment, self.workflow)
+        compatibility = self.workflow.index("Verify live desktop-backend chat compatibility")
+        qualify = self.workflow.index("Qualify exact candidate on the M1 Studio hermetic stack")
+        self.assertLess(compatibility, qualify)
+
     def test_release_process_guard_accepts_the_run_isolated_tag_checkout(self) -> None:
         tree = ast.parse(self.release_guard)
         guard = next(
