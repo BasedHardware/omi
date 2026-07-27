@@ -43,6 +43,17 @@ describe('TranscriptionTab', () => {
     expect(syncLanguage).toHaveBeenCalledWith('es')
   })
 
+  it('offers Brazilian Portuguese and persists its regional code (#7461)', () => {
+    renderTab()
+    const dropdown = screen.getByRole('combobox')
+    expect(Array.from(dropdown.querySelectorAll('option')).map((o) => o.textContent)).toContain(
+      'Portuguese (Brazil)'
+    )
+    fireEvent.change(dropdown, { target: { value: 'pt-BR' } })
+    expect(getPreferences().language).toBe('pt-BR')
+    expect(syncLanguage).toHaveBeenCalledWith('pt-BR')
+  })
+
   it('auto-detect maps to the multi sentinel and hides the dropdown', () => {
     renderTab()
     fireEvent.click(screen.getByText('Auto-detect (multi-language)'))

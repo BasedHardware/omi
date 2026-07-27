@@ -136,6 +136,52 @@ def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
     assert error.provider_rejection == provider_rejection
 
 
+@pytest.mark.parametrize(
+    'failure_class',
+    [FailureClass.BYOK_RATE_LIMIT, FailureClass.BYOK_QUOTA],
+)
+def test_byok_throttling_is_not_reported_as_a_credential_rejection(monkeypatch, failure_class):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider([ProviderFailure(failure_class)])
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 429
+    assert response.json()['error']['type'] == 'rate_limit_error'
+    assert response.json()['error']['message'] == f'provider request failed: {failure_class.value}'
+
+
+def test_byok_auth_failure_still_reports_a_credential_rejection(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider([ProviderFailure(FailureClass.BYOK_AUTH)])
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert response.json()['error']['type'] == 'authentication_error'
+    assert response.json()['error']['code'] == 'credential_failure'
+
+
 def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attribution(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     persisted = []

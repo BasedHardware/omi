@@ -1,7 +1,9 @@
+import logging
 from threading import Lock
 from typing import Any
 
 import os
+from google.api_core.exceptions import InvalidArgument
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
@@ -13,7 +15,12 @@ __all__ = [
     "document_id_from_seed",
     "get_firestore_client",
     "get_users_uid",
+    "is_document_size_limit_error",
+    "is_expired_transaction_error",
+    "run_transactional",
 ]
+
+logger = logging.getLogger(__name__)
 
 _firestore_client = None
 _firestore_client_lock = Lock()
@@ -44,6 +51,46 @@ def get_firestore_client() -> Any:
             if _firestore_client is None:
                 _firestore_client = _build_firestore_client()
     return _firestore_client
+
+
+_EXPIRED_TRANSACTION_MARKER = "transaction has expired"
+
+
+def is_expired_transaction_error(error: BaseException) -> bool:
+    """True for the Firestore 400 that retires a transaction id mid-flight."""
+    return isinstance(error, InvalidArgument) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
+
+
+_DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"
+
+
+def is_document_size_limit_error(error: BaseException) -> bool:
+    """True for the Firestore 400 rejecting a write that would exceed the 1 MiB document ceiling.
+
+    Unlike contention or an expired transaction, this is permanent: retrying the
+    same growing write can never succeed, so callers must take a different path
+    rather than loop.
+    """
+    return isinstance(error, InvalidArgument) and _DOCUMENT_SIZE_LIMIT_MARKER in str(error).lower()
+
+
+def run_transactional(client: Any, transactional_callable: Any, *args: Any, attempts: int = 3, **kwargs: Any) -> Any:
+    """Run a ``@firestore.transactional`` callable, restarting it on an expired transaction.
+
+    ``_Transactional.__call__`` retries contention by replaying the *same* transaction id,
+    which is exactly what cannot work once Firestore has retired that id: the commit comes
+    back ``400 The referenced transaction has expired or is no longer valid`` and nothing
+    was written. The SDK treats that as fatal, so recovery requires a brand-new transaction
+    and belongs to this boundary rather than to every caller — callers that own a live
+    WebSocket session have no way to distinguish it from a real write failure.
+    """
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            return transactional_callable(client.transaction(), *args, **kwargs)
+        except InvalidArgument as error:
+            if attempt >= attempts or not is_expired_transaction_error(error):
+                raise
+            logger.warning('Firestore transaction expired, restarting attempt=%d/%d', attempt, attempts)
 
 
 class _LazyFirestoreClient:

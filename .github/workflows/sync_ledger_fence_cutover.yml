@@ -43,7 +43,7 @@ jobs:
       actions: read
       contents: read
       id-token: write
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout cutover controls
         uses: actions/checkout@v7
@@ -135,7 +135,7 @@ jobs:
       actions: read
       contents: read
       id-token: write
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout cutover controls
         uses: actions/checkout@v7

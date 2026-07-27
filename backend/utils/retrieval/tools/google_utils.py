@@ -20,6 +20,11 @@ from utils.integration_telemetry import (
     emit_auth_refresh_failed,
     emit_auth_refresh_succeeded,
 )
+from utils.integrations_registry import (
+    GMAIL_READ_SCOPE,
+    INTEGRATION_PROVIDERS,
+    oauth_scopes,
+)
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -27,15 +32,14 @@ logger = logging.getLogger(__name__)
 # Google Calendar and Gmail share a single OAuth grant stored under this key.
 GOOGLE_INTEGRATION_KEY = 'google_calendar'
 
-GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
+GMAIL_READONLY_SCOPE = GMAIL_READ_SCOPE
 
-# Scopes requested when the user connects their Google account.
-GOOGLE_OAUTH_SCOPES = (
-    'https://www.googleapis.com/auth/calendar',
-    'https://www.googleapis.com/auth/contacts.readonly',
-    'https://www.googleapis.com/auth/contacts.other.readonly',
-    GMAIL_READONLY_SCOPE,
-)
+# Scopes requested when the user connects their Google account. Derived from the
+# registry that builds the consent request, so the scopes we ask for and the ones
+# `google_integration_has_scope` verifies a stored grant against cannot drift: a
+# scope requested but never verified is unenforced, and one required but never
+# requested reads as ungranted forever and loops the user through reconnect.
+GOOGLE_OAUTH_SCOPES = oauth_scopes(INTEGRATION_PROVIDERS[GOOGLE_INTEGRATION_KEY])
 
 
 def google_integration_has_scope(integration: Optional[Dict[str, Any]], scope: str) -> bool:

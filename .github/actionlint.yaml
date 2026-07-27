@@ -1,6 +1,5 @@
 self-hosted-runner:
   labels:
-    - ubuntu-latest-m
     - macos
     - omi-desktop-qualification
     - omi-qual-m1-studio

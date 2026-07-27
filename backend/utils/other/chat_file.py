@@ -63,7 +63,7 @@ _async_openai: AsyncOpenAI | None = None
 def _get_async_openai() -> AsyncOpenAI:
     global _async_openai
     if _async_openai is None:
-        _async_openai = AsyncOpenAI()
+        _async_openai = AsyncOpenAI(timeout=120.0, max_retries=1)
     return _async_openai
 
 

@@ -12,7 +12,13 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: repo-checks-${{ github.event.pull_request.number || github.ref }}
+  # Metadata events (edited/labeled/unlabeled) and code events (push/synchronize)
+  # run disjoint job sets: `metadata-preflight` for the former, `changes`/`hygiene`
+  # for the latter. Sharing one cancel-in-progress group let a PR-title/body edit
+  # cancel an in-flight code run it shares no work with, and cancelled jobs render
+  # as red "fail" checks on the PR — flaky red with no code cause. Key the group by
+  # lane so newer-cancels-older still holds within each lane, but never across them.
+  group: repo-checks-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action) && 'metadata' || 'code' }}
   cancel-in-progress: true
 
 jobs:

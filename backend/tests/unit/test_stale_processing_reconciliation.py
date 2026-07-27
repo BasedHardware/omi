@@ -16,9 +16,16 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
+from google.api_core.exceptions import InvalidArgument
+
 from services import conversation_finalization as service
 
 _ADMITTED = datetime.now(timezone.utc) - timedelta(seconds=1000)
+# Verbatim shape of the live prod rejection for a conversation at the 1 MiB ceiling.
+_OVERSIZED_DOCUMENT_MESSAGE = (
+    "400 Document 'projects/p/databases/(default)/documents/users/u/conversations/c' cannot be written "
+    'because its size (1,048,601 bytes) exceeds the maximum allowed size of 1,048,576 bytes.'
+)
 
 
 def _candidate(uid: str, cid: str, *, legacy: bool = False) -> dict:
@@ -101,6 +108,50 @@ def test_legacy_stamp_cas_loss_is_skipped_not_migrated(monkeypatch):
     assert result == {'completed': 0, 'migrated': 0, 'skipped': 1, 'error': 0}
     stamp.assert_called_once_with('uid', 'already-stamped-1', firestore_client=None)
     complete.assert_not_called()
+
+
+def test_legacy_row_too_large_to_stamp_is_terminalized_not_retried_forever(monkeypatch):
+    """A legacy row at Firestore's 1 MiB document ceiling rejects the admission
+    stamp permanently, so migration can never progress and the conversation
+    would stay ``processing`` for good. It is terminalized through the
+    unstampable path instead of being counted as an error on every sweep."""
+    stamp, complete = _install(monkeypatch, [_candidate('uid', 'oversized-1', legacy=True)])
+    stamp.side_effect = InvalidArgument(_OVERSIZED_DOCUMENT_MESSAGE)
+    unstampable = MagicMock(return_value=True)
+    monkeypatch.setattr(service.jobs_db, 'complete_unstampable_orphan_conversation', unstampable)
+
+    result = service.reconcile_stale_processing_conversations()
+
+    assert result == {'completed': 1, 'migrated': 0, 'skipped': 0, 'error': 0}
+    unstampable.assert_called_once_with('uid', 'oversized-1', stale_after=timedelta(seconds=900), firestore_client=None)
+    # The generation-fenced terminal is for stamped rows only.
+    complete.assert_not_called()
+
+
+def test_unstampable_row_still_owned_by_a_live_writer_is_skipped(monkeypatch):
+    """The unstampable terminal keeps its own fence: a row it declines to
+    terminalize is an expected skip, never a completion."""
+    stamp, _complete = _install(monkeypatch, [_candidate('uid', 'oversized-2', legacy=True)])
+    stamp.side_effect = InvalidArgument(_OVERSIZED_DOCUMENT_MESSAGE)
+    monkeypatch.setattr(service.jobs_db, 'complete_unstampable_orphan_conversation', MagicMock(return_value=False))
+
+    result = service.reconcile_stale_processing_conversations()
+
+    assert result == {'completed': 0, 'migrated': 0, 'skipped': 1, 'error': 0}
+
+
+def test_non_size_invalid_argument_stays_an_error(monkeypatch):
+    """Only the permanent document-size rejection reroutes; any other 400 is an
+    unexpected per-row failure and must keep counting as an error."""
+    stamp, _complete = _install(monkeypatch, [_candidate('uid', 'legacy-boom', legacy=True)])
+    stamp.side_effect = InvalidArgument('400 The referenced transaction has expired or is no longer valid.')
+    unstampable = MagicMock(return_value=True)
+    monkeypatch.setattr(service.jobs_db, 'complete_unstampable_orphan_conversation', unstampable)
+
+    result = service.reconcile_stale_processing_conversations()
+
+    assert result == {'completed': 0, 'migrated': 0, 'skipped': 0, 'error': 1}
+    unstampable.assert_not_called()
 
 
 def test_query_failure_is_fail_closed_and_records_an_error(monkeypatch):

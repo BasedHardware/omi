@@ -50,7 +50,7 @@ class PreTagReadinessBehaviorTests(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
         path.chmod(0o755)
 
-    def fixture(self, root: Path) -> tuple[Path, str, Path, Path]:
+    def fixture(self, root: Path, *, symlinked_agent: bool = False) -> tuple[Path, str, Path, Path, Path | None]:
         origin = root / "origin.git"
         source = root / "source"
         self.assertEqual(self.run_process(["git", "init", "--bare", "--quiet", str(origin)], cwd=root).returncode, 0)
@@ -58,6 +58,10 @@ class PreTagReadinessBehaviorTests(unittest.TestCase):
         scripts = source / "desktop/macos/scripts"
         scripts.mkdir(parents=True)
         (source / "backend").mkdir()
+        agent = source / "desktop/macos/agent"
+        agent.mkdir()
+        (agent / "package.json").write_text('{"name":"fixture-agent"}\n', encoding="utf-8")
+        (agent / "package-lock.json").write_text('{"lockfileVersion":3}\n', encoding="utf-8")
         os.symlink(REAL_READINESS, scripts / "pre-tag-readiness.sh")
         self.write_executable(
             scripts / "qualification-swift-cache.sh",
@@ -118,17 +122,51 @@ printf 'harness %s %s %s\\n' "$sha" "$OMI_LOCAL_INSTANCE" "$OMI_HARNESS_OWNERSHI
         )
         fake_bin = root / "fake-bin"
         fake_bin.mkdir()
+        self.write_executable(
+            fake_bin / "npm",
+            """#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == ci ]]
+[[ "$2" == --include=dev && "$3" == --no-fund && "$4" == --no-audit && $# -eq 4 ]]
+[[ -z ${NODE_ENV+x} ]]
+printf 'agent-deps %s\\n' "$PWD" >> "${FAKE_READINESS_LOG:?}"
+mkdir -p node_modules/.bin
+[[ ${FAKE_NPM_FAIL:-} != 1 ]] || exit 44
+printf '#!/usr/bin/env bash\\nexit 0\\n' > node_modules/.bin/vitest
+chmod +x node_modules/.bin/vitest
+""",
+        )
+        self.write_executable(
+            fake_bin / "rm",
+            """#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == -rf && "$2" == -- && "$3" == */desktop/macos/agent/node_modules && $# -eq 3 ]]
+printf 'agent-deps-cleanup %s\\n' "$3" >> "${FAKE_READINESS_LOG:?}"
+exec /bin/rm "$@"
+""",
+        )
         self.write_executable(fake_bin / "uname", "#!/usr/bin/env bash\nprintf 'Darwin\\n'\n")
+        foreign_agent: Path | None = None
+        if symlinked_agent:
+            foreign_agent = root / "foreign-agent"
+            (foreign_agent / "node_modules").mkdir(parents=True)
+            (foreign_agent / "node_modules/foreign-sentinel").write_text("preserve\n", encoding="utf-8")
+            for path in agent.iterdir():
+                path.unlink()
+            agent.rmdir()
+            agent.symlink_to(foreign_agent, target_is_directory=True)
         self.run_git(source, "config", "user.email", "readiness-test@example.invalid")
         self.run_git(source, "config", "user.name", "Readiness Test")
         self.run_git(source, "add", ".")
         self.run_git(source, "commit", "--quiet", "-m", "readiness fixture")
         self.run_git(source, "branch", "-M", "main")
         self.run_git(source, "push", "--quiet", "-u", "origin", "main")
-        return source, self.run_git(source, "rev-parse", "HEAD"), fake_bin, scripts / "pre-tag-readiness.sh"
+        return source, self.run_git(source, "rev-parse", "HEAD"), fake_bin, scripts / "pre-tag-readiness.sh", foreign_agent
 
-    def run_readiness(self, root: Path, *, failed_release: str = "") -> tuple[subprocess.CompletedProcess[str], dict[str, object], list[str], str]:
-        source, sha, fake_bin, readiness = self.fixture(root)
+    def run_readiness(
+        self, root: Path, *, failed_release: str = "", npm_failure: bool = False
+    ) -> tuple[subprocess.CompletedProcess[str], dict[str, object], list[str], str, bool]:
+        source, sha, fake_bin, readiness, _foreign_agent = self.fixture(root)
         receipt = root / "evidence/readiness.json"
         log = root / "operations.log"
         env = {
@@ -137,6 +175,8 @@ printf 'harness %s %s %s\\n' "$sha" "$OMI_LOCAL_INSTANCE" "$OMI_HARNESS_OWNERSHI
             "FAKE_READINESS_LOG": str(log),
             "FAKE_READINESS_RECEIPT": str(receipt),
             "FAKE_FAIL_RELEASE": failed_release,
+            "FAKE_NPM_FAIL": "1" if npm_failure else "",
+            "NODE_ENV": "production",
             "TMPDIR": str(root / "tmp"),
             "OMI_QUALIFICATION_LEASE_ROOT": str(root / "lease-root"),
         }
@@ -145,41 +185,98 @@ printf 'harness %s %s %s\\n' "$sha" "$OMI_LOCAL_INSTANCE" "$OMI_HARNESS_OWNERSHI
             [str(readiness), "--evidence", str(receipt), "--source-repository", str(source), sha], cwd=source, env=env
         )
         self.assertTrue(receipt.is_file(), completed.stderr)
-        return completed, json.loads(receipt.read_text(encoding="utf-8")), log.read_text(encoding="utf-8").splitlines(), sha
+        return (
+            completed,
+            json.loads(receipt.read_text(encoding="utf-8")),
+            log.read_text(encoding="utf-8").splitlines(),
+            sha,
+            (source / "desktop/macos/agent/node_modules").exists(),
+        )
 
     def test_success_receipt_follows_exact_sha_bound_authenticated_releases(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            completed, receipt, operations, sha = self.run_readiness(Path(tmp))
+            completed, receipt, operations, sha, dependency_residue_exists = self.run_readiness(Path(tmp))
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertTrue(receipt["passed"])
+        self.assertFalse(dependency_residue_exists)
         self.assertEqual(receipt["source_sha"], sha)
         self.assertEqual([line.split()[0] for line in operations], [
-            "cache-prepare", "lease-acquire", "harness", "lease-release", "cache-release",
+            "cache-prepare", "lease-acquire", "agent-deps", "harness", "agent-deps-cleanup", "lease-release", "cache-release",
         ])
         cache_prepare = operations[0].split()
         lease_acquire = operations[1].split()
-        harness = operations[2].split()
-        lease_release = operations[3].split()
-        cache_release = operations[4].split()
+        agent_deps = operations[2].split()
+        harness = operations[3].split()
+        agent_cleanup = operations[4].split()
+        lease_release = operations[5].split()
+        cache_release = operations[6].split()
         cache_id, readiness_id = cache_prepare[3], lease_acquire[2]
         self.assertNotEqual(cache_id, readiness_id)
         self.assertTrue(cache_id.startswith(f"cache-readiness-{sha[:12]}-"))
         self.assertTrue(readiness_id.startswith(f"readiness-{sha[:12]}-"))
         self.assertEqual(cache_prepare[1:3], [sha, lease_acquire[1]])
+        self.assertEqual(agent_deps[1], f"{cache_prepare[2]}/desktop/macos/agent")
         self.assertEqual(harness[1:], [sha, readiness_id, "lease-token"])
+        self.assertEqual(agent_cleanup[1], f"{cache_prepare[2]}/desktop/macos/agent/node_modules")
         self.assertEqual(lease_release[1:4], [lease_acquire[1], readiness_id, "lease-token"])
         self.assertEqual(cache_release[1:], [sha, cache_id, cache_prepare[4], "cache-token"])
 
     def test_cleanup_failure_never_emits_a_passing_receipt(self) -> None:
         for failed_release in ("lease", "cache"):
             with self.subTest(failed_release=failed_release), tempfile.TemporaryDirectory() as tmp:
-                completed, receipt, operations, _sha = self.run_readiness(Path(tmp), failed_release=failed_release)
+                completed, receipt, operations, _sha, dependency_residue_exists = self.run_readiness(
+                    Path(tmp), failed_release=failed_release
+                )
 
                 self.assertNotEqual(completed.returncode, 0, completed.stderr)
                 self.assertFalse(receipt["passed"])
+                self.assertFalse(dependency_residue_exists)
                 self.assertEqual(receipt["error"], "pre-tag-readiness authenticated cleanup failed")
                 self.assertEqual([line.split()[0] for line in operations][-2:], ["lease-release", "cache-release"])
+
+    def test_failed_npm_install_cleans_owned_residue_before_authenticated_releases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            completed, receipt, operations, _sha, dependency_residue_exists = self.run_readiness(
+                Path(tmp), npm_failure=True
+            )
+
+        self.assertNotEqual(completed.returncode, 0, completed.stderr)
+        self.assertFalse(receipt["passed"])
+        self.assertFalse(dependency_residue_exists)
+        self.assertNotIn("harness", [line.split()[0] for line in operations])
+        self.assertEqual([line.split()[0] for line in operations], [
+            "cache-prepare", "lease-acquire", "agent-deps", "agent-deps-cleanup", "lease-release", "cache-release",
+        ])
+
+    def test_symlinked_agent_cannot_redirect_dependency_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, sha, fake_bin, readiness, foreign_agent = self.fixture(root, symlinked_agent=True)
+            assert foreign_agent is not None
+            receipt = root / "evidence/readiness.json"
+            log = root / "operations.log"
+            env = {
+                **os.environ,
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                "FAKE_READINESS_LOG": str(log),
+                "FAKE_READINESS_RECEIPT": str(receipt),
+                "TMPDIR": str(root / "tmp"),
+                "OMI_QUALIFICATION_LEASE_ROOT": str(root / "lease-root"),
+            }
+            (root / "tmp").mkdir()
+            completed = self.run_process(
+                [str(readiness), "--evidence", str(receipt), "--source-repository", str(source), sha], cwd=source, env=env
+            )
+
+            self.assertTrue(receipt.is_file(), completed.stderr)
+            parsed_receipt = json.loads(receipt.read_text(encoding="utf-8"))
+            self.assertNotEqual(completed.returncode, 0, completed.stderr)
+            self.assertFalse(parsed_receipt["passed"])
+            self.assertTrue((foreign_agent / "node_modules/foreign-sentinel").is_file())
+            self.assertEqual([line.split()[0] for line in log.read_text(encoding="utf-8").splitlines()], [
+                "cache-prepare", "lease-acquire", "lease-release", "cache-release",
+            ])
 
     def test_inherited_git_config_cannot_redirect_fixture_origin(self) -> None:
         git_config_override = {
@@ -188,12 +285,13 @@ printf 'harness %s %s %s\\n' "$sha" "$OMI_LOCAL_INSTANCE" "$OMI_HARNESS_OWNERSHI
             "GIT_CONFIG_VALUE_0": "file:///nonexistent",
         }
         with patch.dict(os.environ, git_config_override, clear=False), tempfile.TemporaryDirectory() as tmp:
-            completed, receipt, operations, _sha = self.run_readiness(Path(tmp))
+            completed, receipt, operations, _sha, dependency_residue_exists = self.run_readiness(Path(tmp))
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertTrue(receipt["passed"])
+        self.assertFalse(dependency_residue_exists)
         self.assertEqual([line.split()[0] for line in operations], [
-            "cache-prepare", "lease-acquire", "harness", "lease-release", "cache-release",
+            "cache-prepare", "lease-acquire", "agent-deps", "harness", "agent-deps-cleanup", "lease-release", "cache-release",
         ])
 
 

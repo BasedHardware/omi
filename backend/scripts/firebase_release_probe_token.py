@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Mint an ephemeral Firebase ID token for the transcription release probe.
+"""Mint an ephemeral Firebase ID token for a release probe.
 
-The script uses the already authenticated deploy identity. It reads the existing
-Firebase web API key from Secret Manager, remotely signs a five-minute Firebase
-custom token for the fixed non-human release-probe UID, then exchanges it for a
-Firebase ID token. The caller separately names the expected Firebase auth
-project; the script rejects a mismatched token audience or issuer. It never
-prints a credential, request body, response body, or upstream error body. The
-ID token is written only to a mode-0600 file owned by the current runner
-process.
+The script reads the existing Firebase web API key from Secret Manager and
+creates a five-minute custom token for the fixed non-human release-probe UID.
+It can either sign remotely with the authenticated deploy identity or sign
+locally with an explicit mode-0600 service-account credential. The local path
+rejects a signer from a different Firebase project before using its key. The
+caller separately names the expected Firebase auth project, and the exchanged
+ID token must match that audience and issuer.
+
+The script never prints a credential, request body, response body, or upstream
+error body. The ID token is written only to a mode-0600 file owned by the
+current runner process.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -36,13 +40,15 @@ IDENTITY_TOOLKIT_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:signI
 CUSTOM_TOKEN_TTL_SECONDS = 300
 HTTP_TIMEOUT_SECONDS = 30
 MAX_TOKEN_CHARS = 8192
+MAX_SIGNER_CREDENTIAL_BYTES = 65536
 FIREBASE_PROJECT_ID_PATTERN = re.compile(r'^[a-z][a-z0-9-]{4,62}$')
 
 
 class ProbeTokenError(RuntimeError):
-    def __init__(self, stage: str):
+    def __init__(self, stage: str, error_class: str = 'operation_failed'):
         super().__init__(stage)
         self.stage = stage
+        self.error_class = error_class
 
 
 def _run_gcloud(args: Sequence[str], *, stage: str) -> str:
@@ -54,8 +60,10 @@ def _run_gcloud(args: Sequence[str], *, stage: str) -> str:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-    except (OSError, subprocess.CalledProcessError) as error:
-        raise ProbeTokenError(stage) from error
+    except OSError as error:
+        raise ProbeTokenError(stage, 'tool_unavailable') from error
+    except subprocess.CalledProcessError as error:
+        raise ProbeTokenError(stage, 'command_failed') from error
     return completed.stdout.strip()
 
 
@@ -97,6 +105,20 @@ def _access_token() -> str:
     return token
 
 
+def _http_error_class(status: int) -> str:
+    if status == 401:
+        return 'authentication_failed'
+    if status == 403:
+        return 'permission_denied'
+    if status == 404:
+        return 'resource_not_found'
+    if status == 429:
+        return 'rate_limited'
+    if 500 <= status <= 599:
+        return 'upstream_unavailable'
+    return 'upstream_rejected'
+
+
 def _request_json(
     url: str,
     *,
@@ -116,35 +138,34 @@ def _request_json(
     try:
         with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
             if int(response.status) != 200:
-                raise ProbeTokenError(stage)
+                raise ProbeTokenError(stage, _http_error_class(int(response.status)))
             payload = json.loads(response.read().decode('utf-8'))
-    except (
-        urllib.error.HTTPError,
-        urllib.error.URLError,
-        OSError,
-        TimeoutError,
-        UnicodeDecodeError,
-        json.JSONDecodeError,
-    ) as error:
-        raise ProbeTokenError(stage) from error
+    except urllib.error.HTTPError as error:
+        raise ProbeTokenError(stage, _http_error_class(int(error.code))) from error
+    except (urllib.error.URLError, OSError, TimeoutError) as error:
+        raise ProbeTokenError(stage, 'transport_error') from error
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ProbeTokenError(stage, 'invalid_response') from error
     if not isinstance(payload, dict):
-        raise ProbeTokenError(stage)
+        raise ProbeTokenError(stage, 'invalid_response')
     return payload
 
 
-def _signed_custom_token(service_account: str, access_token: str) -> str:
+def _custom_token_claims(service_account: str) -> dict[str, Any]:
     now = int(time.time())
-    claims = {
+    return {
         'iss': service_account,
         'sub': service_account,
         'aud': CUSTOM_TOKEN_AUDIENCE,
         'iat': now,
         'exp': now + CUSTOM_TOKEN_TTL_SECONDS,
         'uid': PROBE_UID,
-        # Firebase custom-token developer claims are top-level JWT payload
-        # entries, not nested under a generic "claims" key.
-        'release_probe': True,
+        'claims': {'release_probe': True},
     }
+
+
+def _signed_custom_token(service_account: str, access_token: str) -> str:
+    claims = _custom_token_claims(service_account)
     quoted_account = urllib.parse.quote(service_account, safe='')
     payload = _request_json(
         f'{IAM_CREDENTIALS_URL}/projects/-/serviceAccounts/{quoted_account}:signJwt',
@@ -155,8 +176,118 @@ def _signed_custom_token(service_account: str, access_token: str) -> str:
     signed_jwt = payload.get('signedJwt')
     payload.clear()
     if not isinstance(signed_jwt, str) or not signed_jwt or len(signed_jwt) > MAX_TOKEN_CHARS:
-        raise ProbeTokenError('custom_token_signing')
+        raise ProbeTokenError('custom_token_signing', 'invalid_response')
     return signed_jwt
+
+
+def _base64url(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode('ascii').rstrip('=')
+
+
+def _read_signer_credentials(path: Path, firebase_project: str) -> tuple[str, str, str]:
+    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
+    descriptor = -1
+    payload: dict[str, Any] = {}
+    try:
+        descriptor = os.open(path, flags)
+        file_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(file_stat.st_mode) or stat.S_IMODE(file_stat.st_mode) & 0o077:
+            raise ProbeTokenError('signer_credentials', 'unsafe_permissions')
+        raw = os.read(descriptor, MAX_SIGNER_CREDENTIAL_BYTES + 1)
+        if not raw or len(raw) > MAX_SIGNER_CREDENTIAL_BYTES:
+            raise ProbeTokenError('signer_credentials', 'invalid_credentials')
+        try:
+            payload = json.loads(raw.decode('utf-8'))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ProbeTokenError('signer_credentials', 'invalid_credentials') from error
+        if not isinstance(payload, dict):
+            raise ProbeTokenError('signer_credentials', 'invalid_credentials')
+        service_account = payload.get('client_email')
+        signer_project = payload.get('project_id')
+        private_key_id = payload.get('private_key_id')
+        private_key = payload.get('private_key')
+        expected_suffix = f'@{firebase_project}.iam.gserviceaccount.com'
+        if signer_project != firebase_project:
+            raise ProbeTokenError('signer_credentials', 'project_mismatch')
+        if (
+            payload.get('type') != 'service_account'
+            or not isinstance(service_account, str)
+            or not service_account.endswith(expected_suffix)
+            or not isinstance(private_key_id, str)
+            or not private_key_id
+            or not isinstance(private_key, str)
+            or not private_key.startswith('-----BEGIN PRIVATE KEY-----')
+        ):
+            raise ProbeTokenError('signer_credentials', 'invalid_credentials')
+        return service_account, private_key_id, private_key
+    except OSError as error:
+        raise ProbeTokenError('signer_credentials', 'credential_unavailable') from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        payload.clear()
+
+
+def _signed_custom_token_locally(credentials_path: Path, firebase_project: str) -> str:
+    service_account = ''
+    private_key_id = ''
+    private_key = ''
+    key_path = ''
+    descriptor = -1
+    claims: dict[str, Any] = {}
+    header: dict[str, str] = {}
+    try:
+        service_account, private_key_id, private_key = _read_signer_credentials(credentials_path, firebase_project)
+        claims = _custom_token_claims(service_account)
+        header = {'alg': 'RS256', 'kid': private_key_id, 'typ': 'JWT'}
+        signing_input = (
+            f'{_base64url(json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8"))}.'
+            f'{_base64url(json.dumps(claims, separators=(",", ":"), sort_keys=True).encode("utf-8"))}'
+        )
+        try:
+            descriptor, key_path = tempfile.mkstemp(
+                prefix='omi-firebase-probe-signer-',
+                dir=os.environ.get('RUNNER_TEMP'),
+            )
+            try:
+                os.fchmod(descriptor, 0o600)
+                with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+                    descriptor = -1
+                    handle.write(private_key)
+            finally:
+                if descriptor >= 0:
+                    os.close(descriptor)
+        except OSError as error:
+            raise ProbeTokenError('custom_token_signing', 'credential_unavailable') from error
+        try:
+            completed = subprocess.run(
+                ['openssl', 'dgst', '-sha256', '-sign', key_path],
+                input=signing_input.encode('ascii'),
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except OSError as error:
+            raise ProbeTokenError('custom_token_signing', 'tool_unavailable') from error
+        except subprocess.CalledProcessError as error:
+            raise ProbeTokenError('custom_token_signing', 'local_signing_failed') from error
+        signed_jwt = f'{signing_input}.{_base64url(completed.stdout)}'
+        if len(signed_jwt) > MAX_TOKEN_CHARS:
+            raise ProbeTokenError('custom_token_signing', 'invalid_response')
+        return signed_jwt
+    finally:
+        if key_path:
+            try:
+                os.unlink(key_path)
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                raise ProbeTokenError('custom_token_signing', 'credential_cleanup_failed') from error
+        service_account = ''
+        private_key_id = ''
+        private_key = ''
+        claims.clear()
+        header.clear()
 
 
 def _exchange_custom_token(custom_token: str, firebase_api_key: str) -> str:
@@ -170,7 +301,7 @@ def _exchange_custom_token(custom_token: str, firebase_api_key: str) -> str:
     id_token = payload.get('idToken')
     payload.clear()
     if not isinstance(id_token, str) or not id_token or len(id_token) > MAX_TOKEN_CHARS:
-        raise ProbeTokenError('firebase_token_exchange')
+        raise ProbeTokenError('firebase_token_exchange', 'invalid_response')
     return id_token
 
 
@@ -205,7 +336,12 @@ def _validate_firebase_id_token_claims(id_token: str, firebase_project: str) -> 
         raise ProbeTokenError('firebase_token_claims')
 
 
-def mint_probe_token(secret_project: str, firebase_project: str) -> str:
+def mint_probe_token(
+    secret_project: str,
+    firebase_project: str,
+    *,
+    signer_credentials_file: Path | None = None,
+) -> str:
     firebase_api_key = ''
     service_account = ''
     access_token = ''
@@ -213,9 +349,12 @@ def mint_probe_token(secret_project: str, firebase_project: str) -> str:
     id_token = ''
     try:
         firebase_api_key = _access_secret(secret_project)
-        service_account = _active_service_account()
-        access_token = _access_token()
-        custom_token = _signed_custom_token(service_account, access_token)
+        if signer_credentials_file is None:
+            service_account = _active_service_account()
+            access_token = _access_token()
+            custom_token = _signed_custom_token(service_account, access_token)
+        else:
+            custom_token = _signed_custom_token_locally(signer_credentials_file, firebase_project)
         id_token = _exchange_custom_token(custom_token, firebase_api_key)
         _validate_firebase_id_token_claims(id_token, firebase_project)
         return id_token
@@ -253,6 +392,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--secret-project', required=True)
     parser.add_argument('--firebase-project', required=True)
+    parser.add_argument('--signer-credentials-file', type=Path)
     parser.add_argument('--token-output', required=True, type=Path)
     return parser.parse_args(argv)
 
@@ -263,10 +403,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if not FIREBASE_PROJECT_ID_PATTERN.fullmatch(args.firebase_project):
             raise ProbeTokenError('firebase_project')
-        token = mint_probe_token(args.secret_project, args.firebase_project)
+        token = mint_probe_token(
+            args.secret_project,
+            args.firebase_project,
+            signer_credentials_file=args.signer_credentials_file,
+        )
         write_token(args.token_output, token)
     except ProbeTokenError as error:
-        print(json.dumps({'suite': 'omi_firebase_release_probe_token', 'stage': error.stage, 'status': 'FAIL'}))
+        print(
+            json.dumps(
+                {
+                    'suite': 'omi_firebase_release_probe_token',
+                    'stage': error.stage,
+                    'error_class': error.error_class,
+                    'status': 'FAIL',
+                }
+            )
+        )
         return 1
     finally:
         token = ''
