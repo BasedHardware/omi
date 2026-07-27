@@ -58,7 +58,39 @@ def _classify(question: str) -> str:
         return 'actions'
     if any(w in q for w in _CONVERSATION_WORDS):
         return 'conversations'
+    # A named day ("on 4 July") is asking what happened, which lives in
+    # conversations. Without this it fell through to a semantic memory search
+    # with nothing constraining it to the day.
+    if _explicit_date(question):
+        return 'conversations'
     return 'memories'
+
+
+# Screen capture files interface chrome into memories. Answering "what did I do
+# on 4 July" with "- Show less" is what prompted this: a button label scraped off
+# a page, stored as a fact, and returned as an answer.
+_UI_CHROME = frozenset(
+    {
+        'show less', 'show more', 'see more', 'see all', 'read more', 'learn more',
+        'click here', 'load more', 'view all', 'sign in', 'log in', 'sign up',
+        'accept all', 'got it', 'ok', 'cancel', 'submit', 'continue', 'next',
+        'back', 'close', 'done', 'menu', 'search', 'settings', 'home',
+    }
+)
+
+# Fewer than this many characters cannot carry a fact worth a line of the display.
+_MIN_FACT_CHARS = 15
+
+
+def _is_junk(line: str) -> bool:
+    """True for a retrieved line that is interface text rather than a fact."""
+    stripped = line.strip().rstrip('.').strip().lower()
+    if stripped in _UI_CHROME:
+        return True
+    if len(stripped) < _MIN_FACT_CHARS:
+        return True
+    # A "fact" with no verb-like structure and only one or two words is a label.
+    return len(stripped.split()) < 3
 
 
 def _clean_bullets(result_text: str, min_relevance: float = _MIN_RELEVANCE) -> list[str]:
@@ -80,7 +112,7 @@ def _clean_bullets(result_text: str, min_relevance: float = _MIN_RELEVANCE) -> l
             continue
 
         line = _META_RE.sub('', line).strip().rstrip(',;')
-        if line:
+        if line and not _is_junk(line):
             scored.append((score, line))
 
     # Stable sort keeps the tool's own ordering among equal scores.
@@ -103,7 +135,70 @@ _CONV_NOISE_RE = re.compile(
 _NO_RESULTS_RE = re.compile(r'^\s*(No\s+(conversations?|memories|results)\s+found|Error:)', re.IGNORECASE)
 
 
-def _compact_conversations(result_text: str, limit: int = 4) -> str:
+def _target_days(question: str) -> set[str]:
+    """The calendar days a question is asking about, as 'DD Mon YYYY' strings.
+
+    Matches the format the search results print ("23 Jul 2026 at 16:08"), so the
+    filtering can happen here rather than as a server-side window -- which costs
+    13.5s against 3.1s without.
+    """
+    from datetime import datetime, timedelta
+
+    local_tz = datetime.now().astimezone().tzinfo
+    today = datetime.now(local_tz).date()
+
+    def fmt(day) -> str:
+        return f'{day.day:02d} {day.strftime("%b")} {day.year}'
+
+    q = question.lower()
+    if 'yesterday' in q:
+        return {fmt(today - timedelta(days=1))}
+    if 'today' in q or 'this morning' in q:
+        return {fmt(today)}
+    if 'this week' in q:
+        return {fmt(today - timedelta(days=n)) for n in range(8)}
+    if 'last week' in q:
+        return {fmt(today - timedelta(days=n)) for n in range(7, 15)}
+
+    window = _explicit_date(question)
+    if window:
+        stamp = datetime.fromisoformat(window['start_date']).date()
+        return {fmt(stamp)}
+    return set()
+
+
+# "23 Jul 2026 at 16:08 America/New_York (Technology)" begins each result block.
+_CONV_DATE_RE = re.compile(r'^\s*(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\b')
+
+
+def _blocks_matching_days(result_text: str, days: set[str]) -> str:
+    """Keep only the result blocks whose date line falls on one of `days`."""
+    blocks: list[list[str]] = []
+    current: list[str] = []
+    for line in result_text.splitlines():
+        if re.match(r'^\s*Conversation\s*#\d+', line, re.IGNORECASE):
+            if current:
+                blocks.append(current)
+            current = []
+        current.append(line)
+    if current:
+        blocks.append(current)
+
+    kept: list[str] = []
+    for block in blocks:
+        text = '\n'.join(block)
+        stamp = None
+        for line in block:
+            found = _CONV_DATE_RE.match(line.strip())
+            if found:
+                stamp = found.group(1)
+                break
+        if stamp and any(stamp.lstrip('0') == day.lstrip('0') for day in days):
+            kept.append(text)
+    return '\n'.join(kept)
+
+
+def _compact_conversations(result_text: str, limit: int = 4, only_days: set[str] | None = None) -> str:
     """Reduce a conversation dump to the few lines worth reading on glasses.
 
     The raw result leads with `Conversation #1`, a timezone-qualified timestamp,
@@ -116,6 +211,10 @@ def _compact_conversations(result_text: str, limit: int = 4) -> str:
     # 'What did I do yesterday?' in the specified date range.").
     if _NO_RESULTS_RE.match(body):
         return ''
+    if only_days:
+        body = _blocks_matching_days(body, only_days)
+        if not body.strip():
+            return ''
     kept: list[str] = []
     for raw_line in body.splitlines():
         line = raw_line.strip()
@@ -183,6 +282,66 @@ def _day_bounds(days_ago_start: int, days_ago_end: int) -> dict[str, str]:
     }
 
 
+_MONTHS = {
+    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+}
+_MONTH_ALT = '|'.join(_MONTHS)
+# "4 July", "July 4", "4th of July", "on Jul 4th" -- both orders, optional
+# ordinal suffix, optional "of".
+# `\w*` after each month prefix absorbs the rest of the full name. Without it on
+# BOTH branches, "4 July" fails to match while "July 4" succeeds: the alternation
+# matches "jul" and then demands a word boundary that the "y" denies.
+_EXPLICIT_DATE_RE = re.compile(
+    rf'\b(?:(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?({_MONTH_ALT})\w*'
+    rf'|({_MONTH_ALT})\w*\s+(\d{{1,2}})(?:st|nd|rd|th)?)\b',
+    re.IGNORECASE,
+)
+
+
+def _explicit_date(question: str) -> dict[str, str] | None:
+    """Bounds for a named calendar day, e.g. "what did I do on 4 July".
+
+    Without this, a dated question falls through to a semantic memory search --
+    "What did I do on 4 July that was not work?" answered "- Show less", a
+    fragment of UI chrome, because nothing constrained it to that day.
+
+    A month later than today is read as last year, since people ask about days
+    that have happened.
+    """
+    from datetime import datetime, time, timedelta
+
+    match = _EXPLICIT_DATE_RE.search(question)
+    if not match:
+        return None
+
+    day_str, month_str = (match.group(1), match.group(2)) if match.group(1) else (match.group(4), match.group(3))
+    try:
+        day = int(day_str)
+    except (TypeError, ValueError):
+        return None
+    month = _MONTHS.get(month_str.lower()[:3]) if month_str else None
+    if not month or not 1 <= day <= 31:
+        return None
+
+    local_tz = datetime.now().astimezone().tzinfo
+    today = datetime.now(local_tz).date()
+    year = today.year
+    try:
+        target = today.replace(year=year, month=month, day=day)
+    except ValueError:
+        return None  # e.g. 31 February
+    if target > today:
+        target = target.replace(year=year - 1)
+
+    return {
+        'start_date': datetime.combine(target, time.min, tzinfo=local_tz).isoformat(),
+        'end_date': datetime.combine(
+            target + timedelta(days=1) - timedelta(seconds=1), time.max.replace(microsecond=0), tzinfo=local_tz
+        ).replace(hour=23, minute=59, second=59).isoformat(),
+    }
+
+
 def _date_window(question: str) -> dict[str, str]:
     """Date bounds for a temporal question, so "yesterday" means yesterday.
 
@@ -199,7 +358,8 @@ def _date_window(question: str) -> dict[str, str]:
         return _day_bounds(7, 0)
     if 'last week' in q:
         return _day_bounds(14, 7)
-    return {}
+    explicit = _explicit_date(question)
+    return explicit or {}
 
 
 async def _search_or_empty(client, tool: str, payload: dict) -> str:
@@ -234,11 +394,16 @@ def _is_too_vague(question: str) -> bool:
 
 async def fast_answer(client, question: str) -> str:
     """Answer from Omi's stores directly, in roughly two seconds."""
-    if _is_too_vague(question):
+    kind = _classify(question)
+
+    # Only a question with no recognisable intent can be a stray syllable. Asking
+    # this before classifying rejected "What did I do on 4 July?", because
+    # stopwords and the bare digit leave "july" as the single content word --
+    # which looks exactly like a mis-transcription and is not one.
+    if kind == 'memories' and _is_too_vague(question):
         log.info('fastpath: question too vague to search on (%.40r)', question)
         return 'Ask me something about your day, your people, or your tasks.'
 
-    kind = _classify(question)
     log.info('fastpath: %s', kind)
 
     if kind == 'actions':
@@ -251,17 +416,19 @@ async def fast_answer(client, question: str) -> str:
         return _format(lines, 'Nothing open right now.', limit=4)
 
     if kind == 'conversations':
-        window = _date_window(question)
-        payload = {'query': question, 'limit': 3, 'include_transcript': False, **window}
-        # The tool reports `is_error` for an empty result as well as a real
-        # failure. Treating "nothing that day" as a failure sent the request down
-        # the 6s agent path to be told the same thing.
+        target = _target_days(question)
+        # Deliberately NOT passing start_date/end_date. Measured on the live
+        # account, the same query costs 13.5s with a server-side date window and
+        # 3.1s without -- and 13.5s is past the timeout this whole path exists to
+        # beat. Fetching wider and filtering by date here is the cheaper way to
+        # get the same correctness.
+        payload = {'query': question, 'limit': 8, 'include_transcript': False}
         text = await _search_or_empty(client, 'conversations/search', payload)
-        compact = _compact_conversations(text)
+        compact = _compact_conversations(text, only_days=target)
         if compact:
             return compact
-        if window:
-            return 'Nothing recorded for that period.'
+        if target:
+            return 'Nothing recorded for that day.'
         return 'Nothing in your conversations about that.'
 
     # Default: memories only.

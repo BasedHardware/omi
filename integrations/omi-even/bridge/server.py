@@ -53,6 +53,10 @@ EVEN_TOKEN = os.getenv('OMI_EVEN_TOKEN') or secrets.token_urlsafe(24)
 # cap our own wait and return whatever partial answer exists rather than nothing.
 AGENT_DEADLINE_S = float(os.getenv('OMI_EVEN_DEADLINE', '20'))
 
+# Ceiling for the fast path. Answers that took 5.6s+ were never rendered on the
+# glasses, so anything approaching that is already lost -- better to say so.
+FAST_DEADLINE_S = float(os.getenv('OMI_EVEN_FAST_DEADLINE', '5'))
+
 _CONTRACT_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'add-agent-capture.log')
 
 # Larger than any answer Omi produces; used to strip markup without truncating.
@@ -173,10 +177,17 @@ async def _answer_for_glasses(question: str) -> str:
     if not os.getenv('OMI_EVEN_FULL_AGENT'):
         started = time.monotonic()
         try:
-            answer = await fast_answer(omi, question)
+            # A hard ceiling, because being late is the same as failing here: the
+            # glasses show nothing at all. One query was measured at 14s when a
+            # server-side date window made the search pathologically slow, which
+            # is exactly the outcome this path exists to prevent.
+            answer = await asyncio.wait_for(fast_answer(omi, question), timeout=FAST_DEADLINE_S)
             fitted = fit_for_glasses(answer, limit=DISPLAY_LIMIT)
             log.info('fastpath answered in %.1fs (%d chars shown)', time.monotonic() - started, len(fitted))
             return fitted or "I don't have anything on that."
+        except TimeoutError:
+            log.warning('fastpath exceeded %.0fs; answering rather than hanging', FAST_DEADLINE_S)
+            return 'That took too long to look up. Try asking a shorter question.'
         except Exception as exc:  # noqa: BLE001 - fall back rather than fail
             log.warning('fastpath failed (%s); falling back to the agent', exc)
 

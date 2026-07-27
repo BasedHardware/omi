@@ -101,21 +101,25 @@ def test_a_question_with_no_time_reference_has_no_window():
 def test_relevance_metadata_is_stripped_and_weak_hits_dropped():
     raw = (
         "Found 3 memories matching 'x':\n\n"
-        '- A strong fact. (relevance: 0.62, category: interesting, date: 2026-07-27)\n'
-        '- A weak fact. (relevance: 0.31, category: system, date: 2026-07-08)\n'
+        '- Archit works with David on the trial engagement. (relevance: 0.62, category: interesting, date: 2026-07-27)\n'
+        '- A barely related note about something else. (relevance: 0.31, category: system, date: 2026-07-08)\n'
     )
     lines = _clean_bullets(raw)
-    assert lines == ['A strong fact.']
+    assert lines == ['Archit works with David on the trial engagement.']
     assert 'relevance' not in ' '.join(lines)
 
 
 def test_bullets_come_back_strongest_first():
     raw = (
-        '- Middling. (relevance: 0.50)\n'
-        '- Best. (relevance: 0.90)\n'
-        '- Also good. (relevance: 0.70)\n'
+        '- The middling fact about a thing. (relevance: 0.50)\n'
+        '- The best fact about a thing. (relevance: 0.90)\n'
+        '- Another good fact about a thing. (relevance: 0.70)\n'
     )
-    assert _clean_bullets(raw) == ['Best.', 'Also good.', 'Middling.']
+    assert _clean_bullets(raw) == [
+        'The best fact about a thing.',
+        'Another good fact about a thing.',
+        'The middling fact about a thing.',
+    ]
 
 
 def test_conversation_scaffolding_is_removed():
@@ -201,11 +205,37 @@ async def test_a_general_knowledge_question_admits_it_does_not_know():
 
 
 @pytest.mark.asyncio
-async def test_a_temporal_question_sends_a_date_window():
+async def test_a_temporal_question_does_not_use_a_server_side_date_window():
+    """Date filtering happens here, not in the query -- on purpose.
+
+    Measured on the live account, the same question cost 13.5s with a
+    start_date/end_date window and 3.1s without. 13.5s is past the timeout this
+    whole path exists to beat, so the window would have made the answer correct
+    and invisible.
+    """
     client = FakeClient(conversations='- something')
     await fast_answer(client, 'What did I do yesterday?')
     payload = client.payloads['conversations/search']
-    assert 'start_date' in payload and 'T' in payload['start_date']
+    assert 'start_date' not in payload, 'a server-side window makes this 4x slower'
+    assert payload['limit'] >= 8, 'fetch wider, since filtering happens client-side'
+
+
+@pytest.mark.asyncio
+async def test_results_from_the_wrong_day_are_filtered_out():
+    """The correctness the server-side window used to provide, done locally."""
+    conversations = (
+        "Found 2 conversations matching 'x':\n\n"
+        'Conversation #1\n'
+        '04 Jul 2026 at 12:00 America/New_York (Social)\n'
+        'Friends share burgers on july fourth\n\n'
+        'Conversation #2\n'
+        '23 Jul 2026 at 16:08 America/New_York (Technology)\n'
+        'Archit investigates web search\n'
+    )
+    client = FakeClient(conversations=conversations)
+    answer = await fast_answer(client, 'What did I do on 4 July?')
+    assert 'burgers' in answer
+    assert 'web search' not in answer, 'a conversation from another day leaked through'
 
 
 @pytest.mark.asyncio
