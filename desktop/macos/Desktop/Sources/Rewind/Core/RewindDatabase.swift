@@ -144,7 +144,7 @@ actor RewindDatabase {
     domain == "GRDB"
       || domain == "GRDB.DatabaseError"
       || domain == "SQLite3"
-      || domain == NSSQLiteErrorDomain
+      || domain == "NSSQLiteErrorDomain"
   }
 
   /// Handle corruption/I/O failures from cleanup and other maintenance operations.
