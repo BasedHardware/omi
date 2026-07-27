@@ -28,6 +28,8 @@ SOURCE_SHA = "a" * 40
 LATER_NON_DESKTOP_SHA = "b" * 40
 LATEST_TAG = "v0.0.1+1-macos"
 RELEASABLE_PATH = "desktop/macos/Desktop/Sources/AppDelegate.swift"
+QUALIFICATION_LIFECYCLE_PATH = "scripts/dev-harness/dev_harness/qualification.py"
+UNRELATED_DEV_HARNESS_PATH = "scripts/dev-harness/dev_harness/config.py"
 
 
 def _parse_push_filter(workflow_text: str) -> tuple[list[str], set[str]]:
@@ -165,10 +167,13 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             "--",
             "desktop/macos",
             "codemagic.yaml",
+            QUALIFICATION_LIFECYCLE_PATH,
             ".github/scripts/plan-desktop-release.py",
             ".github/scripts/desktop-release-source-identity.py",
             ".github/scripts/publish-desktop-candidate-tag.py",
+            ".github/scripts/verify-pre-tag-readiness.py",
             ".github/workflows/desktop_auto_release.yml",
+            ".github/workflows/desktop_qualify_beta.yml",
             ".github/workflows/desktop-swift-ci.yml",
         ]
 
@@ -177,6 +182,84 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
         git.assert_called_once_with(expected_args)
         self.assertEqual(changes, ["codemagic.yaml"])
+
+    def test_qualification_lifecycle_change_after_latest_tag_creates_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "git", return_value=QUALIFICATION_LIFECYCLE_PATH) as git,
+                patch.object(planner, "latest_releasable_desktop_sha", return_value=SOURCE_SHA),
+                patch.object(planner, "latest_change_age_seconds", return_value=601),
+                patch.object(planner, "existing_source_candidate_reason", return_value=None),
+                patch.object(planner, "wait_for_required_source_checks", return_value=planner.SourceCheckGate("ready")) as wait,
+                patch.object(planner, "active_release_reason", return_value=None),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        git.assert_called_once_with(
+            [
+                "diff",
+                "--name-only",
+                "--diff-filter=ACDMR",
+                f"{LATEST_TAG}..HEAD",
+                "--",
+                *planner.DESKTOP_RELEASE_PATHS,
+            ]
+        )
+        wait.assert_called_once_with(
+            REPOSITORY,
+            SOURCE_SHA,
+            wait_seconds=planner.SOURCE_CHECK_WAIT_SECONDS,
+            poll_seconds=planner.SOURCE_CHECK_POLL_SECONDS,
+        )
+        self.assertIn(f"source_sha={SOURCE_SHA}", outputs)
+        self.assertIn("should_release=true", outputs)
+
+    def test_unrelated_dev_harness_change_after_latest_tag_does_not_create_candidate(self) -> None:
+        git_calls: list[list[str]] = []
+
+        def scoped_git(args: list[str], *, check: bool = True) -> str:
+            git_calls.append(args)
+            if args[0] == "diff":
+                # Model Git's pathspec filtering: config.py changed, but it is
+                # absent from the planner's release scope and therefore cannot
+                # appear in the diff result.
+                return UNRELATED_DEV_HARNESS_PATH if UNRELATED_DEV_HARNESS_PATH in args else ""
+            self.fail(f"unexpected git invocation: {args}")
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "git", side_effect=scoped_git),
+                patch.object(planner, "wait_for_required_source_checks") as wait,
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            git_calls,
+            [
+                [
+                    "diff",
+                    "--name-only",
+                    "--diff-filter=ACDMR",
+                    f"{LATEST_TAG}..HEAD",
+                    "--",
+                    *planner.DESKTOP_RELEASE_PATHS,
+                ]
+            ],
+        )
+        wait.assert_not_called()
+        self.assertIn("source_sha=", outputs)
+        self.assertIn("should_release=false", outputs)
+        self.assertIn("No releasable desktop app changes", outputs)
 
     def test_exact_source_sha_success_for_every_required_check_passes_the_gate(self) -> None:
         checked: list[tuple[str, str]] = []
@@ -412,23 +495,27 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertEqual(workflow.count('CANDIDATE_SHA="$MAIN_SHA"'), 2)
         self.assertIn('BRANCH="changelog/v${VERSION}-${PLANNED_SOURCE_SHA:0:12}"', workflow)
         self.assertIn('CHANGELOG_PARENT_SHA="$(git rev-parse "${CHANGELOG_COMMIT}^1")"', workflow)
+        self.assertEqual(workflow.count('--release-tag "$RELEASE_TAG"'), 3)
         self.assertIn('--changelog-parent-sha "$CHANGELOG_PARENT_SHA"', workflow)
         self.assertIn('python3 .github/scripts/publish-desktop-candidate-tag.py', workflow)
         self.assertIn('test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"', workflow)
 
-    def test_candidate_creation_has_no_selfhosted_pre_tag_gate(self) -> None:
-        # Continuous deployment: candidate creation (tag-release) must depend only
-        # on the hosted planner gate, NOT on a self-hosted pre-candidate readiness
-        # job. A self-hosted gate before immutable tag creation was a single point
-        # of failure (a down runner blocked ALL releases) and contradicted "create
-        # on every change, then qualify". Heavy validation belongs to
-        # desktop_qualify_beta.yml, which runs AFTER the candidate exists.
+    def test_tag_release_runs_readiness_verification_and_publish_in_one_m1_transaction(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertNotIn("pre-tag-readiness:", workflow)
-        self.assertNotIn("desktop-pre-tag-readiness-evidence", workflow)
-        self.assertNotIn("verify-pre-tag-readiness.py", workflow)
-        tag_release = workflow.split("\n  tag-release:\n", 1)[1].split("\n  ", 1)[0]
-        self.assertIn("needs: [plan-release]", tag_release)
+        self.assertNotIn("pre-tag-readiness:\n", workflow)
+        self.assertNotIn("needs: pre-tag-readiness", workflow)
+        tag_release = workflow.split("\n  tag-release:\n", 1)[1]
+        self.assertIn("runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]", tag_release)
+        self.assertIn("group: desktop-auto-release-tag-main", tag_release)
+        self.assertIn("cancel-in-progress: false", tag_release)
+        self.assertIn("desktop/macos/scripts/pre-tag-readiness.sh", tag_release)
+        self.assertIn(".github/scripts/verify-pre-tag-readiness.py verify", tag_release)
+        self.assertIn(".github/scripts/publish-desktop-candidate-tag.py", tag_release)
+        self.assertLess(tag_release.index("Bind immutable planner evidence to fresh main"), tag_release.index("pre-tag-readiness.sh"))
+        self.assertLess(tag_release.index("pre-tag-readiness.sh"), tag_release.index("verify-pre-tag-readiness.py verify"))
+        self.assertLess(tag_release.index("verify-pre-tag-readiness.py verify"), tag_release.index("publish-desktop-candidate-tag.py"))
+        self.assertIn("if: always()", tag_release)
+        self.assertIn("desktop-pre-tag-readiness", tag_release)
 
     def test_push_paths_cover_releasable_desktop_paths(self) -> None:
         # Continuous deployment: every releasable desktop input the planner
