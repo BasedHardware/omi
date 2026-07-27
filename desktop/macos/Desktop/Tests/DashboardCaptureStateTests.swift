@@ -103,20 +103,24 @@ final class DashboardCaptureStateTests: XCTestCase {
       "An early return drops the hotkey's input focus when chat is already visible")
   }
 
-  func testSecondaryHomePagesReturnHomeOnEscape() throws {
-    let source = try desktopHomeSource()
-
-    // Matched without leading indentation: the escape handler's contract is that
-    // it calls navigateHomeOnEscapeIfNeeded, not how deeply the view hierarchy
-    // that carries it happens to be nested. Pinning the indent made this fail
-    // when the content container was extracted into its own `some View`.
-    XCTAssertTrue(
-      source.range(
-        of: #"\.onExitCommand\s*\{\s*navigateHomeOnEscapeIfNeeded\(\)\s*\}"#,
-        options: .regularExpression) != nil)
-    XCTAssertTrue(source.contains("[.conversations, .memories, .tasks, .rewind].contains(item)"))
-    XCTAssertTrue(source.contains("selectedIndex = SidebarNavItem.dashboard.rawValue"))
-    XCTAssertFalse(source.contains("[.conversations, .chat, .memories, .tasks, .rewind]"))
+  func testSecondaryHomePagesReturnHomeOnEscape() {
+    for item in [SidebarNavItem.conversations, .memories, .tasks, .rewind] {
+      XCTAssertTrue(
+        DesktopHomeEscapeNavigation.shouldNavigateHome(
+          selectedIndex: item.rawValue,
+          usesLegacyHomeDesign: false
+        ))
+    }
+    XCTAssertFalse(
+      DesktopHomeEscapeNavigation.shouldNavigateHome(
+        selectedIndex: SidebarNavItem.chat.rawValue,
+        usesLegacyHomeDesign: false
+      ))
+    XCTAssertFalse(
+      DesktopHomeEscapeNavigation.shouldNavigateHome(
+        selectedIndex: SidebarNavItem.tasks.rawValue,
+        usesLegacyHomeDesign: true
+      ))
   }
 
   func testHomeConnectorButtonsOpenSheetsDirectly() throws {
@@ -304,15 +308,17 @@ final class DashboardCaptureStateTests: XCTestCase {
   func testHomeOverlaysBehaveLikeModals() throws {
     let dashboard = try dashboardSource()
     let apps = try appsSource()
+    let escapeKeyHandler = try escapeKeyHandlerSource()
     let normalizedDashboard = normalizedWhitespace(dashboard)
 
     // Esc must dismiss the topmost overlay. Custom ZStack overlays are not
     // NSWindow sheets, so Esc comes from the shared catcher's window-scoped
     // key monitor — onExitCommand never fires (the overlays are never
     // focused) and hidden cancel-shortcut buttons get culled from dispatch.
-    XCTAssertTrue(apps.contains("struct OverlayModalEscapeCatcher: NSViewRepresentable"))
-    XCTAssertTrue(apps.contains("NSEvent.addLocalMonitorForEvents(matching: .keyDown)"))
-    XCTAssertTrue(apps.contains("event.window === window"))
+    XCTAssertTrue(escapeKeyHandler.contains("struct OverlayModalEscapeCatcher: View"))
+    XCTAssertTrue(escapeKeyHandler.contains("struct EscapeKeyHandler: NSViewRepresentable"))
+    XCTAssertTrue(escapeKeyHandler.contains("NSEvent.addLocalMonitorForEvents(matching: .keyDown)"))
+    XCTAssertTrue(escapeKeyHandler.contains("registration.window === window"))
     XCTAssertTrue(
       dashboard.contains("if appsPopupAcceptsInput && !homeConnectSheetIsPresented"),
       "The apps popup owns Esc only while the connect sheet is not presented"

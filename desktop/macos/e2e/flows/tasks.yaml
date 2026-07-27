@@ -6,6 +6,7 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TasksEscapeHandling.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
 preconditions:
   - auth_ready

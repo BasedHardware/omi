@@ -1,6 +1,12 @@
 import OmiTheme
 import SwiftUI
 
+enum LiveNotesEscapeHandling {
+  static func shouldCancelEdit(editingNoteId: Int64?) -> Bool {
+    editingNoteId != nil
+  }
+}
+
 /// Live notes view showing AI-generated and manual notes during recording
 struct LiveNotesView: View {
   @ObservedObject var monitor: LiveNotesMonitor = .shared
@@ -36,6 +42,11 @@ struct LiveNotesView: View {
       manualInputView
     }
     .background(OmiColors.backgroundSecondary)
+    .onEscapeKey(priority: .editing) {
+      guard LiveNotesEscapeHandling.shouldCancelEdit(editingNoteId: editingNoteId) else { return false }
+      cancelEdit()
+      return true
+    }
   }
 
   // MARK: - Header

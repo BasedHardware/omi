@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/EscapeKeyHandler.swift
 preconditions:
   - auth_ready
 

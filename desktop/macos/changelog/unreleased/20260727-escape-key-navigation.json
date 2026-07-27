@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Escape so it closes active desktop editing and overlays before navigating home"
+}
