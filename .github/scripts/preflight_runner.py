@@ -492,6 +492,28 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_repo_root() -> Path:
+    # Git runs hooks with the working directory at the top of the invoking work
+    # tree, and the pre-push dispatcher cd's to the repo root before invoking
+    # this runner. Fall back to that working directory when `git rev-parse
+    # --show-toplevel` cannot resolve a work tree: in a linked worktree whose
+    # git context resolves to a git dir rather than a work tree, show-toplevel
+    # exits 128 ("this operation must be run in a work tree") and this runner
+    # would otherwise abort the gate, forcing a --no-verify push.
+    try:
+        toplevel = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        toplevel = ""
+    return Path(toplevel or Path.cwd()).resolve()
+
+
 def main() -> int:
     if sys.argv[1:2] == [WINDOWS_CHILD_BOOTSTRAP_FLAG]:
         return run_windows_child_bootstrap(sys.argv[2:])
@@ -503,13 +525,7 @@ def main() -> int:
     if not command:
         print("FAIL: preflight runner requires a command after --", file=sys.stderr)
         return 2
-    root = Path(
-        subprocess.check_output(
-            ["git", "rev-parse", "--show-toplevel"],
-            text=True,
-            encoding="utf-8",
-        ).strip()
-    ).resolve()
+    root = resolve_repo_root()
     # Git supplies ref updates on a pipe. Manual preflight runs inherit a TTY;
     # treating that as empty input avoids waiting forever for an interactive EOF.
     stdin_data = "" if sys.stdin.isatty() else sys.stdin.read()
