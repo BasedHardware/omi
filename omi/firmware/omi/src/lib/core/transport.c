@@ -1068,7 +1068,9 @@ static int ensure_local_ble_identity(void)
 
 #define NET_BUFFER_HEADER_SIZE 3
 #define ATT_NOTIFICATION_OVERHEAD_SIZE 3
-#define RING_BUFFER_HEADER_SIZE 2
+#define RING_BUFFER_LENGTH_BYTES 2U
+#define RING_BUFFER_TIMESTAMP_BYTES sizeof(uint32_t)
+#define RING_BUFFER_HEADER_SIZE (RING_BUFFER_LENGTH_BYTES + RING_BUFFER_TIMESTAMP_BYTES)
 static uint8_t tx_queue[NETWORK_RING_BUF_SIZE * (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)];
 static uint8_t tx_buffer[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
 static uint8_t tx_buffer_2[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
@@ -1091,6 +1093,8 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     // Copy data (TODO: Avoid this copy)
     tx_buffer_2[0] = size & 0xFF;
     tx_buffer_2[1] = (size >> 8) & 0xFF;
+    uint32_t capture_timestamp = ring_record_timestamp_or_zero(rtc_is_valid(), get_utc_time());
+    memcpy(tx_buffer_2 + RING_BUFFER_LENGTH_BYTES, &capture_timestamp, sizeof(capture_timestamp));
     memcpy(tx_buffer_2 + RING_BUFFER_HEADER_SIZE, data, size);
 
     // Write to ring buffer
@@ -1295,17 +1299,18 @@ static void report_and_clear_terminal_storage_tail(void)
     }
 }
 
-static size_t enqueue_storage_record(const uint8_t *record, size_t length, void *context)
+static size_t enqueue_storage_record(const uint8_t *record, size_t length, uint32_t timestamp, void *context)
 {
     ARG_UNUSED(context);
-    return write_to_file(record, (uint32_t) length);
+    return write_to_file_at_timestamp(record, (uint32_t) length, timestamp);
 }
 
-static audio_storage_packer_result_t try_write_frame_to_storage(const uint8_t *frame, size_t frame_size)
+static audio_storage_packer_result_t
+try_write_frame_to_storage(const uint8_t *frame, size_t frame_size, uint32_t frame_timestamp)
 {
     k_mutex_lock(&storage_packer_mutex, K_FOREVER);
     audio_storage_packer_result_t result =
-        audio_storage_packer_push(&storage_packer, frame, frame_size, enqueue_storage_record, NULL);
+        audio_storage_packer_push(&storage_packer, frame, frame_size, frame_timestamp, enqueue_storage_record, NULL);
     k_mutex_unlock(&storage_packer_mutex);
 
     if (result == AUDIO_STORAGE_PACKER_ACCEPTED) {
@@ -1320,7 +1325,9 @@ static audio_storage_packer_result_t try_write_frame_to_storage(const uint8_t *f
 
 static bool write_current_frame_to_storage(void)
 {
-    return try_write_frame_to_storage(tx_buffer + RING_BUFFER_HEADER_SIZE, tx_buffer_size) ==
+    uint32_t frame_timestamp;
+    memcpy(&frame_timestamp, tx_buffer + RING_BUFFER_LENGTH_BYTES, sizeof(frame_timestamp));
+    return try_write_frame_to_storage(tx_buffer + RING_BUFFER_HEADER_SIZE, tx_buffer_size, frame_timestamp) ==
            AUDIO_STORAGE_PACKER_ACCEPTED;
 }
 

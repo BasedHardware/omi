@@ -2168,6 +2168,11 @@ void sd_notify_ble_state(bool connected)
 
 uint32_t write_to_file(const uint8_t *data, uint32_t length)
 {
+    return write_to_file_at_timestamp(data, length, ring_record_timestamp_or_zero(rtc_is_valid(), get_utc_time()));
+}
+
+uint32_t write_to_file_at_timestamp(const uint8_t *data, uint32_t length, uint32_t timestamp)
+{
     static int64_t last_write_err_log_ms;
     static int64_t last_shutdown_drop_log_ms;
     static int64_t last_not_ready_log_ms;
@@ -2207,7 +2212,7 @@ uint32_t write_to_file(const uint8_t *data, uint32_t length)
     req.type = REQ_WRITE_DATA;
     memcpy(req.u.write.buf, data, length);
     req.u.write.len = length;
-    req.u.write.timestamp = ring_record_timestamp_or_zero(rtc_is_valid(), get_utc_time());
+    req.u.write.timestamp = timestamp;
 
     int ret = k_msgq_put(&sd_msgq, &req, K_NO_WAIT);
     if (ret != 0) {

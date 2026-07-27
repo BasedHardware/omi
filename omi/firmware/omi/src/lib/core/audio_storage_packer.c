@@ -35,7 +35,7 @@ static bool submit_record(audio_storage_packer_t *packer, audio_storage_writer_t
         memset(packer->record + packer->used, 0, sizeof(packer->record) - packer->used);
     }
 
-    if (writer(packer->record, sizeof(packer->record), context) != sizeof(packer->record)) {
+    if (writer(packer->record, sizeof(packer->record), packer->timestamp, context) != sizeof(packer->record)) {
         /*
          * Keep used at the record size after padding. A later push will retry
          * this exact record before consuming another frame.
@@ -46,6 +46,7 @@ static bool submit_record(audio_storage_packer_t *packer, audio_storage_writer_t
 
     memset(packer->record, 0, sizeof(packer->record));
     packer->used = 0U;
+    packer->timestamp = 0U;
     return true;
 }
 
@@ -61,6 +62,7 @@ void audio_storage_packer_init(audio_storage_packer_t *packer)
 audio_storage_packer_result_t audio_storage_packer_push(audio_storage_packer_t *packer,
                                                         const uint8_t *frame,
                                                         size_t frame_length,
+                                                        uint32_t frame_timestamp,
                                                         audio_storage_writer_t writer,
                                                         void *context)
 {
@@ -83,6 +85,9 @@ audio_storage_packer_result_t audio_storage_packer_push(audio_storage_packer_t *
         return AUDIO_STORAGE_PACKER_BLOCKED;
     }
 
+    if (packer->used == 0U) {
+        packer->timestamp = frame_timestamp;
+    }
     packer->record[packer->used] = (uint8_t) frame_length;
     memcpy(packer->record + packer->used + 1U, frame, frame_length);
     packer->used += packed_length;

@@ -18,6 +18,7 @@
 
 typedef struct {
     uint8_t records[MAX_CAPTURED_RECORDS][AUDIO_STORAGE_RECORD_BYTES];
+    uint32_t timestamps[MAX_CAPTURED_RECORDS];
     size_t record_count;
     size_t rejected_writes;
 } fake_writer_t;
@@ -143,7 +144,7 @@ static void assert_stages(const fake_durable_disk_t *disk, const uint8_t *expect
     assert(memcmp(disk->stages, expected, count) == 0);
 }
 
-static size_t fake_write(const uint8_t *record, size_t length, void *context)
+static size_t fake_write(const uint8_t *record, size_t length, uint32_t timestamp, void *context)
 {
     fake_writer_t *writer = context;
 
@@ -155,6 +156,7 @@ static size_t fake_write(const uint8_t *record, size_t length, void *context)
     assert(length == AUDIO_STORAGE_RECORD_BYTES);
     assert(writer->record_count < MAX_CAPTURED_RECORDS);
     memcpy(writer->records[writer->record_count], record, length);
+    writer->timestamps[writer->record_count] = timestamp;
     writer->record_count++;
     return length;
 }
@@ -181,18 +183,19 @@ static void test_overflow_flushes_complete_record_and_zero_pads_tail(void)
     fill_frame(second, sizeof(second), 0x22);
     audio_storage_packer_init(&packer);
 
-    assert(audio_storage_packer_push(&packer, first, sizeof(first), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, first, sizeof(first), 100U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_ACCEPTED);
-    assert(audio_storage_packer_push(&packer, second, sizeof(second), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, second, sizeof(second), 101U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_ACCEPTED);
     assert(writer.record_count == 0U);
 
     uint8_t third[80];
     fill_frame(third, sizeof(third), 0x33);
-    assert(audio_storage_packer_push(&packer, third, sizeof(third), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, third, sizeof(third), 102U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_ACCEPTED);
 
     assert(writer.record_count == 1U);
+    assert(writer.timestamps[0] == 100U);
     assert_packed_frame(writer.records[0], 0U, first, sizeof(first));
     assert_packed_frame(writer.records[0], sizeof(first) + 1U, second, sizeof(second));
     for (size_t i = 402U; i < AUDIO_STORAGE_RECORD_BYTES; i++) {
@@ -201,6 +204,7 @@ static void test_overflow_flushes_complete_record_and_zero_pads_tail(void)
 
     assert(audio_storage_packer_flush(&packer, fake_write, &writer));
     assert(writer.record_count == 2U);
+    assert(writer.timestamps[1] == 102U);
     assert_packed_frame(writer.records[1], 0U, third, sizeof(third));
     for (size_t i = sizeof(third) + 1U; i < AUDIO_STORAGE_RECORD_BYTES; i++) {
         assert(writer.records[1][i] == 0U);
@@ -218,20 +222,22 @@ static void test_rejected_overflow_does_not_consume_or_reorder_new_frame(void)
     fill_frame(second, sizeof(second), 0x55);
     audio_storage_packer_init(&packer);
 
-    assert(audio_storage_packer_push(&packer, first, sizeof(first), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, first, sizeof(first), 200U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_ACCEPTED);
-    assert(audio_storage_packer_push(&packer, second, sizeof(second), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, second, sizeof(second), 201U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_BLOCKED);
     assert(writer.record_count == 0U);
     assert(audio_storage_packer_pending_bytes(&packer) == AUDIO_STORAGE_RECORD_BYTES);
 
-    assert(audio_storage_packer_push(&packer, second, sizeof(second), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, second, sizeof(second), 201U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_ACCEPTED);
     assert(writer.record_count == 1U);
+    assert(writer.timestamps[0] == 200U);
     assert_packed_frame(writer.records[0], 0U, first, sizeof(first));
 
     assert(audio_storage_packer_flush(&packer, fake_write, &writer));
     assert(writer.record_count == 2U);
+    assert(writer.timestamps[1] == 201U);
     assert_packed_frame(writer.records[1], 0U, second, sizeof(second));
 }
 
@@ -246,15 +252,16 @@ static void test_exact_fit_flushes_legacy_terminated_record_before_new_frame(voi
     fill_frame(second, sizeof(second), 0x77);
     audio_storage_packer_init(&packer);
 
-    assert(audio_storage_packer_push(&packer, first, sizeof(first), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, first, sizeof(first), 300U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_ACCEPTED);
-    assert(audio_storage_packer_push(&packer, second, sizeof(second), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, second, sizeof(second), 301U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_BLOCKED);
     assert(audio_storage_packer_pending_bytes(&packer) == AUDIO_STORAGE_RECORD_BYTES);
-    assert(audio_storage_packer_push(&packer, second, sizeof(second), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, second, sizeof(second), 301U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_ACCEPTED);
 
     assert(writer.record_count == 1U);
+    assert(writer.timestamps[0] == 300U);
     assert_packed_frame(writer.records[0], 0U, first, sizeof(first));
     for (size_t i = sizeof(first) + 1U; i < AUDIO_STORAGE_RECORD_BYTES; i++) {
         assert(writer.records[0][i] == 0U);
@@ -263,6 +270,7 @@ static void test_exact_fit_flushes_legacy_terminated_record_before_new_frame(voi
 
     assert(audio_storage_packer_flush(&packer, fake_write, &writer));
     assert(writer.record_count == 2U);
+    assert(writer.timestamps[1] == 301U);
     assert_packed_frame(writer.records[1], 0U, second, sizeof(second));
 }
 
@@ -273,8 +281,9 @@ static void test_invalid_frame_leaves_state_unchanged(void)
     uint8_t frame[1] = {0};
 
     audio_storage_packer_init(&packer);
-    assert(audio_storage_packer_push(&packer, frame, 0U, fake_write, &writer) == AUDIO_STORAGE_PACKER_INVALID);
-    assert(audio_storage_packer_push(NULL, frame, sizeof(frame), fake_write, &writer) == AUDIO_STORAGE_PACKER_INVALID);
+    assert(audio_storage_packer_push(&packer, frame, 0U, 400U, fake_write, &writer) == AUDIO_STORAGE_PACKER_INVALID);
+    assert(audio_storage_packer_push(NULL, frame, sizeof(frame), 400U, fake_write, &writer) ==
+           AUDIO_STORAGE_PACKER_INVALID);
     assert(audio_storage_packer_pending_bytes(&packer) == 0U);
     assert(writer.record_count == 0U);
 }
@@ -310,9 +319,9 @@ static void test_pre_pusher_queue_saturation_preserves_whole_frame(void)
     audio_storage_packer_init(&packer);
 
     assert(audio_delivery_route(false, true) == AUDIO_DELIVERY_STORAGE);
-    assert(
-        audio_storage_packer_push(&packer, saturated_queue_frame, sizeof(saturated_queue_frame), fake_write, &writer) ==
-        AUDIO_STORAGE_PACKER_ACCEPTED);
+    assert(audio_storage_packer_push(
+               &packer, saturated_queue_frame, sizeof(saturated_queue_frame), 500U, fake_write, &writer) ==
+           AUDIO_STORAGE_PACKER_ACCEPTED);
     assert(audio_storage_packer_flush(&packer, fake_write, &writer));
     assert(writer.record_count == 1U);
     assert_packed_frame(writer.records[0], 0U, saturated_queue_frame, sizeof(saturated_queue_frame));
@@ -741,17 +750,19 @@ static void test_connect_snapshot_flushes_existing_tail_after_queued_frames(void
     fill_frame(queued_before_connect, sizeof(queued_before_connect), 0x92);
     audio_storage_packer_init(&packer);
 
-    assert(audio_storage_packer_push(&packer, existing_tail, sizeof(existing_tail), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, existing_tail, sizeof(existing_tail), 600U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_ACCEPTED);
     assert(writer.record_count == 0U);
 
     /* The connect barrier drains already-queued audio before flushing. */
-    assert(
-        audio_storage_packer_push(&packer, queued_before_connect, sizeof(queued_before_connect), fake_write, &writer) ==
-        AUDIO_STORAGE_PACKER_ACCEPTED);
+    assert(audio_storage_packer_push(
+               &packer, queued_before_connect, sizeof(queued_before_connect), 601U, fake_write, &writer) ==
+           AUDIO_STORAGE_PACKER_ACCEPTED);
     assert(audio_storage_packer_flush(&packer, fake_write, &writer));
 
     assert(writer.record_count == 1U);
+    /* Reconnect flush must not replace the first captured frame's timestamp. */
+    assert(writer.timestamps[0] == 600U);
     assert_packed_frame(writer.records[0], 0U, existing_tail, sizeof(existing_tail));
     assert_packed_frame(
         writer.records[0], sizeof(existing_tail) + 1U, queued_before_connect, sizeof(queued_before_connect));
@@ -1375,7 +1386,7 @@ static void test_terminal_empty_queue_flush_clears_partial_packer_tail(void)
 
     fill_frame(frame, sizeof(frame), 0xE2);
     audio_storage_packer_init(&packer);
-    assert(audio_storage_packer_push(&packer, frame, sizeof(frame), fake_write, &writer) ==
+    assert(audio_storage_packer_push(&packer, frame, sizeof(frame), 700U, fake_write, &writer) ==
            AUDIO_STORAGE_PACKER_ACCEPTED);
     assert(audio_storage_packer_pending_bytes(&packer) > 0U);
     assert(writer.record_count == 0U);
@@ -1447,15 +1458,41 @@ static void test_bulk_link_policy_avoids_range_boundary_parameter_churn(void)
     assert(ring_bulk_link_policy_on_stop(&policy) == RING_BULK_LINK_ACTION_NONE);
 }
 
+static const voice_activity_gate_config_t test_voice_gate_config = {
+    .minimum_threshold = 250U,
+    .noise_margin = 100U,
+    .noise_rise_shift = 4U,
+    .noise_fall_shift = 2U,
+    .debounce_frames = 3U,
+    .hold_ms = 3000U,
+};
+
 static void test_voice_gate_rejects_silence_and_isolated_noise(void)
 {
     voice_activity_gate_t gate;
 
     voice_activity_gate_init(&gate);
-    assert(voice_activity_gate_process(&gate, 0U, 0, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
-    assert(voice_activity_gate_process(&gate, 900U, 100, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
-    assert(voice_activity_gate_process(&gate, 100U, 200, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 0U, 0, &test_voice_gate_config) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 900U, 100, &test_voice_gate_config) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 100U, 200, &test_voice_gate_config) == VOICE_ACTIVITY_GATE_BUFFER);
     assert(!gate.is_open);
+}
+
+static void test_voice_gate_tracks_room_noise_without_treating_it_as_speech(void)
+{
+    voice_activity_gate_t gate;
+
+    voice_activity_gate_init(&gate);
+    for (int frame = 0; frame < 100; frame++) {
+        uint32_t ambient = 100U + (uint32_t) frame * 3U;
+        assert(voice_activity_gate_process(&gate, ambient, frame * 100, &test_voice_gate_config) ==
+               VOICE_ACTIVITY_GATE_BUFFER);
+    }
+
+    assert(!gate.is_open);
+    assert(gate.noise_floor > 300U);
+    assert(gate.active_threshold > test_voice_gate_config.minimum_threshold);
+    assert(!gate.frame_active);
 }
 
 static void test_voice_gate_opens_after_debounce_and_keeps_hangover(void)
@@ -1463,27 +1500,32 @@ static void test_voice_gate_opens_after_debounce_and_keeps_hangover(void)
     voice_activity_gate_t gate;
 
     voice_activity_gate_init(&gate);
-    assert(voice_activity_gate_process(&gate, 700U, 0, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
-    assert(voice_activity_gate_process(&gate, 700U, 100, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
-    assert(voice_activity_gate_process(&gate, 700U, 200, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_OPEN);
+    assert(voice_activity_gate_process(&gate, 700U, 0, &test_voice_gate_config) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 700U, 100, &test_voice_gate_config) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 700U, 200, &test_voice_gate_config) == VOICE_ACTIVITY_GATE_OPEN);
     assert(gate.is_open);
 
-    assert(voice_activity_gate_process(&gate, 100U, 3199, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_FORWARD);
-    assert(voice_activity_gate_process(&gate, 100U, 3200, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 100U, 3199, &test_voice_gate_config) == VOICE_ACTIVITY_GATE_FORWARD);
+    assert(voice_activity_gate_process(&gate, 100U, 3200, &test_voice_gate_config) == VOICE_ACTIVITY_GATE_BUFFER);
     assert(!gate.is_open);
 }
 
 static void test_voice_gate_activity_extends_hangover_and_clock_regression_is_bounded(void)
 {
     voice_activity_gate_t gate;
+    voice_activity_gate_config_t config = test_voice_gate_config;
+    config.debounce_frames = 1U;
+    config.hold_ms = 1000U;
 
     voice_activity_gate_init(&gate);
-    assert(voice_activity_gate_process(&gate, 800U, 1000, 450U, 1U, 1000U) == VOICE_ACTIVITY_GATE_OPEN);
-    assert(voice_activity_gate_process(&gate, 800U, 1500, 450U, 1U, 1000U) == VOICE_ACTIVITY_GATE_FORWARD);
-    assert(voice_activity_gate_process(&gate, 0U, 2000, 450U, 1U, 1000U) == VOICE_ACTIVITY_GATE_FORWARD);
+    assert(voice_activity_gate_process(&gate, 800U, 1000, &config) == VOICE_ACTIVITY_GATE_OPEN);
+    uint32_t opening_noise_floor = gate.noise_floor;
+    assert(voice_activity_gate_process(&gate, 800U, 1500, &config) == VOICE_ACTIVITY_GATE_FORWARD);
+    assert(gate.noise_floor == opening_noise_floor);
+    assert(voice_activity_gate_process(&gate, 0U, 2000, &config) == VOICE_ACTIVITY_GATE_FORWARD);
 
-    assert(voice_activity_gate_process(&gate, 0U, 100, 450U, 1U, 1000U) == VOICE_ACTIVITY_GATE_FORWARD);
-    assert(voice_activity_gate_process(&gate, 0U, 1100, 450U, 1U, 1000U) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 0U, 100, &config) == VOICE_ACTIVITY_GATE_FORWARD);
+    assert(voice_activity_gate_process(&gate, 0U, 1100, &config) == VOICE_ACTIVITY_GATE_BUFFER);
 }
 
 static void test_codec_pcm_capacity_guard(void)
@@ -1535,6 +1577,7 @@ int main(void)
     test_power_on_queue_failure_reconciles_until_mount_or_newer_off();
     test_bulk_link_policy_avoids_range_boundary_parameter_churn();
     test_voice_gate_rejects_silence_and_isolated_noise();
+    test_voice_gate_tracks_room_noise_without_treating_it_as_speech();
     test_voice_gate_opens_after_debounce_and_keeps_hangover();
     test_voice_gate_activity_extends_hangover_and_clock_regression_is_bounded();
     test_codec_pcm_capacity_guard();

@@ -91,13 +91,45 @@ config OMI_ENABLE_VAD_GATE
     default n
 
 config OMI_VAD_ABS_THRESHOLD
-    int "VAD average absolute amplitude threshold"
+    int "VAD minimum average absolute amplitude threshold"
     range 1 32767
     default 600
     depends on OMI_ENABLE_VAD_GATE
     help
-        "Voice is considered active when average absolute amplitude of one
-         microphone frame is greater than or equal to this threshold."
+        "Lower bound for the adaptive voice threshold. The effective threshold
+         is the larger of this value and the learned ambient noise floor plus
+         OMI_VAD_NOISE_MARGIN."
+
+config OMI_VAD_NOISE_MARGIN
+    int "VAD amplitude margin above learned ambient noise"
+    range 1 32767
+    default 200
+    depends on OMI_ENABLE_VAD_GATE
+    help
+        "Average absolute amplitude required above the adaptive ambient noise
+         floor. This keeps microphone-gain and room-noise changes from turning
+         into continuous false activity while the minimum threshold protects
+         immediate speech at boot."
+
+config OMI_VAD_NOISE_RISE_SHIFT
+    int "VAD ambient rise smoothing shift"
+    range 1 15
+    default 4
+    depends on OMI_ENABLE_VAD_GATE
+    help
+        "Closed-gate ambient estimates rise by 1/(2^N) of the remaining
+         difference per 100 ms frame. Default 4 adapts upward over seconds
+         without immediately learning a transient as the noise floor."
+
+config OMI_VAD_NOISE_FALL_SHIFT
+    int "VAD ambient fall smoothing shift"
+    range 1 15
+    default 2
+    depends on OMI_ENABLE_VAD_GATE
+    help
+        "Closed-gate ambient estimates fall by 1/(2^N) of the remaining
+         difference per 100 ms frame. Default 2 recovers sensitivity quickly
+         when the wearer moves into a quieter room."
 
 config OMI_VAD_DEBOUNCE_FRAMES
     int "VAD debounce frames to start recording"
@@ -151,6 +183,26 @@ config OMI_AAD_SETTLE_MS
         "Time to wait after clocking the T5838 into hardware AAD sleep before
          arming the WAKE interrupt. Lets the mic settle its noise floor and
          swallow the entry transient so it does not immediately false-wake."
+
+config OMI_AAD_IDLE_HOLD_MS
+    int "T5838 AAD hold before any conversation (ms)"
+    range 500 30000
+    default 5000
+    depends on OMI_ENABLE_T5838_AAD
+    help
+        "How long to monitor with software VAD after boot or a hardware AAD
+         wake that does not become speech before returning to low-power AAD."
+
+config OMI_AAD_CONVERSATION_HOLD_MS
+    int "T5838 AAD hold after detected conversation speech (ms)"
+    range 10000 300000
+    default 120000
+    depends on OMI_ENABLE_T5838_AAD
+    help
+        "Keep the microphone available for cheap software VAD after speech so
+         a continuing conversation resumes without hardware sleep churn.
+         Opus and SD remain gated during pauses; default 120000 matches the
+         app's two-minute conversation boundary."
 
 config OMI_WATCHDOG_TIMEOUT_MS
     int "Watchdog timeout (ms)"

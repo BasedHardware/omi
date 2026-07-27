@@ -7,11 +7,12 @@
 
 #define AUDIO_STORAGE_RECORD_BYTES 440U
 
-typedef size_t (*audio_storage_writer_t)(const uint8_t *record, size_t length, void *context);
+typedef size_t (*audio_storage_writer_t)(const uint8_t *record, size_t length, uint32_t timestamp, void *context);
 
 typedef struct {
     uint8_t record[AUDIO_STORAGE_RECORD_BYTES];
     size_t used;
+    uint32_t timestamp;
 } audio_storage_packer_t;
 
 typedef enum {
@@ -61,11 +62,13 @@ void audio_storage_packer_init(audio_storage_packer_t *packer);
  * A full record is retained until writer accepts all 440 bytes. BLOCKED means
  * the new frame was not consumed and may be retried without duplication.
  * ACCEPTED means the frame is owned by the packer, even if its completed
- * record is still waiting for the writer.
+ * record is still waiting for the writer. The record retains the capture
+ * timestamp of its first frame across delayed flushes and writer retries.
  */
 audio_storage_packer_result_t audio_storage_packer_push(audio_storage_packer_t *packer,
                                                         const uint8_t *frame,
                                                         size_t frame_length,
+                                                        uint32_t frame_timestamp,
                                                         audio_storage_writer_t writer,
                                                         void *context);
 

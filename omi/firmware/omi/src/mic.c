@@ -116,9 +116,10 @@ static atomic_t aad_req_sleep = ATOMIC_INIT(0);    /* silence timer asked to sle
 static atomic_t aad_shutdown_quiesced = ATOMIC_INIT(0);
 static K_MUTEX_DEFINE(aad_transition_mutex);
 static bool shutdown_was_in_aad_sleep;
+static bool aad_conversation_active;
 static int64_t aad_last_voice_ms;
 
-static void aad_track_silence(const int16_t *buf, size_t n);
+static void aad_track_activity(bool frame_active);
 static int aad_hw_start(void);
 static void aad_wake_irq(bool enable);
 #endif
@@ -161,14 +162,31 @@ static bool forward_mic_frame(int16_t *buffer)
 #ifdef CONFIG_OMI_ENABLE_VAD_GATE
 static void process_voice_gated_buffer(int16_t *buffer, size_t frames)
 {
-    voice_activity_gate_action_t action = voice_activity_gate_process(&voice_gate,
-                                                                      avg_abs_amplitude(buffer, frames),
-                                                                      k_uptime_get(),
-                                                                      CONFIG_OMI_VAD_ABS_THRESHOLD,
-                                                                      CONFIG_OMI_VAD_DEBOUNCE_FRAMES,
-                                                                      CONFIG_OMI_VAD_HOLD_MS);
+    static const voice_activity_gate_config_t voice_gate_config = {
+        .minimum_threshold = CONFIG_OMI_VAD_ABS_THRESHOLD,
+        .noise_margin = CONFIG_OMI_VAD_NOISE_MARGIN,
+        .noise_rise_shift = CONFIG_OMI_VAD_NOISE_RISE_SHIFT,
+        .noise_fall_shift = CONFIG_OMI_VAD_NOISE_FALL_SHIFT,
+        .debounce_frames = CONFIG_OMI_VAD_DEBOUNCE_FRAMES,
+        .hold_ms = CONFIG_OMI_VAD_HOLD_MS,
+    };
+
+    uint32_t amplitude = avg_abs_amplitude(buffer, frames);
+    bool was_open = voice_gate.is_open;
+    voice_activity_gate_action_t action =
+        voice_activity_gate_process(&voice_gate, amplitude, k_uptime_get(), &voice_gate_config);
+
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    aad_track_activity(voice_gate.frame_active);
+#endif
 
     if (action == VOICE_ACTIVITY_GATE_BUFFER) {
+        if (was_open) {
+            LOG_INF("Voice gate closed: amplitude=%u floor=%u threshold=%u",
+                    amplitude,
+                    voice_gate.noise_floor,
+                    voice_gate.active_threshold);
+        }
         store_vad_preroll(buffer);
         return;
     }
@@ -187,7 +205,12 @@ static void process_voice_gated_buffer(int16_t *buffer, size_t frames)
             break;
         }
     }
-    LOG_INF("Voice gate opened: emitted %u/%u pre-roll frame(s)", emitted, vad_preroll_count);
+    LOG_INF("Voice gate opened: amplitude=%u floor=%u threshold=%u emitted=%u/%u pre-roll frame(s)",
+            amplitude,
+            voice_gate.noise_floor,
+            voice_gate.active_threshold,
+            emitted,
+            vad_preroll_count);
     vad_preroll_write = 0U;
     vad_preroll_count = 0U;
 }
@@ -225,10 +248,6 @@ static void process_audio_buffer(void *buffer, uint32_t size)
     }
 
     interleaved_stereo_to_mono(inter, frames, mono_buffer);
-
-#ifdef CONFIG_OMI_ENABLE_T5838_AAD
-    aad_track_silence(mono_buffer, frames);
-#endif
 
 #ifdef CONFIG_OMI_ENABLE_VAD_GATE
     process_voice_gated_buffer(mono_buffer, frames);
@@ -635,23 +654,29 @@ static void aad_thread_fn(void *p1, void *p2, void *p3)
     }
 }
 
-/* Called per mic frame: track silence and request AAD sleep after a hold. */
-static void aad_track_silence(const int16_t *buf, size_t n)
+/* Called per mic frame after the adaptive gate classifies the current input. */
+static void aad_track_activity(bool frame_active)
 {
     int64_t now = k_uptime_get();
 
     if (atomic_cas(&aad_woke, 1, 0)) {
         aad_last_voice_ms = now;
+        aad_conversation_active = false;
     }
-    if (avg_abs_amplitude(buf, n) >= CONFIG_OMI_VAD_ABS_THRESHOLD) {
+    if (frame_active) {
         aad_last_voice_ms = now;
+        aad_conversation_active = true;
     }
-    /* Sleep after a long silence whether online or offline. When connected, the
-     * BLE link stays up (only the mic + PDM sleep); sound resumes streaming.
-     * BUT never sleep while a BLE sync transfer is running: the AAD entry +
-     * conn-param low-power would stall the sync. Defer sleep until it finishes. */
+    uint32_t hold_ms = aad_conversation_active ? CONFIG_OMI_AAD_CONVERSATION_HOLD_MS : CONFIG_OMI_AAD_IDLE_HOLD_MS;
+    /*
+     * Before speech, return quickly to hardware AAD after an acoustic false
+     * wake. After speech, keep only the mic/software detector available for
+     * the app's two-minute conversation window. Opus and SD remain gated.
+     * Never sleep while a BLE sync transfer is active because the AAD entry
+     * transition would stall the transfer.
+     */
     if (!atomic_get(&aad_shutdown_quiesced) && !atomic_get(&aad_in_sleep) && !storage_transfer_active() &&
-        (now - aad_last_voice_ms) >= CONFIG_OMI_VAD_HOLD_MS) {
+        (now - aad_last_voice_ms) >= hold_ms) {
         atomic_set(&aad_req_sleep, 1);
         k_sem_give(&aad_sem);
     }
@@ -680,6 +705,7 @@ static int aad_hw_start(void)
     (void) gpio_pin_interrupt_configure_dt(&aad_wake, GPIO_INT_DISABLE); /* armed on first sleep */
 
     aad_last_voice_ms = k_uptime_get();
+    aad_conversation_active = false;
     k_thread_create(&aad_thread_data,
                     aad_stack,
                     K_THREAD_STACK_SIZEOF(aad_stack),
@@ -692,10 +718,11 @@ static int aad_hw_start(void)
                     K_NO_WAIT);
     k_thread_name_set(&aad_thread_data, "aad");
     aad_thread_started = true;
-    LOG_INF("AAD (hardware) started: WAKE=P1.%d thr=%d hold=%dms settle=%dms",
+    LOG_INF("AAD (hardware) started: WAKE=P1.%d min_thr=%d idle=%dms conversation=%dms settle=%dms",
             aad_wake.pin,
             CONFIG_OMI_VAD_ABS_THRESHOLD,
-            CONFIG_OMI_VAD_HOLD_MS,
+            CONFIG_OMI_AAD_IDLE_HOLD_MS,
+            CONFIG_OMI_AAD_CONVERSATION_HOLD_MS,
             CONFIG_OMI_AAD_SETTLE_MS);
     return 0;
 }
