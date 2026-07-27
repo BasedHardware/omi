@@ -559,6 +559,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         )
         .padding(.top, ChatTranscriptLayout.topAdjustment(at: index, in: displayMessages))
         .id(message.id)
+        .background {
+          if message.sender == .user {
+            ChatPromptRowAnchorReporter(markID: message.id, geometry: transcriptGeometry)
+          }
+        }
       }
     }
   }

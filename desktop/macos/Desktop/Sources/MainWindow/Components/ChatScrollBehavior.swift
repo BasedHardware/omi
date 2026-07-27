@@ -295,6 +295,113 @@ struct ChatScrollPosition: Equatable {
   let documentHeight: CGFloat
 }
 
+/// Reports a user prompt's document position after AppKit has completed its
+/// layout. SwiftUI geometry actions inside the transcript's `LazyVStack` used
+/// to feed those measurements back into the same layout transaction and could
+/// pin the main thread in AttributeGraph. This bridge keeps the prompt rail's
+/// exact ordering without reintroducing that feedback edge.
+struct ChatPromptRowAnchorReporter: NSViewRepresentable {
+  let markID: String
+  let geometry: ChatTranscriptGeometry
+
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView()
+    context.coordinator.configure(view: view, markID: markID, geometry: geometry)
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    context.coordinator.configure(view: nsView, markID: markID, geometry: geometry)
+  }
+
+  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    coordinator.stop()
+  }
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
+  }
+
+  final class Coordinator: NSObject, @unchecked Sendable {
+    private weak var view: NSView?
+    private weak var geometry: ChatTranscriptGeometry?
+    private var markID = ""
+    private var frameObservation: NSObjectProtocol?
+    private var reportWorkItem: DispatchWorkItem?
+
+    func configure(view: NSView, markID: String, geometry: ChatTranscriptGeometry) {
+      MainActor.assumeIsolated {
+        let isNewAnchor = self.view !== view || self.markID != markID || self.geometry !== geometry
+        guard isNewAnchor else { return }
+        stop()
+        self.view = view
+        self.markID = markID
+        self.geometry = geometry
+        view.postsFrameChangedNotifications = true
+        frameObservation = NotificationCenter.default.addObserver(
+          forName: NSView.frameDidChangeNotification,
+          object: view,
+          queue: .main
+        ) { [weak self] _ in
+          self?.scheduleReport()
+        }
+        scheduleReport()
+      }
+    }
+
+    func stop() {
+      MainActor.assumeIsolated {
+        reportWorkItem?.cancel()
+        reportWorkItem = nil
+        if let frameObservation {
+          NotificationCenter.default.removeObserver(frameObservation)
+        }
+        frameObservation = nil
+        view = nil
+        geometry = nil
+      }
+    }
+
+    private func scheduleReport() {
+      MainActor.assumeIsolated {
+        reportWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+          MainActor.assumeIsolated {
+            guard let self, let view = self.view, let geometry = self.geometry else { return }
+            guard let documentView = Self.enclosingScrollView(for: view)?.documentView else { return }
+            let origin = view.convert(view.bounds.origin, to: documentView)
+            let offset =
+              documentView.isFlipped
+              ? origin.y
+              : documentView.bounds.height - origin.y - view.bounds.height
+            geometry.setRowOffset(offset, for: self.markID)
+          }
+        }
+        reportWorkItem = work
+        DispatchQueue.main.async(execute: work)
+      }
+    }
+
+    @MainActor
+    private static func enclosingScrollView(for view: NSView) -> NSScrollView? {
+      var current: NSView? = view
+      while let candidate = current {
+        if let scrollView = candidate as? NSScrollView {
+          return scrollView
+        }
+        current = candidate.superview
+      }
+      return nil
+    }
+
+    deinit {
+      MainActor.assumeIsolated {
+        stop()
+      }
+    }
+  }
+}
+
 /// Detects user scroll-wheel / trackpad gestures, mouse interactions, and
 /// keyboard scroll-navigation on the enclosing NSScrollView.
 struct UserScrollDetector: NSViewRepresentable {

@@ -991,6 +991,7 @@ import XCTest
     // ChatPromptTimelineTests and ChatScrollLiveEdgeTests.
     XCTAssertFalse(source.contains(".onGeometryChange(for: ChatTranscriptContentFrame.self)"))
     XCTAssertFalse(source.contains("transcriptGeometry.setRowOffset("))
+    XCTAssertTrue(source.contains("ChatPromptRowAnchorReporter"))
     XCTAssertTrue(
       source.contains(
         "    scrollMode = .followingBottom\n    hasActivityBelow = false\n    userIsScrolling = false"))
