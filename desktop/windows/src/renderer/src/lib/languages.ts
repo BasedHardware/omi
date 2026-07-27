@@ -10,6 +10,11 @@ export const LANGUAGES: Language[] = [
   { code: 'fr', label: 'French' },
   { code: 'de', label: 'German' },
   { code: 'pt', label: 'Portuguese' },
+  // Brazilian and European Portuguese differ enough that a generic 'pt' reads as
+  // European to the model (#7461). Regional variants match the mobile app and
+  // macOS lists so the same account resolves to the same code on every surface.
+  { code: 'pt-BR', label: 'Portuguese (Brazil)' },
+  { code: 'pt-PT', label: 'Portuguese (Portugal)' },
   { code: 'it', label: 'Italian' },
   { code: 'nl', label: 'Dutch' },
   { code: 'ja', label: 'Japanese' },
@@ -29,8 +34,15 @@ export const DEFAULT_LANGUAGE = 'en'
 // is a reasonable multilingual signal to the transcription backend.
 export const FALLBACK_LANGUAGE = 'multi'
 
+// Codes carry a region subtag ('pt-BR'), and preferences written by other Omi
+// surfaces don't guarantee its casing, so match without it.
+function findByCode(code: string): Language | undefined {
+  const normalized = code.trim().toLowerCase()
+  return LANGUAGES.find((l) => l.code.toLowerCase() === normalized)
+}
+
 export function languageLabel(code: string): string {
-  return LANGUAGES.find((l) => l.code === code)?.label ?? code
+  return findByCode(code)?.label ?? code
 }
 
 // Common autonyms and alternate spellings users are likely to type in the
@@ -50,6 +62,14 @@ const ALIASES: Record<string, string> = {
   portuguese: 'pt',
   portugues: 'pt',
   português: 'pt',
+  'brazilian portuguese': 'pt-BR',
+  'português do brasil': 'pt-BR',
+  'portugues do brasil': 'pt-BR',
+  'português brasileiro': 'pt-BR',
+  'portugues brasileiro': 'pt-BR',
+  'european portuguese': 'pt-PT',
+  'português europeu': 'pt-PT',
+  'portugues europeu': 'pt-PT',
   italian: 'it',
   italiano: 'it',
   dutch: 'nl',
@@ -70,18 +90,20 @@ const ALIASES: Record<string, string> = {
 }
 
 /**
- * Normalize free-text or code input to an ISO 639-1 language code the app can
- * use. Resolution order: exact known code → label match → alias map. Unknown
- * input falls back to {@link FALLBACK_LANGUAGE} ('multi') rather than passing an
- * untranslated language name (e.g. "Spanish") downstream, which the transcription
- * backend can't interpret. Empty input falls back to the default ('en').
+ * Normalize free-text or code input to a language code the app can use.
+ * Resolution order: known code → label match → alias map. Unknown input falls
+ * back to {@link FALLBACK_LANGUAGE} ('multi') rather than passing an untranslated
+ * language name (e.g. "Spanish") downstream, which the transcription backend
+ * can't interpret. Empty input falls back to the default ('en'). The canonical
+ * casing from {@link LANGUAGES} is returned, so 'pt-br' resolves to 'pt-BR'.
  */
 export function resolveLanguageCode(input: string): string {
   const raw = (input ?? '').trim()
   if (raw.length === 0) return DEFAULT_LANGUAGE
   const normalized = raw.toLowerCase()
   // Already a known code (covers 'multi' too).
-  if (LANGUAGES.some((l) => l.code === normalized)) return normalized
+  const byCode = findByCode(normalized)
+  if (byCode) return byCode.code
   // Matches a label, e.g. "Spanish".
   const byLabel = LANGUAGES.find((l) => l.label.toLowerCase() === normalized)
   if (byLabel) return byLabel.code

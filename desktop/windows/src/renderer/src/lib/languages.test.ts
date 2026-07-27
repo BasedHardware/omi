@@ -25,6 +25,20 @@ describe('resolveLanguageCode', () => {
     expect(resolveLanguageCode('CHINESE')).toBe('zh')
   })
 
+  it('keeps regional Portuguese distinct from generic Portuguese (#7461)', () => {
+    expect(resolveLanguageCode('pt-BR')).toBe('pt-BR')
+    expect(resolveLanguageCode('Portuguese (Brazil)')).toBe('pt-BR')
+    expect(resolveLanguageCode('Brazilian Portuguese')).toBe('pt-BR')
+    expect(resolveLanguageCode('português do Brasil')).toBe('pt-BR')
+    expect(resolveLanguageCode('European Portuguese')).toBe('pt-PT')
+    expect(resolveLanguageCode('Portuguese')).toBe('pt')
+  })
+
+  it('returns the canonical casing of a region-qualified code', () => {
+    expect(resolveLanguageCode('pt-br')).toBe('pt-BR')
+    expect(resolveLanguageCode('  PT-PT ')).toBe('pt-PT')
+  })
+
   it('maps common autonyms and alternate spellings', () => {
     expect(resolveLanguageCode('español')).toBe('es')
     expect(resolveLanguageCode('espanol')).toBe('es')
@@ -58,5 +72,12 @@ describe('languageLabel', () => {
 
   it('returns the code itself for an unknown code', () => {
     expect(languageLabel('xx')).toBe('xx')
+  })
+
+  // The voice system instruction interpolates these labels, so a stored 'pt-BR'
+  // used to reach the model as the raw code instead of a language name (#7461).
+  it('labels region-qualified codes regardless of casing', () => {
+    expect(languageLabel('pt-BR')).toBe('Portuguese (Brazil)')
+    expect(languageLabel('pt-pt')).toBe('Portuguese (Portugal)')
   })
 })
