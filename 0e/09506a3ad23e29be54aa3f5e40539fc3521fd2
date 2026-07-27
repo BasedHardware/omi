@@ -1,0 +1,137 @@
+integrations/omi-even/app/README.md
+  s_e939211e79c9f1::t_e3dbe97e122790 1-188
+integrations/omi-even/app/scripts/verify-simulator.mjs
+  s_e939211e79c9f1::t_b58b97bbb0eab9 1-17,19-20,24-29,31-39,41-173,180-188,191-222,224-239,245-260,275-399,401,422-423,425-435,440,448,450-451,453-454,456-460,462-463,465-467,469,471,478,482-483,485-486,489,491-494,505-514,516,518-523,525-528,542,573,576,586-614
+  s_e939211e79c9f1::t_993cc0a453e229 424,436-439,441-447,449,452,455,461,464,470,472-477,479,481,484,487-488,490,495-504,517,534,543
+  s_e939211e79c9f1::t_f864f36465206b 174-179,189-190
+  s_e939211e79c9f1::t_02925d289ead43 30
+  s_e939211e79c9f1::t_1c4c2e5b61295e 240-244
+  s_e939211e79c9f1::t_d473c841480e2f 40
+  s_e939211e79c9f1::t_4d732baea72ae8 529,531-533,535-540,544-572
+  s_e939211e79c9f1::t_d5241be180b53a 18,21-23
+  s_e939211e79c9f1::t_4df91d12926aca 574-575,577-585
+  s_e939211e79c9f1::t_941307235a95b3 223
+  s_e939211e79c9f1::t_850ff3a5e55ac4 400,402-421
+  s_e939211e79c9f1::t_0978ebbc664a13 261-274
+  s_e939211e79c9f1::t_062a0883608b6e 468,480,515,524,530,541
+integrations/omi-even/app/package.json
+  s_e939211e79c9f1::t_9c13a5061ae87e 1-10,13-27
+  s_e939211e79c9f1::t_4cdca5bed2eadd 11
+  s_e939211e79c9f1::t_54e8490d602476 12
+integrations/omi-even/app/.gitignore
+  s_e939211e79c9f1::t_32523ba22fa501 15-17
+  s_e939211e79c9f1::t_360b297e958d0f 1-14,18-27
+integrations/omi-even/app/index.html
+  s_e939211e79c9f1::t_a36dbc1d890698 1-14
+integrations/omi-even/app/src/background-state.ts
+  s_e939211e79c9f1::t_c715e2c4550c96 1-85
+integrations/omi-even/README.md
+  s_e939211e79c9f1::t_d238048e4397a1 1-107
+integrations/omi-even/bridge/tests/conftest.py
+  s_e939211e79c9f1::t_c0e0ee4b43adc7 40-43
+  s_e939211e79c9f1::t_abb15ad7ad0bb1 1-39,44-99,101-139
+  s_e939211e79c9f1::t_09c02d628e829b 100
+integrations/omi-even/app/scripts/mock-bridge.mjs
+  s_e939211e79c9f1::t_167188e8c497e0 1-322
+integrations/omi-even/bridge/capture.py
+  s_e939211e79c9f1::t_47b3029c12a2e1 55-60
+  s_e939211e79c9f1::t_0c9be7690726d8 1-54,61-125,133-134,137-140,151-272
+  s_e939211e79c9f1::t_74e21916be6962 126-132,135-136,141-150
+integrations/omi-even/app/scripts/unit-test.mjs
+  s_e939211e79c9f1::t_377105f6a7ec28 1-18,20-121,131-190
+  s_e939211e79c9f1::t_cc813774717c4e 19
+  s_e939211e79c9f1::t_ee146bc68587f2 122-130
+integrations/omi-even/bridge/display.py
+  s_e939211e79c9f1::t_61e97a5e1c1c22 45-51
+  s_e939211e79c9f1::t_0eeba7ebea7647 127-140,142-148,152-156,159-163,165-169,172-181,183-189
+  s_e939211e79c9f1::t_d2c5392abca57d 293,296,300-307
+  s_e939211e79c9f1::t_56ab443dd35a32 1-44,52-126,141,149-151,157-158,164,170-171,182,190-292,294-295,297-299,308-437
+integrations/omi-even/app/src/config.ts
+  s_e939211e79c9f1::t_7de1608e271a43 1-10,12-63
+  s_e939211e79c9f1::t_404040c9c2b38d 11
+integrations/omi-even/bridge/observe_contract.py
+  s_e939211e79c9f1::t_4f5d2a79ab32c8 1-139
+integrations/omi-even/app/src/display.ts
+  s_e939211e79c9f1::t_80ae75ed9bdf87 130,132-134
+  s_e939211e79c9f1::t_89c51d8b12bdd8 1-129,131,135-154,156,164-199,203,206-210,212-230
+  s_e939211e79c9f1::t_5ab256b96f9bf4 200-202,204-205,211
+  s_e939211e79c9f1::t_207dd0c5469e19 155,157-163
+integrations/omi-even/app/src/bridge-client.ts
+  s_e939211e79c9f1::t_b7749261b3a6b5 8
+  s_e939211e79c9f1::t_5ba224532d09e4 70-72
+  s_e939211e79c9f1::t_b23553d23d3888 1-7,9-27,29,32-69,73-126
+  s_e939211e79c9f1::t_71da658ff7bd4d 28,30-31
+integrations/omi-even/app/vite.config.ts
+  s_e939211e79c9f1::t_b3800c2c5240b3 1-8,12-19
+  s_e939211e79c9f1::t_ab1d7f07d8a4a6 9-11
+integrations/omi-even/bridge/tests/test_omi_client.py
+  s_e939211e79c9f1::t_cd441d7d0c0a60 1-708,712-715,721-723,727-729,735-790
+  s_e939211e79c9f1::t_9224f879f2df96 709-711,716-720,724-726,730-734
+integrations/omi-even/app/src/paginate.ts
+  s_e939211e79c9f1::t_8c15fc9744b9ce 1-41
+integrations/omi-even/app/src/protocol.ts
+  s_e939211e79c9f1::t_589d8a9245ae6e 1-34,51-98
+  s_e939211e79c9f1::t_542c97de597cc8 35-50
+integrations/omi-even/bridge/server.py
+  s_e939211e79c9f1::t_d1834b6fe2d786 158-183,185-187,189-190,194
+  s_e939211e79c9f1::t_022e9c6365daa5 410-414,421-425,428,437-440,442-443,446-447,450-460
+  s_e939211e79c9f1::t_0f24dc3393bcaa 57-73
+  s_e939211e79c9f1::t_996782e50badce 1-26,28-52,55-56,74-87,90-93,95-157,184,188,191-193,195-409,415-420,426-427,429-436,441,444-445,448-449,461-464
+  s_e939211e79c9f1::t_4fd95030f1d076 88-89,94
+  s_e939211e79c9f1::t_111db9a9299ab1 27
+  s_e939211e79c9f1::t_c7b19ce6eb747a 53-54
+integrations/omi-even/bridge/tests/test_display.py
+  s_e939211e79c9f1::t_fff98b8faa35fc 286-297
+  s_e939211e79c9f1::t_88256a35c6315e 1-285,298-541
+integrations/omi-even/bridge/run.sh
+  s_e939211e79c9f1::t_ea19ff3a438ec1 1-105
+integrations/omi-even/bridge/tests/test_capture.py
+  s_e939211e79c9f1::t_50f8dd4b1958e4 332,337-338,340
+  s_e939211e79c9f1::t_8f71df18bb2293 167
+  s_e939211e79c9f1::t_4a2ecd377a540d 1-166,168-331,333-336,339,341-533,540-543,545,549-552,557-650
+  s_e939211e79c9f1::t_c20963709dc88e 534-539,544,546-548,553-556
+integrations/omi-even/app/app.json
+  s_e939211e79c9f1::t_881e6d7fb6fdfd 1-20
+integrations/omi-even/app/tsconfig.json
+  s_e939211e79c9f1::t_a0b93d447f1188 1-25
+integrations/omi-even/bridge/omi_auth.py
+  s_e939211e79c9f1::t_3be147f9dc24eb 31
+  s_e939211e79c9f1::t_941ef1b28b2bd7 45-48,54,56
+  s_e939211e79c9f1::t_fc70a69c61bbe6 71-77,79-85,88-91,94,97,101-102,104-105,107-114,116-118,120-123
+  s_e939211e79c9f1::t_1b9feef9baf404 135-154,156-163
+  s_e939211e79c9f1::t_786373131e8ed0 197
+  s_e939211e79c9f1::t_4486ecb4d9c884 1-5,8,11,20-30,32-44,49-53,55,57-70,78,86-87,92-93,95-96,98-100,103,106,115,119,124-134,155,164-196,198-218
+  s_e939211e79c9f1::t_41b4739f37645d 6-7,9-10,12-19
+integrations/omi-even/bridge/omi_client.py
+  s_e939211e79c9f1::t_7e0e034733445d 1-89,91-93,101-277,303-308
+  s_e939211e79c9f1::t_15ce1b4f916338 90,94-100
+  s_e939211e79c9f1::t_6201902b95b267 278-302
+integrations/omi-even/bridge/tests/test_push_regression.py
+  s_e939211e79c9f1::t_1d571fc039cd27 1-201
+integrations/omi-even/app/src/main.ts
+  s_e939211e79c9f1::t_9e336af6ec1bb6 1-22,25-26,28-168,173-379,381,387-388,391-460,473-477,479-570
+  s_e939211e79c9f1::t_bbcda8e9e6a83e 23-24,27
+  s_e939211e79c9f1::t_a2de146cb7ee01 461-472,478
+  s_e939211e79c9f1::t_06c5b991913fcd 380,382-386,389-390
+  s_e939211e79c9f1::t_4ea2bd7252e8f7 169-172
+.gitignore
+  s_e939211e79c9f1::t_21a21b34164acf 250-257
+integrations/omi-even/app/package-lock.json
+  s_e939211e79c9f1::t_10b497e73de12c 1-1755
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "0e09506a3ad23e29be54aa3f5e40539fc3521fd2",
+  "prompts": {},
+  "sessions": {
+    "s_e939211e79c9f1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7063973-7aff-42e3-a630-daf5ea69dbc0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
