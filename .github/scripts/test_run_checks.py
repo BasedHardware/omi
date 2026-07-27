@@ -167,6 +167,23 @@ class ManifestContractTests(unittest.TestCase):
             validate_manifest(invalid, REPO_ROOT),
         )
 
+    def test_explicit_trigger_path_must_exist(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        missing = ".github/scripts/does-not-exist.py"
+        malformed = Check(
+            first.id,
+            first.command,
+            (*first.triggers, missing),
+            first.lanes,
+            first.reason,
+        )
+        invalid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertIn(
+            f"{first.id}: explicit trigger path does not exist: {missing}",
+            validate_manifest(invalid, REPO_ROOT),
+        )
+
     def test_workflow_checks_are_registered_or_exempt(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         registered = registered_script_paths()
