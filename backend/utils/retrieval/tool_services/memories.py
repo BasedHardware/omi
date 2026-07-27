@@ -19,7 +19,7 @@ from utils.memory.chat_memory_adapter import (
     list_default_chat_memories_decision_text,
     search_memory_default_chat_memories_vector_decision_text,
 )
-from utils.memory.default_read_rollout import MemoryReadDecision
+from utils.memory.default_read_rollout import MemoryReadDecision, legacy_read_fallback_authorized
 from utils.retrieval.tool_services.conversations import parse_iso_date
 import logging
 
@@ -81,7 +81,7 @@ def get_memories_text(
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
         logger.info("get_memories_text - using memory default chat memory list results")
         return default_memories.text or "No memory default memories found."
-    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not legacy_read_fallback_authorized(default_memories.read_decision, default_memories.fallback_reason):
         logger.info(
             "get_memories_text - memory default memory list denied without legacy fallback: "
             f"{default_memories.fallback_reason}"
@@ -170,7 +170,7 @@ def search_memories_text(
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
         logger.info("search_memories_text - using memory default chat vector memory results")
         return default_memories.text or f"No memory vector memories found matching '{query}'."
-    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not legacy_read_fallback_authorized(default_memories.read_decision, default_memories.fallback_reason):
         logger.info(
             "search_memories_text - memory default memory vector search denied without legacy fallback: "
             f"{default_memories.fallback_reason}"

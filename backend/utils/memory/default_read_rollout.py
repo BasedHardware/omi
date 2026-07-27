@@ -3,6 +3,8 @@
 Neutral ``default_read_rollout`` is the source of truth. Legacy ``default_read_rollout`` remains an importable alias.
 """
 
+# LIFECYCLE: permanent
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Iterable, Literal, Optional, cast
@@ -326,6 +328,46 @@ def legacy_safe_default_read_rollout_decision(
         reason=reason,
         explicit_read_decision=MemoryReadDecision.USE_LEGACY_SAFE,
     )
+
+
+UNENROLLED_LEGACY_FALLBACK_REASON = 'missing_rollout_state'
+
+
+def legacy_read_fallback_authorized(read_decision: MemoryReadDecision, fallback_reason: Optional[str]) -> bool:
+    """Whether a denied default-memory read may serve the legacy `memories` surface.
+
+    Single owner of the un-enrolled legacy-cohort contract (#9892) for every
+    consumer that reads default memories (MCP, Omi chat). True for an explicit
+    legacy-safe decision, and for a deny whose only reason is an absent
+    `memory_control/state` doc — the expected state for an account that was never
+    enrolled, whose authoritative surface is the legacy collection. Every other
+    deny reason stays fail-closed, so a malformed rollout doc, a missing consumer
+    grant, or a read failure can never be mistaken for "never enrolled".
+
+    Emits the legacy-fallback telemetry for the recovered branch so callers do not
+    each own a separate counter.
+
+    A missing reason is not the un-enrolled reason, so it fails closed. The
+    telemetry import is function-level on purpose: this module is the light
+    decision surface that read paths and admin routers import under heavy test
+    stubbing, and `utils.observability` reaches `utils.metrics` -> `fastapi`.
+    Keeping that out of module scope preserves this module's import-time purity.
+    """
+
+    if read_decision == MemoryReadDecision.USE_LEGACY_SAFE:
+        return True
+    if read_decision == MemoryReadDecision.DENY_MEMORY and fallback_reason == UNENROLLED_LEGACY_FALLBACK_REASON:
+        from utils.observability import record_fallback
+
+        record_fallback(
+            component='other',
+            from_mode='memory_default_read',
+            to_mode='legacy_memories',
+            reason='policy',
+            outcome='recovered',
+        )
+        return True
+    return False
 
 
 @dataclass(frozen=True)

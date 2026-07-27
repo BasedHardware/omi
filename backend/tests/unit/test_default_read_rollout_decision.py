@@ -1,6 +1,11 @@
+from unittest.mock import patch
+
 from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
+import utils.observability as observability
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
+    UNENROLLED_LEGACY_FALLBACK_REASON,
+    legacy_read_fallback_authorized,
     DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
     DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS,
     GLOBAL_READ_GATE_PATH,
@@ -588,3 +593,69 @@ def test_shared_rollout_metrics_buckets_unknown_dynamic_fallback_reasons():
     assert (
         'default_read_rollout_decisions_total{consumer="mcp",outcome="fallback",fallback_reason="other"} 1' in metrics
     )
+
+
+# --- shared un-enrolled legacy-fallback contract (#9892) ---------------------
+# `legacy_read_fallback_authorized` is the single owner of "which denied default-memory
+# read may still serve the legacy collection". Every default-memory consumer routes
+# through it, so this matrix is the anti-drift guard: relaxing one consumer must not
+# silently relax another, and no new deny reason may become a legacy fallback by default.
+
+
+def _authorized(read_decision, fallback_reason=None):
+    # The contract imports record_fallback lazily to keep this module free of the
+    # fastapi import chain, so patch it at its source rather than on the module.
+    with patch.object(observability, 'record_fallback') as recorded:
+        allowed = legacy_read_fallback_authorized(read_decision, fallback_reason)
+    return allowed, recorded
+
+
+def test_legacy_read_fallback_allows_explicit_legacy_safe_without_fallback_telemetry():
+    allowed, recorded = _authorized(MemoryReadDecision.USE_LEGACY_SAFE)
+
+    assert allowed is True
+    # An explicit legacy-safe decision is the configured surface, not a recovery.
+    recorded.assert_not_called()
+
+
+def test_legacy_read_fallback_allows_unenrolled_deny_and_records_recovered_fallback():
+    allowed, recorded = _authorized(MemoryReadDecision.DENY_MEMORY, UNENROLLED_LEGACY_FALLBACK_REASON)
+
+    assert allowed is True
+    recorded.assert_called_once_with(
+        component='other',
+        from_mode='memory_default_read',
+        to_mode='legacy_memories',
+        reason='policy',
+        outcome='recovered',
+    )
+
+
+def test_legacy_read_fallback_fails_closed_for_every_other_deny_reason():
+    # Each of these means "we could not establish the account's state", which must never
+    # be read as "never enrolled" — that would serve legacy memories past a real denial.
+    for reason in (
+        'malformed_rollout_state',
+        'rollout_read_failed',
+        'missing_mcp_default_memory_grant',
+        'missing_chat_default_memory_grant',
+        'missing_developer_default_memory_grant',
+        'memory_reads_disabled',
+        'uid_mismatch',
+        'unsupported_consumer',
+        'unsupported_rollout_schema',
+        None,
+    ):
+        allowed, recorded = _authorized(MemoryReadDecision.DENY_MEMORY, reason)
+        assert allowed is False, reason
+        recorded.assert_not_called()
+
+
+def test_legacy_read_fallback_fails_closed_for_shadow_only_and_use_memory():
+    # SHADOW_ONLY is a compute-but-do-not-serve state, and USE_MEMORY is served from the
+    # memory surface; neither is a legacy-fallback decision even with the un-enrolled reason.
+    for read_decision in (MemoryReadDecision.SHADOW_ONLY, MemoryReadDecision.USE_MEMORY):
+        for reason in ('shadow_only', UNENROLLED_LEGACY_FALLBACK_REASON, None):
+            allowed, recorded = _authorized(read_decision, reason)
+            assert allowed is False, (read_decision, reason)
+            recorded.assert_not_called()

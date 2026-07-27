@@ -217,6 +217,15 @@ read_rollout_stub = _stub_module("utils.memory.default_read_rollout")
 read_rollout_stub.MemoryReadDecision = types.SimpleNamespace(
     USE_MEMORY="use_memory",
     USE_LEGACY_SAFE="use_legacy_safe",
+    DENY_MEMORY="deny_memory",
+    SHADOW_ONLY="shadow_only",
+)
+read_rollout_stub.UNENROLLED_LEGACY_FALLBACK_REASON = "missing_rollout_state"
+# Mirrors the real shared contract against this stub's sentinels: an explicit legacy-safe
+# decision, or a deny whose only reason is an absent rollout doc, may read legacy.
+read_rollout_stub.legacy_read_fallback_authorized = lambda read_decision, fallback_reason: (
+    read_decision == "use_legacy_safe"
+    or (read_decision == "deny_memory" and fallback_reason == "missing_rollout_state")
 )
 
 memory_system_stub = _stub_module("utils.memory.memory_system")

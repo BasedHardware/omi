@@ -95,7 +95,11 @@ def _mcp_search_import_isolation():
         return SimpleNamespace(allowed=True, status_code=200, observability={})
 
     def _legacy_safe_vector_result(*_args, **_kwargs):
-        return SimpleNamespace(read_decision=mcp_router_mod.MemoryReadDecision.USE_LEGACY_SAFE, memories=[])
+        # fallback_reason is declared on the real McpMemorySearchResult, so the double carries
+        # it too — the legacy-fallback contract reads it alongside read_decision.
+        return SimpleNamespace(
+            read_decision=mcp_router_mod.MemoryReadDecision.USE_LEGACY_SAFE, memories=[], fallback_reason=None
+        )
 
     def _allow_legacy_write(*_args, **_kwargs):
         return SimpleNamespace(allowed=True, status_code=200, detail={})
