@@ -137,7 +137,9 @@ def validate_baseline(value: Any, shard_relative: str | None = None) -> dict[str
         if not isinstance(relative, str) or not is_product_source(relative):
             raise ValueError(f"baseline contains unsupported source path: {relative!r}")
         if shard_relative is not None and baseline_shard_relative(relative) != shard_relative:
-            raise ValueError(f"baseline path {relative!r} belongs in {baseline_shard_relative(relative)}, not {shard_relative}")
+            raise ValueError(
+                f"baseline path {relative!r} belongs in {baseline_shard_relative(relative)}, not {shard_relative}"
+            )
         if not isinstance(count, int) or isinstance(count, bool) or count < THRESHOLD:
             raise ValueError(f"baseline count for {relative} must be an integer at least {THRESHOLD}")
     for relative, justification in justifications.items():
@@ -179,9 +181,7 @@ def load_baseline_shards(root: Path) -> dict[str, dict[str, Any]]:
     legacy = baseline_path(root)
     if legacy.is_file():
         return {LEGACY_BASELINE_RELATIVE: load_baseline_file(legacy)}
-    raise ValueError(
-        f"no baseline shards found under {BASELINE_DIRECTORY_RELATIVE} and legacy baseline is absent"
-    )
+    raise ValueError(f"no baseline shards found under {BASELINE_DIRECTORY_RELATIVE} and legacy baseline is absent")
 
 
 def aggregate_baseline_shards(shards: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -315,7 +315,7 @@ def baseline_at_ref(root: Path, ref: str) -> dict[str, Any] | None:
         ["git", "ls-tree", "-r", "--name-only", ref, "--", BASELINE_DIRECTORY_RELATIVE],
         cwd=root,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=False,
         env=env,
     )
@@ -333,7 +333,7 @@ def baseline_at_ref(root: Path, ref: str) -> dict[str, Any] | None:
                 ["git", "show", f"{ref}:{shard_relative}"],
                 cwd=root,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=False,
                 env=env,
             )
@@ -349,7 +349,7 @@ def baseline_at_ref(root: Path, ref: str) -> dict[str, Any] | None:
         ["git", "show", f"{ref}:{LEGACY_BASELINE_RELATIVE}"],
         cwd=root,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=False,
         env=env,
     )
@@ -444,7 +444,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--root", help="Repository root (default: inferred from this script)")
     parser.add_argument("--changed-files", type=Path, help="Newline-delimited repository-relative changed paths")
     parser.add_argument("--base", help="Git ref used to validate explicit baseline raises")
-    parser.add_argument("--bootstrap", action="store_true", help="Create initial sharded snapshots when no baseline exists")
+    parser.add_argument(
+        "--bootstrap", action="store_true", help="Create initial sharded snapshots when no baseline exists"
+    )
     parser.add_argument(
         "--update-baseline",
         action="store_true",

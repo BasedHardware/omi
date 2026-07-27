@@ -19,23 +19,68 @@ def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[st
     return []
 
 
+def _validate_production_secret_bridge(text: str, *, workflow: str) -> list[str]:
+    errors: list[str] = []
+    for fragment in (
+        "Preflight production desktop secret resource names",
+        "# Temporary bridge pending Rust -> Python backend consolidation.",
+        'gcloud secrets describe "$secret"',
+        "--format='none'",
+        "GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest",
+        "FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest",
+        "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest",
+        "REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest",
+        "REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest",
+        "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST",
+    ):
+        if fragment not in text:
+            errors.append(f"{workflow}: missing temporary production secret bridge {fragment!r}")
+    for forbidden in (
+        "GEMINI_API_KEY=GEMINI_API_KEY:latest",
+        "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
+        "REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest",
+        "REDIS_DB_HOST=REDIS_DB_HOST:latest",
+        "REDIS_DB_PORT=REDIS_DB_PORT:latest",
+        "PINECONE_API_KEY=",
+        "PINECONE_HOST=",
+    ):
+        if forbidden in text:
+            errors.append(f"{workflow}: forbidden production secret binding {forbidden!r}")
+    errors.extend(
+        _ordered(
+            text,
+            (
+                "Preflight production desktop secret resource names",
+                "Build and push immutable Docker image",
+            ),
+            workflow=workflow,
+        )
+    )
+    return errors
+
+
 def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
     workflow = "desktop_backend_prod.yml" if production else "desktop_backend_auto_dev.yml"
     errors: list[str] = []
     required = (
         "no_traffic: true",
         "desktop_backend_candidate_probe.py",
+        "verify_desktop_backend_image_lineage.py",
         "voice-provider-probe.sh",
         "wait_cloud_run_candidate_readiness.py",
-        "Verify candidate image digest",
+        "Verify candidate image lineage",
         "@${{ steps.build-image.outputs.digest }}",
-        "--expected-image-digest=",
+        '--build-image-ref="$BUILD_IMAGE_REF"',
+        '--runtime-image-ref="$runtime_image_ref"',
+        '--expected-image-digest="${{ steps.verify-image-lineage.outputs.runtime_digest }}"',
         "--expected-revision=",
         "--workflow-run-id=",
         "CHAT_CONTRACT_VERSION: '1'",
         '--expected-contract-version="$CHAT_CONTRACT_VERSION"',
         "Capture current serving revision",
         "Resolve exact no-traffic candidate URL",
+        "Mint candidate probe identity",
+        "firebase_release_probe_token.py",
         "Restore prior traffic after a failed promotion",
         "DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED=true",
         "failure() && env.DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED == 'true'",
@@ -49,19 +94,21 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         errors.append(f"{workflow}: deployment image must use an immutable source tag")
 
     chat_step = (
-        "Prove candidate chat and web-search compatibility"
-        if production
-        else "Prove candidate chat compatibility"
+        "Prove candidate chat and web-search compatibility" if production else "Prove candidate chat compatibility"
     )
     route_step = (
         "Route traffic to accepted production revision"
         if production
         else "Route traffic to accepted desktop-backend revision"
     )
-    verify_step = (
-        "Verify production serving identity"
+    verify_step = "Verify production serving identity" if production else "Verify development backend release identity"
+    probe_identity_steps = (
+        ("Mint candidate probe identity",)
         if production
-        else "Verify development backend release identity"
+        else (
+            "Stage candidate probe signer",
+            "Mint candidate probe identity",
+        )
     )
     errors.extend(
         _ordered(
@@ -69,8 +116,9 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             (
                 "Capture current serving revision",
                 "Wait for no-traffic candidate readiness",
-                "Verify candidate image digest",
+                "Verify candidate image lineage",
                 "Resolve exact no-traffic candidate URL",
+                *probe_identity_steps,
                 chat_step,
                 "Prove candidate managed realtime provider paths",
                 route_step,
@@ -99,7 +147,10 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 errors.append(f"{workflow}: missing production admission guard {fragment!r}")
         for forbidden in ("\n  push:", "deploy-backend-stack-", "verify_backend_release_vector.py"):
             if forbidden in text:
-                errors.append(f"{workflow}: desktop-backend must remain outside the Python backend vector: {forbidden!r}")
+                errors.append(
+                    f"{workflow}: desktop-backend must remain outside the Python backend vector: {forbidden!r}"
+                )
+        errors.extend(_validate_production_secret_bridge(text, workflow=workflow))
     else:
         for fragment in (
             "group: desktop-backend-auto-dev",
@@ -111,9 +162,27 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "EXPECTED_GCP_PROJECT_ID: based-hardware-dev",
             "DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+            "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+            "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
+            "${{ secrets.GCP_SERVICE_ACCOUNT }}",
+            'chmod 600 "$signer_file"',
+            "base64 --decode",
+            '--signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE"',
+            'rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"',
         ):
             if fragment not in text:
                 errors.append(f"{workflow}: missing development traffic guard {fragment!r}")
+        if any(
+            "--remove-env-vars" in line and "GOOGLE_APPLICATION_CREDENTIALS" in line
+            for line in text.splitlines()
+        ):
+            errors.append(
+                f"{workflow}: mounted Firestore credentials must not be removed from the candidate environment"
+            )
+        if "GCP_SERVICE_ACCOUNT:latest" in text or "GCP_SERVICE_ACCOUNT=GCP_SERVICE_ACCOUNT" in text:
+            errors.append(
+                f"{workflow}: the Firebase probe signer must never become desktop-backend runtime configuration"
+            )
     return errors
 
 
