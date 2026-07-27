@@ -18,7 +18,7 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
-from ._client import db, delete_collection_recursive, get_firestore_client
+from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -1365,7 +1365,6 @@ def update_conversation_segments(
 ):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    transaction = client.transaction()
 
     @firestore.transactional
     def _write_segments(transaction) -> bool:
@@ -1388,7 +1387,7 @@ def update_conversation_segments(
         transaction.update(doc_ref, prepared_payload)
         return True
 
-    return _write_segments(transaction)
+    return run_transactional(client, _write_segments)
 
 
 # ***********************************
