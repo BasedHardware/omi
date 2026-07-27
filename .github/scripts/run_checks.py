@@ -296,6 +296,8 @@ def command_for_check(
                 command.append("--skip")
             continue
         command.append(replacements.get(token, token))
+    if command and command[0] == "python3":
+        command[0] = sys.executable
     return command
 
 

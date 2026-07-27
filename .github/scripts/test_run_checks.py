@@ -388,6 +388,41 @@ esac
                 )
             self.assertEqual(result, 1)
 
+    def test_python3_command_uses_current_interpreter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker = root / "interpreter.txt"
+            probe = root / "probe.py"
+            probe.write_text(
+                "from pathlib import Path\n"
+                "import sys\n"
+                f"Path({str(marker)!r}).write_text(sys.executable, encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            changed = root / "changed.txt"
+            changed.write_text("example.txt\n", encoding="utf-8")
+            body = root / "body.txt"
+            body.write_text("", encoding="utf-8")
+            check = Check("python", ("python3", str(probe)), ("all",), ("local",), "fixture")
+
+            with (
+                patch.dict(os.environ, {"PATH": ""}),
+                redirect_stdout(StringIO()),
+                redirect_stderr(StringIO()),
+            ):
+                result = execute_checks(
+                    root,
+                    [check],
+                    changed_files_path=changed,
+                    base="base",
+                    head="HEAD",
+                    pr_body_file=body,
+                )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(marker.read_text(encoding="utf-8"), sys.executable)
+
+    @unittest.skipIf(os.name == "nt", "requires a POSIX shell")
     def test_release_process_guard_uses_locked_pyyaml_in_every_declared_lane(self) -> None:
         """The guard must never depend on a runner-global PyYAML install."""
         manifest = load_manifest(MANIFEST_PATH)
@@ -547,9 +582,7 @@ class PlatformTests(unittest.TestCase):
     def test_invalid_platform_rejected_by_validation(self):
         manifest = Manifest(
             checks=(
-                Check(
-                    id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("plan9",)
-                ),
+                Check(id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("plan9",)),
             ),
             exempt=(),
         )
