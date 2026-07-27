@@ -48,7 +48,7 @@ require_text 'desktop-core-harness.sh --readiness'
 # no broad process control, no passing receipt, and retained lease evidence.
 require_text 'emit_evidence false'
 require_text 'READINESS_CLEANUP_OK=1'
-require_text 'if [[ "$READINESS_CLEANUP_OK" -ne 1 ]]'
+require_text 'if [[ "$READINESS_COMPLETE" -eq 1 && "$READINESS_CLEANUP_OK" -ne 1 ]]'
 require_order \
   '"$LEASE_COMMAND" acquire' \
   'desktop-core-harness.sh --readiness' \

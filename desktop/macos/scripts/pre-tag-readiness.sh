@@ -170,11 +170,15 @@ finalize() {
     READINESS_CLEANUP_OK=1
   fi
   duration_s=$(( $(date +%s) - START_SEC ))
+  # Once the readiness harness completed, a refused authenticated release is a
+  # distinct terminal condition. Keep the receipt non-passing and make that
+  # ownership-cleanup failure explicit rather than misclassifying it as a
+  # pre-readiness abort.
+  if [[ "$READINESS_COMPLETE" -eq 1 && "$READINESS_CLEANUP_OK" -ne 1 ]]; then
+    emit_evidence false "$duration_s" "pre-tag-readiness authenticated cleanup failed"
+    exit 1
+  fi
   if [[ "$rc" -eq 0 && "$READINESS_COMPLETE" -eq 1 ]]; then
-    if [[ "$READINESS_CLEANUP_OK" -ne 1 ]]; then
-      emit_evidence false "$duration_s" "pre-tag-readiness authenticated cleanup failed"
-      exit 1
-    fi
     emit_evidence true "$duration_s"
     echo "pre-tag-readiness: passed for $SOURCE_SHA (lane=$LANE, evidence: ${EVIDENCE:-stdout})" >&2
     exit 0
