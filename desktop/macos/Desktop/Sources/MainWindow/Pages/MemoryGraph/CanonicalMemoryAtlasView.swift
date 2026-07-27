@@ -852,7 +852,7 @@ enum MemoryAtlasRenderPlanner {
     // and y by the full height made collision detection believe horizontally
     // adjacent labels were farther apart than their rendered positions on
     // wide desktop windows, admitting labels that overlapped on the canvas.
-    let span = projectionSpan(of: viewportSize)
+    let span = MemoryAtlasLayoutEngine.projectionSpan(of: viewportSize)
     return CGPoint(
       x: (normalized.x - 0.5) * span * zoom + viewportSize.width / 2 + pan.width,
       y: (normalized.y - 0.5) * span * zoom + viewportSize.height / 2 + pan.height
