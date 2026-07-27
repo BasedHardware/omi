@@ -112,9 +112,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// is 0; the left edge stays aligned with the ask bar. Default 0.
   var trailingContentPadding: CGFloat = 0
   /// Readable cap on the message column. The scroll view remains full-width so
-  /// the native scroller stays on the window edge and the prompt timeline can
-  /// occupy the resulting gutter without replacing it.
+  /// the prompt timeline can occupy the resulting gutter.
   var contentColumnWidth: CGFloat? = nil
+  /// Where the prompt rail's right edge should land in the surrounding chat
+  /// surface. Home uses zero because its ask bar fills the chat column.
+  var timelineTrailingInset: CGFloat = ChatComposerLayout.pageMargin
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -181,6 +183,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// does not observe the object; only the overlay subscribes, so scrolling does
   /// not re-evaluate every message row.
   @State private var transcriptGeometry = ChatTranscriptGeometry()
+  /// SwiftUI's own scroll-indicator policy. The AppKit suppressor remains a
+  /// backstop, but this prevents the framework from recreating the legacy
+  /// scroller during later scroll-view updates.
+  @State private var hidesNativeScrollIndicator = false
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -189,9 +195,18 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         scrollToBottomButton(proxy: proxy)
       }
       .overlay(alignment: .trailing) {
-        ChatPromptTimelineOverlay(geometry: transcriptGeometry) { markID in
-          jumpToPrompt(markID, proxy: proxy)
-        }
+        ChatPromptTimelineOverlay(
+          geometry: transcriptGeometry,
+          trailingInset: timelineTrailingInset,
+          onSelect: { markID in
+            jumpToPrompt(markID, proxy: proxy)
+          },
+          onVisibilityChange: { isVisible in
+            if hidesNativeScrollIndicator != isVisible {
+              hidesNativeScrollIndicator = isVisible
+            }
+          }
+        )
       }
       .onGeometryChange(for: CGSize.self) {
         $0.size
@@ -249,6 +264,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           .id("bottom-anchor")
       }
     }
+    .scrollIndicators(hidesNativeScrollIndicator ? .hidden : .automatic)
     .coordinateSpace(name: ChatTranscriptSpace.viewport)
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
@@ -605,9 +621,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // The custom prompt rail replaces the native vertical scroller only on
       // wide transcripts where the rail is actually visible. Keep this host in
       // the document view so it can reach the enclosing NSScrollView.
-      ChatPromptTimelineScrollerSuppression(geometry: transcriptGeometry)
+      ChatTimelineScrollerSuppressionHost(isSuppressed: hidesNativeScrollIndicator)
       ScrollPositionDetector { atBottom in
         isUserAtBottom = atBottom
+        if atBottom {
+          transcriptGeometry.setFollowingLiveEdge(true)
+        }
         // Resume live following when the reader scrolls back to the
         // live edge. atBottom == true is unambiguous intent to follow
         // again; only atBottom == false is ambiguous (it can be a
@@ -624,6 +643,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         scrollMode = .freeScrolling
         userIsScrolling = true
         hasActivityBelow = false
+        transcriptGeometry.setFollowingLiveEdge(false)
         transcriptGeometry.releaseSelection()
         cancelAllPendingScrolls()
         let endWork = DispatchWorkItem {
@@ -637,6 +657,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         userIsScrolling = false
         scrollMode = .followingBottom
         hasActivityBelow = false
+        transcriptGeometry.setFollowingLiveEdge(true)
       }
     }
   }
@@ -684,6 +705,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // Don't fight the user — skip if they're actively wheel/trackpad scrolling
     guard !userIsScrolling else { return }
     guard !messages.isEmpty else { return }
+    transcriptGeometry.setFollowingLiveEdge(true)
     proxy.scrollTo("bottom-anchor", anchor: .bottom)
   }
 

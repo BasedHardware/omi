@@ -42,10 +42,11 @@ enum ChatPromptTimelineMetrics {
   static let previewGap: CGFloat = 10
   static let previewEdgeInset: CGFloat = 8
 
-  /// Keep the rail's right tip on the same page edge as the composer. The marks
-  /// grow leftward into the unused transcript gutter.
-  static func trailingOffset(gutter _: CGFloat) -> CGFloat {
-    ChatComposerLayout.pageMargin
+  /// Keep the rail's right tip on its owning composer's edge. The Home ask bar
+  /// fills its column and therefore passes zero; regular chat keeps its page
+  /// margin. Marks grow leftward into the unused transcript gutter.
+  static func trailingOffset(for trailingInset: CGFloat) -> CGFloat {
+    max(0, trailingInset)
   }
 
   static let proximityAnimation: Animation = .interactiveSpring(response: 0.18, dampingFraction: 0.86)
@@ -142,6 +143,7 @@ struct ChatPromptTimeline: View {
   let activeMarkID: String?
   let gutter: CGFloat
   let onSelect: (String) -> Void
+  let trailingInset: CGFloat
 
   @State private var cursorY: CGFloat?
   @State private var hoveredIndex: Int?
@@ -155,12 +157,14 @@ struct ChatPromptTimeline: View {
     activeMarkID: String?,
     gutter: CGFloat,
     hoveredIndex: Int? = nil,
-    onSelect: @escaping (String) -> Void
+    onSelect: @escaping (String) -> Void,
+    trailingInset: CGFloat = ChatComposerLayout.pageMargin
   ) {
     self.marks = marks
     self.activeMarkID = activeMarkID
     self.gutter = gutter
     self.onSelect = onSelect
+    self.trailingInset = trailingInset
     _hoveredIndex = State(initialValue: hoveredIndex)
   }
 
@@ -211,7 +215,7 @@ struct ChatPromptTimeline: View {
       }
     }
     .frame(width: ChatPromptTimelineMetrics.railWidth, alignment: .trailing)
-    .padding(.trailing, ChatPromptTimelineMetrics.trailingOffset(gutter: gutter))
+    .padding(.trailing, ChatPromptTimelineMetrics.trailingOffset(for: trailingInset))
     // The rail reports what the cursor is over; it never takes focus, and the
     // marks are decoration for a transcript VoiceOver already reads in order.
     .accessibilityHidden(true)
@@ -274,7 +278,9 @@ struct ChatPromptTimeline: View {
 /// surface that later caps its column.
 struct ChatPromptTimelineOverlay: View {
   @ObservedObject var geometry: ChatTranscriptGeometry
+  var trailingInset: CGFloat = ChatComposerLayout.pageMargin
   let onSelect: (String) -> Void
+  var onVisibilityChange: ((Bool) -> Void)? = nil
 
   var body: some View {
     if geometry.showsPromptTimeline {
@@ -282,9 +288,12 @@ struct ChatPromptTimelineOverlay: View {
         marks: geometry.marks,
         activeMarkID: geometry.activeMarkID,
         gutter: geometry.gutter,
-        onSelect: select
+        onSelect: select,
+        trailingInset: trailingInset
       )
       .background { stepShortcuts }
+      .onAppear { onVisibilityChange?(true) }
+      .onDisappear { onVisibilityChange?(false) }
     }
   }
 
@@ -319,18 +328,6 @@ struct ChatPromptTimelineOverlay: View {
     }
     .buttonStyle(.plain)
     .keyboardShortcut(key, modifiers: .command)
-  }
-}
-
-/// Keeps the legacy AppKit scroller out of the transcript only while the
-/// prompt timeline is visible. It observes the small geometry object rather
-/// than `ChatMessagesView`, so ordinary scroll movement still does not
-/// re-evaluate the full message list.
-struct ChatPromptTimelineScrollerSuppression: View {
-  @ObservedObject var geometry: ChatTranscriptGeometry
-
-  var body: some View {
-    ChatTimelineScrollerSuppressionHost(isSuppressed: geometry.showsPromptTimeline)
   }
 }
 

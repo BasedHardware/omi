@@ -1121,6 +1121,7 @@ struct DashboardPage: View {
         verticalContentPadding: OmiSpacing.sm,
         trailingContentPadding: OmiSpacing.md,
         contentColumnWidth: 760,
+        timelineTrailingInset: 0,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)

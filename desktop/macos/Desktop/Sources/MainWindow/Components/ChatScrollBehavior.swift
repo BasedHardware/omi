@@ -18,30 +18,43 @@ enum ChatScrollLiveEdge {
 /// retain their normal AppKit scrolling affordance.
 @MainActor
 final class ChatPromptTimelineScrollerController {
+  private struct ScrollerVisualState {
+    let isHidden: Bool
+    let alphaValue: CGFloat
+  }
+
   private weak var scrollView: NSScrollView?
+  private weak var verticalScroller: NSScroller?
   private var originalHasVerticalScroller: Bool?
+  private var originalScrollerVisualState: ScrollerVisualState?
   private var isSuppressed = false
 
   func attach(to scrollView: NSScrollView) {
-    guard self.scrollView !== scrollView else {
-      applyVisibility()
-      return
-    }
+    guard self.scrollView !== scrollView else { return }
     restore()
     self.scrollView = scrollView
     applyVisibility()
   }
 
-  func setSuppressed(_ isSuppressed: Bool) {
+  @discardableResult
+  func setSuppressed(_ isSuppressed: Bool) -> Bool {
+    guard self.isSuppressed != isSuppressed else { return false }
     self.isSuppressed = isSuppressed
     applyVisibility()
+    return true
   }
 
   func restore() {
     if let originalHasVerticalScroller, let scrollView {
       scrollView.hasVerticalScroller = originalHasVerticalScroller
     }
+    if let originalScrollerVisualState, let verticalScroller {
+      verticalScroller.isHidden = originalScrollerVisualState.isHidden
+      verticalScroller.alphaValue = originalScrollerVisualState.alphaValue
+    }
     originalHasVerticalScroller = nil
+    originalScrollerVisualState = nil
+    verticalScroller = nil
     scrollView = nil
   }
 
@@ -50,11 +63,25 @@ final class ChatPromptTimelineScrollerController {
     if isSuppressed {
       if originalHasVerticalScroller == nil {
         originalHasVerticalScroller = scrollView.hasVerticalScroller
+        verticalScroller = scrollView.verticalScroller
+        if let verticalScroller {
+          originalScrollerVisualState = ScrollerVisualState(
+            isHidden: verticalScroller.isHidden,
+            alphaValue: verticalScroller.alphaValue)
+        }
       }
       scrollView.hasVerticalScroller = false
+      verticalScroller?.isHidden = true
+      verticalScroller?.alphaValue = 0
     } else if let originalHasVerticalScroller {
       scrollView.hasVerticalScroller = originalHasVerticalScroller
+      if let originalScrollerVisualState, let verticalScroller {
+        verticalScroller.isHidden = originalScrollerVisualState.isHidden
+        verticalScroller.alphaValue = originalScrollerVisualState.alphaValue
+      }
       self.originalHasVerticalScroller = nil
+      self.originalScrollerVisualState = nil
+      verticalScroller = nil
     }
   }
 }
@@ -67,17 +94,14 @@ struct ChatTimelineScrollerSuppressionHost: NSViewRepresentable {
 
   func makeNSView(context: Context) -> NSView {
     let view = NSView()
-    context.coordinator.setSuppressed(isSuppressed)
-    DispatchQueue.main.async {
-      context.coordinator.attach(toEnclosingScrollViewOf: view)
-    }
+    _ = context.coordinator.setSuppressed(isSuppressed)
+    scheduleAttachment(of: view, with: context.coordinator)
     return view
   }
 
   func updateNSView(_ nsView: NSView, context: Context) {
-    context.coordinator.setSuppressed(isSuppressed)
-    DispatchQueue.main.async {
-      context.coordinator.attach(toEnclosingScrollViewOf: nsView)
+    if context.coordinator.setSuppressed(isSuppressed) {
+      scheduleAttachment(of: nsView, with: context.coordinator)
     }
   }
 
@@ -89,10 +113,22 @@ struct ChatTimelineScrollerSuppressionHost: NSViewRepresentable {
     Coordinator()
   }
 
+  private func scheduleAttachment(of view: NSView, with coordinator: Coordinator) {
+    // SwiftUI can create the background representable before inserting it into
+    // the document view. Retry through the next layout turns so the actual
+    // transcript NSScrollView is always found rather than leaving its overlay
+    // scroller visible for this rail session.
+    for delay in [0.0, 0.1, 0.3] {
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        coordinator.attach(toEnclosingScrollViewOf: view)
+      }
+    }
+  }
+
   final class Coordinator: NSObject, @unchecked Sendable {
     private let controller = ChatPromptTimelineScrollerController()
 
-    func setSuppressed(_ isSuppressed: Bool) {
+    func setSuppressed(_ isSuppressed: Bool) -> Bool {
       MainActor.assumeIsolated {
         controller.setSuppressed(isSuppressed)
       }
