@@ -1,0 +1,561 @@
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_525e97d8f6425e::t_ec897883d63f98 7
+.github/AGENTS.md
+  s_525e97d8f6425e::t_c9520281665c47 23
+.github/checks-manifest.yaml
+  s_525e97d8f6425e::t_c4febfe0034e6c 92-96,102-106,252-261,422-426,567,569,572,574
+.github/failure-classes/FC-negotiated-hint-as-hard-limit.json
+  s_525e97d8f6425e::t_1633f3fdffa090 1-9
+.github/failure-classes/FC-permanent-write-rejection-retried-forever.json
+  s_525e97d8f6425e::t_4b528d46b3d963 1-17
+.github/failure-classes/FC-release-probe-signer-identity.json
+  s_525e97d8f6425e::t_081b7fe3b7bd70 1-19
+.github/failure-classes/FC-retired-transaction-treated-as-fatal.json
+  s_525e97d8f6425e::t_34cdc22a548f31 1-16
+.github/failure-classes/FC-runtime-binding-contract.json
+  s_525e97d8f6425e::t_52edb51c1cd15e 6-9
+.github/failure-classes/FC-runtime-image-lineage.json
+  s_525e97d8f6425e::t_42f501242dbeea 1-15
+.github/failure-classes/FC-selection-overlay-layout-loop.json
+  s_525e97d8f6425e::t_6294f06b2ec0e3 6-8
+.github/failure-classes/FC-shared-cache-reader-format.json
+  s_525e97d8f6425e::t_85a7c163c95a81 1-13
+.github/failure-classes/FC-unbounded-user-collection-in-prompt.json
+  s_525e97d8f6425e::t_7da39d297d8e95 1-13
+.github/scripts/check-desktop-backend-release-policy.py
+  s_525e97d8f6425e::t_38e8fe1f37a378 22-61,68,71,73-75,82-83,97,104-106,108-111,119,121,150-153,165-171,175-185
+.github/scripts/check-desktop-changelog.py
+  s_525e97d8f6425e::t_af0fad2603e697 31-40
+.github/scripts/check_deployment_secret_boundary.py
+  s_525e97d8f6425e::t_08815ac931de6a 64,78,86-87,97,279-281,292-294
+.github/scripts/check_product_file_line_count_ratchet.py
+  s_525e97d8f6425e::t_00a73b544df1de 140-142,184,318,336,352,447-449
+.github/scripts/check_runner_cost_policy.py
+  s_525e97d8f6425e::t_da999ebfe8199a 1-39
+.github/scripts/deferred-work-marker-count.py
+  s_525e97d8f6425e::t_21dc64e6576d59 107,173
+.github/scripts/observe-codemagic-tag-build.py
+  s_525e97d8f6425e::t_0f0f3d314f9e09 1-193
+.github/scripts/preflight_runner.py
+  s_525e97d8f6425e::t_5a07241bb7af66 20-48,206-208
+.github/scripts/product_file_line_count_ratchet_baseline/backend-database.json
+  s_525e97d8f6425e::t_73fc983fac3fd9 3
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-chat.json
+  s_525e97d8f6425e::t_ee20dc46dc300d 3
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_525e97d8f6425e::t_3a7d47992779ca 4-6,8,12-14,16
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_525e97d8f6425e::t_6a48c37e170a7d 3-5,12-14
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-proactiveassistants.json
+  s_525e97d8f6425e::t_618531875fad27 4,8
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-providers.json
+  s_525e97d8f6425e::t_6a34b3834775c2 3-4,7-8
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-rewind.json
+  s_525e97d8f6425e::t_ae5374905af9bc 4,9
+.github/scripts/run_checks.py
+  s_525e97d8f6425e::t_86253164c97691 19,29-30
+.github/scripts/test_check_backend_deploy_source_admission.py
+  s_525e97d8f6425e::t_1b806c133a72ad 256-257
+.github/scripts/test_check_deployment_secret_boundary.py
+  s_525e97d8f6425e::t_c8468f0c1a1953 14,52,93-95,107-109,114-117,143-145,163-178
+.github/scripts/test_check_desktop_backend_release_policy.py
+  s_525e97d8f6425e::t_4a7881c45fabea 18-53,99-140,158-196,227-306
+.github/scripts/test_check_product_file_line_count_ratchet.py
+  s_525e97d8f6425e::t_28f082e48e20cb 11,135,190-212
+.github/scripts/test_check_runner_cost_policy.py
+  s_525e97d8f6425e::t_04d8f8ba2f6305 1-49
+.github/scripts/test_desktop_release_manifest_schema.py
+  s_525e97d8f6425e::t_5dae01a8e23646 1-20,24-25,30-87,90-91
+.github/scripts/test_observe_codemagic_tag_build.py
+  s_525e97d8f6425e::t_9f48232cd808e6 1-121
+.github/scripts/test_pr_preflight.py
+  s_525e97d8f6425e::t_8702a900cb75a0 10,18,20,499-552
+.github/scripts/test_publish_desktop_candidate_tag.py
+  s_525e97d8f6425e::t_4e4153832afc00 38-48
+.github/scripts/test_run_checks.py
+  s_525e97d8f6425e::t_d4a74ecbd7e497 19,113,224,258,283,297,303,551,559-562,569-580
+.github/scripts/verify_desktop_backend_image_lineage.py
+  s_525e97d8f6425e::t_96e8e723e0d461 1-189
+.github/workflows/desktop_auto_release.yml
+  s_525e97d8f6425e::t_0e4a3a2271e590 98-106,128
+.github/workflows/desktop_backend_auto_dev.yml
+  s_525e97d8f6425e::t_cb2069a2ea94a3 10,44,191,194,199,225-226,228,232,236-242,258-270,282,297,449-451
+.github/workflows/desktop_backend_prod.yml
+  s_525e97d8f6425e::t_3429406ca7e98e 50,68,211-227,280,287,290-293,310-311,313,317,321-327,366
+.github/workflows/gcp_backend.yml
+  s_525e97d8f6425e::t_902d9888a23eae 116,170,341
+.github/workflows/gcp_backend_auto_dev.yml
+  s_525e97d8f6425e::t_a6c525bf42232d 30,151,247
+.github/workflows/gcp_diarizer.yml
+  s_525e97d8f6425e::t_fbb2c9b84e2715 39
+.github/workflows/gcp_firestore_indexes.yml
+  s_525e97d8f6425e::t_2c6837e7205351 33
+.github/workflows/gcp_models.yml
+  s_525e97d8f6425e::t_20a3bc0ba18075 42
+.github/workflows/gcp_nllb_translation.yml
+  s_525e97d8f6425e::t_81da0178860857 36
+.github/workflows/gcp_parakeet.yml
+  s_525e97d8f6425e::t_ab1eabdda64515 35
+.github/workflows/repo-checks.yml
+  s_525e97d8f6425e::t_32de6bd6b4bdc3 15-21
+.github/workflows/sync_ledger_fence_cutover.yml
+  s_525e97d8f6425e::t_4f922577a12ef6 46,138
+app/lib/services/agent_chat_service.dart
+  s_525e97d8f6425e::t_68c7cf0b1567ed 38-40,98
+app/test/services/agent_chat_service_test.dart
+  s_525e97d8f6425e::t_022a5dc6fa209b 1-11
+backend/.env.template
+  s_525e97d8f6425e::t_f0e1d95093ce57 29-42
+backend/Dockerfile
+  s_525e97d8f6425e::t_23c3d6269e4e76 70-78
+backend/agent-proxy/Dockerfile
+  s_525e97d8f6425e::t_c978f09f0a18cb 23
+backend/agent-proxy/main.py
+  s_525e97d8f6425e::t_eed12c33e913bc 32,43-44,52-56,257-260,273,278-282,324-340,347-355,381-383,385-389,401,408-410,569-584,630,646,665-687,689,693-716,719-722,742-756,758-759,777-783,785-788,791,802-807,810-812,825,834,839-841,843-847,858-871
+backend/agent-proxy/resilience.py
+  s_525e97d8f6425e::t_a983d39cadb5e9 1-59
+backend/database/_client.py
+  s_525e97d8f6425e::t_694351b966394c 1,6,18-20,23-24,56-95
+backend/database/conversation_finalization_jobs.py
+  s_525e97d8f6425e::t_811a51b6d7bdb1 1200-1240
+backend/database/conversations.py
+  s_525e97d8f6425e::t_0f95579fb81cc1 21,1390
+backend/database/redis_db.py
+  s_525e97d8f6425e::t_86fcd95606d549 348-355
+backend/jobs/l2_promotion_selector.py
+  s_525e97d8f6425e::t_3a8ea8d9ef0c49 176-188
+backend/llm_gateway/routers/openai_compatible.py
+  s_525e97d8f6425e::t_9b8a62499d7ffc 59,66-70,252,263,270-271,286-287
+backend/main.py
+  s_525e97d8f6425e::t_a97c637fb77e53 15,118-134
+backend/routers/agent_tools.py
+  s_525e97d8f6425e::t_e0ac142be78cc2 31-32,339,342-348,350-361,399-405
+backend/routers/integrations.py
+  s_525e97d8f6425e::t_f1770b4d9df7b2 22,76-77,368-373,380,386-390,392-393,395-400,402-407,409-410,551-558,564,567-580
+backend/routers/listen/receiver.py
+  s_525e97d8f6425e::t_f339f2a4771d38 76-90,380-382,522-524
+backend/routers/oauth.py
+  s_525e97d8f6425e::t_d0a9e2fc780046 1-2,4,6,15,20-21,41-51,126-127,135,142-150,154-165,198-200,202-207,214-219
+backend/routers/payment.py
+  s_525e97d8f6425e::t_df42acb4b50ac9 1278-1283
+backend/routers/users.py
+  s_525e97d8f6425e::t_e61e667c3e863c 124,1111
+backend/scripts/firebase_release_probe_token.py
+  s_525e97d8f6425e::t_59b294667eb914 2-14,27,43,48,51,63-66,108-121,141,143-148,150,154,156,163,165-168,179,183-292,304,339-344,352-357,395,406-410,413-422
+backend/services/conversation_finalization.py
+  s_525e97d8f6425e::t_8e3ffd48c14ca5 14-15,17,166-195
+backend/templates/oauth_authenticate.html
+  s_525e97d8f6425e::t_2e4decfe974d6d 154,211
+backend/testing/replay_harness_lc3_frame_timing/README.md
+  s_525e97d8f6425e::t_8d3d69790f25e4 1-34
+backend/testing/replay_harness_lc3_frame_timing/oracle.py
+  s_525e97d8f6425e::t_65d524607e312a 1-443
+backend/testing/replay_harness_lc3_frame_timing/run.sh
+  s_525e97d8f6425e::t_52f2f5b6e9679f 1-22
+backend/testing/replay_harness_llm_gateway_fake_upstream/README.md
+  s_525e97d8f6425e::t_6a2303a9ef0fc9 21
+backend/testing/replay_harness_llm_gateway_fake_upstream/oracle.py
+  s_525e97d8f6425e::t_fb3bfb61eccd5b 25-26,162-191,196,199-202,209-214,232-235,271-283
+backend/tests/test_replay_harness_lc3_frame_timing.py
+  s_525e97d8f6425e::t_40457e7b3aff55 1-62
+backend/tests/unit/test_agent_proxy_async_boundaries.py
+  s_525e97d8f6425e::t_fe488bf76cd05b 2,4,21,43-50,67-146,188-234
+backend/tests/unit/test_agent_proxy_history_seeding.py
+  s_525e97d8f6425e::t_f7e69e2344a0bd 1-74
+backend/tests/unit/test_agent_proxy_resilience.py
+  s_525e97d8f6425e::t_fae4a4e0c86633 1-46
+backend/tests/unit/test_agent_tools_isolation.py
+  s_525e97d8f6425e::t_4a6eb2703f0e27 1-51
+backend/tests/unit/test_agent_vm_reaped_record_recovery.py
+  s_525e97d8f6425e::t_1e78e7de794466 31-34
+backend/tests/unit/test_async_app_integrations.py
+  s_525e97d8f6425e::t_3009b72f0700da 248-253,355-417
+backend/tests/unit/test_async_http_infrastructure.py
+  s_525e97d8f6425e::t_3eab5056c87811 71,289-326
+backend/tests/unit/test_async_realtime_integrations_offload.py
+  s_525e97d8f6425e::t_881a97df8bd129 253-258
+backend/tests/unit/test_byok_fingerprint_pepper_migration.py
+  s_525e97d8f6425e::t_7c238544c92f0f 1-168
+backend/tests/unit/test_conversation_segments_transaction_expiry.py
+  s_525e97d8f6425e::t_85b98c4f4c7599 1-161
+backend/tests/unit/test_firebase_release_probe_token.py
+  s_525e97d8f6425e::t_68a8ce1b123b8d 3,6,8,67-68,83-85,94-99,143-266
+backend/tests/unit/test_gmail_scope_contract.py
+  s_525e97d8f6425e::t_658f23738937fd 1-38
+backend/tests/unit/test_gmail_scope_gating.py
+  s_525e97d8f6425e::t_8673da266fbab5 17,55-61,63
+backend/tests/unit/test_http_timeout_defaults.py
+  s_525e97d8f6425e::t_0a13f4c022c5ba 1-100
+backend/tests/unit/test_kg_prompt_node_cap.py
+  s_525e97d8f6425e::t_3a64d95e6e22f9 1-111
+backend/tests/unit/test_l2_promotion_selector.py
+  s_525e97d8f6425e::t_4fe2f24c1cb689 1-135
+backend/tests/unit/test_listen_finalization_cloud_tasks.py
+  s_525e97d8f6425e::t_34327131e77fba 919,931,1456-1462,1468,1483-1490
+backend/tests/unit/test_listen_receiver_opus_frame_capacity.py
+  s_525e97d8f6425e::t_aa2d45111a11d5 1-153
+backend/tests/unit/test_llm_gateway_openai_compatible.py
+  s_525e97d8f6425e::t_faf12abddd567d 139-184
+backend/tests/unit/test_mentor_notifications.py
+  s_525e97d8f6425e::t_112329acdea2cd 373-413
+backend/tests/unit/test_oauth_csrf.py
+  s_525e97d8f6425e::t_329661aac48a7e 1-145
+backend/tests/unit/test_oauth_token_async_boundaries.py
+  s_525e97d8f6425e::t_9e9a4d6d2e244c 80-92,119-127,155-162,182-189
+backend/tests/unit/test_rate_limit_json_failopen.py
+  s_525e97d8f6425e::t_8bb2024daa36d8 9,17-18,111-156
+backend/tests/unit/test_realtime_integrations_usage_tracking.py
+  s_525e97d8f6425e::t_f0309775477295 104-114,222-223,497-527
+backend/tests/unit/test_redis_db_cache_serialization.py
+  s_525e97d8f6425e::t_5e9acfa1424f14 68-92
+backend/tests/unit/test_replay_llm_gateway_fake_upstream_oracle.py
+  s_525e97d8f6425e::t_7c7235cfc86752 1-52
+backend/tests/unit/test_ssrf_public_url_guard.py
+  s_525e97d8f6425e::t_55b8987c910d3d 1-200
+backend/tests/unit/test_stale_processing_emulator_concurrency.py
+  s_525e97d8f6425e::t_72d27818841ab0 291-337
+backend/tests/unit/test_stale_processing_reconciliation.py
+  s_525e97d8f6425e::t_9d04c06f49b67e 19-20,24-28,113-156
+backend/tests/unit/test_task_recommendations.py
+  s_525e97d8f6425e::t_374dcf5fe3caad 1008-1084
+backend/tests/unit/test_tools_agent_route_response_shape.py
+  s_525e97d8f6425e::t_c8a82d96f6dff7 82
+backend/tests/unit/test_tools_rest_memory_runtime_adapter.py
+  s_525e97d8f6425e::t_65970be2536c4e 172-177,204-209
+backend/tests/unit/test_verify_token_admin_and_local_dev_gating.py
+  s_525e97d8f6425e::t_2b4e633c8e93cb 1-193
+backend/utils/app_integrations.py
+  s_525e97d8f6425e::t_57459e064fefa4 10-11,150,164,228-239,249-251,255,257-259,723-731,737-738,744-748,830-838,847-853
+backend/utils/byok.py
+  s_525e97d8f6425e::t_54688954a261cc 17,19,32-61,234-240
+backend/utils/conversations/location.py
+  s_525e97d8f6425e::t_de8bfec2c0e31b 34
+backend/utils/http_client.py
+  s_525e97d8f6425e::t_3d489e1824fa70 14,16,20,26-119,301,306-317
+backend/utils/integrations_registry.py
+  s_525e97d8f6425e::t_51c618e97343c3 1-68
+backend/utils/llm/knowledge_graph.py
+  s_525e97d8f6425e::t_6b972531c2f8dd 1,40-74,123,217
+backend/utils/mentor_notifications.py
+  s_525e97d8f6425e::t_1c039cad84e30d 118-123
+backend/utils/observability/fallback.py
+  s_525e97d8f6425e::t_3145a86811a4ce 69
+backend/utils/other/chat_file.py
+  s_525e97d8f6425e::t_9d6e33a2068341 66
+backend/utils/other/endpoints.py
+  s_525e97d8f6425e::t_fcda2d1964620f 1,46-56,58-65,72-80,366-369
+backend/utils/retrieval/tools/google_utils.py
+  s_525e97d8f6425e::t_67454c68ba9e8e 23-27,35,37-42
+backend/utils/stt/speech_profile.py
+  s_525e97d8f6425e::t_19dcd4886c4873 69
+backend/utils/task_intelligence/recommendations.py
+  s_525e97d8f6425e::t_32b7528b35e299 169-181,357,408-409
+backend/utils/transcribe_decisions.py
+  s_525e97d8f6425e::t_2e5383751d526b 75-80,85,87-88
+desktop/macos/Backend-Rust/src/routes/chat/ARCHITECTURE.md
+  s_525e97d8f6425e::t_66c474bd2a15dc 17-19
+desktop/macos/Backend-Rust/src/routes/chat/request_translation.rs
+  s_525e97d8f6425e::t_1ba03b8964e202 61-131,302-306,309-311,336,646-704,797-799
+desktop/macos/Backend-Rust/src/routes/chat/tests/all.rs
+  s_525e97d8f6425e::t_da73fec27afda8 874,879,914-915,1440,1459,1467-1534
+desktop/macos/Desktop/Sources/AnalyticsManager.swift
+  s_525e97d8f6425e::t_4d4082ab4f775b 37-51,679,948-1036,1099-1111,1113-1118,1121-1133,1135-1140,1143-1155,1157-1162
+desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  s_525e97d8f6425e::t_c50c512f734563 2199-2202
+desktop/macos/Desktop/Sources/Chat/AgentErrorClassifier.swift
+  s_525e97d8f6425e::t_d09f0ff45c4ef4 1-175
+desktop/macos/Desktop/Sources/Chat/ChatOmiMark.swift
+  s_525e97d8f6425e::t_3cc67a6f644ded 1-318
+desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
+  s_525e97d8f6425e::t_3dabeb4db7d5b1 225-261,270,319,328-335,370,525,535
+desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
+  s_525e97d8f6425e::t_5d83df53e063de 65-83
+desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift
+  s_525e97d8f6425e::t_2583e7c22c2a1b 1414
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
+  s_525e97d8f6425e::t_4a8064596372bf 145-152,155-159,192-194,205,214
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_525e97d8f6425e::t_53ae20a205aaa1 289-307,535-556,572-573,579-617,2191-2192,2202-2224
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_525e97d8f6425e::t_b8d57e239f5140 115-125,128-130,3220,3234,3836-3837,3857-3867,3884-3886,3891-3892,3913-3914,4149-4174,4644-4648,4677,4724-4735,4737,4765-4767,4769-4791
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift
+  s_525e97d8f6425e::t_0152d908dd240f 1-138
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchSystemControlsView.swift
+  s_525e97d8f6425e::t_f65355df3a44e9 1-165
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchVoiceMorphMark.swift
+  s_525e97d8f6425e::t_fea3f9e995e9d1 1-175
+desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager+InputDeviceRouting.swift
+  s_525e97d8f6425e::t_26498e1f0ac6e6 2-16,21-27,36-133,138,141-142,145-161
+desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  s_525e97d8f6425e::t_91488580a53257 322,631,675
+desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
+  s_525e97d8f6425e::t_eb64e70f97caf0 621,629
+desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift
+  s_525e97d8f6425e::t_167bbc2443bcc3 100-109,304-313
+desktop/macos/Desktop/Sources/FloatingControlBar/SystemCaptureControls.swift
+  s_525e97d8f6425e::t_e991c0683ce708 1-96
+desktop/macos/Desktop/Sources/Generated/GeneratedToolCapabilities.swift
+  s_525e97d8f6425e::t_d45012da1c17f6 292
+desktop/macos/Desktop/Sources/Generated/GeneratedToolExecutors.swift
+  s_525e97d8f6425e::t_bdb44e7fca493e 44
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  s_525e97d8f6425e::t_d470b786895bee 10,34,42,98-99,128-143,908
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
+  s_525e97d8f6425e::t_4009e3fa867c9a 23-24,26-28,32-33,36-39
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
+  s_525e97d8f6425e::t_77114b034cd59c 60-72,106,114-119,181-189,196-226,240-241,257-258,261,264-269,331-332,336,543-544,548,560,562-566,609-620,626,637-638,651,667,700
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatPromptTimeline.swift
+  s_525e97d8f6425e::t_03e952251e48e7 1-376
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatPromptTimelineModel.swift
+  s_525e97d8f6425e::t_d4c3763718fcf2 1-186
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
+  s_525e97d8f6425e::t_26626818f5959c 10-13,20-167,170,187,189-190,192-193,195,213,221-234,246-251,254,258-260,263,268-275,278-399,586-587
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatTranscriptGeometry.swift
+  s_525e97d8f6425e::t_56f3cf1b8f7e34 1-187
+desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  s_525e97d8f6425e::t_5d5542dc0c31b5 140-160,188-189,202,451-456,460,462-463,468,475,479-480,483-492,517-519,594-693
+desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPageHeaderControls.swift
+  s_525e97d8f6425e::t_b8ae5f85ec3c01 1-131
+desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
+  s_525e97d8f6425e::t_cc6ca43fd986cb 399
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  s_525e97d8f6425e::t_15ab99ab0a9486 239,353,374
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_525e97d8f6425e::t_2f34d512e87b16 621-622,834,1123-1124,1128-1129,2328-2331
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SearchableDropdown.swift
+  s_525e97d8f6425e::t_057d40b3358b35 46-47,81-86,88-96,98-99,101,103-119,122,128,136-138,140-145
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  s_525e97d8f6425e::t_75655e71c59e4e 36-51
+desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  s_525e97d8f6425e::t_7a1aee32709599 154,480
+desktop/macos/Desktop/Sources/ModelQoS.swift
+  s_525e97d8f6425e::t_f95cd011f47110 99-111
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_525e97d8f6425e::t_5b956f7fd7ed0f 1175-1178,1180,1190-1191
+desktop/macos/Desktop/Sources/PostHogManager.swift
+  s_525e97d8f6425e::t_013274bf17f644 831-898,990-1003,1006,1009-1022,1025,1028-1041,1044-1067
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistant.swift
+  s_525e97d8f6425e::t_db6fa5c9702e61 1-493
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistantSettings.swift
+  s_525e97d8f6425e::t_54ae0df11df308 1-190
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistantTelemetry.swift
+  s_525e97d8f6425e::t_4e19cfe6b14565 1-251
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
+  s_525e97d8f6425e::t_f591956792dbd1 1-299
+desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  s_525e97d8f6425e::t_bf3e7b57b82f44 40,383-388
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
+  s_525e97d8f6425e::t_b31a4d429b7c34 335,420
+desktop/macos/Desktop/Sources/Providers/AppProvider.swift
+  s_525e97d8f6425e::t_f0c123986714f9 4-13,31-54,58,130,287,301,306,323,333,337,396,495-501,572
+desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  s_525e97d8f6425e::t_d3ebe5af93a47f 4856
+desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  s_525e97d8f6425e::t_14adf483351d3a 1014-1037,1455-1464,2832-2841,2845,2862-2871
+desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  s_525e97d8f6425e::t_22c0abe11c49f3 3206-3208,3215,3232-3236,3249,3270
+desktop/macos/Desktop/Tests/AgentErrorClassifierTests.swift
+  s_525e97d8f6425e::t_b61887f2fda4e0 1-187
+desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift
+  s_525e97d8f6425e::t_dc654c957a74df 324-325,433,443-445,456-459,554-557,618,988-994,1014-1015
+desktop/macos/Desktop/Tests/AppsHeaderRowLayoutTests.swift
+  s_525e97d8f6425e::t_b6ee1a162d301c 1-163
+desktop/macos/Desktop/Tests/AppsPageSearchResultsPresentationTests.swift
+  s_525e97d8f6425e::t_529f5038bf7242 1-48
+desktop/macos/Desktop/Tests/AuthorizedToolOwnerBoundAuthTests.swift
+  s_525e97d8f6425e::t_dfdc2094438b06 501-539
+desktop/macos/Desktop/Tests/ChatPromptTimelineTests.swift
+  s_525e97d8f6425e::t_5b05ea8a86f76b 1-660
+desktop/macos/Desktop/Tests/ChatQueryTelemetryTests.swift
+  s_525e97d8f6425e::t_29fbf15900736f 53-89,99-100,606,640
+desktop/macos/Desktop/Tests/ChatScrollLiveEdgeTests.swift
+  s_525e97d8f6425e::t_9a3f514ae86f52 16-19
+desktop/macos/Desktop/Tests/ChatToolExecutorActionItemIDTests.swift
+  s_525e97d8f6425e::t_e3607b2be2bac4 1-32
+desktop/macos/Desktop/Tests/ChatWorkingIndicatorTests.swift
+  s_525e97d8f6425e::t_822ddf3f0b17c0 1-207
+desktop/macos/Desktop/Tests/DashboardCaptureStateTests.swift
+  s_525e97d8f6425e::t_8caa5188a132d8 271-273
+desktop/macos/Desktop/Tests/DesktopChatDriftGuardTests.swift
+  s_525e97d8f6425e::t_ec722af0db5de7 32,34-52
+desktop/macos/Desktop/Tests/DesktopDiagnosticsManagerTests.swift
+  s_525e97d8f6425e::t_bbf5086c83a1b1 704-707
+desktop/macos/Desktop/Tests/FloatingBarGeometryTests.swift
+  s_525e97d8f6425e::t_88c98b07848811 403-406,409-410,414-443
+desktop/macos/Desktop/Tests/FloatingControlBarStateTests.swift
+  s_525e97d8f6425e::t_9095a8d3812dec 86-89,94-101
+desktop/macos/Desktop/Tests/NotchCardVoiceDeliveryTests.swift
+  s_525e97d8f6425e::t_b5a455bc05cfb5 1-216
+desktop/macos/Desktop/Tests/NotchVoiceMorphMarkTests.swift
+  s_525e97d8f6425e::t_1806932c3761dd 1-94
+desktop/macos/Desktop/Tests/PTTInputDeviceProbeTests.swift
+  s_525e97d8f6425e::t_96bf58c6889209 1-202
+desktop/macos/Desktop/Tests/RewindSearchQueryExpansionTests.swift
+  s_525e97d8f6425e::t_1e8fe29a46d533 1-67
+desktop/macos/Desktop/Tests/ScreenRecordingPermissionPolicyTests.swift
+  s_525e97d8f6425e::t_7994ed6d6da7d2 53-55
+desktop/macos/Desktop/Tests/SuggestionAssistantTelemetryTests.swift
+  s_525e97d8f6425e::t_3d1a8ba1306a02 1-219
+desktop/macos/Desktop/Tests/SuggestionAssistantTests.swift
+  s_525e97d8f6425e::t_7a73c4af04580e 1-327
+desktop/macos/Desktop/Tests/SystemCaptureControlsTests.swift
+  s_525e97d8f6425e::t_ab0e1ea237f33a 1-26
+desktop/macos/Desktop/Tests/UntrustedNotificationContextTests.swift
+  s_525e97d8f6425e::t_8cb2dfbe71f882 1-133
+desktop/macos/agent-cloud/agent-result.mjs
+  s_525e97d8f6425e::t_3c101cb6b26da2 1-81
+desktop/macos/agent-cloud/agent.mjs
+  s_525e97d8f6425e::t_248785be4c783b 2-25,37-40,42-43,46,50-51,54-63,108-114,140,154-158,171-172,183,187-188,191-192,224-226,275-276,327-331,333-348,386-387,399,402-403,405-407,409,412-421,426,428,431,438,441,446,449,451,487-493,498-569,601-606,609-611,633-635,643-688,691-695,702-705,710-717,742-744,747,764,769-776,844-848,860,866-903,910-912,915,952-980,983,987-994,1043-1046,1073-1075,1091-1098,1100-1110,1118-1125,1131-1145,1160-1172,1184-1191,1494-1504,1506,1565-1575,1577,1614-1623,1698-1700,1710-1718,1730-1731,1735-1737,1741-1747,1749,1761-1778,1784-1789,1791,1795-1805,1808,1814-1817,1829-1831,1858-1861
+desktop/macos/agent-cloud/conversation-condenser.mjs
+  s_525e97d8f6425e::t_6fea808d12f757 1-78
+desktop/macos/agent-cloud/data-tools.mjs
+  s_525e97d8f6425e::t_95ce9e7dd5242d 1-234
+desktop/macos/agent-cloud/errors.mjs
+  s_525e97d8f6425e::t_bfc804093be0fa 1-118
+desktop/macos/agent-cloud/experiments/RESEARCH-FINDINGS.md
+  s_525e97d8f6425e::t_08ac056b906e9f 1-215
+desktop/macos/agent-cloud/experiments/median-user-sim.md
+  s_525e97d8f6425e::t_b370c4ab4152eb 1-44
+desktop/macos/agent-cloud/experiments/user-profile.json
+  s_525e97d8f6425e::t_a037e9c5b544f3 1-62
+desktop/macos/agent-cloud/package-lock.json
+  s_525e97d8f6425e::t_21058492becd65 16-18,43-76,362-397,414-419,421-429,431-438,440-445,448-455,457-462,465-472,474-479,482-487,489,491-496,499-514,516-523,525-528,530,533-540,542-545,547,550-562,564,567-574,576-581,584-596,598,601-616,618-635,637-644,648,651,654-988,991-1263,1265-1277,1279-1298,1300-1371,1400-1418,1437-1450,1460-1486,1517-1545,1611-1644,1677-1683,1729-1752,1799-1850,1869-2068
+desktop/macos/agent-cloud/package.json
+  s_525e97d8f6425e::t_45406aa1c2f2cd 10,14-16
+desktop/macos/agent-cloud/query-config.mjs
+  s_525e97d8f6425e::t_5a33fc26922509 1-70
+desktop/macos/agent-cloud/scripts/ablation.mjs
+  s_525e97d8f6425e::t_3268d793a250bc 1-174
+desktop/macos/agent-cloud/scripts/bench-data-tools.mjs
+  s_525e97d8f6425e::t_63406d407001d1 1-72
+desktop/macos/agent-cloud/scripts/connector-real.mjs
+  s_525e97d8f6425e::t_58c94e34fe36eb 1-89
+desktop/macos/agent-cloud/scripts/inflate-db.mjs
+  s_525e97d8f6425e::t_68262d0480dfed 1-73
+desktop/macos/agent-cloud/scripts/run-tests.sh
+  s_525e97d8f6425e::t_d9992d0f41edf5 1-15
+desktop/macos/agent-cloud/stream-routing.mjs
+  s_525e97d8f6425e::t_4a6c4c7b23b4bb 1-55
+desktop/macos/agent-cloud/tests/agent-result.test.mjs
+  s_525e97d8f6425e::t_70fb6d8b824651 1-70
+desktop/macos/agent-cloud/tests/agent-ws-e2e.test.mjs
+  s_525e97d8f6425e::t_1a819df01930f8 1-334
+desktop/macos/agent-cloud/tests/conversation-condenser.test.mjs
+  s_525e97d8f6425e::t_1bf4f75d37e091 1-75
+desktop/macos/agent-cloud/tests/data-tools.test.mjs
+  s_525e97d8f6425e::t_8cc9e117137880 1-178
+desktop/macos/agent-cloud/tests/errors.test.mjs
+  s_525e97d8f6425e::t_71b48000ccb936 1-110
+desktop/macos/agent-cloud/tests/fixtures/fake-agent-sdk.mjs
+  s_525e97d8f6425e::t_94f4d3a3767c44 1-131
+desktop/macos/agent-cloud/tests/query-config.test.mjs
+  s_525e97d8f6425e::t_f2a73535106d21 1-36
+desktop/macos/agent-cloud/tests/stream-routing.test.mjs
+  s_525e97d8f6425e::t_b8bf7e404887bc 1-78
+desktop/macos/agent/src/runtime/control-tool-manifest.ts
+  s_525e97d8f6425e::t_58b26ef7b8cba0 706,722,754
+desktop/macos/agent/src/runtime/control-tools.ts
+  s_525e97d8f6425e::t_3f5d9b1d94f823 301-304,321,343,1350,1382
+desktop/macos/agent/src/runtime/kernel-runs.ts
+  s_525e97d8f6425e::t_108ce7be3530cb 304,401,573-588
+desktop/macos/agent/src/runtime/kernel-types.ts
+  s_525e97d8f6425e::t_29f278448e7632 376-381,417-422
+desktop/macos/agent/src/runtime/omi-tool-manifest.ts
+  s_525e97d8f6425e::t_e84f2d81756a86 1064-1070
+desktop/macos/agent/src/runtime/run-tool-capability.ts
+  s_525e97d8f6425e::t_d286a9e3859649 278-281,680-681,729,755-771
+desktop/macos/agent/tests/cancellation.test.ts
+  s_525e97d8f6425e::t_711d8671f9c301 92-193
+desktop/macos/agent/tests/control-tools.test.ts
+  s_525e97d8f6425e::t_361c9ea44dd9b4 501-522
+desktop/macos/agent/tests/fixtures/tool-manifest.json
+  s_525e97d8f6425e::t_dd2425cb1cd862 2507-2511,2594-2598,2641,2708-2712,2783-2787
+desktop/macos/agent/tests/run-tool-capability.test.ts
+  s_525e97d8f6425e::t_6c3d736276af60 583-674
+desktop/macos/agent/tests/spawn-tool-policy.test.ts
+  s_525e97d8f6425e::t_810d491c9bd73f 1-89
+desktop/macos/changelog/unreleased/20260721-cancel-cascades-to-delegated-subagents.json
+  s_525e97d8f6425e::t_0b4d57ee1a4c43 1-3
+desktop/macos/changelog/unreleased/20260722-honest-chat-error-messages.json
+  s_525e97d8f6425e::t_0a14b503c9fa1c 1-3
+desktop/macos/changelog/unreleased/20260725-live-proactive-suggestions.json
+  s_525e97d8f6425e::t_554b96ac38760a 1-3
+desktop/macos/changelog/unreleased/20260726-ptt-audio-device-probe.json
+  s_525e97d8f6425e::t_6c27c249a2ba0d 1-3
+desktop/macos/changelog/unreleased/20260727-stabilize-chat-rendering.json
+  s_525e97d8f6425e::t_1fe2501bda9661 1-3
+desktop/macos/e2e/flows/apps.yaml
+  s_525e97d8f6425e::t_f16f4bab20a822 8
+desktop/macos/e2e/flows/chat-hermetic.yaml
+  s_525e97d8f6425e::t_7d47fce9a1082e 7-21,24-28,30-32
+desktop/macos/e2e/flows/floating-bar-functional.yaml
+  s_525e97d8f6425e::t_d7c80f23869c1a 47-49
+desktop/macos/e2e/flows/notifications-settings.yaml
+  s_525e97d8f6425e::t_44dfda2680d374 10-11
+desktop/macos/e2e/flows/ptt-lifecycle.yaml
+  s_525e97d8f6425e::t_c2f7e89dbe7601 7
+desktop/macos/e2e/flows/screen-recording-permission.yaml
+  s_525e97d8f6425e::t_9643f748bf8dbc 29-32
+desktop/macos/scripts/pre-tag-readiness.sh
+  s_525e97d8f6425e::t_9f4bafae5e8790 28,151-170,173-183,264-283
+desktop/macos/scripts/qualify-desktop-beta.sh
+  s_525e97d8f6425e::t_f4d5802612fc7b 227-243
+desktop/macos/tests/test-qualification-swift-cache.sh
+  s_525e97d8f6425e::t_dc79ae4f26c1f1 4-8
+desktop/macos/tests/test_pre_tag_readiness_behavior.py
+  s_525e97d8f6425e::t_6891a1dfc5c610 53,61-64,125-147,149-157,164,166-169,178-179,188-194,198,202,205,209-213,219,221,228-230,234,238-280,288,292,294
+desktop/windows/changelog/unreleased/2026-07-portuguese-variants.json
+  s_525e97d8f6425e::t_411e973146e1e4 1-5
+desktop/windows/package.json
+  s_525e97d8f6425e::t_b01e611832aac3 3,6-8,40
+desktop/windows/scripts/check-node-version.mjs
+  s_525e97d8f6425e::t_3ff6aab2bfc6be 1-39
+desktop/windows/src/renderer/src/components/settings/tabs/TranscriptionTab.test.tsx
+  s_525e97d8f6425e::t_c35a552150f061 46-56
+desktop/windows/src/renderer/src/lib/conversations/filtering.test.ts
+  s_525e97d8f6425e::t_d709c2a68d8bd4 182-187
+desktop/windows/src/renderer/src/lib/conversations/filtering.ts
+  s_525e97d8f6425e::t_18bb114cf15a49 130
+desktop/windows/src/renderer/src/lib/languages.test.ts
+  s_525e97d8f6425e::t_2863a2279f92f5 28-41,76-82
+desktop/windows/src/renderer/src/lib/languages.ts
+  s_525e97d8f6425e::t_370dc7ed8008be 13-17,37-43,45,65-72,93-98,105-106
+docs/superpowers/specs/2026-07-25-proactive-live-suggestions-design.md
+  s_525e97d8f6425e::t_f79f4f641c5926 1-182
+package.json
+  s_525e97d8f6425e::t_30a12e5121273d 12
+scripts/dev-harness/dev_harness/qualification.py
+  s_525e97d8f6425e::t_6297a97ea61ab8 5,18-23,34-37,64-88,93,97,173-185,217,219,259-262,526,528,536,539
+scripts/dev-harness/dev_harness/safety.py
+  s_525e97d8f6425e::t_2dfe39134730ee 17,23-57,390-410,421-453
+scripts/dev-harness/tests/test_qualification_lease.py
+  s_525e97d8f6425e::t_fc386d73239280 4,66-110,122-156,181,224,281,334-335,338-342,344-351,362-364,412-413,417-421,426-434,439,441-444,494,496,502,540-551,600-611
+scripts/dev-harness/tests/test_safety.py
+  s_525e97d8f6425e::t_1594af02a8d73b 5,142-199
+scripts/test-make-setup.sh
+  s_525e97d8f6425e::t_1bdfc68717ca44 6-13
+web/app/src/app/api/proxy/[...path]/route.ts
+  s_525e97d8f6425e::t_c051413ff4beb7 11,18,25,32,37,49,59,82-86,110-113,147-148,167
+web/app/src/components/memories/MemoriesPage.tsx
+  s_525e97d8f6425e::t_373dc6a5ba3c92 3-12,14-30,45-50,101-102,115-116,243-245,248-250,253-255,298-299,362,367-373,403,416,429,446,472,476-484,505,540,555,591-594,642-644,700-702,726-728,749,786,803-804,811-813
+web/app/src/hooks/useMemories.ts
+  s_525e97d8f6425e::t_ba1bf83e03dee4 72-77,81-84,100,121-131,172-177,211-212,325-326,370-391,394-414,417-432,467-485,488-506,509-524
+web/app/src/types/user.ts
+  s_525e97d8f6425e::t_56628698d700d9 249-252
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "80f7740ab393f17d2cfb893a7577261e073f5f70",
+  "prompts": {},
+  "sessions": {
+    "s_525e97d8f6425e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81424a8f-9e27-4689-8547-3152f2473712",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
