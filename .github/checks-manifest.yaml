@@ -244,6 +244,16 @@ checks:
     triggers: [".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py"]
     lanes: ["local", "ci"]
     reason: "deployment secret-boundary fake-name fixtures must remain executable"
+  - id: github-runner-cost-policy
+    command: ["python3", ".github/scripts/check_runner_cost_policy.py"]
+    triggers: [".github/workflows/**/*.yml", ".github/workflows/**/*.yaml", ".github/actionlint.yaml", ".github/scripts/check_runner_cost_policy.py", ".github/scripts/test_check_runner_cost_policy.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-196: public-repository standard runners are free while the larger ubuntu-latest-m label caused recurring Linux 4-core charges"
+  - id: github-runner-cost-policy-fixtures
+    command: ["python3", ".github/scripts/test_check_runner_cost_policy.py"]
+    triggers: [".github/scripts/check_runner_cost_policy.py", ".github/scripts/test_check_runner_cost_policy.py"]
+    lanes: ["local", "ci"]
+    reason: "runner cost-policy fixtures must keep rejecting the paid larger-runner label"
   - id: telegram-deployment-notifier
     command: ["bash", ".github/actions/deployment-notifier/test-check-configuration.sh"]
     triggers: [".github/actions/deployment-notifier/**", ".github/checks-manifest.yaml"]
