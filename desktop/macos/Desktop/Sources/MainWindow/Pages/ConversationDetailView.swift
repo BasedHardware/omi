@@ -363,7 +363,6 @@ struct ConversationDetailView: View {
     }
     .padding(.horizontal, OmiSpacing.xxl)
     .padding(.vertical, OmiSpacing.lg)
-    .background(OmiColors.backgroundTertiary.opacity(0.5))
     .alert("Edit Conversation Title", isPresented: $showEditDialog) {
       TextField("Title", text: $editedTitle)
       Button("Cancel", role: .cancel) {}

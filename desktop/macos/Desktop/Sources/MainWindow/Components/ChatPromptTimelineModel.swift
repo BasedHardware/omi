@@ -90,9 +90,13 @@ enum ChatPromptTimelineModel {
   static func activeMarkID(
     marks: [ChatPromptMark],
     viewportTopFraction: CGFloat,
-    viewportHeightFraction: CGFloat
+    viewportHeightFraction: CGFloat,
+    isAtBottom: Bool = false
   ) -> String? {
     guard !marks.isEmpty else { return nil }
+    // At the live edge the reader is on the newest turn, even when a tall
+    // viewport leaves that prompt below the one-third reading line.
+    if isAtBottom { return marks.last?.id }
     let probe = viewportTopFraction + viewportHeightFraction * readingLine
     return marks.last(where: { $0.fraction <= probe })?.id ?? marks.first?.id
   }

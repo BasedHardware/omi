@@ -286,6 +286,25 @@ struct FloatingControlBarView: View {
           .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)
           .allowsHitTesting(notchSwitcherProgress > 0.6)
 
+          // Shortcut legend + capture controls, hugging the trailing edge of the
+          // expanded surface — the notch's right side, revealed on hover.
+          VStack {
+            NotchSystemControlsView(progress: notchSwitcherProgress)
+              .padding(
+                .top,
+                notchChromeHeight
+                  + FloatingControlBarWindow.notchControlPanelTopOffset(agentCount: agentPills.pills.count)
+                  + OmiSpacing.xs
+              )
+              .padding(.trailing, OmiSpacing.md)
+            Spacer(minLength: 0)
+          }
+          .frame(
+            width: notchChromeLayoutWidth,
+            height: notchChromeHeight + notchHoverMenuHeight,
+            alignment: .topTrailing
+          )
+
           notchAgentLogoHitTarget
             .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)
         }
@@ -550,9 +569,50 @@ struct FloatingControlBarView: View {
       notchReceiptCard(notification)
     } else if notification.assistantId == NotchMoment.endAssistantId {
       notchEndCard(notification)
+    } else if notification.assistantId == "suggestion" {
+      suggestionCard(notification)
     } else {
       notificationView(notification)
     }
+  }
+
+  /// Live proactive suggestion. Monochrome and quiet by design — this card interrupts
+  /// unprompted, so it earns attention with the sentence, not with chrome.
+  private func suggestionCard(_ notification: FloatingBarNotification) -> some View {
+    Button {
+      FloatingControlBarManager.shared.openNotificationAsChat(notification)
+    } label: {
+      HStack(spacing: OmiSpacing.sm) {
+        Image(systemName: "lightbulb")
+          .scaledFont(size: 13, weight: .medium)
+          .foregroundColor(.white.opacity(0.75))
+
+        Text(notification.message)
+          .scaledFont(size: 13, weight: .medium)
+          .foregroundColor(.white)
+          .lineLimit(2)
+          .multilineTextAlignment(.leading)
+          .fixedSize(horizontal: false, vertical: true)
+
+        Spacer(minLength: OmiSpacing.xs)
+
+        Button {
+          FloatingControlBarManager.shared.dismissCurrentNotification()
+        } label: {
+          Image(systemName: "xmark")
+            .scaledFont(size: 10, weight: .semibold)
+            .foregroundColor(.white.opacity(0.45))
+            .padding(OmiSpacing.xxs)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Dismiss suggestion")
+      }
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.md)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
   }
 
   /// Conversation ends — the USP moment. "N follow-ups ready" + Review / Later.
@@ -2146,8 +2206,16 @@ private struct NotchAgentPillsRowView: View {
       isListening: isVoiceListening,
       isThinking: isThinking
     )
-    .frame(width: 28, height: 21)
+    // Keep every PTT dot inside the same 21pt identity slot as the resting
+    // Omi mark. The slot is frontmost and trails the visible left lobe, so the
+    // physical notch/header surface cannot cover or crop the waveform.
+    .frame(
+      width: NotchVoiceMorphGeometry.markSize.width,
+      height: NotchVoiceMorphGeometry.markSize.height
+    )
+    .zIndex(1)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+    .accessibilityIdentifier("notch_voice_morph_mark")
     .accessibilityLabel("Subagent status")
     .accessibilityHint("Hover to fan out subagents, click to keep them open")
     .onAppear { syncPillStatusObservers() }
