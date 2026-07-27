@@ -654,6 +654,7 @@ void main() {
         listener,
         uploadGate: gate,
         walPersister: (_) async => true,
+        freshUploadBatchDelay: () async {},
       );
       externalSync.testWals = List.generate(
         1000,
@@ -686,6 +687,86 @@ void main() {
 
       expect(uploadedFiles, [fileName]);
       expect(uploadLanes, [SyncUploadLane.fresh]);
+    });
+
+    test('recovered live ranges batch before fallback upload without delaying durable registration', () async {
+      SyncRateLimiter.instance.clear();
+      final releaseBatchWindow = Completer<void>();
+      final uploadStarted = Completer<void>();
+      final uploadedBatches = <List<String>>[];
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      const firstFileName = 'audio_test_opus_16000_1_fs320_ring_1_2_1700000001.bin';
+      const secondFileName = 'audio_test_opus_16000_1_fs320_ring_2_3_1700000002.bin';
+      final firstFile = File('${Directory.systemTemp.path}/$firstFileName');
+      final secondFile = File('${Directory.systemTemp.path}/$secondFileName');
+      await firstFile.writeAsBytes([1, 2, 3], flush: true);
+      await secondFile.writeAsBytes([4, 5, 6], flush: true);
+      addTearDown(() async {
+        if (await firstFile.exists()) await firstFile.delete();
+        if (await secondFile.exists()) await secondFile.delete();
+      });
+
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+          uploadedBatches.add(files.map((file) => file.uri.pathSegments.last).toList());
+          if (!uploadStarted.isCompleted) uploadStarted.complete();
+          return UploadFilesResult.queued('batched-recovery-job');
+        },
+      );
+      final externalSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: gate,
+        walPersister: (_) async => true,
+        freshUploadBatchDelay: () => releaseBatchWindow.future,
+      );
+      Wal recoveredWal({
+        required int timerStart,
+        required String fileName,
+        required String sourceId,
+      }) =>
+          Wal(
+            timerStart: timerStart,
+            codec: BleAudioCodec.opus,
+            seconds: 1,
+            status: WalStatus.miss,
+            storage: WalStorage.disk,
+            originalStorage: WalStorage.sdcard,
+            filePath: fileName,
+            device: 'test-device',
+            sourceId: sourceId,
+            uploadIntent: WalUploadIntent.liveContinuity,
+          );
+
+      expect(
+        await externalSync.addExternalWal(
+          recoveredWal(
+            timerStart: now,
+            fileName: firstFileName,
+            sourceId: 'ring_1_2',
+          ),
+        ),
+        ExternalWalRegistration.added,
+      );
+      expect(
+        await externalSync.addExternalWal(
+          recoveredWal(
+            timerStart: now + 1,
+            fileName: secondFileName,
+            sourceId: 'ring_2_3',
+          ),
+        ),
+        ExternalWalRegistration.added,
+      );
+      expect(externalSync.testWals, hasLength(2));
+      expect(uploadedBatches, isEmpty);
+
+      releaseBatchWindow.complete();
+      await uploadStarted.future.timeout(const Duration(seconds: 1));
+
+      expect(uploadedBatches, hasLength(1));
+      expect(uploadedBatches.single.toSet(), {firstFileName, secondFileName});
     });
   });
 

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart' show SyncJobFetch, SyncJobFetchOutcome, SyncUploadLane;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -346,6 +347,67 @@ void main() {
   // -------------------------------------------------------------------------
 
   group('zombie miss: upload failure leaves WAL stuck as miss', () {
+    test('transient reconciliation failure stops after one bounded slice', () async {
+      final fetchedJobs = <String>[];
+      final reconcileSync = LocalWalSyncImpl(
+        listener,
+        syncJobStatusFetcher: (jobId) async {
+          fetchedJobs.add(jobId);
+          return const SyncJobFetch(SyncJobFetchOutcome.transient);
+        },
+      );
+      final uploaded = List.generate(
+        8,
+        (index) => _makeWal(
+          timerStart: 2000 + index,
+          status: WalStatus.uploaded,
+          filePath: null,
+        )..jobId = 'offline-job-$index',
+      );
+      reconcileSync.testWals = uploaded;
+
+      await reconcileSync.reconcileUploadedWals();
+
+      expect(fetchedJobs, hasLength(3));
+      expect(uploaded.every((wal) => wal.status == WalStatus.uploaded), isTrue);
+      expect(uploaded.every((wal) => wal.jobId != null), isTrue);
+    });
+
+    test('one failed batch pauses its lane instead of hammering the whole backlog', () async {
+      var uploadAttempts = 0;
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+          uploadAttempts++;
+          throw StateError('offline');
+        },
+        fairUseStatusLoader: () async => {'stage': 'none'},
+      );
+      final laneSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: gate,
+      );
+      final wals = <Wal>[];
+      for (var index = 0; index < 21; index++) {
+        final filename = 'offline_backlog_$index.bin';
+        await File('${tempDir.path}/$filename').writeAsBytes([index], flush: true);
+        wals.add(
+          _makeWal(
+            timerStart: 1000 + index,
+            filePath: filename,
+          ),
+        );
+      }
+      laneSync.testWals = wals;
+
+      final result = await laneSync.syncAll();
+
+      expect(uploadAttempts, 1);
+      expect(result?.localUploadFailures, 1);
+      expect(wals.every((wal) => wal.status == WalStatus.miss), isTrue);
+      expect(wals.every((wal) => !wal.isSyncing), isTrue);
+    });
+
     test('failed upload leaves WAL as miss with retryCount unchanged', () async {
       // Simulates what the user observes: a recording that exists on disk,
       // gets picked up by syncAll(), upload attempt fails (network/server error),

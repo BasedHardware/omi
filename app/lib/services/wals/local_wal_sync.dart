@@ -31,6 +31,8 @@ const _syncUploadBatchLimit = 5;
 
 typedef WalPersister = Future<bool> Function(List<Wal> wals);
 typedef WalPathResolver = Future<String?> Function(String? pathOrName);
+typedef FreshUploadBatchDelay = Future<void> Function();
+typedef SyncJobStatusFetcher = Future<SyncJobFetch> Function(String jobId);
 
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
 
@@ -150,8 +152,11 @@ class LocalWalSyncImpl implements LocalWalSync {
   SyncUploadGate get _uploadGate => _uploadGateOverride ?? SyncUploadGate.instance;
   final WalPersister? _walPersisterOverride;
   final WalPathResolver _walPathResolver;
+  final FreshUploadBatchDelay _freshUploadBatchDelay;
+  final SyncJobStatusFetcher _syncJobStatusFetcher;
   Future<void>? _freshUploadWake;
   bool _freshUploadWakePending = false;
+  bool _freshUploadWakeNeedsBatchDelay = false;
   String? _freshUploadWakeWalId;
 
   LocalWalSyncImpl(
@@ -159,9 +164,15 @@ class LocalWalSyncImpl implements LocalWalSync {
     SyncUploadGate? uploadGate,
     WalPersister? walPersister,
     WalPathResolver? walPathResolver,
+    FreshUploadBatchDelay? freshUploadBatchDelay,
+    SyncJobStatusFetcher? syncJobStatusFetcher,
   })  : _uploadGateOverride = uploadGate,
         _walPersisterOverride = walPersister,
-        _walPathResolver = walPathResolver ?? Wal.getFilePath;
+        _walPathResolver = walPathResolver ?? Wal.getFilePath,
+        _freshUploadBatchDelay = freshUploadBatchDelay ?? _defaultFreshUploadBatchDelay,
+        _syncJobStatusFetcher = syncJobStatusFetcher ?? fetchSyncJobStatus;
+
+  static Future<void> _defaultFreshUploadBatchDelay() => Future<void>.delayed(const Duration(seconds: 5));
 
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
@@ -249,12 +260,24 @@ class LocalWalSyncImpl implements LocalWalSync {
   void _scheduleFreshUpload(Wal wal) {
     _freshUploadWakePending = true;
     _freshUploadWakeWalId = wal.id;
+    if (_shouldBatchRecoveredLiveWal(wal)) {
+      _freshUploadWakeNeedsBatchDelay = true;
+    }
     if (_freshUploadWake != null) return;
     _startFreshUploadWake();
   }
 
+  bool _shouldBatchRecoveredLiveWal(Wal wal) =>
+      wal.uploadIntent == WalUploadIntent.liveContinuity &&
+      wal.originalStorage == WalStorage.sdcard &&
+      wal.conversationId == null;
+
   void _startFreshUploadWake() {
-    final wake = _drainFreshUploadWakes();
+    final needsBatchDelay = _freshUploadWakeNeedsBatchDelay;
+    _freshUploadWakeNeedsBatchDelay = false;
+    final wake = _drainFreshUploadWake(
+      needsBatchDelay: needsBatchDelay,
+    );
     _freshUploadWake = wake;
     unawaited(
       wake.whenComplete(() {
@@ -267,20 +290,26 @@ class LocalWalSyncImpl implements LocalWalSync {
     );
   }
 
-  Future<void> _drainFreshUploadWakes() async {
-    do {
-      _freshUploadWakePending = false;
-      final walId = _freshUploadWakeWalId;
-      try {
-        // Device-storage recovery persists one WAL at a time. Coalesce wakes
-        // so a fast BLE drain cannot start duplicate upload loops.
-        await syncFreshOnly();
-      } catch (error) {
-        Logger.debug(
-          'LocalWalSync: fresh upload wake failed for $walId: $error',
-        );
-      }
-    } while (_freshUploadWakePending);
+  Future<void> _drainFreshUploadWake({
+    required bool needsBatchDelay,
+  }) async {
+    if (needsBatchDelay) {
+      // Storage-authoritative live fallback arrives as independently durable
+      // 1–3 second ranges. Give adjacent ranges a short collection window so
+      // one backend job can run VAD, chronological assignment, and
+      // conversation reprocessing over the whole passage. The live socket is
+      // unaffected; this applies only when it did not own the frames.
+      await _freshUploadBatchDelay();
+    }
+    _freshUploadWakePending = false;
+    final walId = _freshUploadWakeWalId;
+    try {
+      await syncFreshOnly();
+    } catch (error) {
+      Logger.debug(
+        'LocalWalSync: fresh upload wake failed for $walId: $error',
+      );
+    }
   }
 
   Future<bool> _hasIdenticalFile(Wal existing, Wal candidate) async {
@@ -1050,9 +1079,15 @@ class LocalWalSyncImpl implements LocalWalSync {
         continue;
       } catch (e) {
         print(
-          'Local WAL upload batch failed: $e, continuing with remaining files',
+          'Local WAL upload batch failed: $e, pausing ${batchLane.name} lane',
         );
         batchesFailed++;
+        // A transport/backend failure applies to the lane, not just the
+        // current files. Walking every pending batch while offline turns a
+        // large durable backlog into a tight network, CPU, and battery storm.
+        // Keep every WAL retryable and let the connectivity/cooldown
+        // coordinator wake a later drain.
+        blockedLanes.add(batchLane);
         DebugLogManager.logError(
           e,
           null,
@@ -1327,8 +1362,9 @@ class LocalWalSyncImpl implements LocalWalSync {
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
       final fetched = await Future.wait(
-        slice.map((e) async => (e.value, await fetchSyncJobStatus(e.key))),
+        slice.map((e) async => (e.value, await _syncJobStatusFetcher(e.key))),
       );
+      var transientFailureSeen = false;
 
       for (final (members, fetch) in fetched) {
         final jobId = members.first.jobId;
@@ -1336,6 +1372,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         switch (fetch.outcome) {
           case SyncJobFetchOutcome.transient:
             // Network/5xx — leave as `uploaded`, retry on the next pass.
+            transientFailureSeen = true;
             DebugLogManager.logEvent('reconcile_poll', {
               'jobId': jobId,
               'memberWalIds': memberWalIds,
@@ -1446,6 +1483,13 @@ class LocalWalSyncImpl implements LocalWalSync {
             }
             break;
         }
+      }
+      if (transientFailureSeen) {
+        // One unavailable fetch is enough evidence to stop this pass. With a
+        // large uploaded backlog, probing every job while offline created
+        // hundreds of doomed requests per wake. At most the bounded
+        // concurrent slice is attempted; all remaining jobs stay durable.
+        break;
       }
     }
 
