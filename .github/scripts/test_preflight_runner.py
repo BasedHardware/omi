@@ -56,10 +56,14 @@ class FakeChild:
     def __init__(self, returncode: int | None = None) -> None:
         self.pid = 4321
         self.returncode = returncode
+        self.signals: list[int] = []
         self.terminated = False
 
     def poll(self) -> int | None:
         return self.returncode
+
+    def send_signal(self, signum: int) -> None:
+        self.signals.append(signum)
 
     def terminate(self) -> None:
         self.terminated = True
@@ -75,19 +79,19 @@ class FakeWindowsJob:
         return self.terminated
 
 
-class OwnedSignalTests(unittest.TestCase):
+class ForwardableSignalTests(unittest.TestCase):
     def test_skips_signals_the_host_does_not_define(self) -> None:
         windows_signal = types.SimpleNamespace(SIGINT=2, SIGTERM=15, SIGBREAK=21)
 
-        self.assertEqual(runner.owned_signals(windows_signal), (2, 15, 21))
+        self.assertEqual(runner.forwardable_signals(windows_signal), (2, 15, 21))
 
     def test_registers_sighup_when_the_host_defines_it(self) -> None:
         posix_signal = types.SimpleNamespace(SIGINT=2, SIGTERM=15, SIGHUP=1)
 
-        self.assertEqual(runner.owned_signals(posix_signal), (2, 15, 1))
+        self.assertEqual(runner.forwardable_signals(posix_signal), (2, 15, 1))
 
     def test_every_selected_signal_is_registrable_on_this_host(self) -> None:
-        for signum in runner.owned_signals():
+        for signum in runner.forwardable_signals():
             previous = signal.getsignal(signum)
             signal.signal(signum, previous)
 
@@ -96,32 +100,28 @@ class SignalChildTests(unittest.TestCase):
     def test_posix_signals_the_whole_child_process_group(self) -> None:
         child = FakeChild()
 
-        with (
-            mock.patch.object(runner, "HAS_PROCESS_GROUPS", True),
-            mock.patch.object(runner.os, "killpg", create=True) as killpg,
-        ):
+        with mock.patch.object(runner.os, "killpg", create=True) as killpg:
             runner.signal_child(child, signal.SIGINT)
 
         killpg.assert_called_once_with(child.pid, signal.SIGINT)
-        self.assertFalse(child.terminated)
+        self.assertEqual(child.signals, [])
 
-    def test_hosts_without_process_groups_terminate_the_child(self) -> None:
+    def test_hosts_without_process_groups_forward_to_the_child(self) -> None:
         child = FakeChild()
 
-        with mock.patch.object(runner, "HAS_PROCESS_GROUPS", False):
+        with mock.patch.object(runner.os, "killpg", None, create=True):
             runner.signal_child(child, signal.SIGINT)
 
-        self.assertTrue(child.terminated)
+        self.assertEqual(child.signals, [signal.SIGINT])
 
     def test_windows_job_terminates_the_process_tree(self) -> None:
         child = FakeChild()
         job = FakeWindowsJob()
 
-        with mock.patch.object(runner, "HAS_PROCESS_GROUPS", False):
-            runner.signal_child(child, signal.SIGINT, job)
+        runner.signal_child(child, signal.SIGINT, job)
 
         self.assertEqual(job.calls, 1)
-        self.assertFalse(child.terminated)
+        self.assertEqual(child.signals, [])
 
     def test_windows_job_still_terminates_descendants_after_root_exit(self) -> None:
         child = FakeChild(returncode=0)
@@ -131,21 +131,17 @@ class SignalChildTests(unittest.TestCase):
 
         self.assertEqual(job.calls, 1)
 
-    def test_exited_child_is_left_alone(self) -> None:
-        child = FakeChild(returncode=0)
-
-        with mock.patch.object(runner, "HAS_PROCESS_GROUPS", False):
-            runner.signal_child(child, signal.SIGINT)
-
-        self.assertFalse(child.terminated)
-
     def test_dead_child_does_not_raise(self) -> None:
         child = FakeChild()
 
-        with (
-            mock.patch.object(runner, "HAS_PROCESS_GROUPS", True),
-            mock.patch.object(runner.os, "killpg", side_effect=ProcessLookupError, create=True),
-        ):
+        with mock.patch.object(runner.os, "killpg", side_effect=ProcessLookupError, create=True):
+            runner.signal_child(child, signal.SIGTERM)
+
+    def test_dead_child_without_process_groups_does_not_raise(self) -> None:
+        child = mock.Mock(pid=4321)
+        child.send_signal.side_effect = ProcessLookupError
+
+        with mock.patch.object(runner.os, "killpg", None, create=True):
             runner.signal_child(child, signal.SIGTERM)
 
 

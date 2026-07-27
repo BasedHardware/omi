@@ -7,6 +7,7 @@ from contextlib import redirect_stderr
 import io
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -180,8 +181,11 @@ class SelectionTests(unittest.TestCase):
         )
 
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
+        make = shutil.which("make")
+        if make is None:
+            self.skipTest("requires make")
         result = subprocess.run(
-            ["make", "-n", "preflight"],
+            [make, "-n", "preflight"],
             cwd=REPO_ROOT,
             check=False,
             stdout=subprocess.PIPE,
@@ -256,6 +260,8 @@ class SelectionTests(unittest.TestCase):
                 [
                     sys.executable,
                     "desktop/macos/scripts/check-e2e-flow-coverage.py",
+                    "--formatter-binary",
+                    "none",
                     "--strict",
                     "desktop/macos/Desktop/Sources/Providers/UncoveredRoutingSurface.swift",
                 ],
@@ -546,7 +552,7 @@ class SignalPortabilityTests(unittest.TestCase):
 
     def test_forwarding_swallows_dead_child(self) -> None:
         child = Mock(pid=4321)
-        with patch.object(os, "killpg", side_effect=ProcessLookupError):
+        with patch.object(os, "killpg", side_effect=ProcessLookupError, create=True):
             preflight_runner.signal_child(child, signal.SIGTERM)  # must not raise
 
 

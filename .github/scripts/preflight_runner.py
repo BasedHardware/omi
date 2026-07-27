@@ -17,7 +17,7 @@ from pathlib import Path
 
 POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
-OWNED_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK")
+FORWARDED_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK")
 IS_WINDOWS = os.name == "nt"
 HAS_PROCESS_GROUPS = os.name != "nt" and hasattr(os, "killpg")
 WINDOWS_STILL_ACTIVE = 259
@@ -149,9 +149,9 @@ class WindowsJob:
             self._handle = None
 
 
-def owned_signals(module: object = signal) -> tuple[int, ...]:
+def forwardable_signals(module: object = signal) -> tuple[int, ...]:
     """Return only the forwarding signals the current host defines."""
-    return tuple(signum for name in OWNED_SIGNAL_NAMES if isinstance((signum := getattr(module, name, None)), int))
+    return tuple(signum for name in FORWARDED_SIGNAL_NAMES if isinstance((signum := getattr(module, name, None)), int))
 
 
 def child_launch_command(command: list[str]) -> list[str]:
@@ -179,18 +179,16 @@ def signal_child(
     windows_job: WindowsJob | None = None,
 ) -> None:
     """Forward to the POSIX child group or terminate the Windows process tree."""
+    killpg = getattr(os, "killpg", None)
     try:
         if windows_job is not None and windows_job.terminate():
             return
-        if child.poll() is not None:
-            return
-        if HAS_PROCESS_GROUPS:
-            os.killpg(child.pid, signum)
+        if killpg is not None:
+            killpg(child.pid, signum)
         else:
-            child.terminate()
+            child.send_signal(signum)
     except OSError:
         pass
-
 
 
 def atomic_json(path: Path, value: dict) -> None:
@@ -414,10 +412,13 @@ def run_owned(
         )
 
     def forward_signal(signum: int, _frame: object) -> None:
-        if child is not None:
-            signal_child(child, signum, windows_job)
+        if child is None:
+            return
+        if windows_job is None and child.poll() is not None:
+            return
+        signal_child(child, signum, windows_job)
 
-    previous_handlers = {signum: signal.signal(signum, forward_signal) for signum in owned_signals()}
+    previous_handlers = {signum: signal.signal(signum, forward_signal) for signum in forwardable_signals()}
     exit_code = 1
     try:
         if IS_WINDOWS:
