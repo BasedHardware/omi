@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-unbounded-user-collection-in-prompt",
+  "violated_contract": "A per-user collection that grows without limit must not be rendered whole into a provider request.",
+  "canonical_prevention": "Bound the listing at the point it is rendered \u2014 cap it by an explicit, ordered selection \u2014 and keep correctness that depended on the full set in code that still reads the full set.",
+  "evidence_prs": [
+    10691
+  ],
+  "scope_hints": [
+    "backend/**"
+  ],
+  "status": "open"
+}

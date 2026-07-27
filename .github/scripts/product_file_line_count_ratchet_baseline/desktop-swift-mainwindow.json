@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1854,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3621,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3569,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4467,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3298,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5718,
@@ -9,7 +9,7 @@
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "SB redesign: Omi-mark avatar on replies that spins while thinking (typing-dots suppressed for Omi's own replies) and tool-call chips gated to the streaming turn, merged with main's metadata-row reveal honoring keyboard focus (shared FocusState + testable ChatBubbleMetadataReveal); a component split is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "SearchableDropdown category filter plus extracted filter helpers for regression coverage.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Integration Connect telemetry: ImportConnectorSheet.startRun threads bounded run metrics (source/memory count buckets, was_first_sync, connector-native failure class) from the operation outcome to the runner's terminal emit; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home ask bar now auto-grows as a multi-line TextField so long messages wrap instead of scrolling off-screen (+14 lines over the prior SB-redesign home/chat layout); a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "Suggested-task loading feedback is now overlaid outside the list flow so an initial fetch cannot shift the task rows; a component split is tracked follow-up.",
