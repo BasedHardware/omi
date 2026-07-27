@@ -1124,18 +1124,8 @@ struct DashboardPage: View {
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .mask(
-        LinearGradient(
-          stops: [
-            .init(color: .clear, location: 0.0),
-            .init(color: .black, location: 0.025),
-            .init(color: .black, location: 0.97),
-            .init(color: .clear, location: 1.0),
-          ],
-          startPoint: .top,
-          endPoint: .bottom
-        )
-      )
+      // The composer already has its own visual boundary. Masking this viewport
+      // fades the live edge and can cut off the first lines of an incoming reply.
       .padding(.bottom, OmiSpacing.xs)
 
     }
@@ -2332,11 +2322,12 @@ struct HomeAskBar: View {
       } else {
         RoundedRectangle(cornerRadius: 29, style: .continuous)
           .stroke(HomePalette.stageGlow.opacity(isFocused ? 0.16 : 0.08), lineWidth: 1)
-          .blur(radius: 1.8)
       }
     }
-    .shadow(color: HomePalette.stageGlow.opacity(isFocused ? 0.11 : 0.045), radius: isFocused ? 22 : 16, y: 8)
-    .shadow(color: .black.opacity(isFocused ? 0.45 : 0.34), radius: 24, y: 10)
+    // Keep the composer visually separate without casting a large, opaque bezel
+    // into the transcript. These are intentionally only 10% of the old shadow.
+    .shadow(color: HomePalette.stageGlow.opacity(isFocused ? 0.011 : 0.0045), radius: isFocused ? 2.2 : 1.6)
+    .shadow(color: .black.opacity(isFocused ? 0.045 : 0.034), radius: 2.4, y: 1)
     .contentShape(.rect(cornerRadius: 29))
     .onTapGesture {
       onActivate()
