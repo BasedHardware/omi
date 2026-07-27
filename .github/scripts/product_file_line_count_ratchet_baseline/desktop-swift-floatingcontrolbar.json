@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2375,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2646,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2654,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4915,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2584,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 1536,
@@ -9,7 +9,7 @@
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": "Agent completion presentation now follows the canonical terminal lifecycle used by PTT and chat.",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "The live-suggestion notch card and the hover shortcut legend are distinct assistantId/overlay branches alongside the existing reach-error and notch-moment cards; the legend's own view lives in NotchSystemControlsView.swift rather than here.",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "The visible, centered 21pt notch voice morph must remain frontmost through the flatline-to-waveform transition so capture dots cannot be clipped by the notch chrome.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Reusing the existing owner-scoped, TTL-bounded notification store to hand the last notch card to a voice follow-up needs a read-only accessor and a shared builder here; the builder now also carries the untrusted-context framing, since a card's body and provenance are assembled from screen OCR and memories.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "DEBUG owner-boundary tests need a capture-free effect-handler install seam; shared ensureAutomationBarConfigured() removes duplicated automation setup while adding that seam (BasedHardware/omi#10499).",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Adds bounded realtime mint-failure outcome correlation and close-resolution telemetry so release health distinguishes started recovery from exhaustion; telemetry-only, no lifecycle change (#10425).",
