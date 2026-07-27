@@ -61,6 +61,14 @@ final class ChatWorkingIndicatorTests: XCTestCase {
     XCTAssertNil(ChatOmiMarkPlacement.finalAssistantMessageID(in: messages))
   }
 
+  func testOmiMarkReservesAVisibleRowForAnEmptyStreamingReply() {
+    XCTAssertEqual(
+      ChatOmiMarkPlacement.rowHeight(showsMark: true),
+      ChatOmiMarkPlacement.reservedRowHeight
+    )
+    XCTAssertEqual(ChatOmiMarkPlacement.rowHeight(showsMark: false), 0)
+  }
+
   func testIdleAndNonAssistantMessagesUseGatherMotion() {
     XCTAssertEqual(ChatWorkingStatus.motion(for: nil), .gather)
     XCTAssertEqual(

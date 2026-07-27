@@ -39,8 +39,18 @@ enum ChatMarkMotion: Equatable {
 }
 
 enum ChatOmiMarkPlacement {
+  /// The mark lives in an overlay so it never shifts an assistant bubble's
+  /// leading edge. Reserve its vertical footprint in the owning row, though:
+  /// an empty streaming reply otherwise has zero height and clips the mark at
+  /// the transcript's live edge.
+  static let reservedRowHeight: CGFloat = 32
+
   static func finalAssistantMessageID(in messages: [ChatMessage]) -> String? {
     messages.last(where: { $0.sender == .ai })?.id
+  }
+
+  static func rowHeight(showsMark: Bool) -> CGFloat {
+    showsMark ? reservedRowHeight : 0
   }
 }
 

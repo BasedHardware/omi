@@ -831,7 +831,7 @@ struct DashboardPage: View {
 
       homeAskBar
         .frame(width: askBarWidth)
-        .padding(.top, OmiSpacing.xl)
+        .padding(.top, OmiSpacing.xxs)
 
       dashboardChatErrorCard
         .frame(width: askBarWidth)

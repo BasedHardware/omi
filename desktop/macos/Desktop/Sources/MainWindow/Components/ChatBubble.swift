@@ -125,7 +125,12 @@ struct ChatBubble: View {
         alignment: message.sender == .user ? .trailing : .leading
       )
     }
-    .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
+    .frame(
+      maxWidth: .infinity,
+      minHeight: ChatOmiMarkPlacement.rowHeight(
+        showsMark: message.sender == .ai && app == nil && showsOmiMark),
+      alignment: message.sender == .user ? .trailing : .leading
+    )
     .overlay(alignment: .topLeading) {
       if message.sender == .ai, app == nil, showsOmiMark {
         ChatOmiMark(
