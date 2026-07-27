@@ -1411,6 +1411,7 @@ final class DesktopDiagnosticsManager {
     "task_workflow",
     "auth_storage",
     "state_authority",
+    "ptt_input_routing",
     "other",
   ]
 
