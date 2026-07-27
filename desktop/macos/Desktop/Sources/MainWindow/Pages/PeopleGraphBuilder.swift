@@ -40,10 +40,16 @@ enum PeopleGraphBuilder {
   static func syncIfNeeded(uid: String?, force: Bool = false) async {
     await IMessageExporter.exportIfRequested(force: force)
     await rebuildIfNeeded(uid: uid, force: force)
-    // Write derived relationship facts into the user's memory store so chat can answer
-    // "who is X / how do I know them / who knows whom". Self-gated on the same iMessage consent
-    // flag and its own throttle; off-main; silent on any failure.
+    // Write derived graph-structural relationship facts (who-knows-whom via shared groups/circles)
+    // into the user's memory store. Self-gated on the same iMessage consent flag and its own
+    // throttle; off-main; silent on any failure.
     await PeopleMemoryWriter.writeIfNeeded(uid: uid, force: force)
+    // Route each substantial 1:1 thread through Omi's OWN conversation→memory pipeline so chat gains
+    // a deep, searchable understanding of the relationship from the actual message content. This is
+    // complementary to (not a duplicate of) the graph-structural facts above — it extracts content
+    // facts no single thread's group membership captures. Same consent gate; own throttle; off-main;
+    // silent on any failure.
+    await PeopleThreadIngest.ingestIfNeeded(uid: uid, force: force)
   }
 
   /// Entry point. Cheap flag + throttle check on the caller's thread, then all work (read + graph
@@ -1038,7 +1044,8 @@ enum PeopleGraphBuilder {
 
   /// Builds a `phone_last10 → display name` map from the local Contacts store, but **only** when
   /// access is already granted. Status is checked explicitly so this never triggers a TCC prompt.
-  private static func loadContactsByPhone() -> [String: String] {
+  /// Shared with `PeopleThreadIngest` (which resolves counterpart names the same way).
+  static func loadContactsByPhone() -> [String: String] {
     guard CNContactStore.authorizationStatus(for: .contacts) == .authorized else { return [:] }
     var map: [String: String] = [:]
     let store = CNContactStore()

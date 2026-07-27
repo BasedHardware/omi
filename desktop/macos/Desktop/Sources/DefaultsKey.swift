@@ -76,6 +76,10 @@ enum DefaultsKey: String {
   /// seconds). Independent of the graph-rebuild throttle so the memory writer
   /// runs on its own cadence after the graph settles.
   case peopleMemoryLastWrite = "peopleMemoryLastWrite"
+  /// Throttle bookkeeping for routing substantial 1:1 message threads through the
+  /// conversation→memory pipeline (epoch seconds). Independent of the other
+  /// throttles so thread ingestion trickles on its own cadence.
+  case peopleThreadIngestLastRun = "peopleThreadIngestLastRun"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

@@ -46,7 +46,7 @@ enum IMessageExporter {
 
     let dbQueue: DatabaseQueue
     do {
-      dbQueue = try openCopy(of: chatDB, into: tempDir)
+      dbQueue = try openReadOnlyCopy(of: chatDB, into: tempDir)
     } catch {
       writeError(
         "Couldn't open Messages database: \(error.localizedDescription)",
@@ -71,8 +71,9 @@ enum IMessageExporter {
 
   /// Copies `chat.db` (+ `-wal`/`-shm` sidecars) into `tempDir` and opens the copy
   /// read-only. Copying the sidecars ensures the newest messages (still in the WAL)
-  /// are included without opening the live database.
-  private static func openCopy(of dbURL: URL, into tempDir: URL) throws -> DatabaseQueue {
+  /// are included without opening the live database. Shared with `PeopleThreadIngest`
+  /// so both read the Messages DB through the same never-touch-the-original path.
+  static func openReadOnlyCopy(of dbURL: URL, into tempDir: URL) throws -> DatabaseQueue {
     let fm = FileManager.default
     try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
     let dest = tempDir.appendingPathComponent("chat.db")

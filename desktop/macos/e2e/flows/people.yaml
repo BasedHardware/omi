@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageExporter.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleReview.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleMemoryWriter.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleThreadIngest.swift
 preconditions:
   - auth_ready
 
