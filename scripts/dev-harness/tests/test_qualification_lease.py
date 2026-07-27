@@ -409,26 +409,40 @@ def test_dead_lease_with_unproven_listener_is_quarantined_without_signalling_it(
             "s.bind(('127.0.0.1',int(__import__('sys').argv[1]))); s.listen(); time.sleep(60)",
             str(port),
         ],
-        start_new_session=True,
+        start_new_session=os.name != "nt",
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
     )
     signals: list[tuple[int, signal.Signals]] = []
     try:
-        deadline = time.monotonic() + 5
-        while foreign.pid not in safety.listening_pids(port) and time.monotonic() < deadline:
-            time.sleep(0.05)
+        monkeypatch.setattr(
+            safety,
+            "listening_pids",
+            lambda candidate: (foreign.pid,) if candidate == port and foreign.poll() is None else (),
+        )
         assert foreign.pid in safety.listening_pids(port)
         _stale_lease(root, lease_id, pid=recorded_pid, port=port)
         stale_pointer = json.loads((root / "qualification-lease.json").read_text(encoding="utf-8"))
         original_exists = safety.process_exists
-        original_getpgid = qualification.os.getpgid
+        original_getpgid = getattr(qualification.os, "getpgid", None)
+
+        def getpgid(pid: int) -> int:
+            if pid == recorded_pid:
+                return recorded_pid
+            if original_getpgid is None:
+                return pid
+            return original_getpgid(pid)
+
         monkeypatch.setattr(
             safety, "process_exists", lambda pid: pid == recorded_pid or original_exists(pid)
         )
         monkeypatch.setattr(safety, "command_line_for_pid", lambda pid: marker if pid == recorded_pid else "")
+        monkeypatch.setattr(qualification.os, "getpgid", getpgid, raising=False)
         monkeypatch.setattr(
-            qualification.os, "getpgid", lambda pid: recorded_pid if pid == recorded_pid else original_getpgid(pid)
+            qualification.os,
+            "killpg",
+            lambda pid, sig: signals.append((pid, sig)),
+            raising=False,
         )
-        monkeypatch.setattr(qualification.os, "killpg", lambda pid, sig: signals.append((pid, sig)))
 
         replacement = qualification.acquire(
             repo_root=REPO_ROOT, lease_id="qualification-replacement", owner_pid=os.getpid(), port_offset=1001
