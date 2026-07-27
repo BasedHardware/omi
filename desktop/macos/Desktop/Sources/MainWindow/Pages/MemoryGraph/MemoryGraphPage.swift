@@ -294,6 +294,17 @@ class MemoryGraphViewModel: ObservableObject {
         response = await KnowledgeGraphStorage.shared.loadGraph()
         guard !response.nodes.isEmpty else { throw error }
         log("Memory atlas: server graph unavailable, using local projection")
+        // The authoritative server graph was replaced by a smaller local
+        // projection — that is a degraded mode the desktop health telemetry
+        // must record per the fallback-telemetry contract.
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "memory_atlas",
+          from: "server_graph",
+          to: "local_projection",
+          reason: "server_unavailable",
+          outcome: .degraded,
+          extra: ["user_visible": true]
+        )
       }
       guard generation == sessionGeneration else { return }
       graphResponse = response
@@ -303,6 +314,52 @@ class MemoryGraphViewModel: ObservableObject {
       log("Memory atlas: \(response.nodes.count) nodes, \(response.edges.count) edges")
     } catch {
       log("Failed to load memory atlas: \(error.localizedDescription)")
+    }
+  }
+
+  /// Rebuild the canonical atlas graph, polling until the replacement appears.
+  ///
+  /// The backend rebuild is a background task; a fixed 2-second sleep (as used
+  /// by the legacy `rebuildGraph`) receives an empty or stale graph whenever
+  /// processing the account takes longer. This polls until the new graph has
+  /// at least one node or the poll budget is exhausted.
+  @discardableResult
+  func rebuildCanonicalAtlas() async -> Bool {
+    let generation = sessionGeneration
+    isRebuilding = true
+    defer {
+      if generation == sessionGeneration {
+        isRebuilding = false
+      }
+    }
+
+    do {
+      _ = try await APIClient.shared.rebuildKnowledgeGraph()
+
+      // Poll for the replacement graph — the backend rebuild is async.
+      let maxAttempts = 10
+      for attempt in 1...maxAttempts {
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        guard generation == sessionGeneration else { return false }
+
+        let response = try await APIClient.shared.getKnowledgeGraph()
+        guard generation == sessionGeneration else { return false }
+
+        if !response.nodes.isEmpty {
+          graphResponse = response
+          isEmpty = false
+          hasLoadedCanonicalAtlas = true
+          lastLoadedAt = Date()
+          log("Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.nodes.count) nodes")
+          return true
+        }
+      }
+
+      log("Memory atlas: rebuild poll budget exhausted, graph still empty after \(maxAttempts) attempts")
+      return false
+    } catch {
+      log("Failed to rebuild memory atlas: \(error.localizedDescription)")
+      return false
     }
   }
 

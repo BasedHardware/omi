@@ -116,10 +116,13 @@ actor RewindDatabase {
     }
 
     // GRDB can bridge a SQLite failure through NSError before a storage actor
-    // reports it. Keep this restricted to canonical SQLite primary codes/text
-    // so unrelated application or network failures cannot rotate local storage.
+    // reports it. NSError.code is meaningful only with its domain, so restrict
+    // this to known SQLite/GRDB domains to avoid rotating local storage when an
+    // unrelated POSIX or application error happens to share a numeric code.
     let nsError = error as NSError
-    if nsError.code == 10 || nsError.code == 11 || nsError.code == 6922 {
+    if isKnownSQLiteDomain(nsError.domain),
+      (nsError.code == 10 || nsError.code == 11 || nsError.code == 6922)
+    {
       return true
     }
     let description = error.localizedDescription.lowercased()
@@ -131,6 +134,17 @@ actor RewindDatabase {
   private func isBusyDatabaseError(_ error: Error) -> Bool {
     guard let dbError = error as? DatabaseError else { return false }
     return dbError.resultCode == .SQLITE_BUSY
+  }
+
+  /// NSError domains that carry canonical SQLite result codes. GRDB bridges
+  /// SQLite errors through these before the storage actor reports a typed
+  /// `DatabaseError`; other domains may reuse the same numeric codes for
+  /// unrelated POSIX or application failures.
+  private func isKnownSQLiteDomain(_ domain: String) -> Bool {
+    domain == "GRDB"
+      || domain == "GRDB.DatabaseError"
+      || domain == "SQLite3"
+      || domain == NSSQLiteErrorDomain
   }
 
   /// Handle corruption/I/O failures from cleanup and other maintenance operations.

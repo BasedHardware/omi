@@ -847,11 +847,15 @@ enum MemoryAtlasRenderPlanner {
     zoom: CGFloat,
     pan: CGSize
   ) -> CGPoint {
-    CGPoint(
-      x: (normalized.x * viewportSize.width - viewportSize.width / 2) * zoom
-        + viewportSize.width / 2 + pan.width,
-      y: (normalized.y * viewportSize.height - viewportSize.height / 2) * zoom
-        + viewportSize.height / 2 + pan.height
+    // Must use the same square span as the drawing path's `point(for:in:)`:
+    // min(width, height) for both axes. Scaling x by the full viewport width
+    // and y by the full height made collision detection believe horizontally
+    // adjacent labels were farther apart than their rendered positions on
+    // wide desktop windows, admitting labels that overlapped on the canvas.
+    let span = projectionSpan(of: viewportSize)
+    return CGPoint(
+      x: (normalized.x - 0.5) * span * zoom + viewportSize.width / 2 + pan.width,
+      y: (normalized.y - 0.5) * span * zoom + viewportSize.height / 2 + pan.height
     )
   }
 
@@ -2073,7 +2077,7 @@ struct CanonicalMemoryAtlasPage: View {
         compact: false,
         evidenceProvider: evidenceProvider,
         onOpenMemory: onOpenMemory,
-        onRebuild: { Task { await viewModel.rebuildGraph() } },
+        onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
         isRebuilding: viewModel.isRebuilding,
         onLeave: onBack
       )
@@ -2110,7 +2114,7 @@ struct CanonicalMemoryAtlasTabView: View {
       compact: false,
       evidenceProvider: evidenceProvider,
       onOpenMemory: onOpenMemory,
-      onRebuild: { Task { await viewModel.rebuildGraph() } },
+      onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
       isRebuilding: viewModel.isRebuilding,
       onLeave: onLeave
     )
@@ -2286,6 +2290,16 @@ private struct CanonicalMemoryAtlasSurface: View {
     if let selectedEdge { return selectedEdge.edge.memoryIds }
     var seen = Set<String>()
     var ordered: [String] = []
+    // Seed from the selected entity's own memory IDs first. The backend
+    // writes memory_ids directly onto every extracted node independently of
+    // its edges, so isolated entities — and memories that mention an entity
+    // without producing a relationship — show no evidence if only edge IDs
+    // are collected.
+    if let selectedNode {
+      for id in selectedNode.node.memoryIds where seen.insert(id).inserted {
+        ordered.append(id)
+      }
+    }
     for id in selectedEdges.flatMap(\.edge.memoryIds) where seen.insert(id).inserted {
       ordered.append(id)
     }
@@ -3942,7 +3956,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// line, so letting a line take the hit near a dot would make dots feel
   /// unclickable at the exact places they matter most.
   private func selectAtlasElement(at location: CGPoint, in size: CGSize, plan: MemoryAtlasRenderPlan) {
-    if let node = nearestNode(to: location, in: size) {
+    if let node = nearestNode(to: location, in: size, visibleNodes: plan.visibleNodes) {
       // Reaching for something on the canvas starts a fresh trail; only
       // following a listed connection extends one.
       selectionTrail.removeAll()
@@ -3974,10 +3988,16 @@ private struct CanonicalMemoryAtlasSurface: View {
     selectedEdgeID = hit.id
   }
 
-  private func nearestNode(to location: CGPoint, in size: CGSize) -> MemoryAtlasNodePlacement? {
+  private func nearestNode(to location: CGPoint, in size: CGSize, visibleNodes: [MemoryAtlasNodePlacement] = []) -> MemoryAtlasNodePlacement? {
     let hitRadius = max(12, 18 / zoom)
     var nearest: (placement: MemoryAtlasNodePlacement, distance: CGFloat)?
+    // Hit-test only nodes in the current render plan. On graphs larger than
+    // the current detail-level node budget, the canvas paints only visible
+    // nodes, but searching every node in the snapshot would let a tap on an
+    // apparently blank area select an omitted node and open its inspector.
+    let visibleIDs = visibleNodes.isEmpty ? nil : Set(visibleNodes.map { $0.id })
     for placement in snapshot.nodes where nodeIsVisibleAtCurrentTime(placement) {
+      if let visibleIDs, !visibleIDs.contains(placement.id) { continue }
       let rendered = point(for: placement.normalizedPosition, in: size)
       let distance = hypot(rendered.x - location.x, rendered.y - location.y)
       if distance <= hitRadius && (nearest.map { distance < $0.distance } ?? true) {
