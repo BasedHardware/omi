@@ -58,6 +58,13 @@ _KEEPALIVE_INTERVAL = 25.0
 _FLUSH_SILENCE_FRAMES = 34  # 34 * 60ms ~= 2.0s
 _FLUSH_SETTLE_SECONDS = 4.0
 
+# How many times to try before concluding the socket will never work. Only
+# applies before the first successful connect; after that, drops are treated as
+# transient and retried for as long as capture is wanted.
+_INITIAL_CONNECT_ATTEMPTS = 3
+_INITIAL_CONNECT_DELAY = 0.5
+_MAX_RECONNECT_DELAY = 30
+
 
 @dataclass
 class CaptureStats:
@@ -67,6 +74,7 @@ class CaptureStats:
     conversation_id: str | None = None
     started_at: float = field(default_factory=time.monotonic)
     last_error: str | None = None
+    reconnects: int = 0
 
     @property
     def audio_seconds(self) -> float:
@@ -199,29 +207,92 @@ class CaptureSession:
             log.warning('could not finalize conversation: %s', exc)
 
     async def _run(self) -> None:
+        """Hold the listen socket open for as long as capture is wanted.
+
+        Built for all-day wear, so a dropped connection is expected rather than
+        exceptional: Wi-Fi roams, the laptop sleeps, the server closes an idle
+        socket with 1001. Any of those used to end capture permanently and
+        silently. Instead we reconnect with backoff until `stop()` is called.
+
+        The auth header is rebuilt per attempt so a reconnect after the ID token's
+        one-hour expiry mints a fresh one instead of looping on 401.
+        """
         url = listen_url(self._base)
-        try:
-            headers = await self._auth.auth_header()
-            async with websockets.connect(url, additional_headers=headers, max_size=None) as socket:
-                log.info('capture socket open (source=%s)', SOURCE)
-                sender = asyncio.create_task(self._send_loop(socket), name='capture-send')
-                receiver = asyncio.create_task(self._recv_loop(socket), name='capture-recv')
-                done, pending = await asyncio.wait(
-                    {sender, receiver}, return_when=asyncio.FIRST_COMPLETED
-                )
-                for task in pending:
-                    task.cancel()
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await task
-                for task in done:
-                    exc = task.exception()
-                    if exc:
-                        raise exc
-        except Exception as exc:  # noqa: BLE001 - surface, never crash the bridge
-            self.stats.last_error = f'{type(exc).__name__}: {exc}'
-            log.error('capture session ended: %s', self.stats.last_error)
-        finally:
-            self.active = False
+        attempt = 0
+        connected_once = False
+
+        while self.active:
+            try:
+                headers = await self._auth.auth_header()
+                async with websockets.connect(url, additional_headers=headers, max_size=None) as socket:
+                    if attempt:
+                        log.info('capture socket reconnected after %d attempt(s)', attempt)
+                    else:
+                        log.info('capture socket open (source=%s)', SOURCE)
+                    attempt = 0  # a successful connect resets the backoff
+                    connected_once = True
+                    self.stats.last_error = None
+
+                    sender = asyncio.create_task(self._send_loop(socket), name='capture-send')
+                    receiver = asyncio.create_task(self._recv_loop(socket), name='capture-recv')
+                    done, pending = await asyncio.wait(
+                        {sender, receiver}, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    for task in pending:
+                        task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await task
+                    for task in done:
+                        # `.exception()` re-raises on a cancelled task, which would
+                        # look like the session itself being cancelled.
+                        if task.cancelled():
+                            continue
+                        exc = task.exception()
+                        if exc:
+                            raise exc
+
+                # Both loops finished without error: that only happens when the
+                # send loop consumed the stop sentinel, so this is a clean exit.
+                if not self.active:
+                    break
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - reconnect, never crash the bridge
+                self.stats.last_error = f'{type(exc).__name__}: {exc}'
+                log.warning('capture socket dropped: %s', self.stats.last_error)
+
+            if not self.active:
+                break
+
+            # A socket that has never connected is a configuration or auth problem
+            # -- a bad URL, a revoked token -- and retrying forever would hide it.
+            # One that connected and then dropped is a network blip during all-day
+            # wear, which is expected and worth retrying for a long time.
+            if not connected_once and attempt + 1 >= _INITIAL_CONNECT_ATTEMPTS:
+                log.error('capture never connected after %d attempts; giving up', attempt + 1)
+                break
+
+            attempt += 1
+            self.stats.reconnects += 1
+            if connected_once:
+                # Transient drop during all-day wear. Back off, but cap it so the
+                # session recovers promptly once the network returns rather than
+                # sitting out a long sleep.
+                delay = min(2**attempt, _MAX_RECONNECT_DELAY)
+            else:
+                # Still probing a socket that has never worked; retry quickly so a
+                # misconfiguration surfaces in a second rather than a minute.
+                delay = _INITIAL_CONNECT_DELAY
+            log.info('reconnecting capture in %ss (attempt %d)', delay, attempt)
+            await asyncio.sleep(delay)
+
+        self.active = False
+        log.info(
+            'capture ended: %.1fs audio, %d segments, %d reconnects',
+            self.stats.audio_seconds,
+            self.stats.segments_received,
+            self.stats.reconnects,
+        )
 
     async def _send_loop(self, socket) -> None:
         while True:

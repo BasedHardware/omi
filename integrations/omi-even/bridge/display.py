@@ -90,6 +90,13 @@ _URL_RE = re.compile(r'(?:https?://|ftp://|www\.)[^\s<>()\[\]"\']+', re.IGNORECA
 # from firing on a markdown link whose label happens to be a number.
 _CITATION_RE = re.compile(r'\[\d{1,3}\](?!\()')
 
+# Omi emits <cite index="8-5">quoted evidence</cite> around retrieved passages.
+# Observed live: these survive markdown stripping and render as literal angle
+# brackets on the glasses. Matches any simple tag so a future wrapper element
+# degrades to its text rather than leaking markup. Deliberately requires a
+# letter or `/` after `<`, so "a < b" and "5<10" are untouched.
+_TAG_RE = re.compile(r'</?[a-zA-Z][^<>]{0,200}>')
+
 _CODE_RE = re.compile(r'`{1,3}([^`\n]*)`{1,3}')
 _BOLD_ITALIC_RE = re.compile(r'\*\*\*([^*\n]+)\*\*\*|___([^_\n]+)___')
 _BOLD_RE = re.compile(r'\*\*([^*\n]+)\*\*|__([^_\n]+)__')
@@ -239,6 +246,13 @@ def _strip_markdown(text: str) -> str:
     text = _URL_RE.sub('', text)
 
     text = _CITATION_RE.sub('', text)
+
+    # Omi wraps quoted evidence in <cite index="8-5">...</cite>. Keep the quoted
+    # words -- they are the substance of the answer -- and drop only the tags,
+    # which otherwise render as literal angle brackets on the glasses.
+    # A space is inserted because the opening tag usually abuts the previous word
+    # ("said<cite ...>WhatsApp" -> "said WhatsApp", not "saidWhatsApp").
+    text = _TAG_RE.sub(' ', text)
 
     # Emphasis, widest marker first so *** is not eaten by **.
     text = _CODE_RE.sub(r'\1', text)

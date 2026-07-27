@@ -25,6 +25,7 @@ import os
 import secrets
 import time
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -290,8 +291,71 @@ async def _stream_chat_to(socket: WebSocket, text: str) -> None:
     )
 
 
-async def _handle_app_message(socket: WebSocket, payload: dict, session: CaptureSession) -> None:
+@dataclass
+class _AppSession:
+    """Per-connection state for one glasses app.
+
+    Binary frames mean two different things depending on mode: between
+    `ask_start` and `ask_stop` they are a question being dictated, otherwise
+    they are continuous capture headed for `/v4/listen`. Keeping the mode here
+    rather than globally means two connected apps can't confuse each other.
+    """
+
+    capture: CaptureSession
+    ask_active: bool = False
+    ask_buffer: bytearray = field(default_factory=bytearray)
+
+
+# 30s of PCM16 at 16kHz. The app caps recording well below this; the bound
+# exists so a client that never sends `ask_stop` cannot grow memory forever.
+MAX_ASK_BYTES = 16000 * 2 * 30
+
+
+async def _handle_ask_stop(socket: WebSocket, session: _AppSession) -> None:
+    """Transcribe the dictated question, echo it back, then answer it."""
+    pcm = bytes(session.ask_buffer)
+    session.ask_buffer.clear()
+    session.ask_active = False
+
+    seconds = len(pcm) / (16000 * 2)
+    if seconds < 0.4:
+        # Too short to be speech -- almost always a double-tap cancel or a
+        # mis-tap. Answering "" would send an empty question to Omi.
+        await _send(socket, {'type': 'ask_error', 'text': "Didn't catch that. Tap to retry."})
+        return
+
+    try:
+        transcript = (await omi.transcribe_pcm(pcm)).strip()
+    except Exception as exc:  # noqa: BLE001 - report, never kill the socket
+        log.warning('transcription failed: %s', exc)
+        await _send(socket, {'type': 'ask_error', 'text': 'Could not transcribe that.'})
+        return
+
+    log.info('ask: %.1fs of audio -> %r', seconds, transcript[:120])
+    if not transcript:
+        await _send(socket, {'type': 'ask_error', 'text': "Didn't catch that. Tap to retry."})
+        return
+
+    # Echo the transcript first so a misheard question is visible before the
+    # answer arrives, rather than leaving the user guessing what was asked.
+    await _send(socket, {'type': 'transcribed', 'text': fit_for_glasses(transcript, limit=200)})
+    await _stream_chat_to(socket, transcript)
+
+
+async def _handle_app_message(socket: WebSocket, payload: dict, session: _AppSession) -> None:
     kind = payload.get('type')
+
+    if kind == 'ask_start':
+        session.ask_active = True
+        session.ask_buffer.clear()
+        await _send(socket, {'type': 'ask_listening'})
+        return
+
+    if kind == 'ask_stop':
+        if not session.ask_active and not session.ask_buffer:
+            return  # idempotent: a cancel after an auto-stop is not an error
+        await _handle_ask_stop(socket, session)
+        return
 
     if kind == 'chat':
         question = (payload.get('text') or '').strip()
@@ -327,10 +391,10 @@ async def _handle_app_message(socket: WebSocket, payload: dict, session: Capture
 
     elif kind == 'capture':
         if payload.get('enabled'):
-            await session.start()
+            await session.capture.start()
             await _send(socket, {'type': 'capture', 'active': True})
         else:
-            stats = await session.stop(finalize=True)
+            stats = await session.capture.stop(finalize=True)
             await _send(
                 socket,
                 {
@@ -365,7 +429,7 @@ async def app_socket(socket: WebSocket) -> None:
         if text:
             await _send(socket, {'type': 'transcript', 'text': fit_for_glasses(text, limit=300)})
 
-    session = CaptureSession(auth, OMI_API_BASE, on_segments=on_segments)
+    session = _AppSession(capture=CaptureSession(auth, OMI_API_BASE, on_segments=on_segments))
 
     try:
         await _send(socket, {'type': 'hello', 'omi_api': OMI_API_BASE})
@@ -375,8 +439,17 @@ async def app_socket(socket: WebSocket) -> None:
                 break
 
             if (data := message.get('bytes')) is not None:
-                # Binary frames are microphone PCM straight from the glasses.
-                session.feed(data)
+                # Binary frames are microphone PCM straight from the glasses, and
+                # mean different things depending on mode.
+                if session.ask_active:
+                    if len(session.ask_buffer) < MAX_ASK_BYTES:
+                        session.ask_buffer.extend(data)
+                    else:
+                        # Stop accumulating rather than grow without bound; the
+                        # question is already far longer than anyone speaks.
+                        log.warning('ask buffer hit %d bytes; ignoring further audio', MAX_ASK_BYTES)
+                else:
+                    session.capture.feed(data)
                 continue
 
             raw = message.get('text')
@@ -400,7 +473,7 @@ async def app_socket(socket: WebSocket) -> None:
     finally:
         _clients.discard(socket)
         with contextlib.suppress(Exception):
-            await session.stop(finalize=True)
+            await session.capture.stop(finalize=True)
         log.info('glasses app disconnected (%d left)', len(_clients))
 
 
