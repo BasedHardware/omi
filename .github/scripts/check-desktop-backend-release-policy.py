@@ -121,6 +121,8 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "EXPECTED_GCP_PROJECT_ID: based-hardware-dev",
             "DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+            "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+            "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
             "${{ secrets.GCP_SERVICE_ACCOUNT }}",
             'chmod 600 "$signer_file"',
             "base64 --decode",
@@ -129,6 +131,17 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         ):
             if fragment not in text:
                 errors.append(f"{workflow}: missing development traffic guard {fragment!r}")
+        if any(
+            "--remove-env-vars" in line and "GOOGLE_APPLICATION_CREDENTIALS" in line
+            for line in text.splitlines()
+        ):
+            errors.append(
+                f"{workflow}: mounted Firestore credentials must not be removed from the candidate environment"
+            )
+        if "GCP_SERVICE_ACCOUNT:latest" in text or "GCP_SERVICE_ACCOUNT=GCP_SERVICE_ACCOUNT" in text:
+            errors.append(
+                f"{workflow}: the Firebase probe signer must never become desktop-backend runtime configuration"
+            )
     return errors
 
 
