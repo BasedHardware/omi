@@ -6,6 +6,7 @@ import tempfile
 
 import pytest
 from database.desktop_update_channels import _build_pointer, normalize_release_manifest
+from tests.unit.fixtures.desktop_release_manifest import make_desktop_release_manifest as _manifest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO_ROOT / ".github" / "scripts"
@@ -25,8 +26,6 @@ def _load(name: str, filename: str):
     return module
 
 
-mark_beta = _load("mark_desktop_release_beta", "mark-desktop-release-beta.py")
-prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-promotion.py")
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
 qualification_evidence = _load("desktop_qualification_evidence", "desktop_qualification_evidence.py")
 manifest_contract = _load("desktop_release_manifest", "desktop_release_manifest.py")
@@ -61,77 +60,9 @@ KEY_VALUE_END -->"""
     }
 
 
-def _evidence():
-    return {
-        "schema_version": 1,
-        "release_id": "v0.12.64+12064-macos",
-        "source_sha": "a" * 40,
-        "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
-        "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
-        "artifacts": {
-            "Omi.zip": {
-                "url": "https://github.com/BasedHardware/omi/releases/download/v0.12.64+12064-macos/Omi.zip",
-                "sha256": "b" * 64,
-                "signature": "signature",
-            },
-            "omi.dmg": {
-                "url": "https://github.com/BasedHardware/omi/releases/download/v0.12.64+12064-macos/omi.dmg",
-                "sha256": "c" * 64,
-            },
-        },
-    }
-
-
-def _prepare(release=None, *, allow_stable_channel=False):
-    return prepare_beta.prepare_manifest(
-        _release() if release is None else release,
-        "v0.12.64+12064-macos",
-        "a" * 40,
-        "b" * 64,
-        "c" * 64,
-        qualification_evidence=_evidence(),
-        qualification_evidence_sha256="sha256:" + "d" * 64,
-        allow_stable_channel=allow_stable_channel,
-    )
-
-
-def test_mark_beta_changes_only_visibility_fields():
-    result = mark_beta.mark_beta(_release()["body"])
-    assert "isLive: true" in result
-    assert "channel: beta" in result
-    assert "qualifiedBetaSha: " + "a" * 40 in result
-
-
-def test_prepare_manifest_requires_exact_qualification_and_assets():
-    manifest = _prepare()
-    assert manifest["build_number"] == 12064
-    assert manifest["qualification_tier"] == "T2"
-    assert manifest["qualification_passed"] is True
-    assert manifest["qualification_evidence_asset"] == "qualification-evidence-v0.12.64+12064-macos.json"
-    assert manifest["changelog"] == ["Fixed updates", "Improved recovery"]
-
-
-def test_prepared_manifest_is_the_exact_immutable_object_registered_and_promoted():
-    """Preparation, registration, and promotion share the v1 executable contract."""
-    release = _release()
-    tag = release["tagName"]
-    for asset in release["assets"]:
-        asset["url"] = f"https://github.com/BasedHardware/omi/releases/download/{tag}/{asset['name']}"
-    evidence = _evidence()
-    evidence["artifacts"]["Omi.zip"]["url"] = release["assets"][0]["url"]
-    evidence["artifacts"]["omi.dmg"]["url"] = release["assets"][1]["url"]
-
-    prepared = prepare_beta.prepare_manifest(
-        release,
-        tag,
-        "a" * 40,
-        "b" * 64,
-        "c" * 64,
-        qualification_evidence=evidence,
-        qualification_evidence_sha256="sha256:" + "d" * 64,
-    )
-
-    accepted = manifest_contract.validate_manifest(prepared)
+def test_canonical_manifest_is_the_exact_immutable_object_registered_and_promoted():
+    """Validation, registration, and promotion share the v1 executable contract."""
+    accepted = manifest_contract.validate_manifest(_manifest())
     registered = normalize_release_manifest(accepted)
     pointer = _build_pointer(
         {},
@@ -277,32 +208,6 @@ def test_universal_release_stages_and_smokes_both_sharp_architectures():
     assert "@img/sharp-libvips-darwin-$package_arch@$libvips_version" in prepare
     assert "for sharp_arch in arm64 x64" in prepare
     assert "agent runtime missing Sharp/libvips darwin-$sharp_arch pair" in smoke
-
-
-def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_evidence():
-    """Promotion can only bind bytes independently recorded by qualification."""
-    evidence = {
-        "schema_version": 1,
-        "release_id": "v0.12.64+12064-macos",
-        "source_sha": "a" * 40,
-        "artifacts": {
-            "Omi.zip": {"url": "https://example.com/Omi.zip", "sha256": "b" * 64, "signature": "signature"},
-            "omi.dmg": {"url": "https://example.com/omi.dmg", "sha256": "c" * 64},
-        },
-        "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
-        "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
-    }
-
-    with pytest.raises(ValueError, match="qualification evidence"):
-        prepare_beta.prepare_manifest(
-            _release(),
-            "v0.12.64+12064-macos",
-            "a" * 40,
-            "1" * 64,
-            "2" * 64,
-            qualification_evidence=evidence,
-            qualification_evidence_sha256="sha256:" + "d" * 64,
-        )
 
 
 def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointering():
@@ -454,7 +359,7 @@ def test_qualification_evidence_rejects_candidate_gate_from_a_different_source()
 
 def test_local_candidate_evidence_beta_stable_repoint_and_retry_simulation():
     """No-cloud release-path simulation keeps both pointers bound to exact bytes."""
-    manifest = normalize_release_manifest(_prepare())
+    manifest = normalize_release_manifest(_manifest())
     beta = _build_pointer(
         {},
         manifest,
@@ -500,7 +405,7 @@ def test_local_candidate_evidence_beta_stable_repoint_and_retry_simulation():
 
 
 def test_stable_repair_bundle_uses_the_retained_manifest_installer_identity():
-    manifest = _prepare()
+    manifest = _manifest()
 
     bundle = repair_installer.build_repair_bundle(manifest, "gs://omi_macos_updates")
 
@@ -516,7 +421,7 @@ def test_stable_repair_bundle_uses_the_retained_manifest_installer_identity():
 
 @pytest.mark.parametrize("field, value", [("platform", "windows"), ("dmg_sha256", "not-a-digest")])
 def test_stable_repair_bundle_rejects_incomplete_or_wrong_platform_manifest(field, value):
-    manifest = _prepare()
+    manifest = _manifest()
     manifest[field] = value
 
     with pytest.raises(ValueError):
@@ -524,54 +429,11 @@ def test_stable_repair_bundle_rejects_incomplete_or_wrong_platform_manifest(fiel
 
 
 def test_stable_repair_bundle_requires_the_release_publication_time():
-    manifest = _prepare()
+    manifest = _manifest()
     manifest.pop("published_at")
 
     with pytest.raises(ValueError, match="published_at"):
         repair_installer.build_repair_bundle(manifest, "gs://omi_macos_updates")
-
-
-def test_prepare_manifest_ignores_mutable_legacy_qualification_metadata():
-    release = _release()
-    release["body"] = (
-        release["body"]
-        .replace("qualifiedBeta: true", "blessed: true")
-        .replace("qualifiedBetaAt:", "blessedAt:")
-        .replace("qualifiedBetaSha:", "blessedSha:")
-        .replace("qualifiedBetaTier:", "blessedTier:")
-        .replace("qualifiedBetaEvidence:", "blessedEvidence:")
-    )
-    manifest = _prepare(release)
-    assert manifest["qualification_passed"] is True
-
-
-def test_prepare_manifest_allows_an_already_stable_release_only_for_repair_retries():
-    release = _release()
-    release["body"] = (
-        release["body"].replace("isLive: false", "isLive: true").replace("channel: candidate", "channel: stable")
-    )
-
-    with pytest.raises(SystemExit, match="candidate or beta"):
-        _prepare(release)
-
-    manifest = _prepare(release, allow_stable_channel=True)
-    assert manifest["release_id"] == "v0.12.64+12064-macos"
-
-
-def test_prepare_manifest_rejects_unqualified_candidate():
-    release = _release()
-    evidence = _evidence()
-    evidence["source_qualification"] = {"passed": False, "tier": "T2"}
-    with pytest.raises(ValueError, match="source-built named-bundle T2"):
-        prepare_beta.prepare_manifest(
-            release,
-            "v0.12.64+12064-macos",
-            "a" * 40,
-            "b" * 64,
-            "c" * 64,
-            qualification_evidence=evidence,
-            qualification_evidence_sha256="sha256:" + "d" * 64,
-        )
 
 
 def test_qualification_is_serialized_by_tag_and_retried_without_release_body_state():
@@ -629,7 +491,6 @@ def test_stable_workflow_reads_current_beta_and_owns_its_cas_inputs():
     assert "Read current pointers and capture workflow-owned CAS inputs" in workflow
     assert "Fetch exact retained qualified manifest" in workflow
     assert "actions/download-artifact@v7" not in workflow
-    assert "prepare-desktop-beta-promotion.py" not in workflow
     assert "Register immutable release manifest" not in workflow
     assert "appcast.xml?identity=stable" in workflow
     assert "verify_stable_appcast.py" in workflow
@@ -651,7 +512,7 @@ def test_stable_workflow_selects_its_own_trusted_qualification():
 
 
 def test_beta_pointer_lost_response_retry_remains_exact_and_generation_stable():
-    manifest = normalize_release_manifest(_prepare())
+    manifest = normalize_release_manifest(_manifest())
     current = {
         "platform": "macos",
         "channel": "beta",
