@@ -4,7 +4,8 @@
 The desktop auto-release tag job runs this against the readiness evidence
 artifact produced on the trusted self-hosted M1. It never trusts that the
 readiness *job* merely succeeded: it loads the evidence and proves it covers the
-EXACT source SHA the tag job is about to tag, that it ran offline, and that it
+EXACT source SHA the tag job is about to tag, that its harness ran offline, that
+the independent live desktop-backend compatibility check passed, and that it
 carries no production-pointer authority.
 
 Readiness is deliberately distinct from signed-artifact qualification: this
@@ -26,6 +27,7 @@ REQUIRED_CHECKS = (
     "source_resolved_from_origin",
     "exact_sha_checkout_verified",
     "swift_cache_prepared",
+    "live_desktop_backend_compatibility",
     "self_check",
     "offline_stack_ready",
 )

@@ -136,7 +136,8 @@ def validate_desktop_release_gates(qualification: str, stable: str) -> list[str]
     errors: list[str] = []
     required = (
         "Verify live desktop-backend chat compatibility",
-        '.chat_contract_version == "1"',
+        "verify_desktop_backend_compatibility.py",
+        "--expected-contract-version 1",
         "https://desktop-backend-hhibjajaja-uc.a.run.app",
     )
     for workflow, text in (

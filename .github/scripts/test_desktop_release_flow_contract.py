@@ -116,8 +116,9 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
     def test_m1_qualification_requires_live_desktop_backend_contract(self) -> None:
         for fragment in (
             "Verify live desktop-backend chat compatibility",
-            '.chat_contract_version == "1"',
-            "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+            "verify_desktop_backend_compatibility.py",
+            "--expected-contract-version 1",
+            "https://desktop-backend-hhibjajaja-uc.a.run.app",
             "desktop-backend-compatibility.json",
         ):
             self.assertIn(fragment, self.workflow)

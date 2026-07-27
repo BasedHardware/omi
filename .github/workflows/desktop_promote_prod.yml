@@ -41,15 +41,11 @@ jobs:
       - name: Verify live desktop-backend chat compatibility
         run: |
           set -euo pipefail
-          curl -fsS --max-time 15 \
-            https://desktop-backend-hhibjajaja-uc.a.run.app/health \
-            > /tmp/desktop-backend-health.json
-          jq -e '
-            .status == "healthy"
-            and .service == "omi-desktop-backend"
-            and .chat_contract_version == "1"
-          ' /tmp/desktop-backend-health.json >/dev/null
-          rm -f /tmp/desktop-backend-health.json
+          python3 .github/scripts/verify_desktop_backend_compatibility.py \
+            --base-url https://desktop-backend-hhibjajaja-uc.a.run.app \
+            --expected-contract-version 1 \
+            --evidence "$RUNNER_TEMP/desktop-backend-compatibility.json"
+          rm -f "$RUNNER_TEMP/desktop-backend-compatibility.json"
 
       - name: Generate Omi Bot token
         id: app-token

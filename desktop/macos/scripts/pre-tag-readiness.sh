@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Fail-closed trusted-M1 pre-tag readiness gate. It validates the exact planned
 # source on the trusted runner before the existing serialized tag job can publish
-# an immutable candidate. Readiness is offline-only and has no Beta/Stable or
-# qualification authority.
+# an immutable candidate. Its harness remains offline-only; one bounded,
+# read-only live desktop-backend compatibility probe prevents minting a
+# candidate that the later qualification boundary must reject. This gate has no
+# Beta/Stable or qualification authority.
 set -euo pipefail
 umask 077
 
@@ -11,11 +13,13 @@ DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 CACHE_COMMAND="$SCRIPT_DIR/qualification-swift-cache.sh"
 LEASE_COMMAND="$SCRIPT_DIR/qualification-lease-command.sh"
+PRODUCTION_DESKTOP_BACKEND_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
 
 EVIDENCE=""
 SOURCE_REPOSITORY="$REPO_ROOT"
 SOURCE_SHA=""
 LANE="${OMI_READINESS_LANE:-local}"
+DESKTOP_BACKEND_BASE_URL="${OMI_DESKTOP_BACKEND_BASE_URL:-$PRODUCTION_DESKTOP_BACKEND_URL}"
 SHA_RE='^[0-9a-f]{40}$'
 RETAINED_RUNS="${OMI_QUALIFICATION_RETAINED_RUNS:-3}"
 RETENTION_AGE_SECONDS="${OMI_QUALIFICATION_RETENTION_AGE_SECONDS:-1209600}"
@@ -47,6 +51,8 @@ Options:
 
 Environment:
   OMI_READINESS_LANE         Manifest lane recorded in evidence (local|ci)
+  OMI_DESKTOP_BACKEND_BASE_URL
+                             Desktop-backend base URL to verify before readiness
 USAGE
 }
 
@@ -114,6 +120,7 @@ evidence = {
         "source_resolved_from_origin": passed == "true",
         "exact_sha_checkout_verified": passed == "true",
         "swift_cache_prepared": passed == "true",
+        "live_desktop_backend_compatibility": passed == "true",
         "self_check": passed == "true",
         "offline_stack_ready": passed == "true",
     },
@@ -253,6 +260,19 @@ LEASE_JSON="$(
     "$WORKTREE" "$READINESS_LEASE_ID" "$$" "$PORT_OFFSET" "$RETAINED_RUNS"
 )"
 READINESS_LEASE_TOKEN="$(json_capability_field token "$LEASE_JSON")"
+
+# Fail fast inside the existing exact-source, authenticated cleanup lifecycle.
+# This is the same narrow verifier used by later live qualification; the
+# response body and configured URL are never copied into diagnostics/evidence.
+COMPATIBILITY_VERIFIER="$WORKTREE/.github/scripts/verify_desktop_backend_compatibility.py"
+[[ -x "$COMPATIBILITY_VERIFIER" ]] || {
+  echo "pre-tag-readiness: exact source is missing the desktop-backend compatibility verifier" >&2
+  exit 1
+}
+"$COMPATIBILITY_VERIFIER" \
+  --base-url "$DESKTOP_BACKEND_BASE_URL" \
+  --expected-contract-version 1 \
+  --evidence "$WORKTREE/desktop/macos/.harness/desktop-backend-compatibility.json"
 
 # The harness sees only this lease's state, instance, ports, and authenticated
 # ownership token; it cannot infer authority over unrelated runner processes.

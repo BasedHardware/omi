@@ -171,6 +171,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             ".github/scripts/plan-desktop-release.py",
             ".github/scripts/desktop-release-source-identity.py",
             ".github/scripts/publish-desktop-candidate-tag.py",
+            ".github/scripts/verify_desktop_backend_compatibility.py",
             ".github/scripts/verify-pre-tag-readiness.py",
             ".github/workflows/desktop_auto_release.yml",
             ".github/workflows/desktop_qualify_beta.yml",

@@ -27,6 +27,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from verify_desktop_backend_compatibility import (
+    CompatibilityError,
+    validate_compatibility as validate_shared_compatibility,
+)
+
 HTTP_TIMEOUT_SECONDS = 75
 MAX_CHAT_SECONDS = 70
 MAX_FIRST_EVENT_SECONDS = 20
@@ -58,24 +63,13 @@ def validate_compatibility(
     *,
     expected_contract_version: str,
 ) -> dict[str, object]:
-    health = _require_object(payload, stage="health")
-    expected = {
-        "status": "healthy",
-        "service": "omi-desktop-backend",
-        "chat_contract_version": expected_contract_version,
-    }
-    mismatches = {
-        key: {"expected": wanted, "actual": health.get(key)}
-        for key, wanted in expected.items()
-        if health.get(key) != wanted
-    }
-    if mismatches:
-        raise ProbeError(f"health: incompatible service contract {json.dumps(mismatches, sort_keys=True)}")
-    return {
-        "chat_contract_version": expected_contract_version,
-        "service": "omi-desktop-backend",
-        "status": "healthy",
-    }
+    try:
+        return validate_shared_compatibility(
+            payload,
+            expected_contract_version=expected_contract_version,
+        )
+    except CompatibilityError as error:
+        raise ProbeError(f"health: {error}") from error
 
 
 def validate_health(

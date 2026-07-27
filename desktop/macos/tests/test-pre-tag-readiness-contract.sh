@@ -42,6 +42,9 @@ require_text 'OMI_LOCAL_STATE_ROOT="$LEASE_ROOT/state"'
 require_text 'OMI_LOCAL_INSTANCE="$READINESS_LEASE_ID"'
 require_text 'OMI_HARNESS_PORT_OFFSET="$PORT_OFFSET"'
 require_text 'OMI_HARNESS_OWNERSHIP_TOKEN="$READINESS_LEASE_TOKEN"'
+require_text 'verify_desktop_backend_compatibility.py'
+require_text '--base-url "$DESKTOP_BACKEND_BASE_URL"'
+require_text '--expected-contract-version 1'
 require_text 'desktop-core-harness.sh --readiness'
 
 # A foreign/unproven listener must cause authenticated cleanup to fail closed:
@@ -51,6 +54,7 @@ require_text 'READINESS_CLEANUP_OK=1'
 require_text 'if [[ "$READINESS_COMPLETE" -eq 1 && "$READINESS_CLEANUP_OK" -ne 1 ]]'
 require_order \
   '"$LEASE_COMMAND" acquire' \
+  'verify_desktop_backend_compatibility.py' \
   'desktop-core-harness.sh --readiness' \
   'READINESS_COMPLETE=1'
 require_order \

@@ -57,6 +57,8 @@ class PreTagReadinessBehaviorTests(unittest.TestCase):
         self.assertEqual(self.run_process(["git", "clone", "--quiet", str(origin), str(source)], cwd=root).returncode, 0)
         scripts = source / "desktop/macos/scripts"
         scripts.mkdir(parents=True)
+        github_scripts = source / ".github/scripts"
+        github_scripts.mkdir(parents=True)
         (source / "backend").mkdir()
         agent = source / "desktop/macos/agent"
         agent.mkdir()
@@ -120,6 +122,17 @@ printf '{"tier":"readiness","passed":true,"provider_mode":"offline","git_sha":"%
 printf 'harness %s %s %s\\n' "$sha" "$OMI_LOCAL_INSTANCE" "$OMI_HARNESS_OWNERSHIP_TOKEN" >> "${FAKE_READINESS_LOG:?}"
 """,
         )
+        self.write_executable(
+            github_scripts / "verify_desktop_backend_compatibility.py",
+            """#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == --base-url && "$3" == --expected-contract-version && "$4" == 1 && "$5" == --evidence && $# -eq 6 ]]
+printf 'compatibility %s %s\\n' "$2" "$4" >> "${FAKE_READINESS_LOG:?}"
+[[ ${FAKE_COMPATIBILITY_FAIL:-} != 1 ]] || exit 45
+mkdir -p "$(dirname "$6")"
+printf '{"chat_contract_version":"1","schema_version":1,"service":"omi-desktop-backend","status":"healthy"}\\n' > "$6"
+""",
+        )
         fake_bin = root / "fake-bin"
         fake_bin.mkdir()
         self.write_executable(
@@ -164,7 +177,12 @@ exec /bin/rm "$@"
         return source, self.run_git(source, "rev-parse", "HEAD"), fake_bin, scripts / "pre-tag-readiness.sh", foreign_agent
 
     def run_readiness(
-        self, root: Path, *, failed_release: str = "", npm_failure: bool = False
+        self,
+        root: Path,
+        *,
+        compatibility_failure: bool = False,
+        failed_release: str = "",
+        npm_failure: bool = False,
     ) -> tuple[subprocess.CompletedProcess[str], dict[str, object], list[str], str, bool]:
         source, sha, fake_bin, readiness, _foreign_agent = self.fixture(root)
         receipt = root / "evidence/readiness.json"
@@ -175,6 +193,7 @@ exec /bin/rm "$@"
             "FAKE_READINESS_LOG": str(log),
             "FAKE_READINESS_RECEIPT": str(receipt),
             "FAKE_FAIL_RELEASE": failed_release,
+            "FAKE_COMPATIBILITY_FAIL": "1" if compatibility_failure else "",
             "FAKE_NPM_FAIL": "1" if npm_failure else "",
             "NODE_ENV": "production",
             "TMPDIR": str(root / "tmp"),
@@ -202,20 +221,23 @@ exec /bin/rm "$@"
         self.assertFalse(dependency_residue_exists)
         self.assertEqual(receipt["source_sha"], sha)
         self.assertEqual([line.split()[0] for line in operations], [
-            "cache-prepare", "lease-acquire", "agent-deps", "harness", "agent-deps-cleanup", "lease-release", "cache-release",
+            "cache-prepare", "lease-acquire", "compatibility", "agent-deps", "harness", "agent-deps-cleanup",
+            "lease-release", "cache-release",
         ])
         cache_prepare = operations[0].split()
         lease_acquire = operations[1].split()
-        agent_deps = operations[2].split()
-        harness = operations[3].split()
-        agent_cleanup = operations[4].split()
-        lease_release = operations[5].split()
-        cache_release = operations[6].split()
+        compatibility = operations[2].split()
+        agent_deps = operations[3].split()
+        harness = operations[4].split()
+        agent_cleanup = operations[5].split()
+        lease_release = operations[6].split()
+        cache_release = operations[7].split()
         cache_id, readiness_id = cache_prepare[3], lease_acquire[2]
         self.assertNotEqual(cache_id, readiness_id)
         self.assertTrue(cache_id.startswith(f"cache-readiness-{sha[:12]}-"))
         self.assertTrue(readiness_id.startswith(f"readiness-{sha[:12]}-"))
         self.assertEqual(cache_prepare[1:3], [sha, lease_acquire[1]])
+        self.assertEqual(compatibility[1:], ["https://desktop-backend-hhibjajaja-uc.a.run.app", "1"])
         self.assertEqual(agent_deps[1], f"{cache_prepare[2]}/desktop/macos/agent")
         self.assertEqual(harness[1:], [sha, readiness_id, "lease-token"])
         self.assertEqual(agent_cleanup[1], f"{cache_prepare[2]}/desktop/macos/agent/node_modules")
@@ -246,8 +268,23 @@ exec /bin/rm "$@"
         self.assertFalse(dependency_residue_exists)
         self.assertNotIn("harness", [line.split()[0] for line in operations])
         self.assertEqual([line.split()[0] for line in operations], [
-            "cache-prepare", "lease-acquire", "agent-deps", "agent-deps-cleanup", "lease-release", "cache-release",
+            "cache-prepare", "lease-acquire", "compatibility", "agent-deps", "agent-deps-cleanup", "lease-release",
+            "cache-release",
         ])
+
+    def test_stale_backend_fails_before_agent_install_and_releases_capabilities(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            completed, receipt, operations, _sha, dependency_residue_exists = self.run_readiness(
+                Path(tmp), compatibility_failure=True
+            )
+
+        self.assertNotEqual(completed.returncode, 0, completed.stderr)
+        self.assertFalse(receipt["passed"])
+        self.assertFalse(dependency_residue_exists)
+        self.assertEqual(
+            [line.split()[0] for line in operations],
+            ["cache-prepare", "lease-acquire", "compatibility", "lease-release", "cache-release"],
+        )
 
     def test_symlinked_agent_cannot_redirect_dependency_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -275,7 +312,7 @@ exec /bin/rm "$@"
             self.assertFalse(parsed_receipt["passed"])
             self.assertTrue((foreign_agent / "node_modules/foreign-sentinel").is_file())
             self.assertEqual([line.split()[0] for line in log.read_text(encoding="utf-8").splitlines()], [
-                "cache-prepare", "lease-acquire", "lease-release", "cache-release",
+                "cache-prepare", "lease-acquire", "compatibility", "lease-release", "cache-release",
             ])
 
     def test_inherited_git_config_cannot_redirect_fixture_origin(self) -> None:
@@ -291,7 +328,8 @@ exec /bin/rm "$@"
         self.assertTrue(receipt["passed"])
         self.assertFalse(dependency_residue_exists)
         self.assertEqual([line.split()[0] for line in operations], [
-            "cache-prepare", "lease-acquire", "agent-deps", "harness", "agent-deps-cleanup", "lease-release", "cache-release",
+            "cache-prepare", "lease-acquire", "compatibility", "agent-deps", "harness", "agent-deps-cleanup",
+            "lease-release", "cache-release",
         ])
 
 

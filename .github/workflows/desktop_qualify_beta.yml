@@ -111,22 +111,10 @@ jobs:
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
-          curl -fsS --max-time 15 \
-            https://desktop-backend-hhibjajaja-uc.a.run.app/health \
-            > "$QUALIFICATION_STAGE/desktop-backend-health.json"
-          jq -e '
-            .status == "healthy"
-            and .service == "omi-desktop-backend"
-            and .chat_contract_version == "1"
-          ' "$QUALIFICATION_STAGE/desktop-backend-health.json" >/dev/null
-          jq '{
-            chat_contract_version,
-            schema_version: 1,
-            service,
-            status
-          }' "$QUALIFICATION_STAGE/desktop-backend-health.json" \
-            > "$QUALIFICATION_STAGE/desktop-backend-compatibility.json"
-          rm -f "$QUALIFICATION_STAGE/desktop-backend-health.json"
+          python3 .github/scripts/verify_desktop_backend_compatibility.py \
+            --base-url https://desktop-backend-hhibjajaja-uc.a.run.app \
+            --expected-contract-version 1 \
+            --evidence "$QUALIFICATION_STAGE/desktop-backend-compatibility.json"
       - name: Fetch candidate release inputs into this run only
         working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
