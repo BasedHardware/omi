@@ -15,7 +15,7 @@ import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, TextIO
+from typing import Callable, Iterator, TextIO
 
 if os.name == "nt":
     import msvcrt
@@ -170,6 +170,19 @@ def _load_records(path: Path, key: str) -> list[dict[str, object]]:
     return records
 
 
+def _posix_process_group_api() -> tuple[
+    Callable[[int], int],
+    Callable[[int, signal.Signals], None],
+]:
+    getpgid = getattr(os, "getpgid", None)
+    killpg = getattr(os, "killpg", None)
+    if not callable(getpgid) or not callable(killpg):
+        raise QualificationLeaseError(
+            "Qualification process-manifest cleanup requires POSIX process provenance; retaining lease state"
+        )
+    return getpgid, killpg
+
+
 def _validated_owned_records(
     state_root: Path, repo_root: Path, lease_id: str, ownership_token: str
 ) -> tuple[list[dict[str, object]], Path, Path]:
@@ -183,10 +196,6 @@ def _validated_owned_records(
         return [], process_manifest, port_manifest
     if not process_manifest.is_file() or not port_manifest.is_file():
         raise QualificationLeaseError("Qualification lease is missing process or port provenance")
-    if os.name == "nt":
-        raise QualificationLeaseError(
-            "Qualification process-manifest cleanup requires POSIX process provenance; retaining lease state"
-        )
     records = _load_records(process_manifest, "processes")
     ports = _load_records(port_manifest, "ports")
     by_service = {(str(record.get("service")), int(record.get("pid", -1))): record for record in ports}
@@ -205,8 +214,9 @@ def _validated_owned_records(
         if port_record is None or int(port_record.get("port", -1)) != int(record.get("port", -2)):
             raise QualificationLeaseError("Qualification process has no matching recorded port provenance")
         if safety.process_exists(pid):
+            getpgid, _killpg = _posix_process_group_api()
             safety.validate_owned_pid(pid, process_manifest=process_manifest, service=service)
-            if os.getpgid(pid) != process_group:
+            if getpgid(pid) != process_group:
                 raise QualificationLeaseError("Qualification process is no longer in its recorded process group")
             safety.validate_port_owner(
                 int(record["port"]),
@@ -513,8 +523,9 @@ def _validated_signal(
     service = str(record["service"])
     process_group = int(record["process_group"])
     port = int(record["port"])
+    getpgid, killpg = _posix_process_group_api()
     safety.validate_owned_pid(pid, process_manifest=process_manifest, service=service)
-    if os.getpgid(pid) != process_group or process_group != pid:
+    if getpgid(pid) != process_group or process_group != pid:
         raise QualificationLeaseError("Refusing to signal a qualification process group whose ownership changed")
     safety.validate_port_owner(
         port, pid=pid, port_manifest=port_manifest, process_manifest=None, service=service
@@ -522,10 +533,10 @@ def _validated_signal(
     listeners = safety.listening_pids(port)
     if listeners and not _is_exact_typesense_docker_proxy(record, lease_id):
         for listener_pid in listeners:
-            if os.getpgid(listener_pid) != process_group or not safety.is_descendant_of(listener_pid, pid):
+            if getpgid(listener_pid) != process_group or not safety.is_descendant_of(listener_pid, pid):
                 raise QualificationLeaseError("Refusing to signal a qualification listener whose lease lineage is unproven")
     try:
-        os.killpg(process_group, sig)
+        killpg(process_group, sig)
     except (ProcessLookupError, PermissionError) as exc:
         raise QualificationLeaseError(f"Cannot signal recorded qualification process group: {exc}") from exc
 
