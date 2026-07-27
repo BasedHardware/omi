@@ -52,8 +52,12 @@ class FakeOmi:
         self.quota_exc: Exception | None = None
         self.calls: list = []
 
-    async def chat(self, text, app_id=None, deadline_s=None):
+    async def chat(self, text, app_id=None, deadline_s=None, enough=None):
+        # `enough` lets the caller stop the stream once the answer already
+        # overflows the display. Recorded so tests can assert it was supplied --
+        # omitting it costs about 3 seconds per answer.
         self.calls.append(('chat', text, deadline_s))
+        self.enough = enough
         if self.chat_exc:
             raise self.chat_exc
         return self.chat_result

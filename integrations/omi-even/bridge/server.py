@@ -31,6 +31,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from capture import CaptureSession
+from display import DEFAULT_LIMIT as DISPLAY_LIMIT
 from display import fit_for_glasses, openai_chat_completion, paginate
 from omi_auth import AuthError, OmiAuth
 from omi_client import OmiClient
@@ -52,6 +53,9 @@ EVEN_TOKEN = os.getenv('OMI_EVEN_TOKEN') or secrets.token_urlsafe(24)
 AGENT_DEADLINE_S = float(os.getenv('OMI_EVEN_DEADLINE', '20'))
 
 _CONTRACT_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'add-agent-capture.log')
+
+# Larger than any answer Omi produces; used to strip markup without truncating.
+_UNLIMITED = 1_000_000
 
 auth = OmiAuth()
 omi = OmiClient(auth, OMI_API_BASE)
@@ -138,9 +142,27 @@ def _authorized(request: Request) -> bool:
     return secrets.compare_digest(parts[1].strip(), EVEN_TOKEN)
 
 
+def _display_is_full(raw: str) -> bool:
+    """True once the accumulated answer already overflows one screen.
+
+    Omi writes for a phone: measured answers ran 929-1511 characters where the
+    glasses show ~380, and waiting for that tail cost about 3 seconds per
+    question the user never saw. Stripping only ever shrinks text, so a raw
+    length below the limit cannot possibly fill the screen -- that cheap check
+    guards the expensive one, which runs at most a handful of times per answer.
+    """
+    if len(raw) < DISPLAY_LIMIT:
+        return False
+    # Fit with an effectively unlimited budget so this measures the *stripped*
+    # length. Fitting at DISPLAY_LIMIT would truncate to at most DISPLAY_LIMIT --
+    # and usually a few characters below it, having landed on a word boundary --
+    # so comparing that against DISPLAY_LIMIT is a test that almost never passes.
+    return len(fit_for_glasses(raw, limit=_UNLIMITED)) >= DISPLAY_LIMIT
+
+
 async def _answer_for_glasses(question: str) -> str:
     """Ask Omi and reduce the answer to something the G2 can actually show."""
-    result = await omi.chat(question, deadline_s=AGENT_DEADLINE_S)
+    result = await omi.chat(question, deadline_s=AGENT_DEADLINE_S, enough=_display_is_full)
 
     if result.error:
         log.warning('chat error: %s', result.error)
@@ -149,7 +171,7 @@ async def _answer_for_glasses(question: str) -> str:
     if not result.text.strip():
         return 'Omi had no answer for that.'
 
-    fitted = fit_for_glasses(result.text)
+    fitted = fit_for_glasses(result.text, limit=DISPLAY_LIMIT)
     if result.truncated:
         log.info('answer truncated at the %.0fs deadline', AGENT_DEADLINE_S)
     log.info('answered in %.1fs (%d chars -> %d shown)', result.elapsed_s, len(result.text), len(fitted))

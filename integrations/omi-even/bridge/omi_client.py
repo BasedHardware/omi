@@ -43,7 +43,7 @@ import json
 import logging
 import os
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 
 import httpx
@@ -181,12 +181,20 @@ class OmiClient:
         text: str,
         app_id: str | None = None,
         deadline_s: float | None = None,
+        enough: Callable[[str], bool] | None = None,
     ) -> ChatResult:
         """Run a chat turn to completion, or to `deadline_s`, whichever comes first.
 
         The deadline exists because the glasses' client will give up long before
         Omi's 150s agent cap. On timeout the partial answer accumulated so far is
         returned rather than nothing -- a truncated answer beats a spinner.
+
+        `enough` stops the stream early once the accumulated text is already more
+        than the caller can display. Omi writes for a phone and routinely emits
+        three times what fits on the glasses; measured, waiting for the rest costs
+        about 3 seconds per answer that the user never sees. The predicate is only
+        consulted on `data` frames, and a stream stopped this way is *not* marked
+        truncated -- the answer shown is complete as far as the display goes.
         """
         started = time.monotonic()
         parts: list[str] = []
@@ -212,6 +220,9 @@ class OmiClient:
 
                 if event.kind == 'data':
                     parts.append(event.text)
+                    if enough is not None and enough(''.join(parts)):
+                        saw_terminal = True  # complete for display purposes
+                        break
                 elif event.kind == 'think':
                     thinking.append(event.text)
                 elif event.kind == 'error':
