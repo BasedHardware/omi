@@ -339,6 +339,11 @@ extension AppState {
       // Check daily goal generation
       GoalGenerationService.shared.onConversationCreated()
 
+      // Continuous People-intelligence sync: a newly created conversation can surface new people /
+      // relationships, so re-run the on-device graph (self-gated + self-throttled, off the main
+      // thread) to fold them in without waiting for the next People-tab visit.
+      Task { await PeopleGraphBuilder.syncIfNeeded(uid: UserDefaults.standard.string(forKey: .authUserId)) }
+
       // Refresh conversations list
       Task {
         await loadConversations()

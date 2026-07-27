@@ -105,4 +105,42 @@ final class PeopleGraphBuilderTests: XCTestCase {
       (persons.first?["lastTouch"] as? [String: Any])?["date"] as? String, "2026-07-01T10:00:00Z",
       "lastTouch carries the newest per-person message date")
   }
+
+  // MARK: - Continuous-sync throttle
+
+  /// The throttle decision that gates every continuous trigger (app-active, new conversation,
+  /// connector import) so the on-device pipeline runs at most once per `minSyncInterval`.
+  func testSyncThrottleDecision() {
+    let now = Date()
+    let interval = PeopleGraphBuilder.minSyncInterval
+
+    // Never run before → run.
+    XCTAssertTrue(
+      PeopleGraphBuilder.shouldRun(lastRun: nil, now: now, force: false),
+      "a first-ever sync (no recorded run) must proceed")
+
+    // Ran just now → within the window → skip.
+    XCTAssertFalse(
+      PeopleGraphBuilder.shouldRun(lastRun: now, now: now, force: false),
+      "a sync less than the interval ago must be throttled")
+    XCTAssertFalse(
+      PeopleGraphBuilder.shouldRun(
+        lastRun: now.addingTimeInterval(-(interval - 1)), now: now, force: false),
+      "a sync just under the interval ago must be throttled")
+
+    // Older than the interval → run again.
+    XCTAssertTrue(
+      PeopleGraphBuilder.shouldRun(
+        lastRun: now.addingTimeInterval(-interval), now: now, force: false),
+      "a sync at exactly the interval boundary must proceed")
+    XCTAssertTrue(
+      PeopleGraphBuilder.shouldRun(
+        lastRun: now.addingTimeInterval(-(interval + 60)), now: now, force: false),
+      "a sync older than the interval must proceed")
+
+    // Force always bypasses the throttle, even immediately after a run.
+    XCTAssertTrue(
+      PeopleGraphBuilder.shouldRun(lastRun: now, now: now, force: true),
+      "force must bypass the throttle window")
+  }
 }

@@ -158,6 +158,10 @@ final class ConnectorImportRunner: ObservableObject {
       state.phase = .succeeded
       state.statusMessage = message
       state.errorMessage = nil
+      // Continuous People-intelligence sync: a completed connector import can bring new DM /
+      // relationship data, so rebuild the on-device graph (self-gated + self-throttled, off the
+      // main thread) to fold it in without waiting for the next People-tab visit.
+      Task { await PeopleGraphBuilder.syncIfNeeded(uid: UserDefaults.standard.string(forKey: .authUserId)) }
       AnalyticsManager.shared.integrationConnectSucceeded(
         integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
         connectorID: connectorID,

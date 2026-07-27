@@ -652,6 +652,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
       ) { _ in
         Self.recordForegroundState()
+        // Continuous People-intelligence sync: whenever the app comes to the foreground, pick up
+        // any new local data (fresh iMessages, backend-written people) and rebuild the on-device
+        // social graph. Self-gated on the People flags, self-throttled, and runs off the main
+        // thread — cheap to call on every activation.
+        Task { await PeopleGraphBuilder.syncIfNeeded(uid: UserDefaults.standard.string(forKey: .authUserId)) }
         Task { @MainActor in
           await AuthSessionCoordinator.shared.ensureValidSessionDebounced(
             trigger: .appBecameActive,

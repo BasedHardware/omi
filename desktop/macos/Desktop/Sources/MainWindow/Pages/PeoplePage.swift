@@ -379,14 +379,13 @@ final class PeopleViewModel: ObservableObject {
     hasLoaded = true
     isLoading = true
     errorMessage = nil
-    // Gated, fire-and-forget: self-guards on the `peopleIMessageExport` flag
-    // (default off), so this is a no-op unless a developer opts in.
-    // On-device social-graph engine: reads the exported iMessage aggregates and derives
-    // edges / circles / communities locally, folding them into the People-tab data.
-    // Self-gated on the `peopleGraphBuild` flag (default on) and runs off the main thread.
+    // Gated, fire-and-forget, self-throttled: re-exports iMessage aggregates (only if opted in)
+    // and rebuilds the on-device social graph, folding edges / circles / communities into the
+    // People-tab data. Self-gated on the `peopleIMessageExport` / `peopleGraphBuild` flags, run off
+    // the main thread, throttled so repeated tab loads and continuous data-arrival triggers stay
+    // cheap. syncIfNeeded sequences the export before the rebuild.
     Task { [weak self] in
-      await IMessageExporter.exportIfRequested()
-      await PeopleGraphBuilder.rebuildIfNeeded(uid: UserDefaults.standard.string(forKey: .authUserId))
+      await PeopleGraphBuilder.syncIfNeeded(uid: UserDefaults.standard.string(forKey: .authUserId))
       let outcome = await Self.loadOutcome()
       self?.apply(outcome)
     }
@@ -500,6 +499,11 @@ final class PeopleConnectorsModel: ObservableObject {
   func enableIMessageMapping() {
     UserDefaults.standard.set(true, forKey: .peopleIMessageExport)
     imessageMappingEnabled = true
+    // Explicit opt-in: force past the throttle so the export + graph run right now.
+    Task {
+      await PeopleGraphBuilder.syncIfNeeded(
+        uid: UserDefaults.standard.string(forKey: .authUserId), force: true)
+    }
   }
 
   /// Full Disk Access is a single global permission; reading `~/Library/Messages`

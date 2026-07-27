@@ -27,14 +27,55 @@ enum PeopleGraphBuilder {
   private static let maxGroup = 60  // ignore groups bigger than this (broadcast lists)
   private static let topConn = 6  // connections shown per person
 
-  /// Entry point. Cheap flag check on the caller's thread, then all work (read + graph
-  /// build + JSON writes) runs off the main thread. Safe to call on every People-tab load.
-  static func rebuildIfNeeded(uid: String?) async {
+  /// Minimum spacing between two real pipeline runs. Continuous triggers (app becoming active, a
+  /// new conversation, connector imports) fan in far more often than the underlying data changes,
+  /// so a run inside this window is skipped unless the caller explicitly forces it.
+  static let minSyncInterval: TimeInterval = 5 * 60
+
+  /// Continuous-sync entry point. Re-exports the local iMessage aggregates (only if the user opted
+  /// in) so newly received messages are picked up, then rebuilds the derived social graph — awaited
+  /// in order so the graph always builds from the freshest export. Both steps self-throttle on their
+  /// own timestamps, so calling this from many data-arrival seams is cheap. Pass `force: true` right
+  /// after an explicit user action (e.g. enabling iMessage mapping) to bypass the throttle.
+  static func syncIfNeeded(uid: String?, force: Bool = false) async {
+    await IMessageExporter.exportIfRequested(force: force)
+    await rebuildIfNeeded(uid: uid, force: force)
+  }
+
+  /// Entry point. Cheap flag + throttle check on the caller's thread, then all work (read + graph
+  /// build + JSON writes) runs off the main thread, awaited so callers can sequence after it. Safe to
+  /// call on every People-tab load and from frequent data-arrival triggers; runs at most once per
+  /// `minSyncInterval` unless `force` is set.
+  static func rebuildIfNeeded(uid: String?, force: Bool = false) async {
     let enabled = (UserDefaults.standard.object(forKey: .peopleGraphBuild) as? Bool) ?? true
     guard enabled else { return }
+    guard claimRun(.peopleGraphLastRebuild, force: force) else { return }
     await Task.detached(priority: .utility) {
       build(uid: uid)
     }.value
+  }
+
+  // MARK: - Throttle
+
+  /// Pure throttle decision (no IO — unit-testable): a run should proceed when it is forced, has
+  /// never run before, or the last run was at least `minInterval` ago.
+  static func shouldRun(
+    lastRun: Date?, now: Date = Date(), force: Bool = false, minInterval: TimeInterval = minSyncInterval
+  ) -> Bool {
+    if force { return true }
+    guard let lastRun else { return true }
+    return now.timeIntervalSince(lastRun) >= minInterval
+  }
+
+  /// UserDefaults-backed check-and-mark for a throttle `key`. Returns `true` (and records `now` as
+  /// the new run time) when a run should proceed; returns `false` to skip. Combining the check and
+  /// the write here means a burst of near-simultaneous triggers only admits the first.
+  static func claimRun(_ key: DefaultsKey, force: Bool = false, now: Date = Date()) -> Bool {
+    let stored = UserDefaults.standard.double(forKey: key)  // 0.0 when never set
+    let last = stored > 0 ? Date(timeIntervalSince1970: stored) : nil
+    guard shouldRun(lastRun: last, now: now, force: force) else { return false }
+    UserDefaults.standard.set(now.timeIntervalSince1970, forKey: key)
+    return true
   }
 
   // MARK: - Orchestration

@@ -66,6 +66,12 @@ enum DefaultsKey: String {
   case peopleIMessageExport = "peopleIMessageExport"
   case peopleGraphBuild = "peopleGraphBuild"
   case peopleConnectorsLinkedInCSVPath = "peopleConnectorsLinkedInCSVPath"
+  /// Throttle bookkeeping for the continuous People-graph sync: last time the
+  /// on-device graph rebuild / iMessage export actually ran (epoch seconds).
+  /// Lets frequent data-arrival triggers (app-active, new conversation) stay
+  /// cheap without re-running the pipeline more than once per throttle window.
+  case peopleGraphLastRebuild = "peopleGraphLastRebuild"
+  case peopleIMessageExportLastRun = "peopleIMessageExportLastRun"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is

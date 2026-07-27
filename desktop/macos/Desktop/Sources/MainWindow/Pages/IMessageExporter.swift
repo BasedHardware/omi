@@ -12,10 +12,14 @@ import GRDB
 /// throwaway temp dir and opens the copy read-only, so it never touches, locks, or
 /// mutates the user's real database.
 enum IMessageExporter {
-  /// Entry point. Cheap flag check on the caller's thread, then all blocking work
-  /// (copy + SQLite reads + JSON write) runs off the main thread.
-  static func exportIfRequested() async {
+  /// Entry point. Cheap flag + throttle check on the caller's thread, then all blocking work
+  /// (copy + SQLite reads + JSON write) runs off the main thread, awaited so a caller can sequence
+  /// the graph rebuild after the export completes. Self-throttles so re-running from frequent
+  /// data-arrival triggers stays cheap; new messages are picked up on the next run past the window.
+  /// Pass `force: true` to bypass the throttle (e.g. right after opt-in).
+  static func exportIfRequested(force: Bool = false) async {
     guard UserDefaults.standard.bool(forKey: .peopleIMessageExport) else { return }
+    guard PeopleGraphBuilder.claimRun(.peopleIMessageExportLastRun, force: force) else { return }
     await Task.detached(priority: .utility) {
       runExport()
     }.value
