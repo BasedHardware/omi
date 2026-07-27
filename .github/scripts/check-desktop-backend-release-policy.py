@@ -25,11 +25,14 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
     required = (
         "no_traffic: true",
         "desktop_backend_candidate_probe.py",
+        "verify_desktop_backend_image_lineage.py",
         "voice-provider-probe.sh",
         "wait_cloud_run_candidate_readiness.py",
-        "Verify candidate image digest",
+        "Verify candidate image lineage",
         "@${{ steps.build-image.outputs.digest }}",
-        "--expected-image-digest=",
+        '--build-image-ref="$BUILD_IMAGE_REF"',
+        '--runtime-image-ref="$runtime_image_ref"',
+        '--expected-image-digest="${{ steps.verify-image-lineage.outputs.runtime_digest }}"',
         "--expected-revision=",
         "--workflow-run-id=",
         "CHAT_CONTRACT_VERSION: '1'",
@@ -49,27 +52,21 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         errors.append(f"{workflow}: deployment image must use an immutable source tag")
 
     chat_step = (
-        "Prove candidate chat and web-search compatibility"
-        if production
-        else "Prove candidate chat compatibility"
+        "Prove candidate chat and web-search compatibility" if production else "Prove candidate chat compatibility"
     )
     route_step = (
         "Route traffic to accepted production revision"
         if production
         else "Route traffic to accepted desktop-backend revision"
     )
-    verify_step = (
-        "Verify production serving identity"
-        if production
-        else "Verify development backend release identity"
-    )
+    verify_step = "Verify production serving identity" if production else "Verify development backend release identity"
     errors.extend(
         _ordered(
             text,
             (
                 "Capture current serving revision",
                 "Wait for no-traffic candidate readiness",
-                "Verify candidate image digest",
+                "Verify candidate image lineage",
                 "Resolve exact no-traffic candidate URL",
                 chat_step,
                 "Prove candidate managed realtime provider paths",
@@ -99,7 +96,9 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 errors.append(f"{workflow}: missing production admission guard {fragment!r}")
         for forbidden in ("\n  push:", "deploy-backend-stack-", "verify_backend_release_vector.py"):
             if forbidden in text:
-                errors.append(f"{workflow}: desktop-backend must remain outside the Python backend vector: {forbidden!r}")
+                errors.append(
+                    f"{workflow}: desktop-backend must remain outside the Python backend vector: {forbidden!r}"
+                )
     else:
         for fragment in (
             "group: desktop-backend-auto-dev",
