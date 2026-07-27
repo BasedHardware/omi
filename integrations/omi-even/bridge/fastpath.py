@@ -216,8 +216,28 @@ async def _search_or_empty(client, tool: str, payload: dict) -> str:
         return ''
 
 
+def _is_too_vague(question: str) -> bool:
+    """True when there is not enough in the question to search on.
+
+    Speech-to-text produces fragments -- a cough, a half-word, "ping" -- and
+    vector search answers every one of them with its nearest neighbour. Asking
+    "ping" surfaced an unrelated obscenity from an old transcript. On a display
+    worn on your face, returning nothing is strictly better than returning
+    whatever happened to be closest.
+    """
+    terms = {w for w in re.findall(r'[a-z0-9]+', question.lower()) if w not in _STOPWORDS and len(w) > 2}
+    if not terms:
+        return True
+    # A single short token is far more often a mis-transcription than a query.
+    return len(terms) == 1 and max(len(t) for t in terms) <= 4
+
+
 async def fast_answer(client, question: str) -> str:
     """Answer from Omi's stores directly, in roughly two seconds."""
+    if _is_too_vague(question):
+        log.info('fastpath: question too vague to search on (%.40r)', question)
+        return 'Ask me something about your day, your people, or your tasks.'
+
     kind = _classify(question)
     log.info('fastpath: %s', kind)
 

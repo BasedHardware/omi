@@ -235,3 +235,31 @@ async def test_the_answer_stays_within_a_screenful():
     )
     answer = await fast_answer(client, 'What am I behind on?')
     assert len(answer.splitlines()) <= 4
+
+
+# --------------------------------------------------- garbled speech guard
+
+
+@pytest.mark.parametrize(
+    'question',
+    ['ping', 'uh', 'hm', 'the a of', '', '   ', 'ok', 'yeah'],
+)
+@pytest.mark.asyncio
+async def test_a_fragment_returns_a_prompt_not_a_random_memory(question):
+    """Speech-to-text emits fragments, and vector search answers every one.
+
+    Asking "ping" surfaced an unrelated obscenity from an old transcript. On a
+    display worn on your face, nothing beats nearest-neighbour noise.
+    """
+    client = FakeClient(memories='- Something unrelated. (relevance: 0.55)')
+    answer = await fast_answer(client, question)
+    assert 'Ask me something' in answer
+    assert 'unrelated' not in answer
+
+
+@pytest.mark.asyncio
+async def test_a_real_short_question_still_works():
+    """The guard must not swallow genuine brief questions."""
+    client = FakeClient(memories='- David is your colleague. (relevance: 0.80)')
+    answer = await fast_answer(client, 'Who is David?')
+    assert 'David is your colleague.' in answer
