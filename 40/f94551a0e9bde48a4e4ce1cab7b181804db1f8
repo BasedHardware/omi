@@ -1,0 +1,369 @@
+.github/AGENTS.md
+  s_7918275f8e3531::t_a5c54dd0faea01 23
+.github/checks-manifest.yaml
+  s_7918275f8e3531::t_c3708d1fc84b9f 92-96,102-106,252-261,422-426,567,569,572,574
+.github/failure-classes/FC-negotiated-hint-as-hard-limit.json
+  s_7918275f8e3531::t_538192b3313d4d 1-9
+.github/failure-classes/FC-permanent-write-rejection-retried-forever.json
+  s_7918275f8e3531::t_2467476cb697bd 1-17
+.github/failure-classes/FC-release-probe-signer-identity.json
+  s_7918275f8e3531::t_f397fa40acb666 1-19
+.github/failure-classes/FC-retired-transaction-treated-as-fatal.json
+  s_7918275f8e3531::t_c063ebd87eb6e6 1-16
+.github/failure-classes/FC-runtime-binding-contract.json
+  s_7918275f8e3531::t_88281aa36220b6 6-9
+.github/failure-classes/FC-runtime-image-lineage.json
+  s_7918275f8e3531::t_50fb807eaa2408 1-15
+.github/failure-classes/FC-shared-cache-reader-format.json
+  s_7918275f8e3531::t_e4e17cacdb43c7 1-13
+.github/failure-classes/FC-unbounded-user-collection-in-prompt.json
+  s_7918275f8e3531::t_7f9a4c39ed5b85 1-13
+.github/scripts/check-desktop-backend-release-policy.py
+  s_7918275f8e3531::t_adf47fcba6f6c1 28,31,33-35,42-43,57,64-66,68-71,79,81,110-112,124-130,134-144
+.github/scripts/check_deployment_secret_boundary.py
+  s_7918275f8e3531::t_d79e4303b22312 64,78,86-87,97,279-281,292-294
+.github/scripts/check_product_file_line_count_ratchet.py
+  s_7918275f8e3531::t_04503f4725aff7 140-142,184,318,336,352,447-449
+.github/scripts/check_runner_cost_policy.py
+  s_7918275f8e3531::t_58c38f424312ff 1-39
+.github/scripts/deferred-work-marker-count.py
+  s_7918275f8e3531::t_1b878dae333939 107,173
+.github/scripts/observe-codemagic-tag-build.py
+  s_7918275f8e3531::t_3d0ba997c38d0a 1-193
+.github/scripts/preflight_runner.py
+  s_7918275f8e3531::t_620bd4e2d59045 20-48,206-208
+.github/scripts/product_file_line_count_ratchet_baseline/backend-database.json
+  s_7918275f8e3531::t_5b480dd7b9163b 3
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-chat.json
+  s_7918275f8e3531::t_0269a4b21149a9 3
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_7918275f8e3531::t_d99f163fa1ab1f 6,8,12-14,16
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-providers.json
+  s_7918275f8e3531::t_9042623bd3a713 3-4,7-8
+.github/scripts/run_checks.py
+  s_7918275f8e3531::t_79abdcc62f96e9 19,29-30
+.github/scripts/test_check_backend_deploy_source_admission.py
+  s_7918275f8e3531::t_44f7abc3d05561 256-257
+.github/scripts/test_check_deployment_secret_boundary.py
+  s_7918275f8e3531::t_95b1d29e3ede02 14,52,93-95,107-109,114-117,143-145,163-178
+.github/scripts/test_check_desktop_backend_release_policy.py
+  s_7918275f8e3531::t_0120c1422790b3 18-53,99-140,188-267
+.github/scripts/test_check_product_file_line_count_ratchet.py
+  s_7918275f8e3531::t_b12a0b563c023c 11,135,190-212
+.github/scripts/test_check_runner_cost_policy.py
+  s_7918275f8e3531::t_8ef83f119788c2 1-49
+.github/scripts/test_desktop_release_manifest_schema.py
+  s_7918275f8e3531::t_12d13fdb9c9969 1-20,24-25,30-87,90-91
+.github/scripts/test_observe_codemagic_tag_build.py
+  s_7918275f8e3531::t_1bf9b7fbb1e58e 1-121
+.github/scripts/test_pr_preflight.py
+  s_7918275f8e3531::t_3bde83992482e6 10,18,20,499-552
+.github/scripts/test_publish_desktop_candidate_tag.py
+  s_7918275f8e3531::t_8def8ce097b8f8 38-48
+.github/scripts/test_run_checks.py
+  s_7918275f8e3531::t_d9e0b2c4c6785f 19,113,224,258,283,297,303,551,559-562,569-580
+.github/scripts/verify_desktop_backend_image_lineage.py
+  s_7918275f8e3531::t_df5e4f0a2b3872 1-189
+.github/workflows/desktop_auto_release.yml
+  s_7918275f8e3531::t_efe3aed04f600c 98-106,128
+.github/workflows/desktop_backend_auto_dev.yml
+  s_7918275f8e3531::t_aa0183b47c6e8e 10,44,191,194,199,225-226,228,232,236-242,258-270,282,297,449-451
+.github/workflows/desktop_backend_prod.yml
+  s_7918275f8e3531::t_111d25e9670bdf 50,68,294-295,297,301,305-311,350
+.github/workflows/gcp_backend.yml
+  s_7918275f8e3531::t_d193c35046bf9f 116,170,341
+.github/workflows/gcp_backend_auto_dev.yml
+  s_7918275f8e3531::t_9ddc28d3ee01bb 30,151,247
+.github/workflows/gcp_diarizer.yml
+  s_7918275f8e3531::t_bdb037194d4bb2 39
+.github/workflows/gcp_firestore_indexes.yml
+  s_7918275f8e3531::t_a8012a058f8ba3 33
+.github/workflows/gcp_models.yml
+  s_7918275f8e3531::t_e1f7cb07302a3d 42
+.github/workflows/gcp_nllb_translation.yml
+  s_7918275f8e3531::t_8878093f2dd82c 36
+.github/workflows/gcp_parakeet.yml
+  s_7918275f8e3531::t_750b9fdd13bcaf 35
+.github/workflows/repo-checks.yml
+  s_7918275f8e3531::t_9426de2789a4c7 15-21
+.github/workflows/sync_ledger_fence_cutover.yml
+  s_7918275f8e3531::t_f7d68bb94c1f2e 46,138
+app/lib/services/agent_chat_service.dart
+  s_7918275f8e3531::t_0e9dc2b94c2d2e 38-40,98
+app/test/services/agent_chat_service_test.dart
+  s_7918275f8e3531::t_edc7ffa99accc7 1-11
+backend/agent-proxy/Dockerfile
+  s_7918275f8e3531::t_04d46cea94fd90 23
+backend/agent-proxy/main.py
+  s_7918275f8e3531::t_d209b060da3fb9 32,43-44,52-56,257-260,273,278-282,324-340,347-355,381-383,385-389,401,408-410,569-584,630,646,665-687,689,693-716,719-722,742-756,758-759,777-783,785-788,791,802-807,810-812,825,834,839-841,843-847,858-871
+backend/agent-proxy/resilience.py
+  s_7918275f8e3531::t_6d4ab51a0ae270 1-59
+backend/database/_client.py
+  s_7918275f8e3531::t_b354f0baea27f2 1,6,18-20,23-24,56-95
+backend/database/conversation_finalization_jobs.py
+  s_7918275f8e3531::t_178f560d5503a4 1200-1240
+backend/database/conversations.py
+  s_7918275f8e3531::t_e7c96e1d44d0fd 21,1390
+backend/database/redis_db.py
+  s_7918275f8e3531::t_86935ddb7286c3 348-355
+backend/jobs/l2_promotion_selector.py
+  s_7918275f8e3531::t_8ad20f47420204 176-188
+backend/llm_gateway/routers/openai_compatible.py
+  s_7918275f8e3531::t_6c94595ce7742a 59,66-70,252,263,270-271,286-287
+backend/routers/agent_tools.py
+  s_7918275f8e3531::t_f88be225671002 31-32,339,342-348,350-361,399-405
+backend/routers/integrations.py
+  s_7918275f8e3531::t_bb79394be14f5a 22,76-77,368-373,380,386-390,392-393,395-400,402-407,409-410,551-558,564,567-580
+backend/routers/listen/receiver.py
+  s_7918275f8e3531::t_936fae28376e3d 76-90,380-382,522-524
+backend/scripts/firebase_release_probe_token.py
+  s_7918275f8e3531::t_82c9a976d65adb 2-14,27,43,48,51,63-66,108-121,141,143-148,150,154,156,163,165-168,179,183-292,304,339-344,352-357,395,406-410,413-422
+backend/services/conversation_finalization.py
+  s_7918275f8e3531::t_0ecb3b2a2f93db 14-15,17,166-195
+backend/tests/unit/test_agent_proxy_async_boundaries.py
+  s_7918275f8e3531::t_acb10c2a569e1b 2,4,21,43-50,67-146,188-234
+backend/tests/unit/test_agent_proxy_history_seeding.py
+  s_7918275f8e3531::t_371d67e72c0a9c 1-74
+backend/tests/unit/test_agent_proxy_resilience.py
+  s_7918275f8e3531::t_053f8692eaac8d 1-46
+backend/tests/unit/test_agent_tools_isolation.py
+  s_7918275f8e3531::t_5a2f4c5f7fc545 1-51
+backend/tests/unit/test_agent_vm_reaped_record_recovery.py
+  s_7918275f8e3531::t_4774913ccbd342 31-34
+backend/tests/unit/test_async_http_infrastructure.py
+  s_7918275f8e3531::t_50d4092f5f4c97 71,289-326
+backend/tests/unit/test_conversation_segments_transaction_expiry.py
+  s_7918275f8e3531::t_17543e5a01f912 1-161
+backend/tests/unit/test_firebase_release_probe_token.py
+  s_7918275f8e3531::t_f64c586f3f09b4 3,6,8,67-68,83-85,94-99,143-266
+backend/tests/unit/test_gmail_scope_contract.py
+  s_7918275f8e3531::t_644009ad22839d 1-38
+backend/tests/unit/test_gmail_scope_gating.py
+  s_7918275f8e3531::t_6c7f5a25293568 17,55-61,63
+backend/tests/unit/test_http_timeout_defaults.py
+  s_7918275f8e3531::t_8fb0576c7b5c10 1-100
+backend/tests/unit/test_kg_prompt_node_cap.py
+  s_7918275f8e3531::t_e54c238b6bc9dc 1-111
+backend/tests/unit/test_l2_promotion_selector.py
+  s_7918275f8e3531::t_575b998cb7a097 1-135
+backend/tests/unit/test_listen_finalization_cloud_tasks.py
+  s_7918275f8e3531::t_ac2e4414e6a30b 919,931
+backend/tests/unit/test_listen_receiver_opus_frame_capacity.py
+  s_7918275f8e3531::t_d90ec02dd9ec99 1-153
+backend/tests/unit/test_llm_gateway_openai_compatible.py
+  s_7918275f8e3531::t_a9876105263659 139-184
+backend/tests/unit/test_mentor_notifications.py
+  s_7918275f8e3531::t_60156769ebeded 373-413
+backend/tests/unit/test_rate_limit_json_failopen.py
+  s_7918275f8e3531::t_75a3f4f1ca81c7 9,17-18,111-156
+backend/tests/unit/test_redis_db_cache_serialization.py
+  s_7918275f8e3531::t_2d0d493d177263 68-92
+backend/tests/unit/test_stale_processing_emulator_concurrency.py
+  s_7918275f8e3531::t_7b19183e6b90ea 291-337
+backend/tests/unit/test_stale_processing_reconciliation.py
+  s_7918275f8e3531::t_490c12f8ce9000 19-20,24-28,113-156
+backend/tests/unit/test_task_recommendations.py
+  s_7918275f8e3531::t_3ce3b2bc035976 1008-1084
+backend/tests/unit/test_tools_agent_route_response_shape.py
+  s_7918275f8e3531::t_6ecc7996701699 82
+backend/tests/unit/test_tools_rest_memory_runtime_adapter.py
+  s_7918275f8e3531::t_0cb3b42cb11950 172-177,204-209
+backend/utils/app_integrations.py
+  s_7918275f8e3531::t_05af348f6274d3 148,162
+backend/utils/conversations/location.py
+  s_7918275f8e3531::t_2e4b3d3e6c7db1 34
+backend/utils/http_client.py
+  s_7918275f8e3531::t_055bcd685d19dc 204,209-220
+backend/utils/integrations_registry.py
+  s_7918275f8e3531::t_cf727343dac678 1-68
+backend/utils/llm/knowledge_graph.py
+  s_7918275f8e3531::t_96435394465e56 1,40-74,123,217
+backend/utils/mentor_notifications.py
+  s_7918275f8e3531::t_6efe423b59d3dd 118-123
+backend/utils/observability/fallback.py
+  s_7918275f8e3531::t_585ac98334640b 69
+backend/utils/other/chat_file.py
+  s_7918275f8e3531::t_4d5f5311aa4fb0 66
+backend/utils/other/endpoints.py
+  s_7918275f8e3531::t_3d0842019ff8b6 341-344
+backend/utils/retrieval/tools/google_utils.py
+  s_7918275f8e3531::t_53afde8e514fb2 23-27,35,37-42
+backend/utils/stt/speech_profile.py
+  s_7918275f8e3531::t_f41bfdf948a1e7 69
+backend/utils/task_intelligence/recommendations.py
+  s_7918275f8e3531::t_d8b877facb1eb7 169-181,357,408-409
+backend/utils/transcribe_decisions.py
+  s_7918275f8e3531::t_95c34e7a448ad3 75-80,85,87-88
+desktop/macos/Desktop/Sources/AnalyticsManager.swift
+  s_7918275f8e3531::t_1109fff26f38a7 679
+desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  s_7918275f8e3531::t_54b4a9b9e7dfca 2199-2202
+desktop/macos/Desktop/Sources/Chat/AgentErrorClassifier.swift
+  s_7918275f8e3531::t_7a5d80d50afc88 1-175
+desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
+  s_7918275f8e3531::t_18f0e6d380ef02 225-261,270,319,328-335,370,525,535
+desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift
+  s_7918275f8e3531::t_d15f017927c79c 1414
+desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager+InputDeviceRouting.swift
+  s_7918275f8e3531::t_d583237143d334 2-16,21-27,36-133,138,141-142,145-161
+desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  s_7918275f8e3531::t_b76cb3cd2e3913 322,631,675
+desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift
+  s_7918275f8e3531::t_ef3ad678182c5c 100-109,304-313
+desktop/macos/Desktop/Sources/Generated/GeneratedToolCapabilities.swift
+  s_7918275f8e3531::t_6b94537201c706 292
+desktop/macos/Desktop/Sources/Generated/GeneratedToolExecutors.swift
+  s_7918275f8e3531::t_0a5111a4842f0e 44
+desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  s_7918275f8e3531::t_edafc78fdaba7f 4856
+desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  s_7918275f8e3531::t_61938efcd8b71e 1014-1037,1455-1464,2832-2841,2845,2862-2871
+desktop/macos/Desktop/Tests/AgentErrorClassifierTests.swift
+  s_7918275f8e3531::t_f6312126dfb16f 1-187
+desktop/macos/Desktop/Tests/AuthorizedToolOwnerBoundAuthTests.swift
+  s_7918275f8e3531::t_aebff70032e3f3 501-539
+desktop/macos/Desktop/Tests/ChatQueryTelemetryTests.swift
+  s_7918275f8e3531::t_99e800ff49234e 53-89,99-100,606,640
+desktop/macos/Desktop/Tests/ChatToolExecutorActionItemIDTests.swift
+  s_7918275f8e3531::t_37373ffa257eb4 1-32
+desktop/macos/Desktop/Tests/DesktopDiagnosticsManagerTests.swift
+  s_7918275f8e3531::t_5c1b7ef667121e 704-707
+desktop/macos/Desktop/Tests/PTTInputDeviceProbeTests.swift
+  s_7918275f8e3531::t_e3f5c7663443de 1-202
+desktop/macos/agent-cloud/agent-result.mjs
+  s_7918275f8e3531::t_e836a95cac6815 1-81
+desktop/macos/agent-cloud/agent.mjs
+  s_7918275f8e3531::t_cf8adbceee0454 2-25,37-40,42-43,46,50-51,54-63,108-114,140,154-158,171-172,183,187-188,191-192,224-226,275-276,327-331,333-348,386-387,399,402-403,405-407,409,412-421,426,428,431,438,441,446,449,451,487-493,498-569,601-606,609-611,633-635,643-688,691-695,702-705,710-717,742-744,747,764,769-776,844-848,860,866-903,910-912,915,952-980,983,987-994,1043-1046,1073-1075,1091-1098,1100-1110,1118-1125,1131-1145,1160-1172,1184-1191,1494-1504,1506,1565-1575,1577,1614-1623,1698-1700,1710-1718,1730-1731,1735-1737,1741-1747,1749,1761-1778,1784-1789,1791,1795-1805,1808,1814-1817,1829-1831,1858-1861
+desktop/macos/agent-cloud/conversation-condenser.mjs
+  s_7918275f8e3531::t_ef51d39c5ff7aa 1-78
+desktop/macos/agent-cloud/data-tools.mjs
+  s_7918275f8e3531::t_ca749059a2e436 1-234
+desktop/macos/agent-cloud/errors.mjs
+  s_7918275f8e3531::t_5741549c0202e5 1-118
+desktop/macos/agent-cloud/experiments/RESEARCH-FINDINGS.md
+  s_7918275f8e3531::t_e20791adefe5f7 1-215
+desktop/macos/agent-cloud/experiments/median-user-sim.md
+  s_7918275f8e3531::t_a4e147b05f66d6 1-44
+desktop/macos/agent-cloud/experiments/user-profile.json
+  s_7918275f8e3531::t_58281c989dce68 1-62
+desktop/macos/agent-cloud/package-lock.json
+  s_7918275f8e3531::t_68b303601be661 16-18,43-76,362-397,414-419,421-429,431-438,440-445,448-455,457-462,465-472,474-479,482-487,489,491-496,499-514,516-523,525-528,530,533-540,542-545,547,550-562,564,567-574,576-581,584-596,598,601-616,618-635,637-644,648,651,654-988,991-1263,1265-1277,1279-1298,1300-1371,1400-1418,1437-1450,1460-1486,1517-1545,1611-1644,1677-1683,1729-1752,1799-1850,1869-2068
+desktop/macos/agent-cloud/package.json
+  s_7918275f8e3531::t_665573fffb0cc1 10,14-16
+desktop/macos/agent-cloud/query-config.mjs
+  s_7918275f8e3531::t_524fc7ae76d59b 1-70
+desktop/macos/agent-cloud/scripts/ablation.mjs
+  s_7918275f8e3531::t_8e45027057a873 1-174
+desktop/macos/agent-cloud/scripts/bench-data-tools.mjs
+  s_7918275f8e3531::t_81f6045625254c 1-72
+desktop/macos/agent-cloud/scripts/connector-real.mjs
+  s_7918275f8e3531::t_e0644f68072571 1-89
+desktop/macos/agent-cloud/scripts/inflate-db.mjs
+  s_7918275f8e3531::t_53e48224b10338 1-73
+desktop/macos/agent-cloud/scripts/run-tests.sh
+  s_7918275f8e3531::t_71188a4d424de5 1-15
+desktop/macos/agent-cloud/stream-routing.mjs
+  s_7918275f8e3531::t_0363117659aaa9 1-55
+desktop/macos/agent-cloud/tests/agent-result.test.mjs
+  s_7918275f8e3531::t_1252bd57f473e8 1-70
+desktop/macos/agent-cloud/tests/agent-ws-e2e.test.mjs
+  s_7918275f8e3531::t_e614033be92dcb 1-334
+desktop/macos/agent-cloud/tests/conversation-condenser.test.mjs
+  s_7918275f8e3531::t_ff85a63a0e82b8 1-75
+desktop/macos/agent-cloud/tests/data-tools.test.mjs
+  s_7918275f8e3531::t_2d17c3ccaab18a 1-178
+desktop/macos/agent-cloud/tests/errors.test.mjs
+  s_7918275f8e3531::t_5816784c4ca734 1-110
+desktop/macos/agent-cloud/tests/fixtures/fake-agent-sdk.mjs
+  s_7918275f8e3531::t_b88ce84da6d286 1-131
+desktop/macos/agent-cloud/tests/query-config.test.mjs
+  s_7918275f8e3531::t_a4d38a1270ad9d 1-36
+desktop/macos/agent-cloud/tests/stream-routing.test.mjs
+  s_7918275f8e3531::t_5611db8bff2292 1-78
+desktop/macos/agent/src/runtime/control-tool-manifest.ts
+  s_7918275f8e3531::t_fca8f150f70df0 706,722,754
+desktop/macos/agent/src/runtime/control-tools.ts
+  s_7918275f8e3531::t_7244fa2a7f3d73 301-304,321,343,1350,1382
+desktop/macos/agent/src/runtime/kernel-runs.ts
+  s_7918275f8e3531::t_8060b2c39e0660 304,401,573-588
+desktop/macos/agent/src/runtime/kernel-types.ts
+  s_7918275f8e3531::t_f63e3c4e4f5f9b 376-381,417-422
+desktop/macos/agent/src/runtime/omi-tool-manifest.ts
+  s_7918275f8e3531::t_e8eba4a6317e95 1064-1070
+desktop/macos/agent/src/runtime/run-tool-capability.ts
+  s_7918275f8e3531::t_e56fc057ac8e11 278-281,680-681,729,755-771
+desktop/macos/agent/tests/cancellation.test.ts
+  s_7918275f8e3531::t_9b0484ceae2b11 92-193
+desktop/macos/agent/tests/control-tools.test.ts
+  s_7918275f8e3531::t_e9b51daa7c18f4 501-522
+desktop/macos/agent/tests/fixtures/tool-manifest.json
+  s_7918275f8e3531::t_878d395a03ca6a 2507-2511,2594-2598,2641,2708-2712,2783-2787
+desktop/macos/agent/tests/run-tool-capability.test.ts
+  s_7918275f8e3531::t_026c736c878fd1 583-674
+desktop/macos/agent/tests/spawn-tool-policy.test.ts
+  s_7918275f8e3531::t_cb12cb56f65edf 1-89
+desktop/macos/changelog/unreleased/20260721-cancel-cascades-to-delegated-subagents.json
+  s_7918275f8e3531::t_3d724860922fe4 2
+desktop/macos/changelog/unreleased/20260722-honest-chat-error-messages.json
+  s_7918275f8e3531::t_ed4ff69710f7b8 1-3
+desktop/macos/changelog/unreleased/20260726-ptt-audio-device-probe.json
+  s_7918275f8e3531::t_2f0687d899bca4 2
+desktop/macos/e2e/flows/chat-hermetic.yaml
+  s_7918275f8e3531::t_e2310fe585abaf 7-16,24-28
+desktop/macos/scripts/pre-tag-readiness.sh
+  s_7918275f8e3531::t_4996407b82ee15 28,151-170,173-183,264-283
+desktop/macos/tests/test-qualification-swift-cache.sh
+  s_7918275f8e3531::t_83aa57c9f4da63 4-8
+desktop/macos/tests/test_pre_tag_readiness_behavior.py
+  s_7918275f8e3531::t_c28171e04d868d 53,61-64,125-147,149-157,164,166-169,178-179,188-194,198,202,205,209-213,219,221,228-230,234,238-280,288,292,294
+desktop/windows/changelog/unreleased/2026-07-portuguese-variants.json
+  s_7918275f8e3531::t_0b549e92aaa90e 1-5
+desktop/windows/package.json
+  s_7918275f8e3531::t_80f77e19c8baa0 3,6-8,40
+desktop/windows/scripts/check-node-version.mjs
+  s_7918275f8e3531::t_06390b2e511fa9 1-39
+desktop/windows/src/renderer/src/components/settings/tabs/TranscriptionTab.test.tsx
+  s_7918275f8e3531::t_b1a28111906b16 46-56
+desktop/windows/src/renderer/src/lib/conversations/filtering.test.ts
+  s_7918275f8e3531::t_d865fdb524e35b 182-187
+desktop/windows/src/renderer/src/lib/conversations/filtering.ts
+  s_7918275f8e3531::t_995c3d0d8799d2 130
+desktop/windows/src/renderer/src/lib/languages.test.ts
+  s_7918275f8e3531::t_eeff73c0ec41a4 28-41,76-82
+desktop/windows/src/renderer/src/lib/languages.ts
+  s_7918275f8e3531::t_5959f01bd84026 13-17,37-43,45,65-72,93-98,105-106
+scripts/dev-harness/dev_harness/qualification.py
+  s_7918275f8e3531::t_40dc14d093542c 5,18-23,34-37,64-88,93,97,173-185,217,219,259-262,526,528,536,539
+scripts/dev-harness/dev_harness/safety.py
+  s_7918275f8e3531::t_4f874901197f3c 17,23-57,390-410,421-453
+scripts/dev-harness/tests/test_qualification_lease.py
+  s_7918275f8e3531::t_4e1954ef0ebe4a 4,66-110,122-156,181,224,281,334-335,338-342,344-351,362-364,412-413,417-421,426-434,439,441-444,494,496,502,540-551,600-611
+scripts/dev-harness/tests/test_safety.py
+  s_7918275f8e3531::t_67cb4df839dbe4 5,142-199
+scripts/test-make-setup.sh
+  s_7918275f8e3531::t_20c9b83bb8c661 6-13
+web/app/src/app/api/proxy/[...path]/route.ts
+  s_7918275f8e3531::t_6b4f0f9db6694a 11,18,25,32,37,49,59,82-86,110-113,147-148,167
+web/app/src/components/memories/MemoriesPage.tsx
+  s_7918275f8e3531::t_c3a97770a2eb69 3-12,14-30,45-50,101-102,115-116,243-245,248-250,253-255,298-299,362,367-373,403,416,429,446,472,476-484,505,540,555,591-594,642-644,700-702,726-728,749,786,803-804,811-813
+web/app/src/hooks/useMemories.ts
+  s_7918275f8e3531::t_fabf14f189eb45 72-77,81-84,100,121-131,172-177,211-212,325-326,370-391,394-414,417-432,467-485,488-506,509-524
+web/app/src/types/user.ts
+  s_7918275f8e3531::t_1d90b693144ec2 249-252
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "40f94551a0e9bde48a4e4ce1cab7b181804db1f8",
+  "prompts": {},
+  "sessions": {
+    "s_7918275f8e3531": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "739fdbb2-b061-4a85-8520-85d2527f5698",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
