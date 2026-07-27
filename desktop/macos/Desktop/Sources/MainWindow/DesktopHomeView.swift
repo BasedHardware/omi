@@ -1088,6 +1088,7 @@ struct DesktopHomeView: View {
     // One uniform frosted backdrop for any hoisted modal: the whole window
     // blurs together and the card sits sharp on top. Tap-outside / Esc dismiss.
     .blur(radius: modalState.isPresenting ? 10 : 0)
+    .accessibilityHidden(modalState.isPresenting)
     .overlay {
       if modalState.isPresenting, let modal = modalState.content {
         ZStack {
@@ -1096,6 +1097,7 @@ struct DesktopHomeView: View {
             .contentShape(Rectangle())
             .onTapGesture { modalState.dismiss() }
           modal
+            .accessibilityAddTraits(.isModal)
             .background(OmiColors.backgroundPrimary)
             .clipShape(RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous))
             .overlay(
