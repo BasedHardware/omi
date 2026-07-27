@@ -15,6 +15,7 @@ __all__ = [
     "document_id_from_seed",
     "get_firestore_client",
     "get_users_uid",
+    "is_document_size_limit_error",
     "is_expired_transaction_error",
     "run_transactional",
 ]
@@ -58,6 +59,19 @@ _EXPIRED_TRANSACTION_MARKER = "transaction has expired"
 def is_expired_transaction_error(error: BaseException) -> bool:
     """True for the Firestore 400 that retires a transaction id mid-flight."""
     return isinstance(error, InvalidArgument) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
+
+
+_DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"
+
+
+def is_document_size_limit_error(error: BaseException) -> bool:
+    """True for the Firestore 400 rejecting a write that would exceed the 1 MiB document ceiling.
+
+    Unlike contention or an expired transaction, this is permanent: retrying the
+    same growing write can never succeed, so callers must take a different path
+    rather than loop.
+    """
+    return isinstance(error, InvalidArgument) and _DOCUMENT_SIZE_LIMIT_MARKER in str(error).lower()
 
 
 def run_transactional(client: Any, transactional_callable: Any, *args: Any, attempts: int = 3, **kwargs: Any) -> Any:
