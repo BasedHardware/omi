@@ -41,7 +41,9 @@ DESKTOP_RELEASE_PATHS = (
     ".github/scripts/plan-desktop-release.py",
     ".github/scripts/desktop-release-source-identity.py",
     ".github/scripts/publish-desktop-candidate-tag.py",
+    ".github/scripts/verify-pre-tag-readiness.py",
     ".github/workflows/desktop_auto_release.yml",
+    ".github/workflows/desktop_qualify_beta.yml",
     ".github/workflows/desktop-swift-ci.yml",
 )
 

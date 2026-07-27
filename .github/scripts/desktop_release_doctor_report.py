@@ -310,34 +310,58 @@ def _stable_surfaces(snapshot: dict[str, object], release_id: str, tag_sha: str,
     surfaces: list[dict[str, object]] = []
     backend = snapshot.get("backend", _unavailable("backend health was not collected"))
     if _is_unavailable(backend):
-        surfaces.append(_unavailable_surface("backend_health_identity", {"release_tag": release_id, "release_sha": tag_sha}, backend))
+        surfaces.append(
+            _unavailable_surface(
+                "backend_health_identity",
+                {"service": "omi-desktop-backend", "release_channel": "production", "chat_contract_version": "1"},
+                backend,
+            )
+        )
     else:
-        valid = backend.get("release_tag") == release_id and backend.get("release_sha") == tag_sha and backend.get("release_channel") == "stable"
+        backend_sha = _optional_string(backend.get("backend_release_sha"))
+        valid = (
+            backend.get("status") == "healthy"
+            and backend.get("service") == "omi-desktop-backend"
+            and backend.get("backend_release_channel") == "production"
+            and backend.get("chat_contract_version") == "1"
+            and bool(re.fullmatch(r"[0-9a-f]{40}", backend_sha))
+        )
         surfaces.append(
             _surface(
                 "backend_health_identity",
                 "PASS" if valid else "FAIL",
                 "aligned" if valid else "customer_visible_split",
-                {"release_tag": release_id, "release_sha": tag_sha, "release_channel": "stable"},
-                {key: backend.get(key) for key in ("release_tag", "release_sha", "release_channel", "revision")},
-                "Backend health reports the stable release identity." if valid else "Backend health identity differs from the stable release.",
+                {
+                    "service": "omi-desktop-backend",
+                    "backend_release_channel": "production",
+                    "chat_contract_version": "1",
+                },
+                {
+                    key: backend.get(key)
+                    for key in (
+                        "status",
+                        "service",
+                        "backend_release_sha",
+                        "backend_release_channel",
+                        "chat_contract_version",
+                        "revision",
+                    )
+                },
+                "Backend health reports a compatible independent production identity."
+                if valid
+                else "Backend health is missing a compatible independent production identity.",
             )
         )
-    tracking = snapshot.get("tracking", _unavailable("tracking tag was not collected"))
-    if _is_unavailable(tracking):
-        surfaces.append(_unavailable_surface("tracking_tag", {"source_sha": tag_sha}, tracking))
-    else:
-        actual_sha = _optional_string(tracking.get("desktop_backend_prod_deployed_sha"))
-        surfaces.append(
-            _surface(
-                "tracking_tag",
-                "PASS" if actual_sha == tag_sha else "FAIL",
-                "aligned" if actual_sha == tag_sha else "reversible_drift",
-                {"source_sha": tag_sha},
-                {"source_sha": actual_sha or None},
-                "Production tracking tag matches the release source." if actual_sha == tag_sha else "Production tracking tag does not match the release source.",
-            )
+    surfaces.append(
+        _surface(
+            "tracking_tag",
+            "PASS",
+            "safe_residue",
+            {"status": "retired"},
+            {"status": "retired"},
+            "Legacy tracking tag is retired; independent backend provenance comes from health identity and deploy evidence.",
         )
+    )
     return surfaces
 
 

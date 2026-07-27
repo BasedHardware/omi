@@ -171,7 +171,9 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             ".github/scripts/plan-desktop-release.py",
             ".github/scripts/desktop-release-source-identity.py",
             ".github/scripts/publish-desktop-candidate-tag.py",
+            ".github/scripts/verify-pre-tag-readiness.py",
             ".github/workflows/desktop_auto_release.yml",
+            ".github/workflows/desktop_qualify_beta.yml",
             ".github/workflows/desktop-swift-ci.yml",
         ]
 
@@ -498,19 +500,22 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn('python3 .github/scripts/publish-desktop-candidate-tag.py', workflow)
         self.assertIn('test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"', workflow)
 
-    def test_candidate_creation_has_no_selfhosted_pre_tag_gate(self) -> None:
-        # Continuous deployment: candidate creation (tag-release) must depend only
-        # on the hosted planner gate, NOT on a self-hosted pre-candidate readiness
-        # job. A self-hosted gate before immutable tag creation was a single point
-        # of failure (a down runner blocked ALL releases) and contradicted "create
-        # on every change, then qualify". Heavy validation belongs to
-        # desktop_qualify_beta.yml, which runs AFTER the candidate exists.
+    def test_tag_release_runs_readiness_verification_and_publish_in_one_m1_transaction(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertNotIn("pre-tag-readiness:", workflow)
-        self.assertNotIn("desktop-pre-tag-readiness-evidence", workflow)
-        self.assertNotIn("verify-pre-tag-readiness.py", workflow)
-        tag_release = workflow.split("\n  tag-release:\n", 1)[1].split("\n  ", 1)[0]
-        self.assertIn("needs: [plan-release]", tag_release)
+        self.assertNotIn("pre-tag-readiness:\n", workflow)
+        self.assertNotIn("needs: pre-tag-readiness", workflow)
+        tag_release = workflow.split("\n  tag-release:\n", 1)[1]
+        self.assertIn("runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]", tag_release)
+        self.assertIn("group: desktop-auto-release-tag-main", tag_release)
+        self.assertIn("cancel-in-progress: false", tag_release)
+        self.assertIn("desktop/macos/scripts/pre-tag-readiness.sh", tag_release)
+        self.assertIn(".github/scripts/verify-pre-tag-readiness.py verify", tag_release)
+        self.assertIn(".github/scripts/publish-desktop-candidate-tag.py", tag_release)
+        self.assertLess(tag_release.index("Bind immutable planner evidence to fresh main"), tag_release.index("pre-tag-readiness.sh"))
+        self.assertLess(tag_release.index("pre-tag-readiness.sh"), tag_release.index("verify-pre-tag-readiness.py verify"))
+        self.assertLess(tag_release.index("verify-pre-tag-readiness.py verify"), tag_release.index("publish-desktop-candidate-tag.py"))
+        self.assertIn("if: always()", tag_release)
+        self.assertIn("desktop-pre-tag-readiness", tag_release)
 
     def test_push_paths_cover_releasable_desktop_paths(self) -> None:
         # Continuous deployment: every releasable desktop input the planner
