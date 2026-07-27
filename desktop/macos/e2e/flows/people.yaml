@@ -7,6 +7,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PeoplePage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleGraphBuilder.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageExporter.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleReview.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleMemoryWriter.swift
 preconditions:
   - auth_ready
 

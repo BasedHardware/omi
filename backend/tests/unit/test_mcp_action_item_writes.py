@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 import os
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -155,6 +155,10 @@ from fastapi import HTTPException  # noqa: E402
 import utils.mcp_action_items as actions  # noqa: E402  (module under test)
 from routers import mcp as rest  # noqa: E402
 from routers import mcp_sse as sse  # noqa: E402
+
+# The real memory-routing module (not stubbed) — MCP memory writes flow through it.
+import utils.memory.memory_service as memory_service_mod  # noqa: E402
+from utils.memory.memory_system import MemorySystem  # noqa: E402
 
 NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
@@ -481,3 +485,125 @@ class TestToolRegistration:
 
     def test_write_scope_advertised(self):
         assert 'action_items.write' in sse.MCP_SCOPES_SUPPORTED
+
+
+# ---------------------------------------------------------------------------
+# MCP memory write vectorization (routers/mcp_sse.py execute_tool)
+#
+# Regression for legacy-cohort searchability: an MCP-created/edited memory must
+# get a search vector so chat / semantic search can find it. The tool used to
+# hardcode ``upsert_vector=False`` at both call sites, so legacy writes landed in
+# Firestore with no ns2 vector and were invisible to find_similar_memories.
+# These tests drive the real MemoryService.create_external_memory /
+# update_external_memory_content through execute_tool and observe the real
+# upsert_memory_vector seam: legacy writes vectorize, canonical writes defer.
+# ---------------------------------------------------------------------------
+def _valid_memory_dict(memory_id='mem-1', content='User enjoys hiking on weekends'):
+    now = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    return {
+        'id': memory_id,
+        'uid': UID,
+        'content': content,
+        'category': 'interesting',
+        'created_at': now,
+        'updated_at': now,
+        'scoring': '01_00_1736899200',
+        'is_locked': False,
+        'manually_added': False,
+        'user_review': None,
+        'visibility': 'private',
+    }
+
+
+class TestMcpToolMemoryWriteVectorization:
+    def _allow_write_grant(self):
+        # Product-authorization grant for the MCP app/key: allowed.
+        return patch.object(
+            sse,
+            'authorize_memory_external_default_memory_write',
+            return_value=SimpleNamespace(allowed=True, status_code=200, observability=None),
+        )
+
+    def test_legacy_create_memory_upserts_search_vector(self):
+        upsert = MagicMock()
+        with (
+            self._allow_write_grant(),
+            patch.object(sse, 'pin_memory_system', return_value=MemorySystem.LEGACY),
+            patch.object(
+                sse,
+                'resolve_external_memory_write_context',
+                return_value=SimpleNamespace(memory_system=MemorySystem.LEGACY, legacy_write_allowed=True),
+            ),
+            patch.object(
+                memory_service_mod,
+                'guard_legacy_memory_write',
+                return_value=SimpleNamespace(allowed=True, status_code=200, detail=None),
+            ),
+            patch.object(memory_service_mod.memories_db, 'create_memory', MagicMock()),
+            patch.object(memory_service_mod, 'upsert_memory_vector', upsert),
+        ):
+            result = sse.execute_tool(UID, 'create_memory', {'content': 'User enjoys hiking'}, auth_context=object())
+
+        assert result['success'] is True
+        # The fix: a legacy MCP write must produce a search vector.
+        upsert.assert_called_once()
+        assert upsert.call_args.args[0] == UID
+
+    def test_canonical_create_memory_defers_search_vector(self):
+        upsert = MagicMock()
+        with (
+            self._allow_write_grant(),
+            patch.object(sse, 'pin_memory_system', return_value=MemorySystem.CANONICAL),
+            patch.object(
+                sse,
+                'resolve_external_memory_write_context',
+                return_value=SimpleNamespace(memory_system=MemorySystem.CANONICAL, legacy_write_allowed=True),
+            ),
+            # Take the canonical branch of create_external_memory (vectors deferred
+            # to the promotion cron) and stub its durable-write readback.
+            patch.object(memory_service_mod, '_canonical_external_write_enabled_or_fail_closed', return_value=True),
+            patch.object(memory_service_mod, 'write_canonical_external_memory', return_value='mem-canon'),
+            patch.object(memory_service_mod, 'read_canonical_memory_item', return_value=object()),
+            patch.object(
+                memory_service_mod,
+                'memory_item_to_memorydb',
+                return_value=sse.MemoryDB.model_validate(_valid_memory_dict('mem-canon')),
+            ),
+            patch.object(memory_service_mod.memories_db, 'create_memory', MagicMock()) as legacy_create,
+            patch.object(memory_service_mod, 'upsert_memory_vector', upsert),
+        ):
+            result = sse.execute_tool(UID, 'create_memory', {'content': 'User enjoys hiking'}, auth_context=object())
+
+        assert result['success'] is True
+        # Canonical intentionally defers vectors — neither the legacy Firestore
+        # write nor the legacy vector upsert may run.
+        upsert.assert_not_called()
+        legacy_create.assert_not_called()
+
+    def test_legacy_edit_memory_reindexes_search_vector(self):
+        upsert = MagicMock()
+        with (
+            self._allow_write_grant(),
+            patch.object(sse, 'pin_memory_system', return_value=MemorySystem.LEGACY),
+            patch.object(
+                memory_service_mod,
+                'guard_legacy_memory_write',
+                return_value=SimpleNamespace(allowed=True, status_code=200, detail=None),
+            ),
+            patch.object(memory_service_mod.memories_db, 'get_memory', return_value=_valid_memory_dict('mem-1')),
+            patch.object(memory_service_mod.memories_db, 'edit_memory', MagicMock()),
+            patch.object(memory_service_mod, 'upsert_memory_vector', upsert),
+        ):
+            result = sse.execute_tool(
+                UID,
+                'edit_memory',
+                {'memory_id': 'mem-1', 'content': 'User now enjoys climbing'},
+                auth_context=object(),
+            )
+
+        assert result['success'] is True
+        # The edit fix: a legacy content edit must keep the search vector in sync.
+        upsert.assert_called_once()
+        assert upsert.call_args.args[0] == UID
+        assert upsert.call_args.args[1] == 'mem-1'
+        assert upsert.call_args.args[2] == 'User now enjoys climbing'

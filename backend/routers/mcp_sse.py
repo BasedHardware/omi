@@ -924,7 +924,11 @@ def execute_tool(
                 memory_system=write_context.memory_system,
                 consumer='mcp',
                 operation="mcp_tool_memory_create",
-                upsert_vector=False,
+                # Legacy writes must land a search vector or chat/semantic search can never
+                # find them; canonical writes intentionally defer vectors to the promotion
+                # cron (the canonical branch of create_external_memory ignores this flag).
+                # Mirrors routers/mcp.py, which lets the default (True) vectorize legacy.
+                upsert_vector=(write_context.memory_system == MemorySystem.LEGACY),
                 require_canonical_promotion=True,
             )
         except HTTPException as exc:
@@ -990,7 +994,9 @@ def execute_tool(
                 memory_system=memory_system,
                 consumer='mcp',
                 operation="mcp_tool_memory_edit",
-                upsert_vector=False,
+                # Keep the legacy search vector in sync with edited content; canonical
+                # defers vectors to the promotion cron (its branch ignores this flag).
+                upsert_vector=(memory_system == MemorySystem.LEGACY),
             )
         except HTTPException as exc:
             _raise_tool_error_from_http(exc)
