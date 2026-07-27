@@ -119,6 +119,17 @@ config OMI_VAD_HOLD_MS
          voice activity. Prevents cutting off speech pauses and sentence
          endings. Default 3000 = 3 seconds."
 
+config OMI_VAD_PREROLL_FRAMES
+    int "VAD pre-roll microphone frames"
+    range 1 10
+    default 8
+    depends on OMI_ENABLE_VAD_GATE
+    help
+        "Number of 100 ms PCM frames retained while the gate is closed and
+         emitted in order when debounced voice opens it. Default 8 preserves
+         roughly 800 ms before detection without exceeding the codec's
+         one-second input ring."
+
 config OMI_ENABLE_T5838_AAD
     bool "Enable T5838 hardware AAD (ultra-low-power mic sleep)"
     depends on OMI_ENABLE_VAD_GATE

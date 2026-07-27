@@ -34,6 +34,7 @@ file(GLOB core_sources
     src/lib/core/sd_ring_recovery.c
     src/lib/core/sd_write_recovery.c
     src/lib/core/storage_readiness.c
+    src/lib/core/voice_activity_gate.c
     src/lib/core/transport.c
     src/lib/core/button.c
     src/lib/core/monitor.c

@@ -8,12 +8,15 @@
 
 #include <errno.h>
 #include <nrfx_pdm.h>
+#include <string.h>
 #include <zephyr/audio/dmic.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 
+#include "lib/core/config.h"
 #include "lib/core/settings.h"
+#include "lib/core/voice_activity_gate.h"
 
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
 #include <zephyr/devicetree.h>
@@ -61,6 +64,32 @@ static atomic_t mic_stop_req = ATOMIC_INIT(0);
 #define MAX_FRAMES (MAX_SAMPLE_RATE / 10)
 static int16_t mono_buffer[MAX_FRAMES];
 
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+BUILD_ASSERT(CONFIG_OMI_VAD_PREROLL_FRAMES *MAX_BLOCK_SIZE / CHANNELS <= AUDIO_BUFFER_SAMPLES * BYTES_PER_SAMPLE,
+             "VAD pre-roll must fit in the codec input ring");
+
+static voice_activity_gate_t voice_gate;
+static int16_t vad_preroll[CONFIG_OMI_VAD_PREROLL_FRAMES][MAX_FRAMES];
+static uint8_t vad_preroll_write;
+static uint8_t vad_preroll_count;
+
+static void reset_voice_gate(void)
+{
+    voice_activity_gate_init(&voice_gate);
+    vad_preroll_write = 0U;
+    vad_preroll_count = 0U;
+}
+
+static void store_vad_preroll(const int16_t *buffer)
+{
+    memcpy(vad_preroll[vad_preroll_write], buffer, sizeof(vad_preroll[0]));
+    vad_preroll_write = (vad_preroll_write + 1U) % CONFIG_OMI_VAD_PREROLL_FRAMES;
+    if (vad_preroll_count < CONFIG_OMI_VAD_PREROLL_FRAMES) {
+        vad_preroll_count++;
+    }
+}
+#endif
+
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
 /*
  * Hardware AAD (T5838): during silence the mic is clocked into AAD sleep
@@ -92,6 +121,76 @@ static int64_t aad_last_voice_ms;
 static void aad_track_silence(const int16_t *buf, size_t n);
 static int aad_hw_start(void);
 static void aad_wake_irq(bool enable);
+#endif
+
+static uint32_t avg_abs_amplitude(const int16_t *buf, size_t n)
+{
+    if (n == 0U) {
+        return 0U;
+    }
+    uint64_t sum = 0U;
+    for (size_t i = 0U; i < n; i++) {
+        int32_t sample = buf[i];
+        sum += (uint32_t) (sample < 0 ? -sample : sample);
+    }
+    return (uint32_t) (sum / n);
+}
+
+static bool forward_mic_frame(int16_t *buffer)
+{
+    if (!callback_func) {
+        return true;
+    }
+
+    /*
+     * A newly opened gate emits at most 800 ms of pre-roll into a one-second
+     * codec ring. A short retry absorbs concurrent codec drain scheduling
+     * without silently dropping the beginning of speech.
+     */
+    for (uint8_t attempt = 0U; attempt < 50U; attempt++) {
+        if (callback_func(buffer) == 0) {
+            return true;
+        }
+        k_sleep(K_MSEC(2));
+    }
+
+    LOG_ERR("Voice gate could not forward PCM frame after bounded retry");
+    return false;
+}
+
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+static void process_voice_gated_buffer(int16_t *buffer, size_t frames)
+{
+    voice_activity_gate_action_t action = voice_activity_gate_process(&voice_gate,
+                                                                      avg_abs_amplitude(buffer, frames),
+                                                                      k_uptime_get(),
+                                                                      CONFIG_OMI_VAD_ABS_THRESHOLD,
+                                                                      CONFIG_OMI_VAD_DEBOUNCE_FRAMES,
+                                                                      CONFIG_OMI_VAD_HOLD_MS);
+
+    if (action == VOICE_ACTIVITY_GATE_BUFFER) {
+        store_vad_preroll(buffer);
+        return;
+    }
+    if (action == VOICE_ACTIVITY_GATE_FORWARD) {
+        (void) forward_mic_frame(buffer);
+        return;
+    }
+
+    store_vad_preroll(buffer);
+    uint8_t start =
+        (vad_preroll_write + CONFIG_OMI_VAD_PREROLL_FRAMES - vad_preroll_count) % CONFIG_OMI_VAD_PREROLL_FRAMES;
+    uint8_t emitted = 0U;
+    for (; emitted < vad_preroll_count; emitted++) {
+        uint8_t index = (start + emitted) % CONFIG_OMI_VAD_PREROLL_FRAMES;
+        if (!forward_mic_frame(vad_preroll[index])) {
+            break;
+        }
+    }
+    LOG_INF("Voice gate opened: emitted %u/%u pre-roll frame(s)", emitted, vad_preroll_count);
+    vad_preroll_write = 0U;
+    vad_preroll_count = 0U;
+}
 #endif
 
 static inline void
@@ -131,9 +230,11 @@ static void process_audio_buffer(void *buffer, uint32_t size)
     aad_track_silence(mono_buffer, frames);
 #endif
 
-    if (callback_func) {
-        callback_func(mono_buffer);
-    }
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+    process_voice_gated_buffer(mono_buffer, frames);
+#else
+    (void) forward_mic_frame(mono_buffer);
+#endif
 
     k_mem_slab_free(&mem_slab, buffer);
 }
@@ -267,6 +368,10 @@ int mic_start()
     uint8_t saved_gain = app_settings_get_mic_gain();
     mic_set_gain(saved_gain);
 
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+    reset_voice_gate();
+#endif
+
     ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
     if (ret < 0) {
         LOG_ERR("START trigger failed: %d", ret);
@@ -332,6 +437,9 @@ void mic_resume()
     LOG_INF("Resuming microphone");
     atomic_clear(&mic_stop_req);
     if (!mic_running) {
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+        reset_voice_gate();
+#endif
         int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
         if (ret < 0) {
             LOG_ERR("START trigger failed: %d", ret);
@@ -420,19 +528,6 @@ static void pdm_hw_disable(void)
 #else
     nrf_pdm_disable(NRF_PDM0_NS);
 #endif
-}
-
-static uint32_t avg_abs_amplitude(const int16_t *buf, size_t n)
-{
-    if (n == 0) {
-        return 0;
-    }
-    uint64_t sum = 0;
-    for (size_t i = 0; i < n; i++) {
-        int32_t s = buf[i];
-        sum += (uint32_t) (s < 0 ? -s : s);
-    }
-    return (uint32_t) (sum / n);
 }
 
 static void aad_wake_irq(bool enable)
@@ -658,6 +753,9 @@ void mic_on()
          * so capture works again after an off/on cycle. */
         t5838_aad_power(true);
         k_msleep(AAD_PDM_SETTLE_MS);
+#endif
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+        reset_voice_gate();
 #endif
         int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
         if (ret < 0) {

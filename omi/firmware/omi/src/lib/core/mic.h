@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef void (*mix_handler)(int16_t *);
+typedef int (*mix_handler)(int16_t *);
 
 /**
  * @brief Initialize the Microphone

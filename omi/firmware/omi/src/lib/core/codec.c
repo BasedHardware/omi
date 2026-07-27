@@ -6,6 +6,7 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
 
+#include "codec_input_capacity.h"
 #include "config.h"
 #include "utils.h"
 #ifdef CODEC_OPUS
@@ -36,11 +37,15 @@ K_SEM_DEFINE(codec_drained_sem, 0, 1);
 static atomic_t codec_drain_requested;
 int codec_receive_pcm(int16_t *data, size_t len) // this gets called after mic data is finished
 {
+    size_t frame_bytes = len * sizeof(*data);
+    if (!codec_pcm_frame_fits(ring_buf_space_get(&codec_ring_buf), len)) {
+        return -ENOSPC;
+    }
 
-    int written = ring_buf_put(&codec_ring_buf, (uint8_t *) data, len * 2);
-    if (written != len * 2) {
-        LOG_ERR("Failed to write %d bytes to codec ring buffer", len * 2);
-        return -1;
+    uint32_t written = ring_buf_put(&codec_ring_buf, (uint8_t *) data, frame_bytes);
+    if (written != frame_bytes) {
+        LOG_ERR("Failed to write %zu bytes to codec ring buffer", frame_bytes);
+        return -ENOSPC;
     }
 
     k_sem_give(&codec_data_sem);

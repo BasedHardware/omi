@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "../../src/lib/core/audio_storage_packer.h"
+#include "../../src/lib/core/codec_input_capacity.h"
 #include "../../src/lib/core/ring_transfer_integrity.h"
 #include "../../src/lib/core/rtc_elapsed_recovery.h"
 #include "../../src/lib/core/rtc_time_state.h"
@@ -11,6 +12,7 @@
 #include "../../src/lib/core/sd_ring_recovery.h"
 #include "../../src/lib/core/sd_write_recovery.h"
 #include "../../src/lib/core/storage_readiness.h"
+#include "../../src/lib/core/voice_activity_gate.h"
 
 #define MAX_CAPTURED_RECORDS 4U
 
@@ -1445,6 +1447,51 @@ static void test_bulk_link_policy_avoids_range_boundary_parameter_churn(void)
     assert(ring_bulk_link_policy_on_stop(&policy) == RING_BULK_LINK_ACTION_NONE);
 }
 
+static void test_voice_gate_rejects_silence_and_isolated_noise(void)
+{
+    voice_activity_gate_t gate;
+
+    voice_activity_gate_init(&gate);
+    assert(voice_activity_gate_process(&gate, 0U, 0, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 900U, 100, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 100U, 200, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(!gate.is_open);
+}
+
+static void test_voice_gate_opens_after_debounce_and_keeps_hangover(void)
+{
+    voice_activity_gate_t gate;
+
+    voice_activity_gate_init(&gate);
+    assert(voice_activity_gate_process(&gate, 700U, 0, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 700U, 100, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(voice_activity_gate_process(&gate, 700U, 200, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_OPEN);
+    assert(gate.is_open);
+
+    assert(voice_activity_gate_process(&gate, 100U, 3199, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_FORWARD);
+    assert(voice_activity_gate_process(&gate, 100U, 3200, 450U, 3U, 3000U) == VOICE_ACTIVITY_GATE_BUFFER);
+    assert(!gate.is_open);
+}
+
+static void test_voice_gate_activity_extends_hangover_and_clock_regression_is_bounded(void)
+{
+    voice_activity_gate_t gate;
+
+    voice_activity_gate_init(&gate);
+    assert(voice_activity_gate_process(&gate, 800U, 1000, 450U, 1U, 1000U) == VOICE_ACTIVITY_GATE_OPEN);
+    assert(voice_activity_gate_process(&gate, 800U, 1500, 450U, 1U, 1000U) == VOICE_ACTIVITY_GATE_FORWARD);
+    assert(voice_activity_gate_process(&gate, 0U, 2000, 450U, 1U, 1000U) == VOICE_ACTIVITY_GATE_FORWARD);
+
+    assert(voice_activity_gate_process(&gate, 0U, 100, 450U, 1U, 1000U) == VOICE_ACTIVITY_GATE_FORWARD);
+    assert(voice_activity_gate_process(&gate, 0U, 1100, 450U, 1U, 1000U) == VOICE_ACTIVITY_GATE_BUFFER);
+}
+
+static void test_codec_pcm_capacity_guard(void)
+{
+    assert(!codec_pcm_frame_fits(3199U, 1600U));
+    assert(codec_pcm_frame_fits(3200U, 1600U));
+}
+
 int main(void)
 {
     test_storage_command_readiness_is_bounded_and_terminal_aware();
@@ -1487,6 +1534,10 @@ int main(void)
     test_snapshot_commit_retries_until_success_or_disconnect();
     test_power_on_queue_failure_reconciles_until_mount_or_newer_off();
     test_bulk_link_policy_avoids_range_boundary_parameter_churn();
+    test_voice_gate_rejects_silence_and_isolated_noise();
+    test_voice_gate_opens_after_debounce_and_keeps_hangover();
+    test_voice_gate_activity_extends_hangover_and_clock_regression_is_bounded();
+    test_codec_pcm_capacity_guard();
     puts("audio_storage_packer_tests: PASS");
     return 0;
 }
