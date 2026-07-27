@@ -2,9 +2,10 @@
 /**
  * Hermetic stand-in for the local omi bridge.
  *
- * Speaks the same `ws://<host>/app` JSON protocol as the real bridge but serves
- * fixed canned data, so `verify-simulator.mjs` can assert the app's behaviour
- * without a running backend, credentials, or network.
+ * Speaks the same `ws://<host>/app` protocol as the real bridge — JSON control
+ * frames plus binary microphone PCM — but serves fixed canned data, so
+ * `verify-simulator.mjs` can assert the app's behaviour without a running
+ * backend, credentials, or network.
  *
  * Implements RFC 6455 directly on `node:http` — no `ws` dependency, matching
  * the pure-Node PNG decoder in the verify script.
@@ -12,9 +13,12 @@
  * Usage:
  *   node scripts/mock-bridge.mjs [--port 8765]
  *
- * Control plane (so tests can trigger server-initiated traffic):
- *   GET  /control/health  -> {"ok":true,"clients":N}
- *   POST /control/push    -> body is the banner text; broadcast as {"type":"push"}
+ * Control plane (so tests can trigger server-initiated traffic and read back
+ * what the app actually sent):
+ *   GET  /control/health   -> counters, including how much PCM arrived
+ *   POST /control/push     -> body is the banner text; broadcast as {"type":"push"}
+ *   POST /control/ask-mode -> body is `transcript` or `empty`; picks what the
+ *                             next `ask_stop` replies with
  */
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -65,7 +69,33 @@ export const CHAT_CHUNKS = [
 
 export const CHAT_FULL = CHAT_CHUNKS.join('')
 
+/** What the "speech recogniser" hears. Echoed back as `transcribed` before the
+ *  answer, exactly like the real bridge. */
+export const ASK_TRANSCRIPT = 'What should I work on next?'
+
 const DELTA_INTERVAL_MS = Number(process.env.BRIDGE_DELTA_MS ?? 90)
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Counters the verify script reads back over the control plane. `captureBytes`
+ * is the important one: binary frames that arrive outside an
+ * ask_start/ask_stop bracket are continuous-capture audio to the real bridge,
+ * so anything other than zero means the app leaked microphone frames into the
+ * wrong channel.
+ */
+const stats = {
+  askStarts: 0,
+  askStops: 0,
+  askFrames: 0,
+  askBytes: 0,
+  lastAskBytes: 0,
+  captureFrames: 0,
+  captureBytes: 0,
+}
+
+/** `transcript` answers the question; `empty` pretends it heard nothing. */
+let askMode = 'transcript'
 
 // -------------------------------------------------------------- ws framing
 
@@ -162,7 +192,19 @@ export function broadcastPush(text) {
   return clients.size
 }
 
-function handleMessage(socket, raw) {
+/** Stream one answer: deltas first, then the authoritative `chat_done`. */
+async function streamChat(socket) {
+  for (const chunk of CHAT_CHUNKS) {
+    if (socket.destroyed) return
+    send(socket, { type: 'chat_delta', text: chunk })
+    await sleep(DELTA_INTERVAL_MS)
+  }
+  if (socket.destroyed) return
+  send(socket, { type: 'chat_done', text: CHAT_FULL })
+  console.log(`[mock-bridge] -> chat_done (${CHAT_FULL.length} chars)`)
+}
+
+async function handleMessage(socket, state, raw) {
   let msg
   try {
     msg = JSON.parse(raw)
@@ -173,25 +215,37 @@ function handleMessage(socket, raw) {
   console.log(`[mock-bridge] <- ${msg.type}`)
 
   switch (msg.type) {
-    case 'chat': {
-      // Stream the answer the way the real bridge does: deltas first, then one
-      // authoritative `chat_done` carrying the whole text.
-      let index = 0
-      const tick = setInterval(() => {
-        if (socket.destroyed) {
-          clearInterval(tick)
-          return
-        }
-        if (index < CHAT_CHUNKS.length) {
-          send(socket, { type: 'chat_delta', text: CHAT_CHUNKS[index++] })
-          return
-        }
-        clearInterval(tick)
-        send(socket, { type: 'chat_done', text: CHAT_FULL })
-        console.log(`[mock-bridge] -> chat_done (${CHAT_FULL.length} chars)`)
-      }, DELTA_INTERVAL_MS)
+    case 'ask_start':
+      state.askActive = true
+      state.askBytes = 0
+      stats.askStarts++
+      send(socket, { type: 'ask_listening' })
+      break
+
+    case 'ask_stop': {
+      // Idempotent, like the real bridge: a cancel that races an auto-stop
+      // must not be an error.
+      if (!state.askActive) {
+        console.log('[mock-bridge] ask_stop with no ask open, ignoring')
+        break
+      }
+      state.askActive = false
+      stats.askStops++
+      stats.lastAskBytes = state.askBytes
+      console.log(`[mock-bridge] ask_stop after ${state.askBytes} bytes of PCM`)
+      if (askMode === 'empty') {
+        send(socket, { type: 'ask_error', text: "Didn't catch that. Tap to retry." })
+        break
+      }
+      send(socket, { type: 'transcribed', text: ASK_TRANSCRIPT })
+      await streamChat(socket)
       break
     }
+
+    case 'chat':
+      await streamChat(socket)
+      break
+
     case 'memories': {
       const limit = Number.isFinite(msg.limit) ? msg.limit : MEMORIES.length
       send(socket, { type: 'memories', items: MEMORIES.slice(0, limit) })
@@ -208,20 +262,55 @@ function handleMessage(socket, raw) {
   }
 }
 
+/** Binary frames are microphone PCM. What they mean depends on whether an ask
+ *  is open, which is exactly the distinction the app has to get right. */
+function handleBinary(state, payload) {
+  if (state.askActive) {
+    state.askBytes += payload.length
+    stats.askFrames++
+    stats.askBytes += payload.length
+    return
+  }
+  stats.captureFrames++
+  stats.captureBytes += payload.length
+  console.log(`[mock-bridge] ${payload.length} bytes of PCM outside an ask (continuous capture)`)
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    let body = ''
+    req.on('data', (chunk) => (body += chunk))
+    req.on('end', () => resolve(body))
+  })
+}
+
 const server = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/control/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, clients: clients.size }))
+    res.end(JSON.stringify({ ok: true, clients: clients.size, askMode, ...stats }))
     return
   }
   if (req.method === 'POST' && req.url === '/control/push') {
-    let body = ''
-    req.on('data', (chunk) => (body += chunk))
-    req.on('end', () => {
+    void readBody(req).then((body) => {
       const delivered = broadcastPush(body || 'hello from omi')
       console.log(`[mock-bridge] -> push to ${delivered} client(s)`)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, delivered }))
+    })
+    return
+  }
+  if (req.method === 'POST' && req.url === '/control/ask-mode') {
+    void readBody(req).then((body) => {
+      const wanted = body.trim()
+      if (wanted !== 'transcript' && wanted !== 'empty') {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: 'ask mode must be "transcript" or "empty"' }))
+        return
+      }
+      askMode = wanted
+      console.log(`[mock-bridge] ask mode = ${askMode}`)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ ok: true, askMode }))
     })
     return
   }
@@ -261,6 +350,13 @@ server.on('upgrade', (req, socket) => {
   let fragmentOpcode = null
   let fragments = []
 
+  // Per-connection ask state, and a chain that keeps replies strictly ordered.
+  // The real bridge awaits each message inside one receive loop, so an answer
+  // to a cancelled question always completes before the next question is even
+  // read — the app's discard logic is written against that guarantee.
+  const state = { askActive: false, askBytes: 0 }
+  let work = Promise.resolve()
+
   socket.on('data', (chunk) => {
     buffer = Buffer.concat([buffer, chunk])
     let decoded
@@ -297,7 +393,20 @@ server.on('upgrade', (req, socket) => {
       fragments = []
       const opcode = fragmentOpcode
       fragmentOpcode = null
-      if (opcode === 0x1) handleMessage(socket, payload.toString('utf8'))
+      if (opcode === 0x1) {
+        const text = payload.toString('utf8')
+        work = work
+          .then(() => handleMessage(socket, state, text))
+          .catch((error) => console.error(`[mock-bridge] handler failed: ${error.message}`))
+      } else if (opcode === 0x2) {
+        // Binary goes through the same chain, not straight to the counter: the
+        // real bridge reads it from the same sequential receive loop, so a
+        // frame that arrives while an earlier answer is still streaming is
+        // still classified against the ask state at the time it is *read*.
+        work = work
+          .then(() => handleBinary(state, payload))
+          .catch((error) => console.error(`[mock-bridge] audio failed: ${error.message}`))
+      }
     }
   })
 

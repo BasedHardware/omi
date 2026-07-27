@@ -1,6 +1,6 @@
 # omi — Even Realities G2 plugin
 
-The omi app for Even Hub. A five-row menu on the glasses, backed by the local
+The omi app for Even Hub. A six-row menu on the glasses, backed by the local
 omi bridge in [`../bridge`](../bridge) over a WebSocket. Scroll moves the
 selection, tap opens, double-tap goes back — and exits from the menu.
 
@@ -11,6 +11,7 @@ selection, tap opens, double-tap goes back — and exits from the menu.
 |   Action items                                   |
 |   Today                                          |
 |   Capture: off                                   |
+|   Suggestions                                    |
 |--------------------------------------------------|
 | scroll move | tap open | double-tap exit         |
 +--------------------------------------------------+
@@ -18,14 +19,41 @@ selection, tap opens, double-tap goes back — and exits from the menu.
 
 | Row | What it does |
 |---|---|
-| **Ask Omi** | Asks a question and streams the answer in, paging at ~380 chars. Tap again for the next question. |
+| **Ask Omi** | Speak the question. Tap to start listening, tap again to ask, double-tap to cancel. |
 | **Memories** | Last 20 memories, paginated. |
 | **Action items** | Open and completed items, `[ ]` / `[x]`. |
 | **Today** | Today's summary. |
-| **Capture: on/off** | Toggles the glasses microphone (`audioControl`). |
+| **Capture: on/off** | Toggles the glasses microphone for continuous capture. |
+| **Suggestions** | The old fixed ring of canned questions — no microphone needed. Tap for the next one. |
 
 The bottom strip is always present: it shows the connection state, the page
 position, or the most recent `push` banner from the bridge.
+
+## Ask Omi
+
+The glasses have no keyboard, and the SDK exposes the 4-mic array as raw PCM
+only — there is no on-device speech recognition available to a plugin. So the
+app streams the audio to the bridge and the bridge transcribes it.
+
+```
+tap  ──►  Starting microphone...        audioControl(true, Glasses)
+          Listening...                  ask_start, then PCM frames
+          [####--------]                a live level meter, drawn from the PCM
+tap  ──►  Thinking...                   audioControl(false), ask_stop
+          Q: <what it heard>            transcribed
+          <the answer, streaming>       chat_delta … chat_done
+```
+
+- **Double-tap while listening cancels** — the microphone closes, the question
+  is thrown away, and the answer the bridge produces anyway is discarded.
+- **Recording is capped at 20 s** and auto-stops, so a forgotten session cannot
+  hold the microphone open or stream forever. Override with `?askmax=<ms>`.
+- **An empty transcript never becomes a question.** The bridge replies
+  `ask_error` and the display says `Didn't catch that. Tap to retry.`
+- **The transcript is shown before the answer**, so a misheard question is
+  obvious rather than something to infer from a strange reply.
+- The level meter is computed from the same PCM16 samples that go out on the
+  wire, so a bar that moves with your voice is real end-to-end evidence.
 
 ## Run it
 
@@ -78,11 +106,20 @@ socket, so a missing bridge is a visible state, not a hang.
 
 ### Protocol
 
-Sent: `chat` · `memories` · `action_items` · `today`.
+Sent: `chat` · `memories` · `action_items` · `today` · `ask_start` · `ask_stop`,
+plus **binary frames** of PCM16 LE / 16 kHz / mono between an `ask_start` and
+its `ask_stop`.
 Received: `chat_delta` · `chat_done` · `memories` · `action_items` · `today` ·
-`push`. Anything else — the bridge's `hello`, `transcript`, `pong` — is ignored
-with a debug log, so a bridge that grows new message types does not break an
-older build of the app.
+`push` · `ask_listening` · `transcribed` · `ask_error`. Anything else — the
+bridge's `hello`, `transcript`, `pong` — is ignored with a debug log, so a
+bridge that grows new message types does not break an older build of the app.
+
+**Binary frames outside an `ask_start`/`ask_stop` bracket mean something else**
+— to the bridge they are continuous-capture audio headed for a conversation —
+so the bracket is strict in both directions. Frames that arrive while the
+microphone is open for Capture rather than for a question are counted and
+dropped, never sent. `scripts/mock-bridge.mjs` counts them separately and the
+verify harness asserts that counter stays at zero.
 
 ## Verify
 
@@ -94,20 +131,39 @@ npm run dev          # must be running for the next one
 npm run verify       # end-to-end against the simulator
 ```
 
-`npm test` covers pagination, the wire format, and background-state snapshotting
-by importing `src/*.ts` directly through Node's TypeScript stripping. No build
-step, no simulator.
+`npm test` covers pagination, the wire format, background-state snapshotting,
+and the whole microphone lifecycle — `src/ask-recorder.ts` is driven with fake
+send/mic functions, so "PCM only goes out between `ask_start` and `ask_stop`",
+"a microphone that will not open still closes the bracket" and "the cap fires on
+its own" are all asserted with no glasses in the room. It imports `src/*.ts`
+directly through Node's TypeScript stripping. No build step, no simulator.
 
 `scripts/verify-simulator.mjs` starts its own mock bridge
 (`scripts/mock-bridge.mjs`, a dependency-free RFC 6455 server serving fixed
 fixtures) plus the simulator, then drives the automation HTTP API and asserts
 the app actually works: the bridge connects, the home list renders non-blank at
-576x288, scroll moves the highlight, every row opens and loads, a chat answer
-streams in and repaints **in place** rather than by rebuilding the page, a
-multi-page answer pages with scroll, a server push renders as a banner, losing
-the bridge shows as offline and retries, the app never reloaded mid-run, and
-nothing threw. It decodes the PNG framebuffer in pure Node, so there is no
-image-library dependency.
+576x288, scroll moves the highlight, every row opens and loads, tapping Ask Omi
+opens the microphone and says so on the display, **real PCM reaches the bridge**
+(the mock counts the bytes), tapping again stops the microphone and shows the
+transcript then the answer, the answer repaints **in place** rather than by
+rebuilding the page, a multi-page answer pages with scroll, double-tap cancels
+and the cancelled answer is discarded, the recording cap auto-stops, an empty
+transcript says so instead of asking Omi nothing, a live microphone outside an
+ask sends nothing, every `audioControl(true)` is matched by an
+`audioControl(false)`, a server push renders as a banner, losing the bridge
+shows as offline and retries, the app never reloaded mid-run, and nothing threw.
+It decodes the PNG framebuffer in pure Node, so there is no image-library
+dependency.
+
+The audio path is exercised for real, not faked: the simulator emits
+`audioEvent`s from the **host machine's microphone** in the documented glasses
+format (16 kHz PCM16 LE, 100 ms per event), and a quiet room still produces
+frames. The run shortens the recording cap with `?askmax=12000` so the auto-stop
+takes twelve seconds instead of twenty; `ASK_MAX_MS=<ms> npm run verify`
+overrides it. Do not shorten it much further — draining the simulator console
+while the microphone is live means transferring the SDK's per-frame audio log,
+which is slow enough that a tight cap fires in the middle of the manual-stop
+test.
 
 It refuses to start if the automation port or the bridge port is already taken —
 a leftover process would answer every request and produce a green run against a
@@ -166,10 +222,36 @@ deliberately not wired into CI. `npm test` is the CI-safe half.
   read exactly as they will once the SDK ships them and the import becomes a
   one-line swap.
 
-- **There is no keyboard and no on-device ASR**, and the bridge protocol carries
-  text rather than audio, so "Ask Omi" cycles a fixed ring of prompts rather
-  than dictating a question. Wiring the glasses mic to speech-to-text needs an
-  audio message type the contract does not define yet.
+- **Audio arrives on the same `onEvenHubEvent` listener as touch input**, as
+  `event.audioEvent`. There is one listener in `src/main.ts` that checks for
+  audio first and returns; registering a second listener for audio is not how
+  the SDK works. `audioControl(true, AudioInputSource.Glasses)` starts the mic
+  and `audioControl(false)` stops it, and both require
+  `createStartUpPageContainer` to have succeeded first — by the time any view is
+  open, it has.
+
+- **`audioPcm` is normalised before it goes on the wire** (`src/audio.ts`). The
+  SDK types it as `Uint8Array` and that is what the simulator delivers, but the
+  host is a Flutter app pushing a `Uint8List` through a JSON channel, and the
+  SDK's own parser accepts `number[]` and base64 too. Forwarding whichever of
+  those arrives without normalising would stream garbage to the bridge.
+
+- **One microphone, two features.** Capture and a dictated question both want
+  `audioControl`, so they go through a single owner in `src/main.ts` that turns
+  the hardware off only when neither wants it — otherwise ending a question
+  would silently switch Capture off underneath it. Every path out of listening
+  (tap, cancel, cap, bridge loss, mic failure, `beforeunload`/`pagehide`, and
+  the background-state snapshot) closes it. Start-up also calls
+  `audioControl(false)` once, because a WebView that died mid-question cannot be
+  relied on to have released it — verified by reloading the simulator's WebView
+  while listening: the app logs `listening torn down`, `ask_stop` reaches the
+  bridge, and the reboot starts from a known-off state.
+
+- **The SDK logs every audio event with its whole PCM payload expanded.** At ten
+  frames a second that is roughly 36 KB of console text per 100 ms, which is why
+  the verify harness truncates console messages as it reads them and skips those
+  lines in `--dump`. Nothing in the app logs per frame; the recorder prints a
+  running byte count twice a second while listening instead.
 
 - **`server.host: true` in `vite.config.ts` is required.** Vite binds to
   localhost by default and the phone would get connection refused. `strictPort`

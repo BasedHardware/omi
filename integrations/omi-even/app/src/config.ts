@@ -10,14 +10,20 @@
  */
 const DEFAULT_BRIDGE_URL = 'ws://127.0.0.1:8788/app'
 
+/** One query parameter off the app URL, or null outside a browser host. */
+function queryParam(name: string): string | null {
+  try {
+    return new URLSearchParams(window.location.search).get(name)
+  } catch {
+    /* no window.location in a non-browser host */
+    return null
+  }
+}
+
 /** Resolve the bridge URL: query param > build-time env > default. */
 export function bridgeUrl(): string {
-  try {
-    const fromQuery = new URLSearchParams(window.location.search).get('bridge')
-    if (fromQuery) return fromQuery
-  } catch {
-    /* no window.location in a non-browser host; fall through */
-  }
+  const fromQuery = queryParam('bridge')
+  if (fromQuery) return fromQuery
   const fromEnv = import.meta.env?.VITE_OMI_BRIDGE_URL
   return typeof fromEnv === 'string' && fromEnv.length > 0 ? fromEnv : DEFAULT_BRIDGE_URL
 }
@@ -61,3 +67,39 @@ export const REQUEST_TIMEOUT_MS = 20_000
 
 /** How long a push banner stays on screen before the status line reverts. */
 export const BANNER_TTL_MS = 15_000
+
+// ------------------------------------------------------------- dictated ask
+
+/**
+ * Hard cap on one dictated question. A forgotten listening session otherwise
+ * holds the glasses microphone open and streams PCM forever, and the bridge
+ * only buffers 30s before it starts dropping audio on the floor.
+ *
+ * Override with `?askmax=1500` (the verify harness does exactly that, so the
+ * auto-stop is exercised in a second rather than in twenty) or at build time
+ * with `VITE_OMI_ASK_MAX_MS`.
+ */
+const ASK_MAX_MS_DEFAULT = 20_000
+
+export function askMaxMs(): number {
+  const fromQuery = Number(queryParam('askmax'))
+  if (Number.isFinite(fromQuery) && fromQuery > 0) return fromQuery
+  const fromEnv = Number(import.meta.env?.VITE_OMI_ASK_MAX_MS)
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv
+  return ASK_MAX_MS_DEFAULT
+}
+
+/** How often the listening screen redraws its timer and level meter. Slow on
+ *  purpose: every tick is a BLE round trip to the glasses. */
+export const ASK_TICK_MS = 500
+
+/** Width of the ASCII level meter drawn while listening. */
+export const ASK_METER_WIDTH = 12
+
+/**
+ * Stop queueing PCM once this much is waiting on the socket. A stalled bridge
+ * would otherwise grow the send buffer without bound — dropping the newest
+ * frames is the only option that keeps the app responsive, and the bridge
+ * transcribes what it got.
+ */
+export const ASK_MAX_BUFFERED_BYTES = 256 * 1024

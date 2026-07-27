@@ -15,12 +15,24 @@
  *   5. scroll moves the home selection
  *   6. tap opens a view and its data loads
  *   7. double-tap returns home
- *   8. a chat answer streams in and repaints the body in place, not by rebuild
- *   9. paging works inside a multi-page answer
- *  10. a server push renders as a banner
- *  11. every menu row opens: Memories, Action items, Today, Capture
- *  12. losing the bridge shows up as offline and starts a retry
- *  13. the app never reloaded mid-run, and nothing threw
+ *   8. tapping "Ask Omi" opens the microphone, says so on the display, and
+ *      streams real PCM to the bridge
+ *   9. tapping again stops the microphone, shows the transcript, then the
+ *      answer — repainted in place rather than by rebuilding the page
+ *  10. paging works inside a multi-page answer
+ *  11. double-tap while listening cancels: microphone off, answer discarded
+ *  12. the recording cap auto-stops, and an empty transcript says so instead of
+ *      asking Omi an empty question
+ *  13. a server push renders as a banner
+ *  14. every menu row opens: Memories, Action items, Today, Capture, Suggestions
+ *  15. microphone frames outside an ask are never forwarded to the bridge
+ *  16. every path out of listening turned the microphone back off
+ *  17. losing the bridge shows up as offline and starts a retry
+ *  18. the app never reloaded mid-run, and nothing threw
+ *
+ * The simulator emits real `audioEvent`s from the host machine's microphone
+ * (16 kHz PCM16 LE, 100 ms per event), so the audio path is exercised for real
+ * rather than faked — a quiet room still produces frames.
  *
  * Usage: npm run dev   (separate terminal)
  *        npm run verify
@@ -42,9 +54,16 @@ const AUTOMATION_PORT = Number(process.env.AUTOMATION_PORT ?? 9899)
 const BRIDGE_PORT = Number(process.env.BRIDGE_PORT ?? 18765)
 const API = `http://127.0.0.1:${AUTOMATION_PORT}`
 const BRIDGE_HTTP = `http://127.0.0.1:${BRIDGE_PORT}`
+/** Recording cap for this run. The shipped default is 20s; the app reads
+ *  `?askmax=` so the auto-stop can be exercised in seconds instead.
+ *
+ *  Not shorter than this: draining the simulator console while the microphone
+ *  is live means transferring the SDK's per-frame audio log, which is slow
+ *  enough that a tight cap fires in the middle of the manual-stop test. */
+const ASK_MAX_MS = Number(process.env.ASK_MAX_MS ?? 12_000)
 // The app reads its bridge endpoint from `?bridge=`, so the test drives a
 // throwaway port instead of whatever the developer has running on the default.
-const APP_URL = `${DEV_URL}/?bridge=ws://127.0.0.1:${BRIDGE_PORT}/app`
+const APP_URL = `${DEV_URL}/?bridge=ws://127.0.0.1:${BRIDGE_PORT}/app&askmax=${ASK_MAX_MS}`
 
 const DUMP = process.argv.includes('--dump')
 
@@ -207,13 +226,31 @@ function portInUse(port) {
   })
 }
 
-/** All console text seen so far, accumulated across polls. */
+/** Counters and mode switch on the mock bridge, so the test can assert what
+ *  actually arrived over the socket rather than only what the app claims. */
+async function bridgeHealth() {
+  const r = await fetch(`${BRIDGE_HTTP}/control/health`)
+  if (!r.ok) throw new Error(`bridge health ${r.status}`)
+  return r.json()
+}
+
+async function setAskMode(mode) {
+  const r = await fetch(`${BRIDGE_HTTP}/control/ask-mode`, { method: 'POST', body: mode })
+  if (!r.ok) throw new Error(`ask-mode ${mode} -> ${r.status}`)
+}
+
+/** All console text seen so far, accumulated across polls.
+ *
+ *  Messages are truncated on the way in: the SDK logs every `audioEvent` with
+ *  its whole PCM payload expanded, which is ~36 KB per 100 ms frame, and this
+ *  run records several thousand of them. Nothing asserted here lives past
+ *  column 400. */
 const seen = []
 let lastId = -1
 async function drainConsole() {
   const entries = lastId < 0 ? await console_() : await console_(lastId)
   for (const e of entries) {
-    seen.push(e)
+    seen.push({ ...e, message: (e.message ?? '').slice(0, 400) })
     if (e.id > lastId) lastId = e.id
   }
   return entries
@@ -476,16 +513,88 @@ async function main() {
       fail(`home came back different from how it started (${home.hash} -> ${backHome.hash})`)
     }
 
-    // 7. Chat: tap row 0 and watch the answer stream in
+    // 7. Ask Omi: tap row 0, dictate, tap again, watch the answer stream in.
+    //    The simulator feeds the host machine's microphone through the same
+    //    `audioEvent` channel the glasses use, so this is the real path.
     since = await mark()
     const layoutsBefore = seen.filter((e) => (e.message ?? '').includes('[app] layout=detail')).length
+    const beforeAsk = await bridgeHealth()
     await input('click')
     await sleep(400)
-    await waitForMessageSince(since, '[app] home index=0 (Ask Omi)', 8_000, 'the tapped row is "Ask Omi" (row 0)')
+    // Row 0 is already selected, so there is no index *change* to log — the
+    // selection is asserted from what the tap opened instead.
+    await waitForMessageSince(since, '[app] select chat', 8_000, 'the tapped row is "Ask Omi" (row 0)')
     await waitForMessageSince(since, '[app] view=chat', 8_000, 'tap opens the chat view')
-    await waitForMessageSince(since, '[app] chat delta', 10_000, 'chat answer streams in')
+    await waitForMessageSince(
+      since,
+      '[app] audioControl(true, glasses) ok - mic=on',
+      8_000,
+      'tapping Ask Omi opens the glasses microphone',
+    )
+    await waitForMessageSince(since, '[app] body head: Listening...', 8_000, 'the display says it is listening')
+    await waitForMessageSince(since, '[app] listening (cap ', 8_000, 'the recording cap is armed')
+
+    {
+      const health = await bridgeHealth()
+      if (health.askStarts === beforeAsk.askStarts + 1) {
+        pass('the bridge received ask_start')
+      } else {
+        fail(`bridge saw ${health.askStarts - beforeAsk.askStarts} ask_start(s), expected 1`)
+      }
+    }
+
+    // Let a second of audio flow, then prove the bytes really arrived.
+    await sleep(1_000)
+    {
+      const health = await bridgeHealth()
+      const bytes = health.askBytes - beforeAsk.askBytes
+      if (bytes > 0) {
+        pass(`microphone PCM reaches the bridge (${health.askFrames - beforeAsk.askFrames} frames, ${bytes} bytes)`)
+      } else {
+        fail('no PCM reached the bridge while listening — the audio path is dead')
+      }
+      if (health.captureBytes === 0) {
+        pass('no PCM escaped the ask_start/ask_stop bracket')
+      } else {
+        fail(`${health.captureBytes} bytes arrived outside an ask — the bridge would file them as capture audio`)
+      }
+    }
+
+    // Tap again: microphone off, question sent, transcript back, then answer.
+    since = await mark()
+    await input('click')
+    await sleep(300)
+    await waitForMessageSince(since, '[app] body head: Thinking...', 8_000, 'tapping again shows "Thinking..."')
+    await waitForMessageSince(
+      since,
+      '[app] audioControl(false) ok - mic=off',
+      8_000,
+      'tapping again closes the microphone',
+    )
+    await waitForMessageSince(since, '[app] stopped listening (tap', 8_000, 'the recorder stopped on the tap')
+    {
+      const health = await bridgeHealth()
+      if (health.askStops === beforeAsk.askStops + 1) {
+        pass(`the bridge received ask_stop (${health.lastAskBytes} bytes of question)`)
+      } else {
+        fail(`bridge saw ${health.askStops - beforeAsk.askStops} ask_stop(s), expected 1`)
+      }
+    }
+    await waitForMessageSince(
+      since,
+      '[app] transcript: What should I work on next?',
+      15_000,
+      'the transcript comes back from the bridge',
+    )
+    await waitForMessageSince(
+      since,
+      '[app] body head: Q: What should I work on next?',
+      8_000,
+      'the transcript is shown, so a misheard question is visible',
+    )
+    await waitForMessageSince(since, '[app] chat delta', 10_000, 'the answer streams in')
     await waitForMessageSince(since, '[app] rendered chat body', 10_000, 'streaming repaints the chat body')
-    await waitForMessageSince(since, '[app] chat done', 20_000, 'chat stream completes')
+    await waitForMessageSince(since, '[app] chat done', 20_000, 'the answer completes')
 
     const chat = await framebuffer()
     if (chat.lit > 200) {
@@ -532,7 +641,89 @@ async function main() {
     await sleep(600)
     await waitForMessageSince(since, '[app] view=home', 8_000, 'double-tap from chat returns to home')
 
-    // 11. The remaining menu rows. Returning home puts the highlight back on
+    // 11. Double-tap while listening cancels: microphone off, question thrown
+    //     away, and the answer the bridge produces anyway must not surface.
+    since = await mark()
+    await input('click')
+    await sleep(300)
+    await waitForMessageSince(since, '[app] body head: Listening...', 10_000, 'Ask Omi listens again')
+    await sleep(900)
+    since = await mark()
+    await input('double_click')
+    await sleep(400)
+    await waitForMessageSince(since, '[app] stopped listening (cancel', 8_000, 'double-tap stops the recording')
+    await waitForMessageSince(
+      since,
+      '[app] audioControl(false) ok - mic=off',
+      8_000,
+      'cancelling closes the microphone',
+    )
+    await waitForMessageSince(since, '[app] ask cancelled', 8_000, 'the cancel is logged as a cancel')
+    await waitForMessageSince(since, '[app] view=home', 8_000, 'cancelling returns to home')
+    await waitForMessageSince(
+      since,
+      '[app] discarded a cancelled ask response',
+      20_000,
+      'the answer to the cancelled question is discarded',
+    )
+
+    // 12. The recording cap auto-stops a forgotten session, and a transcript
+    //     the bridge could not make out says so instead of asking Omi nothing.
+    await setAskMode('empty')
+    since = await mark()
+    await input('click')
+    await sleep(300)
+    await waitForMessageSince(since, '[app] body head: Listening...', 10_000, 'Ask Omi listens for the cap test')
+    await waitForMessageSince(
+      since,
+      '[app] listening cap reached',
+      ASK_MAX_MS + 10_000,
+      `the ${Math.round(ASK_MAX_MS / 1000)}s cap fires on its own`,
+    )
+    await waitForMessageSince(since, '[app] stopped listening (cap', 8_000, 'the cap stops the recording')
+    await waitForMessageSince(
+      since,
+      '[app] audioControl(false) ok - mic=off',
+      8_000,
+      'the cap closes the microphone',
+    )
+    await waitForMessageSince(
+      since,
+      "[app] ask error: Didn't catch that. Tap to retry.",
+      15_000,
+      'an unusable recording reports back instead of asking an empty question',
+    )
+    await waitForMessageSince(
+      since,
+      "[app] body head: Didn't catch that. Tap to retry.",
+      8_000,
+      'the retry prompt is on the display',
+    )
+
+    // Tapping from the error state must start listening again, not sit there.
+    await setAskMode('transcript')
+    since = await mark()
+    await input('click')
+    await sleep(300)
+    await waitForMessageSince(
+      since,
+      '[app] audioControl(true, glasses) ok - mic=on',
+      10_000,
+      'tapping the retry prompt reopens the microphone',
+    )
+    await sleep(600)
+    since = await mark()
+    await input('double_click')
+    await sleep(400)
+    await waitForMessageSince(since, '[app] view=home', 10_000, 'cancelling the retry returns to home')
+    await waitForMessageSince(
+      since,
+      '[app] discarded a cancelled ask response',
+      20_000,
+      'the retry answer is discarded too',
+    )
+
+    // 13. The remaining menu rows. Returning home puts the highlight back on
     //     row 0 (asserted above), so N scrolls lands on row N.
     since = await openRow(2, 'Action items')
     await waitForMessageSince(since, '[app] view=actions', 8_000, 'tap opens the Action items view')
@@ -552,19 +743,91 @@ async function main() {
     await sleep(600)
     await waitForMessageSince(since, '[app] view=home', 8_000, 'double-tap returns from Today')
 
-    // 12. Capture toggles the glasses mic and relabels its own row in place.
+    // 14. Capture toggles the glasses mic and relabels its own row in place.
+    //     The microphone is live but no ask is open, so those frames must go
+    //     nowhere: to the bridge, an unbracketed binary frame is capture audio
+    //     headed for a conversation.
+    const captureBytesBefore = (await bridgeHealth()).captureBytes
     const beforeToggle = await framebuffer()
     since = await openRow(4, 'Capture: off')
     await waitForMessageSince(since, '[app] capture=on', 8_000, 'tap turns glasses capture on')
-    await sleep(800)
+    await waitForMessageSince(
+      since,
+      '[app] audioControl(true, glasses) ok - mic=on',
+      8_000,
+      'Capture opens the microphone',
+    )
+    await sleep(1_500)
     const afterToggle = await framebuffer()
     if (afterToggle.hash !== beforeToggle.hash) {
       pass('the Capture row relabels itself on the display')
     } else {
       fail(`menu is byte-identical after the toggle (${beforeToggle.hash}) — the label never changed`)
     }
+    {
+      const health = await bridgeHealth()
+      if (health.captureBytes === captureBytesBefore) {
+        pass('a live microphone outside an ask sends nothing to the bridge')
+      } else {
+        fail(`${health.captureBytes - captureBytesBefore} bytes leaked to the bridge while only Capture was on`)
+      }
+    }
 
-    // 13. Bridge offline is visible, not a hang: drop the bridge and check the
+    // Toggle it back off — the microphone must not outlive the run.
+    since = await openRow(4, 'Capture: on')
+    await waitForMessageSince(since, '[app] capture=off', 8_000, 'tap turns glasses capture back off')
+    await waitForMessageSince(
+      since,
+      '[app] audioControl(false) ok - mic=off',
+      8_000,
+      'turning Capture off closes the microphone',
+    )
+
+    // 15. Suggestions still works: the canned ring is the fallback for when
+    //     dictating is not an option.
+    since = await openRow(5, 'Suggestions')
+    await waitForMessageSince(since, '[app] view=chat', 8_000, 'tap opens the Suggestions view')
+    await waitForMessageSince(
+      since,
+      '[app] asked: What should I focus on right now?',
+      8_000,
+      'the first canned question is asked',
+    )
+    await waitForMessageSince(since, '[app] chat done', 20_000, 'the canned answer streams in')
+
+    since = await mark()
+    await input('click')
+    await sleep(400)
+    await waitForMessageSince(
+      since,
+      '[app] asked: Summarise my last conversation.',
+      10_000,
+      'tap moves to the next canned question',
+    )
+    await waitForMessageSince(since, '[app] chat done', 20_000, 'the next canned answer streams in')
+
+    since = await mark()
+    await input('double_click')
+    await sleep(600)
+    await waitForMessageSince(since, '[app] view=home', 8_000, 'double-tap returns from Suggestions')
+
+    // 16. Nothing left the microphone on. Every `audioControl(true)` in the run
+    //     has to be matched by an `audioControl(false)`, and the last call must
+    //     be the one that turned it off.
+    await drainConsole()
+    const micOn = countMessage('[app] audioControl(true, glasses)')
+    const micOff = countMessage('[app] audioControl(false)')
+    const lastMic = seen
+      .map((e) => e.message ?? '')
+      .filter((m) => m.includes('[app] audioControl('))
+      .pop()
+    if (micOn > 0 && micOn === micOff && (lastMic ?? '').includes('mic=off')) {
+      pass(`microphone balanced: ${micOn} on, ${micOff} off, and off last`)
+    } else {
+      fail(`microphone left on: ${micOn} audioControl(true), ${micOff} audioControl(false), last was "${lastMic}"`)
+    }
+
+    // 17. Bridge offline is visible, not a hang: drop the bridge and check the
     //     app notices and starts retrying.
     since = await mark()
     bridgeProc.kill('SIGTERM')
@@ -596,7 +859,12 @@ async function main() {
 
     if (DUMP) {
       console.log('\n--- console dump ---')
-      for (const e of seen) console.log(`  [${e.level}] ${e.message}`)
+      // Skipping the SDK's per-frame audio log: it fires 10 times a second
+      // while listening and would bury everything else.
+      for (const e of seen) {
+        if (e.message.startsWith('[EvenAppBridge] EvenHub event:') && e.message.includes('audioEvent')) continue
+        console.log(`  [${e.level}] ${e.message}`)
+      }
       console.log('--- mock bridge ---')
       console.log(bridgeLog.trim())
     }

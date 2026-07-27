@@ -13,7 +13,7 @@
     },
     {
       "name": "g2-microphone",
-      "desc": "Captures audio from the glasses microphone when you turn Capture on."
+      "desc": "Listens through the glasses microphone while you ask Omi a question, and when you turn Capture on."
     }
   ],
   "supported_languages": ["en"]

@@ -4,7 +4,7 @@
  *  just reflects `status()` on the glasses. A dropped bridge shows up as
  *  "bridge offline" rather than a view that hangs forever.
  */
-import { bridgeUrl } from './config.ts'
+import { ASK_MAX_BUFFERED_BYTES, bridgeUrl } from './config.ts'
 import { frameType, parseInbound } from './protocol.ts'
 import type { InboundMessage, OutboundMessage } from './protocol.ts'
 
@@ -97,6 +97,28 @@ export class BridgeClient {
     }
     this.socket.send(JSON.stringify(message))
     console.log(`[bridge] sent ${message.type}`)
+    return true
+  }
+
+  /**
+   * Send one raw PCM frame. Binary frames are the microphone channel — the
+   * bridge reads them as PCM16 LE / 16 kHz / mono and never as JSON — so this
+   * deliberately does not log per frame: at 10 frames a second the log would
+   * be useless for anything else.
+   *
+   * Returns false when the frame was dropped, either because the socket is
+   * closed or because it is already backed up. Dropping the newest audio beats
+   * queueing without bound: a stalled bridge would otherwise eat memory on the
+   * phone and deliver a question minutes late.
+   */
+  sendBinary(pcm: Uint8Array): boolean {
+    const socket = this.socket
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false
+    if (socket.bufferedAmount > ASK_MAX_BUFFERED_BYTES) {
+      console.warn(`[bridge] dropping audio frame, ${socket.bufferedAmount} bytes still queued`)
+      return false
+    }
+    socket.send(pcm)
     return true
   }
 
