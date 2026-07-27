@@ -61,7 +61,7 @@ def test_questions_route_to_the_right_store(question, expected):
 
 
 def test_temporal_questions_beat_the_task_wording():
-    """"What did I do yesterday" contains "do" but is not a task question."""
+    """ "What did I do yesterday" contains "do" but is not a task question."""
     assert _classify('What did I do yesterday?') == 'conversations'
 
 
@@ -259,8 +259,11 @@ async def test_an_empty_day_says_so_without_falling_back():
 async def test_the_answer_stays_within_a_screenful():
     client = FakeClient(
         actions=[
-            {'description': f'task number {i} with a fairly long description', 'completed': False,
-             'created_at': f'2026-07-{i:02d}'}
+            {
+                'description': f'task number {i} with a fairly long description',
+                'completed': False,
+                'created_at': f'2026-07-{i:02d}',
+            }
             for i in range(1, 20)
         ]
     )

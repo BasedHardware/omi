@@ -32,8 +32,18 @@ log = logging.getLogger(__name__)
 # Defined early: several module-level regexes below interpolate _MONTH_ALT,
 # and module code runs top to bottom.
 _MONTHS = {
-    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+    'jan': 1,
+    'feb': 2,
+    'mar': 3,
+    'apr': 4,
+    'may': 5,
+    'jun': 6,
+    'jul': 7,
+    'aug': 8,
+    'sep': 9,
+    'oct': 10,
+    'nov': 11,
+    'dec': 12,
 }
 _MONTH_ALT = '|'.join(_MONTHS)
 
@@ -91,13 +101,25 @@ def _is_file_inventory(line: str) -> bool:
         return True
     return bool(_LOCAL_INDEX_STEM_RE.search(line) and _PATH_HINT_RE.search(line))
 
+
 # Word groups that decide which store to read. Checked in order, most specific
 # first, because "what did I do yesterday" is about conversations even though it
 # contains "do".
 _ACTION_WORDS = ('action item', 'task', 'to-do', 'todo', 'behind on', 'due', 'my plate', 'commit')
 _CONVERSATION_WORDS = (
-    'yesterday', 'today', 'last night', 'this morning', 'this week', 'last week',
-    'talk', 'said', 'meeting', 'call', 'conversation', 'discuss', 'happened',
+    'yesterday',
+    'today',
+    'last night',
+    'this morning',
+    'this week',
+    'last week',
+    'talk',
+    'said',
+    'meeting',
+    'call',
+    'conversation',
+    'discuss',
+    'happened',
 )
 
 
@@ -120,10 +142,32 @@ def _classify(question: str) -> str:
 # a page, stored as a fact, and returned as an answer.
 _UI_CHROME = frozenset(
     {
-        'show less', 'show more', 'see more', 'see all', 'read more', 'learn more',
-        'click here', 'load more', 'view all', 'sign in', 'log in', 'sign up',
-        'accept all', 'got it', 'ok', 'cancel', 'submit', 'continue', 'next',
-        'back', 'close', 'done', 'menu', 'search', 'settings', 'home',
+        'show less',
+        'show more',
+        'see more',
+        'see all',
+        'read more',
+        'learn more',
+        'click here',
+        'load more',
+        'view all',
+        'sign in',
+        'log in',
+        'sign up',
+        'accept all',
+        'got it',
+        'ok',
+        'cancel',
+        'submit',
+        'continue',
+        'next',
+        'back',
+        'close',
+        'done',
+        'menu',
+        'search',
+        'settings',
+        'home',
     }
 )
 
@@ -181,9 +225,7 @@ def _format(lines: list[str], empty_message: str, limit: int = 3) -> str:
 
 
 # Lines in a conversation result that are scaffolding rather than content.
-_CONV_NOISE_RE = re.compile(
-    r'^\s*(Conversation\s*#\d+|Started:|Finished:|\d{1,2}\s+\w+\s+\d{4}\s+at\b)', re.IGNORECASE
-)
+_CONV_NOISE_RE = re.compile(r'^\s*(Conversation\s*#\d+|Started:|Finished:|\d{1,2}\s+\w+\s+\d{4}\s+at\b)', re.IGNORECASE)
 
 # The tools report "nothing found" as prose, not as an empty body.
 _NO_RESULTS_RE = re.compile(r'^\s*(No\s+(conversations?|memories|results)\s+found|Error:)', re.IGNORECASE)
@@ -445,7 +487,9 @@ def _explicit_date(question: str) -> dict[str, str] | None:
         'start_date': datetime.combine(target, time.min, tzinfo=local_tz).isoformat(),
         'end_date': datetime.combine(
             target + timedelta(days=1) - timedelta(seconds=1), time.max.replace(microsecond=0), tzinfo=local_tz
-        ).replace(hour=23, minute=59, second=59).isoformat(),
+        )
+        .replace(hour=23, minute=59, second=59)
+        .isoformat(),
     }
 
 
@@ -523,9 +567,7 @@ async def gather_facts(client, question: str) -> list[str]:
 
     memories_text, conversations_text = await asyncio.gather(
         _search_or_empty(client, 'memories/search', {'query': question, 'limit': 10}),
-        _search_or_empty(
-            client, 'conversations/search', {'query': question, 'limit': 4, 'include_transcript': False}
-        ),
+        _search_or_empty(client, 'conversations/search', {'query': question, 'limit': 4, 'include_transcript': False}),
     )
     facts = _clean_bullets(memories_text)
     if _looks_relevant(question, conversations_text):
@@ -582,9 +624,7 @@ async def fast_answer(client, question: str) -> str:
     # the slower of the two rather than their sum.
     memories_text, conversations_text = await asyncio.gather(
         _search_or_empty(client, 'memories/search', {'query': question, 'limit': 10}),
-        _search_or_empty(
-            client, 'conversations/search', {'query': question, 'limit': 4, 'include_transcript': False}
-        ),
+        _search_or_empty(client, 'conversations/search', {'query': question, 'limit': 4, 'include_transcript': False}),
     )
 
     lines = _clean_bullets(memories_text)

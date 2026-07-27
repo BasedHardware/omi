@@ -199,9 +199,7 @@ async def _answer_for_glasses(question: str) -> str:
                 composed = await compose_or_none(auth, OMI_API_BASE, question, facts, remaining)
                 if composed:
                     fitted = fit_for_glasses(composed, limit=DISPLAY_LIMIT)
-                    log.info(
-                        'composed answer in %.1fs (%d chars shown)', time.monotonic() - started, len(fitted)
-                    )
+                    log.info('composed answer in %.1fs (%d chars shown)', time.monotonic() - started, len(fitted))
                     return fitted
 
             # Fallback: show the retrieved lines. Worse than prose, better than
@@ -240,9 +238,7 @@ def _record_contract(request: Request, raw: bytes) -> None:
     token is redacted -- everything else is kept, including header order and case.
     """
     try:
-        headers = [
-            [k, '<redacted>' if k.lower() == 'authorization' else v] for k, v in request.headers.items()
-        ]
+        headers = [[k, '<redacted>' if k.lower() == 'authorization' else v] for k, v in request.headers.items()]
         entry = {
             'received_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
             'method': request.method,

@@ -320,9 +320,7 @@ class OmiClient:
         """
         headers = {**await self._headers(), 'Content-Type': 'application/json'}
         async with httpx.AsyncClient(timeout=_JSON_TIMEOUT) as client:
-            response = await client.post(
-                f'{self._base}/v1/tools/{tool}', headers=headers, json=payload
-            )
+            response = await client.post(f'{self._base}/v1/tools/{tool}', headers=headers, json=payload)
         if response.status_code != 200:
             raise RuntimeError(f'{tool} failed: HTTP {response.status_code}')
         body = response.json() or {}

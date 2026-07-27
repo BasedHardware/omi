@@ -585,7 +585,9 @@ def test_ping_is_answered(bridge):
         assert ws.receive_json() == {'type': 'pong'}
 
 
-@pytest.mark.parametrize('raw', ['not json', '', '[1, 2, 3]', '"a string"', 'null', '{"no type": 1}', '{"type": "nope"}'])
+@pytest.mark.parametrize(
+    'raw', ['not json', '', '[1, 2, 3]', '"a string"', 'null', '{"no type": 1}', '{"type": "nope"}']
+)
 def test_junk_and_unknown_messages_are_ignored_without_a_reply(bridge, raw):
     """An unknown type must be a silent no-op, not an error frame and not a
     close -- the plugin and the bridge ship on different schedules.

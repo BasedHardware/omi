@@ -512,7 +512,9 @@ async def test_empty_done_text_falls_back_to_the_deltas(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_chat_collects_thinking_lines_separately_from_the_answer(monkeypatch):
-    body = b'think: Searching memories\n\nthink: Reading conversations\n\ndata: Done.\n\n' + done_frame('Done.') + b'\n\n'
+    body = (
+        b'think: Searching memories\n\nthink: Reading conversations\n\ndata: Done.\n\n' + done_frame('Done.') + b'\n\n'
+    )
     client, _ = make_client(monkeypatch, [body])
     result = await client.chat('hi')
     assert result.thinking == ['Searching memories', 'Reading conversations']

@@ -235,9 +235,7 @@ class CaptureSession:
 
                     sender = asyncio.create_task(self._send_loop(socket), name='capture-send')
                     receiver = asyncio.create_task(self._recv_loop(socket), name='capture-recv')
-                    done, pending = await asyncio.wait(
-                        {sender, receiver}, return_when=asyncio.FIRST_COMPLETED
-                    )
+                    done, pending = await asyncio.wait({sender, receiver}, return_when=asyncio.FIRST_COMPLETED)
                     for task in pending:
                         task.cancel()
                         with contextlib.suppress(asyncio.CancelledError):
