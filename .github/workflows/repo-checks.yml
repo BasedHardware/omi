@@ -141,9 +141,7 @@ jobs:
         run: python3 desktop/macos/scripts/release-keyvalue.py self-test
 
       - name: Check release process guards
-        run: |
-          pip install -q pyyaml
-          python3 .github/scripts/check-release-process-guards.py
+        run: bash scripts/run-release-process-guards.sh
 
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'

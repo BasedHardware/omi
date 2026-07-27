@@ -1153,7 +1153,7 @@ export interface CreateConversationFromTranscriptRequest {
   client_platform?: string | null;
   client_session_id?: string | null;
   finished_at?: string | null;
-  geolocation?: Geolocation | null;
+  geolocation?: GeolocationInput | null;
   language?: string | null;
   source?: ConversationSource | null;
   started_at?: string | null;
@@ -1162,7 +1162,7 @@ export interface CreateConversationFromTranscriptRequest {
 
 export interface CreateConversationRequest {
   finished_at?: string | null;
-  geolocation?: Geolocation | null;
+  geolocation?: GeolocationInput | null;
   language?: string | null;
   started_at?: string | null;
   text: string;
@@ -1794,6 +1794,14 @@ export interface Geolocation {
   longitude: number;
 }
 
+export interface GeolocationInput {
+  address?: string | null;
+  google_place_id?: string | null;
+  latitude: number;
+  location_type?: string | null;
+  longitude: number;
+}
+
 export interface GoalCreate {
   current_value?: number | null;
   desired_outcome?: string | null;
@@ -2036,6 +2044,18 @@ export interface LlmUsageResponse {
   period_days: number;
   summary?: Record<string, unknown>;
   top_features?: Array<LlmUsageFeatureResponse>;
+}
+
+export interface LocationContextConsentResponse {
+  disclosed_providers?: Array<unknown>;
+  enabled: boolean;
+  expires_at?: string | null;
+  purpose?: string;
+}
+
+export interface LocationContextConsentUpdate {
+  disclosure_accepted?: boolean;
+  enabled: boolean;
 }
 
 export interface McpAddServerResponse {
@@ -3963,6 +3983,7 @@ export interface OmiApiSchemas {
   "GenerateDescriptionRequest": GenerateDescriptionRequest;
   "GenerateWrappedResponse": GenerateWrappedResponse;
   "Geolocation": Geolocation;
+  "GeolocationInput": GeolocationInput;
   "GoalCreate": GoalCreate;
   "GoalDeleteResponse": GoalDeleteResponse;
   "GoalDetailProjection": GoalDetailProjection;
@@ -3999,6 +4020,8 @@ export interface OmiApiSchemas {
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
   "LlmUsageRecordResponse": LlmUsageRecordResponse;
   "LlmUsageResponse": LlmUsageResponse;
+  "LocationContextConsentResponse": LocationContextConsentResponse;
+  "LocationContextConsentUpdate": LocationContextConsentUpdate;
   "McpAddServerResponse": McpAddServerResponse;
   "McpApiKey": McpApiKey;
   "McpApiKeyCreate": McpApiKeyCreate;
@@ -7198,6 +7221,24 @@ export interface OmiApiPaths {
       operationId: "set_user_language_v1_users_language_patch";
       responses: {
         "200": UserLanguageUpdateResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/location-context-consent": {
+    get: {
+      operationId: "get_location_context_consent_v1_users_location_context_consent_get";
+      responses: {
+        "200": LocationContextConsentResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    put: {
+      operationId: "set_location_context_consent_v1_users_location_context_consent_put";
+      responses: {
+        "200": LocationContextConsentResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -13757,7 +13798,7 @@ export async function save_token_v1_users_fcm_token_post(header: { X_App_Platfor
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function set_user_geolocation_v1_users_geolocation_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: Geolocation, init?: OmiApiClientInit): Promise<UserStatusResponse> {
+export async function set_user_geolocation_v1_users_geolocation_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: GeolocationInput, init?: OmiApiClientInit): Promise<UserStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/geolocation`;
   const _search = "";
@@ -13803,6 +13844,46 @@ export async function set_user_language_v1_users_language_patch(header: { author
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_location_context_consent_v1_users_location_context_consent_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<LocationContextConsentResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/location-context-consent`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function set_location_context_consent_v1_users_location_context_consent_put(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: LocationContextConsentUpdate, init?: OmiApiClientInit): Promise<LocationContextConsentResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/location-context-consent`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PUT",
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
@@ -15695,4 +15776,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 385 client methods generated.
+// Total: 387 client methods generated.
