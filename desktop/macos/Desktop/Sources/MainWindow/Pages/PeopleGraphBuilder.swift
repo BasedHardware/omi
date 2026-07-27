@@ -29,12 +29,12 @@ enum PeopleGraphBuilder {
 
   /// Entry point. Cheap flag check on the caller's thread, then all work (read + graph
   /// build + JSON writes) runs off the main thread. Safe to call on every People-tab load.
-  static func rebuildIfNeeded(uid: String?) {
+  static func rebuildIfNeeded(uid: String?) async {
     let enabled = (UserDefaults.standard.object(forKey: .peopleGraphBuild) as? Bool) ?? true
     guard enabled else { return }
-    Task.detached(priority: .utility) {
+    await Task.detached(priority: .utility) {
       build(uid: uid)
-    }
+    }.value
   }
 
   // MARK: - Orchestration

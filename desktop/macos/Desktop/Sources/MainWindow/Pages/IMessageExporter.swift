@@ -14,11 +14,11 @@ import GRDB
 enum IMessageExporter {
   /// Entry point. Cheap flag check on the caller's thread, then all blocking work
   /// (copy + SQLite reads + JSON write) runs off the main thread.
-  static func exportIfRequested() {
+  static func exportIfRequested() async {
     guard UserDefaults.standard.bool(forKey: .peopleIMessageExport) else { return }
-    Task.detached(priority: .utility) {
+    await Task.detached(priority: .utility) {
       runExport()
-    }
+    }.value
   }
 
   // MARK: - Orchestration
@@ -93,7 +93,6 @@ enum IMessageExporter {
     var firstDate: Int64 = .max
     var lastDate: Int64 = .min
     var isGroup = false
-    var samples: [String] = []
   }
 
   private static func aggregate(from dbQueue: DatabaseQueue, iso: ISO8601DateFormatter) throws
@@ -183,36 +182,6 @@ enum IMessageExporter {
         aggs[cp] = a
       }
 
-      // Pass 2 — up to 3 recent non-null text snippets per handle (most recent
-      // first), over a bounded recent window so we never load all message text.
-      var seenText = Set<Int64>()
-      let textCursor = try Row.fetchCursor(
-        db,
-        sql: """
-            SELECT m.ROWID AS rowid, m.text AS text, h.id AS handle, cmj.chat_id AS cid
-            FROM message m
-            LEFT JOIN handle h ON h.ROWID = m.handle_id
-            LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
-            WHERE m.text IS NOT NULL AND m.text <> ''
-              AND (m.associated_message_type = 0 OR m.associated_message_type IS NULL)
-            ORDER BY m.ROWID DESC LIMIT 25000
-          """)
-      while let row = try textCursor.next() {
-        let rowid = int64(row, "rowid")
-        if seenText.contains(rowid) { continue }
-        seenText.insert(rowid)
-        let cid = int64(row, "cid")
-        guard
-          let cp = counterparty(
-            messageHandle: row["handle"] as? String, chatID: cid, participants: participants),
-          let agg = aggs[cp], agg.samples.count < 3,
-          let raw = row["text"] as? String
-        else { continue }
-        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.isEmpty { continue }
-        aggs[cp]?.samples.append(String(text.prefix(500)))
-      }
-
       let handles =
         aggs
         .map { key, a -> ExportHandle in
@@ -224,8 +193,7 @@ enum IMessageExporter {
             received: a.received,
             firstDate: a.firstDate == .max ? nil : isoString(appleTime: a.firstDate, iso: iso),
             lastDate: a.lastDate == .min ? nil : isoString(appleTime: a.lastDate, iso: iso),
-            isGroup: a.isGroup,
-            sampleTexts: a.samples)
+            isGroup: a.isGroup)
         }
         .sorted { $0.messageCount > $1.messageCount }
       return (total, handles, groups)
@@ -349,7 +317,6 @@ enum IMessageExporter {
     let firstDate: String?
     let lastDate: String?
     let isGroup: Bool
-    let sampleTexts: [String]
 
     enum CodingKeys: String, CodingKey {
       case handle
@@ -360,7 +327,6 @@ enum IMessageExporter {
       case firstDate = "first_date"
       case lastDate = "last_date"
       case isGroup = "is_group"
-      case sampleTexts = "sample_texts"
     }
   }
 

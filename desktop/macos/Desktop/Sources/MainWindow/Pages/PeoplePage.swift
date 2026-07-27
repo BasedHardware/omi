@@ -381,12 +381,12 @@ final class PeopleViewModel: ObservableObject {
     errorMessage = nil
     // Gated, fire-and-forget: self-guards on the `peopleIMessageExport` flag
     // (default off), so this is a no-op unless a developer opts in.
-    IMessageExporter.exportIfRequested()
     // On-device social-graph engine: reads the exported iMessage aggregates and derives
     // edges / circles / communities locally, folding them into the People-tab data.
     // Self-gated on the `peopleGraphBuild` flag (default on) and runs off the main thread.
-    PeopleGraphBuilder.rebuildIfNeeded(uid: UserDefaults.standard.string(forKey: .authUserId))
     Task { [weak self] in
+      await IMessageExporter.exportIfRequested()
+      await PeopleGraphBuilder.rebuildIfNeeded(uid: UserDefaults.standard.string(forKey: .authUserId))
       let outcome = await Self.loadOutcome()
       self?.apply(outcome)
     }
@@ -500,8 +500,6 @@ final class PeopleConnectorsModel: ObservableObject {
   func enableIMessageMapping() {
     UserDefaults.standard.set(true, forKey: .peopleIMessageExport)
     imessageMappingEnabled = true
-    IMessageExporter.exportIfRequested()
-    PeopleGraphBuilder.rebuildIfNeeded(uid: UserDefaults.standard.string(forKey: .authUserId))
   }
 
   /// Full Disk Access is a single global permission; reading `~/Library/Messages`
