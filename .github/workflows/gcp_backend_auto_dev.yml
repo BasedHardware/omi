@@ -27,7 +27,7 @@ jobs:
     # support a safe workflow-level paths filter, so inspect its immutable SHA.
     permissions:
       contents: 'read'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
     steps:
@@ -148,7 +148,7 @@ jobs:
     environment: development
     permissions:
       contents: 'read'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
     steps:
@@ -244,7 +244,7 @@ jobs:
       contents: 'read'
       id-token: 'write'
 
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       # To workaround "no space left on device" issue of GitHub-hosted runner
       - name: Delete huge unnecessary tools folder
