@@ -8,8 +8,11 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiSearchField.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryProvenance.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasTerritoryLabels.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasIslands.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasRenderPlanCache.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSnapshotCache.swift
@@ -33,6 +36,12 @@ steps:
     do: "Choose Memories from the Memory menu. Verify the full-width page shows the shared search field ('Search memories'), filter buttons ('This device', 'All'), Add button, and memory rows with timestamps."
     expect:
       interactive_count: { min: 4 }
+
+  - id: S2b
+    name: A memory says where it came from
+    do: "Open a synced memory's detail panel. Verify the provenance row names the capture device and, when the memory carries an app tag, the app — not a bare timestamp. A memory added by hand says so."
+    expect:
+      interactive_count: { min: 1 }
 
   - id: S3
     name: Select Conversations
@@ -105,6 +114,36 @@ steps:
       result.detail.zoom: "2.2"
 
   - id: S11
+    name: Go into a neighbourhood and read its name
+    do: "Note a territory caption printed on the map (an all-caps name inside an outlined island), then run the enter action below with that caption. Verify the camera frames that island, its coastline is the only one still drawn, and the entities on it are named."
+    bridge.action:
+      name: memory_atlas_enter_region
+      params:
+        target: "page"
+        caption: "a"
+    expect:
+      result.detail.posted: "true"
+      result.detail.target: "page"
+
+  - id: S12
+    name: The island survives selecting something on it
+    do: "With a neighbourhood entered, select an entity standing on it by name. Verify the island keeps its outline, its shading, and its caption while the inspector is open — the frame the user is reading in must not disappear because they picked something inside it."
+    bridge.action:
+      name: memory_atlas_select
+      params:
+        target: "page"
+        label: "a"
+    expect:
+      result.detail.posted: "true"
+
+  - id: S13
+    name: Escape backs out one layer per press
+    do: "Press Escape three times with the main window key (not the floating bar). First clears the selection and leaves the island drawn; second leaves the neighbourhood and brings every other coastline back without moving the camera; third closes the Brain Map page back to Memories."
+    expect:
+      text_visible:
+        - Memories
+
+  - id: S14
     name: Logs clean
     log.expect:
       absent:
