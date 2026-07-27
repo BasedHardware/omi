@@ -137,6 +137,22 @@ def test_windows_fault_state_is_retained_without_posix_process_provenance(
     assert fault_state.is_dir()
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows-specific fail-closed behavior")
+def test_windows_process_manifest_is_retained_without_posix_process_provenance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    lease_id = "qualification-windows-process"
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    acquired = qualification.acquire(repo_root=REPO_ROOT, lease_id=lease_id, owner_pid=os.getpid(), port_offset=1000)
+    _stale_lease(root, lease_id, pid=os.getpid(), port=_free_port())
+
+    with pytest.raises(qualification.QualificationLeaseError, match="process-manifest cleanup requires POSIX process provenance"):
+        qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+
+    assert (root / "qualification-lease.json").is_file()
+
+
 @pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
 def test_release_stops_the_exact_lease_owned_fault_inject_listener(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path

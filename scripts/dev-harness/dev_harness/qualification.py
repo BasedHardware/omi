@@ -183,6 +183,10 @@ def _validated_owned_records(
         return [], process_manifest, port_manifest
     if not process_manifest.is_file() or not port_manifest.is_file():
         raise QualificationLeaseError("Qualification lease is missing process or port provenance")
+    if os.name == "nt":
+        raise QualificationLeaseError(
+            "Qualification process-manifest cleanup requires POSIX process provenance; retaining lease state"
+        )
     records = _load_records(process_manifest, "processes")
     ports = _load_records(port_manifest, "ports")
     by_service = {(str(record.get("service")), int(record.get("pid", -1))): record for record in ports}
