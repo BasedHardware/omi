@@ -2,7 +2,7 @@ import Foundation
 
 /// Settings for the live suggestion assistant.
 ///
-/// Default-off, matching the posture set in `48239de8` ("proactive notifications off by
+/// Default-on by product decision, departing from `48239de8` ("proactive notifications off by
 /// default for all users"). Enabling this assistant is independent of the other four —
 /// a user who wants live suggestions should not have to turn on Focus or Memory too.
 @MainActor
@@ -19,9 +19,18 @@ class SuggestionAssistantSettings {
 
   // MARK: - Default Values
 
-  /// Off by default. The 2026-06-07 decision was that proactive output is opt-in; this
-  /// assistant does not get to quietly opt the user back in.
-  private let defaultEnabled = false
+  /// On by default, by product decision.
+  ///
+  /// This deliberately departs from `48239de8`, which made proactive notifications opt-in
+  /// after ~25% click-through over 90 days. The bet is that the two structural changes here
+  /// — evaluating on real dwell rather than a blind 600s timer, and refusing to spend at all
+  /// unless grounding found something the user does not already have on screen — move
+  /// precision enough to justify being on. That is a hypothesis, not a measurement; if
+  /// click-through does not move, this default is the first thing to revert.
+  ///
+  /// Delivery is still bounded independently by the shared 0–5 notification frequency, and
+  /// cost by dwell, cooldown, and the 40/day evaluation budget.
+  private let defaultEnabled = true
 
   /// Minimum time between *evaluations*, not between delivered suggestions. Gating on
   /// evaluation is what bounds cost when the user cmd-tabs rapidly.
