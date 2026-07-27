@@ -40,10 +40,13 @@
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift",
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift",
         "desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift",
-        "desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift"
+        "desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift",
+        "backend/routers/desktop_core.py"
       ],
       "test_adapter": "direct_command_contract",
-      "writer_anchors": []
+      "writer_anchors": [
+        {"path": "backend/routers/desktop_core.py", "symbol": "action_items_db.create_action_item", "discover": true}
+      ]
     },
     {
       "id": "chat_voice_tools",
