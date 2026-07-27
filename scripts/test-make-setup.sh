@@ -2,7 +2,11 @@
 
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# Git invokes hooks with GIT_DIR pointed at the worktree's private git
+# directory. Resolve this test's source root from its own path rather than
+# asking Git for a work tree, which is precisely the linked-worktree condition
+# the final fixture below verifies.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-make-setup.XXXXXX")"
 trap 'rm -rf "$TMPDIR"' EXIT
 
