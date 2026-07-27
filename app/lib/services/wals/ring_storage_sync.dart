@@ -39,6 +39,24 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 typedef RingConnectionResolver = Future<DeviceConnection?> Function(String deviceId);
 typedef RingDocumentsDirectoryProvider = Future<Directory> Function();
 typedef RingLiveFramesHandler = bool Function(List<List<int>> frames);
+typedef RingDeepBacklogPolicy = bool Function();
+
+@visibleForTesting
+int ringRecentRecoveryFloor({
+  required int readSeq,
+  required int writeSeq,
+  required int framesPerRecord,
+  required int framesPerSecond,
+  int recoverySeconds = 120,
+}) {
+  if (writeSeq <= readSeq || framesPerRecord <= 0 || framesPerSecond <= 0 || recoverySeconds <= 0) {
+    return readSeq;
+  }
+  final recentFrames = recoverySeconds * framesPerSecond;
+  final recentRecords = (recentFrames + framesPerRecord - 1) ~/ framesPerRecord;
+  final candidate = writeSeq - recentRecords;
+  return candidate > readSeq ? candidate : readSeq;
+}
 
 class RingAudioTailSession {
   RingAudioTailSession._(this.done, this._cancel) {
@@ -77,6 +95,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   static const Duration _livePollInterval = Duration(seconds: 1);
   static const Duration _partialLiveRangeDeadline = Duration(seconds: 1);
   static const int _liveFreshnessSeconds = 5;
+  static const int _recentRecoverySeconds = 120;
 
   List<Wal> _wals = [];
   BtDevice? _device;
@@ -91,6 +110,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   LocalWalSync? _localSync;
   final RingConnectionResolver? _connectionResolverOverride;
   final RingDocumentsDirectoryProvider _documentsDirectoryProvider;
+  final RingDeepBacklogPolicy _deepBacklogPolicy;
   final int _packetsPerRead;
   final Duration _inactivityTimeout;
   final int Function() _nowSeconds;
@@ -110,11 +130,13 @@ class RingStorageSyncImpl implements RingStorageSync {
     this.listener, {
     RingConnectionResolver? connectionResolver,
     RingDocumentsDirectoryProvider? documentsDirectoryProvider,
+    RingDeepBacklogPolicy? deepBacklogPolicy,
     int packetsPerRead = defaultPacketsPerRead,
     Duration inactivityTimeout = defaultInactivityTimeout,
     int Function()? nowSeconds,
   })  : _connectionResolverOverride = connectionResolver,
         _documentsDirectoryProvider = documentsDirectoryProvider ?? getApplicationDocumentsDirectory,
+        _deepBacklogPolicy = deepBacklogPolicy ?? (() => true),
         _packetsPerRead = packetsPerRead,
         _inactivityTimeout = inactivityTimeout,
         _nowSeconds = nowSeconds ?? _systemNowSeconds {
@@ -569,6 +591,49 @@ class RingStorageSyncImpl implements RingStorageSync {
           partialLiveSince = null;
         }
 
+        /*
+         * Recover the most recent two minutes before spending bandwidth on an
+         * hours-old prefix. These ranges keep their original timestamps and
+         * use the WAL/backfill path; only the newest five seconds can feed the
+         * live socket.
+         */
+        final recentFloor = ringRecentRecoveryFloor(
+          readSeq: info.readSeq,
+          writeSeq: info.writeSeq,
+          framesPerRecord: sourceFramesPerRecord,
+          framesPerSecond: codec.getFramesPerSecond(),
+          recoverySeconds: _recentRecoverySeconds,
+        );
+        final recentStart = coverage.firstUncovered(
+          recentFloor,
+          info.writeSeq,
+        );
+        if (recentStart < info.writeSeq) {
+          final nextRecentCovered = coverage.firstRangeAtOrAfter(recentStart);
+          final recentEnd = nextRecentCovered?.start ?? info.writeSeq;
+          if (recentEnd > recentStart) {
+            final available = recentEnd - recentStart;
+            final count = available > _backlogPacketsPerSlice ? _backlogPacketsPerSlice : available;
+            final result = await _syncRange(
+              connection,
+              wal,
+              startSeq: recentStart,
+              packetCount: count,
+              fallbackAnchor: wal.timerStart,
+              fallbackFramesBefore: (recentStart - sourceReadSeq) * sourceFramesPerRecord,
+              completedRecords: 0,
+              totalRecords: info.unreadPackets,
+              advanceAfterCommit: false,
+            );
+            if (result == null) {
+              throw const RingStorageException(
+                'Recent ring recovery did not complete',
+              );
+            }
+            coverage.add(recentStart, result.nextSeq);
+          }
+        }
+
         final prefixAfterLive = coverage.contiguousEndFrom(info.readSeq);
         if (prefixAfterLive > info.readSeq) {
           final advanced = await connection.advanceRing(prefixAfterLive);
@@ -588,7 +653,7 @@ class RingStorageSyncImpl implements RingStorageSync {
 
         final nextCovered = coverage.firstRangeAtOrAfter(info.readSeq);
         final backlogEnd = nextCovered?.start ?? info.writeSeq;
-        if (backlogEnd > info.readSeq) {
+        if (_deepBacklogPolicy() && backlogEnd > info.readSeq) {
           final available = backlogEnd - info.readSeq;
           final count = available > _backlogPacketsPerSlice ? _backlogPacketsPerSlice : available;
           final result = await _syncRange(
@@ -1251,7 +1316,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       );
     }
     final fps = wal.codec.getFramesPerSecond();
-    final seconds = fps > 0 ? frameCount ~/ fps : 0;
+    final seconds = fps > 0 ? (frameCount + fps - 1) ~/ fps : 0;
 
     final localWal = Wal(
       codec: wal.codec,

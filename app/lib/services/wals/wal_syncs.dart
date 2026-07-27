@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
@@ -71,7 +72,10 @@ class WalSyncs implements IWalSync {
     _sdcardSync = SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
     _storageSync = StorageSyncImpl(listener);
-    _ringSync = RingStorageSyncImpl(listener);
+    _ringSync = RingStorageSyncImpl(
+      listener,
+      deepBacklogPolicy: () => SharedPreferencesUtil().autoSyncOfflineRecordings,
+    );
     _deviceStorageRouter = DeviceStorageRouter(
       bindLegacySdCard: _sdcardSync.setDevice,
       bindMultiFile: _storageSync.setDevice,
