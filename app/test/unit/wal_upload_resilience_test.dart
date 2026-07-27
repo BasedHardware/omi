@@ -92,7 +92,12 @@ void main() {
       listener,
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
           throw uploadFailure;
         },
         fairUseStatusLoader: () async => {'stage': 'none'},
@@ -377,7 +382,12 @@ void main() {
       var uploadAttempts = 0;
       final gate = SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
           uploadAttempts++;
           throw StateError('offline');
         },

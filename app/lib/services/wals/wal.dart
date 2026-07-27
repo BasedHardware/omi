@@ -146,6 +146,11 @@ class Wal {
   /// server conversation id proves they belong to the fresh lane.
   WalUploadIntent? uploadIntent;
 
+  /// This file is the complete, sequence-ordered phone reconstruction of a
+  /// live pendant conversation. The server replaces the realtime preview
+  /// transcript atomically instead of appending duplicate fragments.
+  bool canonicalReplacement;
+
   /// Number of sync retry attempts for this WAL.
   int retryCount;
 
@@ -232,6 +237,7 @@ class Wal {
     this.sourceId,
     this.conversationId,
     this.uploadIntent,
+    this.canonicalReplacement = false,
     this.retryCount = 0,
     this.lastRetryAt = 0,
     this.jobId,
@@ -262,6 +268,7 @@ class Wal {
       sourceId: json['source_id'],
       conversationId: json['conversation_id'],
       uploadIntent: json['upload_intent'] != null ? WalUploadIntent.values.asNameMap()[json['upload_intent']] : null,
+      canonicalReplacement: json['canonical_replacement'] ?? false,
       retryCount: json['retry_count'] ?? 0,
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
@@ -290,6 +297,7 @@ class Wal {
       'source_id': sourceId,
       'conversation_id': conversationId,
       'upload_intent': uploadIntent?.name,
+      'canonical_replacement': canonicalReplacement,
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
       'job_id': jobId,

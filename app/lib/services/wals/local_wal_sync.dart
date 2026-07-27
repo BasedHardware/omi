@@ -4,18 +4,22 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:opus_dart/opus_dart.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
+import 'package:omi/services/wals/conversation_audio_assembler.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/mutex.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 /// Error string the backend's stale guard sets when a job sits queued past
@@ -24,14 +28,16 @@ import 'package:omi/utils/wal_file_manager.dart';
 /// below ('failed' with totalSegments==0) as the durable signal.
 const _kBackendBusyErrorHint = 'background worker likely died';
 const _freshSyncCutoffSeconds = 6 * 60 * 60;
+const _conversationBoundarySeconds = 2 * 60;
+const _captureUploadWalLimit = 2000;
 
-/// One batch is one server-side sync job, and a job must finish inside the
-/// backend's 600s stale guard (backend/database/sync_jobs.py).
-const _syncUploadBatchLimit = 5;
+/// Legacy/historical files per upload batch. A conversation-bound capture uses
+/// [_captureUploadWalLimit] so its immutable recovery units remain one server
+/// transaction instead of racing as many independent jobs.
+const _syncUploadBatchLimit = 20;
 
 typedef WalPersister = Future<bool> Function(List<Wal> wals);
 typedef WalPathResolver = Future<String?> Function(String? pathOrName);
-typedef FreshUploadBatchDelay = Future<void> Function();
 typedef SyncJobStatusFetcher = Future<SyncJobFetch> Function(String jobId);
 
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
@@ -74,6 +80,56 @@ SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) => syncUploadLaneForTime
       hasServerCaptureProof: wal.conversationId != null || wal.uploadIntent == WalUploadIntent.liveContinuity,
     );
 
+bool _isUnboundStorageContinuity(Wal wal) =>
+    wal.uploadIntent == WalUploadIntent.liveContinuity &&
+    wal.originalStorage == WalStorage.sdcard &&
+    wal.conversationId == null;
+
+double _walEndSeconds(Wal wal) {
+  final fps = wal.codec.getFramesPerSecond();
+  final preciseDuration = fps > 0 && wal.totalFrames > 0 ? wal.totalFrames / fps : wal.seconds.toDouble();
+  return wal.timerStart + preciseDuration;
+}
+
+bool _isClosedUnboundCapture(Wal wal, int nowSeconds) =>
+    _isUnboundStorageContinuity(wal) && nowSeconds - _walEndSeconds(wal) >= _conversationBoundarySeconds;
+
+List<Wal> _latestClosedUnboundCapture(List<Wal> ordered, int nowSeconds) {
+  final anchor = ordered.first;
+  final candidates = ordered
+      .where(
+        (wal) =>
+            _isClosedUnboundCapture(wal, nowSeconds) &&
+            wal.device == anchor.device &&
+            wal.codec == anchor.codec &&
+            wal.sampleRate == anchor.sampleRate &&
+            wal.channel == anchor.channel,
+      )
+      .toList()
+    ..sort((a, b) {
+      final timeCompare = b.timerStart.compareTo(a.timerStart);
+      if (timeCompare != 0) return timeCompare;
+      return b.id.compareTo(a.id);
+    });
+
+  final capture = <Wal>[];
+  double? nextStart;
+  for (final wal in candidates) {
+    if (capture.isEmpty) {
+      capture.add(wal);
+      nextStart = wal.timerStart.toDouble();
+      continue;
+    }
+    if (nextStart! - _walEndSeconds(wal) > _conversationBoundarySeconds) {
+      break;
+    }
+    capture.add(wal);
+    nextStart = wal.timerStart.toDouble();
+    if (capture.length == _captureUploadWalLimit) break;
+  }
+  return capture;
+}
+
 @visibleForTesting
 Set<String> oversizedFreshConversationIds(List<Wal> pending, int nowSeconds) {
   final counts = <String, int>{};
@@ -86,7 +142,7 @@ Set<String> oversizedFreshConversationIds(List<Wal> pending, int nowSeconds) {
       );
     }
   }
-  return counts.entries.where((entry) => entry.value > 20).map((entry) => entry.key).toSet();
+  return counts.entries.where((entry) => entry.value > _captureUploadWalLimit).map((entry) => entry.key).toSet();
 }
 
 @visibleForTesting
@@ -100,7 +156,11 @@ List<Wal> nextSyncUploadBatch(
           ? SyncUploadLane.backfill
           : _syncLaneForWal(wal, nowSeconds);
 
-  final ordered = List<Wal>.from(pending)
+  final ordered = pending
+      .where(
+        (wal) => !_isUnboundStorageContinuity(wal) || _isClosedUnboundCapture(wal, nowSeconds),
+      )
+      .toList()
     ..sort((a, b) {
       final laneCompare = effectiveLane(
         a,
@@ -109,14 +169,96 @@ List<Wal> nextSyncUploadBatch(
       return b.timerStart.compareTo(a.timerStart);
     });
   if (ordered.isEmpty) return const [];
+  if (_isUnboundStorageContinuity(ordered.first)) {
+    return _latestClosedUnboundCapture(ordered, nowSeconds);
+  }
   final lane = effectiveLane(ordered.first);
   final conversationId = ordered.first.conversationId;
-  return ordered
+  final canonicalReplacement = ordered.first.canonicalReplacement;
+  final matching = ordered
       .where(
-        (wal) => effectiveLane(wal) == lane && wal.conversationId == conversationId,
+        (wal) =>
+            effectiveLane(wal) == lane &&
+            wal.conversationId == conversationId &&
+            wal.canonicalReplacement == canonicalReplacement,
       )
-      .take(_syncUploadBatchLimit)
       .toList();
+  return matching.take(conversationId == null ? _syncUploadBatchLimit : _captureUploadWalLimit).toList();
+}
+
+({int start, int end})? _ringSourceRange(Wal wal) {
+  final match = RegExp(r'^ring_(\d+)_(\d+)$').firstMatch(wal.sourceId ?? '');
+  if (match == null) return null;
+  final start = int.tryParse(match.group(1)!);
+  final end = int.tryParse(match.group(2)!);
+  if (start == null || end == null || end <= start) return null;
+  return (start: start, end: end);
+}
+
+bool _sameUploadEncoding(Wal left, Wal right) =>
+    left.device == right.device &&
+    left.codec == right.codec &&
+    left.sampleRate == right.sampleRate &&
+    left.channel == right.channel &&
+    left.frameSize == right.frameSize &&
+    left.conversationId == right.conversationId &&
+    left.uploadIntent == right.uploadIntent;
+
+/// Immutable source WALs stay as the acknowledgement/retry records. This
+/// grouping only determines the larger derived artifacts exposed to STT.
+@visibleForTesting
+List<List<Wal>> contiguousWalUploadRuns(
+  List<Wal> wals, {
+  int maxArtifactSeconds = 300,
+}) {
+  final ordered = List<Wal>.from(wals)
+    ..sort((a, b) {
+      final left = _ringSourceRange(a);
+      final right = _ringSourceRange(b);
+      if (left != null && right != null && a.device == b.device) {
+        final sourceCompare = left.start.compareTo(right.start);
+        if (sourceCompare != 0) return sourceCompare;
+      }
+      final timeCompare = a.timerStart.compareTo(b.timerStart);
+      if (timeCompare != 0) return timeCompare;
+      return a.id.compareTo(b.id);
+    });
+
+  final runs = <List<Wal>>[];
+  for (final wal in ordered) {
+    final source = _ringSourceRange(wal);
+    if (runs.isEmpty || source == null) {
+      runs.add([wal]);
+      continue;
+    }
+
+    final run = runs.last;
+    final previous = run.last;
+    final previousSource = _ringSourceRange(previous);
+    final fps = wal.codec.getFramesPerSecond();
+    final runFrames = run.fold<int>(0, (sum, member) => sum + member.totalFrames);
+    final nextDuration = fps > 0 ? (runFrames + wal.totalFrames) / fps : double.infinity;
+    final wallGap = wal.timerStart - _walEndSeconds(previous);
+    final joins = previousSource != null &&
+        previousSource.end == source.start &&
+        _sameUploadEncoding(previous, wal) &&
+        wallGap >= -2 &&
+        wallGap <= 2 &&
+        nextDuration <= maxArtifactSeconds;
+    if (joins) {
+      run.add(wal);
+    } else {
+      runs.add([wal]);
+    }
+  }
+  return runs;
+}
+
+class _PreparedUploadFiles {
+  const _PreparedUploadFiles(this.files, this.temporaryFiles);
+
+  final List<File> files;
+  final List<File> temporaryFiles;
 }
 
 class LocalWalSyncImpl implements LocalWalSync {
@@ -152,11 +294,11 @@ class LocalWalSyncImpl implements LocalWalSync {
   SyncUploadGate get _uploadGate => _uploadGateOverride ?? SyncUploadGate.instance;
   final WalPersister? _walPersisterOverride;
   final WalPathResolver _walPathResolver;
-  final FreshUploadBatchDelay _freshUploadBatchDelay;
+  final OpusSilenceFrameFactory _silenceFrameFactory;
   final SyncJobStatusFetcher _syncJobStatusFetcher;
+  final Mutex _syncMutex = Mutex();
   Future<void>? _freshUploadWake;
   bool _freshUploadWakePending = false;
-  bool _freshUploadWakeNeedsBatchDelay = false;
   String? _freshUploadWakeWalId;
 
   LocalWalSyncImpl(
@@ -164,15 +306,28 @@ class LocalWalSyncImpl implements LocalWalSync {
     SyncUploadGate? uploadGate,
     WalPersister? walPersister,
     WalPathResolver? walPathResolver,
-    FreshUploadBatchDelay? freshUploadBatchDelay,
+    OpusSilenceFrameFactory? silenceFrameFactory,
     SyncJobStatusFetcher? syncJobStatusFetcher,
   })  : _uploadGateOverride = uploadGate,
         _walPersisterOverride = walPersister,
         _walPathResolver = walPathResolver ?? Wal.getFilePath,
-        _freshUploadBatchDelay = freshUploadBatchDelay ?? _defaultFreshUploadBatchDelay,
+        _silenceFrameFactory = silenceFrameFactory ?? _encodeOpusSilenceFrame,
         _syncJobStatusFetcher = syncJobStatusFetcher ?? fetchSyncJobStatus;
 
-  static Future<void> _defaultFreshUploadBatchDelay() => Future<void>.delayed(const Duration(seconds: 5));
+  static List<int> _encodeOpusSilenceFrame(BleAudioCodec codec) {
+    final encoder = SimpleOpusEncoder(
+      sampleRate: 16000,
+      channels: 1,
+      application: Application.voip,
+    );
+    try {
+      return encoder.encode(
+        input: Int16List(codec.getFrameSize()),
+      );
+    } finally {
+      encoder.destroy();
+    }
+  }
 
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
@@ -204,7 +359,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
       Logger.debug("LocalWalSync: WAL ${wal.id} already durably registered");
       await _deleteDuplicateExternalFile(existing, wal);
-      if (scheduleUpload && existing.status == WalStatus.miss) {
+      if (scheduleUpload && existing.status == WalStatus.miss && _mayAutoUploadExternalWal(existing)) {
         _scheduleFreshUpload(existing);
       }
       return ExternalWalRegistration.alreadyRegistered;
@@ -248,7 +403,9 @@ class LocalWalSyncImpl implements LocalWalSync {
     Logger.debug(
       "LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)",
     );
-    if (scheduleUpload && _syncLaneForWal(wal, DateTime.now().millisecondsSinceEpoch ~/ 1000) == SyncUploadLane.fresh) {
+    if (scheduleUpload &&
+        _mayAutoUploadExternalWal(wal) &&
+        _syncLaneForWal(wal, DateTime.now().millisecondsSinceEpoch ~/ 1000) == SyncUploadLane.fresh) {
       // Registration is the durability boundary used by device-storage sync:
       // once the manifest is committed, the device may advance its read
       // pointer. Cloud latency must not hold that acknowledgement hostage.
@@ -257,27 +414,26 @@ class LocalWalSyncImpl implements LocalWalSync {
     return ExternalWalRegistration.added;
   }
 
+  bool _mayAutoUploadExternalWal(Wal wal) {
+    // Ring-tail fallback ranges are transport recovery units, not independent
+    // conversations. Uploading them before the live session receives its
+    // server conversation id creates parallel jobs of 1–3 second utterances;
+    // those jobs race conversation assignment and repeatedly reprocess
+    // summaries. Keep the bytes durable on the phone until
+    // stampConversationId() binds the complete session to its authoritative
+    // backend conversation.
+    return wal.uploadIntent != WalUploadIntent.liveContinuity || wal.conversationId != null;
+  }
+
   void _scheduleFreshUpload(Wal wal) {
     _freshUploadWakePending = true;
     _freshUploadWakeWalId = wal.id;
-    if (_shouldBatchRecoveredLiveWal(wal)) {
-      _freshUploadWakeNeedsBatchDelay = true;
-    }
     if (_freshUploadWake != null) return;
     _startFreshUploadWake();
   }
 
-  bool _shouldBatchRecoveredLiveWal(Wal wal) =>
-      wal.uploadIntent == WalUploadIntent.liveContinuity &&
-      wal.originalStorage == WalStorage.sdcard &&
-      wal.conversationId == null;
-
   void _startFreshUploadWake() {
-    final needsBatchDelay = _freshUploadWakeNeedsBatchDelay;
-    _freshUploadWakeNeedsBatchDelay = false;
-    final wake = _drainFreshUploadWake(
-      needsBatchDelay: needsBatchDelay,
-    );
+    final wake = _drainFreshUploadWakes();
     _freshUploadWake = wake;
     unawaited(
       wake.whenComplete(() {
@@ -290,26 +446,20 @@ class LocalWalSyncImpl implements LocalWalSync {
     );
   }
 
-  Future<void> _drainFreshUploadWake({
-    required bool needsBatchDelay,
-  }) async {
-    if (needsBatchDelay) {
-      // Storage-authoritative live fallback arrives as independently durable
-      // 1–3 second ranges. Give adjacent ranges a short collection window so
-      // one backend job can run VAD, chronological assignment, and
-      // conversation reprocessing over the whole passage. The live socket is
-      // unaffected; this applies only when it did not own the frames.
-      await _freshUploadBatchDelay();
-    }
-    _freshUploadWakePending = false;
-    final walId = _freshUploadWakeWalId;
-    try {
-      await syncFreshOnly();
-    } catch (error) {
-      Logger.debug(
-        'LocalWalSync: fresh upload wake failed for $walId: $error',
-      );
-    }
+  Future<void> _drainFreshUploadWakes() async {
+    do {
+      _freshUploadWakePending = false;
+      final walId = _freshUploadWakeWalId;
+      try {
+        // Device-storage recovery persists one WAL at a time. Coalesce wakes
+        // so a fast BLE drain cannot start duplicate upload loops.
+        await syncFreshOnly();
+      } catch (error) {
+        Logger.debug(
+          'LocalWalSync: fresh upload wake failed for $walId: $error',
+        );
+      }
+    } while (_freshUploadWakePending);
   }
 
   Future<bool> _hasIdenticalFile(Wal existing, Wal candidate) async {
@@ -334,6 +484,72 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (candidatePath == null) return;
     final candidateFile = File(candidatePath);
     if (await candidateFile.exists()) await candidateFile.delete();
+  }
+
+  Future<_PreparedUploadFiles> _prepareUploadFiles(
+    List<Wal> wals,
+    List<File> sourceFiles,
+  ) async {
+    final filesByWal = Map<Wal, File>.identity();
+    for (var index = 0; index < wals.length; index++) {
+      filesByWal[wals[index]] = sourceFiles[index];
+    }
+
+    final uploadFiles = <File>[];
+    final temporaryFiles = <File>[];
+    for (final run in contiguousWalUploadRuns(wals)) {
+      if (run.length == 1) {
+        uploadFiles.add(filesByWal[run.single]!);
+        continue;
+      }
+
+      final first = run.first;
+      final firstRange = _ringSourceRange(first)!;
+      final lastRange = _ringSourceRange(run.last)!;
+      final filename = first.getFileNameByTimeStarts(
+        first.timerStart,
+        sourceId: 'assembled_${firstRange.start}_${lastRange.end}_$pid',
+      );
+      final artifact = File('${Directory.systemTemp.path}/$filename');
+      final partial = File('${artifact.path}.partial');
+      if (await artifact.exists()) await artifact.delete();
+      if (await partial.exists()) await partial.delete();
+      final sink = partial.openWrite();
+      var sinkClosed = false;
+      try {
+        for (final wal in run) {
+          await sink.addStream(filesByWal[wal]!.openRead());
+        }
+        await sink.flush();
+        await sink.close();
+        sinkClosed = true;
+        await partial.rename(artifact.path);
+      } catch (_) {
+        if (!sinkClosed) {
+          try {
+            await sink.close();
+          } catch (_) {
+            // Preserve the assembly failure; cleanup is best-effort.
+          }
+        }
+        if (await partial.exists()) await partial.delete();
+        if (await artifact.exists()) await artifact.delete();
+        rethrow;
+      }
+      uploadFiles.add(artifact);
+      temporaryFiles.add(artifact);
+    }
+    return _PreparedUploadFiles(uploadFiles, temporaryFiles);
+  }
+
+  Future<void> _deleteTemporaryUploadFiles(List<File> files) async {
+    for (final file in files) {
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (error) {
+        Logger.debug('LocalWalSync: failed to delete derived upload artifact: $error');
+      }
+    }
   }
 
   @override
@@ -697,28 +913,177 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   /// Stamp all session WALs with the given conversationId and persist to disk.
-  /// This makes WAL→conversation linkage survive app kill.
+  /// Ring-backed live ranges are compacted into one canonical recording before
+  /// upload. This makes WAL→conversation linkage survive app kill without
+  /// retaining or submitting thousands of one-second files.
   Future<void> stampConversationId(
     int sessionStartSeconds,
     String conversationId,
   ) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     int stamped = 0;
+    final ringSources = <Wal>[];
     for (final wal in _wals) {
-      if (wal.status == WalStatus.miss &&
-          wal.timerStart >= sessionStartSeconds &&
-          wal.timerStart <= now &&
-          wal.conversationId == null) {
+      final inSession = wal.timerStart >= sessionStartSeconds && wal.timerStart <= now;
+      final ringContinuity = wal.uploadIntent == WalUploadIntent.liveContinuity &&
+          wal.originalStorage == WalStorage.sdcard &&
+          RingProtocol.parseSourceRange(wal.sourceId) != null;
+      if (inSession &&
+          wal.conversationId == null &&
+          (wal.status == WalStatus.miss || (ringContinuity && wal.status == WalStatus.synced))) {
         wal.conversationId = conversationId;
         stamped++;
       }
+      if (inSession &&
+          ringContinuity &&
+          wal.conversationId == conversationId &&
+          (wal.status == WalStatus.miss || wal.status == WalStatus.synced)) {
+        ringSources.add(wal);
+      }
     }
-    if (stamped > 0) {
-      await _saveWalsToFile();
+    if (stamped > 0 || ringSources.isNotEmpty) {
+      try {
+        await _compactRingConversation(
+          conversationId,
+          ringSources,
+        );
+      } catch (error) {
+        // Every immutable source remains in place. Persist its conversation
+        // owner and fall back to the gap-only uploader instead of risking
+        // either data loss or an unbounded retry loop.
+        await _saveWalsToFile();
+        Logger.debug(
+          'stampConversationId: canonical assembly failed for $conversationId: $error',
+        );
+      }
       Logger.debug(
         'stampConversationId: stamped $stamped WALs with conversation $conversationId',
       );
+      Wal? uploadWakeWal;
+      for (final wal in _wals) {
+        if (wal.status == WalStatus.miss && wal.conversationId == conversationId) {
+          uploadWakeWal = wal;
+          break;
+        }
+      }
+      if (uploadWakeWal != null) {
+        // Active-conversation repair is independent of opt-in historical
+        // sync. The exact server owner is known, so wake one serialized drain.
+        _scheduleFreshUpload(uploadWakeWal);
+      }
     }
+  }
+
+  Future<void> _compactRingConversation(
+    String conversationId,
+    List<Wal> sourceWals,
+  ) async {
+    if (sourceWals.isEmpty) {
+      await _saveWalsToFile();
+      return;
+    }
+
+    final byDevice = <String, List<Wal>>{};
+    for (final wal in sourceWals) {
+      byDevice.putIfAbsent(wal.device, () => <Wal>[]).add(wal);
+    }
+    if (byDevice.length != 1) {
+      throw StateError('Canonical assembly requires one pendant per conversation');
+    }
+
+    final canonicalWals = <Wal>[];
+    final canonicalFiles = <File>[];
+    final compactedSources = <Wal>{};
+    try {
+      for (final entry in byDevice.entries) {
+        final parts = <ConversationAudioPart>[];
+        for (final wal in entry.value) {
+          final path = await _walPathResolver(wal.filePath);
+          if (path == null) {
+            throw StateError('Canonical source path is unavailable');
+          }
+          final file = File(path);
+          if (!await file.exists()) {
+            throw StateError('Canonical source file is unavailable');
+          }
+          parts.add(ConversationAudioPart(wal: wal, file: file));
+        }
+
+        final first = entry.value.reduce(
+          (left, right) {
+            final leftRange = RingProtocol.parseSourceRange(left.sourceId)!;
+            final rightRange = RingProtocol.parseSourceRange(right.sourceId)!;
+            return leftRange.start <= rightRange.start ? left : right;
+          },
+        );
+        final filename = first.getFileNameByTimeStarts(
+          first.timerStart,
+          sourceId: 'canonical_${conversationId}_$pid',
+        );
+        final firstPath = await _walPathResolver(first.filePath);
+        if (firstPath == null) {
+          throw StateError('Canonical destination directory is unavailable');
+        }
+        final destination = File('${File(firstPath).parent.path}/$filename');
+        final assembly = await assembleConversationAudio(
+          parts: parts,
+          destination: destination,
+          silenceFrameFactory: _silenceFrameFactory,
+          conversationBoundarySeconds: _conversationBoundarySeconds,
+        );
+        canonicalFiles.add(assembly.file);
+        compactedSources.addAll(assembly.sourceWals);
+
+        final fps = first.codec.getFramesPerSecond();
+        canonicalWals.add(
+          Wal(
+            timerStart: assembly.timerStart,
+            codec: first.codec,
+            channel: first.channel,
+            sampleRate: first.sampleRate,
+            seconds: fps > 0 ? (assembly.totalFrames + fps - 1) ~/ fps : 0,
+            totalFrames: assembly.totalFrames,
+            status: assembly.hadLiveGap ? WalStatus.miss : WalStatus.synced,
+            storage: WalStorage.disk,
+            originalStorage: WalStorage.sdcard,
+            filePath: assembly.file.path.split('/').last,
+            device: first.device,
+            deviceModel: first.deviceModel,
+            sourceId: 'canonical_${conversationId}_$pid',
+            conversationId: conversationId,
+            uploadIntent: WalUploadIntent.liveContinuity,
+            canonicalReplacement: assembly.hadLiveGap,
+          ),
+        );
+      }
+
+      // Assembly performs asynchronous disk reads. Preserve WALs registered by
+      // the BLE drain while those reads were in flight; replacing the original
+      // snapshot here could orphan already-acknowledged pendant records.
+      _wals = [
+        ..._wals.where((wal) => !compactedSources.contains(wal)),
+        ...canonicalWals,
+      ];
+      await _saveWalsToFile();
+    } catch (_) {
+      for (final file in canonicalFiles) {
+        if (await file.exists()) await file.delete();
+      }
+      rethrow;
+    }
+
+    for (final source in compactedSources) {
+      final sourcePath = await _walPathResolver(source.filePath);
+      if (sourcePath == null) continue;
+      final sourceFile = File(sourcePath);
+      if (canonicalFiles.any((file) => file.path == sourceFile.path)) continue;
+      try {
+        if (await sourceFile.exists()) await sourceFile.delete();
+      } catch (error) {
+        Logger.debug('Canonical assembly could not delete compacted source: $error');
+      }
+    }
+    listener.onWalUpdated();
   }
 
   /// Returns WALs that have a conversationId but haven't been synced yet.
@@ -819,6 +1184,21 @@ class LocalWalSyncImpl implements LocalWalSync {
       _syncAll(progress: progress, includeBackfill: false);
 
   Future<SyncLocalFilesResponse?> _syncAll({
+    IWalSyncProgressListener? progress,
+    required bool includeBackfill,
+  }) async {
+    await _syncMutex.acquire();
+    try {
+      return await _syncAllOwned(
+        progress: progress,
+        includeBackfill: includeBackfill,
+      );
+    } finally {
+      _syncMutex.release();
+    }
+  }
+
+  Future<SyncLocalFilesResponse?> _syncAllOwned({
     IWalSyncProgressListener? progress,
     required bool includeBackfill,
   }) async {
@@ -991,15 +1371,22 @@ class LocalWalSyncImpl implements LocalWalSync {
       );
 
       listener.onWalUpdated();
+      _PreparedUploadFiles? preparedUpload;
       try {
+        preparedUpload = await _prepareUploadFiles(batchWals, files);
+        DebugLogManager.logEvent('local_upload_prepared', {
+          'sourceWalCount': batchWals.length,
+          'uploadArtifactCount': preparedUpload.files.length,
+        });
         // Upload only — return as soon as the server acknowledges. We do NOT
         // wait for server-side processing here; the reconciler resolves the
         // job_id later. Only WALs that actually became files (batchWals) are
         // mutated — corrupted ones already short-circuited above.
         final result = await _uploadGate.upload(
-          files,
+          preparedUpload.files,
           lane: batchLane,
           conversationId: batchWals.first.conversationId,
+          replaceTranscript: batchWals.first.canonicalReplacement,
         );
 
         if (result.completed != null) {
@@ -1103,6 +1490,10 @@ class LocalWalSyncImpl implements LocalWalSync {
           wal.isSyncing = false;
           wal.syncStartedAt = null;
           wal.syncEtaSeconds = null;
+        }
+      } finally {
+        if (preparedUpload != null) {
+          await _deleteTemporaryUploadFiles(preparedUpload.temporaryFiles);
         }
       }
 

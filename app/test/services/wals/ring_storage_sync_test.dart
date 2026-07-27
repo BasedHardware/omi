@@ -229,6 +229,29 @@ void main() {
     await session!.cancel();
   });
 
+  test('live cursor catches up sequentially instead of skipping records produced during a read', () async {
+    final connection = _FakeRingConnection(
+      readSeq: 100,
+      writeSeq: 120,
+      growWriteSeqAfterFirstReadBy: 30,
+    );
+    final local = localSync();
+    final sync = ringSync(
+      connection,
+      local,
+      deepBacklogEnabled: false,
+    );
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => true);
+
+    await connection.secondRead.future.timeout(const Duration(seconds: 3));
+    expect(connection.reads[0], (start: 100, count: 20));
+    expect(connection.reads[1], (start: 120, count: 30));
+    expect(connection.reads[1].start, connection.reads[0].start + connection.reads[0].count);
+
+    await session!.cancel();
+  });
+
   test('interrupted live-head read leaves backlog cursor untouched', () async {
     final timestamps = {for (var seq = 0; seq < 1000; seq++) seq: _FakeRingConnection.baseTimestamp + 1000};
     final connection = _FakeRingConnection(
@@ -601,7 +624,8 @@ class _FakeRingConnection implements DeviceConnection {
   static const int baseTimestamp = 1710000000;
 
   int readSeq;
-  final int writeSeq;
+  int writeSeq;
+  final int growWriteSeqAfterFirstReadBy;
   final int? truncateStartSeq;
   final bool corruptCrc;
   final bool failAdvance;
@@ -619,6 +643,7 @@ class _FakeRingConnection implements DeviceConnection {
   _FakeRingConnection({
     required this.readSeq,
     required this.writeSeq,
+    this.growWriteSeqAfterFirstReadBy = 0,
     this.truncateStartSeq,
     this.corruptCrc = false,
     this.failAdvance = false,
@@ -646,6 +671,9 @@ class _FakeRingConnection implements DeviceConnection {
   Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
     final count = packetCount!;
     reads.add((start: startSeq, count: count));
+    if (reads.length == 1 && growWriteSeqAfterFirstReadBy > 0) {
+      writeSeq += growWriteSeqAfterFirstReadBy;
+    }
     if (reads.length == 2 && !secondRead.isCompleted) secondRead.complete();
     if (reads.length == 3 && !thirdRead.isCompleted) thirdRead.complete();
     scheduleMicrotask(() {

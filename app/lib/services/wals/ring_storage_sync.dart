@@ -595,7 +595,13 @@ class RingStorageSyncImpl implements RingStorageSync {
         final livePackets = _livePacketsPerRead(codec);
         final desiredLiveStart =
             info.writeSeq - info.readSeq > livePackets ? info.writeSeq - livePackets : info.readSeq;
-        var liveStart = liveCursor != null && liveCursor > desiredLiveStart ? liveCursor : desiredLiveStart;
+        // Bootstrap near the live head once, then preserve sequence order.
+        // Re-snapping to `writeSeq - livePackets` on every poll skipped the
+        // records produced while the previous BLE transaction was in flight.
+        // Those holes became alternating 1–3 second fallback WALs and separate
+        // cloud jobs. A growing read catches up in one bounded transaction;
+        // it must never manufacture a new hole merely to shave latency.
+        var liveStart = liveCursor ?? desiredLiveStart;
         liveStart = coverage.firstUncovered(liveStart, info.writeSeq);
         final liveCount = info.writeSeq - liveStart;
 
