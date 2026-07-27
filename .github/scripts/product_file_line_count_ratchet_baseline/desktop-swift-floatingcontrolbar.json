@@ -1,10 +1,9 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2375,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2638,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2586,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4829,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2584,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift": 1515,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 1536,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1639
   },
@@ -13,9 +12,8 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "The Second Brain onboarding, reach-error, and notch-moment UI keeps the hover menu agent-only and routes idle notch taps through main chat.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Second Brain continuous-chat routing shares window geometry with agent-only hover sizing and canonical idle-notch chat ownership.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "DEBUG owner-boundary tests need a capture-free effect-handler install seam; shared ensureAutomationBarConfigured() removes duplicated automation setup while adding that seam (BasedHardware/omi#10499).",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift": "Pairs each provider close with its bounded active-turn outcome and immediate recovery decision for release-health analysis; the input-window open is now forwarded so a warm-idle background-agent completion is retried beside that close handling; telemetry and delivery only, no lifecycle change (#10425).",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Adds bounded realtime mint-failure outcome correlation and close-resolution telemetry so release health distinguishes started recovery from exhaustion; telemetry-only, no lifecycle change (#10425).",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers; sendBackgroundAgentContext now confirms the provider send before returning true (exactly-once: no ack before delivery) and the session emits hubDidOpenInputWindow so a warm-idle completion is retried — both must live beside the file-private send/turn machinery."
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers; sendBackgroundAgentContext now confirms the provider send before returning true (exactly-once: no ack before delivery) and the session emits hubDidOpenInputWindow so a warm-idle completion is retried \u2014 both must live beside the file-private send/turn machinery."
   },
   "threshold": 1500
 }
