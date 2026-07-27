@@ -1,0 +1,23 @@
+integrations/omi-even/bridge/tests/test_server.py
+  s_e939211e79c9f1::t_e79c7f5e23939d 1-1015
+integrations/omi-even/bridge/omi_auth.py
+  s_e939211e79c9f1::t_a1d213da07488f 120-124
+integrations/omi-even/bridge/tests/test_omi_auth.py
+  s_e939211e79c9f1::t_a3058cc717ff2d 1-452
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "00d230760d896a3f128efa0b82546651459448e0",
+  "prompts": {},
+  "sessions": {
+    "s_e939211e79c9f1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7063973-7aff-42e3-a630-daf5ea69dbc0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
