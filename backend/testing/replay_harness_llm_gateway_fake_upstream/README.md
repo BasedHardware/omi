@@ -18,7 +18,7 @@ routing remain unchanged outside this test process.
 The fake upstream proves only that:
 
 1. the real provider adapter uses the expected chat-completions path;
-2. a routed gateway request completes exactly one bounded local round trip;
+2. a routed gateway request completes exactly one proxy-isolated, bounded local round trip;
 3. gateway and upstream event ordering remains stable; and
 4. an incoming request cannot choose or redirect the upstream target.
 

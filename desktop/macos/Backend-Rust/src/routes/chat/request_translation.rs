@@ -58,6 +58,77 @@ const WEB_SEARCH_MAX_USES: u32 = 5;
 /// Anthropic web search pricing: $10 per 1,000 searches.
 const WEB_SEARCH_COST_PER_REQUEST: f64 = 10.0 / 1_000.0;
 
+// The agent runtime owns positive public-web routing. The gateway remains the
+// authority that prevents an explicitly private or no-web turn from receiving
+// the external server tool, including after a client tool result is replayed.
+const EXPLICIT_WEB_REQUESTS: &[&str] = &[
+    "search the web",
+    "search web",
+    "search the internet",
+    "search online",
+    "look it up online",
+    "look this up online",
+    "look that up online",
+    "find it online",
+    "find this online",
+    "find that online",
+    "google it",
+    "google this",
+    "google that",
+    "browse the web",
+    "web search",
+    "internet search",
+];
+const EXPLICIT_WEB_PROHIBITIONS: &[&str] = &[
+    "don't call web search",
+    "do not call web search",
+    "don't call the web search",
+    "do not call the web search",
+    "don't call internet search",
+    "do not call internet search",
+    "don't call the internet search",
+    "do not call the internet search",
+    "don't use web search",
+    "do not use web search",
+    "don't use the web search",
+    "do not use the web search",
+    "don't use internet search",
+    "do not use internet search",
+    "don't use the internet search",
+    "do not use the internet search",
+    "don't search the web",
+    "do not search the web",
+    "don't search the internet",
+    "do not search the internet",
+    "without web search",
+];
+const EXPLICIT_PRIVATE_CONTEXT: &[&str] = &[
+    "my conversations",
+    "our conversations",
+    "my memories",
+    "your memory of me",
+    "my screen history",
+    "my screen activity",
+    "my calendar",
+    "your calendar",
+    "my email",
+    "your email",
+    "my files",
+    "your files",
+    "my tasks",
+    "your tasks",
+    "my action items",
+    "my notes",
+    "your notes",
+    "what did i say",
+    "what have i said",
+    "what did i do",
+    "when did i",
+    "what was i doing",
+    "what do you remember about me",
+];
+const CURRENT_USER_MESSAGE_DELIMITER: &str = "\n# User Message\n";
+
 fn web_search_tool_def() -> AnthropicToolDef {
     AnthropicToolDef::Server(json!({
         "type": WEB_SEARCH_TOOL_TYPE,
@@ -228,16 +299,16 @@ pub(super) fn translate_request_inner(
         }
     }
 
-    // Web search is a normal tool the model chooses to use, not a keyword-routed
-    // pre-decision. The desktop system prompt already states when public web
-    // search is appropriate, so expose the server-side tool on every supported
-    // agentic turn and let the model select it with its normal tool choice.
-    // This keeps public-web turns on the incremental streaming path instead of
-    // buffering an entire server-tool continuation before the client sees a byte.
-    // Haiku is excluded because it does not support this web-search tool.
+    // Web search is a normal tool on supported public agentic turns, keeping
+    // streaming incremental rather than pre-routing into a buffered path. The
+    // current user instruction is still a hard privacy boundary: an explicit
+    // private or no-web turn must not receive this external server tool, even
+    // when this request resumes after a client tool result.
     let web_search_supported = enable_web_search && !upstream_model.starts_with("claude-haiku");
     let client_tools = req.tools.as_deref().unwrap_or(&[]);
-    let inject_web_search = web_search_supported && !client_tools.is_empty();
+    let public_web_prohibited = public_web_is_prohibited(&req.messages);
+    let inject_web_search =
+        web_search_supported && !public_web_prohibited && !client_tools.is_empty();
     let anthropic_tools = if client_tools.is_empty() && !inject_web_search {
         req.tools.as_ref().map(|_| Vec::new())
     } else {
@@ -262,6 +333,7 @@ pub(super) fn translate_request_inner(
     tracing::info!(
         event = "retrieval_policy",
         web_search_exposed = inject_web_search,
+        public_web_prohibited,
         "chat_retrieval_policy"
     );
 
@@ -571,6 +643,65 @@ pub(super) fn extract_text_content(content: &Option<serde_json::Value>) -> Strin
     }
 }
 
+fn public_web_is_prohibited(messages: &[ChatMessage]) -> bool {
+    // A tool-result continuation ends in `tool`, but must retain the privacy
+    // policy selected by the fresh user instruction that began the turn.
+    let Some(latest_user) = messages.iter().rev().find(|message| message.role == "user") else {
+        return false;
+    };
+    let rendered_prompt = extract_text_content(&latest_user.content);
+    let instruction = rendered_prompt
+        .rsplit_once(CURRENT_USER_MESSAGE_DELIMITER)
+        .map_or(rendered_prompt.as_str(), |(_, current)| current);
+    let instruction = strip_public_web_routing_instruction(instruction);
+    let normalized = normalize_policy_text(instruction);
+    if normalized.is_empty() {
+        return false;
+    }
+
+    let explicitly_mentions_web = contains_policy_phrase(&normalized, EXPLICIT_WEB_REQUESTS);
+    let explicit_private_context = contains_policy_phrase(&normalized, EXPLICIT_PRIVATE_CONTEXT);
+    (explicitly_mentions_web && explicitly_prohibits_public_web(&normalized))
+        || (explicit_private_context && !explicitly_mentions_web)
+}
+
+fn strip_public_web_routing_instruction(text: &str) -> &str {
+    const OPEN: &str = "<omi_retrieval_policy>";
+    const CLOSE: &str = "</omi_retrieval_policy>";
+
+    let trimmed = text.trim_start();
+    if !trimmed.starts_with(OPEN) {
+        return text;
+    }
+    trimmed
+        .split_once(CLOSE)
+        .map_or(text, |(_, remainder)| remainder.trim_start())
+}
+
+fn normalize_policy_text(text: &str) -> String {
+    text.trim()
+        .trim_matches(|ch: char| !ch.is_alphanumeric())
+        .replace(['\u{2018}', '\u{2019}'], "'")
+        .to_ascii_lowercase()
+}
+
+fn contains_policy_phrase(text: &str, phrases: &[&str]) -> bool {
+    phrases.iter().any(|phrase| text.contains(phrase))
+}
+
+fn explicitly_prohibits_public_web(text: &str) -> bool {
+    EXPLICIT_WEB_PROHIBITIONS.iter().any(|phrase| {
+        text.match_indices(phrase).any(|(start, _)| {
+            let suffix = text[start + phrase.len()..].trim_start();
+            !["result", "results"].iter().any(|noun| {
+                suffix
+                    .strip_prefix(noun)
+                    .is_some_and(|tail| tail.chars().next().is_none_or(|ch| !ch.is_alphanumeric()))
+            })
+        })
+    })
+}
+
 // ── Anthropic non-streaming response → OpenAI format ────────────────────────
 
 pub(super) fn translate_response(
@@ -663,7 +794,9 @@ pub(super) fn should_record_web_search_fallback(
     req: &ChatCompletionRequest,
     web_search_supported: bool,
 ) -> bool {
-    !web_search_supported && req.tools.as_ref().is_some_and(|tools| !tools.is_empty())
+    !web_search_supported
+        && !public_web_is_prohibited(&req.messages)
+        && req.tools.as_ref().is_some_and(|tools| !tools.is_empty())
 }
 
 pub(super) fn server_tool_available_from(tools: &Option<Vec<AnthropicToolDef>>) -> &'static str {

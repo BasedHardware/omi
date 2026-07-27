@@ -396,6 +396,7 @@ struct ChatPage: View {
       onOpenAgentRef: { ref, completion in
         FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
       },
+      contentColumnWidth: 760,
       welcomeContent: {
         if let opener = chatProvider.onboardingOpener {
           OnboardingOpenerView(opener: opener, chatProvider: chatProvider)

@@ -9,6 +9,7 @@
     "test:sync-cloud-tasks-stack:emulator": "backend/testing/sync_cloud_tasks_stack/run.sh",
     "test:replay-harness-phase0a:emulator": "backend/testing/replay_harness_phase0a/run.sh",
     "test:replay-stt-wire-fidelity": "backend/testing/replay_harness_stt_wire_fidelity/run.sh",
+    "test:replay-lc3-frame-timing": "backend/testing/replay_harness_lc3_frame_timing/run.sh",
     "test:replay-llm-fake-upstream": "backend/testing/replay_harness_llm_gateway_fake_upstream/run.sh",
     "test:replay-llm-streaming-wire-fidelity": "backend/testing/replay_harness_llm_streaming_wire_fidelity/run.sh",
     "test:memory-vector-repair-outbox:emulator": "firebase emulators:exec --only firestore --project demo-memory \"python3 backend/scripts/vector_repair_outbox_emulator_test.py\"",
