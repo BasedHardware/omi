@@ -94,6 +94,9 @@ struct SuggestionResult: Codable, AssistantResult, Sendable {
   let suggestion: ExtractedSuggestion?
   let contextSummary: String
   let currentActivity: String
+  /// Opaque, in-memory-only evaluation correlation. This intentionally stays
+  /// out of the model JSON and `toDictionary()` product payload.
+  var telemetryIdentity: SuggestionAssistantTelemetry.Identity?
 
   enum CodingKeys: String, CodingKey {
     case hasSuggestion = "has_suggestion"

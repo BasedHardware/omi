@@ -45,7 +45,7 @@ extension SettingsContentView {
                 .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: liveSuggestionsEnabled) { _, newValue in
-                  SuggestionAssistantSettings.shared.isEnabled = newValue
+                  SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
                 }
             }
 

@@ -37,6 +37,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   // MARK: - Properties
 
   private let geminiClient: GeminiClient
+  private let telemetryModel: SuggestionAssistantTelemetry.Model
 
   /// How long the user must stay in a context before it is worth spending on. People
   /// switch apps hundreds of times a day and almost none of those are a request for
@@ -77,11 +78,13 @@ actor SuggestionAssistant: ProactiveAssistant {
   // MARK: - Initialization
 
   init(apiKey: String? = nil) throws {
+    let model = ModelQoS.Gemini.suggestions
     self.geminiClient = try GeminiClient(
       apiKey: apiKey,
-      model: ModelQoS.Gemini.suggestions,
+      model: model,
       fallbackModel: "gemini-2.5-flash"
     )
+    telemetryModel = SuggestionAssistantTelemetry.Model(configuredModel: model)
   }
 
   // MARK: - Trigger
@@ -125,6 +128,9 @@ actor SuggestionAssistant: ProactiveAssistant {
     )
 
     guard decision.allowsEvaluation else {
+      await MainActor.run {
+        AnalyticsManager.shared.suggestionAssistantGateOutcome(.init(decision))
+      }
       // Dwell and cooldown are "not yet", so the pending context survives to be retried on
       // a later frame. Everything else is "not at all" and is consumed here, otherwise a
       // blocked context re-checks on every capture tick.
@@ -142,10 +148,16 @@ actor SuggestionAssistant: ProactiveAssistant {
     let grounding = await assembleGrounding(for: frame)
     guard !grounding.isEmpty else {
       clearPendingContext()
+      await MainActor.run {
+        AnalyticsManager.shared.suggestionAssistantGateOutcome(.noGrounding)
+      }
       log("Suggestion: skipped (skippedNoGrounding) app=\(frame.appName)")
       return nil
     }
 
+    await MainActor.run {
+      AnalyticsManager.shared.suggestionAssistantGateOutcome(.eligible)
+    }
     clearPendingContext()
     lastEvaluationAt = now
     dailyBudget.recordEvaluation(now: now)
@@ -269,17 +281,52 @@ actor SuggestionAssistant: ProactiveAssistant {
   private func evaluate(frame: CapturedFrame, grounding: SuggestionGrounding) async throws -> SuggestionResult? {
     let prompt = buildPrompt(frame: frame, grounding: grounding)
     let systemPrompt = await systemPrompt
-
     let preview = SuggestionFramePreview.downscaledJPEG(from: frame.jpegData)
-    let response = try await geminiClient.sendRequest(
-      prompt: prompt,
-      imageData: preview,
-      systemPrompt: systemPrompt,
-      responseSchema: Self.responseSchema
+    let identity = SuggestionAssistantTelemetry.Identity()
+    let shape = SuggestionAssistantTelemetry.EvaluationShape(
+      model: telemetryModel,
+      previewData: preview,
+      grounding: grounding
     )
+    await MainActor.run {
+      AnalyticsManager.shared.suggestionAssistantEvaluationStarted(identity: identity, shape: shape)
+    }
 
-    guard let data = response.data(using: .utf8) else { return nil }
-    return try JSONDecoder().decode(SuggestionResult.self, from: data)
+    let startedAt = Date()
+    do {
+      let response = try await geminiClient.sendRequest(
+        prompt: prompt,
+        imageData: preview,
+        systemPrompt: systemPrompt,
+        responseSchema: Self.responseSchema
+      )
+      guard let data = response.data(using: .utf8) else {
+        throw SuggestionEvaluationError.invalidResponse
+      }
+
+      var result = try JSONDecoder().decode(SuggestionResult.self, from: data)
+      let producedSuggestion = result.hasSuggestion && result.suggestion != nil
+      let completedIdentity = producedSuggestion ? identity.withSuggestion() : identity
+      result.telemetryIdentity = completedIdentity
+      await MainActor.run {
+        AnalyticsManager.shared.suggestionAssistantEvaluationCompleted(
+          identity: completedIdentity,
+          shape: shape,
+          latency: Date().timeIntervalSince(startedAt),
+          producedSuggestion: producedSuggestion
+        )
+      }
+      return result
+    } catch {
+      await MainActor.run {
+        AnalyticsManager.shared.suggestionAssistantEvaluationFailed(
+          identity: identity,
+          shape: shape,
+          latency: Date().timeIntervalSince(startedAt)
+        )
+      }
+      throw error
+    }
   }
 
   private func buildPrompt(frame: CapturedFrame, grounding: SuggestionGrounding) -> String {
@@ -343,15 +390,20 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   func handleResult(_ result: AssistantResult, sendEvent: @escaping @Sendable (String, [String: Any]) -> Void) async {
     guard let result = result as? SuggestionResult else { return }
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
-
     guard result.hasSuggestion, let suggestion = result.suggestion else {
       log("Suggestion: nothing worth saying — \(result.currentActivity)")
+      return
+    }
+    let telemetryIdentity = SuggestionAssistantTelemetry.NotificationIdentity(result.telemetryIdentity)
+
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else {
+      await emitDeliveryOutcome(.rejectedOwner, identity: telemetryIdentity)
       return
     }
 
     let threshold = await minConfidence
     guard suggestion.confidence >= threshold else {
+      await emitDeliveryOutcome(.filteredLowConfidence, identity: telemetryIdentity)
       log(
         "Suggestion: below bar [\(Int(suggestion.confidence * 100))% < \(Int(threshold * 100))%] "
           + "\"\(suggestion.suggestion)\""
@@ -360,21 +412,45 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
 
     guard !SuggestionDeduplication.isDuplicate(suggestion.suggestion, of: recentSuggestions) else {
+      await emitDeliveryOutcome(.filteredDuplicate, identity: telemetryIdentity)
       log("Suggestion: duplicate of a recent suggestion — \"\(suggestion.suggestion)\"")
       return
     }
 
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+      await emitDeliveryOutcome(.rejectedOwner, identity: telemetryIdentity)
+      return
+    }
 
     recentSuggestions.append(suggestion.suggestion)
     if recentSuggestions.count > maxRecentSuggestions {
       recentSuggestions.removeFirst(recentSuggestions.count - maxRecentSuggestions)
     }
 
-    await deliver(suggestion, result: result, ownerID: ownerID)
+    await deliver(
+      suggestion,
+      result: result,
+      ownerID: ownerID,
+      telemetryIdentity: telemetryIdentity
+    )
   }
 
-  private func deliver(_ suggestion: ExtractedSuggestion, result: SuggestionResult, ownerID: String) async {
+  private func emitDeliveryOutcome(
+    _ outcome: SuggestionAssistantTelemetry.DeliveryOutcome,
+    identity: SuggestionAssistantTelemetry.NotificationIdentity?
+  ) async {
+    guard let identity else { return }
+    await MainActor.run {
+      AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(outcome, identity: identity)
+    }
+  }
+
+  private func deliver(
+    _ suggestion: ExtractedSuggestion,
+    result: SuggestionResult,
+    ownerID: String,
+    telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
+  ) async {
     let context = FloatingBarNotificationContext(
       sourceTitle: "Suggestion",
       assistantId: identifier,
@@ -394,7 +470,8 @@ actor SuggestionAssistant: ProactiveAssistant {
         title: "Suggestion",
         message: suggestion.suggestion,
         assistantId: identifier,
-        context: context
+        context: context,
+        suggestionTelemetryIdentity: telemetryIdentity
       )
     }
   }
@@ -409,4 +486,8 @@ actor SuggestionAssistant: ProactiveAssistant {
     clearPendingContext()
     recentSuggestions.removeAll()
   }
+}
+
+private enum SuggestionEvaluationError: Error {
+  case invalidResponse
 }

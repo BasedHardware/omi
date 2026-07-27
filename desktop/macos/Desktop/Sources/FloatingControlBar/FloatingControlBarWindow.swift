@@ -3217,6 +3217,7 @@ class FloatingControlBarManager {
     sound: NotificationSound,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
+    suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     screenshotData: Data? = nil
   ) -> OwnerBoundNotificationPresentationResult {
     guard !ownerID.isEmpty, RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
@@ -3230,6 +3231,7 @@ class FloatingControlBarManager {
       assistantId: assistantId,
       context: context,
       action: action,
+      suggestionTelemetryIdentity: suggestionTelemetryIdentity,
       screenshotData: screenshotData
     )
     guard let window else {
@@ -3831,7 +3833,8 @@ class FloatingControlBarManager {
       notificationId: notification.id.uuidString,
       title: notification.title,
       assistantId: notification.assistantId,
-      surface: "floating_bar"
+      surface: "floating_bar",
+      suggestionIdentity: notification.suggestionTelemetryIdentity
     )
 
     notificationDismissWorkItem?.cancel()
@@ -3878,11 +3881,15 @@ class FloatingControlBarManager {
     }
 
     window.showNotification(notification)
+    if let suggestionIdentity = notification.suggestionTelemetryIdentity {
+      AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(.delivered, identity: suggestionIdentity)
+    }
     AnalyticsManager.shared.notificationSent(
       notificationId: notification.id.uuidString,
       title: notification.title,
       assistantId: notification.assistantId,
-      surface: "floating_bar"
+      surface: "floating_bar",
+      suggestionIdentity: notification.suggestionTelemetryIdentity
     )
 
     let dismissWorkItem = DispatchWorkItem { [weak self] in
@@ -3903,7 +3910,8 @@ class FloatingControlBarManager {
         notificationId: dismissedNotification.id.uuidString,
         title: dismissedNotification.title,
         assistantId: dismissedNotification.assistantId,
-        surface: "floating_bar"
+        surface: "floating_bar",
+        suggestionIdentity: dismissedNotification.suggestionTelemetryIdentity
       )
     }
 

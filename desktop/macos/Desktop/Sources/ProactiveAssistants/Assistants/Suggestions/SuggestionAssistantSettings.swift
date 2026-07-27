@@ -126,6 +126,24 @@ class SuggestionAssistantSettings {
     }
   }
 
+  /// Applies an explicit user toggle and records the activation denominator only
+  /// when the persisted value actually changes. Remote sync, startup/default
+  /// registration, and resets continue to call `isEnabled` directly and stay
+  /// deliberately silent.
+  @discardableResult
+  func applyUserEnabledChange(_ value: Bool) -> Bool {
+    let previous = isEnabled
+    isEnabled = value
+    guard
+      SuggestionAssistantTelemetry.settingChangeIsPersistedChange(
+        oldValue: previous,
+        newValue: value
+      )
+    else { return false }
+    AnalyticsManager.shared.suggestionAssistantSettingChanged(setting: .enabled, value: value)
+    return true
+  }
+
   var analysisPrompt: String {
     get { UserDefaults.standard.string(forKey: analysisPromptKey) ?? Self.defaultAnalysisPrompt }
     set { UserDefaults.standard.set(newValue, forKey: analysisPromptKey) }
