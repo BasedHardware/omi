@@ -482,6 +482,37 @@ class MemoryService:
             now=now,
         )
 
+    def read_pinned(
+        self,
+        uid: str,
+        memory_system: MemorySystem,
+        limit: int = 100,
+        offset: int = 0,
+        *,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
+        now: Optional[datetime] = None,
+    ) -> List[MemoryDB]:
+        """Read from the backend already selected and authorized by a request route.
+
+        External list routes resolve their request-scoped memory-system pin only
+        after checking the caller's default-read grant. Re-running the rollout
+        control reader inside ``read`` can disagree with that pin and silently
+        serve the legacy store for a canonical account. This seam keeps the
+        route's authorized selection authoritative without weakening grants or
+        exposing canonical provenance fields.
+        """
+
+        backend = self._canonical if memory_system == MemorySystem.CANONICAL else self._legacy
+        return backend.read(
+            uid,
+            limit=limit,
+            offset=offset,
+            device_scope_request=device_scope_request,
+            include_pending_processing=include_pending_processing,
+            now=now,
+        )
+
     def search(
         self,
         uid: str,
