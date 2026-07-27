@@ -28,6 +28,10 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 AGENT_PROXY_DIR = BACKEND_DIR / "agent-proxy"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
+# `agent-proxy/main.py` imports its siblings by bare name (`from resilience import ...`),
+# so loading it by file path also needs its own directory importable.
+if str(AGENT_PROXY_DIR) not in sys.path:
+    sys.path.insert(0, str(AGENT_PROXY_DIR))
 
 from tests.unit.test_tools_agent_route_response_shape import _install_route_stubs  # noqa: E402
 

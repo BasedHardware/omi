@@ -580,3 +580,95 @@ describe("RunToolCapabilityBroker", () => {
     reopened.close();
   });
 });
+
+describe("RunToolCapabilityBroker spawn-time tool policy", () => {
+  it("intersects a spawn-time toolPolicy with the computed allowlist", () => {
+    const { store, session, run, attempt } = fixture("leaf");
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({
+        prompt: "restricted child",
+        metadata: { toolPolicy: { allowedToolNames: ["get_memories"] } },
+      }),
+      run.runId,
+    ]);
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+
+    expect(capability.allowedToolNames).toEqual(["get_memories"]);
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "policy-allowed-1",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "get_memories",
+      toolInput: {},
+    });
+    expect(authorized.canonicalToolName).toBe("get_memories");
+    expectCode(
+      () => broker.authorize({
+        capabilityRef: capability.capabilityRef,
+        invocationId: "policy-denied-1",
+        runId: run.runId,
+        attemptId: attempt.attemptId,
+        activeOwnerId: session.ownerId,
+        toolName: "search_memories",
+        toolInput: {},
+      }),
+      "tool_not_allowed",
+    );
+    store.close();
+  });
+
+  it("keeps the full role-computed allowlist when no toolPolicy is present", () => {
+    const { store, session, run, attempt } = fixture("leaf");
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    // Baseline for the intersection test above: both tools are normally
+    // available to a leaf run, so exclusion there is policy-driven.
+    expect(capability.allowedToolNames).toContain("get_memories");
+    expect(capability.allowedToolNames).toContain("search_memories");
+    store.close();
+  });
+
+  it("fails closed when the toolPolicy intersection is empty or the policy is malformed", () => {
+    for (const toolPolicy of [{ allowedToolNames: ["not_a_real_tool"] }, "bogus", { allowedToolNames: "bogus" }]) {
+      const { store, session, run, attempt } = fixture("leaf");
+      store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+        JSON.stringify({ prompt: "restricted child", metadata: { toolPolicy } }),
+        run.runId,
+      ]);
+      const broker = createBroker(store);
+      const capability = broker.register({
+        ownerId: session.ownerId,
+        sessionId: session.sessionId,
+        runId: run.runId,
+        attemptId: attempt.attemptId,
+      });
+      expect(capability.allowedToolNames).toEqual([]);
+      expectCode(
+        () => broker.authorize({
+          capabilityRef: capability.capabilityRef,
+          invocationId: "policy-closed-1",
+          runId: run.runId,
+          attemptId: attempt.attemptId,
+          activeOwnerId: session.ownerId,
+          toolName: "get_memories",
+          toolInput: {},
+        }),
+        "tool_not_allowed",
+      );
+      store.close();
+    }
+  });
+});

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the app freezing at the start of a push-to-talk turn when an audio driver stops responding"
+}

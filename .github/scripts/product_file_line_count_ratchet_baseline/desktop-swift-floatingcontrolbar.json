@@ -3,17 +3,17 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2375,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2586,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4829,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2584,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2587,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 1536,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1639
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1658
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": "Agent completion presentation now follows the canonical terminal lifecycle used by PTT and chat.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "The Second Brain onboarding, reach-error, and notch-moment UI keeps the hover menu agent-only and routes idle notch taps through main chat.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Second Brain continuous-chat routing shares window geometry with agent-only hover sizing and canonical idle-notch chat ownership.",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "DEBUG owner-boundary tests need a capture-free effect-handler install seam; shared ensureAutomationBarConfigured() removes duplicated automation setup while adding that seam (BasedHardware/omi#10499).",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "DEBUG owner-boundary tests need a capture-free effect-handler install seam; shared ensureAutomationBarConfigured() removes duplicated automation setup while adding that seam (BasedHardware/omi#10499). Setup and both PTT entry points then warm the CoreAudio input-routing snapshot off the main thread so turn start never reads the HAL inline (BasedHardware/omi#10442).",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Adds bounded realtime mint-failure outcome correlation and close-resolution telemetry so release health distinguishes started recovery from exhaustion; telemetry-only, no lifecycle change (#10425).",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers; sendBackgroundAgentContext now confirms the provider send before returning true (exactly-once: no ack before delivery) and the session emits hubDidOpenInputWindow so a warm-idle completion is retried \u2014 both must live beside the file-private send/turn machinery."
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers; sendBackgroundAgentContext confirms the provider send before returning true (exactly-once: no ack before delivery), the session emits hubDidOpenInputWindow so a warm-idle completion is retried, and URLSession is invalidated on transport teardown via an explicit backing optional to break the delegate retain cycle \u2014 all beside the file-private send/turn machinery."
   },
   "threshold": 1500
 }

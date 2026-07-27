@@ -88,17 +88,21 @@ jobs:
       group: desktop-auto-release-tag-main
       cancel-in-progress: false
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
       - name: Generate Omi Bot token
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      # The native tag must be pushed by the Omi Bot installation, rather than
+      # the workflow's GITHUB_TOKEN. GitHub suppresses recursively generated
+      # events for GITHUB_TOKEN, which leaves Codemagic no tag webhook to build.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Recheck desktop release queue before tagging
         id: recheck
@@ -121,6 +125,7 @@ jobs:
         with:
           ref: ${{ steps.recheck.outputs.source_sha }}
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Compute next version and consolidate changelog
         if: steps.recheck.outputs.should_release == 'true'

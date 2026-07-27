@@ -7,6 +7,13 @@ set -euo pipefail
 # asking Git for a work tree, which is precisely the linked-worktree condition
 # the final fixture below verifies.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Git exports repository-local environment variables to hooks. Clear them
+# before creating the fixture repository so `git init <path>` cannot re-open
+# and mutate the caller's shared repository (especially from a linked worktree).
+while IFS= read -r var; do
+  unset "$var"
+done < <(git rev-parse --local-env-vars)
 TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-make-setup.XXXXXX")"
 trap 'rm -rf "$TMPDIR"' EXIT
 

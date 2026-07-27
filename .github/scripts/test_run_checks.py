@@ -16,6 +16,7 @@ from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 from run_checks import (
     VALID_PLATFORMS,
@@ -109,9 +110,7 @@ def non_self_running_reason(source: str) -> str | None:
             for cmp_ in getattr(node.test, "comparators", [])
         )
     ]
-    invoking_blocks = [
-        node for node in main_blocks if any(isinstance(inner, ast.Call) for inner in ast.walk(node))
-    ]
+    invoking_blocks = [node for node in main_blocks if any(isinstance(inner, ast.Call) for inner in ast.walk(node))]
     if not invoking_blocks:
         return "has no __main__ block invoking a test runner, so the interpreter runs no cases"
 
@@ -222,10 +221,7 @@ class ManifestContractTests(unittest.TestCase):
     def test_pytest_only_module_is_reported_as_non_self_running(self) -> None:
         """The guard above must fail on the real historical shape it exists to catch."""
         pytest_only = (
-            "from pathlib import Path\n"
-            "\n"
-            "def test_something(tmp_path: Path) -> None:\n"
-            "    assert True\n"
+            "from pathlib import Path\n" "\n" "def test_something(tmp_path: Path) -> None:\n" "    assert True\n"
         )
         self.assertIn("has no __main__", non_self_running_reason(pytest_only) or "")
 
@@ -259,9 +255,7 @@ class ManifestContractTests(unittest.TestCase):
             'if __name__ == "__main__":\n'
             "    unittest.main()\n"
         )
-        self.assertIn(
-            "no TestCase subclass", non_self_running_reason(unittest_main_without_test_case) or ""
-        )
+        self.assertIn("no TestCase subclass", non_self_running_reason(unittest_main_without_test_case) or "")
 
         # Script-style: a module whose __main__ runs its own assertions is fine.
         script_style = (
@@ -286,6 +280,7 @@ class ManifestContractTests(unittest.TestCase):
 
 
 class RunnerBehaviorTests(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "requires a POSIX shell")
     def test_firestore_contention_runner_uses_uv_without_backend_venv(self) -> None:
         source = REPO_ROOT / "backend/testing/desktop_beta_admission/run.sh"
         with tempfile.TemporaryDirectory() as tmp:
@@ -299,13 +294,13 @@ class RunnerBehaviorTests(unittest.TestCase):
             capture = root / "node-args.txt"
             for name, body in {
                 "uv": "#!/bin/sh\nexit 99\n",
-                "node": f'''#!/bin/sh
+                "node": f"""#!/bin/sh
 case "$1" in
   -p) echo 22 ;;
   *emulator_config.mjs) printf '45678 45679\\n' ;;
   *supervise.mjs) printf '%s\\n' "$@" > "{capture}" ;;
 esac
-''',
+""",
                 "java": "#!/bin/sh\necho '    java.version = 21.0.1' >&2\n",
             }.items():
                 path = fake_bin / name
@@ -553,7 +548,7 @@ class PlatformTests(unittest.TestCase):
         manifest = Manifest(
             checks=(
                 Check(
-                    id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("windows",)
+                    id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("plan9",)
                 ),
             ),
             exempt=(),
@@ -561,12 +556,28 @@ class PlatformTests(unittest.TestCase):
         errors = validate_manifest(manifest, REPO_ROOT)
         self.assertTrue(any("invalid platforms" in e for e in errors))
 
+    def test_detect_platform_maps_windows(self):
+        with patch("run_checks._platform_mod.system", return_value="Windows"):
+            self.assertEqual(detect_platform(), "windows")
+
     def test_detect_platform_returns_known_value(self):
         plat = detect_platform()
         self.assertIn(plat, VALID_PLATFORMS - {"all"})
 
 
 class DeferredMarkerTests(unittest.TestCase):
+    def test_git_content_reads_are_utf8(self) -> None:
+        module = load_deferred_marker_module()
+        completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        with patch.object(module.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(module.added_lines("origin/main", "fixture.txt"), [])
+            self.assertEqual(module.marker_counts_at_base("origin/main", "fixture.txt"), Counter())
+
+        content_reads = [call for call in run.call_args_list if call.args[0][1] in {"diff", "show"}]
+        self.assertEqual(len(content_reads), 2)
+        for call in content_reads:
+            self.assertEqual(call.kwargs.get("encoding"), "utf-8")
+
     def test_new_marker_requires_tracking_issue(self) -> None:
         module = load_deferred_marker_module()
         marker = "TO" + "DO"
