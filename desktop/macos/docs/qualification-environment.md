@@ -38,65 +38,29 @@ All three classes remain fail-closed. The classification only makes a
 non-product host prerequisite precise and early; it does not convert it to
 passing evidence.
 
-## Local M1 lifecycle proof
+## Pre-tag trusted-M1 readiness
 
-On the Apple Silicon M1 qualification host, install the backend virtual
-environment once in the canonical repository at
-`~/workspace/omi/backend/.venv`, then create or enter a source-only checkout of
-the exact local release tag:
+`desktop_auto_release.yml` keeps final source binding, offline readiness receipt
+creation, receipt verification, and immutable tag publication in the same
+non-cancelling `desktop-auto-release-tag-main` job on `omi-qual-m1-studio`.
+There is no independent readiness job or cross-job artifact handoff.
 
-```bash
-cd ~/workspace/omi
-make setup-backend
-git worktree add --detach /private/tmp/omi-qualification-proof refs/tags/vX.Y.Z+BUILD-macos
-cd /private/tmp/omi-qualification-proof
-desktop/macos/scripts/qualification-local-proof.sh \
-  --offline \
-  --fast \
-  --result "$PWD/.local/qualification-proof.json" \
-  vX.Y.Z+BUILD-macos
-```
+The job invokes `desktop/macos/scripts/pre-tag-readiness.sh` against the exact
+post-binding main SHA. That script obtains separate token-bound exact-SHA cache
+and qualification leases, derives its state root/instance/port offset from the
+immutable SHA and run scope, and runs `desktop-core-harness.sh --readiness` in
+the cache checkout with an offline provider. Its receipt can pass only after the
+readiness manifest matches the exact SHA and both authenticated leases have
+released successfully. A stale or foreign listener is never broadly signalled:
+the lease authority quarantines only a dead unproven pointer, retains state
+for evidence, and refuses a passing receipt if its own cleanup cannot prove
+ownership.
 
-Prerequisites are `git`, Python 3, `nc`, `lsof`, `ps`, and the canonical shared
-backend virtual environment created by `make setup-backend`. The dependency
-interpreter is resolved in this fail-closed order: an executable path explicitly
-set with `OMI_QUALIFICATION_PYTHON`, the exact candidate worktree's
-`backend/.venv/bin/python`, then the executable canonical M1 path
-`~/workspace/omi/backend/.venv/bin/python`. An invalid explicit override aborts
-without falling back, and a missing interpreter reports every safe path it
-attempted before any lease or listener activity. The selected interpreter runs
-with the tag-pinned checkout as both its working directory and Python source
-owner; no virtual environment is copied into that immutable candidate.
-
-Fetch the tag and provision the canonical venv before entering offline mode if
-either is missing. The exact repeatable command for a source-only candidate is:
-
-```bash
-OMI_QUALIFICATION_PYTHON="$HOME/workspace/omi/backend/.venv/bin/python" \
-  desktop/macos/scripts/qualification-local-proof.sh --offline --fast \
-  --result /private/tmp/omi-local-qualification-proof.json \
-  vX.Y.Z+BUILD-macos
-```
-
-The proof itself does not use GitHub Actions or Codemagic credentials,
-production credentials, release APIs, channel pointers, publication,
-Beta/Stable bundles, or `/Applications/Omi.app`.
-
-A successful `0600` result has `status: "passed"`, `mode: "offline-fast"`,
-the tag's exact `source_sha`, `cleanup_status: "released"`, and these completed
-boundaries in order: release-tag validation, lease/provenance acquisition,
-disposable fault-listener start, runner-hygiene preflight, and cleanup
-finalization. The adjacent
-`.local/qualification-proof-fault-listener.json` is the redacted provenance
-cleanup report. Missing or foreign listener provenance, an unreclaimable stale
-owned process, or incomplete cleanup fails closed before any long UI flow and
-retains the unknown process.
-
-The workflow runs this exact entry point as a separate fast M1 job. Only a
-passing proof dispatches the canonical qualification job; the result and
-fault-listener report are retained as an artifact even on failure. This proof
-does not run or replace signed-identity, Tier-2, behavioral fault, manifest, or
-evidence gates.
+The receipt verifier rejects a wrong SHA, non-offline provider, failed or
+missing checks, and any qualification/promotion field. The publisher still
+refetches live `main` immediately before pushing; if it moved after readiness,
+no tag is created and the next merge/planner pass must produce a fresh candidate.
+This readiness gate never grants Beta or Stable authority.
 
 ## Runner capacity preflight
 

@@ -300,6 +300,64 @@ def test_dead_lease_with_missing_sentinel_is_quarantined_before_a_fresh_lease_ac
     qualification.release(repo_root=REPO_ROOT, lease_id="qualification-replacement", token=str(replacement["token"]))
 
 
+def test_dead_lease_with_unproven_listener_is_quarantined_without_signalling_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    lease_id, recorded_pid = "qualification-unproven-listener", 42424
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    qualification.acquire(repo_root=REPO_ROOT, lease_id=lease_id, owner_pid=os.getpid(), port_offset=1000)
+    stale_pointer = json.loads((root / "qualification-lease.json").read_text(encoding="utf-8"))
+    marker = f"omi-dev-harness:{lease_id}:backend:{stale_pointer['token']}"
+    port = _free_port()
+    foreign = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import socket,time; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); "
+            "s.bind(('127.0.0.1',int(__import__('sys').argv[1]))); s.listen(); time.sleep(60)",
+            str(port),
+        ],
+        start_new_session=True,
+    )
+    signals: list[tuple[int, signal.Signals]] = []
+    try:
+        deadline = time.monotonic() + 5
+        while foreign.pid not in safety.listening_pids(port) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert foreign.pid in safety.listening_pids(port)
+        _stale_lease(root, lease_id, pid=recorded_pid, port=port)
+        stale_pointer = json.loads((root / "qualification-lease.json").read_text(encoding="utf-8"))
+        original_exists = safety.process_exists
+        original_getpgid = qualification.os.getpgid
+        monkeypatch.setattr(
+            safety, "process_exists", lambda pid: pid == recorded_pid or original_exists(pid)
+        )
+        monkeypatch.setattr(safety, "command_line_for_pid", lambda pid: marker if pid == recorded_pid else "")
+        monkeypatch.setattr(
+            qualification.os, "getpgid", lambda pid: recorded_pid if pid == recorded_pid else original_getpgid(pid)
+        )
+        monkeypatch.setattr(qualification.os, "killpg", lambda pid, sig: signals.append((pid, sig)))
+
+        replacement = qualification.acquire(
+            repo_root=REPO_ROOT, lease_id="qualification-replacement", owner_pid=os.getpid(), port_offset=1001
+        )
+
+        quarantined = list((root / qualification.QUARANTINE_DIRNAME).glob("*.json"))
+        assert len(quarantined) == 1
+        assert json.loads(quarantined[0].read_text(encoding="utf-8")) == stale_pointer
+        assert (root / "state" / lease_id).exists()
+        assert foreign.poll() is None
+        assert signals == []
+        qualification.release(
+            repo_root=REPO_ROOT, lease_id="qualification-replacement", token=str(replacement["token"])
+        )
+    finally:
+        if foreign.poll() is None:
+            foreign.terminate()
+            foreign.wait(timeout=10)
+
+
 def test_retention_prunes_only_completed_sentinel_proven_qualification_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     root = tmp_path / "qualification"
     monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
