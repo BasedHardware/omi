@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
-import type { RewindSettings } from '../../shared/types'
+import type { RewindCaptureQuality, RewindSettings } from '../../shared/types'
 
 // Rewind capture is ON by default — screen history is a core feature, so a fresh
 // install (no settings file yet) starts capturing. Once the user changes a
@@ -12,8 +12,13 @@ const DEFAULTS: RewindSettings = {
   captureEnabled: true,
   intervalMs: 1000,
   retentionDays: 14,
-  excludedApps: []
+  excludedApps: [],
+  // 720p — the resolution the capture path was tuned at. Sharper tiers cost CPU
+  // and disk continuously, so they are opt-in.
+  captureQuality: 'standard'
 }
+
+const QUALITIES: RewindCaptureQuality[] = ['standard', 'high', 'max']
 
 function file(): string {
   return join(app.getPath('userData'), 'rewind-settings.json')
@@ -51,7 +56,12 @@ function sanitize(raw: Partial<RewindSettings>): RewindSettings {
     captureEnabled: raw.captureEnabled !== false,
     intervalMs,
     retentionDays,
-    excludedApps
+    excludedApps,
+    // An unknown tier (older settings file, hand-edited value) falls back to the
+    // default rather than reaching the capture host as an undefined constraint.
+    captureQuality: QUALITIES.includes(raw.captureQuality as RewindCaptureQuality)
+      ? (raw.captureQuality as RewindCaptureQuality)
+      : DEFAULTS.captureQuality
   }
 }
 

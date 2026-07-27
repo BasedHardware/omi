@@ -2,6 +2,98 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.140",
+      "date": "2026-07-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.139",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.138",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.137",
+      "date": "2026-07-26",
+      "changes": [
+        "Added privacy-safe analytics for macOS integration connect/import outcomes (Calendar, Gmail, Apple Notes, Local Files, X, ChatGPT, Claude) across the Apps tab and onboarding — attempts, successes, reconnect-required, and classified failures by build — so the connect funnel is finally measurable on macOS; no screen content, cookies, tokens, account IDs, or raw errors are sent."
+      ]
+    },
+    {
+      "version": "0.12.136",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.135",
+      "date": "2026-07-26",
+      "changes": [
+        "Made macOS Beta qualification detect unsafe runner listener state before the long behavioral suite."
+      ]
+    },
+    {
+      "version": "0.12.134",
+      "date": "2026-07-26",
+      "changes": [
+        "Fixed chat and push-to-talk turns that could remain stuck after web searches or rapid voice interruptions."
+      ]
+    },
+    {
+      "version": "0.12.133",
+      "date": "2026-07-26",
+      "changes": [
+        "Fixed chat failures so backend status codes are clearly identified as HTTP errors"
+      ]
+    },
+    {
+      "version": "0.12.132",
+      "date": "2026-07-26",
+      "changes": [
+        "Improved internal diagnostics so failed chat tool calls are recorded alongside successful ones",
+        "Improved reliability of macOS Beta qualification cleanup."
+      ]
+    },
+    {
+      "version": "0.12.131",
+      "date": "2026-07-26",
+      "changes": [
+        "Improved reliability of macOS Beta qualification on cold build runners."
+      ]
+    },
+    {
+      "version": "0.12.130",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.129",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.128",
+      "date": "2026-07-26",
+      "changes": [
+        "Fixed chat silently skipping the action it promised after a web search — the follow-up tool call was dropped, so nothing happened"
+      ]
+    },
+    {
       "version": "0.12.127",
       "date": "2026-07-26",
       "changes": [

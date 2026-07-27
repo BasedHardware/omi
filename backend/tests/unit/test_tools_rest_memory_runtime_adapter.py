@@ -34,7 +34,9 @@ def memory_services_module():
 
     client_mod = ModuleType('database._client')
     client_mod.db = object()
+    client_mod.delete_collection_recursive = lambda ref, *, client, batch_size=450: None
     client_mod.document_id_from_seed = lambda seed: seed
+    client_mod.get_firestore_client = lambda: client_mod.db
 
     with stub_modules(
         {

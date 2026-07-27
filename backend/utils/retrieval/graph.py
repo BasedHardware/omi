@@ -19,7 +19,7 @@ from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, Base
 
 from models.app import App
 from models.chat import ChatSession, Message, PageContext
-from utils.llm.chat import retrieve_is_file_question
+from utils.llm.chat import get_current_datetime_block, get_user_timezone, retrieve_is_file_question
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.executors import db_executor, llm_executor, run_blocking
@@ -34,12 +34,27 @@ from utils.retrieval.agentic import (
     AsyncStreamingCallback,
     cancel_stream_task,
     execute_agentic_chat_stream,
+    get_mobile_city,
     next_stream_chunk,
 )
 from utils.observability.langsmith import get_chat_tracer_callbacks
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+async def _current_prompt_metadata(uid: str, platform: Optional[str]) -> tuple[str, str]:
+    try:
+        tz = await run_blocking(db_executor, get_user_timezone, uid)
+        city = await get_mobile_city(uid, platform)
+        return get_current_datetime_block(uid, tz=tz, location=city), tz
+    except Exception as error:
+        logger.warning('Prompt metadata unavailable error_type=%s', type(error).__name__)
+        return get_current_datetime_block(uid, tz='UTC'), 'UTC'
+
+
+def _with_prompt_metadata(text: str, metadata: str) -> str:
+    return f'{metadata}\n\n{text}'
 
 
 async def _drain_chat_callback(
@@ -118,10 +133,11 @@ async def _execute_file_chat_stream(
     messages: List[Message],
     chat_session: ChatSession,
     callback_data: Optional[Dict[str, Any]] = None,
+    current_datetime_block: Optional[str] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Handle file chat with streaming."""
     last_message = messages[-1] if messages else None
-    question = last_message.text if last_message else ""
+    question = _with_prompt_metadata(last_message.text if last_message else "", current_datetime_block or "")
 
     # Determine which files to use
     if last_message and last_message.files_id and len(last_message.files_id) > 0:
@@ -179,16 +195,20 @@ async def execute_persona_chat_stream(
     cited: Optional[bool] = False,
     callback_data: Optional[Dict[str, Any]] = None,
     chat_session: Optional[ChatSession] = None,
+    current_datetime_block: Optional[str] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Handle streaming chat responses for persona-type apps."""
     system_prompt = app.persona_prompt
     formatted_messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
 
-    for msg in messages:
+    for index, msg in enumerate(messages):
         if msg.sender == "ai":
             formatted_messages.append(AIMessage(content=msg.text))
         else:
-            formatted_messages.append(HumanMessage(content=msg.text))
+            text = msg.text
+            if current_datetime_block and index == len(messages) - 1:
+                text = _with_prompt_metadata(text, current_datetime_block)
+            formatted_messages.append(HumanMessage(content=text))
 
     full_response: List[str] = []
     callback = AsyncStreamingCallback()
@@ -284,11 +304,18 @@ async def execute_chat_stream(
     - Everything else -> Anthropic agentic chat (Claude decides whether to use tools)
     """
     logger.info(f'execute_chat_stream app: {app.id if app else "<none>"}')
+    current_datetime_block, tz = await _current_prompt_metadata(uid, platform)
 
     # 1. Persona apps
     if app and app.is_a_persona():
         async for chunk in execute_persona_chat_stream(
-            uid, messages, app, cited=cited, callback_data=callback_data, chat_session=chat_session
+            uid,
+            messages,
+            app,
+            cited=cited,
+            callback_data=callback_data,
+            chat_session=chat_session,
+            current_datetime_block=current_datetime_block,
         ):
             yield chunk
         return
@@ -296,14 +323,24 @@ async def execute_chat_stream(
     # 2. File attachments
     last_msg = messages[-1] if messages else None
     if chat_session is not None and await _has_file_context(last_msg, chat_session):
-        async for chunk in _execute_file_chat_stream(uid, messages, chat_session, callback_data):
+        async for chunk in _execute_file_chat_stream(
+            uid, messages, chat_session, callback_data, current_datetime_block=current_datetime_block
+        ):
             yield chunk
         return
 
     # 3. Default: Anthropic agentic chat
     # Claude decides implicitly whether to use tools — no requires_context() needed
     async for chunk in execute_agentic_chat_stream(
-        uid, messages, app, callback_data=callback_data, chat_session=chat_session, context=context, platform=platform
+        uid,
+        messages,
+        app,
+        callback_data=callback_data,
+        chat_session=chat_session,
+        context=context,
+        platform=platform,
+        current_datetime_block=current_datetime_block,
+        tz=tz,
     ):
         yield chunk
 

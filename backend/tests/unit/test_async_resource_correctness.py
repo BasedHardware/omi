@@ -97,15 +97,20 @@ async def test_gmail_tool_exercises_async_interface_and_refreshes_once(gmail_mod
             }
         ]
 
-    async def fake_refresh(uid, integration):
+    # The Gmail scope must be present on the grant: the tool refuses to call Gmail with a
+    # Google grant that predates the Gmail scope.
+    granted_scopes = ["https://www.googleapis.com/auth/gmail.readonly"]
+    integration = {"connected": True, "access_token": "old-token", "granted_scopes": granted_scopes}
+
+    async def fake_refresh(uid, integration_arg):
         assert uid == "uid-1"
-        assert integration == {"connected": True, "access_token": "old-token"}
+        assert integration_arg == integration
         return "new-token"
 
     monkeypatch.setattr(
         gmail_module,
         "prepare_access",
-        lambda *args, **kwargs: ("uid-1", {"connected": True, "access_token": "old-token"}, "old-token", None),
+        lambda *args, **kwargs: ("uid-1", integration, "old-token", None),
     )
     monkeypatch.setattr(gmail_module, "get_gmail_messages", fake_get_gmail_messages)
     monkeypatch.setattr(gmail_module, "refresh_google_token", fake_refresh)

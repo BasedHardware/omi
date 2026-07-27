@@ -24,9 +24,9 @@ def test_agent_execute_tool_route_guards_memory_tool_result_before_returning_to_
 
     assert 'from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary' in contents
     assert 'result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))' in contents
-    assert contents.index('result = target.invoke(params, config=config)') < contents.index(
-        'result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))'
-    )
+    assert contents.index(
+        'result = await run_blocking(db_executor, target.invoke, params, config=config)'
+    ) < contents.index('result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))')
     assert contents.index(
         'result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))'
     ) < contents.index('return {"result": result}')

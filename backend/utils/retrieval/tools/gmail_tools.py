@@ -18,7 +18,12 @@ from utils.retrieval.tools.integration_base import (
 )
 
 # Import shared Google utilities
-from utils.retrieval.tools.google_utils import refresh_google_token, google_api_request
+from utils.retrieval.tools.google_utils import (
+    GMAIL_READONLY_SCOPE,
+    google_api_request,
+    google_integration_has_scope,
+    refresh_google_token,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -208,6 +213,14 @@ async def get_gmail_messages_tool(
     assert uid is not None
     assert integration is not None
     assert access_token is not None
+
+    # A Google grant created before Gmail was requested carries no Gmail scope; calling
+    # the Gmail API with it fails with an opaque 403, so ask for a reconnect instead.
+    if not google_integration_has_scope(integration, GMAIL_READONLY_SCOPE):
+        return (
+            'Gmail access has not been granted for this Google account. '
+            'Please reconnect Gmail from settings and approve email access.'
+        )
 
     try:
         max_results = ensure_capped(max_results, 50, "⚠️ get_gmail_messages_tool - max_results capped from {} to {}")

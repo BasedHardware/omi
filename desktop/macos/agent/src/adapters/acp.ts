@@ -793,7 +793,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         sink({
           type: "tool_activity",
           name: title,
-          status: status === "completed" ? "completed" : "failed",
+          status,
           toolUseId: toolCallId,
         });
 

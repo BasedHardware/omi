@@ -56,7 +56,7 @@ from config.stt_provider_policy import supports_live_multilingual_mode
 from utils.user_language import normalize_user_language
 from database.users import *
 from models.conversation import Conversation
-from models.geolocation import Geolocation
+from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
 from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
 from models.shared import StatusResponse
@@ -76,6 +76,8 @@ from models.users import (
     PricingOption,
     PhoneCallQuota,
     TrialMetadata,
+    LocationContextConsentResponse,
+    LocationContextConsentUpdate,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
@@ -221,6 +223,13 @@ class MemorySummaryRatingResponse(BaseModel):
 class TrainingDataOptInResponse(BaseModel):
     opted_in: bool
     status: Optional[str] = None
+
+
+def _location_context_consent_response(consent) -> LocationContextConsentResponse:
+    return LocationContextConsentResponse(
+        enabled=bool(consent and consent.is_active()),
+        expires_at=consent.expires_at if consent and consent.is_active() else None,
+    )
 
 
 class DailySummaryTestResponse(UserStatusResponse):
@@ -418,7 +427,13 @@ async def run_account_deletion_wipe(
 
 
 @router.patch('/v1/users/geolocation', tags=['v1'], response_model=UserStatusResponse)
-def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
+def set_user_geolocation(geolocation: GeolocationInput, uid: str = Depends(auth.get_current_user_uid)):
+    validated_geolocation = validated_geolocation_or_none(geolocation)
+    if validated_geolocation is None:
+        # Preserve the released endpoint's success-shaped input contract while
+        # ensuring out-of-range coordinates cannot enter the cache or any provider path.
+        return {'status': 'ok', 'message': 'Location ignored because its coordinates are invalid.'}
+
     last_location_data = get_cached_user_geolocation(uid)
     if last_location_data:
         try:
@@ -426,20 +441,20 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
             last_lat = round(last_location.latitude, 4)
             last_lon = round(last_location.longitude, 4)
-            new_lat = round(geolocation.latitude, 4)
-            new_lon = round(geolocation.longitude, 4)
+            new_lat = round(validated_geolocation.latitude, 4)
+            new_lon = round(validated_geolocation.longitude, 4)
 
             # Only update if location has changed up to 4 decimal places
             if last_lat == new_lat and last_lon == new_lon:
                 return {'status': 'ok', 'message': 'Location not changed significantly.'}
 
-            cache_user_geolocation(uid, geolocation.model_dump())
+            cache_user_geolocation(uid, validated_geolocation.model_dump())
         except Exception as e:
             logger.error(f"Error processing geolocation update, caching new location anyway. Error: {e}")
-            cache_user_geolocation(uid, geolocation.model_dump())
+            cache_user_geolocation(uid, validated_geolocation.model_dump())
     else:
         # No previous location, so cache the new one
-        cache_user_geolocation(uid, geolocation.model_dump())
+        cache_user_geolocation(uid, validated_geolocation.model_dump())
 
     return {'status': 'ok'}
 
@@ -1028,6 +1043,21 @@ def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid
     send_training_data_submitted_notification(uid)
 
     return {'status': 'ok', 'message': 'Your request has been submitted for review. We will let you know soon.'}
+
+
+@router.get('/v1/users/location-context-consent', tags=['v1'], response_model=LocationContextConsentResponse)
+def get_location_context_consent(uid: str = Depends(auth.get_current_user_uid)):
+    """Return the current city-context disclosure and active server-side consent state."""
+    return _location_context_consent_response(users_db.get_user_location_context_consent(uid))
+
+
+@router.put('/v1/users/location-context-consent', tags=['v1'], response_model=LocationContextConsentResponse)
+def set_location_context_consent(update: LocationContextConsentUpdate, uid: str = Depends(auth.get_current_user_uid)):
+    """Grant, renew, or revoke city-only location context for interactive chat."""
+    if update.enabled and not update.disclosure_accepted:
+        raise HTTPException(status_code=422, detail='location context requires accepting the provider disclosure')
+    consent = users_db.set_user_location_context_consent(uid, enabled=update.enabled)
+    return _location_context_consent_response(consent)
 
 
 # **************************************

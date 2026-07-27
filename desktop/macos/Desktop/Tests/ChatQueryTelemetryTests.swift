@@ -13,6 +13,38 @@ private final class ChatTestGenerationBox {
 }
 
 final class ChatQueryTelemetryTests: XCTestCase {
+  /// A failed tool call used to emit nothing at all: the call site removed the
+  /// start time and then gated the event on `toolStatus == .completed`, so 30
+  /// days of `chat_tool_call_completed` carried only successes and tool
+  /// reliability could not be measured. Every terminal bridge status must now
+  /// map to a bounded outcome.
+  func testEveryTerminalBridgeStatusReportsABoundedToolOutcome() {
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("failed"), "failed")
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("cancelled"), "cancelled")
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("interrupted"), "interrupted")
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("completed"), "completed")
+
+    // Unknown adapter vocabulary must not leak or inflate successful calls.
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("some_new_status"), "unknown")
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome(""), "unknown")
+  }
+
+  /// User Stop is not a tool defect. `ToolCallStatus` deliberately collapses
+  /// cancelled/interrupted into `.failed` for the UI, so the telemetry
+  /// dimension must stay independent of it or a Stop would count as a failure.
+  func testStopIsDistinguishableFromFailureEvenThoughBothMapToFailedStatus() {
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("cancelled"), .failed)
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("interrupted"), .failed)
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("failed"), .failed)
+
+    XCTAssertNotEqual(
+      ChatTelemetryDimension.toolOutcome("cancelled"),
+      ChatTelemetryDimension.toolOutcome("failed"))
+    XCTAssertNotEqual(
+      ChatTelemetryDimension.toolOutcome("interrupted"),
+      ChatTelemetryDimension.toolOutcome("failed"))
+  }
+
   func testKernelContextTimeoutDoesNotInterruptAnUnstartedAgentQuery() {
     XCTAssertFalse(ChatProvider.shouldInterruptTimedOutAgentQuery(queryStarted: false))
     XCTAssertTrue(ChatProvider.shouldInterruptTimedOutAgentQuery(queryStarted: true))

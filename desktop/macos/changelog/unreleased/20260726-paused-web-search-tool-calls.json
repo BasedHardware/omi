@@ -1,3 +1,0 @@
-{
-  "change": "Fixed chat silently skipping the action it promised after a web search — the follow-up tool call was dropped, so nothing happened"
-}

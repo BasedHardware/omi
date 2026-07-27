@@ -237,7 +237,7 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
     codemagic = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
     qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
     assert '-f release_tag="$CM_TAG" --ref "$CM_TAG"' in codemagic
-    assert "ref: ${{ inputs.release_tag }}" in qualification
+    assert 'git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"' in qualification
     # The release attachment is content-addressed from the exact checked-out
     # candidate SHA and evidence digest, not a mutable tag-only filename.
     assert 'asset="qualification-evidence-${TARGET_SHA}-${digest}.json"' in qualification

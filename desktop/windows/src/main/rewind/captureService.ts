@@ -36,7 +36,8 @@ let settings: RewindSettings = {
   captureEnabled: true,
   intervalMs: 1000,
   retentionDays: 14,
-  excludedApps: []
+  excludedApps: [],
+  captureQuality: 'standard'
 }
 
 function bindPowerListeners(): void {

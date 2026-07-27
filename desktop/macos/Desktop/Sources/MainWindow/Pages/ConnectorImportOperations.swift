@@ -16,7 +16,7 @@ enum ConnectorImportOperations {
 
   enum Outcome {
     case success(SyncResult, message: String)
-    case failure(message: String)
+    case failure(message: String, failureClass: IntegrationConnectTelemetry.ErrorClass? = nil)
   }
 
   @MainActor
@@ -47,9 +47,13 @@ enum ConnectorImportOperations {
         message: "Imported \(memories.formatted()) memories from \(source.displayName)."
       )
     case .noDurableMemories:
+      // Not a connect failure — the parse succeeded but produced nothing
+      // durable. Surfaces UI guidance as a failure but carries a distinct
+      // bounded class so analytics can exclude it from the connect-failure rate.
       return .failure(
         message: "No durable memories found in that text. "
-          + "Make sure you pasted \(source.displayName)'s full response, then import again."
+          + "Make sure you pasted \(source.displayName)'s full response, then import again.",
+        failureClass: .noContent
       )
     case .failed:
       return .failure(message: "The import couldn't run. Try again.")
@@ -74,8 +78,12 @@ enum ConnectorImportOperations {
         SyncResult(sourceCount: emails.count, memoryCount: memoryCount, newItems: emails.count),
         message: "Imported \(emails.count.formatted()) emails and saved \(memoryCount.formatted()) memories."
       )
+    } catch let error as GmailReaderError {
+      return .failure(message: error.localizedDescription, failureClass: Self.failureClass(for: error))
     } catch {
-      return .failure(message: error.localizedDescription)
+      return .failure(
+        message: error.localizedDescription,
+        failureClass: IntegrationConnectTelemetry.ErrorClass.fromMessage(error.localizedDescription))
     }
   }
 
@@ -182,6 +190,34 @@ enum ConnectorImportOperations {
     return "omi-computer"
   }
 
+  /// Maps the connector-native Gmail error to the closed telemetry class.
+  /// Pure and bounded — the enum is the sanitized form; no message text leaks.
+  private static func failureClass(for error: GmailReaderError) -> IntegrationConnectTelemetry.ErrorClass {
+    switch error {
+    case .noBrowserFound: return .noBrowser
+    case .noGmailCookies, .notSignedIn: return .notSignedIn
+    case .sessionExpired, .authFailed: return .sessionExpired
+    case .cookieDecryptionFailed: return .decryptFailed
+    case .networkError: return .network
+    case .pythonNotFound: return .unknown
+    }
+  }
+
+  /// Maps the connector-native Calendar error to the closed telemetry class.
+  /// Includes the `configuration` class (invalid/missing API key) that is
+  /// otherwise invisible to telemetry — a real cold-launch ops blind spot.
+  private static func failureClass(for error: CalendarReaderError) -> IntegrationConnectTelemetry.ErrorClass {
+    switch error {
+    case .noBrowserFound: return .noBrowser
+    case .notSignedIn: return .notSignedIn
+    case .sessionExpired: return .sessionExpired
+    case .cookieDecryptionFailed: return .decryptFailed
+    case .configurationError: return .configuration
+    case .networkError: return .network
+    case .pythonNotFound: return .unknown
+    }
+  }
+
   @MainActor
   static func importCalendar(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
     do {
@@ -201,8 +237,12 @@ enum ConnectorImportOperations {
         SyncResult(sourceCount: events.count, memoryCount: memoryCount, newItems: events.count),
         message: "Read \(events.count.formatted()) calendar events and saved \(memoryCount.formatted()) memories."
       )
+    } catch let error as CalendarReaderError {
+      return .failure(message: error.localizedDescription, failureClass: Self.failureClass(for: error))
     } catch {
-      return .failure(message: error.localizedDescription)
+      return .failure(
+        message: error.localizedDescription,
+        failureClass: IntegrationConnectTelemetry.ErrorClass.fromMessage(error.localizedDescription))
     }
   }
 

@@ -346,7 +346,7 @@ def test_get_memories_allowed_grant_canonical_lists():
     from datetime import datetime, timezone
 
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    # MemoryService.read() returns List[MemoryDB]; the router calls .dict() on each
+    # MemoryService.read_pinned() returns List[MemoryDB]; the router serializes each.
     from models.memories import MemoryDB
 
     canonical_memory = MemoryDB(
@@ -366,13 +366,94 @@ def test_get_memories_allowed_grant_canonical_lists():
 
     # MemoryService is a real class; mock its read method via patching the class
     with __import__('unittest.mock', fromlist=['patch']).patch.object(
-        developer_module.MemoryService, 'read', return_value=[canonical_memory]
+        developer_module.MemoryService, 'read_pinned', return_value=[canonical_memory]
     ):
         resp = client.get('/v1/dev/user/memories')
 
     assert resp.status_code == 200
     assert len(resp.json()) == 1
     assert resp.json()[0]['id'] == 'canon-1'
+
+
+def test_get_memories_uses_authorized_canonical_pin_for_new_schema_rows():
+    """The route must not re-resolve a canonical pin into a stale legacy read."""
+    from datetime import datetime, timezone
+
+    from models.memories import Evidence, MemoryDB, SubjectAttribution
+
+    old_at = datetime(2026, 5, 29, 2, 34, 56, tzinfo=timezone.utc)
+    new_at = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+    old_schema_memory = MemoryDB(
+        id='canonical-old-schema',
+        uid='uid1',
+        content='old schema canonical memory',
+        category=_VALID_CATEGORY,
+        visibility='private',
+        tags=[],
+        created_at=old_at,
+        updated_at=old_at,
+        manually_added=False,
+    )
+    new_schema_memory = MemoryDB(
+        id='canonical-new-schema',
+        uid='uid1',
+        content='new schema canonical memory',
+        category=_VALID_CATEGORY,
+        visibility='private',
+        tags=[],
+        created_at=new_at,
+        updated_at=new_at,
+        manually_added=False,
+        predicate='prefers',
+        arguments={'thing': 'tea'},
+        subject_entity_id='user',
+        subject_attribution=SubjectAttribution.user,
+        evidence=[
+            Evidence(
+                evidence_id='evidence-new',
+                source_id='conversation-new',
+                source_type='conversation',
+                source_signal='transcription',
+                extractor_id='memory_extractor',
+                extractor_version='v2',
+                artifact_ref={},
+                capture_confidence=0.9,
+                independence_group='conversation-new',
+                redaction_status='none',
+                created_at=new_at,
+            )
+        ],
+        capture_confidence=0.9,
+        veracity=0.8,
+        uncertainty_reasons=['single_source'],
+    )
+    client = _build(deny_grant=False, canonical=True)
+
+    from utils.memory import memory_service as memory_service_module
+
+    with (
+        patch.object(
+            memory_service_module,
+            'canonical_read_enabled',
+            return_value=False,
+        ),
+        patch.object(
+            memory_service_module.LegacyMemoryBackend,
+            'read',
+            return_value=[old_schema_memory],
+        ) as legacy_read,
+        patch.object(
+            memory_service_module.CanonicalMemoryBackend,
+            'read',
+            return_value=[new_schema_memory, old_schema_memory],
+        ) as canonical_read,
+    ):
+        resp = client.get('/v1/dev/user/memories?limit=25')
+
+    assert resp.status_code == 200
+    assert [memory['id'] for memory in resp.json()] == ['canonical-new-schema', 'canonical-old-schema']
+    legacy_read.assert_not_called()
+    canonical_read.assert_called_once()
 
 
 def _denied_memory_result(fallback_reason):
@@ -456,15 +537,16 @@ def test_search_memories_vector_missing_rollout_state_falls_back_to_legacy():
 
     # search_memories_by_vector ranks a, then b; hydration returns them in the opposite
     # order — the response must follow the vector rank, not the hydration order.
-    with patch.object(
-        developer_module, 'search_memories_by_vector', return_value=['legacy-a', 'legacy-b']
-    ), patch.object(
-        developer_module.memories_db,
-        'get_memories_by_ids',
-        return_value=[
-            {'id': 'legacy-b', 'content': 'second', 'category': _VALID_CATEGORY},
-            {'id': 'legacy-a', 'content': 'first', 'category': _VALID_CATEGORY},
-        ],
+    with (
+        patch.object(developer_module, 'search_memories_by_vector', return_value=['legacy-a', 'legacy-b']),
+        patch.object(
+            developer_module.memories_db,
+            'get_memories_by_ids',
+            return_value=[
+                {'id': 'legacy-b', 'content': 'second', 'category': _VALID_CATEGORY},
+                {'id': 'legacy-a', 'content': 'first', 'category': _VALID_CATEGORY},
+            ],
+        ),
     ):
         resp = client.get('/v1/dev/user/memories/vector/search', params={'query': 'memory'})
 
@@ -479,10 +561,13 @@ def test_search_memories_vector_use_legacy_safe_falls_back_to_legacy():
     """The explicit USE_LEGACY_SAFE decision serves legacy too (was 403 before #10203)."""
     client = _build()  # default vector mock resolves to USE_LEGACY_SAFE
 
-    with patch.object(developer_module, 'search_memories_by_vector', return_value=['m1']), patch.object(
-        developer_module.memories_db,
-        'get_memories_by_ids',
-        return_value=[{'id': 'm1', 'content': 'hi', 'category': _VALID_CATEGORY}],
+    with (
+        patch.object(developer_module, 'search_memories_by_vector', return_value=['m1']),
+        patch.object(
+            developer_module.memories_db,
+            'get_memories_by_ids',
+            return_value=[{'id': 'm1', 'content': 'hi', 'category': _VALID_CATEGORY}],
+        ),
     ):
         resp = client.get('/v1/dev/user/memories/vector/search', params={'query': 'memory'})
 

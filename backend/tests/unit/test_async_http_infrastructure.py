@@ -390,35 +390,79 @@ class TestWebhookClientConfig:
 
     def test_webhook_client_read_timeout_is_30s(self):
         """Webhook client must use 30s read timeout to match previous per-call behavior."""
-        from utils.http_client import get_webhook_client, _webhook_client
 
-        # Force fresh client creation
-        import utils.http_client as hc
+        async def _read_timeout():
+            from utils.http_client import close_all_clients, get_webhook_client
 
-        old_client = hc._webhook_client
-        hc._webhook_client = None
-        try:
-            client = get_webhook_client()
-            assert client.timeout.read == 30.0
-        finally:
-            if hc._webhook_client is not None and hc._webhook_client is not old_client:
-                asyncio.run(hc._webhook_client.aclose())
-            hc._webhook_client = old_client
+            try:
+                return get_webhook_client().timeout.read
+            finally:
+                await close_all_clients()
+
+        assert asyncio.run(_read_timeout()) == 30.0
 
     def test_webhook_client_connect_timeout_is_2s(self):
         """Webhook client must use aggressive 2s connect timeout."""
-        from utils.http_client import get_webhook_client as gwc
+
+        async def _connect_timeout():
+            from utils.http_client import close_all_clients, get_webhook_client
+
+            try:
+                return get_webhook_client().timeout.connect
+            finally:
+                await close_all_clients()
+
+        assert asyncio.run(_connect_timeout()) == 2.0
+
+
+class TestClientEventLoopOwnership:
+    """A shared client belongs to the event loop that opened its connections.
+
+    Regression for the prod failure where one process-wide client outlived the
+    `asyncio.run()` loop that pooled its keep-alive connections: the next live
+    loop made the pool discard one, uvloop raised `RuntimeError: ... the
+    handler is closed` from `write_eof()` on the freed handle, and httpcore
+    re-raised it at the caller — intermittent HTTP 500s on `/v1/apps/enable`
+    and dropped app-integration webhook deliveries.
+    """
+
+    def test_each_event_loop_gets_its_own_client(self):
+        """The surviving client of a finished loop is never handed to the next one."""
         import utils.http_client as hc
 
-        old_client = hc._webhook_client
-        hc._webhook_client = None
+        async def _client_id():
+            return id(hc.get_webhook_client())
+
+        # No close in between: this is the prod shape, where the process-wide
+        # client outlived the asyncio.run() loop that pooled its connections.
+        first = asyncio.run(_client_id())
+        second = asyncio.run(_client_id())
         try:
-            client = gwc()
-            assert client.timeout.connect == 2.0
+            assert first != second
         finally:
-            if hc._webhook_client is not None and hc._webhook_client is not old_client:
-                asyncio.run(hc._webhook_client.aclose())
-            hc._webhook_client = old_client
+            asyncio.run(hc.close_all_clients())
+
+    def test_one_loop_reuses_a_single_pooled_client(self):
+        import utils.http_client as hc
+
+        async def _same_client():
+            try:
+                return hc.get_webhook_client() is hc.get_webhook_client()
+            finally:
+                await hc.close_all_clients()
+
+        assert asyncio.run(_same_client()) is True
+
+    def test_finished_loops_do_not_accumulate_clients(self):
+        import utils.http_client as hc
+
+        async def _touch():
+            hc.get_webhook_client()
+
+        for _ in range(5):
+            asyncio.run(_touch())
+
+        assert len(hc._clients) == 1  # only the most recent loop's entry survives
 
 
 class TestExecutorConfiguration:

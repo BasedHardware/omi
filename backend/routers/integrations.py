@@ -19,6 +19,12 @@ import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 from utils.executors import run_blocking, db_executor
+from utils.retrieval.tools.google_utils import (
+    GMAIL_READONLY_SCOPE,
+    GOOGLE_INTEGRATION_KEY,
+    GOOGLE_OAUTH_SCOPES,
+    google_integration_has_scope,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -46,7 +52,7 @@ AUTH_PROVIDERS: Dict[str, Dict[str, Any]] = {
         'redirect_path': '/v2/integrations/google-calendar/callback',
         'query': {
             'response_type': 'code',
-            'scope': 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly',
+            'scope': ' '.join(GOOGLE_OAUTH_SCOPES),
             'access_type': 'offline',
             'prompt': 'consent',
         },
@@ -222,9 +228,26 @@ class AppleHealthSyncResponse(BaseModel):
 # *****************************
 
 
+# Integrations that are not stored under their own key: they are derived from another
+# grant, and each requires a specific scope on that grant.
+DERIVED_INTEGRATIONS = {
+    'gmail': (GOOGLE_INTEGRATION_KEY, GMAIL_READONLY_SCOPE),
+}
+
+
 @router.get("/v1/integrations/{app_key}", response_model=IntegrationResponse, tags=['integrations'])
 def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
-    """Get integration connection status for the current user."""
+    """Get integration connection status for the current user.
+
+    Gmail has no grant of its own — it rides the Google Calendar OAuth grant and is
+    connected only when that grant actually carries the Gmail scope.
+    """
+    if app_key in DERIVED_INTEGRATIONS:
+        source_key, required_scope = DERIVED_INTEGRATIONS[app_key]
+        source = users_db.get_integration(uid, source_key)
+        connected = bool(source and source.get('connected')) and google_integration_has_scope(source, required_scope)
+        return IntegrationResponse(connected=connected, app_key=app_key)
+
     integration = users_db.get_integration(uid, app_key)
 
     if integration and integration.get('connected'):
@@ -246,7 +269,14 @@ def save_integration(app_key: str, data: IntegrationData, uid: str = Depends(aut
 
 @router.delete("/v1/integrations/{app_key}", status_code=204, tags=['integrations'])
 def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
-    """Delete an integration connection."""
+    """Delete an integration connection.
+
+    Deleting a derived integration deletes the grant it rides on — there is no
+    separate token to revoke.
+    """
+    if app_key in DERIVED_INTEGRATIONS:
+        app_key = DERIVED_INTEGRATIONS[app_key][0]
+
     success = users_db.delete_integration(uid, app_key)
 
     if not success:
@@ -344,7 +374,13 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     Get OAuth authorization URL for an integration.
     Frontend opens this URL in browser to start OAuth flow.
     Uses secure random state tokens to prevent CSRF attacks.
+
+    A derived integration (Gmail) authorizes through the grant it rides on, so the
+    whole flow — state, provider config and callback — runs under the source key.
     """
+    if app_key in DERIVED_INTEGRATIONS:
+        app_key = DERIVED_INTEGRATIONS[app_key][0]
+
     base_url = os.getenv('BASE_API_URL')
     if not base_url:
         logger.error(f'ERROR: BASE_API_URL not configured for integration OAuth')
@@ -484,9 +520,12 @@ async def handle_oauth_callback(
                 logger.info(f'{app_key}: No access token received in response')
                 return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
-            integration_data = {
+            integration_data: Dict[str, Any] = {
                 'connected': True,
                 'access_token': access_token,
+                # Google returns only the scopes the user actually approved; store them so
+                # scope-derived integrations (Gmail) can tell granted from merely requested.
+                'granted_scopes': (token_data.get('scope') or '').split(),
             }
 
             if refresh_token:

@@ -174,6 +174,7 @@ class VADStreamingGate:
         _get_ort_session()
         self._vad_window_samples = VAD_WINDOW_SAMPLES  # 512 for 16kHz (Silero v6)
         self._vad_buffer = np.array([], dtype=np.float32)  # Buffer for cross-chunk accumulation
+        self._pcm_remainder = b''  # Trailing bytes of a frame split across chunks
         self._vad_state: np.ndarray[Any, Any]
         self._vad_context: np.ndarray[Any, Any]
         self._vad_state, self._vad_context = make_fresh_state()  # Per-connection ONNX recurrent state + context
@@ -230,6 +231,7 @@ class VADStreamingGate:
             # Reset VAD recurrent state and buffer for clean active-mode start
             self._vad_state, self._vad_context = make_fresh_state()
             self._vad_buffer = np.array([], dtype=np.float32)
+            self._pcm_remainder = b''
             # Sync mapper cursor: DG received all audio during shadow phase
             self.dg_wall_mapper._provider_cursor_sec = self._audio_cursor_ms / 1000.0  # type: ignore[reportPrivateUsage]  # sync internal mapper cursor
             logger.info(
@@ -250,8 +252,21 @@ class VADStreamingGate:
 
     def _convert_for_vad(self, pcm_data: bytes) -> np.ndarray[Any, Any]:
         """Convert audio to float32 at 16kHz mono for VAD."""
+        # A client may split PCM16 anywhere, so a chunk can end mid-frame. Carry
+        # those bytes into the next chunk: np.frombuffer rejects a partial sample,
+        # and dropping it would shift every later sample by one byte.
+        data = self._pcm_remainder + pcm_data if self._pcm_remainder else pcm_data
+        frame_bytes = self._sample_width * self.channels
+        leftover = len(data) % frame_bytes
+        if leftover:
+            self._pcm_remainder = data[len(data) - leftover :]
+            data = data[: len(data) - leftover]
+        else:
+            self._pcm_remainder = b''
+        if not data:
+            return np.array([], dtype=np.float32)
+
         # Convert to mono if stereo
-        data = pcm_data
         if self.channels == 2:
             data = audioop.tomono(data, self._sample_width, 0.5, 0.5)
 

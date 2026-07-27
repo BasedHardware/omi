@@ -1658,6 +1658,9 @@ struct ImportConnectorSheet: View {
   ) {
     let connectorID = connector.id
     let statusStore = statusStore
+    // Capture first-sync state before markSynced flips the persisted latch, so
+    // the terminal telemetry can separate first-ever connects from re-syncs.
+    let wasFirstSync = !statusStore.snapshot(for: connector).isConnected
     ConnectorImportRunner.shared.start(
       connectorID: connectorID,
       progressTitle: title,
@@ -1672,9 +1675,22 @@ struct ImportConnectorSheet: View {
           lastDeltaCount: result.newItems,
           availabilityText: availabilityText
         )
-        return .success(message: message)
-      case .failure(let message):
-        return .failure(message: message)
+        return .success(
+          message: message,
+          metrics: ConnectorImportRunner.RunMetrics(
+            sourceCount: result.sourceCount,
+            memoryCount: result.memoryCount,
+            wasFirstSync: wasFirstSync
+          )
+        )
+      case .failure(let message, let failureClass):
+        return .failure(
+          message: message,
+          metrics: ConnectorImportRunner.RunMetrics(
+            failureClass: failureClass,
+            wasFirstSync: wasFirstSync
+          )
+        )
       }
     }
   }

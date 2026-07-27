@@ -169,6 +169,24 @@ def test_mapped_source_with_direct_test_remains_narrow(selector_and_all_tests):
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
+def test_location_context_paths_select_their_focused_privacy_regressions(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+
+    for source_path in (
+        "backend/models/geolocation.py",
+        "backend/models/users.py",
+        "backend/database/users.py",
+        "backend/routers/developer.py",
+        "backend/utils/retrieval/agentic.py",
+        "backend/routers/users.py",
+    ):
+        selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
+        assert "tests/unit/test_location_context_consent.py" in selected, source_path
+        assert "tests/unit/test_chat_async_offload.py" in selected, source_path
+        assert selected != all_tests, source_path
+        assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+
 def test_removed_test_forces_full_discovered_suite(selector_and_all_tests):
     selector, all_tests = selector_and_all_tests
 
@@ -260,6 +278,21 @@ def test_pre_push_requires_backend_python_lazily():
         function_start = pre_push.index(f"{function_name}()")
         function_end = pre_push.find("\n}\n", function_start)
         assert "require_backend_python" in pre_push[function_start:function_end], function_name
+
+
+def test_pre_push_selects_release_guard_and_focused_test_for_release_contract_changes():
+    """The fast lane catches qualification guard drift without cloning the backend suite."""
+    pre_push = (BACKEND_DIR.parent / "scripts/pre-push").read_text(encoding="utf-8")
+    function_start = pre_push.index("check_release_process_guards_if_needed()")
+    function_end = pre_push.index("\n}\n", function_start)
+    guard = pre_push[function_start:function_end]
+
+    assert ".github/workflows/desktop_qualify_beta.yml" in guard
+    assert ".github/scripts/check-release-process-guards.py" in guard
+    assert "scripts/run-release-process-guards.sh" in guard
+    assert "tests/unit/test_desktop_release_scripts.py" in guard
+    assert "bash scripts/run-release-process-guards.sh" in guard
+    assert "BACKEND_UNIT_TEST_FILE_LIST" in guard
 
 
 def test_pre_push_runs_each_named_check_phase_once():

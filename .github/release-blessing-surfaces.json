@@ -10,7 +10,7 @@
     "desktop-rust-backend": {
       "display_name": "Desktop Rust backend",
       "depends_on": ["python-backend"],
-      "promotion_workflows": [".github/workflows/desktop_promote_prod.yml"]
+      "promotion_workflows": [".github/workflows/desktop_backend_prod.yml"]
     },
     "desktop-macos": {
       "display_name": "macOS Desktop app",

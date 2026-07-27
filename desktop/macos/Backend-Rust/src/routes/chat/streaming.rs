@@ -16,7 +16,8 @@ use super::request_translation::{compute_cost, response_text_content};
 use super::response_or_500;
 use super::sse::{drain_sse_events, make_chunk, sse_line, stream_termination_chunks};
 use super::transport::{
-    append_pause_turn_continuation, complete_anthropic_server_tool_turn, send_anthropic_with_retry,
+    accumulate_anthropic_usage, append_pause_turn_continuation,
+    complete_anthropic_server_tool_turn, send_anthropic_with_retry,
 };
 
 /// How long a streaming turn may go without a single byte from Anthropic before we end it.
@@ -165,6 +166,28 @@ pub(super) fn continuation_delta_chunks(
     }
 
     chunks
+}
+
+/// Total the usage of a turn that paused: the streamed leg plus the continuation.
+///
+/// The paused leg is the leg that ran the server tool — it holds the output tokens
+/// generated before the pause *and* the `web_search_requests` Anthropic bills per
+/// request. Reporting only the continuation's usage drops both, so a paused turn is
+/// billed as if its first half never happened. The non-streaming lane already sums
+/// every leg (`accumulate_anthropic_usage`); the streaming splice totals the same way.
+pub(super) fn paused_turn_total_usage(
+    initial: Option<&AnthropicUsage>,
+    streamed_final: Option<&AnthropicUsage>,
+    continuation: &AnthropicUsage,
+) -> AnthropicUsage {
+    // `message_start` carries the input side, `message_delta` the output side, so the
+    // streamed leg is only whole once the two are merged.
+    let mut total = match streamed_final {
+        Some(final_usage) => merge_stream_usage(initial, final_usage),
+        None => initial.cloned().unwrap_or_default(),
+    };
+    accumulate_anthropic_usage(&mut total, continuation);
+    total
 }
 
 fn append_string_field(block: &mut Value, key: &str, suffix: &str) {
@@ -547,7 +570,11 @@ where
                     );
                     yield Ok(sse_line(&chunk_val));
 
-                    let merged = merge_stream_usage(initial_usage.as_ref(), &anthropic_resp.usage);
+                    let merged = paused_turn_total_usage(
+                        initial_usage.as_ref(),
+                        final_usage.as_ref(),
+                        &anthropic_resp.usage,
+                    );
                     let openai_usage = anthropic_usage_to_openai(&merged);
                     let usage_chunk = ChatCompletionChunk {
                         id: stream_id.clone(),

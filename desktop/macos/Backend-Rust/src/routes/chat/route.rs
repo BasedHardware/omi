@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::{DefaultBodyLimit, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode},
     response::Response,
     routing::post,
     Json, Router,
@@ -23,6 +23,7 @@ use super::request_translation::{
 use super::response_or_500;
 use super::streaming::handle_streaming;
 use super::transport::{handle_non_streaming, new_anthropic_client};
+use super::CHAT_CONTRACT_VERSION;
 
 pub(super) fn chat_metering_response(decision: &RateDecision) -> Option<Response> {
     match decision {
@@ -64,6 +65,7 @@ const CHAT_COMPLETIONS_MAX_BODY_SIZE: usize = 16 * 1024 * 1024;
 
 const OMI_REQUEST_ID_HEADER: &str = "x-omi-request-id";
 const RESPONSE_REQUEST_ID_HEADER: &str = "x-request-id";
+const OMI_CHAT_CONTRACT_HEADER: &str = "x-omi-chat-contract-version";
 /// Per-turn effort directive from the desktop app (relayed by the pi-mono
 /// extension). Header wins over the OpenAI-compatible body field.
 const OMI_REASONING_EFFORT_HEADER: &str = "x-omi-reasoning-effort";
@@ -96,12 +98,26 @@ fn inbound_request_id(headers: &HeaderMap) -> String {
         .unwrap_or_else(|| ulid::Ulid::new().to_string())
 }
 
+fn supports_chat_contract(headers: &HeaderMap) -> bool {
+    headers
+        .get(OMI_CHAT_CONTRACT_HEADER)
+        .map(|value| value.as_bytes() == CHAT_CONTRACT_VERSION.as_bytes())
+        .unwrap_or(true)
+}
+
 fn attach_request_id(response: &mut Response, request_id: &str) {
     if let Ok(value) = request_id.parse() {
         response
             .headers_mut()
             .insert(RESPONSE_REQUEST_ID_HEADER, value);
     }
+}
+
+fn attach_chat_contract_version(response: &mut Response) {
+    response.headers_mut().insert(
+        OMI_CHAT_CONTRACT_HEADER,
+        HeaderValue::from_static(CHAT_CONTRACT_VERSION),
+    );
 }
 
 async fn chat_completions(
@@ -121,6 +137,7 @@ async fn chat_completions(
     let response = chat_completions_inner(state, user, headers, req).await;
     response.map(|mut response| {
         attach_request_id(&mut response, &request_id);
+        attach_chat_contract_version(&mut response);
         response
     })
 }
@@ -133,6 +150,15 @@ async fn chat_completions_inner(
 ) -> Result<Response, StatusCode> {
     let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
+
+    if !supports_chat_contract(&headers) {
+        tracing::warn!(
+            event = "chat_contract_version_unsupported",
+            version = ?headers.get(OMI_CHAT_CONTRACT_HEADER),
+            "chat completion rejected"
+        );
+        return Err(StatusCode::UPGRADE_REQUIRED);
+    }
 
     if llm_stub_enabled() {
         return Ok(stub_chat_completions_response(&req));
@@ -262,7 +288,9 @@ mod tests {
         response::Response,
     };
 
-    use super::{attach_request_id, inbound_request_id};
+    use super::{
+        attach_chat_contract_version, attach_request_id, inbound_request_id, supports_chat_contract,
+    };
 
     #[test]
     fn preserves_a_valid_opaque_request_id() {
@@ -292,5 +320,26 @@ mod tests {
         attach_request_id(&mut response, "req_01AB-cd");
 
         assert_eq!(response.headers()["x-request-id"], "req_01AB-cd");
+    }
+
+    #[test]
+    fn accepts_legacy_and_current_chat_contracts_but_rejects_unknown_versions() {
+        let mut headers = HeaderMap::new();
+        assert!(supports_chat_contract(&headers));
+
+        headers.insert("x-omi-chat-contract-version", HeaderValue::from_static("1"));
+        assert!(supports_chat_contract(&headers));
+
+        headers.insert("x-omi-chat-contract-version", HeaderValue::from_static("2"));
+        assert!(!supports_chat_contract(&headers));
+    }
+
+    #[test]
+    fn advertises_the_supported_chat_contract_on_responses() {
+        let mut response = Response::new(Body::empty());
+
+        attach_chat_contract_version(&mut response);
+
+        assert_eq!(response.headers()["x-omi-chat-contract-version"], "1");
     }
 }
