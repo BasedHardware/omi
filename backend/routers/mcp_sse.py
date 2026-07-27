@@ -67,7 +67,9 @@ from utils.mcp_memories import (
     build_mcp_default_memory_read_context,
     collect_filtered_memories,
     list_default_mcp_memories,
+    mcp_denied_read_reason,
     mcp_legacy_read_authorized,
+    mcp_memory_read_denied_detail,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
@@ -740,6 +742,18 @@ class ToolExecutionError(Exception):
         super().__init__(self.message)
 
 
+def _raise_if_memory_read_denied(result) -> None:
+    """Surface a denied default-memory read as an MCP error carrying its reason.
+
+    Returns without raising only when the decision is a non-serving rollout state rather
+    than a denial, which keeps that caller's existing empty result.
+    """
+    reason = mcp_denied_read_reason(result)
+    if reason is None:
+        return
+    raise ToolExecutionError(str(mcp_memory_read_denied_detail(reason)), code=-32009)
+
+
 def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
     if exc.status_code == 404:
         raise ToolExecutionError("Memory not found", code=-32001) from exc
@@ -864,6 +878,7 @@ def execute_tool(
         if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
             return {"memories": memory_list_results.memories}
         if not mcp_legacy_read_authorized(memory_list_results):
+            _raise_if_memory_read_denied(memory_list_results)
             return {"memories": []}
 
         result = collect_filtered_memories(
@@ -1092,6 +1107,7 @@ def execute_tool(
         if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
             return {"memories": vector_search_results.memories}
         if not mcp_legacy_read_authorized(vector_search_results):
+            _raise_if_memory_read_denied(vector_search_results)
             return {"memories": []}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
