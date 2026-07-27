@@ -237,7 +237,7 @@ exercise_fault_launcher_without_backend_env() {
   local output="$TMP_ROOT/fault-launcher.out"
   local status
 
-  mkdir -p "$TMP_ROOT/fault-launcher/scripts" "$bin_dir"
+  mkdir -p "$fixture" "$TMP_ROOT/fault-launcher/scripts" "$TMP_ROOT/fault-launcher/backend" "$bin_dir"
   ln -s "$RUN_SH" "$fixture/run.sh"
   ln -s "$MACOS_DIR/scripts" "$fixture/scripts"
   ln -s "$REPO_ROOT/scripts/dev-instance.sh" "$TMP_ROOT/fault-launcher/scripts/dev-instance.sh"
