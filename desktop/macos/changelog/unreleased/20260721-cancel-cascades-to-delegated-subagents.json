@@ -1,3 +1,0 @@
-{
-  "change": "Stopping an agent now also stops the delegated sub-agents it was waiting on"
-}

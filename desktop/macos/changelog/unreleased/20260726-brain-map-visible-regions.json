@@ -1,3 +1,0 @@
-{
-  "change": "Brain Map neighbourhoods are now visible as territories rather than implied by position alone, the ones that genuinely own their ground are outlined, and unconnected entities ring the map from just outside it instead of the far edge of the canvas"
-}
