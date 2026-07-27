@@ -1,11 +1,13 @@
 // Configuration - Environment variables
 // Copied from Python backend .env
 
-use std::env;
+use std::{env, net::IpAddr};
 
 /// Application configuration loaded from environment
 #[derive(Clone)]
 pub struct Config {
+    /// Server bind address
+    pub bind_address: IpAddr,
     /// Server port
     pub port: u16,
     /// Gemini API key for LLM calls
@@ -92,6 +94,8 @@ impl Config {
     /// Load configuration from environment variables
     pub fn from_env() -> Self {
         Self {
+            bind_address: parse_bind_address(env::var("BIND_ADDRESS").ok().as_deref())
+                .unwrap_or_else(|error| panic!("{error}")),
             port: env::var("PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())
@@ -185,5 +189,41 @@ impl Config {
             );
         }
         Ok(())
+    }
+}
+
+fn parse_bind_address(value: Option<&str>) -> Result<IpAddr, String> {
+    value
+        .unwrap_or("0.0.0.0")
+        .parse()
+        .map_err(|_| "BIND_ADDRESS must be a valid IP address".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_bind_address;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    #[test]
+    fn bind_address_defaults_to_all_interfaces() {
+        assert_eq!(
+            parse_bind_address(None).unwrap(),
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+        );
+    }
+
+    #[test]
+    fn bind_address_accepts_loopback_for_local_fixtures() {
+        assert_eq!(
+            parse_bind_address(Some("127.0.0.1")).unwrap(),
+            IpAddr::V4(Ipv4Addr::LOCALHOST)
+        );
+    }
+
+    #[test]
+    fn bind_address_rejects_hostnames_and_ports() {
+        for value in ["localhost", "127.0.0.1:10201"] {
+            assert!(parse_bind_address(Some(value)).is_err(), "{value}");
+        }
     }
 }

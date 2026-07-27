@@ -352,10 +352,10 @@ async fn main() {
         .layer(CatchPanicLayer::new());
 
     // Start server
-    let addr = format!("0.0.0.0:{}", config.port);
+    let addr = std::net::SocketAddr::new(config.bind_address, config.port);
     tracing::info!("Starting OMI Desktop Backend on {}", addr);
 
-    let listener = match tokio::net::TcpListener::bind(&addr).await {
+    let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(listener) => listener,
         Err(error) => {
             tracing::error!("Failed to bind {}: {}", addr, error);

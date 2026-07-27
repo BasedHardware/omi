@@ -12,8 +12,11 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from verify_desktop_backend_compatibility import CompatibilityError, _health_url
+
 
 SCRIPT = Path(__file__).with_name("verify_desktop_backend_compatibility.py")
+PRODUCTION_BASE_URL = "https://desktop-backend-hhibjajaja-uc.a.run.app"
 GOOD_HEALTH = {
     "status": "healthy",
     "service": "omi-desktop-backend",
@@ -102,15 +105,30 @@ class DesktopBackendCompatibilityVerifierTests(unittest.TestCase):
                 self.assertIn("chat_contract_version", completed.stderr)
                 self.assertIn("expected", completed.stderr)
 
-    def test_diagnostics_do_not_echo_arbitrary_health_values(self) -> None:
-        secret = "sensitive response detail with spaces"
-        completed, evidence = self.run_verifier({**GOOD_HEALTH, "service": secret})
+    def test_diagnostics_redact_every_response_derived_value(self) -> None:
+        for field in GOOD_HEALTH:
+            secret = f"SecretToken123{field.replace('_', '')}"
+            with self.subTest(field=field):
+                completed, evidence = self.run_verifier({**GOOD_HEALTH, field: secret})
 
-        self.assertNotEqual(completed.returncode, 0)
-        self.assertIsNone(evidence)
-        self.assertIn("service", completed.stderr)
-        self.assertIn("<redacted", completed.stderr)
-        self.assertNotIn(secret, completed.stderr)
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIsNone(evidence)
+                self.assertIn(field, completed.stderr)
+                self.assertIn("<redacted", completed.stderr)
+                self.assertNotIn(secret, completed.stderr)
+
+    def test_base_url_allows_only_loopback_or_the_production_origin(self) -> None:
+        self.assertEqual(_health_url(PRODUCTION_BASE_URL), f"{PRODUCTION_BASE_URL}/health")
+        self.assertEqual(_health_url("http://127.0.0.1:12345"), "http://127.0.0.1:12345/health")
+
+        for name, base_url in (
+            ("host", "https://attacker.example"),
+            ("userinfo", f"https://token@{PRODUCTION_BASE_URL.removeprefix('https://')}"),
+            ("path", f"{PRODUCTION_BASE_URL}/unexpected"),
+            ("port", f"{PRODUCTION_BASE_URL}:444"),
+        ):
+            with self.subTest(name=name), self.assertRaises(CompatibilityError):
+                _health_url(base_url)
 
 
 if __name__ == "__main__":

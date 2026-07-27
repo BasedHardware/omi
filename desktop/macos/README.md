@@ -52,9 +52,10 @@ After a successful full launch, `run.sh` automatically uses its fast lane for or
 
 `verify-local-desktop-backend-compatibility.sh` needs no application credentials
 or external service. It builds the checked-out Rust source, owns one temporary
-loopback process, and runs the same redacted `/health` verifier used before
-candidate tagging and again during live qualification. A passing JSON result
-must contain `status: healthy`, `service: omi-desktop-backend`, and
+process with `BIND_ADDRESS=127.0.0.1`, asserts that the listener is not exposed
+on a wildcard interface, and runs the same redacted `/health` verifier used
+before candidate tagging and again during live qualification. A passing JSON
+result must contain `status: healthy`, `service: omi-desktop-backend`, and
 `chat_contract_version: "1"`.
 
 `git push` is the bounded desktop acceptance gate: desktop source changes run only the fast `xcrun swift build -c debug --package-path Desktop` check on the installed Xcode. This is intentionally less than CI: the serial, isolated Swift suite, clean release compile, and pinned `/Applications/Xcode_16.4.app` (Xcode 16.4 build 16F6) belong to GitHub Actions. Do not move those CI jobs into pre-push; preserving push-time budget keeps normal iteration fast. Use `dev-feedback.py --watch` while editing.

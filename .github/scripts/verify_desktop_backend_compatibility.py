@@ -16,8 +16,8 @@ from typing import Any
 
 EXPECTED_STATUS = "healthy"
 EXPECTED_SERVICE = "omi-desktop-backend"
+PRODUCTION_BASE_URL = "https://desktop-backend-hhibjajaja-uc.a.run.app"
 CONTRACT_VERSION_RE = re.compile(r"^[1-9][0-9]{0,5}$")
-SAFE_VALUE_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 MAX_RESPONSE_BYTES = 1024 * 1024
 _MISSING = object()
@@ -30,12 +30,6 @@ class CompatibilityError(RuntimeError):
 def _describe_actual(value: object) -> object:
     if value is _MISSING:
         return "<missing>"
-    if value is None or isinstance(value, (bool, int, float)):
-        return value
-    if isinstance(value, str):
-        if SAFE_VALUE_RE.fullmatch(value):
-            return value
-        return f"<redacted string length={len(value)}>"
     return f"<redacted {type(value).__name__}>"
 
 
@@ -82,8 +76,19 @@ def _health_url(base_url: str) -> str:
         raise CompatibilityError("base URL must be an absolute HTTP(S) URL")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise CompatibilityError("base URL must not contain credentials, query, or fragment")
-    if parsed.scheme == "http" and parsed.hostname.lower() not in LOOPBACK_HOSTS:
-        raise CompatibilityError("plain HTTP is allowed only for a loopback base URL")
+    if parsed.path not in {"", "/"}:
+        raise CompatibilityError("base URL must not contain a path")
+    hostname = parsed.hostname.lower()
+    if hostname not in LOOPBACK_HOSTS:
+        production = urllib.parse.urlsplit(PRODUCTION_BASE_URL)
+        if (
+            parsed.scheme != production.scheme
+            or hostname != production.hostname
+            or parsed.port not in {None, 443}
+        ):
+            raise CompatibilityError(
+                "non-loopback base URL must use the canonical production desktop-backend origin"
+            )
     return f"{base_url.rstrip('/')}/health"
 
 

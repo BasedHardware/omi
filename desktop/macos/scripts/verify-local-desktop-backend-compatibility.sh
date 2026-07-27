@@ -44,6 +44,7 @@ BASE_URL="http://127.0.0.1:$PORT"
 
 cargo build --manifest-path "$BACKEND_DIR/Cargo.toml"
 env \
+  BIND_ADDRESS=127.0.0.1 \
   FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9 \
   FIREBASE_AUTH_PROJECT_ID=omi-local-health-contract \
   FIREBASE_PROJECT_ID=omi-local-health-contract \
@@ -71,6 +72,15 @@ PY
   fi
   sleep 1
 done
+
+LISTENER_ADDRESS="$(
+  lsof -nP -a -p "$BACKEND_PID" -iTCP:"$PORT" -sTCP:LISTEN -Fn \
+    | awk '/^n/ { print substr($0, 2) }'
+)"
+if [[ "$LISTENER_ADDRESS" != "127.0.0.1:$PORT" ]]; then
+  echo "local Rust desktop-backend must listen only on 127.0.0.1:$PORT; observed ${LISTENER_ADDRESS:-no listener}" >&2
+  exit 1
+fi
 
 "$VERIFIER" \
   --base-url "$BASE_URL" \
