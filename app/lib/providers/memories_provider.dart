@@ -64,8 +64,7 @@ class MemoriesProvider extends ChangeNotifier {
       // When the server does not support device_scope, legacy memories have no
       // primary_capture_device/capture_device_ids. Skip the local device filter
       // in that case to avoid hiding all legacy rows on the "This device" view.
-      final deviceMatch =
-          !_filterThisDeviceOnly ||
+      final deviceMatch = !_filterThisDeviceOnly ||
           !_deviceScopeSupported ||
           ClientDeviceService.instance.memoryMatchesThisDevice(
             primaryCaptureDevice: memory.primaryCaptureDevice,
@@ -73,7 +72,8 @@ class MemoriesProvider extends ChangeNotifier {
           );
 
       return matchesSearch && categoryMatch && deviceMatch;
-    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setFilterThisDeviceOnly(bool enabled) {

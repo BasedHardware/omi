@@ -78,11 +78,11 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
   ) {
     final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
         ? homeProvider.availableLanguages.entries
-              .firstWhere(
-                (element) => element.value == homeProvider.userPrimaryLanguage,
-                orElse: () => MapEntry(context.l10n.notSet, ''),
-              )
-              .key
+            .firstWhere(
+              (element) => element.value == homeProvider.userPrimaryLanguage,
+              orElse: () => MapEntry(context.l10n.notSet, ''),
+            )
+            .key
         : context.l10n.notSet;
 
     final isUpdatingTranslation = userProvider.isUpdatingSingleLanguageMode;

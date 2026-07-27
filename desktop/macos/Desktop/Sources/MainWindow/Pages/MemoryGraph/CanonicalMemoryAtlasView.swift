@@ -3988,7 +3988,9 @@ private struct CanonicalMemoryAtlasSurface: View {
     selectedEdgeID = hit.id
   }
 
-  private func nearestNode(to location: CGPoint, in size: CGSize, visibleNodes: [MemoryAtlasNodePlacement] = []) -> MemoryAtlasNodePlacement? {
+  private func nearestNode(to location: CGPoint, in size: CGSize, visibleNodes: [MemoryAtlasNodePlacement] = [])
+    -> MemoryAtlasNodePlacement?
+  {
     let hitRadius = max(12, 18 / zoom)
     var nearest: (placement: MemoryAtlasNodePlacement, distance: CGFloat)?
     // Hit-test only nodes in the current render plan. On graphs larger than

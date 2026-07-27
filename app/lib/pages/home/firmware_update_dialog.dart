@@ -265,16 +265,16 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                           ],
                         )
                       : _isDragging && progress > 0.3
-                      ? Text(
-                          context.l10n.release,
-                          key: const ValueKey('release'),
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w500),
-                        )
-                      : Text(
-                          context.l10n.slideToUpdate,
-                          key: const ValueKey('slide'),
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w500),
-                        ),
+                          ? Text(
+                              context.l10n.release,
+                              key: const ValueKey('release'),
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w500),
+                            )
+                          : Text(
+                              context.l10n.slideToUpdate,
+                              key: const ValueKey('slide'),
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w500),
+                            ),
                 ),
               ),
               // Draggable button

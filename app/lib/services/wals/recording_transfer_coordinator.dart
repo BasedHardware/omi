@@ -23,17 +23,17 @@ class RecordingTransferDrainResult {
 
   /// Nothing eligible to drain (empty backlog). Not a retry signal.
   const RecordingTransferDrainResult.skipped()
-    : attempted = false,
-      failed = false,
-      needsReconciliation = false,
-      contended = false;
+      : attempted = false,
+        failed = false,
+        needsReconciliation = false,
+        contended = false;
 
   /// Drain could not run because another sync owned the seam. Retry later.
   const RecordingTransferDrainResult.contended()
-    : attempted = false,
-      failed = false,
-      needsReconciliation = false,
-      contended = true;
+      : attempted = false,
+        failed = false,
+        needsReconciliation = false,
+        contended = true;
 
   final bool attempted;
   final bool failed;
@@ -61,24 +61,24 @@ class RecordingTransferCoordinator {
     bool initiallyConnected = true,
     DateTime Function()? clock,
     RecordingTransferCooldownScheduler? scheduleCooldown,
-  }) : _reconcile = reconcile,
-       _discover = discover,
-       _refreshPending = refreshPending,
-       _drain = drain,
-       _autoUploadEnabled = autoUploadEnabled,
-       _clock = clock ?? DateTime.now,
-       _scheduleCooldown = scheduleCooldown {
+  })  : _reconcile = reconcile,
+        _discover = discover,
+        _refreshPending = refreshPending,
+        _drain = drain,
+        _autoUploadEnabled = autoUploadEnabled,
+        _clock = clock ?? DateTime.now,
+        _scheduleCooldown = scheduleCooldown {
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected);
   }
 
   RecordingTransferCoordinator._singleton()
-    : _reconcile = _noop,
-      _discover = _noop,
-      _refreshPending = _noop,
-      _drain = _skippedDrain,
-      _autoUploadEnabled = _disabled,
-      _clock = DateTime.now;
+      : _reconcile = _noop,
+        _discover = _noop,
+        _refreshPending = _noop,
+        _drain = _skippedDrain,
+        _autoUploadEnabled = _disabled,
+        _clock = DateTime.now;
 
   static final RecordingTransferCoordinator instance = RecordingTransferCoordinator._singleton();
 

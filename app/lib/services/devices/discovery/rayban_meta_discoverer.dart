@@ -72,8 +72,7 @@ class RayBanMetaDiscoverer extends DeviceDiscoverer {
       if (mode == 'audio_only') {
         final inputs = await host.getBluetoothHfpInputs();
         final storedDevice = SharedPreferencesUtil().btDevice;
-        final hasStoredAudioSelection =
-            storedDevice.type == DeviceType.raybanMeta &&
+        final hasStoredAudioSelection = storedDevice.type == DeviceType.raybanMeta &&
             storedDevice.locator?.extras[audioOnlyExtraKey] == true &&
             storedDevice.id.isNotEmpty &&
             storedDevice.id != legacyAudioOnlyId;

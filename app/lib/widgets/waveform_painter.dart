@@ -79,8 +79,7 @@ class WaveformPainter extends CustomPainter {
     if (isPlaying && playbackProgress > 0) {
       final progressX = (barCount * playbackProgress) * (barWidth + spacing);
       final dotPaint = Paint()
-        ..color =
-            const Color(0xFF4A90E2) // Blue color like in the image
+        ..color = const Color(0xFF4A90E2) // Blue color like in the image
         ..style = PaintingStyle.fill;
 
       // Draw the progress dot above the waveform

@@ -136,14 +136,14 @@ class AppMetadataWidget extends StatelessWidget {
                               ),
                               child: imageFile != null || imageUrl != null
                                   ? (imageUrl == null
-                                        ? ClipRRect(
-                                            borderRadius: BorderRadius.circular(14.0),
-                                            child: Image.file(imageFile!, fit: BoxFit.cover),
-                                          )
-                                        : ClipRRect(
-                                            borderRadius: BorderRadius.circular(14.0),
-                                            child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
-                                          ))
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(14.0),
+                                          child: Image.file(imageFile!, fit: BoxFit.cover),
+                                        )
+                                      : ClipRRect(
+                                          borderRadius: BorderRadius.circular(14.0),
+                                          child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
+                                        ))
                                   : Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
@@ -420,46 +420,45 @@ class AppMetadataWidget extends StatelessWidget {
                                             const SizedBox(height: 18),
                                             ListView(
                                               shrinkWrap: true,
-                                              children:
-                                                  [
-                                                    {'label': context.l10n.pricingFree, 'isPaid': false},
-                                                    {'label': context.l10n.pricingPaid, 'isPaid': true},
-                                                  ].map((option) {
-                                                    final isPaid = option['isPaid'] as bool;
-                                                    final label = option['label'] as String;
-                                                    return InkWell(
-                                                      onTap: () {
-                                                        provider.setIsPaid(isPaid);
-                                                        Navigator.pop(context);
-                                                      },
-                                                      child: Container(
-                                                        padding: const EdgeInsets.symmetric(vertical: 10),
-                                                        child: Row(
-                                                          crossAxisAlignment: CrossAxisAlignment.center,
-                                                          children: [
-                                                            const SizedBox(width: 6),
-                                                            Text(
-                                                              label,
-                                                              style: TextStyle(
-                                                                color: Colors.grey.shade300,
-                                                                fontSize: 16,
-                                                              ),
-                                                            ),
-                                                            const Spacer(),
-                                                            Checkbox(
-                                                              value: provider.isPaid == isPaid,
-                                                              onChanged: (value) {
-                                                                provider.setIsPaid(isPaid);
-                                                                Navigator.pop(context);
-                                                              },
-                                                              side: BorderSide(color: Colors.grey.shade300),
-                                                              shape: const CircleBorder(),
-                                                            ),
-                                                          ],
+                                              children: [
+                                                {'label': context.l10n.pricingFree, 'isPaid': false},
+                                                {'label': context.l10n.pricingPaid, 'isPaid': true},
+                                              ].map((option) {
+                                                final isPaid = option['isPaid'] as bool;
+                                                final label = option['label'] as String;
+                                                return InkWell(
+                                                  onTap: () {
+                                                    provider.setIsPaid(isPaid);
+                                                    Navigator.pop(context);
+                                                  },
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                                    child: Row(
+                                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                                      children: [
+                                                        const SizedBox(width: 6),
+                                                        Text(
+                                                          label,
+                                                          style: TextStyle(
+                                                            color: Colors.grey.shade300,
+                                                            fontSize: 16,
+                                                          ),
                                                         ),
-                                                      ),
-                                                    );
-                                                  }).toList(),
+                                                        const Spacer(),
+                                                        Checkbox(
+                                                          value: provider.isPaid == isPaid,
+                                                          onChanged: (value) {
+                                                            provider.setIsPaid(isPaid);
+                                                            Navigator.pop(context);
+                                                          },
+                                                          side: BorderSide(color: Colors.grey.shade300),
+                                                          shape: const CircleBorder(),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+                                              }).toList(),
                                             ),
                                           ],
                                         ),

@@ -121,7 +121,7 @@ actor RewindDatabase {
     // unrelated POSIX or application error happens to share a numeric code.
     let nsError = error as NSError
     if isKnownSQLiteDomain(nsError.domain),
-      (nsError.code == 10 || nsError.code == 11 || nsError.code == 6922)
+      nsError.code == 10 || nsError.code == 11 || nsError.code == 6922
     {
       return true
     }
