@@ -64,6 +64,19 @@ void main() {
       expect(wal.retryCount, 0);
       expect(wal.lastRetryAt, 0);
     });
+
+    test('device-owned upload intent persists across restart', () {
+      final wal = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 2,
+        uploadIntent: WalUploadIntent.liveContinuity,
+      );
+
+      final restored = Wal.fromJson(wal.toJson());
+
+      expect(restored.uploadIntent, WalUploadIntent.liveContinuity);
+    });
   });
 
   group('Wal source identity', () {

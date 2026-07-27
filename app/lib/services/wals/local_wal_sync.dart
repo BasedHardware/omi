@@ -69,7 +69,7 @@ SyncUploadLane syncUploadLaneForTimestamp(
 SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) => syncUploadLaneForTimestamp(
       wal.timerStart,
       nowSeconds,
-      hasServerCaptureProof: wal.conversationId != null,
+      hasServerCaptureProof: wal.conversationId != null || wal.uploadIntent == WalUploadIntent.liveContinuity,
     );
 
 @visibleForTesting

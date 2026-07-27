@@ -108,18 +108,44 @@ void main() {
     );
   });
 
+  test('deep backlog runs only by opt-in or while charging', () {
+    expect(
+      ringShouldDrainDeepBacklog(
+        autoSyncEnabled: false,
+        isCharging: false,
+      ),
+      isFalse,
+    );
+    expect(
+      ringShouldDrainDeepBacklog(
+        autoSyncEnabled: true,
+        isCharging: false,
+      ),
+      isTrue,
+    );
+    expect(
+      ringShouldDrainDeepBacklog(
+        autoSyncEnabled: false,
+        isCharging: true,
+      ),
+      isTrue,
+    );
+  });
+
   test('storage-authoritative scheduler persists the live head before draining backlog', () async {
-    final timestamps = {for (var seq = 0; seq < 1000; seq++) seq: _FakeRingConnection.baseTimestamp + 1000};
+    final timestamps = {
+      for (var seq = 0; seq < 10000; seq++) seq: _FakeRingConnection.baseTimestamp + 10000,
+    };
     final connection = _FakeRingConnection(
       readSeq: 0,
-      writeSeq: 1000,
+      writeSeq: 10000,
       timestamps: timestamps,
     );
     final local = localSync();
     final sync = ringSync(
       connection,
       local,
-      nowSeconds: _FakeRingConnection.baseTimestamp + 1000,
+      nowSeconds: _FakeRingConnection.baseTimestamp + 10000,
     );
     final liveDelivered = Completer<void>();
 
@@ -132,28 +158,34 @@ void main() {
 
     expect(session, isNotNull);
     await liveDelivered.future.timeout(const Duration(seconds: 1));
-    expect(connection.reads.first, (start: 980, count: 20));
+    expect(connection.reads.first, (start: 9980, count: 20));
     expect(connection.advanceAttempts, isEmpty);
 
     await connection.secondRead.future.timeout(const Duration(seconds: 3));
     final framesPerRecord = RingProtocol.audioPayloadBytes ~/ (BleAudioCodec.opus.getFramesLengthInBytes() + 1);
     final recentFloor = ringRecentRecoveryFloor(
       readSeq: 0,
-      writeSeq: 1000,
+      writeSeq: 10000,
       framesPerRecord: framesPerRecord,
       framesPerSecond: BleAudioCodec.opus.getFramesPerSecond(),
     );
     expect(connection.reads[1], (start: recentFloor, count: 96));
 
-    await connection.firstAdvance.future.timeout(const Duration(seconds: 3));
     await connection.thirdRead.future.timeout(const Duration(seconds: 3));
-    expect(connection.reads[2], (start: 96, count: 96));
-    expect(connection.successfulAdvances.first, 96);
-    expect(connection.successfulAdvances, isNot(contains(1000)));
+    expect(connection.reads[2], (start: recentFloor + 96, count: 96));
+    expect(connection.reads.where((read) => read.start < recentFloor), isEmpty);
+    expect(connection.advanceAttempts, isEmpty);
 
     await session!.cancel();
     expect(session.isActive, isFalse);
-    expect(local.testWals.any((wal) => wal.sourceId == 'ring_980_1000'), isTrue);
+    final liveWal = local.testWals.singleWhere((wal) => wal.sourceId == 'ring_9980_10000');
+    expect(liveWal.uploadIntent, WalUploadIntent.liveContinuity);
+    expect(
+      local.testWals.where((wal) => wal.sourceId != 'ring_9980_10000').every(
+            (wal) => wal.uploadIntent == WalUploadIntent.liveContinuity,
+          ),
+      isTrue,
+    );
   });
 
   test('disabled auto-sync recovers recent gap but does not start the deep prefix', () async {
@@ -221,6 +253,52 @@ void main() {
     expect(connection.reads, [(start: 980, count: 20)]);
     expect(connection.advanceAttempts, isEmpty);
     expect(local.testWals, isEmpty);
+  });
+
+  test('disconnect racing a durable live ADVANCE ends cleanly and leaves the device cursor retryable', () async {
+    final connection = _FakeRingConnection(
+      readSeq: 100,
+      writeSeq: 120,
+      failAdvance: true,
+      connected: false,
+    );
+    final local = localSync();
+    final sync = ringSync(connection, local);
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => true);
+
+    expect(session, isNotNull);
+    await expectLater(session!.done, completes);
+    expect(connection.advanceAttempts, [120]);
+    expect(connection.successfulAdvances, isEmpty);
+    expect(local.testWals.map((wal) => wal.sourceId), ['ring_100_120']);
+  });
+
+  test('live ADVANCE rejection on a connected transport remains a protocol failure', () async {
+    final connection = _FakeRingConnection(
+      readSeq: 100,
+      writeSeq: 120,
+      failAdvance: true,
+    );
+    final local = localSync();
+    final sync = ringSync(connection, local);
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => true);
+
+    expect(session, isNotNull);
+    await expectLater(
+      session!.done,
+      throwsA(
+        isA<RingStorageException>().having(
+          (error) => error.message,
+          'message',
+          contains('live covered-prefix'),
+        ),
+      ),
+    );
+    expect(connection.advanceAttempts, [120]);
+    expect(connection.successfulAdvances, isEmpty);
+    expect(local.testWals.map((wal) => wal.sourceId), ['ring_100_120']);
   });
 
   test('storage-authoritative scheduler preserves chronology when the pendant RTC is invalid', () async {
@@ -527,6 +605,7 @@ class _FakeRingConnection implements DeviceConnection {
   final int? truncateStartSeq;
   final bool corruptCrc;
   final bool failAdvance;
+  final bool connected;
   final int framesPerRecord;
   final Map<int, int> timestamps;
   final reads = <({int start, int count})>[];
@@ -543,6 +622,7 @@ class _FakeRingConnection implements DeviceConnection {
     this.truncateStartSeq,
     this.corruptCrc = false,
     this.failAdvance = false,
+    this.connected = true,
     this.framesPerRecord = 1,
     this.timestamps = const {},
   });
@@ -595,6 +675,9 @@ class _FakeRingConnection implements DeviceConnection {
     if (!firstAdvance.isCompleted) firstAdvance.complete();
     return true;
   }
+
+  @override
+  Future<bool> isConnected() async => connected;
 
   @override
   Future<BleAudioCodec> getAudioCodec() async => BleAudioCodec.opus;

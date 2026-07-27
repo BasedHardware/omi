@@ -33,6 +33,7 @@ class WalSyncs implements IWalSync {
   bool _isCancelled = false;
   BtDevice? _device;
   String? _firmwareVersion;
+  bool _deviceCharging = false;
 
   /// Called from DeviceProvider when a device connects/disconnects so the
   /// firmware-version gate in syncAll() can route to the right Phase-0 sync.
@@ -44,7 +45,14 @@ class WalSyncs implements IWalSync {
   void setDevice(BtDevice? device, {String? firmwareVersion}) {
     _device = device;
     _firmwareVersion = firmwareVersion;
+    if (device == null) {
+      _deviceCharging = false;
+    }
     _deviceStorageRouter.bind(device, firmwareVersion: firmwareVersion);
+  }
+
+  void setDeviceCharging(bool charging) {
+    _deviceCharging = charging;
   }
 
   /// Best available firmware for discovery routing: the enriched value if it
@@ -74,7 +82,10 @@ class WalSyncs implements IWalSync {
     _storageSync = StorageSyncImpl(listener);
     _ringSync = RingStorageSyncImpl(
       listener,
-      deepBacklogPolicy: () => SharedPreferencesUtil().autoSyncOfflineRecordings,
+      deepBacklogPolicy: () => ringShouldDrainDeepBacklog(
+        autoSyncEnabled: SharedPreferencesUtil().autoSyncOfflineRecordings,
+        isCharging: _deviceCharging,
+      ),
     );
     _deviceStorageRouter = DeviceStorageRouter(
       bindLegacySdCard: _sdcardSync.setDevice,

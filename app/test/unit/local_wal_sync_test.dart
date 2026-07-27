@@ -284,7 +284,30 @@ void main() {
       expect(isLiveCaptureWal(at(7 * 60 * 60, conversationId: 'c'), now), isFalse);
     });
 
-    test('a backlog smaller than the limit drains in one batch', () {
+    test('device-owned live continuity preempts historical WALs before a conversation id exists', () {
+      const now = 2000000000;
+      final historical = Wal(
+        timerStart: now - 7 * 60 * 60,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+      );
+      final liveContinuity = Wal(
+        timerStart: now - 10,
+        codec: BleAudioCodec.opus,
+        seconds: 2,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        uploadIntent: WalUploadIntent.liveContinuity,
+      );
+
+      final batch = nextSyncUploadBatch([historical, liveContinuity], now);
+
+      expect(batch, [liveContinuity]);
+    });
+
+    test('a small historical backlog drains in one batch instead of a few files at a time', () {
       const now = 2000000000;
       final historical = List.generate(
         3,
@@ -603,6 +626,66 @@ void main() {
         [fileName],
         [secondFileName],
       ]);
+    });
+
+    test('fresh external WAL wakes ahead of a large historical queue without a conversation id', () async {
+      SyncRateLimiter.instance.clear();
+      final uploadStarted = Completer<void>();
+      final uploadedFiles = <String>[];
+      final uploadLanes = <SyncUploadLane>[];
+      final fileName = 'external_live_${DateTime.now().microsecondsSinceEpoch}.bin';
+      final file = File('${Directory.systemTemp.path}/$fileName');
+      await file.writeAsBytes([1, 2, 3], flush: true);
+      addTearDown(() async {
+        if (await file.exists()) await file.delete();
+      });
+
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+          uploadedFiles.addAll(files.map((candidate) => candidate.uri.pathSegments.last));
+          uploadLanes.add(syncLane);
+          if (!uploadStarted.isCompleted) uploadStarted.complete();
+          return UploadFilesResult.queued('fresh-priority-job');
+        },
+      );
+      final externalSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: gate,
+        walPersister: (_) async => true,
+      );
+      externalSync.testWals = List.generate(
+        1000,
+        (index) => Wal(
+          timerStart: 1000 + index,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          filePath: 'historical_$index.bin',
+          device: 'test-device',
+          uploadIntent: WalUploadIntent.historicalBackfill,
+        ),
+      );
+      final liveWal = Wal(
+        timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 2,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: fileName,
+        device: 'test-device',
+        sourceId: 'ring_1000_1020',
+        uploadIntent: WalUploadIntent.liveContinuity,
+      );
+
+      expect(await externalSync.addExternalWal(liveWal), ExternalWalRegistration.added);
+      await uploadStarted.future.timeout(const Duration(seconds: 1));
+
+      expect(uploadedFiles, [fileName]);
+      expect(uploadLanes, [SyncUploadLane.fresh]);
     });
   });
 

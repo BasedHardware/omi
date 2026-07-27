@@ -41,6 +41,12 @@ typedef RingDocumentsDirectoryProvider = Future<Directory> Function();
 typedef RingLiveFramesHandler = bool Function(List<List<int>> frames);
 typedef RingDeepBacklogPolicy = bool Function();
 
+bool ringShouldDrainDeepBacklog({
+  required bool autoSyncEnabled,
+  required bool isCharging,
+}) =>
+    autoSyncEnabled || isCharging;
+
 @visibleForTesting
 int ringRecentRecoveryFloor({
   required int readSeq,
@@ -514,6 +520,37 @@ class RingStorageSyncImpl implements RingStorageSync {
     return RingSequenceCoverage(ranges);
   }
 
+  Future<bool> _advanceLiveTailOrStop({
+    required int generation,
+    required String deviceId,
+    required DeviceConnection connection,
+    required int nextSeq,
+    required String rejectionMessage,
+  }) async {
+    if (await connection.advanceRing(nextSeq)) return true;
+
+    /*
+     * A Bluetooth shutdown can reject the in-flight ADVANCE before the
+     * provider's disconnect callback invalidates this tail. The range is
+     * already durable locally, and the device cursor was not advanced, so a
+     * replacement session can safely retry without loss or duplication.
+     *
+     * Keep a rejection on a live transport fatal: that is a real firmware or
+     * protocol contract failure, not an expected connection transition.
+     */
+    if (_tailGeneration != generation || _isCancelled || _device?.id != deviceId) {
+      return false;
+    }
+    try {
+      if (!await connection.isConnected()) return false;
+    } catch (_) {
+      // A stale native session can fail the state query itself. It has the
+      // same retry semantics as an explicitly disconnected transport.
+      return false;
+    }
+    throw RingStorageException(rejectionMessage);
+  }
+
   Future<void> _runAudioTail({
     required int generation,
     required String deviceId,
@@ -538,12 +575,14 @@ class RingStorageSyncImpl implements RingStorageSync {
       while (_tailGeneration == generation && !_isCancelled && _device?.id == deviceId) {
         final coveredPrefix = coverage.contiguousEndFrom(info.readSeq);
         if (coveredPrefix > info.readSeq) {
-          final advanced = await connection.advanceRing(coveredPrefix);
-          if (!advanced) {
-            throw const RingStorageException(
-              'Device rejected a durable covered-prefix advance',
-            );
-          }
+          final advanced = await _advanceLiveTailOrStop(
+            generation: generation,
+            deviceId: deviceId,
+            connection: connection,
+            nextSeq: coveredPrefix,
+            rejectionMessage: 'Device rejected a durable covered-prefix advance',
+          );
+          if (!advanced) return;
           info = RingInfo(
             readSeq: coveredPrefix,
             writeSeq: info.writeSeq,
@@ -569,6 +608,7 @@ class RingStorageSyncImpl implements RingStorageSync {
             final result = await _syncRange(
               connection,
               wal,
+              uploadIntent: WalUploadIntent.liveContinuity,
               startSeq: liveStart,
               packetCount: liveCount,
               fallbackAnchor: wal.timerStart,
@@ -608,6 +648,7 @@ class RingStorageSyncImpl implements RingStorageSync {
           recentFloor,
           info.writeSeq,
         );
+        var recoveredRecentSlice = false;
         if (recentStart < info.writeSeq) {
           final nextRecentCovered = coverage.firstRangeAtOrAfter(recentStart);
           final recentEnd = nextRecentCovered?.start ?? info.writeSeq;
@@ -617,6 +658,7 @@ class RingStorageSyncImpl implements RingStorageSync {
             final result = await _syncRange(
               connection,
               wal,
+              uploadIntent: WalUploadIntent.liveContinuity,
               startSeq: recentStart,
               packetCount: count,
               fallbackAnchor: wal.timerStart,
@@ -631,17 +673,20 @@ class RingStorageSyncImpl implements RingStorageSync {
               );
             }
             coverage.add(recentStart, result.nextSeq);
+            recoveredRecentSlice = true;
           }
         }
 
         final prefixAfterLive = coverage.contiguousEndFrom(info.readSeq);
         if (prefixAfterLive > info.readSeq) {
-          final advanced = await connection.advanceRing(prefixAfterLive);
-          if (!advanced) {
-            throw const RingStorageException(
-              'Device rejected a live covered-prefix advance',
-            );
-          }
+          final advanced = await _advanceLiveTailOrStop(
+            generation: generation,
+            deviceId: deviceId,
+            connection: connection,
+            nextSeq: prefixAfterLive,
+            rejectionMessage: 'Device rejected a live covered-prefix advance',
+          );
+          if (!advanced) return;
           info = RingInfo(
             readSeq: prefixAfterLive,
             writeSeq: info.writeSeq,
@@ -653,12 +698,15 @@ class RingStorageSyncImpl implements RingStorageSync {
 
         final nextCovered = coverage.firstRangeAtOrAfter(info.readSeq);
         final backlogEnd = nextCovered?.start ?? info.writeSeq;
-        if (_deepBacklogPolicy() && backlogEnd > info.readSeq) {
+        // One recovery transfer per live poll. A slow BLE link must not queue a
+        // recent repair and an old-history drain ahead of newly captured audio.
+        if (!recoveredRecentSlice && _deepBacklogPolicy() && backlogEnd > info.readSeq) {
           final available = backlogEnd - info.readSeq;
           final count = available > _backlogPacketsPerSlice ? _backlogPacketsPerSlice : available;
           final result = await _syncRange(
             connection,
             wal,
+            uploadIntent: WalUploadIntent.historicalBackfill,
             startSeq: info.readSeq,
             packetCount: count,
             fallbackAnchor: wal.timerStart,
@@ -673,12 +721,14 @@ class RingStorageSyncImpl implements RingStorageSync {
             );
           }
           coverage.add(info.readSeq, result.nextSeq);
-          final advanced = await connection.advanceRing(result.nextSeq);
-          if (!advanced) {
-            throw const RingStorageException(
-              'Device rejected a backlog covered-prefix advance',
-            );
-          }
+          final advanced = await _advanceLiveTailOrStop(
+            generation: generation,
+            deviceId: deviceId,
+            connection: connection,
+            nextSeq: result.nextSeq,
+            rejectionMessage: 'Device rejected a backlog covered-prefix advance',
+          );
+          if (!advanced) return;
           info = RingInfo(
             readSeq: result.nextSeq,
             writeSeq: info.writeSeq,
@@ -857,6 +907,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       final advancedTo = await _syncRange(
         connection,
         wal,
+        uploadIntent: WalUploadIntent.historicalBackfill,
         startSeq: nextReadSeq,
         packetCount: packetCount,
         fallbackAnchor: fallbackAnchor,
@@ -905,6 +956,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   Future<_RingRangeResult?> _syncRange(
     DeviceConnection connection,
     Wal wal, {
+    required WalUploadIntent uploadIntent,
     required int startSeq,
     required int packetCount,
     required int fallbackAnchor,
@@ -967,6 +1019,7 @@ class RingStorageSyncImpl implements RingStorageSync {
             timerStart,
             frames.length,
             sourceId,
+            uploadIntent: uploadIntent,
             scheduleUpload: !isLiveRange,
           );
           if (isLiveRange && registered.registration == ExternalWalRegistration.added) {
@@ -1308,6 +1361,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     int timerStart,
     int frameCount,
     String sourceId, {
+    required WalUploadIntent uploadIntent,
     bool scheduleUpload = true,
   }) async {
     if (_localSync == null) {
@@ -1333,6 +1387,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       syncedFrameOffset: 0,
       originalStorage: WalStorage.sdcard,
       sourceId: sourceId,
+      uploadIntent: uploadIntent,
     );
 
     final registration = await _localSync!.addExternalWal(

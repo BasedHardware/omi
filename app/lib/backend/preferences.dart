@@ -192,9 +192,11 @@ class SharedPreferencesUtil {
 
   bool get useCustomStt => customSttConfig.isEnabled;
 
-  // Whether offline recordings auto-sync to Omi when the device connects.
-  // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
-  bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings', defaultValue: true);
+  // Whether historical offline recordings auto-sync to Omi when the device
+  // connects. Current-conversation gap repair is independent of this setting.
+  // Defaults off to protect pendant and phone battery; charging can still
+  // enable the bounded background drain.
+  bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings');
 
   set autoSyncOfflineRecordings(bool value) => saveBool('autoSyncOfflineRecordings', value);
 

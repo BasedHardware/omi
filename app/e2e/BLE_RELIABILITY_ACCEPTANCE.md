@@ -131,6 +131,52 @@ speed promise for every phone or radio environment. Keep the measured
 (approximately 16.5% below that clean baseline) until it is remeasured on the
 same path.
 
+## Deterministic voice-gate fixture
+
+Use recorded or synthesized speech instead of tester speech when comparing
+firmware voice-gate candidates. Keep the pendant position, phone position,
+speaker, macOS output level, and pendant microphone gain unchanged for the
+entire comparison.
+
+Create one reusable marker:
+
+```bash
+say -v Samantha -r 165 \
+  -o /tmp/omi-cv1-marker.aiff \
+  "Omi marker seven. The blue train reaches the station at nine forty."
+```
+
+For each firmware artifact:
+
+1. Record the artifact SHA-256 and the initial ring `read`, `write`, and
+   `dropped` counters.
+2. Leave the fixture silent for 60 seconds. After the configured audio
+   hangover, `write` must remain stable; hardware-AAD wakeups alone are not
+   stored speech.
+3. Play the marker five times at the fixed normal level, separated by
+   one-second pauses:
+
+   ```bash
+   for run in 1 2 3 4 5; do
+     afplay -v 0.50 /tmp/omi-cv1-marker.aiff
+     sleep 1
+   done
+   ```
+
+4. Repeat once at the fixed quiet level with `afplay -v 0.25`.
+5. Leave the fixture silent again. The ring must stop growing within the
+   encoded-audio hangover even if the low-power conversation window remains
+   armed.
+6. Cycle phone Bluetooth off, play one marker while disconnected, then turn
+   Bluetooth on. The app must resume live audio first and durably recover the
+   missing marker with its capture timestamp.
+
+Pass only when all normal-level markers and the quiet marker are durably
+present, the two silence windows do not create audio records, `dropped` does
+not increase, and the reconnect produces neither a duplicate marker nor a
+chronological rewind. Preserve the generated audio file, artifact hash, ring
+snapshots, and Flutter/native log with the run evidence.
+
 ## Timestamp-specific checks
 
 Firmware reboot can reset its clock. For every initial connection and native

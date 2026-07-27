@@ -30,6 +30,14 @@ enum WalStorage { mem, disk, sdcard, flashPage }
 
 enum SyncMethod { ble }
 
+/// Why this recording is entering the cloud-upload queue.
+///
+/// [liveContinuity] is assigned only by a source transport that knows the
+/// recording belongs to the current/recent capture window. It may use the
+/// latency-sensitive upload lane even before the server assigns a conversation
+/// id. [historicalBackfill] is always background work.
+enum WalUploadIntent { liveContinuity, historicalBackfill }
+
 /// User-facing sync state for a single recording, derived from [Wal.status],
 /// [Wal.isSyncing] and [Wal.retryCount]. This is what the sync UI renders so a
 /// recording is never shown as an indistinct row — every state is explicit.
@@ -132,6 +140,12 @@ class Wal {
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
 
+  /// Durable upload-lane ownership assigned by the source transport.
+  ///
+  /// Legacy WALs leave this null and retain the conservative rule that only a
+  /// server conversation id proves they belong to the fresh lane.
+  WalUploadIntent? uploadIntent;
+
   /// Number of sync retry attempts for this WAL.
   int retryCount;
 
@@ -217,6 +231,7 @@ class Wal {
     this.originalStorage,
     this.sourceId,
     this.conversationId,
+    this.uploadIntent,
     this.retryCount = 0,
     this.lastRetryAt = 0,
     this.jobId,
@@ -246,6 +261,7 @@ class Wal {
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       sourceId: json['source_id'],
       conversationId: json['conversation_id'],
+      uploadIntent: json['upload_intent'] != null ? WalUploadIntent.values.asNameMap()[json['upload_intent']] : null,
       retryCount: json['retry_count'] ?? 0,
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
@@ -273,6 +289,7 @@ class Wal {
       'original_storage': originalStorage?.name,
       'source_id': sourceId,
       'conversation_id': conversationId,
+      'upload_intent': uploadIntent?.name,
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
       'job_id': jobId,
