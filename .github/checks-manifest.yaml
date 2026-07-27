@@ -14,6 +14,11 @@ checks:
     triggers: ["desktop/macos/scripts/pre-tag-readiness.sh", "desktop/macos/tests/test-pre-tag-readiness-contract.sh", ".github/scripts/verify-pre-tag-readiness.py", ".github/scripts/test_verify_pre_tag_readiness.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "trusted-M1 readiness must retain exact-SHA cache/lease ownership and cannot emit a passing receipt before authenticated cleanup"
+  - id: pre-tag-readiness-behavior
+    command: ["python3", "desktop/macos/tests/test_pre_tag_readiness_behavior.py"]
+    triggers: ["desktop/macos/scripts/pre-tag-readiness.sh", "desktop/macos/tests/test_pre_tag_readiness_behavior.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a disposable source and authenticated capability fakes prove the real readiness orchestrator emits its exact-SHA receipt only after ordered cleanup"
   - id: verify-pre-tag-readiness-tests
     command: ["python3", ".github/scripts/test_verify_pre_tag_readiness.py"]
     triggers: [".github/scripts/verify-pre-tag-readiness.py", ".github/scripts/test_verify_pre_tag_readiness.py", ".github/checks-manifest.yaml"]
@@ -326,9 +331,9 @@ checks:
     reason: "repository-wide version-prefixed filename contract"
   - id: backend-import-purity
     command: ["python3", "backend/scripts/scan_import_time_side_effects.py", "--files", "{changed_files}", "--check-allowlist-monotonic", "{base}"]
-    triggers: ["backend/**/*.py", "backend/tests/.import_time_side_effects_legacy_allowlist"]
+    triggers: ["backend/**/*.py"]
     lanes: ["local", "ci"]
-    reason: "backend production Python or its allowlist changed"
+    reason: "backend production Python changes must retain import-time purity"
   - id: backend-runtime-image-source-closure
     command: ["python3", "backend/scripts/runtime_image_contracts.py", "check"]
     triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", ".github/workflows/runtime_image_contracts.yml", ".github/workflows/gcp_backend*.yml", ".github/workflows/gcp_diarizer.yml", ".github/workflows/gcp_models.yml", ".github/workflows/gcp_parakeet.yml", ".github/workflows/gcp_nllb_translation.yml", ".github/workflows/gcp_memory_maintenance_job*.yml", ".github/workflows/gcp_notifications_job.yml", ".github/workflows/gcp_plugins.yml", "plugins/**/*.py", "plugins/Dockerfile"]
