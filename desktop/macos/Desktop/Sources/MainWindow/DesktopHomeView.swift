@@ -1388,7 +1388,12 @@ private struct MemoryHubPage: View {
             guard await memoriesViewModel.openMemory(id: memoryId) else { return }
             destinationRawValue = MemoryHubDestination.memories.rawValue
           }
-        }
+        },
+        // Escape out of the map itself lands on the hub — the level the Brain
+        // Map is a destination of, one step back like every other Escape. The
+        // map calls this directly rather than letting the key travel up to the
+        // window: a canvas takes no focus, so nothing up there ever hears it.
+        onLeave: { destinationRawValue = MemoryHubDestination.memories.rawValue }
       )
     case .legacyBrainMap:
       MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)

@@ -392,6 +392,35 @@ private struct MemoryAtlasNeighbourhoodCaption: View {
   }
 }
 
+/// What Escape undoes on the Brain Map, one layer at a time.
+///
+/// The map stacks modes: you go into a place, pick something inside it, then
+/// search from there. Collapsing all of that on one press throws away two
+/// decisions the user did not ask to undo — and the version that cleared only
+/// the search and the selection left the newest mode as the only one with no
+/// keyboard way out, which is exactly backwards.
+///
+/// Innermost first, and nothing at all once there is nothing left: the press
+/// then belongs to whatever is around the map. Escape backing out of a page is
+/// how the rest of this app behaves, and a map that swallows the key
+/// unconditionally is a page you can only leave with the mouse.
+enum MemoryAtlasDismissal {
+  enum Step: Equatable {
+    case search
+    case selection
+    case neighbourhood
+    /// Nothing to undo — the key is not the map's to eat.
+    case passThrough
+  }
+
+  static func next(isSearching: Bool, hasSelection: Bool, isInsideNeighbourhood: Bool) -> Step {
+    if isSearching { return .search }
+    if hasSelection { return .selection }
+    if isInsideNeighbourhood { return .neighbourhood }
+    return .passThrough
+  }
+}
+
 /// Where a region's name goes, and whether it goes anywhere at all.
 ///
 /// Separate from the drawing so the tap target and the painted caption are
@@ -450,7 +479,15 @@ enum MemoryAtlasNeighbourhoodLabels {
   /// entirely. Otherwise they stay: an earlier version dropped them past
   /// neighbourhood zoom, so zooming in on an island made it vanish — the one
   /// thing a person does after seeing a place they want to look at.
-  static func areVisible(detailLevel: MemoryAtlasDetailLevel, hasSelection: Bool) -> Bool {
+  ///
+  /// Inside a place, none of that applies. The island the user went into is
+  /// the frame everything else is being read in, so it outlasts zooming all
+  /// the way in and picking an entity off it — both of which used to erase the
+  /// only thing on screen saying where they were.
+  static func areVisible(
+    detailLevel: MemoryAtlasDetailLevel, hasSelection: Bool, isInsideNeighbourhood: Bool
+  ) -> Bool {
+    if isInsideNeighbourhood { return true }
     guard !hasSelection else { return false }
     return detailLevel != .inspect
   }
@@ -524,6 +561,22 @@ enum MemoryAtlasNeighbourhoodLabels {
         width: (0.5 - center.x) * span * zoom,
         height: (0.5 - center.y) * span * zoom)
     )
+  }
+
+  /// The zoom at which zooming out counts as having left the place you went
+  /// into.
+  ///
+  /// Relative to the camera that entering actually chose, never a constant.
+  /// A big island is framed at a low zoom — sometimes below the fixed
+  /// threshold this replaced — so entering it set a zoom that immediately read
+  /// as "zoomed back out" and threw the user straight out again. Any island
+  /// wider than about half the map was unenterable, which on an account with a
+  /// handful of regions is all of them.
+  ///
+  /// The margin is what keeps a small zoom-out from being an exit: nudging the
+  /// camera to see a little more context around a place is not leaving it.
+  static func departureZoom(enteredAt zoom: CGFloat, neighbourhoodZoom: CGFloat) -> CGFloat {
+    min(zoom, neighbourhoodZoom) * 0.85
   }
 
   /// Places on the island where its whole name would sit on land, nearest the
@@ -2433,7 +2486,8 @@ struct CanonicalMemoryAtlasPage: View {
         evidenceProvider: evidenceProvider,
         onOpenMemory: onOpenMemory,
         onRebuild: { Task { await viewModel.rebuildGraph() } },
-        isRebuilding: viewModel.isRebuilding
+        isRebuilding: viewModel.isRebuilding,
+        onLeave: onBack
       )
     }
     .background(OmiColors.backgroundPrimary)
@@ -2459,6 +2513,8 @@ struct CanonicalMemoryAtlasTabView: View {
   let evidenceProvider: ([String]) async -> [MemoryAtlasEvidence]
   /// Opens a cited memory on the hub's Memories destination.
   let onOpenMemory: (String) -> Void
+  /// Where Escape goes once the map has nothing of its own left to undo.
+  var onLeave: (() -> Void)?
 
   var body: some View {
     CanonicalMemoryAtlasSurface(
@@ -2467,7 +2523,8 @@ struct CanonicalMemoryAtlasTabView: View {
       evidenceProvider: evidenceProvider,
       onOpenMemory: onOpenMemory,
       onRebuild: { Task { await viewModel.rebuildGraph() } },
-      isRebuilding: viewModel.isRebuilding
+      isRebuilding: viewModel.isRebuilding,
+      onLeave: onLeave
     )
     .background(OmiColors.backgroundPrimary)
     .accessibilityIdentifier("canonical_memory_atlas_tab")
@@ -2499,6 +2556,9 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// view model to drive it (the inline preview, offscreen export renders).
   let onRebuild: (() -> Void)?
   let isRebuilding: Bool
+  /// Where Escape goes once the map itself has nothing left to undo. Absent on
+  /// surfaces with nowhere to go, which is how those keep passing the key on.
+  let onLeave: (() -> Void)?
   private let snapshot: MemoryAtlasSnapshot
   private let renderPlanCache: MemoryAtlasRenderPlanCache
   /// The cursor at which each relationship can first be painted. Precomputing
@@ -2531,6 +2591,11 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// names are hidden under a caption while you are reading the map as a whole,
   /// and handed back the moment you pick somewhere to look.
   @State private var enteredRegionID: Int?
+  /// The zoom at which the user counts as having zoomed back out of the place
+  /// they went into. Set from the camera entering actually used, because a
+  /// fixed threshold throws the user out of any island big enough to be framed
+  /// below it — which is every island on a map with only a few regions on it.
+  @State private var departureZoom: CGFloat = 0
   @State private var zoom: CGFloat = 1
   @State private var settledZoom: CGFloat = 1
   @State private var pan: CGSize = .zero
@@ -2558,6 +2623,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     onOpenMemory: ((String) -> Void)? = nil,
     onRebuild: (() -> Void)? = nil,
     isRebuilding: Bool = false,
+    onLeave: (() -> Void)? = nil,
     previewTimeCursor: Double? = nil,
     /// Deterministic offscreen renders open the inspector, which is otherwise
     /// only reachable by tapping the canvas.
@@ -2576,6 +2642,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     self.onOpenMemory = onOpenMemory
     self.onRebuild = onRebuild
     self.isRebuilding = isRebuilding
+    self.onLeave = onLeave
     self.previewTimeCursor = previewTimeCursor
     self.previewEvidence = previewEvidence
     _timeCursor = State(initialValue: previewTimeCursor ?? 1)
@@ -2812,7 +2879,7 @@ private struct CanonicalMemoryAtlasSurface: View {
               onScroll: { delta, location in
                 scrollZoom(by: delta, anchoredAt: location, in: proxy.size)
               },
-              onEscape: clearTransientState,
+              onEscape: dismissTopmostState,
               onFocusSearch: { searchIsFocused = true }
             )
             .accessibilityHidden(true)
@@ -2826,10 +2893,8 @@ private struct CanonicalMemoryAtlasSurface: View {
         // looking at one region, and the only way back is a control they have
         // no reason to know about.
         .onChange(of: zoom) { _, level in
-          guard enteredRegionID != nil, level < MemoryAtlasZoomPolicy.neighborhoodZoom else {
-            return
-          }
-          enteredRegionID = nil
+          guard enteredRegionID != nil, level < departureZoom else { return }
+          leaveNeighbourhood()
         }
         .clipped()
       }
@@ -2916,9 +2981,18 @@ private struct CanonicalMemoryAtlasSurface: View {
         selectedEdgeID = edgeID
         return
       }
-      if let nodeID = notification.userInfo?["node_id"] as? String,
-        snapshot.nodeByID[nodeID] != nil
-      {
+      // By name as well as by id, because an entity's id is a server key
+      // nothing on screen shows. Selecting the entity a QA step is actually
+      // talking about otherwise means clicking a dot by pixel — which is not
+      // reachable from a headless check, and on a multi-display machine is not
+      // reliably reachable from a cursor either.
+      let named = (notification.userInfo?["label"] as? String).flatMap { wanted in
+        snapshot.nodes.first { $0.node.label.localizedCaseInsensitiveCompare(wanted) == .orderedSame }
+          ?? snapshot.nodes.first { $0.node.label.localizedCaseInsensitiveContains(wanted) }
+      }
+      if let nodeID = (notification.userInfo?["node_id"] as? String).flatMap({
+        snapshot.nodeByID[$0] != nil ? $0 : nil
+      }) ?? named?.id {
         selectionTrail.removeAll()
         selectedEdgeID = nil
         selectedNodeID = nodeID
@@ -3076,7 +3150,8 @@ private struct CanonicalMemoryAtlasSurface: View {
   ) -> (islands: [MemoryAtlasNeighbourhoodLabels.Placed], quietened: Set<String>) {
     guard !compact, matchingNodeIDs == nil,
       MemoryAtlasNeighbourhoodLabels.areVisible(
-        detailLevel: plan.detailLevel, hasSelection: selectedNodeID != nil)
+        detailLevel: plan.detailLevel, hasSelection: selectedNodeID != nil,
+        isInsideNeighbourhood: enteredRegionID != nil)
     else { return ([], []) }
 
     let found = MemoryAtlasNeighbourhoodLabels.islands(
@@ -3184,11 +3259,20 @@ private struct CanonicalMemoryAtlasSurface: View {
       shape.move(to: point(for: region.ring[0], in: size))
       for vertex in region.ring.dropFirst() { shape.addLine(to: point(for: vertex, in: size)) }
       shape.closeSubpath()
+      // The place the user went into is the one thing on the map they chose,
+      // so it is drawn as chosen. Not loudly — a shade more ink than the
+      // others is enough when it is also the only coast still on screen, and
+      // it is what keeps the island reading as the frame once an entity
+      // inside it is selected and the inspector takes over the right-hand
+      // side.
+      let entered = region.regionID == enteredRegionID
       // Even-odd, so an enclave inside a territory is drawn as the hole it is
       // rather than being filled over.
       context.fill(
-        shape, with: .color(OmiColors.textPrimary.opacity(0.05)), style: FillStyle(eoFill: true))
-      context.stroke(shape, with: .color(OmiColors.textPrimary.opacity(0.34)), lineWidth: 1)
+        shape, with: .color(OmiColors.textPrimary.opacity(entered ? 0.07 : 0.05)),
+        style: FillStyle(eoFill: true))
+      context.stroke(
+        shape, with: .color(OmiColors.textPrimary.opacity(entered ? 0.5 : 0.34)), lineWidth: 1)
     }
   }
 
@@ -3241,6 +3325,8 @@ private struct CanonicalMemoryAtlasSurface: View {
       radius: framed.1,
       viewport: viewportSize,
       zoomRange: MemoryAtlasZoomPolicy.minimumZoom...maximumZoom)
+    departureZoom = MemoryAtlasNeighbourhoodLabels.departureZoom(
+      enteredAt: camera.zoom, neighbourhoodZoom: MemoryAtlasZoomPolicy.neighborhoodZoom)
     withAnimation(OmiMotion.gated(.easeOut(duration: 0.26))) {
       enteredRegionID = region.regionID
       zoom = camera.zoom
@@ -3274,6 +3360,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// thing they asked for. Only the mode ends — every coastline comes back and
   /// the captions take their entities' names again.
   private func leaveNeighbourhood() {
+    departureZoom = 0
     withAnimation(OmiMotion.gated(.easeOut(duration: 0.2))) { enteredRegionID = nil }
   }
 
@@ -4357,12 +4444,33 @@ private struct CanonicalMemoryAtlasSurface: View {
     }
   }
 
-  private func clearTransientState() {
-    searchIsFocused = false
-    searchText = ""
-    matchingNodeIDs = nil
-    matchingEdges = nil
-    clearSelection()
+  /// Undo the innermost thing the user has done, and say whether there was
+  /// one. A press the map has no use for is handed back so the page around it
+  /// can take the user out of the map.
+  private func dismissTopmostState() -> Bool {
+    switch MemoryAtlasDismissal.next(
+      isSearching: searchIsFocused || !searchText.isEmpty,
+      hasSelection: selectedNodeID != nil || selectedEdgeID != nil,
+      isInsideNeighbourhood: enteredRegionID != nil)
+    {
+    case .search:
+      searchIsFocused = false
+      searchText = ""
+      matchingNodeIDs = nil
+      matchingEdges = nil
+    case .selection:
+      clearSelection()
+    case .neighbourhood:
+      leaveNeighbourhood()
+    case .passThrough:
+      // The last layer is the map itself. Handing the key back to the window
+      // instead was the tidy-looking version and it did nothing: the atlas is
+      // a canvas, so there is no focused control for a cancel to travel up
+      // from, and Escape on a page with nothing selected was simply swallowed.
+      guard let onLeave else { return false }
+      onLeave()
+    }
+    return true
   }
 }
 
@@ -4372,7 +4480,8 @@ private struct CanonicalMemoryAtlasSurface: View {
 /// owned by SwiftUI.
 private struct MemoryAtlasInputMonitor: NSViewRepresentable {
   let onScroll: (CGFloat, CGPoint) -> Void
-  let onEscape: () -> Void
+  /// Reports whether the map used the key. False hands it back to the page.
+  let onEscape: () -> Bool
   let onFocusSearch: () -> Void
 
   func makeCoordinator() -> Coordinator {
@@ -4428,7 +4537,7 @@ private struct MemoryAtlasInputMonitor: NSViewRepresentable {
 
   final class Coordinator {
     var onScroll: (CGFloat, CGPoint) -> Void
-    var onEscape: () -> Void
+    var onEscape: () -> Bool
     var onFocusSearch: () -> Void
     fileprivate var windowNumber: Int?
     fileprivate var frameInWindow: CGRect = .zero
@@ -4436,7 +4545,7 @@ private struct MemoryAtlasInputMonitor: NSViewRepresentable {
 
     init(
       onScroll: @escaping (CGFloat, CGPoint) -> Void,
-      onEscape: @escaping () -> Void,
+      onEscape: @escaping () -> Bool,
       onFocusSearch: @escaping () -> Void
     ) {
       self.onScroll = onScroll
@@ -4452,8 +4561,7 @@ private struct MemoryAtlasInputMonitor: NSViewRepresentable {
         }
 
         if event.type == .keyDown, event.keyCode == 53 {
-          self.onEscape()
-          return nil
+          return self.onEscape() ? nil : event
         }
 
         if event.type == .keyDown,

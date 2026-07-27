@@ -3141,11 +3141,12 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "memory_atlas_select",
       summary: "Select a Brain Map entity or connection so the inspector can be checked cursor-free",
-      params: ["target", "node_id", "edge_id", "clear"]
+      params: ["target", "node_id", "label", "edge_id", "clear"]
     ) { params in
       let target = params["target"] == "inline" ? "inline" : "page"
       var userInfo: [String: Any] = ["target": target]
       if let nodeID = params["node_id"], !nodeID.isEmpty { userInfo["node_id"] = nodeID }
+      if let label = params["label"], !label.isEmpty { userInfo["label"] = label }
       if let edgeID = params["edge_id"], !edgeID.isEmpty { userInfo["edge_id"] = edgeID }
       if params["clear"] == "true" { userInfo["clear"] = true }
       await MainActor.run {
@@ -3159,6 +3160,7 @@ final class DesktopAutomationActionRegistry {
         "posted": "true",
         "target": target,
         "node_id": params["node_id"] ?? "",
+        "label": params["label"] ?? "",
         "edge_id": params["edge_id"] ?? "",
         "clear": params["clear"] ?? "false",
       ]

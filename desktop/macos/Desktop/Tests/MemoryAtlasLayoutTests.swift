@@ -722,12 +722,86 @@ final class MemoryAtlasLayoutTests: XCTestCase {
   func testRegionNamesGiveWayToWhateverTheUserIsActuallyLookingAt() {
     let visible = MemoryAtlasNeighbourhoodLabels.areVisible
 
-    XCTAssertTrue(visible(.overview, false))
-    XCTAssertTrue(visible(.neighborhood, false))
-    XCTAssertTrue(visible(.detail, false), "Zooming into a place must not delete the place")
-    XCTAssertTrue(visible(.focus, false))
-    XCTAssertFalse(visible(.inspect, false), "Every entity is named here; a region name is noise")
-    XCTAssertFalse(visible(.overview, true), "A selection is a more specific question")
+    XCTAssertTrue(visible(.overview, false, false))
+    XCTAssertTrue(visible(.neighborhood, false, false))
+    XCTAssertTrue(visible(.detail, false, false), "Zooming into a place must not delete the place")
+    XCTAssertTrue(visible(.focus, false, false))
+    XCTAssertFalse(
+      visible(.inspect, false, false), "Every entity is named here; a region name is noise")
+    XCTAssertFalse(visible(.overview, true, false), "A selection is a more specific question")
+  }
+
+  /// The place you went into is still there once you start looking inside it.
+  ///
+  /// Both of these erased it. Zooming past inspect took the island and its name
+  /// with it, and picking any entity did the same — so the two things a person
+  /// does immediately after arriving somewhere both removed the only thing on
+  /// screen saying where they had arrived. Inside a place the island is the
+  /// frame, not a competing answer.
+  func testThePlaceYouAreInsideOutlastsLookingAroundInsideIt() {
+    let visible = MemoryAtlasNeighbourhoodLabels.areVisible
+
+    XCTAssertTrue(visible(.inspect, false, true), "Zooming right in must not delete the island")
+    XCTAssertTrue(
+      visible(.overview, true, true), "Selecting an entity on the island must not delete it")
+    XCTAssertTrue(visible(.inspect, true, true), "Nor both at once")
+  }
+
+  /// Going into a place must not immediately count as having left it.
+  ///
+  /// The rule for leaving used to be a fixed zoom, which quietly made big
+  /// islands unenterable: a region that fills half the map is framed at barely
+  /// more than 1×, below the threshold, so the camera arrived and the mode
+  /// ended in the same frame. Whether the user has zoomed back out is a
+  /// question about where they started, not about a constant.
+  func testGoingIntoABigPlaceDoesNotCountAsLeavingIt() {
+    let departure = MemoryAtlasNeighbourhoodLabels.departureZoom
+
+    // A region filling most of the map: entering barely zooms at all.
+    let wide = MemoryAtlasNeighbourhoodLabels.entering(
+      center: CGPoint(x: 0.5, y: 0.5), radius: 0.3, viewport: CGSize(width: 900, height: 700),
+      zoomRange: 0.6...12)
+    XCTAssertLessThan(
+      wide.zoom, MemoryAtlasZoomPolicy.neighborhoodZoom,
+      "Fixture check: this is the case a fixed threshold got wrong")
+    XCTAssertGreaterThan(
+      wide.zoom,
+      departure(wide.zoom, MemoryAtlasZoomPolicy.neighborhoodZoom),
+      "Arriving somewhere must never already be below the zoom that leaves it")
+
+    // A small region, entered at deep zoom: pulling back a little to see the
+    // surroundings is still being there, and pulling back to the whole map is
+    // not.
+    let tight = MemoryAtlasNeighbourhoodLabels.entering(
+      center: CGPoint(x: 0.3, y: 0.6), radius: 0.05, viewport: CGSize(width: 900, height: 700),
+      zoomRange: 0.6...12)
+    let floor = departure(tight.zoom, MemoryAtlasZoomPolicy.neighborhoodZoom)
+    XCTAssertGreaterThan(tight.zoom * 0.9, floor, "A small pull-back is not an exit")
+    XCTAssertLessThan(CGFloat(1), floor, "Zooming back out to the whole map is")
+  }
+
+  /// Escape undoes one thing per press, innermost first, and stops eating the
+  /// key once there is nothing of the map's left to undo.
+  ///
+  /// The layering is the point. One press used to drop the search and the
+  /// selection together — two decisions for one keystroke — while the
+  /// neighbourhood the user had gone into had no keyboard exit at all. And
+  /// because the map consumed every Escape whether or not it used one, the
+  /// Brain Map was a page you could only leave with the mouse.
+  func testEscapeUndoesOneThingAtATimeFromTheInsideOut() {
+    let next = MemoryAtlasDismissal.next
+
+    XCTAssertEqual(
+      next(true, true, true), .search, "The search field is the innermost thing to leave")
+    XCTAssertEqual(
+      next(false, true, true), .selection,
+      "With the search gone, the selection goes before the place it was made in")
+    XCTAssertEqual(
+      next(false, false, true), .neighbourhood,
+      "An island is left the same way a node is deselected")
+    XCTAssertEqual(
+      next(false, false, false), .passThrough,
+      "A map with nothing to undo must hand the key to the page around it")
   }
 
   /// Two region names on top of each other name nothing, and a name for a
