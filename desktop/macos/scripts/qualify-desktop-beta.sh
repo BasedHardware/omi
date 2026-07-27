@@ -224,6 +224,23 @@ PY
 }
 
 initialize_phase_timings
+
+# Before the full cleanup() function and its trap are installed (after lease
+# acquisition), install an early EXIT trap so a failed candidate-and-lease-
+# preflight phase still records a phase_end failed entry in phase-timings.json.
+# Without this the diagnostic contract would silently omit the phase whose
+# failures it is meant to classify. Replaced by the timing-aware cleanup() trap
+# once desktop/lease state is initialized.
+early_exit_finalize_timing() {
+  local exit_code=$?
+  if [[ -n "$ACTIVE_PHASE" ]]; then
+    phase_end failed
+  fi
+  qualification_stage_remove "$QUALIFICATION_STAGE" || true
+  exit "$exit_code"
+}
+trap early_exit_finalize_timing EXIT
+
 phase_begin "candidate-and-lease-preflight" "immutable-artifact-security"
 RELEASE_FILE="$QUALIFICATION_STAGE/release.json"
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
