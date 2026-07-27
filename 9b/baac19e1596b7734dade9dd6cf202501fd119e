@@ -5,24 +5,31 @@ desktop/macos/docs/people-intelligence-productization.md
 desktop/macos/Desktop/Sources/MainWindow/Pages/PeopleGraphBuilder.swift
   s_525e97d8f6425e::t_e0dce740445f39 30-35,43-45,52,58-79
   s_525e97d8f6425e::t_b461b6ddb4ca8f 80
+  s_525e97d8f6425e::t_b71f2527ba762b 36-42,46-49
 .github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
   s_525e97d8f6425e::t_5acd20ba45ff5c 7
   s_525e97d8f6425e::t_3feebdfd49ed7d 13
 desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportRunner.swift
   s_525e97d8f6425e::t_86b379add19f17 153-155
+  s_525e97d8f6425e::t_5b61b7996831c2 156
 desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageExporter.swift
   s_525e97d8f6425e::t_ee315057e1c8cc 15,22
+  s_525e97d8f6425e::t_836fba474a56ce 16-20
 desktop/macos/Desktop/Sources/DefaultsKey.swift
   s_525e97d8f6425e::t_d7b1abde7eca78 58-63
 desktop/macos/changelog/unreleased/20260726-people-graph-continuous-sync.json
   s_525e97d8f6425e::t_53cd38e3fb825e 1-3
 desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
   s_525e97d8f6425e::t_82ef420e88fb8d 342-344,346
+  s_525e97d8f6425e::t_e74fda1d91cb41 345
 desktop/macos/Desktop/Sources/MainWindow/Pages/PeoplePage.swift
   s_525e97d8f6425e::t_caef97db0661d1 382-383
   s_525e97d8f6425e::t_5aa34e284db2b1 502
+  s_525e97d8f6425e::t_791ab71212cfc3 503-506
+  s_525e97d8f6425e::t_c2af3c25c66309 384-386,388
 desktop/macos/Desktop/Sources/OmiApp.swift
   s_525e97d8f6425e::t_f5a82c28a1954f 658-661
+  s_525e97d8f6425e::t_aba30798dc732a 662
 ---
 {
   "schema_version": "authorship/3.0.0",
