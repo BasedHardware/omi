@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any
 
-VALID_PLATFORMS = {"all", "macos", "linux"}
+VALID_PLATFORMS = {"all", "macos", "linux", "windows"}
 
 
 def detect_platform() -> str:
@@ -26,6 +26,8 @@ def detect_platform() -> str:
         return "macos"
     if system == "Linux":
         return "linux"
+    if system == "Windows":
+        return "windows"
     return system.lower()
 
 
