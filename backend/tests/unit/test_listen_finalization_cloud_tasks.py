@@ -1453,11 +1453,19 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     app.triggers_on_conversation_creation.return_value = True
     webhook_client = AsyncMock()
     webhook_client.post = AsyncMock(return_value=MagicMock(status_code=401, text='re-authenticate'))
+    pinned_url = 'https://8.8.8.8/hook?uid=uid-1'
+    safe_target = MagicMock(
+        return_value=(
+            pinned_url,
+            {'headers': {'Host': 'app.test'}, 'extensions': {'sni_hostname': 'app.test'}},
+        )
+    )
     monkeypatch.setattr(app_integrations, 'run_blocking', inline_run_blocking)
     monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [app])
     monkeypatch.setattr(app_integrations, 'conversation_to_dict', lambda conv: {'id': conv.id})
     monkeypatch.setattr(app_integrations, 'get_webhook_client', lambda: webhook_client)
     monkeypatch.setattr(app_integrations, 'is_app_webhook_disabled', lambda app_id: False)
+    monkeypatch.setattr(app_integrations, 'safe_request_target', safe_target)
     record_failure = MagicMock(return_value=0)
     monkeypatch.setattr(app_integrations, 'record_app_webhook_failure', record_failure)
     monkeypatch.setattr(app_integrations, '_handle_webhook_health_action', MagicMock())
@@ -1472,5 +1480,13 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
 
     assert disposition == ConversationFinalizationDisposition.completed
     complete.assert_called_once_with('job-1', 2, 3)
+    safe_target.assert_called_once_with('https://app.test/hook?uid=uid-1')
+    webhook_client.post.assert_awaited_once_with(
+        pinned_url,
+        json={'id': 'conversation-1'},
+        headers={'Host': 'app.test', 'X-Omi-Idempotency-Key': 'conversation:conversation-1:finalization'},
+        extensions={'sni_hostname': 'app.test'},
+        follow_redirects=False,
+    )
     # The failure is still owned by webhook health, which disables the app after 72h.
     record_failure.assert_called_once_with('omi-google-drive-integration', 401, 'HTTP 401')

@@ -77,7 +77,19 @@ def _loaded_oauth_router() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]
             READ_TASKS=SimpleNamespace(value='read_tasks'),
         ),
     )
-    http_client = _module('utils.http_client', get_auth_client=lambda: None)
+
+    class _UnsafeWebhookURLError(Exception):
+        pass
+
+    http_client = _module(
+        'utils.http_client',
+        get_auth_client=lambda: None,
+        # Passthrough: none of this file's tests exercise the setup_completed_url
+        # branch (default is_user_app_enabled=True skips it), so this only needs
+        # to satisfy the import and match safe_request_target's (url, extra) shape.
+        safe_request_target=lambda url: (url, {'headers': {}, 'extensions': {}}),
+        UnsafeWebhookURLError=_UnsafeWebhookURLError,
+    )
 
     with stub_modules(
         {
@@ -104,7 +116,15 @@ def test_oauth_token_routes_auth_and_app_reads_to_owned_executors() -> None:
 
         oauth.run_blocking = tracking_run_blocking
 
-        result = asyncio.run(oauth.oauth_token(firebase_id_token='token', app_id='app-1', state='opaque'))
+        result = asyncio.run(
+            oauth.oauth_token(
+                firebase_id_token='token',
+                app_id='app-1',
+                state='opaque',
+                csrf_token='matching-csrf-token',
+                oauth_csrf_cookie='matching-csrf-token',
+            )
+        )
 
         assert result == {
             'uid': 'user-1',
@@ -132,7 +152,14 @@ def test_oauth_token_verification_keeps_the_event_loop_responsive() -> None:
                 return {'uid': 'user-1'}
 
             firebase_auth.verify_id_token = blocking_verify
-            task = asyncio.create_task(oauth.oauth_token(firebase_id_token='token', app_id='app-1'))
+            task = asyncio.create_task(
+                oauth.oauth_token(
+                    firebase_id_token='token',
+                    app_id='app-1',
+                    csrf_token='matching-csrf-token',
+                    oauth_csrf_cookie='matching-csrf-token',
+                )
+            )
             try:
                 await asyncio.wait_for(entered.wait(), timeout=2)
                 tick = asyncio.Event()
@@ -152,7 +179,14 @@ def test_oauth_token_preserves_invalid_token_status() -> None:
         firebase_auth.verify_id_token = lambda _token: (_ for _ in ()).throw(_InvalidIdTokenError('invalid'))
 
         with pytest.raises(HTTPException) as exc:
-            asyncio.run(oauth.oauth_token(firebase_id_token='bad', app_id='app-1'))
+            asyncio.run(
+                oauth.oauth_token(
+                    firebase_id_token='bad',
+                    app_id='app-1',
+                    csrf_token='matching-csrf-token',
+                    oauth_csrf_cookie='matching-csrf-token',
+                )
+            )
 
         assert exc.value.status_code == 401
         assert 'Invalid Firebase ID token' in exc.value.detail
