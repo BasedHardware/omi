@@ -1,3 +1,0 @@
-{
-  "change": "Escape now backs out of the Brain Map one step at a time — first the search, then the selection, then the neighbourhood you went into, then the map itself — and the island you are inside keeps its outline and shading while you zoom in and pick entities off it"
-}

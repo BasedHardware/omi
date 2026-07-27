@@ -1,3 +1,0 @@
-{
-  "change": "Brain Map now merges duplicate connections between the same two entities into a single Connections row instead of showing one row per verb"
-}
