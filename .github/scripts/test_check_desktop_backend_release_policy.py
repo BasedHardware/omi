@@ -183,6 +183,38 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                         manifest=manifest,
                     )
 
+    def test_rejects_attestation_descriptor_claiming_runtime_platform(self) -> None:
+        manifest = _buildx_index()
+        runtime_descriptor = manifest["manifests"][0]
+        runtime_descriptor["annotations"] = {"vnd.docker.reference.type": "attestation-manifest"}
+        with self.assertRaisesRegex(LINEAGE.LineageError, "attestation"):
+            LINEAGE.verify_lineage(
+                build_image_reference=f"{REPOSITORY}@{INDEX_DIGEST}",
+                runtime_image_reference=f"{REPOSITORY}@{RUNTIME_DIGEST}",
+                manifest=manifest,
+            )
+
+    def test_rejects_annotations_with_non_string_values(self) -> None:
+        manifest = _buildx_index()
+        runtime_descriptor = manifest["manifests"][0]
+        runtime_descriptor["annotations"] = {"vnd.docker.reference.type": 7}
+        with self.assertRaisesRegex(LINEAGE.LineageError, "string-to-string"):
+            LINEAGE.verify_lineage(
+                build_image_reference=f"{REPOSITORY}@{INDEX_DIGEST}",
+                runtime_image_reference=f"{REPOSITORY}@{RUNTIME_DIGEST}",
+                manifest=manifest,
+            )
+
+    def test_rejects_non_v2_manifest_schema(self) -> None:
+        manifest = _buildx_index()
+        manifest["schemaVersion"] = 1
+        with self.assertRaisesRegex(LINEAGE.LineageError, "schema version 2"):
+            LINEAGE.verify_lineage(
+                build_image_reference=f"{REPOSITORY}@{INDEX_DIGEST}",
+                runtime_image_reference=f"{REPOSITORY}@{RUNTIME_DIGEST}",
+                manifest=manifest,
+            )
+
     def test_rejects_candidate_evidence_bound_to_index_instead_of_runtime_child(self) -> None:
         mutated = self.dev.replace(
             '--expected-image-digest="${{ steps.verify-image-lineage.outputs.runtime_digest }}"',

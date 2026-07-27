@@ -22,6 +22,7 @@ IMAGE_MEDIA_TYPES = {
 }
 RUNTIME_OS = "linux"
 RUNTIME_ARCHITECTURE = "amd64"
+ATTESTATION_REFERENCE_TYPE = "attestation-manifest"
 
 
 class LineageError(ValueError):
@@ -51,6 +52,8 @@ def verify_lineage(
         raise LineageError(
             f"runtime repository {runtime_repository!r} does not match build repository {build_repository!r}"
         )
+    if manifest.get("schemaVersion") != 2:
+        raise LineageError("build image manifest must use OCI/Docker schema version 2")
 
     media_type = manifest.get("mediaType")
     if media_type in INDEX_MEDIA_TYPES:
@@ -71,6 +74,15 @@ def verify_lineage(
                 f"(found {len(runtime_descriptors)})"
             )
         runtime_descriptor = runtime_descriptors[0]
+        annotations = runtime_descriptor.get("annotations")
+        if annotations is not None and not isinstance(annotations, dict):
+            raise LineageError("linux/amd64 runtime descriptor has malformed annotations")
+        if annotations is not None and any(
+            not isinstance(key, str) or not isinstance(value, str) for key, value in annotations.items()
+        ):
+            raise LineageError("linux/amd64 runtime descriptor annotations must be a string-to-string map")
+        if annotations and annotations.get("vnd.docker.reference.type") == ATTESTATION_REFERENCE_TYPE:
+            raise LineageError("linux/amd64 runtime descriptor is an attestation, not a runnable image")
         expected_runtime_digest = runtime_descriptor.get("digest")
         descriptor_media_type = runtime_descriptor.get("mediaType")
         if not isinstance(expected_runtime_digest, str) or not DIGEST_PATTERN.fullmatch(expected_runtime_digest):
