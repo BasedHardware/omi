@@ -208,6 +208,23 @@ jobs:
               raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY does not look like a Google API key")
           PY
 
+      - name: Preflight production desktop secret resource names
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          # Temporary bridge pending Rust -> Python backend consolidation.
+          for secret in \
+            DESKTOP_GEMINI_API_KEY \
+            DESKTOP_FIREBASE_API_KEY \
+            DESKTOP_REDIS_DB_PASSWORD \
+            DESKTOP_REDIS_DB_HOST \
+            DESKTOP_REDIS_DB_PORT; do
+            gcloud secrets describe "$secret" \
+              --project="$PROJECT_ID" \
+              --format='none'
+          done
+
       - name: Capture current serving revision
         id: previous-traffic
         env:
@@ -260,21 +277,20 @@ jobs:
             --revision-suffix=${{ steps.admitted-source.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
             --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
+            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST
           env_vars: |
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=production
           secrets: |
-            GEMINI_API_KEY=GEMINI_API_KEY:latest
+            GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-            REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest
-            FIREBASE_API_KEY=FIREBASE_API_KEY:latest
-            PINECONE_API_KEY=PINECONE_API_KEY:latest
-            REDIS_DB_HOST=REDIS_DB_HOST:latest
-            REDIS_DB_PORT=REDIS_DB_PORT:latest
-            PINECONE_HOST=PINECONE_HOST:latest
+            REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest
+            FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest
+            REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest
+            REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest
             ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
