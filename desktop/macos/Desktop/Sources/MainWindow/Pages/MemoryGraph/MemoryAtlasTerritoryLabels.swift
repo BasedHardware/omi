@@ -103,15 +103,21 @@ struct MemoryAtlasNeighbourhoodCaption: View {
 enum MemoryAtlasDismissal {
   enum Step: Equatable {
     case search
+    /// One hop back along the trail of entities the user followed. Their own
+    /// pushes, so their own pops — dropping the whole trail on one press would
+    /// throw away every step of a walk five relationships deep.
+    case selectionStep
     case selection
     case neighbourhood
     /// Nothing to undo — the key is not the map's to eat.
     case passThrough
   }
 
-  static func next(isSearching: Bool, hasSelection: Bool, isInsideNeighbourhood: Bool) -> Step {
+  static func next(
+    isSearching: Bool, hasSelection: Bool, hasTrail: Bool, isInsideNeighbourhood: Bool
+  ) -> Step {
     if isSearching { return .search }
-    if hasSelection { return .selection }
+    if hasSelection { return hasTrail ? .selectionStep : .selection }
     if isInsideNeighbourhood { return .neighbourhood }
     return .passThrough
   }
@@ -271,8 +277,18 @@ enum MemoryAtlasNeighbourhoodLabels {
   ///
   /// The margin is what keeps a small zoom-out from being an exit: nudging the
   /// camera to see a little more context around a place is not leaving it.
-  static func departureZoom(enteredAt zoom: CGFloat, neighbourhoodZoom: CGFloat) -> CGFloat {
-    min(zoom, neighbourhoodZoom) * 0.85
+  ///
+  /// `nil` when the answer would sit below the map's own minimum zoom, which
+  /// happens for a region so large that entering it barely moves the camera.
+  /// There is no "further out" than the whole map, so a threshold down there is
+  /// one that can never be crossed — it reads as a working exit and is not one.
+  /// Saying so lets those places be left the two ways that do work: Escape, and
+  /// pressing the caption again.
+  static func departureZoom(
+    enteredAt zoom: CGFloat, neighbourhoodZoom: CGFloat, minimumZoom: CGFloat
+  ) -> CGFloat? {
+    let departure = min(zoom, neighbourhoodZoom) * 0.85
+    return departure > minimumZoom ? departure : nil
   }
 
   /// Places on the island where its whole name would sit on land, nearest the

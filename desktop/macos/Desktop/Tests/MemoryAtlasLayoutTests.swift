@@ -754,7 +754,7 @@ final class MemoryAtlasLayoutTests: XCTestCase {
   /// more than 1×, below the threshold, so the camera arrived and the mode
   /// ended in the same frame. Whether the user has zoomed back out is a
   /// question about where they started, not about a constant.
-  func testGoingIntoABigPlaceDoesNotCountAsLeavingIt() {
+  func testGoingIntoABigPlaceDoesNotCountAsLeavingIt() throws {
     let departure = MemoryAtlasNeighbourhoodLabels.departureZoom
 
     // A region filling most of the map: entering barely zooms at all.
@@ -766,7 +766,7 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       "Fixture check: this is the case a fixed threshold got wrong")
     XCTAssertGreaterThan(
       wide.zoom,
-      departure(wide.zoom, MemoryAtlasZoomPolicy.neighborhoodZoom),
+      try XCTUnwrap(departure(wide.zoom, MemoryAtlasZoomPolicy.neighborhoodZoom, 0.6)),
       "Arriving somewhere must never already be below the zoom that leaves it")
 
     // A small region, entered at deep zoom: pulling back a little to see the
@@ -775,9 +775,38 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let tight = MemoryAtlasNeighbourhoodLabels.entering(
       center: CGPoint(x: 0.3, y: 0.6), radius: 0.05, viewport: CGSize(width: 900, height: 700),
       zoomRange: 0.6...12)
-    let floor = departure(tight.zoom, MemoryAtlasZoomPolicy.neighborhoodZoom)
+    let floor = try XCTUnwrap(
+      departure(tight.zoom, MemoryAtlasZoomPolicy.neighborhoodZoom, 0.6))
     XCTAssertGreaterThan(tight.zoom * 0.9, floor, "A small pull-back is not an exit")
     XCTAssertLessThan(CGFloat(1), floor, "Zooming back out to the whole map is")
+  }
+
+  /// A place entered without moving the camera has no zoom-out exit, and the
+  /// map must say so rather than set one nobody can reach.
+  ///
+  /// A region large enough to fill the map is framed at the minimum zoom. The
+  /// departure threshold then lands *below* the minimum, so no amount of
+  /// zooming out ever crosses it — the exit looks like it exists and does
+  /// nothing. Reporting no threshold at all is what leaves Escape and the
+  /// caption as the honest ways out.
+  func testAPlaceThatFillsTheMapHasNoZoomOutExitToOffer() {
+    let departure = MemoryAtlasNeighbourhoodLabels.departureZoom
+    let minimum = MemoryAtlasZoomPolicy.minimumZoom
+
+    let wholeMap = MemoryAtlasNeighbourhoodLabels.entering(
+      center: CGPoint(x: 0.5, y: 0.5), radius: 0.45, viewport: CGSize(width: 900, height: 700),
+      zoomRange: minimum...12)
+    XCTAssertEqual(wholeMap.zoom, minimum, "Fixture check: this region is framed at the floor")
+    XCTAssertNil(
+      departure(wholeMap.zoom, MemoryAtlasZoomPolicy.neighborhoodZoom, minimum),
+      "A threshold under the minimum zoom can never be crossed; do not pretend to offer one")
+
+    let ordinary = MemoryAtlasNeighbourhoodLabels.entering(
+      center: CGPoint(x: 0.5, y: 0.5), radius: 0.1, viewport: CGSize(width: 900, height: 700),
+      zoomRange: minimum...12)
+    XCTAssertNotNil(
+      departure(ordinary.zoom, MemoryAtlasZoomPolicy.neighborhoodZoom, minimum),
+      "An ordinary island still leaves when the user zooms back out")
   }
 
   /// Escape undoes one thing per press, innermost first, and stops eating the
@@ -792,16 +821,37 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let next = MemoryAtlasDismissal.next
 
     XCTAssertEqual(
-      next(true, true, true), .search, "The search field is the innermost thing to leave")
+      next(true, true, false, true), .search, "The search field is the innermost thing to leave")
     XCTAssertEqual(
-      next(false, true, true), .selection,
+      next(false, true, false, true), .selection,
       "With the search gone, the selection goes before the place it was made in")
     XCTAssertEqual(
-      next(false, false, true), .neighbourhood,
+      next(false, false, false, true), .neighbourhood,
       "An island is left the same way a node is deselected")
     XCTAssertEqual(
-      next(false, false, false), .passThrough,
+      next(false, false, false, false), .passThrough,
       "A map with nothing to undo must hand the key to the page around it")
+  }
+
+  /// A walk five relationships deep is five things the user did, so Escape
+  /// undoes them one at a time.
+  ///
+  /// Clearing the whole trail on one press is the same mistake as clearing the
+  /// search and the selection together: it throws away decisions nobody asked
+  /// to undo, and it is worse here because the trail is the only record of how
+  /// the user got where they are.
+  func testEscapeWalksBackAlongTheTrailBeforeDroppingTheSelection() {
+    let next = MemoryAtlasDismissal.next
+
+    XCTAssertEqual(
+      next(false, true, true, false), .selectionStep,
+      "Followed a connection to get here, so Escape goes back one connection")
+    XCTAssertEqual(
+      next(false, true, false, false), .selection,
+      "The first entity on the walk has nothing behind it but the map")
+    XCTAssertEqual(
+      next(true, true, true, true), .search,
+      "The search field still comes first, trail or no trail")
   }
 
   /// Two region names on top of each other name nothing, and a name for a

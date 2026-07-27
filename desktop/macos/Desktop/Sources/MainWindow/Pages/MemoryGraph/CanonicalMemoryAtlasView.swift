@@ -2183,7 +2183,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// they went into. Set from the camera entering actually used, because a
   /// fixed threshold throws the user out of any island big enough to be framed
   /// below it — which is every island on a map with only a few regions on it.
-  @State private var departureZoom: CGFloat = 0
+  @State private var departureZoom: CGFloat?
   @State private var zoom: CGFloat = 1
   @State private var settledZoom: CGFloat = 1
   @State private var pan: CGSize = .zero
@@ -2481,7 +2481,15 @@ private struct CanonicalMemoryAtlasSurface: View {
         // looking at one region, and the only way back is a control they have
         // no reason to know about.
         .onChange(of: zoom) { _, level in
-          guard enteredRegionID != nil, level < departureZoom else { return }
+          guard enteredRegionID != nil, let departureZoom, level < departureZoom else { return }
+          leaveNeighbourhood()
+        }
+        // A neighbourhood id belongs to the snapshot that detected it. Rebuild
+        // the graph and the same ground can come back under a different number,
+        // or not at all — and being inside a place that no longer exists is a
+        // mode with nothing on screen to explain it and no control to end it.
+        .onChange(of: snapshot.neighbourhoods.map(\.id)) { _, regions in
+          guard let entered = enteredRegionID, !regions.contains(entered) else { return }
           leaveNeighbourhood()
         }
         .clipped()
@@ -2914,7 +2922,8 @@ private struct CanonicalMemoryAtlasSurface: View {
       viewport: viewportSize,
       zoomRange: MemoryAtlasZoomPolicy.minimumZoom...maximumZoom)
     departureZoom = MemoryAtlasNeighbourhoodLabels.departureZoom(
-      enteredAt: camera.zoom, neighbourhoodZoom: MemoryAtlasZoomPolicy.neighborhoodZoom)
+      enteredAt: camera.zoom, neighbourhoodZoom: MemoryAtlasZoomPolicy.neighborhoodZoom,
+      minimumZoom: MemoryAtlasZoomPolicy.minimumZoom)
     withAnimation(OmiMotion.gated(.easeOut(duration: 0.26))) {
       enteredRegionID = region.regionID
       zoom = camera.zoom
@@ -2948,7 +2957,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// thing they asked for. Only the mode ends — every coastline comes back and
   /// the captions take their entities' names again.
   private func leaveNeighbourhood() {
-    departureZoom = 0
+    departureZoom = nil
     withAnimation(OmiMotion.gated(.easeOut(duration: 0.2))) { enteredRegionID = nil }
   }
 
@@ -4039,6 +4048,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     switch MemoryAtlasDismissal.next(
       isSearching: searchIsFocused || !searchText.isEmpty,
       hasSelection: selectedNodeID != nil || selectedEdgeID != nil,
+      hasTrail: !selectionTrail.isEmpty,
       isInsideNeighbourhood: enteredRegionID != nil)
     {
     case .search:
@@ -4046,6 +4056,8 @@ private struct CanonicalMemoryAtlasSurface: View {
       searchText = ""
       matchingNodeIDs = nil
       matchingEdges = nil
+    case .selectionStep:
+      goBack()
     case .selection:
       clearSelection()
     case .neighbourhood:
