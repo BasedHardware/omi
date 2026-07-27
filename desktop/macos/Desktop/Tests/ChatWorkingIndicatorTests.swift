@@ -1,8 +1,39 @@
+import SwiftUI
 import XCTest
 
 @testable import Omi_Computer
 
 final class ChatWorkingIndicatorTests: XCTestCase {
+  func testCompletedMarkHasNoAnimationFrameSchedule() {
+    XCTAssertEqual(
+      ChatOmiMark.frameSchedule(motion: nil, reduceMotion: false),
+      .staticResting
+    )
+    XCTAssertEqual(
+      ChatOmiMark.frameSchedule(motion: .wave, reduceMotion: true),
+      .staticResting
+    )
+    XCTAssertEqual(
+      ChatOmiMark.frameSchedule(motion: .wave, reduceMotion: false),
+      .animated(.wave)
+    )
+  }
+
+  @MainActor
+  func testCompletedMarkRenderDoesNotAdvanceAnimationModel() {
+    let model = ChatMarkModel()
+    let renderer = ImageRenderer(
+      content: ChatOmiMark(motion: nil, size: 24, model: model)
+        .frame(width: 48, height: 32)
+    )
+    renderer.scale = 1
+
+    XCTAssertNotNil(renderer.cgImage)
+    #if DEBUG
+      XCTAssertEqual(model.debugAdvanceCount, 0)
+    #endif
+  }
+
   func testOnlyTheFinalAssistantMessageOwnsTheOmiMark() {
     let messages = [
       ChatMessage(id: "assistant-1", text: "First answer", sender: .ai),
