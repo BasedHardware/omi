@@ -96,6 +96,22 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_deploy_workflow(mutated, production=False)
         self.assertTrue(any("missing ordered release step" in error for error in errors), errors)
 
+    def test_rejects_missing_or_bypassed_development_probe_signer(self) -> None:
+        missing_signer = self.dev.replace(
+            '--signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE" \\\n',
+            "",
+            1,
+        )
+        missing_gate = self.dev.replace(
+            "      - name: Mint candidate probe identity", "      - name: Probe identity omitted", 1
+        )
+
+        signer_errors = POLICY.validate_deploy_workflow(missing_signer, production=False)
+        gate_errors = POLICY.validate_deploy_workflow(missing_gate, production=False)
+
+        self.assertTrue(any("DESKTOP_BACKEND_PROBE_SIGNER_FILE" in error for error in signer_errors), signer_errors)
+        self.assertTrue(any("Mint candidate probe identity" in error for error in gate_errors), gate_errors)
+
     def test_rejects_mutable_image_and_direct_traffic_deploy(self) -> None:
         mutated = self.prod.replace(
             "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}",
