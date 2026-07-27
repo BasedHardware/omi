@@ -66,6 +66,7 @@ ALLOWED_COMPONENTS = frozenset(
         'redis_ratelimit',
         'silent_mic',
         'firestore_read',
+        'agent_tools',
         'other',
     }
 )

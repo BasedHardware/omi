@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6268,
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2861
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6269,
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2912
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Failed bridge starts now consume typed runtime diagnostics at the sole user-facing error surface, avoiding a duplicate Sentry event; a component split is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "Already-granted permissions no longer reopen System Settings: screen-recording and full-disk-access requests gate their Settings/drag-card opens behind the granted result."
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "ACP authentication terminalizes the active turn with an explicit disposition instead of awaiting OAuth, and failed bridge starts consume typed runtime diagnostics at the sole user-facing error surface to avoid a duplicate Sentry event; a component split is tracked follow-up.",
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "update_action_item accepts the realtime `id` alias and backend task writes refresh TasksStore so agent-created tasks appear immediately; already-granted permissions still gate their Settings/drag-card opens behind the granted result."
   },
   "threshold": 1500
 }

@@ -498,6 +498,28 @@ describe("agent control tools", () => {
     ).toBe(false);
   });
 
+  it("accepts and bounds spawn toolPolicy on both spawn schemas", () => {
+    const toolPolicy = { allowedToolNames: ["get_memories"] };
+    expect(agentControlToolSchemas.spawn_agent.safeParse({
+      objective: "Restricted child work",
+      toolPolicy,
+    }).success).toBe(true);
+    expect(agentControlToolSchemas.spawn_background_agent.safeParse({
+      prompt: "Restricted child work",
+      originSurfaceKind: "floating_bar",
+      toolPolicy,
+    }).success).toBe(true);
+    // Non-string names and unknown keys inside toolPolicy are rejected.
+    expect(agentControlToolSchemas.spawn_agent.safeParse({
+      objective: "Restricted child work",
+      toolPolicy: { allowedToolNames: [1] },
+    }).success).toBe(false);
+    expect(agentControlToolSchemas.spawn_agent.safeParse({
+      objective: "Restricted child work",
+      toolPolicy: { allowedToolNames: ["get_memories"], extra: true },
+    }).success).toBe(false);
+  });
+
   it("accepts objective-only public spawn_agent input and rejects caller-supplied routing authority", () => {
     expect(agentControlToolSchemas.spawn_agent.safeParse({
       objective: "Research the release plan",
