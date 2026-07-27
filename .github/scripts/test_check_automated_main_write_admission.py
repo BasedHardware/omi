@@ -87,6 +87,14 @@ class CheckWorkflowTests(unittest.TestCase):
             f"guard missed the GITHUB_TOKEN-authored PR: {errors}",
         )
 
+    def test_rejects_a_pr_that_uses_the_default_token(self):
+        missing_token = FIXED.replace("          token: ${{ steps.app-token.outputs.token }}\n", "")
+        errors = self._errors_for(missing_token)
+        self.assertTrue(
+            any("explicit non-default token" in e for e in errors),
+            f"guard missed the default-token PR: {errors}",
+        )
+
     def test_rejects_a_squashed_automated_merge(self):
         """MUTATION: --squash breaks `git revert -m 1` recovery on main."""
         errors = self._errors_for(BROKEN)

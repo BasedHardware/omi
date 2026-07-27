@@ -39,6 +39,7 @@ APP_TOKEN_ACTION = "actions/create-github-app-token"
 # `token: ${{ secrets.GITHUB_TOKEN }}` on the create-pull-request step, in any
 # spacing GitHub Actions accepts.
 GITHUB_TOKEN_INPUT = re.compile(r"token:\s*\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}")
+GITHUB_CONTEXT_TOKEN_INPUT = re.compile(r"token:\s*\$\{\{\s*github\.token\s*\}\}")
 
 
 def _self_merging_workflows() -> list[Path]:
@@ -50,18 +51,47 @@ def _self_merging_workflows() -> list[Path]:
     return found
 
 
+def _create_pr_token(step: str) -> str | None:
+    with_indent: int | None = None
+    for line in step.splitlines():
+        stripped = line.lstrip()
+        indent = len(line) - len(stripped)
+        if stripped == "with:":
+            with_indent = indent
+        elif with_indent is not None:
+            if stripped and indent <= with_indent:
+                break
+            if stripped.startswith("token:"):
+                return stripped.partition(":")[2].strip()
+    return None
+
+
 def check_workflow(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
     rel = path.relative_to(ROOT)
     errors: list[str] = []
 
-    if GITHUB_TOKEN_INPUT.search(text):
+    create_pr_tokens = [
+        _create_pr_token(step) for step in re.split(r"(?m)^(?=\s*-\s)", text) if CREATE_PR_ACTION in step
+    ]
+
+    if any(
+        token is not None
+        and (GITHUB_TOKEN_INPUT.search(f"token: {token}") or GITHUB_CONTEXT_TOKEN_INPUT.search(f"token: {token}"))
+        for token in create_pr_tokens
+    ):
         errors.append(
-            f"{rel}: opens its own auto-merged PR with secrets.GITHUB_TOKEN, so no "
+            f"{rel}: opens its own auto-merged PR with secrets.GITHUB_TOKEN or github.token, so no "
             f"pull_request checks fire on it. Mint an app token with "
             f"{APP_TOKEN_ACTION} and pass that to {CREATE_PR_ACTION} instead (#10535)."
         )
-    elif APP_TOKEN_ACTION not in text:
+    elif any(token is None for token in create_pr_tokens):
+        errors.append(
+            f"{rel}: opens its own auto-merged PR without an explicit non-default token, "
+            f"so {CREATE_PR_ACTION} falls back to GitHub's default token and no "
+            f"pull_request checks fire (#10535)."
+        )
+    if APP_TOKEN_ACTION not in text:
         errors.append(
             f"{rel}: opens its own auto-merged PR without an {APP_TOKEN_ACTION} step, "
             f"so the PR cannot run pull_request checks (#10535)."

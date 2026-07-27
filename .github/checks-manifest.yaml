@@ -284,7 +284,7 @@ checks:
     command: ["python3", ".github/scripts/test_check_automated_main_write_admission.py"]
     triggers: [".github/scripts/check_automated_main_write_admission.py", ".github/scripts/test_check_automated_main_write_admission.py"]
     lanes: ["local", "ci"]
-    reason: "the admission guard's own mutation cases must keep proving it rejects a GITHUB_TOKEN-authored PR and a squashed automated merge"
+    reason: "the admission guard's own mutation cases must keep proving it rejects default-token PR creation and a squashed automated merge"
   - id: telegram-deployment-notifier
     command: ["bash", ".github/actions/deployment-notifier/test-check-configuration.sh"]
     triggers: [".github/actions/deployment-notifier/**", ".github/checks-manifest.yaml"]
