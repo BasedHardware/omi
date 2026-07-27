@@ -82,4 +82,8 @@ final class OnboardingGoogleConnectTests: XCTestCase {
 
     XCTAssertFalse(store.snapshot(for: calendar).isConnected)
   }
+
+  func testGoogleConnectRemainsRetryableWhenImportDoesNotPersist() {
+    XCTAssertEqual(SBOnboardingModel.googleContextState(afterPersistedImport: false), "idle")
+  }
 }

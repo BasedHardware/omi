@@ -679,6 +679,10 @@ extension SBOnboardingModel {
     id == "gmail" ? "email" : id
   }
 
+  nonisolated static func googleContextState(afterPersistedImport persisted: Bool) -> String {
+    persisted ? "on" : "idle"
+  }
+
   /// Resolve a cookie-based Google connector. `googleContextResolution` decides the
   /// chip state + actionable detail and whether to open the Google sign-in page; on a
   /// successful connect we ALSO run the same import+persist seam the Apps page uses,
@@ -697,11 +701,25 @@ extension SBOnboardingModel {
     contextStates[id] = resolution.state
     contextDetails[id] = resolution.detail
     if resolution.state == "on" {
-      // Fire-and-forget: the runner survives this step and dedups per connector.
-      ConnectorImportRunner.startPersistingImport(
-        connectorID: Self.statusStoreConnectorID(forOnboardingID: id),
+      let connectorID = Self.statusStoreConnectorID(forOnboardingID: id)
+      guard let connector = ImportConnector.all.first(where: { $0.id == connectorID }) else {
+        contextStates[id] = "idle"
+        return
+      }
+      contextStates[id] = "connecting"
+      let task = ConnectorImportRunner.startPersistingImport(
+        connectorID: connectorID,
         statusStore: importStatusStore,
         title: importTitle, detail: importDetail, operation: operation)
+      Task { [weak self] in
+        await task?.value
+        guard let self else { return }
+        let state = Self.googleContextState(
+          afterPersistedImport: self.importStatusStore.snapshot(for: connector).isConnected)
+        self.contextStates[id] = state
+        self.contextDetails[id] =
+          state == "on" ? nil : "Couldn't import \(connector.title). Check your connection, then retry."
+      }
     }
     if resolution.shouldOpenSignIn, let url = URL(string: signInURL) {
       NSWorkspace.shared.open(url)
