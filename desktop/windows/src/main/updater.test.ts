@@ -113,12 +113,18 @@ describe('updater feed and beta channel wiring', () => {
     vi.useRealTimers()
   })
 
-  it('rechecks the new channel after an in-flight check finishes', async () => {
-    const firstCheck = deferred<{ updateInfo: { version: string } }>()
+  it('drops an in-flight result and rechecks when the selected channel changes', async () => {
+    const cancellationToken = { cancel: vi.fn() }
+    const firstCheck = deferred<{
+      isUpdateAvailable: true
+      updateInfo: { version: string }
+      cancellationToken: { cancel: ReturnType<typeof vi.fn> }
+    }>()
     autoUpdater.checkForUpdates.mockReset()
     autoUpdater.checkForUpdates
       .mockImplementationOnce(() => firstCheck.promise)
       .mockResolvedValue({ updateInfo: { version: '9.9.9' } })
+    autoUpdater.downloadUpdate.mockClear()
     autoUpdater.setFeedURL.mockClear()
 
     setAppSettings({ betaUpdatesEnabled: false })
@@ -127,8 +133,14 @@ describe('updater feed and beta channel wiring', () => {
     await Promise.resolve()
     expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
 
-    firstCheck.resolve({ updateInfo: { version: '1.0.1' } })
+    firstCheck.resolve({
+      isUpdateAvailable: true,
+      updateInfo: { version: '1.0.1' },
+      cancellationToken
+    })
     await vi.waitFor(() => expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2))
+    expect(cancellationToken.cancel).toHaveBeenCalledOnce()
+    expect(autoUpdater.downloadUpdate).not.toHaveBeenCalledWith(cancellationToken)
     expect(autoUpdater.setFeedURL).toHaveBeenLastCalledWith({
       provider: 'generic',
       url: 'https://github.com/BasedHardware/omi/releases/download/v1.0.19-windows/'
@@ -148,7 +160,7 @@ describe('updater feed and beta channel wiring', () => {
 })
 
 describe('installUpdateNow', () => {
-  it('cancels and ignores a beta download that finishes after opting out', async () => {
+  it('clears and ignores a beta download that finishes after opting out', async () => {
     const betaDownload = deferred<string[]>()
     const cancellationToken = { cancel: vi.fn() }
     autoUpdater.checkForUpdates.mockReset()
@@ -169,14 +181,24 @@ describe('installUpdateNow', () => {
       expect(autoUpdater.downloadUpdate).toHaveBeenCalledWith(cancellationToken)
     )
 
-    setAppSettings({ betaUpdatesEnabled: false })
-    expect(cancellationToken.cancel).toHaveBeenCalledOnce()
     const downloaded = autoUpdater.on.mock.calls.find(
       (call) => call[0] === 'update-downloaded'
     )?.[1] as (info: { version: string }) => void
     downloaded({ version: '2.0.0' })
+    expect(getPendingUpdate()).toEqual({ version: '2.0.0' })
+    expect(autoUpdater.autoInstallOnAppQuit).toBe(true)
+
+    setAppSettings({ betaUpdatesEnabled: false })
+    expect(cancellationToken.cancel).toHaveBeenCalledOnce()
+    expect(getPendingUpdate()).toBeNull()
+    expect(autoUpdater.autoInstallOnAppQuit).toBe(false)
+
+    downloaded({ version: '2.0.0' })
+    expect(getPendingUpdate()).toBeNull()
+
     betaDownload.resolve([])
     await checking
+    downloaded({ version: '2.0.0' })
 
     expect(getPendingUpdate()).toBeNull()
     expect(autoUpdater.autoInstallOnAppQuit).toBe(false)
@@ -189,12 +211,29 @@ describe('installUpdateNow', () => {
     expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled()
   })
 
-  it('installs and relaunches once an update is downloaded', () => {
+  it('installs and relaunches once the current channel update is downloaded', async () => {
+    const stableDownload = deferred<string[]>()
+    const cancellationToken = { cancel: vi.fn() }
+    autoUpdater.checkForUpdates.mockReset()
+    autoUpdater.checkForUpdates.mockResolvedValueOnce({
+      isUpdateAvailable: true,
+      updateInfo: { version: '2.0.0' },
+      cancellationToken
+    })
+    autoUpdater.downloadUpdate.mockReset()
+    autoUpdater.downloadUpdate.mockReturnValueOnce(stableDownload.promise)
+
+    const checking = checkForUpdatesNow()
+    await vi.waitFor(() =>
+      expect(autoUpdater.downloadUpdate).toHaveBeenCalledWith(cancellationToken)
+    )
     const downloaded = autoUpdater.on.mock.calls.find(
       (call) => call[0] === 'update-downloaded'
     )?.[1] as (info: { version: string }) => void
     expect(downloaded).toBeTypeOf('function')
     downloaded({ version: '2.0.0' })
+    stableDownload.resolve([])
+    await checking
 
     expect(getPendingUpdate()).toEqual({ version: '2.0.0' })
     expect(installUpdateNow()).toBe(true)

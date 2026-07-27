@@ -27,19 +27,33 @@ const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 const OMI_API_BASE = import.meta.env.VITE_OMI_API_BASE || 'https://api.omi.me'
 
 let started = false
-let pendingUpdate: { version: string } | null = null
 let selectedChannel: WindowsUpdateChannel = 'stable'
+let channelGeneration = 0
+let pendingUpdate: {
+  version: string
+  channel: WindowsUpdateChannel
+  generation: number
+} | null = null
 let feedSelector: WindowsUpdateFeedSelector | null = null
 let updateCheckTail: Promise<void> = Promise.resolve()
-let activeDownload: { channel: WindowsUpdateChannel; cancellationToken: CancellationToken } | null =
-  null
+let activeDownload: {
+  channel: WindowsUpdateChannel
+  generation: number
+  version: string
+  cancellationToken: CancellationToken
+} | null = null
 
 type ElectronUpdateCheckResult = Awaited<ReturnType<typeof autoUpdater.checkForUpdates>>
+type UpdateAttempt = { channel: WindowsUpdateChannel; generation: number }
+
+function isCurrentAttempt(attempt: UpdateAttempt): boolean {
+  return attempt.channel === selectedChannel && attempt.generation === channelGeneration
+}
 
 /** The update staged for install-on-quit, if any. The update:ready event fires
  * once (usually while nobody is on Settings), so the UI queries this on mount. */
 export function getPendingUpdate(): { version: string } | null {
-  return pendingUpdate
+  return pendingUpdate ? { version: pendingUpdate.version } : null
 }
 
 async function prepareUpdateFeed(): Promise<void> {
@@ -48,18 +62,36 @@ async function prepareUpdateFeed(): Promise<void> {
 
 function runPreparedUpdateCheck(): Promise<ElectronUpdateCheckResult> {
   const operation = updateCheckTail.then(async (): Promise<ElectronUpdateCheckResult> => {
+    if (pendingUpdate && isCurrentAttempt(pendingUpdate)) return null
+    if (activeDownload) {
+      activeDownload.cancellationToken.cancel()
+      activeDownload = null
+    }
+
+    const attempt = { channel: selectedChannel, generation: channelGeneration }
     await prepareUpdateFeed()
+    if (!isCurrentAttempt(attempt)) return null
+
     const result = await autoUpdater.checkForUpdates()
+    if (!isCurrentAttempt(attempt)) {
+      result?.cancellationToken?.cancel()
+      return null
+    }
     if (!result?.isUpdateAvailable || !result.cancellationToken) return result
 
-    const download = { channel: selectedChannel, cancellationToken: result.cancellationToken }
+    const version = typeof result.updateInfo?.version === 'string' ? result.updateInfo.version : ''
+    const download = {
+      ...attempt,
+      version,
+      cancellationToken: result.cancellationToken
+    }
     activeDownload = download
     try {
       await autoUpdater.downloadUpdate(download.cancellationToken)
     } finally {
       if (activeDownload === download) activeDownload = null
     }
-    return result
+    return isCurrentAttempt(download) ? result : null
   })
   updateCheckTail = operation.then(
     (): undefined => undefined,
@@ -113,7 +145,7 @@ export function initAutoUpdater(
   started = true
 
   autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.autoInstallOnAppQuit = false
   if (devForced) autoUpdater.forceDevUpdateConfig = true
 
   selectedChannel = betaOptInToUpdateChannel(getAppSettings().betaUpdatesEnabled)
@@ -131,9 +163,17 @@ export function initAutoUpdater(
   }
 
   autoUpdater.on('update-downloaded', (info) => {
-    if (activeDownload && activeDownload.channel !== selectedChannel) return
+    // electron-updater emits this before downloadUpdate() settles. Accept it
+    // only while the matching channel generation still owns the download.
+    const download = activeDownload
     const version = typeof info?.version === 'string' ? info.version : ''
-    pendingUpdate = { version }
+    if (!download || !isCurrentAttempt(download) || version !== download.version) return
+
+    pendingUpdate = {
+      version,
+      channel: download.channel,
+      generation: download.generation
+    }
     const win = getMainWindow()
     if (win && !win.isDestroyed()) win.webContents.send('update:ready', { version })
     setTrayUpdateReady(true)
@@ -169,9 +209,16 @@ export function initAutoUpdater(
     const change = resolveBetaChannelChange(selectedChannel, settings.betaUpdatesEnabled)
     if (!change.changed) return
     selectedChannel = change.channel
-    if (activeDownload && activeDownload.channel !== selectedChannel) {
-      autoUpdater.autoInstallOnAppQuit = false
-      activeDownload.cancellationToken.cancel()
+    channelGeneration += 1
+    autoUpdater.autoInstallOnAppQuit = false
+    if (activeDownload && !isCurrentAttempt(activeDownload)) {
+      const staleDownload = activeDownload
+      activeDownload = null
+      staleDownload.cancellationToken.cancel()
+    }
+    if (pendingUpdate && !isCurrentAttempt(pendingUpdate)) {
+      pendingUpdate = null
+      setTrayUpdateReady(false)
     }
     autoUpdater.allowPrerelease = selectedChannel === 'beta'
     feedSelector?.select(selectedChannel)
