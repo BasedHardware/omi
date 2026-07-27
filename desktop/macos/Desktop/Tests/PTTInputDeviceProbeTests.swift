@@ -19,9 +19,13 @@ final class PTTInputDeviceProbeTests: XCTestCase {
 
   /// A probe whose device lookup blocks until the test releases it, standing in for a
   /// wedged CoreAudio driver without sleeping on the wall clock.
-  private func stalledProbe(until release: DispatchSemaphore) -> PTTAudioDeviceProbe {
+  private func stalledProbe(
+    until release: DispatchSemaphore,
+    onStart: (@Sendable () -> Void)? = nil
+  ) -> PTTAudioDeviceProbe {
     PTTAudioDeviceProbe(
       inputDeviceID: { _ in
+        onStart?()
         release.wait()
         return 99
       },
@@ -55,39 +59,37 @@ final class PTTInputDeviceProbeTests: XCTestCase {
   /// the main thread does not satisfy this: it still parks the run loop for the whole
   /// budget. The turn-start read must not wait on CoreAudio at all.
   @MainActor
-  func testMainRunLoopKeepsPumpingWhileTheHALIsWedged() {
+  func testMainRunLoopKeepsPumpingWhileTheHALIsWedged() async {
     let release = DispatchSemaphore(value: 0)
+    let started = expectation(description: "HAL probe started")
     // Joined before returning: a probe still parked at teardown would publish its
     // snapshot into whichever test runs next.
     let finished = expectation(description: "parked probe finished")
     PTTInputDeviceRouting.refresh(
-      selectedUID: "wedged-uid", probe: stalledProbe(until: release)
+      selectedUID: "wedged-uid",
+      probe: stalledProbe(until: release) { started.fulfill() }
     ) { finished.fulfill() }
+    await fulfillment(of: [started], timeout: 5)
 
-    let ticker = Ticker()
-    // This is a liveness probe, not a scheduler-throughput benchmark. A coarser
-    // cadence keeps CI scheduling jitter from obscuring whether the main actor
-    // actually continues to make progress while the HAL worker is parked.
-    let timer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { _ in ticker.tick() }
-    RunLoop.main.add(timer, forMode: .common)
-    defer { timer.invalidate() }
-
-    let started = Date()
-    var reads = 0
-    while Date().timeIntervalSince(started) < 0.3 {
-      // The exact call PTT turn start makes, hammered while the HAL is wedged.
-      _ = PTTInputDeviceRouting.currentSnapshot(selectedUID: "wedged-uid")
-      reads += 1
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    let mainActorProgress = expectation(description: "main actor kept making progress")
+    mainActorProgress.expectedFulfillmentCount = 3
+    let snapshotReads = expectation(description: "turn-start snapshot reads completed")
+    snapshotReads.expectedFulfillmentCount = 3
+    for _ in 0..<3 {
+      DispatchQueue.main.async {
+        mainActorProgress.fulfill()
+      }
+      DispatchQueue.global().async {
+        // Exercise the exact turn-start read off-main so a regression times out
+        // without blocking the main actor that must release the wedged probe.
+        XCTAssertNil(PTTInputDeviceRouting.currentSnapshot(selectedUID: "wedged-uid"))
+        snapshotReads.fulfill()
+      }
     }
-
-    XCTAssertGreaterThan(
-      ticker.count, 3,
-      "the main run loop must keep pumping while the HAL is wedged (got \(ticker.count) ticks)")
-    XCTAssertGreaterThan(reads, 3, "turn-start reads must keep completing")
+    await fulfillment(of: [mainActorProgress, snapshotReads], timeout: 5)
 
     release.signal()
-    wait(for: [finished], timeout: 5)
+    await fulfillment(of: [finished], timeout: 5)
   }
 
   /// A wedged driver must not leak one parked thread per PTT turn.
