@@ -4,6 +4,7 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatWorkingIndicatorTests: XCTestCase {
+  @MainActor
   func testCompletedMarkHasNoAnimationFrameSchedule() {
     XCTAssertEqual(
       ChatOmiMark.frameSchedule(motion: nil, reduceMotion: false),
