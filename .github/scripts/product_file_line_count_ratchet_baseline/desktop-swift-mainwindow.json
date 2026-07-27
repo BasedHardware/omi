@@ -2,7 +2,7 @@
   "files": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1864,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3626,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4458,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4459,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3298,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5718,
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1690
@@ -10,7 +10,7 @@
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Final-assistant Omi mark ownership and canonical expandable tool-call presentation are row-level rendering contracts that belong with bubble equality and layout.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Apps search now owns an explicit unknown/loading/completed/failed presentation state so the UI never flashes a false empty result before filtering completes.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home ask bar now auto-grows as a multi-line TextField so long messages wrap instead of scrolling off-screen (+14 lines over the prior SB-redesign home/chat layout); a component split is tracked follow-up.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home ask bar now auto-grows as a multi-line TextField so long messages wrap instead of scrolling off-screen (+14 lines over the prior SB-redesign home/chat layout); the Home prompt rail also receives the ask bar's outer trailing edge so the custom rail aligns flush with it; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "Suggested-task loading feedback is now overlaid outside the list flow so an initial fetch cannot shift the task rows; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "SB redesign: adds the hover-expand AppNavRail (icons\u2192labels) and the merged/simplified navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
