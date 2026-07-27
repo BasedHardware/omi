@@ -253,6 +253,19 @@ jobs:
             --tag="$CANDIDATE_TAG")"
           echo "url=$candidate_url" >> "$GITHUB_OUTPUT"
 
+      - name: Stage candidate probe signer
+        if: github.event.inputs.candidate_only != 'true'
+        env:
+          FIREBASE_PROBE_SIGNER_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          signer_file="$(mktemp "$RUNNER_TEMP/omi-firebase-probe-signer.XXXXXX")"
+          trap 'rm -f "$signer_file"' ERR
+          chmod 600 "$signer_file"
+          printf '%s' "$FIREBASE_PROBE_SIGNER_B64" | base64 --decode > "$signer_file"
+          echo "DESKTOP_BACKEND_PROBE_SIGNER_FILE=$signer_file" >> "$GITHUB_ENV"
+          trap - ERR
+
       - name: Mint candidate probe identity
         if: github.event.inputs.candidate_only != 'true'
         env:
@@ -264,6 +277,7 @@ jobs:
           python3 backend/scripts/firebase_release_probe_token.py \
             --secret-project "$PROJECT_ID" \
             --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
+            --signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE" \
             --token-output "$token_file"
           echo "DESKTOP_BACKEND_PROBE_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
 
@@ -429,6 +443,9 @@ jobs:
         run: |
           if [[ -n "${DESKTOP_BACKEND_PROBE_TOKEN_FILE:-}" ]]; then
             rm -f "$DESKTOP_BACKEND_PROBE_TOKEN_FILE"
+          fi
+          if [[ -n "${DESKTOP_BACKEND_PROBE_SIGNER_FILE:-}" ]]; then
+            rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"
           fi
 
       - name: Show Output
