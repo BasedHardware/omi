@@ -282,10 +282,15 @@ jobs:
 
       - name: Setup Gradle for Flutter compile smoke
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # The repository intentionally does not track Flutter's generated
+          # gradlew scripts or wrapper jar. Pin the distribution declared by
+          # android/gradle/wrapper/gradle-wrapper.properties instead.
+          gradle-version: '8.14.2'
 
       - name: Run Android native unit tests
         working-directory: app
-        run: ./android/gradlew -p android testDevDebugUnitTest
+        run: gradle -p android testDevDebugUnitTest
 
       - name: Build Flutter Android dev debug APK
         working-directory: app

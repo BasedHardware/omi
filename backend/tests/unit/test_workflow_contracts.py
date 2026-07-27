@@ -387,6 +387,9 @@ def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
     assert "if: needs.changes.outputs.has_app_l10n == 'true'" in generated
     assert 'fetch-depth: 1' in generated
     assert 'fetch-depth: 1' in android
+    assert "gradle-version: '8.14.2'" in android
+    assert 'run: gradle -p android testDevDebugUnitTest' in android
+    assert './android/gradlew' not in android
     assert 'fetch-depth: 0' in changes
 
 
