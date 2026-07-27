@@ -112,6 +112,32 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         self.assertTrue(any("DESKTOP_BACKEND_PROBE_SIGNER_FILE" in error for error in signer_errors), signer_errors)
         self.assertTrue(any("Mint candidate probe identity" in error for error in gate_errors), gate_errors)
 
+    def test_rejects_missing_or_conflicting_development_firestore_credentials(self) -> None:
+        missing_mount = self.dev.replace(
+            "            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest\n",
+            "",
+            1,
+        )
+        removed_env = self.dev.replace(
+            "--remove-env-vars=OMI_DESKTOP_RELEASE_TAG",
+            "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,OMI_DESKTOP_RELEASE_TAG",
+            1,
+        )
+        runtime_signer = self.dev.replace(
+            "            GEMINI_API_KEY=GEMINI_API_KEY:latest\n",
+            "            GCP_SERVICE_ACCOUNT=GCP_SERVICE_ACCOUNT:latest\n"
+            "            GEMINI_API_KEY=GEMINI_API_KEY:latest\n",
+            1,
+        )
+
+        missing_errors = POLICY.validate_deploy_workflow(missing_mount, production=False)
+        removed_errors = POLICY.validate_deploy_workflow(removed_env, production=False)
+        signer_errors = POLICY.validate_deploy_workflow(runtime_signer, production=False)
+
+        self.assertTrue(any("SERVICE_ACCOUNT_JSON" in error for error in missing_errors), missing_errors)
+        self.assertTrue(any("must not be removed" in error for error in removed_errors), removed_errors)
+        self.assertTrue(any("must never become" in error for error in signer_errors), signer_errors)
+
     def test_rejects_mutable_image_and_direct_traffic_deploy(self) -> None:
         mutated = self.prod.replace(
             "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}",
