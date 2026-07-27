@@ -155,6 +155,45 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_deploy_workflow(mutated, production=True)
         self.assertTrue(any("manual" in error or "outside" in error for error in errors), errors)
 
+    def test_rejects_legacy_production_secret_bindings(self) -> None:
+        generic_mappings = (
+            ("GEMINI_API_KEY", "DESKTOP_GEMINI_API_KEY"),
+            ("FIREBASE_API_KEY", "DESKTOP_FIREBASE_API_KEY"),
+            ("REDIS_DB_PASSWORD", "DESKTOP_REDIS_DB_PASSWORD"),
+            ("REDIS_DB_HOST", "DESKTOP_REDIS_DB_HOST"),
+            ("REDIS_DB_PORT", "DESKTOP_REDIS_DB_PORT"),
+        )
+        for environment_key, secret_name in generic_mappings:
+            legacy = f"{environment_key}={environment_key}:latest"
+            mutated = self.prod.replace(
+                f"{environment_key}={secret_name}:latest",
+                legacy,
+                1,
+            )
+            with self.subTest(legacy=legacy):
+                errors = POLICY.validate_deploy_workflow(mutated, production=True)
+                self.assertTrue(any(legacy in error for error in errors), errors)
+
+        for pinecone_key in ("PINECONE_API_KEY", "PINECONE_HOST"):
+            binding = f"{pinecone_key}={pinecone_key}:latest"
+            mutated = self.prod.replace(
+                "            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest\n",
+                f"            {binding}\n"
+                "            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest\n",
+                1,
+            )
+            with self.subTest(binding=binding):
+                errors = POLICY.validate_deploy_workflow(mutated, production=True)
+                self.assertTrue(any(f"{pinecone_key}=" in error for error in errors), errors)
+
+        missing_removal = self.prod.replace(
+            "            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST\n",
+            "",
+            1,
+        )
+        errors = POLICY.validate_deploy_workflow(missing_removal, production=True)
+        self.assertTrue(any("--remove-secrets=PINECONE_API_KEY,PINECONE_HOST" in error for error in errors), errors)
+
     def test_rejects_missing_release_compatibility_gate(self) -> None:
         mutated = self.stable.replace("Verify live desktop-backend chat compatibility", "Compatibility omitted")
         errors = POLICY.validate_desktop_release_gates(self.qualification, mutated)
