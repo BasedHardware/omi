@@ -39,6 +39,13 @@ steps:
     expect:
       interactive_count: { min: 3 }
 
+  - id: S4a
+    name: Cancel inline task creation with Escape
+    do: "Click New to begin an inline task, then press Escape. Verify the inline editor closes and the Tasks page remains visible."
+    expect:
+      text_visible:
+        - Tasks
+
   - id: S5
     name: Verify search and filter controls
     do: "Verify the search bar is present at the top. Check for filter/settings icons next to the search bar and the add (+) button."

@@ -33,6 +33,13 @@ steps:
         - Conversations
         - Brain Map
 
+  - id: S2a
+    name: Return Home with Escape
+    do: "Press Escape while the Memory page is visible. Verify the app returns to Home and the top navigation bar remains visible."
+    expect:
+      text_visible:
+        - Home
+
   - id: S3
     name: Navigate to Tasks
     do: "Click the Tasks button in the top nav bar (agent-swift find text 'Tasks' click). Verify Tasks page loads with search bar and task list."

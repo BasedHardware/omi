@@ -62,8 +62,12 @@ final class EscapeKeyHandlerView: NSView {
 
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-  isolated deinit {
-    removeRegistration()
+  deinit {
+    if let registration {
+      Task { @MainActor in
+        WindowEscapeKeyMonitor.shared.unregister(registration)
+      }
+    }
   }
 
   private func removeRegistration() {
