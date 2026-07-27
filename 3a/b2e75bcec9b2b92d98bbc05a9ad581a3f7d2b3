@@ -1,0 +1,27 @@
+integrations/omi-even/bridge/server.py
+  s_e939211e79c9f1::t_a7d646f387538a 36-37,61-63
+  s_e939211e79c9f1::t_cd22b03ce88478 192-209
+  s_e939211e79c9f1::t_636f143a6ec13e 64
+integrations/omi-even/bridge/fastpath.py
+  s_e939211e79c9f1::t_b8247cf9fa2e3d 502-537
+integrations/omi-even/bridge/compose.py
+  s_e939211e79c9f1::t_7b5a9837be4f3c 1-141
+integrations/omi-even/bridge/tests/test_compose.py
+  s_e939211e79c9f1::t_85f95bfb61420d 1-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "3ab2e75bcec9b2b92d98bbc05a9ad581a3f7d2b3",
+  "prompts": {},
+  "sessions": {
+    "s_e939211e79c9f1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7063973-7aff-42e3-a630-daf5ea69dbc0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
