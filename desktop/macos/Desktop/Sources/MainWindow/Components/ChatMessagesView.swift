@@ -673,6 +673,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         scrollMode = .followingBottom
         hasActivityBelow = false
         scrollToBottom(proxy: proxy)
+        scheduleInitialScroll(proxy: proxy, delay: ChatScrollLiveEdge.explicitJumpSettlingDelay)
       } label: {
         ZStack(alignment: .center) {
           Circle()

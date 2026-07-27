@@ -7,6 +7,10 @@ import SwiftUI
 /// look like "follow the stream" and pulls the reader back down on the next token.
 enum ChatScrollLiveEdge {
   static let intentEpsilon: CGFloat = 2
+  /// A jump button fires before SwiftUI has necessarily finished laying out a
+  /// newly expanded final row. Repeating the bottom-anchor scroll on the next
+  /// turn makes the explicit intent land at the true live edge.
+  static let explicitJumpSettlingDelay: TimeInterval = 0.05
 
   static func isAtBottom(visibleMaxY: CGFloat, documentHeight: CGFloat) -> Bool {
     visibleMaxY >= documentHeight - intentEpsilon
