@@ -42,6 +42,11 @@ def _enabled_rollout_doc(uid='u1'):
 
 
 def test_chat_memory_tool_wires_memory_adapter_before_legacy_vector_search():
+    # Static tripwire (source order, not behavior): the chat tool must consult the default-read
+    # decision before it can reach the legacy vector index. The decision is interpreted by the
+    # shared legacy-fallback contract, so an un-enrolled account reads legacy while every other
+    # deny reason stays fail-closed; behavior is covered in
+    # tests/unit/test_chat_memory_unenrolled_legacy_fallback.py.
     memory_tools_py = Path(__file__).resolve().parents[2] / 'utils' / 'retrieval' / 'tools' / 'memory_tools.py'
     contents = memory_tools_py.read_text(encoding='utf-8')
     rollout_call = 'search_memory_default_chat_memories_vector_decision_text('
@@ -50,7 +55,7 @@ def test_chat_memory_tool_wires_memory_adapter_before_legacy_vector_search():
     assert legacy_call in contents
     assert contents.index(rollout_call) < contents.index(legacy_call)
     assert 'if default_memories is not None:' not in contents
-    assert 'MemoryReadDecision.USE_LEGACY_SAFE' in contents
+    assert 'legacy_read_fallback_authorized(' in contents
 
 
 def test_chat_rollout_reader_supports_omi_chat_grant_without_reading_memory_items():
