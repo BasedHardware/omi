@@ -16,11 +16,15 @@ struct PeopleIntelligenceFile: Decodable, Sendable {
   let generatedAt: String?
   let stats: PeopleStats?
   let people: [PeopleIntelPerson]
+  /// Low-confidence identity/fact items the engine wants the user to confirm or correct. Optional
+  /// so an older file without the field still decodes.
+  let reviewQueue: [PeopleReviewItem]
 
   enum CodingKeys: String, CodingKey {
     case generatedAt = "generated_at"
     case stats
     case people
+    case reviewQueue
   }
 
   init(from decoder: Decoder) throws {
@@ -28,6 +32,7 @@ struct PeopleIntelligenceFile: Decodable, Sendable {
     generatedAt = try c.decodeIfPresent(String.self, forKey: .generatedAt)
     stats = try c.decodeIfPresent(PeopleStats.self, forKey: .stats)
     people = (try c.decodeIfPresent([PeopleIntelPerson].self, forKey: .people)) ?? []
+    reviewQueue = (try c.decodeIfPresent([PeopleReviewItem].self, forKey: .reviewQueue)) ?? []
   }
 }
 
@@ -189,11 +194,17 @@ struct PeopleIntelPerson: Decodable, Identifiable, Equatable, Sendable {
   let photoPath: String?
   let connections: [PersonConnection]?
   let circle: PersonCircle?
+  /// Set by the engine when this person was resolved by a weak signal (e.g. a name that is
+  /// edit-distance-close to another person). Optional so existing files decode unchanged.
+  let needsConfirmation: Bool?
+  /// A short, plain-language reason paired with `needsConfirmation` (shown on the detail).
+  let confirmReason: String?
 
   enum CodingKeys: String, CodingKey {
     case id, name, relationship, who, now, overall, closeness
     case lastTouch, channels, aliases, contactName, linkedin, activities, openThreads, facts, photoPath
     case connections, circle
+    case needsConfirmation, confirmReason
   }
 
   init(from decoder: Decoder) throws {
@@ -216,6 +227,8 @@ struct PeopleIntelPerson: Decodable, Identifiable, Equatable, Sendable {
     photoPath = try c.decodeIfPresent(String.self, forKey: .photoPath)
     connections = try c.decodeIfPresent([PersonConnection].self, forKey: .connections)
     circle = try c.decodeIfPresent(PersonCircle.self, forKey: .circle)
+    needsConfirmation = try c.decodeIfPresent(Bool.self, forKey: .needsConfirmation)
+    confirmReason = try c.decodeIfPresent(String.self, forKey: .confirmReason)
   }
 
   var initials: String {
@@ -335,8 +348,12 @@ final class PeopleViewModel: ObservableObject {
   @Published var errorMessage: String?
   @Published var searchText = ""
   @Published var selectedID: String?
+  /// Low-confidence items surfaced at the top of the tab for the user to confirm/correct.
+  @Published var reviewQueue: [PeopleReviewItem] = []
 
   private var hasLoaded = false
+
+  private var uid: String? { UserDefaults.standard.string(forKey: .authUserId) }
 
   var filteredPeople: [PeopleIntelPerson] {
     let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -400,6 +417,7 @@ final class PeopleViewModel: ObservableObject {
       people = file.people.sorted { $0.closeness > $1.closeness }
       stats = file.stats
       generatedAt = file.generatedAt
+      reviewQueue = file.reviewQueue
       if let selected = selectedID, !people.contains(where: { $0.id == selected }) {
         selectedID = nil
       }
@@ -407,8 +425,75 @@ final class PeopleViewModel: ObservableObject {
       people = []
       stats = nil
       generatedAt = nil
+      reviewQueue = []
     case .failed(let message):
       errorMessage = message
+    }
+  }
+
+  // MARK: - Review / confirm / correct actions
+  //
+  // Each records the user's decision to `people_overrides.json`, then re-applies overrides to the
+  // written people file so the change is reflected immediately. The next full pipeline run also
+  // re-reads the overrides, so user truth persists.
+
+  /// Identity item: the two are the same person (`same: true`) or confirmed different (`false`).
+  func resolveIdentity(_ item: PeopleReviewItem, same: Bool) {
+    guard let a = item.a, let b = item.b else {
+      skipReview(item)
+      return
+    }
+    PeopleOverridesStore.recordIdentity(a: a, b: b, same: same, uid: uid)
+    reapplyAndReload()
+  }
+
+  /// Identity "Skip" — hide this question without deciding.
+  func skipReview(_ item: PeopleReviewItem) {
+    PeopleOverridesStore.dismiss(id: item.id, uid: uid)
+    reapplyAndReload()
+  }
+
+  /// Fact "Yes" — the asserted fact is correct; stop asking.
+  func confirmFact(_ item: PeopleReviewItem) {
+    PeopleOverridesStore.dismiss(id: item.id, uid: uid)
+    reapplyAndReload()
+  }
+
+  /// Fact "No" — the asserted fact is wrong; drop it.
+  func rejectFact(_ item: PeopleReviewItem) {
+    if let pid = item.personId, let fact = item.fact {
+      PeopleOverridesStore.recordFactEdit(id: pid, original: fact, corrected: "", uid: uid)
+    }
+    PeopleOverridesStore.dismiss(id: item.id, uid: uid)
+    reapplyAndReload()
+  }
+
+  /// Fact "Edit" — replace the asserted fact with the user's corrected text.
+  func editFact(_ item: PeopleReviewItem, corrected: String) {
+    let trimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let pid = item.personId, let fact = item.fact {
+      PeopleOverridesStore.recordFactEdit(id: pid, original: fact, corrected: trimmed, uid: uid)
+    }
+    PeopleOverridesStore.dismiss(id: item.id, uid: uid)
+    reapplyAndReload()
+  }
+
+  /// Route a person/review item to the existing chat surface, prefilled to correct what Omi knows.
+  func fixInChat(name: String) {
+    PeopleChatCorrection.fixInChat(name: name)
+  }
+
+  /// Persist-then-reflect: overrides are already written; re-apply them to the people file off the
+  /// main thread and reload so the review card and any merge/split/edit surfaces immediately.
+  private func reapplyAndReload() {
+    let uid = self.uid
+    isLoading = true
+    Task { [weak self] in
+      await Task.detached(priority: .utility) {
+        PeopleGraphBuilder.reapplyOverrides(uid: uid)
+      }.value
+      let outcome = await Self.loadOutcome()
+      self?.apply(outcome)
     }
   }
 
@@ -610,6 +695,8 @@ struct PeoplePage: View {
   @ObservedObject var viewModel: PeopleViewModel
   @StateObject private var connectors = PeopleConnectorsModel()
   @Environment(\.sbTheme) private var sb
+  /// The fact review item currently being edited (drives the correction sheet).
+  @State private var editingItem: PeopleReviewItem?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -623,6 +710,13 @@ struct PeoplePage: View {
       .padding(.horizontal, 28)
       .padding(.top, 24)
       .padding(.bottom, 14)
+
+      // Human-in-the-loop: never silently assert an uncertain identity/fact — ask first.
+      if !viewModel.reviewQueue.isEmpty {
+        reviewSection
+          .padding(.horizontal, 28)
+          .padding(.bottom, 14)
+      }
 
       content
     }
@@ -638,6 +732,54 @@ struct PeoplePage: View {
     // Opting in to iMessage mapping runs the on-device pipeline; reload so its output surfaces.
     .onChange(of: connectors.imessageMappingEnabled) { _, enabled in
       if enabled { viewModel.reload() }
+    }
+    .sheet(item: $editingItem) { item in
+      FactEditSheet(
+        item: item,
+        onSave: { corrected in
+          viewModel.editFact(item, corrected: corrected)
+          editingItem = nil
+        },
+        onCancel: { editingItem = nil }
+      )
+    }
+  }
+
+  // MARK: Review surface
+
+  private var reviewSection: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(spacing: 8) {
+        Image(systemName: "questionmark.circle")
+          .font(.system(size: 13, weight: .medium))
+          .foregroundStyle(sb.ink(.w45))
+        Text("Needs your confirmation")
+          .geist(size: 13, weight: .semibold)
+          .foregroundStyle(sb.ink(.w85))
+        Text("\(viewModel.reviewQueue.count)")
+          .geistMono(size: 10.5, tracking: 0)
+          .foregroundStyle(sb.ink(.w6))
+          .padding(.horizontal, 6)
+          .padding(.vertical, 1)
+          .background(Capsule().fill(sb.ink(.w08)))
+      }
+
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(alignment: .top, spacing: 12) {
+          ForEach(viewModel.reviewQueue) { item in
+            PeopleReviewCard(
+              item: item,
+              onIdentity: { same in viewModel.resolveIdentity(item, same: same) },
+              onSkip: { viewModel.skipReview(item) },
+              onFactYes: { viewModel.confirmFact(item) },
+              onFactNo: { viewModel.rejectFact(item) },
+              onFactEdit: { editingItem = item },
+              onFixInChat: { viewModel.fixInChat(name: item.name) }
+            )
+          }
+        }
+        .padding(.vertical, 1)
+      }
     }
   }
 
@@ -880,7 +1022,8 @@ struct PeoplePage: View {
               withAnimation(SBMotion.standard) {
                 viewModel.selectedID = viewModel.selectedID == person.id ? nil : person.id
               }
-            }
+            },
+            onFixInChat: { viewModel.fixInChat(name: person.name) }
           )
         }
       }
@@ -998,6 +1141,7 @@ private struct PersonRowView: View {
   let person: PeopleIntelPerson
   let isSelected: Bool
   let onTap: () -> Void
+  let onFixInChat: () -> Void
 
   @State private var isHovering = false
   @Environment(\.sbTheme) private var sb
@@ -1045,7 +1189,7 @@ private struct PersonRowView: View {
       .buttonStyle(.plain)
 
       if isSelected {
-        PersonDetailView(person: person)
+        PersonDetailView(person: person, onFixInChat: onFixInChat)
           .padding(.horizontal, 14)
           .padding(.bottom, 14)
       }
@@ -1169,6 +1313,7 @@ private struct ChannelDots: View {
 
 private struct PersonDetailView: View {
   let person: PeopleIntelPerson
+  let onFixInChat: () -> Void
   @Environment(\.sbTheme) private var sb
 
   private var hasContactSection: Bool {
@@ -1179,6 +1324,27 @@ private struct PersonDetailView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
+      if person.needsConfirmation == true, let reason = person.confirmReason, !reason.isEmpty {
+        HStack(alignment: .top, spacing: 6) {
+          Image(systemName: "questionmark.circle")
+            .font(.system(size: 12))
+            .foregroundStyle(sb.ink(.w45))
+          Text(reason)
+            .geist(size: 12)
+            .foregroundStyle(sb.ink(.w6))
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          RoundedRectangle(cornerRadius: 9, style: .continuous).fill(sb.ink(.w04))
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(sb.ink(.w08), lineWidth: 1)
+        )
+      }
+
       if !person.who.isEmpty {
         Text(person.who)
           .geist(size: 13.5)
@@ -1282,6 +1448,23 @@ private struct PersonDetailView: View {
           }
         }
       }
+
+      // Correct-by-chat: route to the existing chat surface to fix what Omi knows.
+      Button(action: onFixInChat) {
+        HStack(spacing: 6) {
+          Image(systemName: "bubble.left")
+            .font(.system(size: 11.5))
+          Text("Looks wrong? Confirm or correct")
+            .geist(size: 12, weight: .medium)
+        }
+        .foregroundStyle(sb.ink(.w6))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .overlay(
+          RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(sb.ink(.w12), lineWidth: 1)
+        )
+      }
+      .buttonStyle(.plain)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(14)
@@ -1411,6 +1594,170 @@ private struct ConnectionAvatarView: View {
         .multilineTextAlignment(.center)
     }
     .frame(width: 60)
+  }
+}
+
+// MARK: - Review card + correction sheet
+
+/// One compact "Needs your confirmation" card. Identity items offer Confirm / Not the same / Skip;
+/// fact items offer Yes / No / Edit. Every card also offers "Fix in chat" (correct-by-chat).
+private struct PeopleReviewCard: View {
+  let item: PeopleReviewItem
+  let onIdentity: (Bool) -> Void
+  let onSkip: () -> Void
+  let onFactYes: () -> Void
+  let onFactNo: () -> Void
+  let onFactEdit: () -> Void
+  let onFixInChat: () -> Void
+  @Environment(\.sbTheme) private var sb
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 9) {
+      HStack(spacing: 5) {
+        Image(systemName: item.isIdentity ? "person.2" : "text.badge.checkmark")
+          .font(.system(size: 10.5, weight: .medium))
+          .foregroundStyle(sb.ink(.w45))
+        Text(item.isIdentity ? "Same person?" : "Fact check")
+          .geistMono(size: 9.5, tracking: 0.4)
+          .foregroundStyle(sb.ink(.w35))
+      }
+
+      Text(item.question)
+        .geist(size: 12.5, weight: .medium)
+        .foregroundStyle(sb.ink(.w85))
+        .lineLimit(3)
+        .fixedSize(horizontal: false, vertical: true)
+
+      Spacer(minLength: 0)
+
+      HStack(spacing: 6) {
+        if item.isIdentity {
+          PeopleReviewButton(title: "Confirm", prominent: true) { onIdentity(true) }
+          PeopleReviewButton(title: "Not the same") { onIdentity(false) }
+          PeopleReviewButton(title: "Skip", action: onSkip)
+        } else {
+          PeopleReviewButton(title: "Yes", prominent: true, action: onFactYes)
+          PeopleReviewButton(title: "No", action: onFactNo)
+          PeopleReviewButton(title: "Edit", action: onFactEdit)
+        }
+      }
+
+      Button(action: onFixInChat) {
+        HStack(spacing: 4) {
+          Image(systemName: "bubble.left")
+            .font(.system(size: 10))
+          Text("Fix in chat")
+            .geist(size: 11, weight: .medium)
+        }
+        .foregroundStyle(sb.ink(.w45))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(12)
+    .frame(width: 268, height: 152, alignment: .topLeading)
+    .sbCard(radius: 14)
+  }
+}
+
+private struct PeopleReviewButton: View {
+  let title: String
+  var prominent: Bool = false
+  let action: () -> Void
+  @Environment(\.sbTheme) private var sb
+
+  var body: some View {
+    Button(action: action) {
+      Text(title)
+        .geist(size: 11.5, weight: .medium)
+        .foregroundStyle(prominent ? sb.ink(.w9) : sb.ink(.w6))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(
+          RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(prominent ? sb.ink(.w12) : sb.ink(.w05))
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .stroke(sb.ink(.w12), lineWidth: 1)
+        )
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+/// Inline correction for a fact review item: prefilled with the asserted fact so the user tweaks it
+/// rather than retyping. Saving records a `factEdit`; an emptied field drops the fact.
+private struct FactEditSheet: View {
+  let item: PeopleReviewItem
+  let onSave: (String) -> Void
+  let onCancel: () -> Void
+
+  @State private var text: String
+  @Environment(\.sbTheme) private var sb
+
+  init(item: PeopleReviewItem, onSave: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+    self.item = item
+    self.onSave = onSave
+    self.onCancel = onCancel
+    _text = State(initialValue: item.fact ?? "")
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Correct this fact")
+          .geist(size: 15, weight: .semibold)
+          .foregroundStyle(sb.ink)
+        Text("About \(item.name). Clear the text to remove the fact entirely.")
+          .geist(size: 12)
+          .foregroundStyle(sb.ink(.w45))
+      }
+
+      TextEditor(text: $text)
+        .geist(size: 13)
+        .foregroundStyle(sb.ink(.w85))
+        .scrollContentBackground(.hidden)
+        .padding(8)
+        .frame(minHeight: 80)
+        .background(
+          RoundedRectangle(cornerRadius: 8, style: .continuous).fill(sb.ink(.w05))
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(sb.ink(.w12), lineWidth: 1)
+        )
+
+      HStack(spacing: 10) {
+        Spacer()
+        Button(action: onCancel) {
+          Text("Cancel")
+            .geist(size: 12.5, weight: .medium)
+            .foregroundStyle(sb.ink(.w6))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .overlay(
+              RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(sb.ink(.w18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.cancelAction)
+
+        Button(action: { onSave(text) }) {
+          Text("Save")
+            .geist(size: 12.5, weight: .medium)
+            .foregroundStyle(sb.ink(.w9))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .background(
+              RoundedRectangle(cornerRadius: 8, style: .continuous).fill(sb.ink(.w12))
+            )
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.defaultAction)
+      }
+    }
+    .padding(20)
+    .frame(width: 400)
+    .background(OmiColors.backgroundPrimary)
   }
 }
 

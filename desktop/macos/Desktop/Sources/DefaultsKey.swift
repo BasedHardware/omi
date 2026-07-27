@@ -72,6 +72,10 @@ enum DefaultsKey: String {
   /// cheap without re-running the pipeline more than once per throttle window.
   case peopleGraphLastRebuild = "peopleGraphLastRebuild"
   case peopleIMessageExportLastRun = "peopleIMessageExportLastRun"
+  /// Throttle bookkeeping for writing derived relationship-fact memories (epoch
+  /// seconds). Independent of the graph-rebuild throttle so the memory writer
+  /// runs on its own cadence after the graph settles.
+  case peopleMemoryLastWrite = "peopleMemoryLastWrite"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
