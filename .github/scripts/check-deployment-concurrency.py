@@ -37,6 +37,8 @@ class LockContract:
 # new deploy writer cannot silently bypass the audited lock graph.
 LOCK_CONTRACTS = {
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
+    "desktop_backend_prod.yml": LockContract("desktop-backend-prod"),
+    "desktop_backend_recover_prod.yml": LockContract("desktop-backend-prod"),
     "gcp_admin.yml": LockContract(
         "deploy-cloud-run-omi-admin-dashboard-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
