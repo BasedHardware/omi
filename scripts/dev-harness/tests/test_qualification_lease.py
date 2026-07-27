@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import os
 import signal
 import socket
@@ -62,6 +63,51 @@ def _start_fault_injector(state: Path, token: str, port: int) -> int:
     return int((state / "pid").read_text(encoding="utf-8"))
 
 
+def _lock_process(root: str, ready, acquired, release) -> None:
+    ready.set()
+    with qualification._locked(Path(root)):
+        acquired.set()
+        release.wait()
+
+
+def test_qualification_file_lock_serializes_processes(tmp_path: Path) -> None:
+    root = tmp_path / "qualification"
+    context = multiprocessing.get_context("spawn")
+    holder_ready, holder_acquired, holder_release = context.Event(), context.Event(), context.Event()
+    contender_ready, contender_acquired, contender_release = context.Event(), context.Event(), context.Event()
+    contender_release.set()
+    holder = context.Process(target=_lock_process, args=(str(root), holder_ready, holder_acquired, holder_release))
+    contender = context.Process(
+        target=_lock_process,
+        args=(str(root), contender_ready, contender_acquired, contender_release),
+    )
+    started: list[multiprocessing.Process] = []
+    try:
+        holder.start()
+        started.append(holder)
+        assert holder_ready.wait(timeout=5), f"holder exited with {holder.exitcode}"
+        assert holder_acquired.wait(timeout=5), f"holder exited with {holder.exitcode}"
+
+        contender.start()
+        started.append(contender)
+        assert contender_ready.wait(timeout=5), f"contender exited with {contender.exitcode}"
+        assert not contender_acquired.wait(timeout=1)
+
+        holder_release.set()
+        assert contender_acquired.wait(timeout=5), f"contender exited with {contender.exitcode}"
+        holder.join(timeout=5)
+        contender.join(timeout=5)
+        assert holder.exitcode == 0
+        assert contender.exitcode == 0
+    finally:
+        holder_release.set()
+        contender_release.set()
+        for process in reversed(started):
+            if process.is_alive():
+                process.kill()
+            process.join(timeout=5)
+
+
 def test_active_lease_serializes_qualification_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     root = tmp_path / "qualification"
     monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
@@ -73,6 +119,41 @@ def test_active_lease_serializes_qualification_runs(monkeypatch: pytest.MonkeyPa
     qualification.release(repo_root=REPO_ROOT, lease_id="qualification-one", token=str(first["token"]))
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows-specific fail-closed behavior")
+def test_windows_fault_state_is_retained_without_posix_process_provenance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    lease_id = "qualification-windows-fault"
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    acquired = qualification.acquire(repo_root=REPO_ROOT, lease_id=lease_id, owner_pid=os.getpid(), port_offset=1000)
+    fault_state = root / "state" / lease_id / qualification.FAULT_STATE_DIRNAME
+    fault_state.mkdir()
+
+    with pytest.raises(qualification.QualificationLeaseError, match="requires POSIX process provenance"):
+        qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+
+    assert (root / "qualification-lease.json").is_file()
+    assert fault_state.is_dir()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows-specific fail-closed behavior")
+def test_windows_process_manifest_is_retained_without_posix_process_provenance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    lease_id = "qualification-windows-process"
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    acquired = qualification.acquire(repo_root=REPO_ROOT, lease_id=lease_id, owner_pid=os.getpid(), port_offset=1000)
+    _stale_lease(root, lease_id, pid=os.getpid(), port=_free_port())
+
+    with pytest.raises(qualification.QualificationLeaseError, match="process-manifest cleanup requires POSIX process provenance"):
+        qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+
+    assert (root / "qualification-lease.json").is_file()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
 def test_release_stops_the_exact_lease_owned_fault_inject_listener(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -97,6 +178,7 @@ def test_release_stops_the_exact_lease_owned_fault_inject_listener(
     assert (root / "state" / lease_id / qualification.COMPLETION_FILENAME).is_file()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
 def test_fault_listener_preflight_proves_cleanup_before_retaining_the_active_lease(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -139,6 +221,7 @@ def test_fault_listener_preflight_proves_cleanup_before_retaining_the_active_lea
     qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
 
 
+@pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
 def test_fault_listener_preflight_retains_replaced_listener_and_reports_host_prerequisite(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -195,8 +278,7 @@ def test_fault_listener_preflight_retains_replaced_listener_and_reports_host_pre
         if foreign.poll() is None:
             foreign.terminate()
             foreign.wait(timeout=10)
-
-
+@pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
 def test_release_refuses_and_retains_an_unproven_listener_on_the_recorded_fault_port(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -249,14 +331,24 @@ def test_stale_owned_stack_is_reclaimed_without_touching_foreign_listener(
     owned_pid, stopped, signalled = 42424, set(), []
     foreign = subprocess.Popen(
         [sys.executable, "-c", "import socket,time; s=socket.socket(); s.bind(('127.0.0.1', 49199)); s.listen(); time.sleep(60)"],
-        start_new_session=True,
+        start_new_session=os.name != "nt",
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
     )
     try:
-        original_exists = safety.process_exists
-        monkeypatch.setattr(safety, "process_exists", lambda pid: pid == owned_pid and pid not in stopped or original_exists(pid))
+        monkeypatch.setattr(
+            safety,
+            "process_exists",
+            lambda pid: pid == os.getpid() or (pid == owned_pid and pid not in stopped),
+        )
         monkeypatch.setattr(safety, "command_line_for_pid", lambda pid: marker if pid == owned_pid else "")
-        monkeypatch.setattr(qualification.os, "getpgid", lambda pid: pid)
-        monkeypatch.setattr(qualification.os, "killpg", lambda pid, sig: (signalled.append((pid, sig)), stopped.add(pid)))
+        monkeypatch.setattr(safety, "listening_pids", lambda _port: ())
+        monkeypatch.setattr(qualification.os, "getpgid", lambda pid: pid, raising=False)
+        monkeypatch.setattr(
+            qualification.os,
+            "killpg",
+            lambda pid, sig: (signalled.append((pid, sig)), stopped.add(pid)),
+            raising=False,
+        )
         _stale_lease(root, old_id, owned_pid, 49198)
         replacement = qualification.acquire(
             repo_root=REPO_ROOT, lease_id="qualification-replacement", owner_pid=os.getpid(), port_offset=1001
@@ -267,10 +359,9 @@ def test_stale_owned_stack_is_reclaimed_without_touching_foreign_listener(
             repo_root=REPO_ROOT, lease_id="qualification-replacement", token=str(replacement["token"])
         )
     finally:
-        for proc in (foreign,):
-            if proc.poll() is None:
-                proc.terminate()
-                proc.wait(timeout=10)
+        if foreign.poll() is None:
+            foreign.terminate()
+            foreign.wait(timeout=10)
 
 
 def test_dead_lease_with_missing_sentinel_is_quarantined_before_a_fresh_lease_acquires(
@@ -318,26 +409,40 @@ def test_dead_lease_with_unproven_listener_is_quarantined_without_signalling_it(
             "s.bind(('127.0.0.1',int(__import__('sys').argv[1]))); s.listen(); time.sleep(60)",
             str(port),
         ],
-        start_new_session=True,
+        start_new_session=os.name != "nt",
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
     )
     signals: list[tuple[int, signal.Signals]] = []
     try:
-        deadline = time.monotonic() + 5
-        while foreign.pid not in safety.listening_pids(port) and time.monotonic() < deadline:
-            time.sleep(0.05)
+        monkeypatch.setattr(
+            safety,
+            "listening_pids",
+            lambda candidate: (foreign.pid,) if candidate == port and foreign.poll() is None else (),
+        )
         assert foreign.pid in safety.listening_pids(port)
         _stale_lease(root, lease_id, pid=recorded_pid, port=port)
         stale_pointer = json.loads((root / "qualification-lease.json").read_text(encoding="utf-8"))
         original_exists = safety.process_exists
-        original_getpgid = qualification.os.getpgid
+        original_getpgid = getattr(qualification.os, "getpgid", None)
+
+        def getpgid(pid: int) -> int:
+            if pid == recorded_pid:
+                return recorded_pid
+            if original_getpgid is None:
+                return pid
+            return original_getpgid(pid)
+
         monkeypatch.setattr(
             safety, "process_exists", lambda pid: pid == recorded_pid or original_exists(pid)
         )
         monkeypatch.setattr(safety, "command_line_for_pid", lambda pid: marker if pid == recorded_pid else "")
+        monkeypatch.setattr(qualification.os, "getpgid", getpgid, raising=False)
         monkeypatch.setattr(
-            qualification.os, "getpgid", lambda pid: recorded_pid if pid == recorded_pid else original_getpgid(pid)
+            qualification.os,
+            "killpg",
+            lambda pid, sig: signals.append((pid, sig)),
+            raising=False,
         )
-        monkeypatch.setattr(qualification.os, "killpg", lambda pid, sig: signals.append((pid, sig)))
 
         replacement = qualification.acquire(
             repo_root=REPO_ROOT, lease_id="qualification-replacement", owner_pid=os.getpid(), port_offset=1001
@@ -386,13 +491,15 @@ def test_supervisor_dead_with_recorded_port_still_open_retains_incomplete_lease(
     monkeypatch.setattr(
         qualification,
         "STOP_PHASES",
-        ((qualification.signal.SIGINT, 0), (qualification.signal.SIGTERM, 0), (qualification.signal.SIGKILL, 0)),
+        tuple((sig, 0) for sig, _wait_seconds in qualification.STOP_PHASES),
     )
+    monkeypatch.setattr(safety, "process_exists", lambda pid: pid == os.getpid())
     acquired = qualification.acquire(repo_root=REPO_ROOT, lease_id=lease_id, owner_pid=os.getpid(), port_offset=1000)
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(("127.0.0.1", 0))
     listener.listen()
     port = listener.getsockname()[1]
+    monkeypatch.setattr(safety, "listening_pids", lambda candidate: (os.getpid(),) if candidate == port else ())
     try:
         _stale_lease(root, lease_id, pid=42424, port=port)
         with pytest.raises(qualification.QualificationLeaseError, match="port.*still open"):
@@ -430,8 +537,18 @@ def test_docker_typesense_proxy_listener_is_reclaimed_only_with_exact_container_
     monkeypatch.setattr(safety, "validate_port_owner", lambda *args, **kwargs: None)
     monkeypatch.setattr(safety, "listening_pids", lambda observed_port: (proxy_pid,) if observed_port == port else ())
     monkeypatch.setattr(safety, "is_descendant_of", lambda child, parent: False)
-    monkeypatch.setattr(qualification.os, "getpgid", lambda pid: supervisor_pid if pid == supervisor_pid else proxy_pid)
-    monkeypatch.setattr(qualification.os, "killpg", lambda pid, sig: signalled.append((pid, sig)))
+    monkeypatch.setattr(
+        qualification.os,
+        "getpgid",
+        lambda pid: supervisor_pid if pid == supervisor_pid else proxy_pid,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        qualification.os,
+        "killpg",
+        lambda pid, sig: signalled.append((pid, sig)),
+        raising=False,
+    )
     monkeypatch.setattr(
         qualification.subprocess,
         "run",
@@ -480,8 +597,18 @@ def test_external_typesense_listener_without_exact_docker_binding_is_not_signall
     monkeypatch.setattr(safety, "validate_port_owner", lambda *args, **kwargs: None)
     monkeypatch.setattr(safety, "listening_pids", lambda observed_port: (proxy_pid,) if observed_port == port else ())
     monkeypatch.setattr(safety, "is_descendant_of", lambda child, parent: False)
-    monkeypatch.setattr(qualification.os, "getpgid", lambda pid: supervisor_pid if pid == supervisor_pid else proxy_pid)
-    monkeypatch.setattr(qualification.os, "killpg", lambda pid, sig: signalled.append((pid, sig)))
+    monkeypatch.setattr(
+        qualification.os,
+        "getpgid",
+        lambda pid: supervisor_pid if pid == supervisor_pid else proxy_pid,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        qualification.os,
+        "killpg",
+        lambda pid, sig: signalled.append((pid, sig)),
+        raising=False,
+    )
 
     with pytest.raises(qualification.QualificationLeaseError, match="lease lineage is unproven"):
         qualification._validated_signal(

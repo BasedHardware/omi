@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import fcntl
+import errno
 import hashlib
 import json
 import os
@@ -15,7 +15,12 @@ import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator, TextIO
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 from . import config, safety
 
@@ -26,10 +31,10 @@ DEFAULT_RETENTION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 COMPLETION_FILENAME = "qualification-completed.json"
 QUARANTINE_DIRNAME = "quarantined-lease-pointers"
 FAULT_STATE_DIRNAME = "fault"
-STOP_PHASES: tuple[tuple[signal.Signals, float], ...] = (
-    (signal.SIGINT, 8),
-    (signal.SIGTERM, 5),
-    (signal.SIGKILL, 2),
+STOP_PHASES: tuple[tuple[signal.Signals, float], ...] = tuple(
+    (signal.Signals(value), wait_seconds)
+    for name, wait_seconds in (("SIGINT", 8), ("SIGTERM", 5), ("SIGKILL", 2))
+    if (value := getattr(signal, name, None)) is not None
 )
 
 
@@ -56,15 +61,40 @@ def _validate_root(root: Path, repo_root: Path) -> Path:
     return resolved
 
 
+def _acquire_file_lock(lock_file: TextIO) -> None:
+    if os.name != "nt":
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        return
+
+    while True:
+        lock_file.seek(0)
+        try:
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            return
+        except OSError as exc:
+            if exc.errno not in {errno.EACCES, errno.EAGAIN}:
+                raise
+            time.sleep(0.05)
+
+
+def _release_file_lock(lock_file: TextIO) -> None:
+    if os.name != "nt":
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        return
+
+    lock_file.seek(0)
+    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+
+
 @contextmanager
 def _locked(root: Path) -> Iterator[None]:
     root.mkdir(parents=True, exist_ok=True)
     with (root / ".qualification-lease.lock").open("a+", encoding="utf-8") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        _acquire_file_lock(lock_file)
         try:
             yield
         finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            _release_file_lock(lock_file)
 
 
 def _lease_path(root: Path) -> Path:
@@ -140,6 +170,19 @@ def _load_records(path: Path, key: str) -> list[dict[str, object]]:
     return records
 
 
+def _posix_process_group_api() -> tuple[
+    Callable[[int], int],
+    Callable[[int, signal.Signals], None],
+]:
+    getpgid = getattr(os, "getpgid", None)
+    killpg = getattr(os, "killpg", None)
+    if not callable(getpgid) or not callable(killpg):
+        raise QualificationLeaseError(
+            "Qualification process-manifest cleanup requires POSIX process provenance; retaining lease state"
+        )
+    return getpgid, killpg
+
+
 def _validated_owned_records(
     state_root: Path, repo_root: Path, lease_id: str, ownership_token: str
 ) -> tuple[list[dict[str, object]], Path, Path]:
@@ -171,8 +214,9 @@ def _validated_owned_records(
         if port_record is None or int(port_record.get("port", -1)) != int(record.get("port", -2)):
             raise QualificationLeaseError("Qualification process has no matching recorded port provenance")
         if safety.process_exists(pid):
+            getpgid, _killpg = _posix_process_group_api()
             safety.validate_owned_pid(pid, process_manifest=process_manifest, service=service)
-            if os.getpgid(pid) != process_group:
+            if getpgid(pid) != process_group:
                 raise QualificationLeaseError("Qualification process is no longer in its recorded process group")
             safety.validate_port_owner(
                 int(record["port"]),
@@ -212,6 +256,10 @@ def _validated_fault_record(state_root: Path, ownership_token: str) -> dict[str,
     fault_state = state_root / FAULT_STATE_DIRNAME
     if not fault_state.exists():
         return None
+    if os.name == "nt":
+        raise QualificationLeaseError(
+            "Qualification fault-inject cleanup requires POSIX process provenance; retaining lease state"
+        )
     if (
         fault_state.is_symlink()
         or not fault_state.is_dir()
@@ -475,8 +523,9 @@ def _validated_signal(
     service = str(record["service"])
     process_group = int(record["process_group"])
     port = int(record["port"])
+    getpgid, killpg = _posix_process_group_api()
     safety.validate_owned_pid(pid, process_manifest=process_manifest, service=service)
-    if os.getpgid(pid) != process_group or process_group != pid:
+    if getpgid(pid) != process_group or process_group != pid:
         raise QualificationLeaseError("Refusing to signal a qualification process group whose ownership changed")
     safety.validate_port_owner(
         port, pid=pid, port_manifest=port_manifest, process_manifest=None, service=service
@@ -484,10 +533,10 @@ def _validated_signal(
     listeners = safety.listening_pids(port)
     if listeners and not _is_exact_typesense_docker_proxy(record, lease_id):
         for listener_pid in listeners:
-            if os.getpgid(listener_pid) != process_group or not safety.is_descendant_of(listener_pid, pid):
+            if getpgid(listener_pid) != process_group or not safety.is_descendant_of(listener_pid, pid):
                 raise QualificationLeaseError("Refusing to signal a qualification listener whose lease lineage is unproven")
     try:
-        os.killpg(process_group, sig)
+        killpg(process_group, sig)
     except (ProcessLookupError, PermissionError) as exc:
         raise QualificationLeaseError(f"Cannot signal recorded qualification process group: {exc}") from exc
 
