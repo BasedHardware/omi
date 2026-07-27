@@ -19,9 +19,13 @@ final class PTTInputDeviceProbeTests: XCTestCase {
 
   /// A probe whose device lookup blocks until the test releases it, standing in for a
   /// wedged CoreAudio driver without sleeping on the wall clock.
-  private func stalledProbe(until release: DispatchSemaphore) -> PTTAudioDeviceProbe {
+  private func stalledProbe(
+    until release: DispatchSemaphore,
+    onStart: @escaping @Sendable () -> Void = {}
+  ) -> PTTAudioDeviceProbe {
     PTTAudioDeviceProbe(
       inputDeviceID: { _ in
+        onStart()
         release.wait()
         return 99
       },
@@ -55,36 +59,32 @@ final class PTTInputDeviceProbeTests: XCTestCase {
   /// the main thread does not satisfy this: it still parks the run loop for the whole
   /// budget. The turn-start read must not wait on CoreAudio at all.
   @MainActor
-  func testMainRunLoopKeepsPumpingWhileTheHALIsWedged() {
+  func testMainRunLoopKeepsPumpingWhileTheHALIsWedged() async {
     let release = DispatchSemaphore(value: 0)
+    let probeStarted = expectation(description: "HAL probe is parked")
     // Joined before returning: a probe still parked at teardown would publish its
     // snapshot into whichever test runs next.
     let finished = expectation(description: "parked probe finished")
     PTTInputDeviceRouting.refresh(
-      selectedUID: "wedged-uid", probe: stalledProbe(until: release)
+      selectedUID: "wedged-uid",
+      probe: stalledProbe(until: release) { probeStarted.fulfill() }
     ) { finished.fulfill() }
 
-    let ticker = Ticker()
-    let timer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { _ in ticker.tick() }
-    RunLoop.main.add(timer, forMode: .common)
-    defer { timer.invalidate() }
+    await fulfillment(of: [probeStarted], timeout: 5)
 
-    let started = Date()
-    var reads = 0
-    while Date().timeIntervalSince(started) < 0.3 {
-      // The exact call PTT turn start makes, hammered while the HAL is wedged.
-      _ = PTTInputDeviceRouting.currentSnapshot(selectedUID: "wedged-uid")
-      reads += 1
-      RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    let mainTurnFinished = expectation(description: "main run loop completed another turn")
+    DispatchQueue.main.async {
+      // A fixed batch tests the exact turn-start read without tying correctness to
+      // scheduler throughput. This turn runs before the parked HAL probe is released.
+      for _ in 0..<100 {
+        XCTAssertNil(PTTInputDeviceRouting.currentSnapshot(selectedUID: "wedged-uid"))
+      }
+      mainTurnFinished.fulfill()
     }
-
-    XCTAssertGreaterThan(
-      ticker.count, 10,
-      "the main run loop must keep pumping while the HAL is wedged (got \(ticker.count) ticks)")
-    XCTAssertGreaterThan(reads, 10, "turn-start reads must keep completing")
+    await fulfillment(of: [mainTurnFinished], timeout: 5)
 
     release.signal()
-    wait(for: [finished], timeout: 5)
+    await fulfillment(of: [finished], timeout: 5)
   }
 
   /// A wedged driver must not leak one parked thread per PTT turn.
