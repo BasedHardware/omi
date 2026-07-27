@@ -15,6 +15,42 @@ POLICY = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = POLICY
 SPEC.loader.exec_module(POLICY)
 
+LINEAGE_SCRIPT = Path(__file__).with_name("verify_desktop_backend_image_lineage.py")
+LINEAGE_SPEC = importlib.util.spec_from_file_location("desktop_backend_image_lineage", LINEAGE_SCRIPT)
+assert LINEAGE_SPEC and LINEAGE_SPEC.loader
+LINEAGE = importlib.util.module_from_spec(LINEAGE_SPEC)
+sys.modules[LINEAGE_SPEC.name] = LINEAGE
+LINEAGE_SPEC.loader.exec_module(LINEAGE)
+
+REPOSITORY = "gcr.io/based-hardware-dev/desktop-backend"
+INDEX_DIGEST = "sha256:c0e01b33a33bb41d2dd5009a43353fb4ec43f18aeb8aac292c1751dceb081b57"
+RUNTIME_DIGEST = "sha256:1bb2df293d5287e2af54ed14e1f923013a44d453546984e51157b71c7e25dc5e"
+
+
+def _buildx_index(*, runtime_platform: dict[str, str] | None = None) -> dict[str, object]:
+    return {
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "manifests": [
+            {
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "digest": RUNTIME_DIGEST,
+                "size": 1987,
+                "platform": runtime_platform or {"architecture": "amd64", "os": "linux"},
+            },
+            {
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "digest": f"sha256:{'2' * 64}",
+                "size": 566,
+                "annotations": {
+                    "vnd.docker.reference.digest": RUNTIME_DIGEST,
+                    "vnd.docker.reference.type": "attestation-manifest",
+                },
+                "platform": {"architecture": "unknown", "os": "unknown"},
+            },
+        ],
+    }
+
 
 class DesktopBackendReleasePolicyTests(unittest.TestCase):
     @classmethod
@@ -60,6 +96,48 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_deploy_workflow(mutated, production=False)
         self.assertTrue(any("missing ordered release step" in error for error in errors), errors)
 
+    def test_rejects_missing_or_bypassed_development_probe_signer(self) -> None:
+        missing_signer = self.dev.replace(
+            '--signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE" \\\n',
+            "",
+            1,
+        )
+        missing_gate = self.dev.replace(
+            "      - name: Mint candidate probe identity", "      - name: Probe identity omitted", 1
+        )
+
+        signer_errors = POLICY.validate_deploy_workflow(missing_signer, production=False)
+        gate_errors = POLICY.validate_deploy_workflow(missing_gate, production=False)
+
+        self.assertTrue(any("DESKTOP_BACKEND_PROBE_SIGNER_FILE" in error for error in signer_errors), signer_errors)
+        self.assertTrue(any("Mint candidate probe identity" in error for error in gate_errors), gate_errors)
+
+    def test_rejects_missing_or_conflicting_development_firestore_credentials(self) -> None:
+        missing_mount = self.dev.replace(
+            "            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest\n",
+            "",
+            1,
+        )
+        removed_env = self.dev.replace(
+            "--remove-env-vars=OMI_DESKTOP_RELEASE_TAG",
+            "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,OMI_DESKTOP_RELEASE_TAG",
+            1,
+        )
+        runtime_signer = self.dev.replace(
+            "            GEMINI_API_KEY=GEMINI_API_KEY:latest\n",
+            "            GCP_SERVICE_ACCOUNT=GCP_SERVICE_ACCOUNT:latest\n"
+            "            GEMINI_API_KEY=GEMINI_API_KEY:latest\n",
+            1,
+        )
+
+        missing_errors = POLICY.validate_deploy_workflow(missing_mount, production=False)
+        removed_errors = POLICY.validate_deploy_workflow(removed_env, production=False)
+        signer_errors = POLICY.validate_deploy_workflow(runtime_signer, production=False)
+
+        self.assertTrue(any("SERVICE_ACCOUNT_JSON" in error for error in missing_errors), missing_errors)
+        self.assertTrue(any("must not be removed" in error for error in removed_errors), removed_errors)
+        self.assertTrue(any("must never become" in error for error in signer_errors), signer_errors)
+
     def test_rejects_mutable_image_and_direct_traffic_deploy(self) -> None:
         mutated = self.prod.replace(
             "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}",
@@ -76,6 +154,45 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         ).replace("group: desktop-backend-prod", "group: deploy-backend-stack-prod")
         errors = POLICY.validate_deploy_workflow(mutated, production=True)
         self.assertTrue(any("manual" in error or "outside" in error for error in errors), errors)
+
+    def test_rejects_legacy_production_secret_bindings(self) -> None:
+        generic_mappings = (
+            ("GEMINI_API_KEY", "DESKTOP_GEMINI_API_KEY"),
+            ("FIREBASE_API_KEY", "DESKTOP_FIREBASE_API_KEY"),
+            ("REDIS_DB_PASSWORD", "DESKTOP_REDIS_DB_PASSWORD"),
+            ("REDIS_DB_HOST", "DESKTOP_REDIS_DB_HOST"),
+            ("REDIS_DB_PORT", "DESKTOP_REDIS_DB_PORT"),
+        )
+        for environment_key, secret_name in generic_mappings:
+            legacy = f"{environment_key}={environment_key}:latest"
+            mutated = self.prod.replace(
+                f"{environment_key}={secret_name}:latest",
+                legacy,
+                1,
+            )
+            with self.subTest(legacy=legacy):
+                errors = POLICY.validate_deploy_workflow(mutated, production=True)
+                self.assertTrue(any(legacy in error for error in errors), errors)
+
+        for pinecone_key in ("PINECONE_API_KEY", "PINECONE_HOST"):
+            binding = f"{pinecone_key}={pinecone_key}:latest"
+            mutated = self.prod.replace(
+                "            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest\n",
+                f"            {binding}\n"
+                "            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest\n",
+                1,
+            )
+            with self.subTest(binding=binding):
+                errors = POLICY.validate_deploy_workflow(mutated, production=True)
+                self.assertTrue(any(f"{pinecone_key}=" in error for error in errors), errors)
+
+        missing_removal = self.prod.replace(
+            "            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST\n",
+            "",
+            1,
+        )
+        errors = POLICY.validate_deploy_workflow(missing_removal, production=True)
+        self.assertTrue(any("--remove-secrets=PINECONE_API_KEY,PINECONE_HOST" in error for error in errors), errors)
 
     def test_rejects_missing_release_compatibility_gate(self) -> None:
         mutated = self.stable.replace("Verify live desktop-backend chat compatibility", "Compatibility omitted")
@@ -106,6 +223,86 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         mutated = self.dev.replace("CHAT_CONTRACT_VERSION: '1'", "CHAT_CONTRACT_VERSION: '2'")
         errors = POLICY.validate_deploy_workflow(mutated, production=False)
         self.assertTrue(any("CHAT_CONTRACT_VERSION" in error for error in errors), errors)
+
+    def test_accepts_buildx_index_cloud_run_platform_child(self) -> None:
+        evidence = LINEAGE.verify_lineage(
+            build_image_reference=f"{REPOSITORY}@{INDEX_DIGEST}",
+            runtime_image_reference=f"{REPOSITORY}@{RUNTIME_DIGEST}",
+            manifest=_buildx_index(),
+        )
+        self.assertEqual(evidence["build_image"]["digest"], INDEX_DIGEST)
+        self.assertEqual(evidence["runtime_image"]["digest"], RUNTIME_DIGEST)
+        self.assertEqual(evidence["desktop_backend_oci_index_digest"], INDEX_DIGEST)
+        self.assertEqual(evidence["desktop_backend_platform_digest"], RUNTIME_DIGEST)
+        self.assertEqual(evidence["lineage"]["selected_manifest_digest"], RUNTIME_DIGEST)
+        self.assertEqual(evidence["lineage"]["kind"], "image-index-platform-child")
+
+    def test_rejects_tag_stale_digest_and_wrong_platform(self) -> None:
+        cases = (
+            (
+                f"{REPOSITORY}:01c0eae627bc",
+                _buildx_index(),
+                "exact sha256 digest",
+            ),
+            (
+                f"{REPOSITORY}@sha256:{'d' * 64}",
+                _buildx_index(),
+                "selects",
+            ),
+            (
+                f"{REPOSITORY}@{RUNTIME_DIGEST}",
+                _buildx_index(runtime_platform={"architecture": "arm64", "os": "linux"}),
+                "exactly one linux/amd64",
+            ),
+        )
+        for runtime_reference, manifest, message in cases:
+            with self.subTest(runtime_reference=runtime_reference, message=message):
+                with self.assertRaisesRegex(LINEAGE.LineageError, message):
+                    LINEAGE.verify_lineage(
+                        build_image_reference=f"{REPOSITORY}@{INDEX_DIGEST}",
+                        runtime_image_reference=runtime_reference,
+                        manifest=manifest,
+                    )
+
+    def test_rejects_attestation_descriptor_claiming_runtime_platform(self) -> None:
+        manifest = _buildx_index()
+        runtime_descriptor = manifest["manifests"][0]
+        runtime_descriptor["annotations"] = {"vnd.docker.reference.type": "attestation-manifest"}
+        with self.assertRaisesRegex(LINEAGE.LineageError, "attestation"):
+            LINEAGE.verify_lineage(
+                build_image_reference=f"{REPOSITORY}@{INDEX_DIGEST}",
+                runtime_image_reference=f"{REPOSITORY}@{RUNTIME_DIGEST}",
+                manifest=manifest,
+            )
+
+    def test_rejects_annotations_with_non_string_values(self) -> None:
+        manifest = _buildx_index()
+        runtime_descriptor = manifest["manifests"][0]
+        runtime_descriptor["annotations"] = {"vnd.docker.reference.type": 7}
+        with self.assertRaisesRegex(LINEAGE.LineageError, "string-to-string"):
+            LINEAGE.verify_lineage(
+                build_image_reference=f"{REPOSITORY}@{INDEX_DIGEST}",
+                runtime_image_reference=f"{REPOSITORY}@{RUNTIME_DIGEST}",
+                manifest=manifest,
+            )
+
+    def test_rejects_non_v2_manifest_schema(self) -> None:
+        manifest = _buildx_index()
+        manifest["schemaVersion"] = 1
+        with self.assertRaisesRegex(LINEAGE.LineageError, "schema version 2"):
+            LINEAGE.verify_lineage(
+                build_image_reference=f"{REPOSITORY}@{INDEX_DIGEST}",
+                runtime_image_reference=f"{REPOSITORY}@{RUNTIME_DIGEST}",
+                manifest=manifest,
+            )
+
+    def test_rejects_candidate_evidence_bound_to_index_instead_of_runtime_child(self) -> None:
+        mutated = self.dev.replace(
+            '--expected-image-digest="${{ steps.verify-image-lineage.outputs.runtime_digest }}"',
+            '--expected-image-digest="${{ steps.build-image.outputs.digest }}"',
+        )
+        errors = POLICY.validate_deploy_workflow(mutated, production=False)
+        self.assertTrue(any("verify-image-lineage.outputs.runtime_digest" in error for error in errors), errors)
 
 
 if __name__ == "__main__":
