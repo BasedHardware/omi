@@ -9,6 +9,7 @@ description: >-
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Chat/ElicitationStore.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+Elicitation.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeStatusStore.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatElicitationPanel.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift

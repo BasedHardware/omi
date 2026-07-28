@@ -179,3 +179,56 @@ final class ElicitationProjection {
     }
   }
 }
+
+/// Pure wire shaping for elicitation messages.
+///
+/// Kept off the runtime actor so the actor holds only the effects — writing to
+/// stdin and calling the projection handlers — and so the payload rules stay
+/// directly testable without a subprocess.
+enum ElicitationWire {
+  /// What an inbound elicitation message means, once decoded.
+  enum Inbound: Equatable {
+    case pending(PendingElicitation)
+    case resolved(dispatchID: String)
+  }
+
+  static func decodePending(_ payload: [String: Any]) -> Inbound? {
+    guard let elicitation = PendingElicitation(payload: payload) else { return nil }
+    return .pending(elicitation)
+  }
+
+  static func decodeResolved(_ payload: [String: Any]) -> Inbound? {
+    guard let dispatchID = payload["dispatchId"] as? String else { return nil }
+    return .resolved(dispatchID: dispatchID)
+  }
+
+  /// Build the answer message, or nil when the answering owner is not the owner
+  /// that was asked. An answer under a different owner is refused rather than
+  /// retargeted, so a question surviving an owner change cannot be resolved by
+  /// whoever is signed in now.
+  static func resolvePayload(
+    dispatchID: String,
+    ownerID: String,
+    currentOwnerID: String?,
+    answer: ElicitationAnswer
+  ) -> [String: Any]? {
+    guard let currentOwnerID, currentOwnerID == ownerID else { return nil }
+    var payload: [String: Any] = [
+      "type": "resolve_elicitation",
+      "protocolVersion": 2,
+      "ownerId": ownerID,
+      "dispatchId": dispatchID,
+    ]
+    switch answer {
+    case .option(let optionID):
+      payload["decision"] = "answer"
+      payload["optionId"] = optionID
+    case .text(let text):
+      payload["decision"] = "answer"
+      payload["text"] = text
+    case .cancel:
+      payload["decision"] = "cancel"
+    }
+    return payload
+  }
+}

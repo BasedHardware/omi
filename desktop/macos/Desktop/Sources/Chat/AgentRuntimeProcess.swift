@@ -508,8 +508,6 @@ actor AgentRuntimeProcess {
   }
 
   typealias JournalTurnChangedHandler = @Sendable (KernelJournalTurn) -> Void
-  typealias ElicitationPendingHandler = @Sendable (PendingElicitation) -> Void
-  typealias ElicitationResolvedHandler = @Sendable (String) -> Void
   typealias AuthorizedRealtimeToolHandler =
     @Sendable (AuthorizedToolExecution) async -> AuthorizedRealtimeToolExecutionResult
 
@@ -545,8 +543,8 @@ actor AgentRuntimeProcess {
   private var timedOutKernelContractRequests: [RuntimeMessage.RequestKey: TimedOutKernelContractRequest] = [:]
   private var activeAuthorizedToolExecutionTasks: [UUID: Task<Void, Never>] = [:]
   private var journalTurnChangedHandler: JournalTurnChangedHandler?
-  private var elicitationPendingHandler: ElicitationPendingHandler?
-  private var elicitationResolvedHandler: ElicitationResolvedHandler?
+  var elicitationPendingHandler: ElicitationPendingHandler?
+  var elicitationResolvedHandler: ElicitationResolvedHandler?
   private var authorizedRealtimeToolHandler: AuthorizedRealtimeToolHandler?
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
@@ -1755,19 +1753,6 @@ actor AgentRuntimeProcess {
 
   func setJournalTurnChangedHandler(_ handler: JournalTurnChangedHandler?) {
     journalTurnChangedHandler = handler
-  }
-
-  func setElicitationHandlers(
-    pending: ElicitationPendingHandler?,
-    resolved: ElicitationResolvedHandler?
-  ) {
-    elicitationPendingHandler = pending
-    elicitationResolvedHandler = resolved
-  }
-
-  /// Test-only projection seam; production events arrive from omi-agentd.
-  func dispatchElicitationMessageForTesting(_ message: RuntimeMessage) {
-    handleElicitationMessage(message)
   }
 
   func journalTurnChangedHandlerCount() -> Int {
@@ -3333,29 +3318,9 @@ actor AgentRuntimeProcess {
     return nil
   }
 
-  /// Project a pending or retired elicitation to the surface.
-  ///
-  /// Owner-fenced like every other owner-scoped projection: a message for an
-  /// owner that is no longer authorized is dropped rather than rendered, so
-  /// signing out cannot leave another user's question on screen.
-  private func handleElicitationMessage(_ message: RuntimeMessage) {
-    guard messageOwnerIsCurrentlyAuthorized(message) else { return }
-    switch message.kind {
-    case .elicitationPending:
-      guard let elicitation = PendingElicitation(payload: message.payload) else {
-        log("AgentRuntimeProcess: dropping malformed elicitation_pending")
-        return
-      }
-      elicitationPendingHandler?(elicitation)
-    case .elicitationResolved:
-      guard let dispatchID = message.payload["dispatchId"] as? String else { return }
-      elicitationResolvedHandler?(dispatchID)
-    default:
-      break
-    }
-  }
-
-  private func messageOwnerIsCurrentlyAuthorized(_ message: RuntimeMessage) -> Bool {
+  /// Internal rather than private so the elicitation extension can fence on it.
+  /// A read-only predicate: it grants no capability, unlike the stdin writer.
+  func messageOwnerIsCurrentlyAuthorized(_ message: RuntimeMessage) -> Bool {
     guard let ownerID = message.payload["ownerId"] as? String else { return false }
     return RuntimeOwnerIdentity.captureAuthorizationSnapshot(
       expectedOwnerID: ownerID) != nil
@@ -3797,30 +3762,16 @@ actor AgentRuntimeProcess {
   }
 
   /// Send the user's answer back to the kernel.
-  ///
-  /// Owner-scoped: an answer is refused unless it is being made under the owner
-  /// that was asked, so a question surviving an owner change cannot be resolved
-  /// by whoever is signed in now.
   func resolveElicitation(dispatchID: String, ownerID: String, answer: ElicitationAnswer) {
-    guard let currentOwner = currentOwnerId(), currentOwner == ownerID else {
+    guard
+      let payload = ElicitationWire.resolvePayload(
+        dispatchID: dispatchID,
+        ownerID: ownerID,
+        currentOwnerID: currentOwnerId(),
+        answer: answer)
+    else {
       log("AgentRuntimeProcess: dropping elicitation answer for a non-current owner")
       return
-    }
-    var payload: [String: Any] = [
-      "type": "resolve_elicitation",
-      "protocolVersion": 2,
-      "ownerId": ownerID,
-      "dispatchId": dispatchID,
-    ]
-    switch answer {
-    case .option(let optionID):
-      payload["decision"] = "answer"
-      payload["optionId"] = optionID
-    case .text(let text):
-      payload["decision"] = "answer"
-      payload["text"] = text
-    case .cancel:
-      payload["decision"] = "cancel"
     }
     sendJson(payload)
   }
