@@ -39,6 +39,16 @@ abstract class IDeviceServiceSubsciption {
 }
 
 class DeviceService {
+  DeviceService({
+    List<Duration> dfuReconnectBackoff = const [
+      Duration.zero,
+      Duration(milliseconds: 250),
+      Duration(seconds: 1),
+      Duration(seconds: 2),
+      Duration(seconds: 4),
+    ],
+  }) : _dfuReconnectBackoff = List.unmodifiable(dfuReconnectBackoff);
+
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
 
@@ -54,6 +64,7 @@ class DeviceService {
   String? _dfuSuspendedDeviceId;
   Future<void>? _dfuSuspendFuture;
   Future<void>? _dfuResumeFuture;
+  final List<Duration> _dfuReconnectBackoff;
   List<BtDevice> get devices => _devices;
 
   DeviceServiceStatus get status => _status;
@@ -303,15 +314,40 @@ class DeviceService {
         await suspendFuture;
       }
       if (_dfuSuspendedDeviceId != deviceId) return;
-      await ensureConnection(deviceId, force: true);
+
+      if (_dfuReconnectBackoff.isEmpty) {
+        throw StateError('No DFU reconnect backoff configured');
+      }
+
+      var attempt = 0;
+      while (_dfuSuspendedDeviceId == deviceId) {
+        final backoffIndex = attempt < _dfuReconnectBackoff.length ? attempt : _dfuReconnectBackoff.length - 1;
+        final delay = _dfuReconnectBackoff[backoffIndex];
+        attempt++;
+        if (_dfuSuspendedDeviceId != deviceId) return;
+        if (delay > Duration.zero) await Future<void>.delayed(delay);
+        if (_dfuSuspendedDeviceId != deviceId) return;
+
+        try {
+          final connection = await ensureConnection(deviceId, force: true);
+          if (connection != null) {
+            _dfuSuspendedDeviceId = null;
+            return;
+          }
+        } catch (error) {
+          Logger.debug('DeviceService: DFU reconnect attempt $attempt failed for $deviceId: $error');
+        }
+      }
     } finally {
-      _dfuSuspendedDeviceId = null;
       _dfuResumeFuture = null;
     }
   }
 
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
+    if (_dfuSuspendedDeviceId == deviceId) {
+      _dfuSuspendedDeviceId = null;
+    }
     if (_connection != null) {
       if (_connection!.status == DeviceConnectionState.connected) {
         try {
