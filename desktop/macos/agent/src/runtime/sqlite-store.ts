@@ -705,6 +705,32 @@ export class SqliteAgentStore implements AgentStore {
            AND expires_at_ms <= ?`,
       ).run("expired", now, "daemon_startup_reconciliation", JSON.stringify({ reason: "daemon_startup_reconciliation" }), "pending", now);
 
+      // Elicitations are deliberately created without an expiry so a run waits
+      // as long as the user needs. That only holds within one process life: the
+      // protocol request they block died with the previous daemon, so answering
+      // them now would reach nothing. Terminalize them here rather than leave a
+      // card that cannot affect anything.
+      const cancelledElicitationDispatchIds = this.allRows(
+        `SELECT dispatch_id FROM desktop_dispatches
+         WHERE status = ? AND json_extract(payload_json, '$.channel') IN (?, ?)`,
+        ["pending", "acp_permission", "omi_ask_user"],
+      ).map((row) => text(row.dispatch_id));
+      if (cancelledElicitationDispatchIds.length > 0) {
+        this.db.prepare(
+          `UPDATE desktop_dispatches
+           SET status = ?, resolved_at_ms = COALESCE(resolved_at_ms, ?), resolved_by = COALESCE(resolved_by, ?), resolution_json = COALESCE(resolution_json, ?)
+           WHERE status = ? AND json_extract(payload_json, '$.channel') IN (?, ?)`,
+        ).run(
+          "cancelled",
+          now,
+          "daemon_startup_reconciliation",
+          JSON.stringify({ reason: "elicitation_request_did_not_survive_restart" }),
+          "pending",
+          "acp_permission",
+          "omi_ask_user",
+        );
+      }
+
       const failedArtifactDeliveryIds = this.allRows(
         "SELECT delivery_id FROM desktop_artifact_deliveries WHERE delivery_status = ?",
         ["retrying"],
@@ -839,6 +865,7 @@ export class SqliteAgentStore implements AgentStore {
         reconciledJournalTurnIds: reconciledJournalTurns.map((repair) => repair.turnId),
         repairedBackendTurnOutboxIds: repairedBackendTurnOutboxes.map((repair) => repair.turnId),
         recoveryDispatchIds,
+        cancelledElicitationDispatchIds,
         clearedAttemptInstanceIds,
         clearedBindingInstanceIds,
         eventIds,
@@ -1208,6 +1235,45 @@ export class SqliteAgentStore implements AgentStore {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(...desktopContextPacketValues(packet));
     return packet;
+  }
+
+  /**
+   * Resolve the Omi session an adapter-native session belongs to.
+   *
+   * An adapter reports only its own session identity, so anything that has to
+   * record kernel state for an in-flight adapter request — an elicitation
+   * dispatch, for one — needs this bridge. Reads the newest non-closed binding,
+   * matching the `adapter_bindings_native_uq` index.
+   */
+  sessionForAdapterNativeSession(
+    adapterId: string,
+    adapterNativeSessionId: string,
+  ): { sessionId: string; ownerId: string; runId: string | null } | null {
+    const [row] = this.allRows(
+      `SELECT b.session_id AS sessionId, s.owner_id AS ownerId
+       FROM adapter_bindings b
+       JOIN sessions s ON s.session_id = b.session_id
+       WHERE b.adapter_id = ? AND b.adapter_native_session_id = ? AND b.status != 'closed'
+       ORDER BY b.binding_generation DESC
+       LIMIT 1`,
+      [adapterId, adapterNativeSessionId],
+    );
+    if (!row) return null;
+
+    const placeholders = ACTIVE_ATTEMPT_STATUSES.map(() => "?").join(", ");
+    const [run] = this.allRows(
+      `SELECT run_id AS runId FROM runs
+       WHERE session_id = ? AND status IN (${placeholders})
+       ORDER BY created_at_ms DESC
+       LIMIT 1`,
+      [text(row.sessionId), ...ACTIVE_ATTEMPT_STATUSES],
+    );
+
+    return {
+      sessionId: text(row.sessionId),
+      ownerId: text(row.ownerId),
+      runId: run ? text(run.runId) : null,
+    };
   }
 
   insertDesktopDispatch(input: NewDesktopCoordinatorDispatch): DesktopCoordinatorDispatch {

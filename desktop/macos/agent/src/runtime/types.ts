@@ -660,6 +660,7 @@ export interface StartupReconciliationResult {
   reconciledJournalTurnIds: string[];
   repairedBackendTurnOutboxIds: string[];
   recoveryDispatchIds: string[];
+  cancelledElicitationDispatchIds: string[];
   clearedAttemptInstanceIds: number;
   clearedBindingInstanceIds: number;
   eventIds: string[];
@@ -680,6 +681,10 @@ export interface AgentStore {
   appendEvent(input: NewAgentEvent): AgentEvent;
   insertGrant(input: NewAgentGrant): AgentGrant;
   insertDesktopContextPacket(input: NewDesktopContextPacket): DesktopContextPacket;
+  sessionForAdapterNativeSession(
+    adapterId: string,
+    adapterNativeSessionId: string,
+  ): { sessionId: string; ownerId: string; runId: string | null } | null;
   insertDesktopDispatch(input: NewDesktopCoordinatorDispatch): DesktopCoordinatorDispatch;
   resolveDesktopDispatch(dispatchId: string, input: { ownerId: string; status: "resolved" | "cancelled"; resolvedBy?: string | null; resolutionJson?: string | null; resolvedAtMs?: number }): DesktopCoordinatorDispatch;
   insertDesktopArtifactDelivery(input: NewDesktopArtifactDelivery): DesktopArtifactDelivery;

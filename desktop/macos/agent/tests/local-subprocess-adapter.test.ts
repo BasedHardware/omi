@@ -538,13 +538,6 @@ describe("env-command local subprocess adapters", () => {
     await adapter.stop();
   });
 
-  it("routes ACP permission handling through desktop tool policy", () => {
-    const source = readFileSync(new URL("../src/adapters/acp.ts", import.meta.url), "utf8");
-    expect(source).toContain("resolveAcpPermission");
-    expect(source).toContain("resolveExternalAcpPermission");
-    expect(source).not.toContain("legacy-permission-policy");
-  });
-
   it("tracks local ACP adapters for bridge shutdown", () => {
     const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
     expect(source).toContain("const localAcpAdapters = new Set<RuntimeAdapter>()");

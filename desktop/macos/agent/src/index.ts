@@ -82,6 +82,7 @@ import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapters/acp.js";
+import { createKernelElicitationResolver } from "./runtime/desktop-elicitation-resolver.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
@@ -1280,6 +1281,14 @@ async function main(): Promise<void> {
   });
   kernel.subscribe(rejectPendingToolCallsForKernelEvent);
   runtimeKernel = kernel;
+  // Give every ACP adapter a way to reach a person. Without this an adapter
+  // fails closed on any permission its policy will not auto-resolve, so the
+  // installation has to cover the pi adapter and each externally spawned one.
+  const elicitationResolver = createKernelElicitationResolver({ kernel, log: logErr });
+  const installElicitationResolver = (adapter: RuntimeAdapter): void => {
+    if (adapter instanceof AcpRuntimeAdapter) adapter.elicitationResolver = elicitationResolver;
+  };
+  installElicitationResolver(acpAdapter);
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
@@ -1310,14 +1319,20 @@ async function main(): Promise<void> {
     return ensureRegisteredAdapter(registry, "hermes", {
       log: logErr,
       maxWorkers: 1,
-      onCreate: (adapter) => localAcpAdapters.add(adapter),
+      onCreate: (adapter) => {
+        localAcpAdapters.add(adapter);
+        installElicitationResolver(adapter);
+      },
     });
   };
   const ensureOpenClawAdapter = async (): Promise<boolean> => {
     return ensureRegisteredAdapter(registry, "openclaw", {
       log: logErr,
       maxWorkers: configuredPiMonoMaxWorkers(),
-      onCreate: (adapter) => localAcpAdapters.add(adapter),
+      onCreate: (adapter) => {
+        localAcpAdapters.add(adapter);
+        installElicitationResolver(adapter);
+      },
     });
   };
   const hermesAvailable = await ensureHermesAdapter();

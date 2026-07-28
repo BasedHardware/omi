@@ -2,7 +2,14 @@ import { spawn, type ChildProcess } from "child_process";
 import { createInterface, type Interface as ReadlineInterface } from "readline";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { resolveAcpPermission, resolveExternalAcpPermission } from "../runtime/desktop-tool-policy.js";
+import {
+  classifyAcpPermission,
+  failClosedOutcome,
+  normalizeAcpPermission,
+  type ElicitationOutcome,
+  type ElicitationRequest,
+  type ElicitationResolver,
+} from "../runtime/desktop-elicitation.js";
 import { adapterCapabilitiesFor, type ProductionAdapterId } from "./interface.js";
 import type {
   AdapterAttemptContext,
@@ -167,6 +174,15 @@ const EXTERNAL_TERMINAL_HTTP_FAILURE = /^\s*HTTP\s+([45]\d{2})\s*:\s*(?:\{|\[)/i
  * leading 4xx/5xx JSON response are classified.  A normal agent discussion of
  * an HTTP status therefore remains ordinary assistant text.
  */
+/** Human-facing agent name. Shown to the user on permission cards. */
+function adapterLabel(adapterId: ProductionAdapterId): string {
+  switch (adapterId) {
+    case "hermes": return "Hermes";
+    case "openclaw": return "OpenClaw";
+    default: return "The agent";
+  }
+}
+
 function externalTerminalHttpFailure(
   adapterId: ProductionAdapterId,
   text: string,
@@ -175,7 +191,7 @@ function externalTerminalHttpFailure(
   const match = EXTERNAL_TERMINAL_HTTP_FAILURE.exec(text);
   if (!match) return undefined;
   const statusCode = Number(match[1]);
-  const label = adapterId === "hermes" ? "Hermes" : "OpenClaw";
+  const label = adapterLabel(adapterId);
   return normalizeRuntimeFailure({
     code: "adapter_terminal_http_failure",
     source: "adapter_execution",
@@ -226,6 +242,20 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   private stdinWriter: ((line: string) => void) | null = null;
   private responseHandlers = new Map<number, ResponseHandler>();
   private notificationHandler: AcpNotificationHandler | null = null;
+  /**
+   * Asks a human when policy will not auto-resolve a permission request.
+   * Installed by the runtime, which owns the kernel; left null the adapter
+   * fails closed rather than approving on the user's behalf.
+   */
+  elicitationResolver: ElicitationResolver | null = null;
+  /**
+   * In-flight permission requests, keyed by the ACP session they belong to.
+   *
+   * ACP requires a client that cancels a prompt turn to answer every pending
+   * `session/request_permission` with the `cancelled` outcome, so cancellation
+   * has to reach requests that are still waiting on a person.
+   */
+  private pendingPermissions = new Map<string, Set<(outcome: ElicitationOutcome) => void>>();
   private nextRpcId = 1;
   private initialized = false;
   private initializePromise: Promise<void> | null = null;
@@ -317,6 +347,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         handler.reject(error);
       }
       this.responseHandlers.clear();
+      // The subprocess that was blocked on these is gone, so nothing remains to
+      // answer. Releasing the waiters here is what keeps a dead request from
+      // holding a card the user can never usefully act on.
+      this.cancelPendingPermissions(undefined, "adapter_process_exited");
       this.onProcessExit?.();
     };
 
@@ -574,6 +608,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         fn();
       };
       const onAbort = (): void => {
+        this.cancelPendingPermissions(adapterSessionId, "attempt_aborted");
         finish(() => reject(new Error("ACP attempt cancelled")));
       };
       const timer = setInterval(() => {
@@ -587,6 +622,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         }
         this.log(`${this.adapterId} ACP session ${adapterSessionId} produced no recognized progress for ${idleMs}ms; cancelling`);
         this.notify("session/cancel", { sessionId: adapterSessionId });
+        this.cancelPendingPermissions(adapterSessionId, "no_progress_timeout");
         finish(() => reject(new Error(`${this.adapterId} produced no progress for ${Math.round(timeoutMs / 1000)} seconds`)));
       }, Math.min(5_000, Math.max(1_000, Math.floor(timeoutMs / 6))));
 
@@ -609,6 +645,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       };
     }
     this.notify("session/cancel", { sessionId });
+    this.cancelPendingPermissions(sessionId, "turn_cancelled");
     return {
       accepted: true,
       dispatchAttempted: true,
@@ -673,26 +710,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const method = msg.method as string;
 
     if (method === "session/request_permission") {
-      const params = msg.params as Record<string, unknown> | undefined;
-      const options =
-        (params?.options as Array<{ kind: string; optionId: string }>) ?? [];
-      const decision = this.adapterId === "acp"
-        ? resolveAcpPermission({ requestId: id, options })
-        : resolveExternalAcpPermission({ adapterId: this.adapterId, requestId: id, options });
-      this.log(`ACP permission resolved: ${JSON.stringify(decision.auditEvent)}`);
-      if ("acpError" in decision) {
-        this.stdinWriter?.(JSON.stringify({
-          jsonrpc: "2.0",
-          id,
-          error: decision.acpError,
-        }));
-        return;
-      }
-      this.stdinWriter?.(JSON.stringify({
-        jsonrpc: "2.0",
-        id,
-        result: decision.acpResult,
-      }));
+      void this.handlePermissionRequest(id, msg.params);
       return;
     }
 
@@ -708,6 +726,120 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       id,
       error: { code: -32601, message: `Method not handled: ${method}` },
     }));
+  }
+
+  /**
+   * Answer `session/request_permission`.
+   *
+   * The agent subprocess is blocked on this JSON-RPC id until a response is
+   * written, which is the contract that lets a person decide. Only one branch
+   * resolves without them: a one-time grant on a read-shaped tool. Everything
+   * else goes to `elicitationResolver`, and when no resolver is reachable the
+   * request fails closed instead of approving unattended.
+   */
+  private async handlePermissionRequest(id: number, rawParams: unknown): Promise<void> {
+    const request = normalizeAcpPermission({
+      adapterId: this.adapterId,
+      agentLabel: adapterLabel(this.adapterId),
+      params: rawParams,
+    });
+
+    if (!request) {
+      // An ACP permission response may only name an option the agent offered.
+      // With no usable option there is nothing valid to answer, and inventing
+      // one would fabricate consent.
+      this.log(`${this.adapterId} ACP permission request carried no usable option; cancelling`);
+      this.writePermissionOutcome(id, { kind: "cancelled", reason: "no_usable_option" });
+      return;
+    }
+
+    const toolKind = (rawParams as Record<string, unknown> | undefined)?.toolCall;
+    const classification = classifyAcpPermission(
+      request,
+      (toolKind as Record<string, unknown> | undefined)?.kind,
+    );
+    if (classification.decision === "auto") {
+      this.log(`${this.adapterId} ACP permission auto-resolved: ${classification.reason}`);
+      this.writePermissionOutcome(id, { kind: "selected", optionId: classification.optionId });
+      return;
+    }
+
+    const resolver = this.elicitationResolver;
+    if (!resolver) {
+      this.log(
+        `${this.adapterId} ACP permission needs a user but no resolver is installed; failing closed`,
+      );
+      this.writePermissionOutcome(id, failClosedOutcome(request, "no_resolver"));
+      return;
+    }
+
+    this.log(`${this.adapterId} ACP permission asking the user: ${classification.reason}`);
+    const outcome = await this.awaitPermissionOutcome(request, resolver);
+    this.writePermissionOutcome(id, outcome);
+  }
+
+  /**
+   * Wait on the user while remaining answerable to `session/cancel`, which ACP
+   * requires be honoured for permission requests still in flight.
+   */
+  private awaitPermissionOutcome(
+    request: ElicitationRequest,
+    resolver: ElicitationResolver,
+  ): Promise<ElicitationOutcome> {
+    const sessionKey = request.externalSessionId ?? "";
+    return new Promise<ElicitationOutcome>((resolve) => {
+      let settled = false;
+      const settle = (outcome: ElicitationOutcome) => {
+        if (settled) return;
+        settled = true;
+        this.pendingPermissions.get(sessionKey)?.delete(settle);
+        resolve(outcome);
+      };
+
+      let waiters = this.pendingPermissions.get(sessionKey);
+      if (!waiters) {
+        waiters = new Set();
+        this.pendingPermissions.set(sessionKey, waiters);
+      }
+      waiters.add(settle);
+
+      resolver(request).then(settle, (error: unknown) => {
+        this.log(`${this.adapterId} ACP permission resolver failed: ${String(error)}`);
+        settle(failClosedOutcome(request, "resolver_failed"));
+      });
+    });
+  }
+
+  /**
+   * Cancel permission requests still awaiting a person.
+   *
+   * Passing no session id cancels every pending request, which is what process
+   * teardown needs: the blocked JSON-RPC call cannot outlive the subprocess.
+   */
+  private cancelPendingPermissions(sessionId?: string, reason = "cancelled"): void {
+    const keys = sessionId === undefined ? [...this.pendingPermissions.keys()] : [sessionId, ""];
+    for (const key of keys) {
+      const waiters = this.pendingPermissions.get(key);
+      if (!waiters) continue;
+      this.pendingPermissions.delete(key);
+      for (const settle of waiters) settle({ kind: "cancelled", reason });
+    }
+  }
+
+  /**
+   * ACP accepts only `selected` or `cancelled`. A typed answer has no place in
+   * the permission response shape, so it is recorded and treated as a
+   * cancellation rather than silently coerced into an option the user did not
+   * pick.
+   */
+  private writePermissionOutcome(id: number, outcome: ElicitationOutcome): void {
+    if (outcome.kind === "answered") {
+      this.log(`${this.adapterId} ACP permission received free text; answering cancelled`);
+    }
+    const result = outcome.kind === "selected"
+      ? { outcome: { outcome: "selected", optionId: outcome.optionId } }
+      : { outcome: { outcome: "cancelled" } };
+    this.stdinWriter?.(JSON.stringify({ jsonrpc: "2.0", id, result }));
   }
 
   private handleResponse(msg: Record<string, unknown>): void {
