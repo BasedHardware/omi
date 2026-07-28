@@ -18,6 +18,7 @@ router = APIRouter()
 
 DESKTOP_BACKEND_VERSION = "0.1.0"
 DESKTOP_BACKEND_SERVICE = "omi-desktop-backend"
+CHAT_CONTRACT_VERSION = "1"
 
 
 def health_response() -> dict[str, str]:
@@ -25,11 +26,14 @@ def health_response() -> dict[str, str]:
         "status": "healthy",
         "service": DESKTOP_BACKEND_SERVICE,
         "version": DESKTOP_BACKEND_VERSION,
+        "chat_contract_version": CHAT_CONTRACT_VERSION,
     }
     for response_field, environment_name in (
         ("release_tag", "OMI_DESKTOP_RELEASE_TAG"),
         ("release_sha", "OMI_DESKTOP_RELEASE_SHA"),
         ("release_channel", "OMI_DESKTOP_RELEASE_CHANNEL"),
+        ("backend_release_sha", "OMI_DESKTOP_BACKEND_RELEASE_SHA"),
+        ("backend_release_channel", "OMI_DESKTOP_BACKEND_RELEASE_CHANNEL"),
     ):
         value = os.getenv(environment_name)
         if value is not None:

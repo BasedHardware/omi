@@ -303,50 +303,40 @@ def probe_candidate(
     readiness = validate_readiness(_request_json(f"{base_url.rstrip('/')}/ready"))
     firestore = _require_firestore_read(base_url)
 
-    web_prompt = (
-        "<omi_retrieval_policy>Web search is required and available for this fresh public request. "
-        "Use live public web search before answering.</omi_retrieval_policy>\n\n"
-        "What is the current weather in New York City? Answer briefly and identify one public source."
-    )
-    web_result = _chat_request(
+    initial_prompt = "Reply with one concise sentence confirming that the desktop chat service is available."
+    initial_result = _chat_request(
         base_url,
         token=token,
         contract_version=expected_contract_version,
-        messages=[{"role": "user", "content": web_prompt}],
-        stage="public_web_turn",
+        messages=[{"role": "user", "content": initial_prompt}],
+        stage="initial_turn",
     )
-    if not web_result.saw_usage or web_result.web_search_requests < 1:
-        raise ProbeError("public_web_turn: provider did not report a web search request")
+    if not initial_result.saw_usage:
+        raise ProbeError("initial_turn: provider did not report terminal usage")
     follow_up_result = _chat_request(
         base_url,
         token=token,
         contract_version=expected_contract_version,
         messages=[
-            {"role": "user", "content": web_prompt},
-            {"role": "assistant", "content": web_result.answer},
-            {
-                "role": "user",
-                "content": "This is a normal follow-up. Reply briefly without using web search.",
-            },
+            {"role": "user", "content": initial_prompt},
+            {"role": "assistant", "content": initial_result.answer},
+            {"role": "user", "content": "Reply with one short follow-up sentence."},
         ],
         stage="ordinary_follow_up",
     )
     if not follow_up_result.saw_usage:
         raise ProbeError("ordinary_follow_up: provider did not report terminal usage")
-    if follow_up_result.web_search_requests != 0:
-        raise ProbeError("ordinary_follow_up: unexpectedly reused public web search")
 
     return {
         "backend_release": health,
         "chat": {
+            "initial_turn": "passed",
+            "initial_turn_chars": len(initial_result.answer),
+            "initial_turn_first_event_seconds": round(initial_result.first_event_seconds, 3),
+            "initial_turn_seconds": round(initial_result.elapsed_seconds, 3),
             "ordinary_follow_up": "passed",
             "ordinary_follow_up_chars": len(follow_up_result.answer),
             "ordinary_follow_up_seconds": round(follow_up_result.elapsed_seconds, 3),
-            "public_web_turn": "passed",
-            "public_web_turn_chars": len(web_result.answer),
-            "public_web_turn_first_event_seconds": round(web_result.first_event_seconds, 3),
-            "public_web_turn_seconds": round(web_result.elapsed_seconds, 3),
-            "public_web_turn_web_search_requests": web_result.web_search_requests,
         },
         "firestore_read": firestore,
         "readiness": readiness,

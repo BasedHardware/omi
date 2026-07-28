@@ -21,6 +21,8 @@ def test_health_and_root_preserve_release_identity(monkeypatch):
     monkeypatch.setenv("OMI_DESKTOP_RELEASE_TAG", "v1.2.3")
     monkeypatch.setenv("OMI_DESKTOP_RELEASE_SHA", "abc123")
     monkeypatch.setenv("OMI_DESKTOP_RELEASE_CHANNEL", "stable")
+    monkeypatch.setenv("OMI_DESKTOP_BACKEND_RELEASE_SHA", "a" * 40)
+    monkeypatch.setenv("OMI_DESKTOP_BACKEND_RELEASE_CHANNEL", "development")
 
     client = make_client()
     expected = {
@@ -30,6 +32,9 @@ def test_health_and_root_preserve_release_identity(monkeypatch):
         "release_tag": "v1.2.3",
         "release_sha": "abc123",
         "release_channel": "stable",
+        "backend_release_sha": "a" * 40,
+        "backend_release_channel": "development",
+        "chat_contract_version": "1",
     }
 
     assert client.get("/").json() == expected

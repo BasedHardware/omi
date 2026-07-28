@@ -351,6 +351,9 @@ check_flutter_generated_if_needed() {
     fi
     echo "==> Flutter build_runner generated-output check"
     (
+      # Git exports linked-worktree metadata to hooks. Flutter resolves its own
+      # SDK version through Git, so those variables must not leak into Flutter.
+      unset GIT_DIR GIT_WORK_TREE
       cd app
       flutter pub run build_runner build --delete-conflicting-outputs
       git diff --exit-code -- lib || {
@@ -376,6 +379,8 @@ check_flutter_generated_if_needed() {
     fi
     echo "==> Flutter l10n generated-output check"
     (
+      # Keep Flutter's SDK-version Git lookup isolated from hook worktree state.
+      unset GIT_DIR GIT_WORK_TREE
       cd app
       flutter gen-l10n
       git diff --exit-code -- lib/l10n || {
