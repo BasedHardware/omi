@@ -21,6 +21,7 @@ from scripts.admin.reset_transcription_usage import (  # noqa: E402
     build_reset_plan,
     month_label,
     seconds_to_minutes,
+    _sanitized_audit_payload,
 )
 
 NOW = datetime(2026, 7, 27, 13, 30, tzinfo=timezone.utc)
@@ -182,3 +183,102 @@ def test_aggregation_trusts_caller_month_filter() -> None:
     usage = aggregate_monthly_usage(cross_month)
 
     assert usage.used_seconds == 1500
+
+
+# ---------------------------------------------------------------------------
+# Audit sanitization (Thread 5)
+# ---------------------------------------------------------------------------
+
+
+def test_sanitized_audit_payload_masks_email() -> None:
+    record = build_audit_record(
+        uid="abc123",
+        email="user@example.com",
+        plan="basic",
+        month="2026-07",
+        reason="goodwill",
+        operator="ops",
+        applied=True,
+        before_seconds=100,
+        after_seconds=0,
+        docs_touched=1,
+        now=NOW,
+    )
+
+    payload = _sanitized_audit_payload(record)
+
+    # Email local part is masked; domain preserved.
+    assert "@" in payload["email"]
+    assert payload["email"] != "user@example.com"
+    assert "example.com" in payload["email"]
+
+
+def test_sanitized_audit_payload_masks_reason_text() -> None:
+    record = build_audit_record(
+        uid="abc123",
+        email=None,
+        plan="basic",
+        month="2026-07",
+        reason="goodwill: user jane@example.com silent open-mic",
+        operator="ops",
+        applied=True,
+        before_seconds=100,
+        after_seconds=0,
+        docs_touched=1,
+        now=NOW,
+    )
+
+    payload = _sanitized_audit_payload(record)
+
+    # The reason contained an email — it must be masked in the sanitized output.
+    assert "jane@example.com" not in payload["reason"]
+
+
+def test_sanitized_audit_payload_preserves_non_pii_fields() -> None:
+    record = build_audit_record(
+        uid="abc123",
+        email=None,
+        plan="basic",
+        month="2026-07",
+        reason="routine",
+        operator="ops",
+        applied=False,
+        before_seconds=10,
+        after_seconds=0,
+        docs_touched=1,
+        now=NOW,
+    )
+
+    payload = _sanitized_audit_payload(record)
+
+    # Non-PII fields pass through unchanged.
+    assert payload["uid"] == "abc123"
+    assert payload["plan"] == "basic"
+    assert payload["before_seconds"] == 10
+    assert payload["applied"] is False
+
+
+# ---------------------------------------------------------------------------
+# Pending audit record uses sentinel before mutation outcome is known (Thread 4)
+# ---------------------------------------------------------------------------
+
+
+def test_pending_audit_record_marks_applied_false_and_sentinel_after() -> None:
+    """A pending audit record is written before mutation with applied=False
+    and a sentinel after_seconds=-1 so partial-failure leaves a recoverable trail."""
+    pending = build_audit_record(
+        uid="abc123",
+        email=None,
+        plan="basic",
+        month="2026-07",
+        reason="goodwill",
+        operator="ops",
+        applied=False,
+        before_seconds=300,
+        after_seconds=-1,  # sentinel: outcome not yet known
+        docs_touched=2,
+        now=NOW,
+    )
+
+    assert pending.applied is False
+    assert pending.after_seconds == -1  # sentinel: not yet finalized

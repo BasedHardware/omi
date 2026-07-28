@@ -54,7 +54,7 @@ import json
 import logging
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
@@ -231,9 +231,9 @@ def build_audit_record(
 
 
 def _firestore_client() -> Any:
-    from database._client import db  # lazy: builds on first attr access
+    from database._client import get_firestore_client  # supported getter
 
-    return db
+    return get_firestore_client()
 
 
 def fetch_monthly_hourly_docs(client: Any, uid: str, year: int, month: int) -> list[tuple[str, dict[str, Any]]]:
@@ -278,14 +278,31 @@ def resolve_uid(*, uid: Optional[str], email: Optional[str]) -> tuple[str, Optio
 def resolve_plan_and_limit(uid: str) -> tuple[str, Optional[int]]:
     """Return ``(plan_name, monthly_seconds_limit_or_None)``.
 
+    Uses ``get_user_valid_subscription`` — the same effective subscription the
+    enforcement path (``get_remaining_transcription_seconds``) uses. This is a
+    **non-mutating** read: unlike ``get_user_subscription``, it never creates a
+    default subscription or rewrites legacy ``free`` plans, so ``show`` and
+    dry-run commands stay genuinely read-only.
+
+    For a user whose paid plan has expired, this returns the Basic fallback
+    rather than the stored paid plan — matching what enforcement sees.
+
     ``None`` limit = unlimited plan (operator/architect/unlimited/neo). The
     transcription cap only bites basic + plus, whose limits come straight from
     ``utils.subscription.get_plan_limits``.
     """
     from database import users as users_db
-    from utils.subscription import get_plan_display_name, get_plan_limits
+    from utils.subscription import (
+        get_default_basic_subscription,
+        get_plan_display_name,
+        get_plan_limits,
+    )
 
-    subscription = users_db.get_user_subscription(uid)
+    # get_user_valid_subscription returns None when the stored plan is expired;
+    # enforcement treats that user as Basic, so we do the same here.
+    subscription = users_db.get_user_valid_subscription(uid)
+    if subscription is None:
+        subscription = get_default_basic_subscription()
     plan = subscription.plan
     limits = get_plan_limits(plan)
     limit_seconds = limits.transcription_seconds
@@ -309,6 +326,39 @@ def write_audit(client: Any, record: AuditRecord) -> str:
     doc_ref = client.collection("admin_audit_log").document()
     doc_ref.set(record.to_dict())
     return doc_ref.id
+
+
+def update_audit(client: Any, audit_id: str, record: AuditRecord) -> None:
+    """Update an existing audit record after the mutation outcome is known."""
+    client.collection("admin_audit_log").document(audit_id).set(record.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# Audit payload sanitization — stdout/logs get redacted PII; the Firestore
+# record retains the full fields (access-controlled).
+# ---------------------------------------------------------------------------
+
+
+def _sanitized_audit_payload(record: AuditRecord) -> dict[str, Any]:
+    """Return a copy of the audit record with PII redacted for stdout/logs.
+
+    The email and operator-provided reason may contain user-identifiable text;
+    these are masked before serializing to the JSON line printed to stdout,
+    which is intended for operator logs. The full record persists only in the
+    access-controlled ``admin_audit_log`` Firestore collection.
+    """
+    try:
+        from utils.log_sanitizer import sanitize_pii
+    except Exception:
+        # Fallback: don't crash the CLI if the sanitizer can't import.
+        sanitize_pii = lambda v: str(v)  # noqa: E731
+
+    payload = record.to_dict()
+    if payload.get("email") is not None:
+        payload["email"] = sanitize_pii(payload["email"])
+    if payload.get("reason") is not None:
+        payload["reason"] = sanitize_pii(payload["reason"])
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -392,14 +442,34 @@ def cmd_reset_month(args: argparse.Namespace) -> int:
 
     if not args.apply:
         # Still emit the audit line so dry-run intent is captured in operator logs.
-        print("audit (not persisted): " + json.dumps(record.to_dict(), sort_keys=True))
+        print("audit (not persisted): " + json.dumps(_sanitized_audit_payload(record), sort_keys=True))
         print("Dry-run complete. Re-run with --apply to commit.")
         return 0
 
+    # Write a pending audit record BEFORE mutation so a mid-reset failure
+    # (partial batch commit or audit-write error) still leaves a durable trail
+    # describing the intended mutation and the operator who initiated it.
+    pending_record = build_audit_record(
+        uid=uid,
+        email=email,
+        plan=plan_name,
+        month=month_label(now),
+        reason=args.reason,
+        operator=args.operator,
+        applied=False,  # updated to True after mutation completes
+        before_seconds=reset_plan.before_total_seconds,
+        after_seconds=-1,  # sentinel: outcome not yet known
+        docs_touched=reset_plan.touches,
+        now=now,
+    )
+    audit_id = write_audit(client, pending_record)
+
     apply_reset(client, uid, reset_plan)
-    audit_id = write_audit(client, record)
+    # All batched commits succeeded — finalize the audit record.
+    final_record = replace(record, applied=True, after_seconds=0)
+    update_audit(client, audit_id, final_record)
     print(f"Applied. Audit written: admin_audit_log/{audit_id}")
-    print("audit: " + json.dumps(record.to_dict(), sort_keys=True))
+    print("audit: " + json.dumps(_sanitized_audit_payload(final_record), sort_keys=True))
     return 0
 
 
