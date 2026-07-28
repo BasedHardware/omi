@@ -48,8 +48,14 @@ final class ToolsTests: XCTestCase {
                 "\(tool.name) parameters drifted from the contract")
 
             for (name, property) in properties {
-                XCTAssertNotNil(
-                    property["type"]?.stringValue, "\(tool.name).\(name) has no declared type")
+                // JSON Schema allows a union, and `transcript.session_id` is genuinely one: a
+                // session is a local integer id until it has been uploaded, and Omi's UUID after.
+                let declared = property["type"]
+                let isSingle = declared?.stringValue != nil
+                let isUnion = (declared?.arrayValue?.allSatisfy { $0.stringValue != nil }) == true
+                    && declared?.arrayValue?.isEmpty == false
+                XCTAssertTrue(
+                    isSingle || isUnion, "\(tool.name).\(name) has no declared type")
             }
         }
     }
