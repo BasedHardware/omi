@@ -248,12 +248,15 @@ void main() {
       provider.dispose();
     });
 
-    test('awaits disconnect then force-reconnects the same device exactly once', () async {
+    test('retries null and thrown reconnects while coalescing terminal callbacks', () async {
       final disconnectGate = Completer<void>();
-      final reconnectGate = Completer<void>();
       deviceService
         ..disconnectGate = disconnectGate
-        ..reconnectGate = reconnectGate;
+        ..reconnectResults = [
+          null,
+          StateError('transient reconnect failure'),
+          _DfuTestDeviceConnection(),
+        ];
 
       var prepareCompleted = false;
       final prepareFuture = provider.prepareDFU().then((_) => prepareCompleted = true);
@@ -268,17 +271,57 @@ void main() {
 
       final firstResume = provider.resumeConnectionAfterDFU();
       final duplicateResume = provider.resumeConnectionAfterDFU();
-      await Future<void>.delayed(Duration.zero);
-
-      expect(deviceService.events, ['disconnect', 'reconnect:device-123:true']);
-      expect(provider.isFirmwareUpdateInProgress, isTrue);
-
-      reconnectGate.complete();
       await Future.wait([firstResume, duplicateResume]);
+
+      expect(deviceService.events, [
+        'disconnect',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+      ]);
       expect(provider.isFirmwareUpdateInProgress, isFalse);
 
       await provider.resumeConnectionAfterDFU();
-      expect(deviceService.events, ['disconnect', 'reconnect:device-123:true']);
+      expect(deviceService.events, [
+        'disconnect',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+      ]);
+    });
+
+    test('keeps retrying at the bounded backoff cap until reclaim succeeds', () async {
+      deviceService.reconnectResults = [null, null, null, null, _DfuTestDeviceConnection()];
+      await provider.prepareDFU();
+
+      await provider.resumeConnectionAfterDFU();
+
+      expect(deviceService.events, [
+        'disconnect',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+      ]);
+    });
+
+    test('forgetting the suspended device deliberately abandons reconnect', () async {
+      final reconnectGate = Completer<void>();
+      deviceService
+        ..reconnectGate = reconnectGate
+        ..reconnectResults = [null];
+      await provider.prepareDFU();
+
+      final resumeFuture = provider.resumeConnectionAfterDFU();
+      await Future<void>.delayed(Duration.zero);
+      await deviceService.forgetDevice('device-123');
+      reconnectGate.complete();
+      await resumeFuture;
+
+      await provider.resumeConnectionAfterDFU();
+      expect(deviceService.events.first, 'disconnect');
+      expect(deviceService.events.where((event) => event.startsWith('reconnect:')), isNotEmpty);
     });
 
     test('failed disconnect releases the lease and clears firmware-update state', () async {
@@ -298,9 +341,12 @@ void main() {
 }
 
 class _DfuTestDeviceService extends DeviceService {
+  _DfuTestDeviceService() : super(dfuReconnectBackoff: const [Duration.zero, Duration.zero, Duration.zero]);
+
   final List<String> events = [];
   Completer<void>? disconnectGate;
   Completer<void>? reconnectGate;
+  List<Object?> reconnectResults = [_DfuTestDeviceConnection()];
   Object? disconnectError;
 
   @override
@@ -315,6 +361,14 @@ class _DfuTestDeviceService extends DeviceService {
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
     events.add('reconnect:$deviceId:$force');
     await reconnectGate?.future;
-    return null;
+    if (reconnectResults.isEmpty) return null;
+    final result = reconnectResults.removeAt(0);
+    if (result is Object && result is! DeviceConnection) throw result;
+    return result as DeviceConnection?;
   }
+}
+
+class _DfuTestDeviceConnection implements DeviceConnection {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
