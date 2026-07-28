@@ -241,7 +241,7 @@ def mock_typesense():
 
     with (
         patch("utils.memory.atom_keyword_index._typesense_client", return_value=typesense_client),
-        patch("utils.memory.atom_keyword_index.default_db_client", _data_protection_db()),
+        patch("database.firestore_paths.db", _data_protection_db()),
     ):
         yield typesense_client, docs_store
 

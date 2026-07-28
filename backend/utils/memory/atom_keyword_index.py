@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import timezone
 from typing import Any, Dict, List, Optional, cast
 
-from database._client import db as default_db_client
+from database import firestore_paths
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
@@ -86,8 +86,7 @@ def user_allows_atom_keyword_index(uid: str, *, db_client: Any = None) -> bool:
     """Canonical cohort + conversation-Typesense-compatible data protection."""
     if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return False
-    client = db_client if db_client is not None else default_db_client
-    user_doc: Any = client.document(f"users/{uid}").get()
+    user_doc: Any = firestore_paths.get_document(db_client, f"users/{uid}")
     user_data = _payload_or_empty(user_doc.to_dict() if getattr(user_doc, "exists", False) else {})
     return user_data.get("data_protection_level", "enhanced") != "e2ee"
 
@@ -298,17 +297,16 @@ def keyword_search_memory_ids(
 
 def rebuild_atom_keyword_index(uid: str, *, db_client: Any = None) -> AtomKeywordRebuildReport:
     """Rebuild the keyword index for one user from the canonical store (idempotent)."""
-    client = db_client if db_client is not None else default_db_client
-    if not user_allows_atom_keyword_index(uid, db_client=client):
+    if not user_allows_atom_keyword_index(uid, db_client=db_client):
         return AtomKeywordRebuildReport(uid=uid, skipped_reason="not_indexable_user")
 
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
     indexable = [item for item in items if is_indexable_long_term_atom(item)]
 
-    purge_user_atom_keyword_index(uid, db_client=client)
+    purge_user_atom_keyword_index(uid, db_client=db_client)
     indexed = 0
     for item in indexable:
-        if upsert_atom_keyword_doc(item, db_client=client):
+        if upsert_atom_keyword_doc(item, db_client=db_client):
             indexed += 1
 
     expected = len(indexable)
