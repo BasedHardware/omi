@@ -785,7 +785,9 @@ jobs:
         self.assertEqual(personas.deployment.runtime_secrets["LINKEDIN_API_KEY"], "NEXT_PUBLIC_LINKEDIN_API_KEY:latest")
         self.assertEqual(
             personas.deployment.runtime_env_vars,
-            {"LINKEDIN_RAPIDAPI_HOST": "linkedin-api8.p.rapidapi.com"},
+            {
+                "LINKEDIN_RAPIDAPI_HOST": "linkedin-api8.p.rapidapi.com",
+            },
         )
         self.assertEqual(
             personas.deployment.preserve_runtime_secrets,
@@ -877,6 +879,15 @@ jobs:
         readme = (ROOT / "web/personas-open-source/README.md").read_text(encoding="utf-8")
         self.assertIn("/rockapis-rockapis-default/api/linkedin-api8", readme)
         self.assertIn("LINKEDIN_RAPIDAPI_HOST=linkedin-api8.p.rapidapi.com", readme)
+
+        personas_workflow = (ROOT / ".github/workflows/gcp_personas.yml").read_text(encoding="utf-8")
+        self.assertIn("network: ${{ vars.CLOUD_RUN_VPC_NETWORK }}", personas_workflow)
+        self.assertIn("subnet: ${{ vars.CLOUD_RUN_VPC_SUBNET }}", personas_workflow)
+        self.assertIn(
+            "runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}",
+            personas_workflow,
+        )
+        self.assertIn("require_gateway_url: true", personas_workflow)
 
     def test_rejects_a_required_value_missing_from_reviewed_source(self) -> None:
         contract = STATIC.load_contract(self.root / "config/public-build-contract.json")
