@@ -65,6 +65,33 @@ def test_temporal_questions_beat_the_task_wording():
     assert _classify('What did I do yesterday?') == 'conversations'
 
 
+@pytest.mark.parametrize(
+    'question',
+    [
+        'What do I need to do today?',
+        'what do i need to get done today',
+        'What do I have to do this morning?',
+        'Who do I have to reply to?',
+        'What is left to do today?',
+    ],
+)
+def test_owed_work_beats_the_day_it_is_owed_on(question):
+    """The exact question this surface exists for was going to the wrong store.
+
+    "What do I need to do today?" contains "today" and none of the original
+    task words, so it routed to conversations and answered with what was *said*
+    today rather than what is *owed*. Tense is what separates these from
+    `test_temporal_questions_beat_the_task_wording`: "did I do" is history,
+    "need to do" is a list.
+    """
+    assert _classify(question) == 'actions'
+
+
+def test_knowing_is_not_owing():
+    """ "need to" alone would swallow memory questions, so only phrases match."""
+    assert _classify('What do I need to know about David?') == 'memories'
+
+
 # ------------------------------------------------------------- date windows
 
 

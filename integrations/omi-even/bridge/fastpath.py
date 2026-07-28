@@ -105,7 +105,36 @@ def _is_file_inventory(line: str) -> bool:
 # Word groups that decide which store to read. Checked in order, most specific
 # first, because "what did I do yesterday" is about conversations even though it
 # contains "do".
-_ACTION_WORDS = ('action item', 'task', 'to-do', 'todo', 'behind on', 'due', 'my plate', 'commit')
+_ACTION_WORDS = (
+    'action item',
+    'task',
+    'to-do',
+    'todo',
+    'behind on',
+    'due',
+    'my plate',
+    'commit',
+    # "What do I need to do today?" -- the question this whole surface exists to
+    # answer -- was being routed to conversations, because it contains "today"
+    # and none of the words above. It came back with what was *said* today
+    # instead of what is *owed*. Phrases, not bare words: "need to" alone would
+    # capture "what do I need to know about David", which is a memory question.
+    'need to do',
+    'need to get done',
+    'need to finish',
+    'needs doing',
+    'have to do',
+    'left to do',
+    'still have to',
+    'should i do',
+    'get done',
+    'to do today',
+    'reply to',
+    'respond to',
+    'get back to',
+    'follow up',
+    'my agenda',
+)
 _CONVERSATION_WORDS = (
     'yesterday',
     'today',
