@@ -5,11 +5,13 @@ error (``error_type=ReadTimeout``), the loop treated it as fatal, and the turn e
 empty answer — which the router can only render as "Sorry, something went wrong while generating
 a response." A momentary provider stall cost the user their whole reply.
 
-Two behaviours are pinned here:
+Three behaviours are pinned here:
 
 1. A transport-class failure is re-issued while nothing has reached the user yet, and is *not*
    re-issued once text has streamed (a second attempt would duplicate it on screen).
-2. A provider failure the loop could not recover from is reported to the caller instead of
+2. Text the loop shows the user — a safety-guard explanation — becomes part of the answer, so
+   the terminal ``done:`` frame does not overwrite it with the canned error.
+3. A provider failure the loop could not recover from is reported to the caller instead of
    looking like a model that legitimately produced nothing.
 
 The pure decision logic is exercised directly against ``utils.retrieval.safety`` (import-light).
@@ -24,6 +26,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from utils.retrieval.safety import (
+    SafetyGuardError,
     is_transient_provider_error,
     provider_fallback_reason,
     should_retry_provider_error,
@@ -337,6 +340,24 @@ async def test_tool_loop_still_reaches_a_second_iteration(agentic_mod):
     assert ''.join(full_response) == 'done'
 
 
+async def test_safety_guard_message_becomes_the_answer(agentic_mod):
+    """Guard text reached the client but not the answer, so the canned error overwrote it."""
+    guard = MagicMock()
+    guard.validate_tool_call.side_effect = SafetyGuardError(
+        'I seem to be stuck trying to answer your question. Could you rephrase it in a different way?'
+    )
+    guard.should_warn_user.return_value = None
+    guard.get_stats.return_value = {}
+
+    streams = [FakeStream(response=_tool_use_final())]
+    go, _calls, full_response = _run(agentic_mod, streams, safety_guard=guard)
+
+    result, _recorded = await go()
+
+    assert result is None, 'a guard stop is a deliberate reply, not a provider failure'
+    assert 'I seem to be stuck' in ''.join(full_response)
+
+
 async def _drain(stream):
     return [chunk async for chunk in stream]
 
@@ -398,3 +419,18 @@ async def test_successful_turn_reports_no_error(agentic_mod):
 
     assert callback_data['answer'] == 'an answer'
     assert 'error' not in callback_data
+
+
+async def test_context_size_guard_message_becomes_the_answer(agentic_mod):
+    guard = MagicMock()
+    guard.should_warn_user.return_value = None
+    guard.get_stats.return_value = {}
+    guard.check_context_size.side_effect = SafetyGuardError("That's a lot of information to process at once!")
+
+    streams = [FakeStream(response=_tool_use_final())]
+    go, _calls, full_response = _run(agentic_mod, streams, safety_guard=guard)
+
+    result, _recorded = await go()
+
+    assert result is None
+    assert "That's a lot of information to process at once!" in ''.join(full_response)

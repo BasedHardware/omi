@@ -486,6 +486,18 @@ async def get_mobile_city(uid: str, platform: Optional[str]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
+async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list, text: str) -> None:
+    """Stream text to the client *and* record it as part of the answer.
+
+    ``callback.put_data`` alone only reaches the live SSE stream. The answer the caller persists
+    and sends in the terminal ``done:`` frame is built from ``full_response``, so text that skips
+    it is overwritten by the router's canned error the moment the turn ends — the user watches a
+    real explanation arrive and then get replaced by "something went wrong".
+    """
+    full_response.append(text)
+    await callback.put_data(text)
+
+
 async def _run_anthropic_agent_stream(
     system_prompt: str,
     messages: list,
@@ -638,7 +650,7 @@ async def _run_anthropic_agent_stream(
                 if warning:
                     await callback.put_thought(warning)
             except SafetyGuardError as e:
-                await callback.put_data(f"\n\n{str(e)}")
+                await _put_answer_text(callback, full_response, f"\n\n{str(e)}")
                 logger.error(f"Safety Guard blocked tool call: {e}")
                 await callback.end()
                 return None
@@ -659,7 +671,7 @@ async def _run_anthropic_agent_stream(
             try:
                 safety_guard.check_context_size(result)
             except SafetyGuardError as e:
-                await callback.put_data(f"\n\n{str(e)}")
+                await _put_answer_text(callback, full_response, f"\n\n{str(e)}")
                 logger.error(f"Safety Guard blocked due to context size: {e}")
                 await callback.end()
                 return None
