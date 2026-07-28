@@ -1897,7 +1897,7 @@
     "deviceMayWarmUp": "長時間の使用中にデバイスが熱くなる可能性があります。",
     "speedAccuracyLower": "速度と精度がクラウドモデルより低くなる可能性があります。",
     "cloudProvider": "クラウドプロバイダー",
-    "premiumMinutesMonth": "月間 600 分のプレミアム枠。「オンデバイス」タブでは無料の無制限文字起こしが利用できます。",
+    "premiumMinutesMonth": "月間 300 分のプレミアム枠。「オンデバイス」タブでは無料の無制限文字起こしが利用できます。",
     "viewUsage": "使用状況を表示",
     "audioProcessedLocally": "音声はローカルで処理されます。オフラインで動作し、よりプライベートですが、バッテリー消費が増えます。",
     "languageLabel": "言語",
