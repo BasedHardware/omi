@@ -617,9 +617,7 @@ class PlatformTests(unittest.TestCase):
     def test_invalid_platform_rejected_by_validation(self):
         manifest = Manifest(
             checks=(
-                Check(
-                    id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("plan9",)
-                ),
+                Check(id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("plan9",)),
             ),
             exempt=(),
         )
