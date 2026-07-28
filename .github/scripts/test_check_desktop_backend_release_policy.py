@@ -84,6 +84,32 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         self.assertIn("'backend/**/*.py'", self.dev)
         self.assertIn("'backend/pylock.runtime.toml'", self.dev)
 
+    def test_requires_python_dockerfile_context_for_every_desktop_deploy(self) -> None:
+        retired_desktop_context = "./desktop/macos/" + "Backend" + "-Rust"
+        mutations = (
+            ("context: .", f"context: {retired_desktop_context}", "context: ."),
+            (
+                "file: ./backend/Dockerfile.desktop_backend",
+                f"file: {retired_desktop_context}/Dockerfile",
+                "file: ./backend/Dockerfile.desktop_backend",
+            ),
+        )
+        for workflow, production in ((self.dev, False), (self.prod, True)):
+            for original, replacement, required in mutations:
+                with self.subTest(production=production, replacement=replacement):
+                    errors = POLICY.validate_deploy_workflow(
+                        workflow.replace(original, replacement, 1),
+                        production=production,
+                    )
+                    self.assertTrue(any(required in error for error in errors), errors)
+
+    def test_requires_production_agent_vm_artifacts(self) -> None:
+        errors = POLICY.validate_deploy_workflow(
+            self.prod.replace("      - name: Build and publish Agent VM image", "      - name: Omitted agent VM", 1),
+            production=True,
+        )
+        self.assertTrue(any("Build and publish Agent VM image" in error for error in errors), errors)
+
     def test_rejects_traffic_before_candidate_proof(self) -> None:
         mutated = self.dev.replace(
             "      - name: Prove candidate chat compatibility",

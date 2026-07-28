@@ -105,7 +105,7 @@ apply_yolo_env() {
     # `--yolo` supplies remote-development defaults, but must not discard an
     # explicitly targeted backend. Named QA and fault-injection bundles use
     # these overrides to exercise a chosen service revision without requiring
-    # a local Rust backend or .env file.
+    # a local desktop backend or .env file.
     export OMI_DESKTOP_API_URL="${OMI_DESKTOP_API_URL:-https://desktop-backend-dt5lrfkkoa-uc.a.run.app}"
     export OMI_PYTHON_API_URL="${OMI_PYTHON_API_URL:-https://api.omiapi.com}"
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
@@ -1094,7 +1094,7 @@ if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
     fi
 fi
 # Bootstrap OMI_PYTHON_API_URL — main Omi Python backend (auth, subscriptions, payments, transcription).
-# Do NOT fall back to OMI_DESKTOP_API_URL — that's the Rust desktop-backend which doesn't serve these routes.
+# Do NOT fall back to OMI_DESKTOP_API_URL — that is the Python desktop backend, which does not serve these routes.
 # If the caller set OMI_PYTHON_API_URL (for example --yolo), it must override copied .env values.
 PYTHON_API_URL="${OMI_PYTHON_API_URL:-}"
 if [ -z "$PYTHON_API_URL" ] && [ -f "$BACKEND_DIR/.env" ]; then

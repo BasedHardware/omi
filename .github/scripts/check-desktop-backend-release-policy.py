@@ -19,13 +19,21 @@ def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[st
     return []
 
 
-def _validate_production_secret_bridge(text: str, *, workflow: str) -> list[str]:
+def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str]:
     errors: list[str] = []
+    retired_desktop_context = "./desktop/macos/" + "Backend" + "-Rust"
     for fragment in (
         "Preflight production desktop secret resource names",
-        "# Temporary bridge pending Rust -> Python backend consolidation.",
         'gcloud secrets describe "$secret"',
         "--format='none'",
+        "SERVICE_ACCOUNT_JSON",
+        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+        "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
+        "AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}",
+        "AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}",
+        "Build and publish Agent VM image",
+        "backend/agent_vm/Dockerfile",
+        "gs://$AGENT_GCS_BUCKET/startup.sh",
         "GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest",
         "FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest",
         "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest",
@@ -34,8 +42,13 @@ def _validate_production_secret_bridge(text: str, *, workflow: str) -> list[str]
         "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST",
     ):
         if fragment not in text:
-            errors.append(f"{workflow}: missing temporary production secret bridge {fragment!r}")
+            errors.append(f"{workflow}: missing Python production runtime contract {fragment!r}")
     for forbidden in (
+        "Rust -> Python",
+        "Rust → Python",
+        "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS",
+        f"context: {retired_desktop_context}",
+        f"file: {retired_desktop_context}/Dockerfile",
         "GEMINI_API_KEY=GEMINI_API_KEY:latest",
         "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
         "REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest",
@@ -45,13 +58,14 @@ def _validate_production_secret_bridge(text: str, *, workflow: str) -> list[str]
         "PINECONE_HOST=",
     ):
         if forbidden in text:
-            errors.append(f"{workflow}: forbidden production secret binding {forbidden!r}")
+            errors.append(f"{workflow}: forbidden production runtime configuration {forbidden!r}")
     errors.extend(
         _ordered(
             text,
             (
                 "Preflight production desktop secret resource names",
                 "Build and push immutable Docker image",
+                "Build and publish Agent VM image",
             ),
             workflow=workflow,
         )
@@ -63,6 +77,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
     workflow = "desktop_backend_prod.yml" if production else "desktop_backend_auto_dev.yml"
     errors: list[str] = []
     required = (
+        "with:\n          context: .\n          file: ./backend/Dockerfile.desktop_backend",
         "no_traffic: true",
         "desktop_backend_candidate_probe.py",
         "verify_desktop_backend_image_lineage.py",
@@ -150,7 +165,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 errors.append(
                     f"{workflow}: desktop-backend must remain outside the Python backend vector: {forbidden!r}"
                 )
-        errors.extend(_validate_production_secret_bridge(text, workflow=workflow))
+        errors.extend(_validate_production_python_runtime(text, workflow=workflow))
     else:
         for fragment in (
             "group: desktop-backend-auto-dev",

@@ -78,7 +78,7 @@ Signed artifact smoke scope:
 Stable is manual:
 - Automatic qualification never promotes Stable. `desktop_promote_prod.yml` remains `workflow_dispatch` only and protected by the `prod` environment.
 - Run it with the current qualified Beta `release_tag` and `confirm=promote-stable`. It reads and compare-and-swaps the current Stable pointer itself, advances only that pointer, updates the existing legacy/static bridges, and verifies hashes and feed output.
-- Python backend and Rust desktop-backend deployments remain independent in their named workflows. Stable promotion checks live desktop chat-contract compatibility but does not deploy either backend. Do not manually edit release visibility or pointers outside the promotion workflow.
+- The Python desktop-backend deployment workflows remain independent from desktop release promotion. Stable promotion checks live desktop chat-contract compatibility but does not deploy the backend. Do not manually edit release visibility or pointers outside the promotion workflow.
 
 **Codemagic CLI & API:**
 - Token: `$CODEMAGIC_API_TOKEN` (set in `~/.zshrc`)
