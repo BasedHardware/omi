@@ -2,10 +2,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional, TypedDict
 
-from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
+from database.store import get_document_store
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import (
@@ -28,6 +28,18 @@ from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _store():
+    """The configured document store (``STORAGE_BACKEND`` seam, ADR-0002/0004).
+
+    Indirection over the factory so tests can inject a specific backend (a mongomock-backed adapter
+    for hermetic units, a live adapter for the dual-backend contract test) by patching this name —
+    the WP2 analogue of the old ``monkeypatch.setattr(users, 'db', fake)``.
+    """
+    return get_document_store()
+
+
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
@@ -752,26 +764,27 @@ def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELE
     return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
 
 
+def _people_path(uid: str) -> str:
+    return f'users/{uid}/people'
+
+
 def create_person(uid: str, data: dict):
-    people_ref = db.collection('users').document(uid).collection('people')
-    people_ref.document(data['id']).set(data)
+    _store().set(f"{_people_path(uid)}/{data['id']}", data)
     return data
 
 
 def get_person(uid: str, person_id: str):
-    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_doc = person_ref.get()
-    if not person_doc.exists:
+    doc = _store().get(f'{_people_path(uid)}/{person_id}')
+    if not doc.exists:
         return None
-    person_data = person_doc.to_dict()
-    person_data.setdefault('id', person_doc.id)
+    person_data = doc.to_dict()
+    person_data.setdefault('id', doc.id)
     return person_data
 
 
 def get_people(uid: str):
-    people_ref = db.collection('users').document(uid).collection('people')
     result = []
-    for person in people_ref.stream():
+    for person in _store().query(_people_path(uid)):
         data = person.to_dict()
         data.setdefault('id', person.id)
         result.append(data)
@@ -779,9 +792,7 @@ def get_people(uid: str):
 
 
 def get_person_by_name(uid: str, name: str):
-    people_ref = db.collection('users').document(uid).collection('people')
-    query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
-    docs = list(query.stream())
+    docs = _store().query(_people_path(uid), filters=[('name', '==', name)], limit=1)
     if docs:
         data = docs[0].to_dict()
         data.setdefault('id', docs[0].id)
@@ -790,45 +801,44 @@ def get_person_by_name(uid: str, name: str):
 
 
 def get_people_by_ids(uid: str, person_ids: list[str]):
-    """Fetch people docs by ID using db.get_all().
+    """Fetch people docs by ID.
 
-    Note: db.get_all() returns results in arbitrary order (Firestore behavior).
-    Callers must not assume the result order matches person_ids order.
+    Results are returned in an unspecified order across backends; callers must not assume the
+    result order matches person_ids order.
     """
     if not person_ids:
         return []
-    people_ref = db.collection('users').document(uid).collection('people')
-    # Use document ID fetches instead of where("id", "in", ...) to handle
-    # legacy docs that may not have a stored 'id' field.
-    doc_refs = [people_ref.document(pid) for pid in person_ids]
     all_people = []
-    for doc in db.get_all(doc_refs):
-        if doc.exists:
-            data = doc.to_dict()
-            data.setdefault('id', doc.id)
-            if parse_snapshot_or_none(Person, doc, document_id_field='id') is not None:
-                all_people.append(data)
+    # Fetch by document id (not a where("id", "in", ...)) to handle legacy docs without a stored
+    # 'id' field. The neutral record exposes .exists/.to_dict()/.id, so the read boundary parses it
+    # unchanged whichever backend is configured.
+    for doc in _store().get_many(_people_path(uid), person_ids):
+        data = doc.to_dict()
+        data.setdefault('id', doc.id)
+        if parse_snapshot_or_none(Person, doc, document_id_field='id') is not None:
+            all_people.append(data)
     return all_people
 
 
 def update_person(uid: str, person_id: str, name: str) -> bool:
-    """Rename a person. Returns False when the person does not exist so callers can 404,
-    instead of letting Firestore .update() raise NotFound and surface as an HTTP 500."""
-    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    if not person_ref.get().exists:
-        return False
-    try:
-        person_ref.update({'name': name})
-    except NotFound:
-        # The person was deleted between the existence check and the update; treat as missing so
-        # the caller 404s instead of 500ing on the Firestore NotFound race.
-        return False
-    return True
+    """Rename a person. Returns False when the person does not exist so callers can 404.
+
+    The existence check and the rename run in a transaction so they are atomic — this removes the
+    read-then-write race the Firestore-only path guarded against by catching NotFound.
+    """
+    path = f'{_people_path(uid)}/{person_id}'
+
+    def _rename(tx) -> bool:
+        if not tx.get(path).exists:
+            return False
+        tx.update(path, {'name': name})
+        return True
+
+    return _store().run_transaction(_rename)
 
 
 def delete_person(uid: str, person_id: str):
-    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_ref.delete()
+    _store().delete(f'{_people_path(uid)}/{person_id}')
 
 
 @transactional

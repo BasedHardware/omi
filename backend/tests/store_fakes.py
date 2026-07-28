@@ -1,0 +1,167 @@
+"""In-memory ``DocumentStore`` fake for hermetic domain-module unit tests (WP2, ADR-0002).
+
+Implements the neutral storage port over a dict keyed by full logical path. The backend adapters
+have their own live contract test (``tests/contract/test_document_store_contract.py``); this fake
+exists so ``database/*`` domain code migrated to the port can be unit-tested without any backend —
+including the transactional paths that ``mongomock`` cannot run (it has no sessions).
+
+Semantics mirror the port contract: neutral sentinels, dotted-key updates, collection scoping by
+containing path. ``run_transaction`` runs the callback directly (a unit test asserts domain logic,
+not real atomicity — parity/atomicity is covered by the live contract test).
+"""
+
+from __future__ import annotations
+
+import copy
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
+
+from database.store.records import StoredDocument
+from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
+
+_OPS = {
+    "==": lambda a, b: a == b,
+    "in": lambda a, b: a in b,
+    "<": lambda a, b: a < b,
+    "<=": lambda a, b: a <= b,
+    ">": lambda a, b: a > b,
+    ">=": lambda a, b: a >= b,
+}
+
+
+def _set_path(data: Dict[str, Any], dotted: str, value: Any) -> None:
+    parts = dotted.split(".")
+    for part in parts[:-1]:
+        data = data.setdefault(part, {})
+    data[parts[-1]] = value
+
+
+def _del_path(data: Dict[str, Any], dotted: str) -> None:
+    parts = dotted.split(".")
+    for part in parts[:-1]:
+        if not isinstance(data.get(part), dict):
+            return
+        data = data[part]
+    data.pop(parts[-1], None)
+
+
+def _get_path(data: Dict[str, Any], dotted: str) -> Any:
+    for part in dotted.split("."):
+        if not isinstance(data, dict):
+            return None
+        data = data.get(part)
+    return data
+
+
+def _apply(data: Dict[str, Any], patch: Dict[str, Any]) -> None:
+    for key, value in patch.items():
+        if value is DELETE:
+            _del_path(data, key)
+        elif value is SERVER_TIMESTAMP:
+            _set_path(data, key, datetime.now(timezone.utc))
+        elif isinstance(value, ArrayUnion):
+            current = list(_get_path(data, key) or [])
+            current.extend(v for v in value.values if v not in current)
+            _set_path(data, key, current)
+        elif isinstance(value, ArrayRemove):
+            current = list(_get_path(data, key) or [])
+            _set_path(data, key, [v for v in current if v not in value.values])
+        elif isinstance(value, Increment):
+            _set_path(data, key, (_get_path(data, key) or 0) + value.amount)
+        else:
+            _set_path(data, key, value)
+
+
+class _FakeTransaction:
+    def __init__(self, store: "FakeDocumentStore"):
+        self._store = store
+
+    def get(self, path: str) -> StoredDocument:
+        return self._store.get(path)
+
+    def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
+        self._store.set(path, data, merge=merge)
+
+    def update(self, path: str, data: Dict[str, Any]) -> None:
+        self._store.update(path, data)
+
+    def delete(self, path: str) -> None:
+        self._store.delete(path)
+
+
+class FakeDocumentStore:
+    """Backend-neutral in-memory document store for tests."""
+
+    def __init__(self) -> None:
+        self._docs: Dict[str, Dict[str, Any]] = {}
+
+    def get(self, path: str, *, fields: Optional[Sequence[str]] = None) -> StoredDocument:
+        if path not in self._docs:
+            return StoredDocument.missing(path)
+        data = copy.deepcopy(self._docs[path])
+        if fields is not None:
+            data = {k: v for k, v in data.items() if k in set(fields)}
+        return StoredDocument.present(path, data)
+
+    def exists(self, path: str) -> bool:
+        return path in self._docs
+
+    def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
+        if merge and path in self._docs:
+            self._docs[path].update(copy.deepcopy(data))
+        else:
+            self._docs[path] = copy.deepcopy(data)
+
+    def update(self, path: str, data: Dict[str, Any]) -> None:
+        self._docs.setdefault(path, {})
+        _apply(self._docs[path], copy.deepcopy(data))
+
+    def delete(self, path: str) -> None:
+        self._docs.pop(path, None)
+
+    def query(
+        self,
+        collection: str,
+        *,
+        filters: Optional[Iterable] = None,
+        order_by: Optional[str] = None,
+        direction: str = "asc",
+        limit: Optional[int] = None,
+    ) -> List[StoredDocument]:
+        rows = [
+            (path, data)
+            for path, data in self._docs.items()
+            if path.rsplit("/", 1)[0] == collection
+        ]
+        for field, op, value in filters or ():
+            rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
+        if order_by is not None:
+            rows.sort(key=lambda pd: pd[1].get(order_by), reverse=(direction == "desc"))
+        if limit is not None:
+            rows = rows[:limit]
+        return [StoredDocument.present(p, copy.deepcopy(d)) for p, d in rows]
+
+    def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]:
+        result = []
+        for doc_id in ids:
+            path = f"{collection}/{doc_id}"
+            if path in self._docs:
+                result.append(StoredDocument.present(path, copy.deepcopy(self._docs[path])))
+        return result
+
+    def list_ids(self, collection: str) -> List[str]:
+        return [
+            path.rsplit("/", 1)[-1]
+            for path in self._docs
+            if path.rsplit("/", 1)[0] == collection
+        ]
+
+    def delete_recursive(self, path: str) -> None:
+        for key in [k for k in self._docs if k == path or k.startswith(path + "/")]:
+            del self._docs[key]
+
+    def run_transaction(self, fn: Callable[[_FakeTransaction], Any], *, attempts: int = 3) -> Any:
+        return fn(_FakeTransaction(self))
+
+
+__all__ = ["FakeDocumentStore"]
