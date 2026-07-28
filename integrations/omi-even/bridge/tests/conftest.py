@@ -30,6 +30,10 @@ os.environ['OMI_EVEN_TOKEN'] = EVEN_TOKEN
 # The push loop starts on app startup; keep it asleep unless a test drives it.
 os.environ.setdefault('OMI_EVEN_PUSH_INTERVAL', '3600')
 os.environ['OMI_SESSION_FILE'] = str(Path(__file__).parent / 'no-such-dir' / 'desktop-auth.json')
+# Ollama on 127.0.0.1 is a fourth escape hatch, and a live one on this machine:
+# an unpatched test would reach a real 23 GB model and block for seconds. Tests
+# that exercise the local rung clear this and install a mock transport.
+os.environ['OMI_EVEN_NO_LOCAL'] = '1'
 
 import httpx  # noqa: E402
 

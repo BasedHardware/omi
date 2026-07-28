@@ -1024,3 +1024,32 @@ async def test_the_push_loop_does_not_poll_without_a_connected_app(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert calls == 0
+
+
+def test_shutdown_is_clean_when_background_tasks_are_cancelled(monkeypatch):
+    """Lifespan shutdown must not raise, whatever the background tasks did.
+
+    `CancelledError` is a `BaseException`, so `suppress(Exception)` does not
+    catch it -- a detail that turned an ordinary shutdown into a traceback in
+    the bridge log until it was named explicitly. The local-model warmer is the
+    other half: it runs forever, so it is always mid-flight at shutdown, and if
+    it has already died the await must swallow that too.
+    """
+    started = []
+
+    async def dies_immediately():
+        started.append('dead')
+        raise RuntimeError('warmer blew up')
+
+    async def sleeps_forever():
+        started.append('sleeping')
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(server, '_push_loop', sleeps_forever)
+    monkeypatch.setattr(server.local_llm, 'warm_forever', dies_immediately)
+    monkeypatch.delenv('OMI_EVEN_NO_LOCAL', raising=False)
+
+    with TestClient(server.app) as client:
+        assert client.get('/health').status_code == 200
+
+    assert set(started) == {'dead', 'sleeping'}

@@ -33,6 +33,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from capture import CaptureSession
 from display import DEFAULT_LIMIT as DISPLAY_LIMIT
 from display import fit_for_glasses, openai_chat_completion, paginate
+import local_llm
 from compose import compose_or_none
 from fastpath import fast_answer, gather_facts
 from omi_auth import AuthError, OmiAuth
@@ -58,8 +59,8 @@ AGENT_DEADLINE_S = float(os.getenv('OMI_EVEN_DEADLINE', '20'))
 # glasses, so anything approaching that is already lost -- better to say so.
 FAST_DEADLINE_S = float(os.getenv('OMI_EVEN_FAST_DEADLINE', '5'))
 
-# Retrieval plus one compose call measured 2.9s end to end. This bounds the pair,
-# leaving headroom under the ~5s the glasses tolerate.
+# Retrieval plus one compose call measured 2.9s in the cloud and 3.7s locally.
+# This bounds the pair, leaving headroom under the ~5s the glasses tolerate.
 COMPOSE_DEADLINE_S = float(os.getenv('OMI_EVEN_COMPOSE_DEADLINE', '4.5'))
 
 _CONTRACT_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'add-agent-capture.log')
@@ -80,12 +81,25 @@ async def _lifespan(_: FastAPI):
     if not os.getenv('OMI_EVEN_TOKEN'):
         log.warning('OMI_EVEN_TOKEN was unset -- generated one for this run only')
     push_task = asyncio.create_task(_push_loop(), name='omi-even-push')
+    # Composing locally is uncapped, but only while the model is resident: cold,
+    # it takes 16.5s, which is three times the whole budget. Warming is a
+    # background task so a slow first load never delays the bridge coming up.
+    warm_task = (
+        None if os.getenv('OMI_EVEN_NO_LOCAL') else asyncio.create_task(local_llm.warm_forever(), name='omi-even-warm')
+    )
     try:
         yield
     finally:
-        push_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await push_task
+        for task in (push_task, warm_task):
+            if task is None:
+                continue
+            task.cancel()
+            # CancelledError is a BaseException, so it has to be named
+            # explicitly -- suppressing Exception alone lets it escape and turns
+            # an ordinary shutdown into a traceback. A background task that
+            # already died must not fail shutdown either.
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
 
 
 app = FastAPI(title='omi-even-bridge', lifespan=_lifespan)
