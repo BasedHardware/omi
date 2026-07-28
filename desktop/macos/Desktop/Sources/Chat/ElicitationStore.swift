@@ -88,15 +88,57 @@ enum ElicitationAnswer: Equatable, Sendable {
 /// card cannot outlive the dispatch it renders.
 @MainActor
 final class ElicitationStore: ObservableObject {
-  /// FIFO. Only the head is presented; the rest wait their turn, because the
-  /// composer has exactly one slot and answering out of order would make the
-  /// count meaningless.
+  /// Oldest first. The user reads them in this order but is not forced through
+  /// it: any pending question can be brought forward.
   @Published private(set) var queue: [PendingElicitation] = []
+  /// Which question the composer is showing.
+  @Published private(set) var focusedID: String?
+  /// Choices made but not yet sent, per question. Kept here rather than in the
+  /// card so moving between questions does not discard what was already picked.
+  @Published private(set) var staged: [String: ElicitationAnswer] = [:]
 
-  var current: PendingElicitation? { queue.first }
+  var focused: PendingElicitation? {
+    queue.first(where: { $0.id == focusedID }) ?? queue.first
+  }
+  var focusedIndex: Int {
+    guard let focused else { return 0 }
+    return queue.firstIndex(where: { $0.id == focused.id }) ?? 0
+  }
   var waitingCount: Int { queue.count }
-  /// Everything behind the head, oldest first.
-  var upcoming: [PendingElicitation] { Array(queue.dropFirst()) }
+  var stagedForFocused: ElicitationAnswer? {
+    focused.flatMap { staged[$0.id] }
+  }
+
+  func focus(_ elicitation: PendingElicitation) {
+    guard queue.contains(where: { $0.id == elicitation.id }) else { return }
+    focusedID = elicitation.id
+  }
+
+  func focusNext() { step(by: 1) }
+  func focusPrevious() { step(by: -1) }
+
+  private func step(by offset: Int) {
+    guard queue.count > 1 else { return }
+    let next = (focusedIndex + offset + queue.count) % queue.count
+    focusedID = queue[next].id
+  }
+
+  /// Record a choice without sending it. Sending is a separate, explicit act so
+  /// a mis-click is recoverable.
+  func stage(_ answer: ElicitationAnswer, for elicitation: PendingElicitation) {
+    guard queue.contains(where: { $0.id == elicitation.id }) else { return }
+    staged[elicitation.id] = answer
+  }
+
+  func clearStaged(for elicitation: PendingElicitation) {
+    staged[elicitation.id] = nil
+  }
+
+  /// Send what is staged for the question on screen.
+  func submitFocused() {
+    guard let focused, let pending = staged[focused.id] else { return }
+    answer(focused, with: pending)
+  }
 
   private let submit: (PendingElicitation, ElicitationAnswer) -> Void
 
@@ -109,19 +151,30 @@ final class ElicitationStore: ObservableObject {
   func enqueue(_ elicitation: PendingElicitation) {
     guard !queue.contains(where: { $0.id == elicitation.id }) else { return }
     queue.append(elicitation)
+    if focusedID == nil { focusedID = elicitation.id }
   }
 
   /// Retires a question the kernel says is no longer pending, whoever ended it.
+  /// Focus moves to whatever now occupies that position, so answering the last
+  /// question in the queue does not leave the card pointing at nothing.
   func remove(id: String) {
+    let index = queue.firstIndex(where: { $0.id == id })
     queue.removeAll { $0.id == id }
+    staged[id] = nil
+    guard focusedID == id else { return }
+    guard let index, !queue.isEmpty else {
+      focusedID = queue.first?.id
+      return
+    }
+    focusedID = queue[min(index, queue.count - 1)].id
   }
 
   func answer(_ elicitation: PendingElicitation, with answer: ElicitationAnswer) {
     guard queue.contains(where: { $0.id == elicitation.id }) else { return }
-    // Removed locally so the card leaves immediately on click; the kernel's
-    // own resolved message is what makes it durable, and re-arrival is a no-op
-    // because `remove` is idempotent.
-    queue.removeAll { $0.id == elicitation.id }
+    // Removed locally so the card leaves immediately; the kernel's own resolved
+    // message is what makes it durable, and re-arrival is a no-op because
+    // `remove` is idempotent.
+    remove(id: elicitation.id)
     submit(elicitation, answer)
   }
 
@@ -131,9 +184,13 @@ final class ElicitationStore: ObservableObject {
   func clear(ownerID: String? = nil) {
     guard let ownerID else {
       queue.removeAll()
+      staged.removeAll()
+      focusedID = nil
       return
     }
+    for dropped in queue where dropped.ownerID == ownerID { staged[dropped.id] = nil }
     queue.removeAll { $0.ownerID == ownerID }
+    if queue.first(where: { $0.id == focusedID }) == nil { focusedID = queue.first?.id }
   }
 }
 
@@ -145,12 +202,7 @@ final class ElicitationStore: ObservableObject {
 final class ElicitationProjection {
   let store: ElicitationStore
   private var republisher: AnyCancellable?
-  /// Records the answer in the conversation. Set by the owner so the store
-  /// stays free of chat plumbing.
-  var onAnswered: ((PendingElicitation, ElicitationAnswer) -> Void)?
-
   init() {
-    var forward: ((PendingElicitation, ElicitationAnswer) -> Void)?
     store = ElicitationStore { elicitation, answer in
       Task {
         await AgentRuntimeProcess.shared.resolveElicitation(
@@ -159,27 +211,6 @@ final class ElicitationProjection {
           answer: answer
         )
       }
-      forward?(elicitation, answer)
-    }
-    forward = { [weak self] elicitation, answer in
-      self?.onAnswered?(elicitation, answer)
-    }
-  }
-
-  /// What the answer reads as in the transcript. A dismissal records nothing:
-  /// declining to answer is not a message the user sent.
-  static func transcriptText(
-    for elicitation: PendingElicitation,
-    answer: ElicitationAnswer
-  ) -> String? {
-    switch answer {
-    case .option(let optionID):
-      return elicitation.options.first(where: { $0.id == optionID })?.label ?? optionID
-    case .text(let text):
-      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      return trimmed.isEmpty ? nil : trimmed
-    case .cancel:
-      return nil
     }
   }
 

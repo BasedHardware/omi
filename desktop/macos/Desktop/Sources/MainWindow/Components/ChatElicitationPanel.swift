@@ -8,29 +8,27 @@ import SwiftUI
 /// the question rather than the run: the agent is told the user declined to
 /// choose and carries on, which is also why there is no stop control here —
 /// declining one question should not end everything else in flight.
+///
+/// Choosing and sending are separate. A click stages the answer and nothing
+/// leaves until Send, so a mis-click costs a second click rather than an
+/// irreversible answer, and a queued question can be revisited before sending.
 struct ChatElicitationPanel: View {
+  @ObservedObject var elicitations: ElicitationStore
   let elicitation: PendingElicitation
-  let waitingCount: Int
-  /// Questions queued behind this one, oldest first, so the user can see what
-  /// answering leads to instead of being surprised by the next card.
-  var upcoming: [PendingElicitation] = []
-  let onAnswer: (ElicitationAnswer) -> Void
 
   @Environment(\.fontScale) private var fontScale
   @State private var freeText: String = ""
-  /// Held briefly after a click so the choice is visibly acknowledged before
-  /// the card collapses; a card that vanishes on click leaves the user unsure
-  /// which row they actually hit.
-  @State private var selectedOptionID: String?
   @State private var hoveredOptionID: String?
   @FocusState private var freeTextFocused: Bool
 
-  /// How long the tick stays on screen before the card collapses.
-  private static let selectionAcknowledgementSeconds: Double = 0.22
+  private var staged: ElicitationAnswer? { elicitations.staged[elicitation.id] }
 
-  private var canSendFreeText: Bool {
-    !freeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  private var stagedOptionID: String? {
+    if case .option(let id) = staged { return id }
+    return nil
   }
+
+  private var canSend: Bool { staged != nil }
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -40,16 +38,20 @@ struct ChatElicitationPanel: View {
       if let context = elicitation.context, !context.isEmpty { contextLine(context) }
       options
       if elicitation.allowsFreeText { freeTextField }
-      if !upcoming.isEmpty { upcomingQueue }
+      footer
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background {
-      // Escape works without the card holding focus, so a user who has clicked
-      // into the transcript can still dismiss the question.
-      Button("", action: cancel)
-        .keyboardShortcut(.cancelAction)
-        .opacity(0)
-        .accessibilityHidden(true)
+    // The card persists across a switch, so its own layout changes — a
+    // different prompt length, a different option count — are what the user
+    // sees move. Animating on the id keeps that a glide rather than a snap.
+    .omiAnimation(SBMotion.standard, value: elicitation.id)
+    .omiAnimation(SBMotion.standard, value: stagedOptionID)
+    .onAppear { restoreStagedText() }
+    .onChange(of: elicitation.id) { _, _ in
+      // Hover belongs to the row the pointer was over, not to the question that
+      // replaced it.
+      hoveredOptionID = nil
+      restoreStagedText()
     }
     .accessibilityElement(children: .contain)
     .accessibilityLabel("\(elicitation.title). \(elicitation.prompt)")
@@ -68,37 +70,40 @@ struct ChatElicitationPanel: View {
         .scaledFont(size: OmiType.caption, weight: .semibold)
         .foregroundColor(OmiColors.textSecondary)
 
-      if waitingCount > 1 {
-        Text("1 of \(waitingCount)")
-          .scaledFont(size: OmiType.micro)
-          .foregroundColor(OmiColors.textTertiary)
-          .padding(.horizontal, OmiSpacing.xs)
-          .padding(.vertical, OmiSpacing.hairline)
-          .background(OmiColors.backgroundQuaternary.opacity(0.7))
-          .clipShape(Capsule())
-      }
+      if elicitations.waitingCount > 1 { queueStepper }
 
       Spacer()
+    }
+  }
 
-      // The way out is stated rather than implied: without the input row there
-      // is no other visible affordance for leaving the question alone.
-      Button(action: cancel) {
-        HStack(spacing: OmiSpacing.xxs) {
-          Text("esc")
-            .scaledFont(size: OmiType.micro, weight: .medium)
-            .padding(.horizontal, OmiSpacing.xs)
-            .padding(.vertical, OmiSpacing.hairline)
-            .background(OmiColors.backgroundQuaternary.opacity(0.7))
-            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous))
-          Text("dismiss")
-            .scaledFont(size: OmiType.micro)
-        }
-        .foregroundColor(OmiColors.textTertiary)
+  /// Move between pending questions without answering the one on screen.
+  private var queueStepper: some View {
+    HStack(spacing: OmiSpacing.xxs) {
+      Button {
+        elicitations.focusPrevious()
+      } label: {
+        Image(systemName: "chevron.left").scaledFont(size: OmiType.micro, weight: .bold)
       }
       .buttonStyle(.plain)
-      .help("Dismiss this question. The agent keeps working.")
-      .accessibilityLabel("Dismiss this question")
+      .accessibilityLabel("Previous question")
+
+      Text("\(elicitations.focusedIndex + 1) of \(elicitations.waitingCount)")
+        .scaledFont(size: OmiType.micro)
+        .monospacedDigit()
+
+      Button {
+        elicitations.focusNext()
+      } label: {
+        Image(systemName: "chevron.right").scaledFont(size: OmiType.micro, weight: .bold)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Next question")
     }
+    .foregroundColor(OmiColors.textTertiary)
+    .padding(.horizontal, OmiSpacing.xs)
+    .padding(.vertical, OmiSpacing.hairline)
+    .background(OmiColors.backgroundQuaternary.opacity(0.7))
+    .clipShape(Capsule())
   }
 
   private var prompt: some View {
@@ -140,28 +145,9 @@ struct ChatElicitationPanel: View {
       HStack(spacing: OmiSpacing.sm) {
         ForEach(elicitation.options) { option in
           Button {
-            select(option)
+            stage(option)
           } label: {
-            HStack(spacing: OmiSpacing.xxs) {
-              if selectedOptionID == option.id {
-                Image(systemName: "checkmark")
-                  .scaledFont(size: OmiType.micro, weight: .bold)
-              }
-              Text(option.label)
-                .scaledFont(size: OmiType.caption, weight: .medium)
-            }
-            .foregroundColor(option.isRejection ? OmiColors.textSecondary : OmiColors.textPrimary)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.xs)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-                .fill(optionFill(option))
-            )
-            .overlay {
-              RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-                .stroke(
-                  OmiColors.border.opacity(option.isPermanent ? 0.4 : 0.16), lineWidth: 1)
-            }
+            optionChipLabel(option)
           }
           .buttonStyle(.plain)
           .onHover { hoveredOptionID = $0 ? option.id : nil }
@@ -173,33 +159,9 @@ struct ChatElicitationPanel: View {
       VStack(spacing: OmiSpacing.xxs) {
         ForEach(elicitation.options) { option in
           Button {
-            select(option)
+            stage(option)
           } label: {
-            HStack(spacing: OmiSpacing.sm) {
-              Text(option.label)
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-              if selectedOptionID == option.id {
-                Image(systemName: "checkmark")
-                  .scaledFont(size: OmiType.caption, weight: .bold)
-                  .foregroundColor(OmiColors.accent)
-              }
-            }
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.sm)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-                .fill(optionFill(option))
-            )
-            .overlay {
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-                .stroke(
-                  OmiColors.border.opacity(hoveredOptionID == option.id ? 0.28 : 0.12),
-                  lineWidth: 1)
-            }
-            .contentShape(Rectangle())
+            optionRowLabel(option)
           }
           .buttonStyle(.plain)
           .onHover { hoveredOptionID = $0 ? option.id : nil }
@@ -212,78 +174,159 @@ struct ChatElicitationPanel: View {
     }
   }
 
+  private func optionChipLabel(_ option: ElicitationOption) -> some View {
+    HStack(spacing: OmiSpacing.xxs) {
+      if stagedOptionID == option.id {
+        Image(systemName: "checkmark").scaledFont(size: OmiType.micro, weight: .bold)
+      }
+      Text(option.label).scaledFont(size: OmiType.caption, weight: .medium)
+    }
+    .foregroundColor(option.isRejection ? OmiColors.textSecondary : OmiColors.textPrimary)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.xs)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
+        .fill(optionFill(option))
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
+        .stroke(optionStroke(option), lineWidth: stagedOptionID == option.id ? 1.5 : 1)
+    }
+  }
+
+  private func optionRowLabel(_ option: ElicitationOption) -> some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Text(option.label)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(OmiColors.textPrimary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      if stagedOptionID == option.id {
+        Image(systemName: "checkmark")
+          .scaledFont(size: OmiType.caption, weight: .bold)
+          .foregroundColor(OmiColors.accent)
+      }
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+        .fill(optionFill(option))
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+        .stroke(optionStroke(option), lineWidth: stagedOptionID == option.id ? 1.5 : 1)
+    }
+    .contentShape(Rectangle())
+  }
+
   private func optionFill(_ option: ElicitationOption) -> Color {
-    if selectedOptionID == option.id {
-      return OmiColors.backgroundQuaternary
-    }
-    if hoveredOptionID == option.id {
-      return OmiColors.backgroundTertiary.opacity(1)
-    }
+    if stagedOptionID == option.id { return OmiColors.backgroundQuaternary }
+    if hoveredOptionID == option.id { return OmiColors.backgroundTertiary }
     return OmiColors.backgroundTertiary.opacity(0.55)
   }
 
-  private var freeTextField: some View {
-    HStack(spacing: OmiSpacing.xs) {
-      TextField("Type a different answer\u{2026}", text: $freeText)
-        .textFieldStyle(.plain)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
-        .focused($freeTextFocused)
-        .onSubmit { sendFreeText() }
+  private func optionStroke(_ option: ElicitationOption) -> Color {
+    if stagedOptionID == option.id { return OmiColors.accent.opacity(0.55) }
+    if hoveredOptionID == option.id { return OmiColors.border.opacity(0.28) }
+    return OmiColors.border.opacity(option.isPermanent ? 0.4 : 0.12)
+  }
 
-      Button(action: sendFreeText) {
-        Image(systemName: "arrow.up.circle.fill")
-          .scaledFont(size: OmiType.heading)
-          .foregroundColor(canSendFreeText ? OmiColors.accent : OmiColors.textQuaternary)
+  private var freeTextField: some View {
+    TextField("Type a different answer\u{2026}", text: $freeText)
+      .textFieldStyle(.plain)
+      .scaledFont(size: OmiType.body)
+      .foregroundColor(OmiColors.textPrimary)
+      .focused($freeTextFocused)
+      .onChange(of: freeText) { _, value in stageFreeText(value) }
+      .onSubmit(send)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xs)
+      .background(OmiColors.backgroundTertiary)
+      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous))
+  }
+
+  /// Both actions sit under the options on the left, so the eye travels
+  /// prompt -> options -> what to do about them without crossing the card.
+  private var footer: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Button(action: send) {
+        actionLabel(
+          "Send", key: "\u{21A9}", enabled: canSend,
+          fill: canSend ? OmiColors.backgroundQuaternary : OmiColors.backgroundTertiary.opacity(0.5))
       }
       .buttonStyle(.plain)
-      .disabled(!canSendFreeText)
-    }
-    .padding(.horizontal, OmiSpacing.sm)
-    .padding(.vertical, OmiSpacing.xs)
-    .background(OmiColors.backgroundTertiary)
-    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous))
-  }
+      .disabled(!canSend)
+      .keyboardShortcut(.return, modifiers: [])
+      .help(canSend ? "Send this answer" : "Choose an option first")
 
-  /// What answering this one leads to. Prompts only — the queued cards render
-  /// in full when their turn comes.
-  private var upcomingQueue: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-      Divider().overlay(OmiColors.border.opacity(0.14))
-      ForEach(upcoming) { pending in
-        HStack(spacing: OmiSpacing.xs) {
-          Text("next")
-            .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(OmiColors.textQuaternary)
-          Text(pending.prompt)
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
-            .lineLimit(1)
-        }
+      Button(action: dismiss) {
+        actionLabel(
+          "Cancel", key: "esc", enabled: true,
+          fill: OmiColors.backgroundTertiary.opacity(0.5))
+      }
+      .buttonStyle(.plain)
+      .keyboardShortcut(.cancelAction)
+      .help("Cancel this question. The agent keeps working.")
+
+      Spacer()
+
+      if elicitations.waitingCount > 1 {
+        Text("\(answeredCount) of \(elicitations.waitingCount) answered")
+          .scaledFont(size: OmiType.micro)
+          .foregroundColor(OmiColors.textQuaternary)
       }
     }
-    .padding(.top, OmiSpacing.xxs)
   }
 
-  /// Acknowledge the click, then answer. The delay is presentation only: the
-  /// store still receives exactly one answer.
-  private func select(_ option: ElicitationOption) {
-    guard selectedOptionID == nil else { return }
-    OmiMotion.withGated(.easeOut(duration: 0.12)) { selectedOptionID = option.id }
-    Task {
-      try? await Task.sleep(for: .seconds(Self.selectionAcknowledgementSeconds))
-      onAnswer(.option(option.id))
+  private func actionLabel(
+    _ title: String, key: String, enabled: Bool, fill: Color
+  ) -> some View {
+    HStack(spacing: OmiSpacing.xs) {
+      Text(title).scaledFont(size: OmiType.caption, weight: .semibold)
+      Text(key)
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .padding(.horizontal, OmiSpacing.xs)
+        .padding(.vertical, OmiSpacing.hairline)
+        .background(OmiColors.backgroundQuaternary.opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous))
     }
+    .foregroundColor(enabled ? OmiColors.textPrimary : OmiColors.textQuaternary)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.xs)
+    .background(RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous).fill(fill))
   }
 
-  private func cancel() {
-    guard selectedOptionID == nil else { return }
-    onAnswer(.cancel)
+  private var answeredCount: Int {
+    elicitations.queue.filter { elicitations.staged[$0.id] != nil }.count
   }
 
-  private func sendFreeText() {
-    let trimmed = freeText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty, selectedOptionID == nil else { return }
-    onAnswer(.text(trimmed))
+  private func stage(_ option: ElicitationOption) {
+    elicitations.stage(.option(option.id), for: elicitation)
+    freeText = ""
+  }
+
+  private func stageFreeText(_ value: String) {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
+      if case .text = staged { elicitations.clearStaged(for: elicitation) }
+      return
+    }
+    elicitations.stage(.text(trimmed), for: elicitation)
+  }
+
+  /// Typed answers survive moving between questions, so the field is refilled
+  /// from what was staged rather than cleared.
+  private func restoreStagedText() {
+    if case .text(let text) = staged { freeText = text } else { freeText = "" }
+  }
+
+  private func send() {
+    guard canSend else { return }
+    elicitations.submitFocused()
+  }
+
+  private func dismiss() {
+    elicitations.answer(elicitation, with: .cancel)
   }
 }

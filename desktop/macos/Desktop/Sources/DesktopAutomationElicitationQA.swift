@@ -54,7 +54,7 @@ extension DesktopAutomationActionRegistry {
         store.enqueue(elicitation)
         return [
           "queued": "\(store.waitingCount)",
-          "current_dispatch_id": store.current?.id ?? "",
+          "current_dispatch_id": store.focused?.id ?? "",
         ]
       }
 
@@ -66,13 +66,65 @@ extension DesktopAutomationActionRegistry {
           return ["error": "main ChatProvider not yet initialized"]
         }
         let store = provider.elicitations
-        let current = store.current
+        let current = store.focused
         return [
           "waiting_count": "\(store.waitingCount)",
           "current_dispatch_id": current?.id ?? "",
           "current_mode": current?.mode.rawValue ?? "",
           "current_allows_free_text": current.map { $0.allowsFreeText ? "true" : "false" } ?? "",
           "composer_shows_card": current == nil ? "false" : "true",
+        ]
+      }
+
+      register(
+        name: "elicitation_focus",
+        summary: "Move between queued questions without answering. DEBUG non-prod only.",
+        params: ["direction", "dispatch_id"]
+      ) { params in
+        guard AppBuild.isNonProduction else {
+          return ["error": "elicitation_focus is disabled on production bundles"]
+        }
+        guard let provider = ChatProvider.mainInstance else {
+          return ["error": "main ChatProvider not yet initialized"]
+        }
+        let store = provider.elicitations
+        if let dispatchID = params["dispatch_id"],
+          let target = store.queue.first(where: { $0.id == dispatchID })
+        {
+          store.focus(target)
+        } else if params["direction"] == "previous" {
+          store.focusPrevious()
+        } else {
+          store.focusNext()
+        }
+        return [
+          "current_dispatch_id": store.focused?.id ?? "",
+          "focused_index": "\(store.focusedIndex)",
+          "staged_here": store.stagedForFocused == nil ? "false" : "true",
+        ]
+      }
+
+      register(
+        name: "elicitation_stage",
+        summary: "Choose an option without sending it. DEBUG non-prod only.",
+        params: ["option_id", "text"]
+      ) { params in
+        guard AppBuild.isNonProduction else {
+          return ["error": "elicitation_stage is disabled on production bundles"]
+        }
+        guard let provider = ChatProvider.mainInstance else {
+          return ["error": "main ChatProvider not yet initialized"]
+        }
+        let store = provider.elicitations
+        guard let current = store.focused else { return ["staged": "false"] }
+        if let text = params["text"] {
+          store.stage(.text(text), for: current)
+        } else if let optionID = params["option_id"] {
+          store.stage(.option(optionID), for: current)
+        }
+        return [
+          "staged": store.stagedForFocused == nil ? "false" : "true",
+          "waiting_count": "\(store.waitingCount)",
         ]
       }
 
@@ -88,7 +140,7 @@ extension DesktopAutomationActionRegistry {
           return ["error": "main ChatProvider not yet initialized"]
         }
         let store = provider.elicitations
-        guard let current = store.current else {
+        guard let current = store.focused else {
           return ["answered": "false", "waiting_count": "0"]
         }
         // Never default to a remembered grant. The first option a permission
@@ -99,11 +151,12 @@ extension DesktopAutomationActionRegistry {
           ?? current.options.first(where: { !$0.isPermanent })
           ?? current.options.first
         let optionID = params["option_id"] ?? fallback?.id ?? ""
-        store.answer(current, with: .option(optionID))
+        store.stage(.option(optionID), for: current)
+        store.submitFocused()
         return [
           "answered": "true",
           "waiting_count": "\(store.waitingCount)",
-          "current_dispatch_id": store.current?.id ?? "",
+          "current_dispatch_id": store.focused?.id ?? "",
         ]
       }
     #endif

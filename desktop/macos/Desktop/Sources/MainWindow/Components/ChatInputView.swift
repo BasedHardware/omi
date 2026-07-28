@@ -101,20 +101,16 @@ struct ChatInputView: View {
 
   var body: some View {
     Group {
-      if let elicitation = elicitations.current {
-        ChatElicitationPanel(
-          elicitation: elicitation,
-          waitingCount: elicitations.waitingCount,
-          upcoming: elicitations.upcoming,
-          onAnswer: { elicitations.answer(elicitation, with: $0) }
-        )
-        // Keyed by dispatch id so advancing the queue crossfades between two
-        // questions instead of snapping the shell closed and open again.
-        .id(elicitation.id)
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+      if let elicitation = elicitations.focused {
+        // Deliberately not keyed by dispatch id. Keying it rebuilds the whole
+        // card on every switch, so two cards exist mid-transition and the shell
+        // jumps between their heights. Letting one card update in place makes
+        // switching a height change instead of a teardown.
+        ChatElicitationPanel(elicitations: elicitations, elicitation: elicitation)
+          .transition(.opacity)
       } else {
         composer
-          .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .bottom)))
+          .transition(.opacity)
       }
     }
     // One shell for both states. Keeping it here, rather than on each branch,
@@ -126,8 +122,9 @@ struct ChatInputView: View {
         .stroke(dropStrokeColor, lineWidth: isDropTargeted ? 1.5 : 0)
     }
     .fixedSize(horizontal: false, vertical: true)
-    .omiAnimation(SBMotion.standard, value: elicitations.current?.id)
-    .onChange(of: elicitations.current?.id) { _, newValue in
+    .omiAnimation(SBMotion.standard, value: elicitations.focused?.id)
+    .omiAnimation(SBMotion.standard, value: elicitations.waitingCount)
+    .onChange(of: elicitations.focused?.id) { _, newValue in
       if newValue != nil {
         // Park the draft, then clear the field so the returning composer is not
         // holding text the user typed before the question arrived.

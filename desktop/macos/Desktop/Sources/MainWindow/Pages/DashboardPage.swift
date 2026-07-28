@@ -2266,23 +2266,20 @@ struct HomeAskBar: View {
 
   var body: some View {
     Group {
-      if let elicitation = elicitations.current {
-        ChatElicitationPanel(
-          elicitation: elicitation,
-          waitingCount: elicitations.waitingCount,
-          upcoming: elicitations.upcoming,
-          onAnswer: { elicitations.answer(elicitation, with: $0) }
-        )
-        .padding(.horizontal, OmiSpacing.lg)
-        .padding(.vertical, OmiSpacing.md)
-        .id(elicitation.id)
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+      if let elicitation = elicitations.focused {
+        // Not keyed by dispatch id: see ChatInputView. One card updating in
+        // place keeps switching smooth.
+        ChatElicitationPanel(elicitations: elicitations, elicitation: elicitation)
+          .padding(.horizontal, OmiSpacing.lg)
+          .padding(.vertical, OmiSpacing.md)
+          .transition(.opacity)
       } else {
         askBarInput
-          .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .bottom)))
+          .transition(.opacity)
       }
     }
-    .omiAnimation(SBMotion.standard, value: elicitations.current?.id)
+    .omiAnimation(SBMotion.standard, value: elicitations.focused?.id)
+    .omiAnimation(SBMotion.standard, value: elicitations.waitingCount)
     .background(
       RoundedRectangle(cornerRadius: 29, style: .continuous)
         .fill(HomePalette.tile.opacity(isHovering || isFocused ? 1 : 0.92))

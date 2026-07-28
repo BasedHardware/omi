@@ -1400,23 +1400,6 @@ class ChatProvider: ObservableObject {
     log("ChatProvider initialized, will start Claude bridge on first use")
 
     elicitationProjection.start { [weak self] in self?.objectWillChange.send() }
-    // The answer is a message the user sent, so it belongs in the transcript
-    // like any other. Recorded through the kernel journal, never appended
-    // locally (INV-CHAT-1).
-    elicitationProjection.onAnswered = { [weak self] elicitation, answer in
-      guard let self,
-        let text = ElicitationProjection.transcriptText(for: elicitation, answer: answer)
-      else { return }
-      Task { @MainActor in
-        await self.kernelTurnProjection.recordTurn(
-          surface: .mainChat(chatId: self.currentSession?.id),
-          message: ChatMessage(text: text, sender: .user),
-          origin: "typed_chat",
-          status: .completed
-        )
-      }
-    }
-
     // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
     // Pre-6594 installs may have the old agentSDK tag saved; the settings
     // picker no longer offers it, so leaving it stored would leave the UI

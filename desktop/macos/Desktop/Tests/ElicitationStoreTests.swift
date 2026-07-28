@@ -97,11 +97,12 @@ final class ElicitationStoreTests: XCTestCase {
     store.enqueue(first)
     store.enqueue(second)
 
-    XCTAssertEqual(store.current?.id, "a")
+    XCTAssertEqual(store.focused?.id, "a")
     XCTAssertEqual(store.waitingCount, 2)
 
-    store.answer(first, with: .option("once"))
-    XCTAssertEqual(store.current?.id, "b")
+    store.stage(.option("once"), for: first)
+    store.submitFocused()
+    XCTAssertEqual(store.focused?.id, "b")
     XCTAssertEqual(store.waitingCount, 1)
   }
 
@@ -134,7 +135,7 @@ final class ElicitationStoreTests: XCTestCase {
 
     store.remove(id: elicitation.id)
 
-    XCTAssertNil(store.current)
+    XCTAssertNil(store.focused)
     // Retirement is not an answer: nothing is sent back on the user's behalf.
     XCTAssertTrue(submitted().isEmpty)
   }
@@ -163,45 +164,116 @@ final class ElicitationStoreTests: XCTestCase {
 }
 
 @MainActor
-final class ElicitationTranscriptTests: XCTestCase {
-  private func elicitation(options: [[String: Any]]) -> PendingElicitation {
+final class ElicitationQueueNavigationTests: XCTestCase {
+  private func pending(_ id: String) -> PendingElicitation {
     PendingElicitation(payload: [
-      "dispatchId": "d1", "ownerId": "o1", "sessionId": "s1", "mode": "question",
-      "title": "Omi is asking", "prompt": "Which branch?", "options": options,
+      "dispatchId": id, "ownerId": "o1", "sessionId": "s1", "mode": "question",
+      "title": "Omi is asking", "prompt": "Q \(id)",
+      "options": [["optionId": "yes", "label": "Yes", "effect": "choice"]],
       "allowsFreeText": true,
     ])!
   }
 
-  func testAnOptionIsRecordedByItsLabelNotItsId() {
-    let pending = elicitation(options: [
-      ["optionId": "opt-1", "label": "Planning / thinking", "effect": "choice"]
-    ])
-
-    XCTAssertEqual(
-      ElicitationProjection.transcriptText(for: pending, answer: .option("opt-1")),
-      "Planning / thinking")
+  private func makeStore() -> (ElicitationStore, () -> [(PendingElicitation, ElicitationAnswer)]) {
+    var sent: [(PendingElicitation, ElicitationAnswer)] = []
+    return (ElicitationStore { sent.append(($0, $1)) }, { sent })
   }
 
-  func testAnUnknownOptionFallsBackToItsIdRatherThanVanishing() {
-    let pending = elicitation(options: [])
+  func testChoosingAnOptionSendsNothingUntilSend() {
+    let (store, sent) = makeStore()
+    let one = pending("a")
+    store.enqueue(one)
 
-    XCTAssertEqual(
-      ElicitationProjection.transcriptText(for: pending, answer: .option("main")), "main")
+    store.stage(.option("yes"), for: one)
+    XCTAssertTrue(sent().isEmpty, "choosing must not send")
+    XCTAssertEqual(store.waitingCount, 1, "the card stays until sent")
+
+    store.submitFocused()
+    XCTAssertEqual(sent().count, 1)
+    XCTAssertEqual(store.waitingCount, 0)
   }
 
-  func testTypedTextIsRecordedTrimmed() {
-    let pending = elicitation(options: [])
+  func testSendDoesNothingWithoutAChoice() {
+    let (store, sent) = makeStore()
+    store.enqueue(pending("a"))
 
-    XCTAssertEqual(
-      ElicitationProjection.transcriptText(for: pending, answer: .text("  release/0.12  ")),
-      "release/0.12")
-    XCTAssertNil(ElicitationProjection.transcriptText(for: pending, answer: .text("   ")))
+    store.submitFocused()
+
+    XCTAssertTrue(sent().isEmpty)
+    XCTAssertEqual(store.waitingCount, 1)
   }
 
-  func testDismissingRecordsNothing() {
-    // Declining to answer is not a message the user sent.
-    let pending = elicitation(options: [["optionId": "a", "label": "A", "effect": "choice"]])
+  func testTheUserCanMoveBetweenQuestionsInAnyOrder() {
+    let (store, _) = makeStore()
+    let a = pending("a")
+    let c = pending("c")
+    store.enqueue(a)
+    store.enqueue(pending("b"))
+    store.enqueue(c)
 
-    XCTAssertNil(ElicitationProjection.transcriptText(for: pending, answer: .cancel))
+    XCTAssertEqual(store.focused?.id, "a")
+    store.focus(c)
+    XCTAssertEqual(store.focused?.id, "c")
+    XCTAssertEqual(store.focusedIndex, 2)
+
+    store.focusNext()
+    XCTAssertEqual(store.focused?.id, "a", "stepping past the end wraps")
+    store.focusPrevious()
+    XCTAssertEqual(store.focused?.id, "c")
+  }
+
+  func testChoicesSurviveMovingBetweenQuestions() {
+    let (store, sent) = makeStore()
+    let a = pending("a")
+    let b = pending("b")
+    store.enqueue(a)
+    store.enqueue(b)
+
+    store.stage(.option("yes"), for: a)
+    store.focus(b)
+    store.stage(.text("later"), for: b)
+    store.focus(a)
+
+    XCTAssertEqual(store.staged[a.id], .option("yes"), "returning shows the earlier choice")
+    XCTAssertEqual(store.staged[b.id], .text("later"))
+
+    store.submitFocused()
+    XCTAssertEqual(sent().count, 1)
+    XCTAssertEqual(sent().first?.1, .option("yes"))
+    XCTAssertEqual(store.staged[b.id], .text("later"), "sending one keeps the other's choice")
+  }
+
+  func testAnsweringMovesFocusToWhatTookItsPlace() {
+    let (store, _) = makeStore()
+    let a = pending("a")
+    store.enqueue(a)
+    store.enqueue(pending("b"))
+
+    store.stage(.option("yes"), for: a)
+    store.submitFocused()
+
+    XCTAssertEqual(store.focused?.id, "b")
+  }
+
+  func testRetiringTheFocusedQuestionDropsItsStagedChoice() {
+    let (store, _) = makeStore()
+    let a = pending("a")
+    store.enqueue(a)
+    store.stage(.option("yes"), for: a)
+
+    store.remove(id: "a")
+
+    XCTAssertNil(store.staged["a"])
+    XCTAssertNil(store.focused)
+  }
+
+  func testFocusingAQuestionThatIsNotQueuedIsIgnored() {
+    let (store, _) = makeStore()
+    let a = pending("a")
+    store.enqueue(a)
+
+    store.focus(pending("ghost"))
+
+    XCTAssertEqual(store.focused?.id, "a")
   }
 }
