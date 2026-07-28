@@ -1234,12 +1234,13 @@
   {
     "name": "ask_user",
     "label": "Ask User",
-    "description": "Ask the user one or more questions and wait for their answers before continuing.\n\nUse this instead of guessing whenever the next step depends on something only the user can decide:\n- their request is ambiguous and the readings lead to different work\n- a required detail is missing and you would otherwise pick one\n- there are several reasonable paths and the choice is theirs\n- you are about to do something significant and irreversible\n\nPrefer this over asking in plain prose: a plain question ends your turn and the user has to retype an answer, while this pauses the run and resumes with what they chose.\n\nPut every question the decision actually needs into one call. They are shown as one set the user walks through and answers in a single pass, so a three-part decision costs one interruption rather than three. Pass options when you can name the likely answers, and leave allow_free_text on when an unlisted answer is reasonable. Set allow_multiple for a question whose answers genuinely combine, such as constraints or features; leave it off when the answers are alternatives.\n\nDo not use it for onboarding steps; ask_followup owns that flow. Do not use it to confirm something you already know, or to ask permission for a tool that already has its own approval.",
+    "description": "Ask the user one or more questions and wait for their answers before continuing.\n\nUse this instead of guessing whenever the next step depends on something only the user can decide:\n- their request is ambiguous and the readings lead to different work\n- a required detail is missing and you would otherwise pick one\n- there are several reasonable paths and the choice is theirs\n- you are about to do something significant and irreversible\n\nPrefer this over asking in plain prose: a plain question ends your turn and the user has to retype an answer, while this pauses the run and resumes with what they chose.\n\nPut every question the decision actually needs into one call. They are shown as one set the user walks through and answers in a single pass, so a three-part decision costs one interruption rather than three. Pass options when you can name the likely answers, and leave allow_free_text on when an unlisted answer is reasonable. allow_multiple defaults to false and should stay false unless the question itself invites more than one answer (\"any that apply\", \"all that apply\"). A question asking for the stack, the status, the stage, which one, or what you would most like has alternatives as answers, not a combination, and a single choice there moves the user straight to the next question.\n\nDo not use it for onboarding steps; ask_followup owns that flow. Do not use it to confirm something you already know, or to ask permission for a tool that already has its own approval.",
     "promptSnippet": "ask_user - Ask the user questions and wait for the answers",
     "promptGuidelines": [
       "Use when the work genuinely cannot proceed without a decision only the user can make.",
       "Put every question that decision needs into one call; they are answered as one set.",
-      "Prefer options the user can click; set allow_free_text when an unlisted answer is reasonable, and allow_multiple when the answers combine rather than exclude.",
+      "Prefer options the user can click; set allow_free_text when an unlisted answer is reasonable.",
+      "Leave allow_multiple off unless the question says any/all that apply; status, stage, and which-one questions take exactly one answer.",
       "Do not use for onboarding steps; ask_followup owns that flow.",
       "The run blocks until the user answers or cancels, so ask the full set once and act on the answers."
     ],
@@ -1270,7 +1271,7 @@
               },
               "allow_multiple": {
                 "type": "boolean",
-                "description": "Whether the user may pick several of the options at once. Set this for a question whose answers genuinely combine, such as constraints or features. Defaults to false, where picking one answer moves straight to the next question."
+                "description": "Whether the user may pick several options at once. Default false. Set it true only when the question itself invites more than one answer -- it says any that apply, all that apply, or select any. Leave it false whenever the question asks for one thing: the stack, the status, the stage, which one, what is your main X, what would you most like. Those answers are alternatives, and offering checkboxes for them makes the user answer a question you did not ask."
               }
             },
             "required": [
@@ -1310,7 +1311,7 @@
               },
               "allow_multiple": {
                 "type": "boolean",
-                "description": "Whether the user may pick several of the options at once. Set this for a question whose answers genuinely combine, such as constraints or features. Defaults to false, where picking one answer moves straight to the next question."
+                "description": "Whether the user may pick several options at once. Default false. Set it true only when the question itself invites more than one answer -- it says any that apply, all that apply, or select any. Leave it false whenever the question asks for one thing: the stack, the status, the stage, which one, what is your main X, what would you most like. Those answers are alternatives, and offering checkboxes for them makes the user answer a question you did not ask."
               }
             },
             "required": [

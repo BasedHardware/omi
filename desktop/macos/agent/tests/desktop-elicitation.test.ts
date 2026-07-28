@@ -524,6 +524,23 @@ describe("ask_user is discoverable without being named", () => {
     expect(description).toContain("ask_followup");
   });
 
+  it("tells the model when NOT to allow several answers", async () => {
+    const { mcpToolDefinitionsForAdapter } = await import("../src/runtime/omi-tool-manifest.js");
+    const askUser = mcpToolDefinitionsForAdapter("omi-tools-stdio", {}).find(
+      (tool) => tool.name === "ask_user",
+    )!;
+    const multiple = (askUser.inputSchema as any)
+      .properties.questions.items.properties.allow_multiple.description.toLowerCase();
+
+    // Observed live: the model set this true on plainly exclusive questions
+    // ("what's the current status"), so the card offered checkboxes for
+    // answers that are alternatives. A judgment call became a bright line.
+    expect(multiple).toContain("default false");
+    expect(multiple).toContain("any that apply");
+    expect(multiple).toContain("status");
+    expect(askUser.description.toLowerCase()).toContain("allow_multiple defaults to false");
+  });
+
   it("is offered to the surfaces that can render the card", async () => {
     const { toolNamesForAdapter } = await import("../src/runtime/omi-tool-manifest.js");
     expect(toolNamesForAdapter("omi-tools-stdio")).toContain("ask_user");
