@@ -34,26 +34,17 @@ enum NotchVoiceMorphGeometry {
     return smoothStep(clamp(normalized))
   }
 
-  /// Ambient room noise measured on real hardware sits around 0.005–0.015
-  /// after the capture service's own noise-floor subtraction; gate it out so
-  /// a quiet room renders a genuinely flat line / still ring.
-  static let displayLevelGate: CGFloat = 0.02
+  /// Levels below this are treated as true silence. Ambient room noise
+  /// measured on real hardware (after the capture service's own noise-floor
+  /// subtraction) runs 0.005–0.013; the gate sits just above it so a quiet
+  /// room renders a genuinely flat line / still ring, while even quiet
+  /// speech (~0.03+) passes and is auto-gained to full range.
+  static let displayLevelGate: CGFloat = 0.015
 
-  /// Perceptual display mapping shared by the waveform and the speaking
-  /// pulse: silence and room noise stay exactly zero, quiet speech is lifted
-  /// so it visibly moves, loud speech saturates at 1. Display-only; never
-  /// affects VAD or capture.
-  static func displayLevel(_ level: CGFloat, gain: CGFloat) -> CGFloat {
-    guard level > displayLevelGate else { return 0 }
-    let gated = (level - displayLevelGate) / (1 - displayLevelGate)
-    let boosted = clamp(gated * gain)
-    return boosted == 0 ? 0 : pow(boosted, 0.65)
-  }
-
-  /// Mic RMS arrives noise-floor-subtracted and snapped to zero in silence
-  /// (AudioCaptureService), so zero genuinely means "no voice".
-  static func inputDisplayLevel(_ microphoneLevel: CGFloat) -> CGFloat {
-    displayLevel(microphoneLevel, gain: 3.0)
+  /// Perceptual knee applied after auto-gain normalization: lifts the quiet
+  /// half of the range so word-to-word dynamics stay visible.
+  static func displayKnee(_ normalized: CGFloat) -> CGFloat {
+    normalized <= 0 ? 0 : pow(clamp(normalized), 0.65)
   }
 
   static func center(in size: CGSize) -> CGPoint {
@@ -92,10 +83,12 @@ enum NotchVoiceMorphGeometry {
 
   // MARK: - Speaking (response playback) pulse
 
-  /// Ring-radius growth at full pulse. Bounded so the outermost dot edge stays
-  /// inside the 21pt identity slot: 6.93×1.12 + 1.89×1.3/2 ≈ 10.2 ≤ 10.5.
-  static let speakingRingScaleMax: CGFloat = 0.12
-  static let speakingDotScaleMax: CGFloat = 0.3
+  /// Pulse geometry at full level. Dot swell carries most of the visible
+  /// motion (a radius-only pulse is sub-pixel at 21pt); the ring breathes a
+  /// little on top. Bounded so the outermost dot edge stays inside the 21pt
+  /// identity slot: 6.93×1.08 + (3.78×1.45)/2 ≈ 10.2 ≤ 10.5.
+  static let speakingRingScaleMax: CGFloat = 0.08
+  static let speakingDotScaleMax: CGFloat = 0.45
 
   /// Speaker-cone pulse for the responding state — a primary beat with a
   /// quieter overtone so the ring breathes organically instead of ticking
@@ -113,13 +106,6 @@ enum NotchVoiceMorphGeometry {
 
   static func speakingDotScale(pulse: CGFloat) -> CGFloat {
     1 + speakingDotScaleMax * clamp(pulse)
-  }
-
-  /// Post-mixer speech RMS is quiet in absolute terms (~0.02–0.3); same
-  /// zero-stays-zero mapping as the mic side, so pauses in the reply leave
-  /// the ring still instead of breathing on a timer.
-  static func outputDisplayLevel(_ playbackLevel: CGFloat) -> CGFloat {
-    displayLevel(playbackLevel, gain: 3.5)
   }
 
   /// Fraction of the speaking pulse allowed to wobble with time. The pulse
@@ -155,6 +141,42 @@ enum NotchVoiceMorphGeometry {
 
   private static func clamp(_ value: CGFloat) -> CGFloat {
     min(max(value, 0), 1)
+  }
+}
+
+/// Turns raw audio levels into full-range display levels at frame rate:
+/// gate (true silence stays zero) → auto-gain (normalize against a slowly
+/// decaying running peak, so normal speech uses the whole visual range no
+/// matter the absolute mic/output scale) → perceptual knee → attack/release
+/// smoothing. A class so a Canvas draw pass can advance it per frame.
+final class VoiceLevelDisplay {
+  private let smoother: VoiceLevelSmoother
+  /// Reference peak never falls below this, so noise between the gate and
+  /// `minPeak` cannot be amplified to full scale.
+  private let minPeak: CGFloat
+  /// Per-second multiplicative decay of the running peak; slow enough that
+  /// one loud word doesn't crush the next quiet one to invisibility.
+  private let peakHalfLife: TimeInterval
+  private var peak: CGFloat
+  private var lastTime: TimeInterval?
+
+  init(minPeak: CGFloat, peakHalfLife: TimeInterval = 4) {
+    self.minPeak = minPeak
+    self.peakHalfLife = peakHalfLife
+    peak = minPeak
+    smoother = VoiceLevelSmoother()
+  }
+
+  func step(rawLevel: CGFloat, at time: TimeInterval) -> CGFloat {
+    let gated = rawLevel > NotchVoiceMorphGeometry.displayLevelGate ? min(rawLevel, 1) : 0
+    if let last = lastTime, time > last {
+      let dt = min(time - last, 1)
+      peak = max(minPeak, peak * pow(0.5, CGFloat(dt / peakHalfLife)))
+    }
+    lastTime = time
+    peak = max(peak, gated)
+    let normalized = gated == 0 ? 0 : NotchVoiceMorphGeometry.displayKnee(gated / peak)
+    return smoother.step(target: normalized, at: time)
   }
 }
 
@@ -199,8 +221,10 @@ struct NotchVoiceMorphMark: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var morphProgress: CGFloat = 0
-  @State private var micLevelSmoother = VoiceLevelSmoother()
-  @State private var voiceLevelSmoother = VoiceLevelSmoother()
+  /// Reference peaks measured on real hardware: close-mic speech ~0.03–0.2
+  /// RMS after the capture noise floor; post-mixer reply speech ~0.1–0.25.
+  @State private var micLevelDisplay = VoiceLevelDisplay(minPeak: 0.035)
+  @State private var voiceLevelDisplay = VoiceLevelDisplay(minPeak: 0.1)
 
   var body: some View {
     TimelineView(.animation(paused: !isListening && !isThinking && !isSpeaking)) { timeline in
@@ -236,13 +260,12 @@ struct NotchVoiceMorphMark: View {
       reduceMotion: reduceMotion
     )
     let time = date.timeIntervalSinceReferenceDate
-    // Live (un-throttled) mic level, smoothed at frame rate. Silence maps to
-    // exactly zero amplitude — the listening line goes flat between words and
-    // oscillates in proportion to the user's actual voice.
-    let level = micLevelSmoother.step(
-      target: NotchVoiceMorphGeometry.inputDisplayLevel(
-        CGFloat(AudioLevelMonitor.shared.liveMicrophoneLevel)),
-      at: time)
+    // Live (un-throttled) mic level through gate → auto-gain → knee →
+    // smoothing. Silence maps to exactly zero amplitude — the listening line
+    // goes flat between words — while normal speech spans the full wave
+    // height regardless of the absolute mic scale.
+    let level = micLevelDisplay.step(
+      rawLevel: CGFloat(AudioLevelMonitor.shared.liveMicrophoneLevel), at: time)
     let amplitude = base * 0.32 * waveProgress * level
     let thinkingRotation =
       isThinking && !reduceMotion && morphProgress < 0.001
@@ -254,10 +277,8 @@ struct NotchVoiceMorphMark: View {
     // keeps sustained speech from freezing at one scale. Listening owns the
     // waveform, so the pulse applies only in ring formation.
     let speakingPresentation = isSpeaking && !isListening && morphProgress < 0.001
-    let voiceLevel = voiceLevelSmoother.step(
-      target: NotchVoiceMorphGeometry.outputDisplayLevel(
-        CGFloat(AudioLevelMonitor.shared.liveVoicePlaybackLevel)),
-      at: time)
+    let voiceLevel = voiceLevelDisplay.step(
+      rawLevel: CGFloat(AudioLevelMonitor.shared.liveVoicePlaybackLevel), at: time)
     let speakingPulse =
       speakingPresentation && !reduceMotion
       ? NotchVoiceMorphGeometry.speakingPulse(

@@ -173,20 +173,43 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
       floorAtFullLevel, 1 - NotchVoiceMorphGeometry.speakingWobbleShare - 0.001)
   }
 
-  func testSilenceMapsToAFlatLineAndSpeechScalesWithVolume() {
-    // Silence must render a genuinely flat line — no display floor — and
-    // ambient room noise (~0.01 on real hardware) is gated to flat too.
-    XCTAssertEqual(NotchVoiceMorphGeometry.inputDisplayLevel(0), 0, accuracy: 0.0001)
-    XCTAssertEqual(NotchVoiceMorphGeometry.inputDisplayLevel(0.012), 0, accuracy: 0.0001)
-    XCTAssertEqual(NotchVoiceMorphGeometry.outputDisplayLevel(0), 0, accuracy: 0.0001)
-    // Quiet speech is perceptually lifted, loud speech saturates, and the
-    // mapping is monotonic so the wave visibly follows volume.
-    let whisper = NotchVoiceMorphGeometry.inputDisplayLevel(0.05)
-    let normal = NotchVoiceMorphGeometry.inputDisplayLevel(0.15)
-    let loud = NotchVoiceMorphGeometry.inputDisplayLevel(0.5)
-    XCTAssertGreaterThan(whisper, 0.1)
-    XCTAssertGreaterThan(normal, whisper)
-    XCTAssertGreaterThan(loud, normal)
-    XCTAssertEqual(NotchVoiceMorphGeometry.inputDisplayLevel(1), 1, accuracy: 0.001)
+  func testSilenceAndRoomNoiseRenderFlatButRealSpeechFillsTheRange() {
+    let display = VoiceLevelDisplay(minPeak: 0.035)
+    // Silence and ambient room noise (0.005–0.013 measured on real hardware)
+    // must render a genuinely flat line — no display floor.
+    XCTAssertEqual(display.step(rawLevel: 0, at: 0), 0, accuracy: 0.0001)
+    XCTAssertEqual(display.step(rawLevel: 0.005, at: 0.05), 0, accuracy: 0.0001)
+    XCTAssertEqual(display.step(rawLevel: 0.012, at: 0.1), 0, accuracy: 0.0001)
+    // Quiet real speech (0.04 RMS — measured scale on real hardware) must
+    // reach most of the visual range via auto-gain, not sub-pixel wiggle.
+    var level: CGFloat = 0
+    for i in 0..<30 {
+      level = display.step(rawLevel: 0.04, at: 0.2 + Double(i) * 0.016)
+    }
+    XCTAssertGreaterThan(level, 0.7, "Normal speech must use the full wave height")
+    // Release back to flat when the speaker stops.
+    for i in 0..<60 {
+      level = display.step(rawLevel: 0, at: 1.0 + Double(i) * 0.016)
+    }
+    XCTAssertLessThan(level, 0.05)
+  }
+
+  func testAutoGainAdaptsToLoudSpeechButKeepsQuietWordsVisible() {
+    let display = VoiceLevelDisplay(minPeak: 0.035)
+    var t = 0.0
+    // A loud stretch raises the reference peak…
+    for _ in 0..<30 {
+      _ = display.step(rawLevel: 0.2, at: t)
+      t += 0.016
+    }
+    // …and an immediately following quieter word is scaled relative to it,
+    // still clearly visible rather than crushed to near zero.
+    var quiet: CGFloat = 0
+    for _ in 0..<30 {
+      quiet = display.step(rawLevel: 0.08, at: t)
+      t += 0.016
+    }
+    XCTAssertGreaterThan(quiet, 0.35)
+    XCTAssertLessThan(quiet, 0.95, "Quieter speech must read as quieter than the loud peak")
   }
 }
