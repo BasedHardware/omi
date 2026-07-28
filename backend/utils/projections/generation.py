@@ -1,8 +1,12 @@
 """Generation of projections — a generated image carrying one future-tense imperative.
 
-This is the spike surface for the non-chat-box output: hardcoded content in, a real
-generated image and one line of text out, persisted and served over the authenticated API.
-Subject selection, prompt quality and visual style are deliberately not here yet.
+Composes the two halves. `sources` and `evidence` gather what the projection is selected
+from, `selector` decides what it is about, `image_prompt` renders it. This module owns the
+image call, storage, and the shape of the persisted document.
+
+Every generation records what produced it — the signals that selected the subject, the model,
+the prompts, the timestamps, and whether the top-ranked candidate survived the grounding gate.
+That is cheap here and unrecoverable afterwards.
 """
 
 from __future__ import annotations
@@ -19,6 +23,9 @@ from typing import Any, Mapping, cast
 from utils.llm.gateway_client import generate_image_via_gateway
 from utils.observability.fallback import record_fallback
 from utils.other import storage
+from utils.projections.image_prompt import build_image_prompt
+from utils.projections.selector import MAX_PREVIOUS, select_subject
+from utils.projections.sources import read_evidence, read_previous_projections
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +33,6 @@ PROJECTION_IMAGE_MODEL = 'gpt-image-1'
 PROJECTION_IMAGE_SIZE = '1024x1536'
 PROJECTION_IMAGE_QUALITY = 'medium'
 PROJECTION_USAGE_FEATURE = 'projection_image'
-
-# Hardcoded until subject selection exists. The shape is the point, not the content.
-HARDCODED_IMPERATIVE = 'Send the message you have been drafting in your head all week.'
-HARDCODED_IMAGE_PROMPT = (
-    'A quiet photographic scene of a phone face-up on a windowsill in late afternoon light, '
-    'one unsent message glowing on the screen, shallow depth of field, muted natural colour.'
-)
 
 
 def _local_image_root() -> Path:
@@ -81,15 +81,52 @@ def _store_image(image_bytes: bytes, projection_id: str) -> str:
 def generate_projection(uid: str) -> dict[str, Any]:
     """Generate, store and return one projection document for `uid`.
 
-    The caller is responsible for persisting the returned document.
+    Raises `NoProjectionSubject` when there is nothing to project from, or when nothing the
+    selector ranked was grounded in the evidence. The caller is responsible for persisting
+    the returned document.
     """
     projection_id = str(uuid.uuid4())
 
+    packet = read_evidence(uid)
+    previous = read_previous_projections(uid, MAX_PREVIOUS)
+    selection = select_subject(packet, previous=previous)
+    subject = selection.subject
+
+    image_prompt = build_image_prompt(subject)
+    image_url = _store_image(_generate_image(image_prompt), projection_id)
+    logger.info(
+        'generated projection uid=%s projection_id=%s stage=%s fell_through=%s',
+        uid,
+        projection_id,
+        subject.stage.value,
+        selection.metadata['fell_through'],
+    )
+
+    return {
+        'id': projection_id,
+        'created_at': datetime.now(timezone.utc),
+        'imperative': subject.imperative,
+        'image_url': image_url,
+        'subject': subject.subject,
+        'stage': subject.stage.value,
+        'projection': subject.projection,
+        'evidence': list(subject.evidence),
+        'selection': selection.metadata,
+        'generation': {
+            'model': PROJECTION_IMAGE_MODEL,
+            'size': PROJECTION_IMAGE_SIZE,
+            'quality': PROJECTION_IMAGE_QUALITY,
+            'prompt': image_prompt,
+        },
+    }
+
+
+def _generate_image(prompt: str) -> bytes:
     response = cast(
         Mapping[str, Any],
         generate_image_via_gateway(
             model=PROJECTION_IMAGE_MODEL,
-            prompt=HARDCODED_IMAGE_PROMPT,
+            prompt=prompt,
             size=PROJECTION_IMAGE_SIZE,
             quality=PROJECTION_IMAGE_QUALITY,
             n=1,
@@ -102,19 +139,4 @@ def generate_projection(uid: str) -> dict[str, Any]:
     encoded = data[0].get('b64_json')
     if not isinstance(encoded, str) or not encoded:
         raise ValueError('gateway image response carried no b64_json payload')
-
-    image_url = _store_image(base64.b64decode(encoded), projection_id)
-    logger.info('generated projection uid=%s projection_id=%s', uid, projection_id)
-
-    return {
-        'id': projection_id,
-        'created_at': datetime.now(timezone.utc),
-        'imperative': HARDCODED_IMPERATIVE,
-        'image_url': image_url,
-        'generation': {
-            'model': PROJECTION_IMAGE_MODEL,
-            'size': PROJECTION_IMAGE_SIZE,
-            'quality': PROJECTION_IMAGE_QUALITY,
-            'prompt': HARDCODED_IMAGE_PROMPT,
-        },
-    }
+    return base64.b64decode(encoded)

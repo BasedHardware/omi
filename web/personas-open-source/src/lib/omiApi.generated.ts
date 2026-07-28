@@ -2628,6 +2628,8 @@ export interface ProjectionResponse {
   id?: string | null;
   image_url?: string | null;
   imperative?: string | null;
+  stage?: string | null;
+  subject?: string | null;
   [key: string]: unknown;
 }
 

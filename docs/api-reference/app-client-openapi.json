@@ -15959,6 +15959,28 @@
               }
             ],
             "title": "Imperative"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
           }
         },
         "title": "ProjectionResponse",
@@ -50972,7 +50994,7 @@
     },
     "/v1/users/projections/test": {
       "post": {
-        "description": "Generate a projection for the authenticated user immediately.\n\nThis is the manual trigger for a surface that will otherwise be produced on a schedule;\nit exists so the result can be demonstrated without waiting for a scheduled run.",
+        "description": "Generate a projection for the authenticated user immediately.\n\nThis is the manual trigger for a surface that will otherwise be produced on a schedule;\nit exists so the result can be demonstrated without waiting for a scheduled run.\n\nAnswers 409 when there is nothing to project from, or when nothing the selector ranked\nwas grounded in the captured evidence. Both are real outcomes rather than errors: an\ninvented projection is the evidence-free artifact this surface exists to replace.",
         "operationId": "test_projection_v1_users_projections_test_post",
         "parameters": [
           {

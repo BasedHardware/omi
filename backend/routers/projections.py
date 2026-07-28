@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from database import projections as projections_db
 from utils.other import endpoints as auth
-from utils.projections import generate_projection, local_projection_image_path
+from utils.projections import NoProjectionSubject, generate_projection, local_projection_image_path
 
 router = APIRouter()
 
@@ -36,11 +36,24 @@ class ProjectionResponse(BaseModel):
     created_at: Optional[datetime] = None
     imperative: Optional[str] = None
     image_url: Optional[str] = None
+    subject: Optional[str] = None
+    stage: Optional[str] = None
     generation: Optional[ProjectionGeneration] = None
 
 
 class ProjectionsResponse(BaseModel):
     projections: List[ProjectionResponse] = Field(default_factory=list)
+
+
+# Persisted but never served. `selection.prompt` is the whole evidence packet — 7-10k tokens
+# of the user's own week — so a page of thirty projections would ship thirty copies of it.
+# The response model allows extra keys, so these have to be dropped explicitly rather than
+# relied on to be filtered by the schema.
+INTERNAL_PROJECTION_FIELDS = ('selection', 'projection', 'evidence')
+
+
+def _served(projection: Dict[str, Any]) -> Dict[str, Any]:
+    return {key: value for key, value in projection.items() if key not in INTERNAL_PROJECTION_FIELDS}
 
 
 @router.post('/v1/users/projections/test', tags=['v1'], response_model=ProjectionResponse)
@@ -50,10 +63,17 @@ def test_projection(uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, 
 
     This is the manual trigger for a surface that will otherwise be produced on a schedule;
     it exists so the result can be demonstrated without waiting for a scheduled run.
+
+    Answers 409 when there is nothing to project from, or when nothing the selector ranked
+    was grounded in the captured evidence. Both are real outcomes rather than errors: an
+    invented projection is the evidence-free artifact this surface exists to replace.
     """
-    projection = generate_projection(uid)
+    try:
+        projection = generate_projection(uid)
+    except NoProjectionSubject as error:
+        raise HTTPException(status_code=409, detail=str(error) or 'No projection subject available')
     projections_db.create_projection(uid, projection)
-    return projection
+    return _served(projection)
 
 
 @router.get('/v1/users/projections', tags=['v1'], response_model=ProjectionsResponse)
@@ -61,7 +81,8 @@ def get_projections_endpoint(
     limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
 ) -> Dict[str, Any]:
     """List the authenticated user's projections, newest first."""
-    return {'projections': projections_db.get_projections(uid, limit=limit, offset=offset)}
+    projections = projections_db.get_projections(uid, limit=limit, offset=offset)
+    return {'projections': [_served(projection) for projection in projections]}
 
 
 @router.get('/v1/users/projections/{projection_id}', tags=['v1'], response_model=ProjectionResponse)
@@ -70,7 +91,7 @@ def get_projection_endpoint(projection_id: str, uid: str = Depends(auth.get_curr
     projection = projections_db.get_projection(uid, projection_id)
     if not projection:
         raise HTTPException(status_code=404, detail='Projection not found')
-    return projection
+    return _served(projection)
 
 
 @router.get('/v1/projection-images/{projection_id}.png', tags=['v1'], include_in_schema=False)

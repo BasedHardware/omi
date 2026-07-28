@@ -3167,6 +3167,8 @@ public enum OmiAPI {
     public let id: String?
     public let imageUrl: String?
     public let imperative: String?
+    public let stage: String?
+    public let subject: String?
 
     private enum CodingKeys: String, CodingKey {
       case createdAt = "created_at"
@@ -3174,6 +3176,8 @@ public enum OmiAPI {
       case id
       case imageUrl = "image_url"
       case imperative
+      case stage
+      case subject
     }
 
     public init(from decoder: Decoder) throws {
@@ -3183,14 +3187,18 @@ public enum OmiAPI {
       id = try c.decodeIfPresent(String.self, forKey: .id)
       imageUrl = try c.decodeIfPresent(String.self, forKey: .imageUrl)
       imperative = try c.decodeIfPresent(String.self, forKey: .imperative)
+      stage = try c.decodeIfPresent(String.self, forKey: .stage)
+      subject = try c.decodeIfPresent(String.self, forKey: .subject)
     }
 
-    public init(createdAt: String?, generation: ProjectionGeneration?, id: String?, imageUrl: String?, imperative: String?) {
+    public init(createdAt: String?, generation: ProjectionGeneration?, id: String?, imageUrl: String?, imperative: String?, stage: String?, subject: String?) {
       self.createdAt = createdAt
       self.generation = generation
       self.id = id
       self.imageUrl = imageUrl
       self.imperative = imperative
+      self.stage = stage
+      self.subject = subject
     }
   }
 

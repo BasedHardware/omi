@@ -1,151 +1,27 @@
-"""Tests for Model QoS profile system in utils/llm/clients.py."""
+"""Tests for Model QoS profile system in utils/llm/clients.py.
+
+Import purity: this module imports the real ``utils.llm.clients`` and its real
+dependencies (every one of them is a hard requirement in ``requirements.txt``).
+It must not stub ``sys.modules`` at module scope — doing so leaks fake
+``langchain_*``/``anthropic`` modules into every other test file collected in the
+same pytest process. See ``backend/docs/test_isolation.md`` (Tier 2).
+"""
 
 import os
 import sys
-import types
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Pre-mock heavy deps before any imports touch them
-# ---------------------------------------------------------------------------
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
-def _install_module(name: str, **attrs) -> types.ModuleType:
-    module = types.ModuleType(name)
-    for attr, value in attrs.items():
-        setattr(module, attr, value)
-    if '.' in name:
-        parent_name, child_name = name.rsplit('.', 1)
-        parent = sys.modules.setdefault(parent_name, types.ModuleType(parent_name))
-        if not hasattr(parent, '__path__'):
-            parent.__path__ = []
-        setattr(parent, child_name, module)
-    sys.modules[name] = module
-    return module
-
-
-class _BaseCallbackHandler:
-    pass
-
-
-class _LLMResult:
-    pass
-
-
-class _BaseChatModel:
-    def invoke(self, *_args, **_kwargs):
-        return MagicMock()
-
-    async def ainvoke(self, *_args, **_kwargs):
-        return MagicMock()
-
-    def stream(self, *_args, **_kwargs):
-        return iter(())
-
-    def with_structured_output(self, *_args, **_kwargs):
-        return self
-
-    def bind(self, **kwargs):
-        bound = self.__class__(**self._constructor_kwargs)
-        bound.bound_kwargs = kwargs
-        return bound
-
-
-class _ChatOpenAI(_BaseChatModel):
-    def __init__(self, **kwargs):
-        self._constructor_kwargs = dict(kwargs)
-        self.model_name = kwargs.get('model')
-        self.model = self.model_name
-        self.temperature = kwargs.get('temperature')
-        self.openai_api_base = kwargs.get('base_url', '')
-
-
-class _ChatGoogleGenerativeAI(_BaseChatModel):
-    def __init__(self, **kwargs):
-        self._constructor_kwargs = dict(kwargs)
-        self.model_name = kwargs.get('model')
-        self.model = self.model_name
-
-
-class _OpenAIEmbeddings:
-    def __init__(self, **_kwargs):
-        pass
-
-    def embed_query(self, _text):
-        return [0.0]
-
-    def embed_documents(self, texts):
-        return [[0.0] for _text in texts]
-
-
-class _PydanticOutputParser:
-    def __init__(self, **kwargs):
-        self.pydantic_object = kwargs.get('pydantic_object')
-
-
-class _Encoding:
-    def encode(self, text):
-        return list(text)
-
-
-class _AsyncAnthropic:
-    def __init__(self, **_kwargs):
-        pass
-
-
-_install_module('anthropic', AsyncAnthropic=_AsyncAnthropic)
-_install_module('langchain_core')
-_install_module('langchain_core.callbacks', BaseCallbackHandler=_BaseCallbackHandler)
-_install_module('langchain_core.outputs', LLMResult=_LLMResult)
-_install_module('langchain_core.language_models', BaseChatModel=_BaseChatModel)
-_install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticOutputParser)
-_install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
-_install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
-_install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
-_install_module('utils.byok', get_byok_key=MagicMock(return_value=None), get_byok_uid=MagicMock(return_value=None))
-
-_HEAVY_MOCKS = {
-    'firebase_admin': MagicMock(),
-    'firebase_admin.firestore': MagicMock(),
-    'google.cloud.firestore': MagicMock(),
-    'google.cloud.firestore_v1': MagicMock(),
-    'google.cloud.firestore_v1.base_query': MagicMock(),
-    'database': MagicMock(),
-    'database._client': MagicMock(),
-    'database.llm_usage': MagicMock(),
-}
-
-for _mod, _mock in _HEAVY_MOCKS.items():
-    sys.modules.setdefault(_mod, _mock)
-
-for _package, _path in {
-    'utils': BACKEND_DIR / 'utils',
-    'utils.llm': BACKEND_DIR / 'utils' / 'llm',
-}.items():
-    module = sys.modules.get(_package)
-    if module is None or not hasattr(module, '__path__'):
-        module = types.ModuleType(_package)
-        sys.modules[_package] = module
-    module.__path__ = [str(_path)]
-    if '.' in _package:
-        parent_name, child_name = _package.rsplit('.', 1)
-        setattr(sys.modules[parent_name], child_name, module)
-
-_clients_stub = sys.modules.get('utils.llm.clients')
-if _clients_stub is not None and not hasattr(_clients_stub, 'MODEL_QOS_PROFILES'):
-    sys.modules.pop('utils.llm.clients', None)
-
-_usage_tracker_stub = sys.modules.get('utils.llm.usage_tracker')
-if _usage_tracker_stub is not None and not hasattr(_usage_tracker_stub, 'get_usage_callback'):
-    sys.modules.pop('utils.llm.usage_tracker', None)
-
-# Set required env vars before importing clients
-os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-key-for-unit-tests')
-os.environ.setdefault('ANTHROPIC_API_KEY', 'sk-ant-test-fake-key')
+@pytest.fixture(autouse=True)
+def _llm_api_keys(monkeypatch):
+    """Client construction reads provider keys at call time; keep them fake and test-scoped."""
+    monkeypatch.setenv('OPENAI_API_KEY', os.environ.get('OPENAI_API_KEY') or 'sk-test-fake-key-for-unit-tests')
+    monkeypatch.setenv('ANTHROPIC_API_KEY', os.environ.get('ANTHROPIC_API_KEY') or 'sk-ant-test-fake-key')
 
 
 def _clients_subprocess_script(assertion: str) -> str:
@@ -1110,6 +986,7 @@ class TestStructuredOutputFeatureTracking:
             'external_structure',
             'trends',
             'what_matters_now',
+            'projection_subject',
         }
         assert _STRUCTURED_OUTPUT_FEATURES == expected
 
