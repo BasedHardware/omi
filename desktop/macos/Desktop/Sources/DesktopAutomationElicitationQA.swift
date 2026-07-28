@@ -91,7 +91,14 @@ extension DesktopAutomationActionRegistry {
         guard let current = store.current else {
           return ["answered": "false", "waiting_count": "0"]
         }
-        let optionID = params["option_id"] ?? current.options.first?.id ?? ""
+        // Never default to a remembered grant. The first option a permission
+        // offers is often "Always Allow", and a QA helper that silently grants
+        // one outlives the run it was testing.
+        let fallback =
+          current.options.first(where: { !$0.isPermanent && !$0.isRejection })
+          ?? current.options.first(where: { !$0.isPermanent })
+          ?? current.options.first
+        let optionID = params["option_id"] ?? fallback?.id ?? ""
         store.answer(current, with: .option(optionID))
         return [
           "answered": "true",
