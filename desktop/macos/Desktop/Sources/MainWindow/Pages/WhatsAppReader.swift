@@ -278,6 +278,110 @@ enum WhatsAppReader {
     (row[column] as? Int64) ?? Int64(row[column] as? Int ?? 0)
   }
 
+  // MARK: - Deep-ingest reads (1:1 message TEXT, on-device only)
+  //
+  // The metadata export above never carries message text. `PeopleThreadIngest` needs the actual
+  // words to route a relationship through Omi's conversation→memory extraction, so these helpers
+  // read a bounded window of a 1:1 chat's text off a throwaway read-only copy — same isolation as
+  // `runExport`. Nothing is written to disk here; the transcript is handed to the ingester in memory
+  // and redacted before it leaves the machine.
+
+  /// A named 1:1 WhatsApp chat, ready for deep ingest. `contactName` is WhatsApp's own
+  /// `ZPARTNERNAME`, so we get a human label without Contacts access.
+  struct OneToOneThread: Equatable {
+    let sessionPK: Int64
+    let contactName: String
+    let phoneLast10: String?
+    let messageCount: Int
+    let lastDate: String
+  }
+
+  /// One decoded WhatsApp message: `fromMe` distinguishes the user; `date` is ISO-8601.
+  struct WAMessage: Equatable {
+    let fromMe: Bool
+    let text: String
+    let date: String
+  }
+
+  /// Open a throwaway read-only copy of WhatsApp's `ChatStorage.sqlite`. Returns nil when WhatsApp
+  /// isn't installed or the copy can't be opened (no Full Disk Access). Caller owns nothing to clean
+  /// up beyond process temp.
+  private static func openChatDBReadOnly() -> DatabaseQueue? {
+    let chatDB = groupContainer.appendingPathComponent("ChatStorage.sqlite")
+    guard FileManager.default.fileExists(atPath: chatDB.path) else { return nil }
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-wa-ingest-\(UUID().uuidString)", isDirectory: true)
+    return try? IMessageExporter.openReadOnlyCopy(of: chatDB, into: tempDir)
+  }
+
+  /// Enumerate substantial **1:1** WhatsApp chats that carry a partner name — the deep-ingest
+  /// candidates. Groups are excluded (they feed the graph, not per-person memories). Guarded: no DB /
+  /// no access returns empty.
+  static func readOneToOneThreads() -> [OneToOneThread] {
+    guard let dbQueue = openChatDBReadOnly() else { return [] }
+    let iso = ISO8601DateFormatter()
+    iso.formatOptions = [.withInternetDateTime]
+    return
+      (try? dbQueue.read { db -> [OneToOneThread] in
+        var out: [OneToOneThread] = []
+        let cursor = try Row.fetchCursor(
+          db,
+          sql: """
+              SELECT Z_PK AS pk, ZCONTACTJID AS jid, ZPARTNERNAME AS name,
+                     ZMESSAGECOUNTER AS cnt, ZLASTMESSAGEDATE AS last
+              FROM ZWACHATSESSION
+            """)
+        while let row = try cursor.next() {
+          let jid = (row["jid"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
+          guard isRealContactJID(jid), !jid.lowercased().hasSuffix("@g.us") else { continue }  // 1:1 only
+          let name = (row["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+          guard !name.isEmpty else { continue }  // need a human label
+          let pk = int64(row, "pk")
+          let count = max(Int(int64(row, "cnt")), 0)
+          // `@s.whatsapp.net` JIDs carry the phone directly; `@lid` needs the bridge we don't load
+          // here (a name is enough to label + ingest).
+          let digits =
+            jid.lowercased().hasSuffix("@s.whatsapp.net")
+            ? String(jid.prefix { $0 != "@" }).filter { $0.isNumber } : ""
+          let p10 = last10(digits)
+          let last = appleSeconds(row["last"]).map { iso.string(from: Date(timeIntervalSinceReferenceDate: $0)) } ?? ""
+          out.append(
+            OneToOneThread(sessionPK: pk, contactName: name, phoneLast10: p10, messageCount: count, lastDate: last))
+        }
+        return out
+      }) ?? []
+  }
+
+  /// Read the most-recent `limit` text messages of a 1:1 chat, chronological. Media-only rows (no
+  /// `ZTEXT`) are skipped. Guarded like the rest of the reader.
+  static func readThreadMessages(sessionPK: Int64, limit: Int) -> [WAMessage] {
+    guard let dbQueue = openChatDBReadOnly() else { return [] }
+    let iso = ISO8601DateFormatter()
+    iso.formatOptions = [.withInternetDateTime]
+    let recentDesc: [WAMessage] =
+      (try? dbQueue.read { db -> [WAMessage] in
+        var out: [WAMessage] = []
+        let cursor = try Row.fetchCursor(
+          db,
+          sql: """
+              SELECT ZTEXT AS text, ZISFROMME AS from_me, ZMESSAGEDATE AS date
+              FROM ZWAMESSAGE
+              WHERE ZCHATSESSION = ? AND ZTEXT IS NOT NULL AND length(trim(ZTEXT)) > 0
+              ORDER BY ZMESSAGEDATE DESC
+              LIMIT ?
+            """,
+          arguments: [sessionPK, limit])
+        while let row = try cursor.next() {
+          guard let text = (row["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty
+          else { continue }
+          let date = appleSeconds(row["date"]).map { iso.string(from: Date(timeIntervalSinceReferenceDate: $0)) } ?? ""
+          out.append(WAMessage(fromMe: int64(row, "from_me") == 1, text: text, date: date))
+        }
+        return out
+      }) ?? []
+    return recentDesc.reversed()
+  }
+
   /// WhatsApp `TIMESTAMP` columns are Core Data reference-date seconds (Double); guard against them
   /// arriving as Int as well. Returns nil for a missing/zero date.
   private static func appleSeconds(_ value: DatabaseValueConvertible?) -> Double? {

@@ -185,4 +185,56 @@ final class PeopleThreadIngestTests: XCTestCase {
       FileManager.default.fileExists(atPath: ledgerURL.path),
       "the ledger is persisted at people_thread_ingest_ledger.json")
   }
+
+  // MARK: - Name resolution (the deep-ingest gate)
+
+  /// Regression: the ingest used to resolve names ONLY from macOS Contacts, which iMessage-only
+  /// bundles can never obtain — so `namesByPhone` returned nothing and every thread was silently
+  /// skipped (zero conversations reached the backend). It must now resolve names from the on-device
+  /// export JSONs (WhatsApp's `contact_name` / any iMessage `contact_name`) with no Contacts grant.
+  func testNamesByPhoneResolvesFromExportsWithoutContacts() throws {
+    let dir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("PeopleThreadIngestNamesTests-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+
+    let whatsapp = """
+      {"generated_at":"2026-07-28","total_messages":10,"handles":[
+        {"handle":"+917746099000","phone_last10":"7746099000","contact_name":"Aryaveer UMN","message_count":328,"is_group":false},
+        {"handle":"+15551230000","phone_last10":"5551230000","contact_name":"","message_count":5,"is_group":false}
+      ],"groups":[]}
+      """
+    let imessage = """
+      {"generated_at":"2026-07-28","total_messages":10,"handles":[
+        {"handle":"+16516210269","phone_last10":"6516210269","contact_name":"Maya Iyer","message_count":900,"is_group":false},
+        {"handle":"+19998887777","phone_last10":"9998887777","message_count":40,"is_group":false}
+      ],"groups":[]}
+      """
+    try whatsapp.write(to: dir.appendingPathComponent("whatsapp_export.json"), atomically: true, encoding: .utf8)
+    try imessage.write(to: dir.appendingPathComponent("imessage_export.json"), atomically: true, encoding: .utf8)
+
+    // Inject an empty Contacts map so the test is hermetic (no real address-book dependency) and
+    // proves the export-only resolution path that a no-Contacts-grant bundle actually uses.
+    let map = PeopleThreadIngest.namesByPhone(directory: dir, contacts: [:])
+    XCTAssertEqual(
+      map["7746099000"], "Aryaveer UMN", "WhatsApp contact_name resolves the counterpart name with no Contacts grant")
+    XCTAssertEqual(map["6516210269"], "Maya Iyer", "iMessage contact_name (when present) also resolves")
+    XCTAssertNil(map["5551230000"], "an empty contact_name is not a usable label")
+    XCTAssertNil(map["9998887777"], "a phone with no contact_name is left unresolved (thread stays skipped)")
+
+    // When macOS Contacts IS authorized, its name is authoritative and wins over the export.
+    let withContacts = PeopleThreadIngest.namesByPhone(
+      directory: dir, contacts: ["7746099000": "Aryaveer Singh"])
+    XCTAssertEqual(withContacts["7746099000"], "Aryaveer Singh", "Contacts name wins over the WhatsApp export name")
+  }
+
+  /// A WhatsApp candidate must key its window on a `wa:`-prefixed person id so the same person's
+  /// WhatsApp and iMessage threads ingest as two distinct conversations instead of colliding.
+  func testWhatsAppAndIMessageWindowsForOnePersonDoNotCollide() {
+    let phone = "7746099000"
+    let imessageKey = PeopleThreadIngest.windowKey(personKey: phone, messageCount: 40, lastDate: "2026-07-28T00:00:00Z")
+    let whatsappKey = PeopleThreadIngest.windowKey(
+      personKey: "wa:" + phone, messageCount: 40, lastDate: "2026-07-28T00:00:00Z")
+    XCTAssertNotEqual(imessageKey, whatsappKey, "same person, two channels → two independent ingest windows")
+  }
 }

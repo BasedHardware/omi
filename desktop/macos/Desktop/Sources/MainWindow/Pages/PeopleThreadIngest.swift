@@ -81,18 +81,29 @@ enum PeopleThreadIngest {
     let date: String
   }
 
+  /// Which on-device messaging store a thread comes from. The transcript build, redaction, dedupe and
+  /// submission are provider-agnostic; only the message read differs per provider.
+  enum Provider: String, Equatable {
+    case imessage
+    case whatsapp
+  }
+
   /// A candidate 1:1 thread with a named contact, before message text is read.
   struct ThreadCandidate: Equatable {
-    /// Stable per-person key (phone_last10 when available, else the lowercased handle).
+    /// Stable per-person key. iMessage uses `phone_last10` (or the lowercased handle); WhatsApp
+    /// prefixes with `wa:` so the same person's two channels ingest as two conversations rather than
+    /// colliding on one dedupe window.
     let personKey: String
-    /// Resolved human display name (from Contacts) — used as the counterpart's speaker label.
+    /// Resolved human display name — used as the counterpart's speaker label.
     let contactName: String
-    /// Underlying Messages chat row id, used to read the recent window.
+    /// Provider-specific chat id: iMessage `chat_message_join` chat id, or WhatsApp `ZWACHATSESSION.Z_PK`.
     let chatId: Int64
     /// Count of readable (text) messages in the thread.
     let messageCount: Int
     /// ISO-8601 date of the newest readable message.
     let lastDate: String
+    /// Source store; drives which reader `readThread` dispatches to.
+    var provider: Provider = .imessage
   }
 
   /// A fully-prepared submission: the transcript segments plus the dedupe/idempotency keys.
@@ -159,7 +170,13 @@ enum PeopleThreadIngest {
   static func buildPlan(uid: String?) -> SubmissionPlan? {
     guard let dir = PeopleUserDirectory.resolve(uid: uid) else { return nil }
 
-    let candidates = readThreadCandidates()
+    // Names come from the same data the graph used to name 1,800+ people: macOS Contacts when the
+    // user has authorized it, plus WhatsApp's own `ZPARTNERNAME` and any iMessage contact names in
+    // the on-device exports. This is what lets the deep ingest run WITHOUT a Contacts grant — iMessage
+    // stores only phone numbers, so a Contacts-only lookup (the previous behavior) named nobody and
+    // silently ingested nothing.
+    let names = namesByPhone(directory: dir)
+    let candidates = readThreadCandidates(namesByPhone: names) + readWhatsAppCandidates()
     guard !candidates.isEmpty else { return nil }
 
     let ledger = loadLedger(directory: dir)
@@ -168,7 +185,7 @@ enum PeopleThreadIngest {
 
     var submissions: [Submission] = []
     for (candidate, windowKey) in selected {
-      let messages = readThread(chatId: candidate.chatId, limit: maxMessagesPerThread)
+      let messages = readThread(candidate, limit: maxMessagesPerThread)
       guard let built = buildTranscript(contactName: candidate.contactName, messages: messages) else {
         continue
       }
@@ -287,15 +304,69 @@ enum PeopleThreadIngest {
     return regex.stringByReplacingMatches(in: text, range: range, withTemplate: replacement)
   }
 
-  // MARK: - Messages DB reads (IO, iMessage-specific)
+  // MARK: - Name resolution + provider candidates
 
-  /// Enumerate 1:1 chats with a named contact and their readable-message counts. Reads a throwaway
-  /// read-only copy of `chat.db` (via `IMessageExporter.openReadOnlyCopy`) so it never touches the
-  /// live database. Contacts are resolved authorized-only (never prompts); an unnamed counterpart
-  /// (bare phone / email) is skipped so we never build a thread we can't label.
-  static func readThreadCandidates() -> [ThreadCandidate] {
+  /// A `phone_last10 → display name` map reused from the exact sources the graph already resolved
+  /// names from, so the deep ingest can label an iMessage thread (phone-only) without a Contacts
+  /// grant. Order of preference: macOS Contacts (authoritative, when authorized), then WhatsApp's
+  /// `ZPARTNERNAME` and any iMessage `contact_name`, read from the on-device export JSONs. Pure JSON +
+  /// Contacts read; a missing/corrupt export just contributes nothing.
+  static func namesByPhone(directory: URL, contacts: [String: String]? = nil) -> [String: String] {
+    // `contacts` is injectable so the resolution is unit-testable without touching the real
+    // Contacts store; production passes nil and reads macOS Contacts (empty unless authorized).
+    var map = contacts ?? PeopleGraphBuilder.loadContactsByPhone()
+    for file in ["whatsapp_export.json", "imessage_export.json"] {
+      let url = directory.appendingPathComponent(file)
+      guard let data = try? Data(contentsOf: url),
+        let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let handles = obj["handles"] as? [[String: Any]]
+      else { continue }
+      for handle in handles {
+        guard let phone = handle["phone_last10"] as? String, !phone.isEmpty,
+          let name = (handle["contact_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !name.isEmpty, PeopleMemoryWriter.isHumanName(name)
+        else { continue }
+        if map[phone] == nil { map[phone] = name }  // Contacts wins; else first export name.
+      }
+    }
+    return map
+  }
+
+  /// Substantial 1:1 WhatsApp chats as ingest candidates, named by WhatsApp's own `ZPARTNERNAME`
+  /// (`WhatsAppReader` reads the message text on demand). The `wa:` person-key prefix keeps a
+  /// person's WhatsApp and iMessage threads as two distinct ingest windows. Empty when WhatsApp isn't
+  /// installed / no Full Disk Access.
+  static func readWhatsAppCandidates() -> [ThreadCandidate] {
+    WhatsAppReader.readOneToOneThreads().compactMap { thread in
+      guard PeopleMemoryWriter.isHumanName(thread.contactName) else { return nil }
+      let personKey = "wa:" + (thread.phoneLast10 ?? String(thread.sessionPK))
+      return ThreadCandidate(
+        personKey: personKey, contactName: thread.contactName, chatId: thread.sessionPK,
+        messageCount: thread.messageCount, lastDate: thread.lastDate, provider: .whatsapp)
+    }
+  }
+
+  // MARK: - Messages DB reads (IO, provider-specific)
+
+  /// Read the recent window for a candidate, dispatching to its provider's on-device reader. Both
+  /// return chronological `RawMessage`s the provider-agnostic transcript build then redacts.
+  static func readThread(_ candidate: ThreadCandidate, limit: Int) -> [RawMessage] {
+    switch candidate.provider {
+    case .imessage:
+      return readIMessageThread(chatId: candidate.chatId, limit: limit)
+    case .whatsapp:
+      return WhatsAppReader.readThreadMessages(sessionPK: candidate.chatId, limit: limit)
+        .map { RawMessage(fromMe: $0.fromMe, text: $0.text, date: $0.date) }
+    }
+  }
+
+  /// Enumerate 1:1 iMessage chats with a resolvable name and their readable-message counts. Reads a
+  /// throwaway read-only copy of `chat.db` (via `IMessageExporter.openReadOnlyCopy`) so it never
+  /// touches the live database. A counterpart with no resolvable name (not in `namesByPhone`) is
+  /// skipped so we never build a thread we can't label.
+  static func readThreadCandidates(namesByPhone: [String: String]) -> [ThreadCandidate] {
     guard let dbQueue = openMessagesDB() else { return [] }
-    let contactsByPhone = PeopleGraphBuilder.loadContactsByPhone()
+    let contactsByPhone = namesByPhone
     let iso = ISO8601DateFormatter()
     iso.formatOptions = [.withInternetDateTime]
 
@@ -357,8 +428,8 @@ enum PeopleThreadIngest {
       }) ?? []
   }
 
-  /// Read the most-recent `limit` readable messages of a chat, returned in chronological order.
-  static func readThread(chatId: Int64, limit: Int) -> [RawMessage] {
+  /// Read the most-recent `limit` readable messages of an iMessage chat, chronological.
+  static func readIMessageThread(chatId: Int64, limit: Int) -> [RawMessage] {
     guard let dbQueue = openMessagesDB() else { return [] }
     let iso = ISO8601DateFormatter()
     iso.formatOptions = [.withInternetDateTime]
