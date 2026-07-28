@@ -791,13 +791,21 @@ pub(super) fn response_text_content(resp: &AnthropicResponse) -> Option<String> 
     (!text.is_empty()).then_some(text)
 }
 
+/// Report the degrade whenever a turn that *would* have been given the
+/// server-side `web_search` tool has to answer from model knowledge instead.
+///
+/// The request-side condition must stay the mirror of `inject_web_search`:
+/// an agentic turn (client tools present) **or** an explicit `omi_web_search`
+/// opt-in. PTT `ask_higher_model` escalations only ever use the opt-in, so
+/// keying this on client tools alone made every voice escalation degrade
+/// silently on a haiku route or with the kill switch set.
 pub(super) fn should_record_web_search_fallback(
     req: &ChatCompletionRequest,
     web_search_supported: bool,
 ) -> bool {
-    !web_search_supported
-        && !public_web_is_prohibited(&req.messages)
-        && req.tools.as_ref().is_some_and(|tools| !tools.is_empty())
+    let requested_web_search = req.tools.as_ref().is_some_and(|tools| !tools.is_empty())
+        || req.omi_web_search == Some(true);
+    !web_search_supported && !public_web_is_prohibited(&req.messages) && requested_web_search
 }
 
 pub(super) fn server_tool_available_from(tools: &Option<Vec<AnthropicToolDef>>) -> &'static str {

@@ -1053,6 +1053,41 @@ fn test_omi_web_search_opt_in_still_respects_private_no_web_turns() {
 }
 
 #[test]
+fn test_omi_web_search_opt_in_reports_the_degrade_when_search_is_unsupported() {
+    // Regression: the opt-in was added to the injection condition but not to
+    // the fallback predicate, so a PTT escalation (no client tools) that lost
+    // web search — haiku route or the kill switch — answered from model
+    // knowledge with no `chat_retrieval` fallback event at all.
+    let mut req = test_request(vec![user_message("What's the weather in NYC right now?")]);
+    req.omi_web_search = Some(true);
+    assert!(req.tools.is_none());
+
+    assert!(should_record_web_search_fallback(&req, false));
+    assert!(!should_record_web_search_fallback(&req, true));
+
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        false,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+    assert_eq!(server_tool_available_from(&result.tools), "model_knowledge");
+}
+
+#[test]
+fn test_omi_web_search_opt_in_does_not_report_a_degrade_on_a_private_turn() {
+    // A private/no-web turn never wanted the tool, so losing it is not a
+    // degrade — reporting one would make the fallback rate unreadable.
+    let mut req = test_request(vec![user_message(
+        "Do not use the web. From my conversations only: what did I say about the launch?",
+    )]);
+    req.omi_web_search = Some(true);
+
+    assert!(!should_record_web_search_fallback(&req, false));
+}
+
+#[test]
 fn test_injected_web_search_tool_uses_direct_compatible_version() {
     // Regression: web_search_20260209 only allowed code-execution callers in
     // the live provider route, so selecting web_search directly returned 400
