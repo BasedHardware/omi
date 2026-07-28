@@ -1611,6 +1611,15 @@ export function toolNamesForAdapter(
   return toolsForAdapter(adapterId, context).map((tool) => tool.adapters[adapterId]?.adapterName ?? tool.name);
 }
 
+/// Surface projection over the same manifest that generates the Swift surface
+/// allowlists. Realtime-voice runs authorize Swift-executed voice tools (e.g.
+/// ask_higher_model, point_click) that no chat adapter advertises, so the
+/// kernel capability allowlist must include the run surface's tools — an
+/// adapter-only projection structurally rejects every voice-only tool.
+export function toolsForSurface(surface: OmiToolSurface): OmiToolManifestEntry[] {
+  return omiToolManifest.filter((tool) => tool.surfaces.includes(surface));
+}
+
 export function mcpToolDefinitionsForAdapter(
   adapterId: "omi-tools-stdio",
   context: OmiToolProjectionContext = {},

@@ -6,6 +6,7 @@ import {
   normalizeOmiToolName,
   toolManifestEntry,
   toolsForAdapter,
+  toolsForSurface,
 } from "./omi-tool-manifest.js";
 import { executionRoleAllowsTool, type AgentExecutionRole } from "./execution-policy.js";
 import type { AgentEvent, AgentStore, AttemptStatus, RunStatus } from "./types.js";
@@ -22,6 +23,8 @@ import {
   type ToolInvocationIdentity,
   type ToolInvocationRetryPolicy,
 } from "./tool-invocation-ledger.js";
+
+const REALTIME_VOICE_SURFACE_KINDS = new Set(["realtime", "realtime_voice"]);
 
 const ACTIVE_RUN_STATUSES = new Set<RunStatus>([
   "queued",
@@ -272,14 +275,24 @@ export class RunToolCapabilityBroker {
       screenContext: persisted.screenContext,
     };
     const snapshot = buildToolAvailabilitySnapshot(adapterProjection, projectionContext);
-    const allowedToolNames = toolsForAdapter(adapterProjection, projectionContext)
-      .filter((tool) => executionRoleAllowsTool(persisted.profile.executionRole, tool.name))
-      .map((tool) => tool.name)
-      .filter(
-        (name) =>
-          persisted.toolPolicyAllowedToolNames === null || persisted.toolPolicyAllowedToolNames.includes(name),
-      )
-      .sort();
+    // Realtime-voice runs invoke Swift-executed voice tools that no chat
+    // adapter advertises (ask_higher_model, point_click, …). Authorize the
+    // run's surface projection alongside the adapter projection so the
+    // allowlist matches the tools the surface actually offers the provider.
+    const surfaceTools = REALTIME_VOICE_SURFACE_KINDS.has(persisted.surfaceKind)
+      ? toolsForSurface("realtime_voice")
+      : [];
+    const allowedToolNames = [
+      ...new Set(
+        [...toolsForAdapter(adapterProjection, projectionContext), ...surfaceTools]
+          .filter((tool) => executionRoleAllowsTool(persisted.profile.executionRole, tool.name))
+          .map((tool) => tool.name)
+          .filter(
+            (name) =>
+              persisted.toolPolicyAllowedToolNames === null || persisted.toolPolicyAllowedToolNames.includes(name),
+          ),
+      ),
+    ].sort();
     const capability: RunToolCapability = Object.freeze({
       capabilityRef: `cap_${randomUUID().replaceAll("-", "")}`,
       ownerId: input.ownerId,
