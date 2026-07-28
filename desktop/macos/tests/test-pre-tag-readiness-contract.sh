@@ -31,6 +31,11 @@ PY
 }
 
 # Cache and qualification leases are independently authenticated capabilities.
+require_text 'qualification-runner-self-clean.py'
+require_text 'qualification-watchdog.py'
+require_text 'run_watchdog runner-self-clean 1200'
+require_text '--current-run-id "$CURRENT_RUN_ID"'
+require_text '--report "$HYGIENE_EVIDENCE"'
 require_text '"$CACHE_COMMAND" prepare'
 require_text '"$SOURCE_SHA" "$SOURCE_REPOSITORY" "$CACHE_LEASE_ID" "$$"'
 require_text '"$LEASE_COMMAND" acquire'
@@ -43,6 +48,9 @@ require_text 'OMI_LOCAL_INSTANCE="$READINESS_LEASE_ID"'
 require_text 'OMI_HARNESS_PORT_OFFSET="$PORT_OFFSET"'
 require_text 'OMI_HARNESS_OWNERSHIP_TOKEN="$READINESS_LEASE_TOKEN"'
 require_text 'desktop-core-harness.sh --readiness'
+require_text 'run_watchdog readiness-cache-prepare 3600'
+require_text 'run_watchdog readiness-agent-dependencies 1800'
+require_text 'run_watchdog readiness-offline-stack 3600'
 
 # A foreign/unproven listener must cause authenticated cleanup to fail closed:
 # no broad process control, no passing receipt, and retained lease evidence.
@@ -50,6 +58,7 @@ require_text 'emit_evidence false'
 require_text 'READINESS_CLEANUP_OK=1'
 require_text 'if [[ "$READINESS_COMPLETE" -eq 1 && "$READINESS_CLEANUP_OK" -ne 1 ]]'
 require_order \
+  'run_watchdog runner-self-clean 1200' \
   '"$LEASE_COMMAND" acquire' \
   'desktop-core-harness.sh --readiness' \
   'READINESS_COMPLETE=1'
