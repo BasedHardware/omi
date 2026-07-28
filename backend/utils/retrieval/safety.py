@@ -370,18 +370,19 @@ def should_retry_provider_error(
     max_attempts: int,
     text_already_streamed: bool,
     seconds_remaining: float,
-    seconds_per_attempt: float,
+    min_headroom_seconds: float,
 ) -> bool:
     """Whether the agent's streaming model call may be re-issued after ``error``.
 
     Safe only while nothing from this attempt has reached the user: streamed text cannot be
     un-sent, and tool calls run after a stream closes cleanly, so a failed attempt leaves
-    nothing to undo. An attempt that cannot finish inside the remaining budget is not started.
+    nothing to undo. A retry with less than ``min_headroom_seconds`` of the request budget left
+    would be cancelled mid-flight, so it is not started.
     """
     if text_already_streamed:
         return False
     if attempts_made >= max_attempts:
         return False
-    if seconds_remaining < seconds_per_attempt:
+    if seconds_remaining < min_headroom_seconds:
         return False
     return is_transient_provider_error(error)

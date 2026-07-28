@@ -118,10 +118,11 @@ AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS = _positive_timeout_from_env('AGENT_STRE
 AGENT_STREAM_MAX_DURATION_SECONDS = _positive_timeout_from_env('AGENT_STREAM_MAX_DURATION_SECONDS', 150.0)
 AGENT_STREAM_CANCEL_GRACE_SECONDS = _positive_timeout_from_env('AGENT_STREAM_CANCEL_GRACE_SECONDS', 2.0)
 
-# Idle gap between stream events, not a cap on answer length. Must stay well under the total
-# duration above or a stalled attempt leaves no room to retry.
-AGENT_STREAM_PROVIDER_IDLE_TIMEOUT_SECONDS = _positive_timeout_from_env(
-    'AGENT_STREAM_PROVIDER_IDLE_TIMEOUT_SECONDS', 45.0
+# How much of the turn budget a retry needs to be worth starting. The silent-interval bound on
+# the call itself belongs to the transport (the gateway client, or the shared Anthropic client
+# when features are not routed through it) and is deliberately not overridden per request.
+AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS = _positive_timeout_from_env(
+    'AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS', 45.0
 )
 AGENT_STREAM_PROVIDER_MAX_ATTEMPTS = _positive_int_from_env('AGENT_STREAM_PROVIDER_MAX_ATTEMPTS', 3)
 AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS = _positive_timeout_from_env(
@@ -544,7 +545,6 @@ async def _run_anthropic_agent_stream(
                     # append-only inter-turn history epoch and each agentic tool-loop
                     # iteration while the explicit system breakpoint remains stable.
                     cache_control={"type": "ephemeral", "ttl": "1h"},
-                    timeout=AGENT_STREAM_PROVIDER_IDLE_TIMEOUT_SECONDS,
                 ) as stream:
                     async for event in stream:
                         # Stream text tokens
@@ -599,7 +599,7 @@ async def _run_anthropic_agent_stream(
                     max_attempts=AGENT_STREAM_PROVIDER_MAX_ATTEMPTS,
                     text_already_streamed=len(full_response) > text_before_attempt,
                     seconds_remaining=AGENT_STREAM_MAX_DURATION_SECONDS - elapsed,
-                    seconds_per_attempt=AGENT_STREAM_PROVIDER_IDLE_TIMEOUT_SECONDS,
+                    min_headroom_seconds=AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS,
                 ):
                     retried_reason = provider_fallback_reason(e)
                     logger.warning(
