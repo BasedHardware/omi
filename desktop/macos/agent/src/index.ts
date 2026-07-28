@@ -83,7 +83,7 @@ import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapters/acp.js";
-import { askUser, createKernelElicitationResolver } from "./runtime/desktop-elicitation-resolver.js";
+import { askUser, createKernelElicitationResolver, humanIsBeingAsked } from "./runtime/desktop-elicitation-resolver.js";
 import type { KernelElicitationDeps } from "./runtime/desktop-elicitation-resolver.js";
 import { relayToolTimeoutMs } from "./runtime/desktop-elicitation.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
@@ -1325,7 +1325,10 @@ async function main(): Promise<void> {
   };
   const elicitationResolver = createKernelElicitationResolver(elicitationDeps);
   const installElicitationResolver = (adapter: RuntimeAdapter): void => {
-    if (adapter instanceof AcpRuntimeAdapter) adapter.elicitationResolver = elicitationResolver;
+    if (!(adapter instanceof AcpRuntimeAdapter)) return;
+    adapter.elicitationResolver = elicitationResolver;
+    // The idle watchdog must not read "blocked on a person" as "stalled".
+    adapter.humanIsBeingAsked = humanIsBeingAsked;
   };
   installElicitationResolver(acpAdapter);
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;

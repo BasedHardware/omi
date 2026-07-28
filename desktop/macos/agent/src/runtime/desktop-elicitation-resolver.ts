@@ -131,6 +131,26 @@ export interface ElicitationOwnerBinding {
 }
 
 /**
+ * How many questions are on screen waiting for an answer, process-wide.
+ *
+ * Idle watchdogs elsewhere measure "has this turn produced progress lately" and
+ * cannot otherwise tell a stalled agent from one correctly blocked on a person.
+ * A user reading a question is progress; cancelling the turn under them throws
+ * away the answer they are in the middle of giving.
+ *
+ * Deliberately a process-wide count rather than per-session: an elicitation is
+ * bound to a kernel session, while the watchdogs that need this run against
+ * adapter-native sessions, and the two do not share an id. The cost of the
+ * coarser signal is that one session's open question briefly protects another
+ * session's genuinely stalled turn; the next tick after the answer catches it.
+ */
+let inFlightElicitations = 0;
+
+export function humanIsBeingAsked(): boolean {
+  return inFlightElicitations > 0;
+}
+
+/**
  * Record the question, tell the surface, and wait for the user.
  *
  * Shared by the ACP path, which has to discover its binding from an
@@ -182,7 +202,15 @@ export async function askUser(
     createdAtMs: dispatch.createdAtMs,
   });
 
-  const outcome = await waitForDispatchResolution(deps, request, dispatch.dispatchId);
+  inFlightElicitations += 1;
+  let outcome: ElicitationOutcome;
+  try {
+    outcome = await waitForDispatchResolution(deps, request, dispatch.dispatchId);
+  } finally {
+    // Decremented on every exit, so a throw cannot leave a watchdog permanently
+    // believing someone is still being asked.
+    inFlightElicitations -= 1;
+  }
   // Announced for every terminal transition, not only a user answer, so a card
   // cannot outlive the question it belongs to.
   deps.notifier?.resolved({

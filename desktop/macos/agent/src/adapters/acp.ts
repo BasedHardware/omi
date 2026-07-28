@@ -256,6 +256,12 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
    */
   elicitationResolver: ElicitationResolver | null = null;
   /**
+   * Whether a question is currently on screen waiting for an answer. Injected
+   * for the same reason as the resolver: the adapter stays free of kernel
+   * imports. Left unset, the idle watchdog behaves exactly as before.
+   */
+  humanIsBeingAsked: (() => boolean) | null = null;
+  /**
    * In-flight permission requests, keyed by the ACP session they belong to.
    *
    * ACP requires a client that cancels a prompt turn to answer every pending
@@ -618,12 +624,23 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         this.cancelPendingPermissions(adapterSessionId, "attempt_aborted");
         finish(() => reject(new Error("ACP attempt cancelled")));
       };
+      // A turn blocked on a question produces no protocol traffic, which by
+      // traffic alone is indistinguishable from a stalled agent. Someone
+      // reading the question and deciding is progress, so the idle clock runs
+      // from the end of that wait rather than the last message. Without this
+      // the watchdog cancels the turn while the card is still on screen, and
+      // the answer lands on a run whose authority has already been revoked.
+      let humanWaitEndedAt = Date.now();
       const timer = setInterval(() => {
         if (signal.aborted) {
           onAbort();
           return;
         }
-        const idleMs = Date.now() - getLastProgressAt();
+        if (this.humanIsBeingAsked?.()) {
+          humanWaitEndedAt = Date.now();
+          return;
+        }
+        const idleMs = Date.now() - Math.max(getLastProgressAt(), humanWaitEndedAt);
         if (idleMs < timeoutMs) {
           return;
         }

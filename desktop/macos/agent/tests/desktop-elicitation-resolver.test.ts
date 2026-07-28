@@ -278,6 +278,49 @@ describe("resolution mapping", () => {
   });
 });
 
+describe("a question on screen counts as progress, not a stall", () => {
+  it("reports a human is being asked only while one actually is", async () => {
+    const { humanIsBeingAsked } = await import("../src/runtime/desktop-elicitation-resolver.js");
+    const stub = kernelStub();
+
+    // Idle watchdogs cancel a turn that has produced no traffic. A turn blocked
+    // on a card produces none, and cancelling it revokes the run before the
+    // user's answer can land.
+    expect(humanIsBeingAsked()).toBe(false);
+
+    const promise = askUser(
+      { kernel: stub.kernel as any, log: () => {} },
+      questionRequest,
+      { sessionId: "sess-9", ownerId: "owner-9", runId: "run-9" },
+    );
+    await Promise.resolve();
+    expect(humanIsBeingAsked()).toBe(true);
+
+    stub.emitResolution({ dispatchId: "disp-1", status: "resolved", resolution: { optionId: "main" } });
+    await promise;
+    expect(humanIsBeingAsked()).toBe(false);
+  });
+
+  it("stops reporting one even when the wait ends badly", async () => {
+    const { humanIsBeingAsked } = await import("../src/runtime/desktop-elicitation-resolver.js");
+    const stub = kernelStub();
+
+    const promise = askUser(
+      { kernel: stub.kernel as any, log: () => {} },
+      questionRequest,
+      { sessionId: "sess-9", ownerId: "owner-9", runId: null },
+    );
+    await Promise.resolve();
+    expect(humanIsBeingAsked()).toBe(true);
+
+    // A cancelled question must not leave a watchdog believing forever that
+    // somebody is still deciding.
+    stub.emitResolution({ dispatchId: "disp-1", status: "cancelled" });
+    await promise;
+    expect(humanIsBeingAsked()).toBe(false);
+  });
+});
+
 describe("ask_user records a question against the session it was called from", () => {
   it("does not need an adapter-native session to reach the user", async () => {
     const stub = kernelStub();
