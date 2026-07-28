@@ -82,22 +82,16 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
     }
   }
 
-  func testRadialPushKeepsEveryDotInsideTheIdentitySlot() {
-    // Even the fully-pushed dot edge must fit the 21pt mark slot, for every
-    // dot and wave phase.
+  func testSpeakingExpansionKeepsEveryDotInsideTheIdentitySlot() {
+    // Even the fully-expanded dot edge must fit the 21pt mark slot.
     let size = NotchVoiceMorphGeometry.markSize
     let base = min(size.width, size.height)
     let dotRadius = base * NotchVoiceMorphGeometry.dotDiameterRatio / 2
-    for time in stride(from: 0.0, through: 2.0, by: 0.03) {
-      for index in 0..<NotchVoiceMorphGeometry.dotCount {
-        let push = NotchVoiceMorphGeometry.speakingRadialPush(
-          index: index, time: time, level: 1)
-        let radius =
-          base * NotchVoiceMorphGeometry.ringRadiusRatio
-          * (1 + NotchVoiceMorphGeometry.speakingPushMax * push)
-        XCTAssertLessThanOrEqual(radius + dotRadius, base / 2 + 0.001)
-      }
-    }
+    let push = NotchVoiceMorphGeometry.speakingExpansion(level: 1)
+    let radius =
+      base * NotchVoiceMorphGeometry.ringRadiusRatio
+      * (1 + NotchVoiceMorphGeometry.speakingPushMax * push)
+    XCTAssertLessThanOrEqual(radius + dotRadius, base / 2 + 0.001)
   }
 
   func testWaveEnvelopeIsCenterWeighted() {
@@ -160,57 +154,17 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
     XCTAssertEqual(smoother.step(target: 0.25, at: 100), 0.25, accuracy: 0.001)
   }
 
-  func testRadialPushIsACircularWaveDrivenByTheOutputLevel() {
+  func testSpeakingExpansionIsUniformOutwardAndTracksTheLevel() {
     // A pause in the reply must leave the ring completely still.
-    for index in 0..<NotchVoiceMorphGeometry.dotCount {
-      XCTAssertEqual(
-        NotchVoiceMorphGeometry.speakingRadialPush(index: index, time: 0.7, level: 0),
-        0,
-        accuracy: 0.0001
-      )
-    }
-    // The push is bounded by the level, outward only, and louder pushes harder.
-    for index in 0..<NotchVoiceMorphGeometry.dotCount {
-      let quiet = NotchVoiceMorphGeometry.speakingRadialPush(index: index, time: 0.7, level: 0.4)
-      let loud = NotchVoiceMorphGeometry.speakingRadialPush(index: index, time: 0.7, level: 1)
-      XCTAssertGreaterThanOrEqual(quiet, 0)
-      XCTAssertLessThanOrEqual(quiet, 0.4001)
-      XCTAssertLessThanOrEqual(loud, 1.0001)
-      XCTAssertGreaterThanOrEqual(loud, quiet - 0.0001)
-    }
-    // Not a uniform swell: at one instant different dots sit at different
-    // displacements, and each dot's displacement changes over time (the wave
-    // travels around the ring).
-    let atOnce = (0..<NotchVoiceMorphGeometry.dotCount).map {
-      NotchVoiceMorphGeometry.speakingRadialPush(index: $0, time: 0.7, level: 1)
-    }
-    XCTAssertGreaterThan((atOnce.max() ?? 0) - (atOnce.min() ?? 0), 0.15)
-    let later = NotchVoiceMorphGeometry.speakingRadialPush(index: 0, time: 1.05, level: 1)
-    XCTAssertNotEqual(atOnce[0], later, accuracy: 0.01)
-  }
-
-  func testSpeakingWaveAlwaysTravelsInOneDirection() {
-    // The three-crest pattern advances exactly one dot per 3/8 period,
-    // always the same way around the ring: shifting one dot forward in
-    // space and 3/8 period forward in time reproduces the wave exactly.
-    let dotStep = NotchVoiceMorphGeometry.speakingWavePeriod * 3 / 8
-    for time in stride(from: 0.0, through: 2.0, by: 0.17) {
-      for index in 0..<NotchVoiceMorphGeometry.dotCount {
-        let here = NotchVoiceMorphGeometry.speakingRadialPush(
-          index: index, time: time, level: 1)
-        let handedOff = NotchVoiceMorphGeometry.speakingRadialPush(
-          index: (index + 1) % NotchVoiceMorphGeometry.dotCount,
-          time: time + dotStep,
-          level: 1)
-        XCTAssertEqual(handedOff, here, accuracy: 0.0001)
-      }
-    }
-    // The reversed hand-off does not reproduce it — the travel is
-    // unidirectional, not a standing oscillation.
-    let forward = NotchVoiceMorphGeometry.speakingRadialPush(index: 3, time: 0.4, level: 1)
-    let reversed = NotchVoiceMorphGeometry.speakingRadialPush(
-      index: 2, time: 0.4 + dotStep, level: 1)
-    XCTAssertNotEqual(forward, reversed, accuracy: 0.05)
+    XCTAssertEqual(NotchVoiceMorphGeometry.speakingExpansion(level: 0), 0, accuracy: 0.0001)
+    // Outward only, bounded, and louder expands further — the ring is a
+    // uniform level meter, all dots moving together.
+    let quiet = NotchVoiceMorphGeometry.speakingExpansion(level: 0.4)
+    let loud = NotchVoiceMorphGeometry.speakingExpansion(level: 1)
+    XCTAssertEqual(quiet, 0.4, accuracy: 0.0001)
+    XCTAssertGreaterThan(loud, quiet)
+    XCTAssertLessThanOrEqual(loud, 1)
+    XCTAssertEqual(NotchVoiceMorphGeometry.speakingExpansion(level: 3), 1, accuracy: 0.0001)
   }
 
   func testSilenceAndRoomNoiseRenderFlatButRealSpeechFillsTheRange() {
