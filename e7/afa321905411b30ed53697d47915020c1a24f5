@@ -1,0 +1,111 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_0e62a9e2988b29::t_da5f27ef893f7d 310
+  s_0e62a9e2988b29::t_25453c8110c9f3 136,142-195
+  s_0e62a9e2988b29::t_2310fc893638b9 382-385,387,389
+  s_0e62a9e2988b29::t_e043ae6d10ff43 13-18,20
+  s_0e62a9e2988b29::t_a589281248f899 108
+  s_0e62a9e2988b29::t_df9df6872c11d1 427-428
+  s_0e62a9e2988b29::t_83ce73f102b10a 403
+  s_0e62a9e2988b29::t_1cc6225fd8bd24 266
+  s_0e62a9e2988b29::t_5322f302950d16 197
+  s_030a94a2f319d8::t_a2fb8e4f1acc08 196
+desktop/context-for-claude/Sources/ContextApp/Backend/MCPKeyProvisioner.swift
+  s_030a94a2f319d8::t_31b554832d0172 15,26-27,32-34,39-40,43-45,62,74-75,88,99,101-102,105,114-115,126,131,141,144,146,157,179-180,193,205,211-213,216-245
+  s_030a94a2f319d8::t_488eb6d57b5478 1-14,16-25,28-31,35-38,41-42,46-61,63-73,76-87,89-98,100,103-104,106-113,116-125,127-130,132-140,142-143,145,147-156,158-178,181-192,194-204,206-210,214-215,246-248
+desktop/context-for-claude/Sources/ContextApp/Capture/ScreenWatcher.swift
+  s_030a94a2f319d8::t_b1247c03e646c1 147
+  s_030a94a2f319d8::t_67c35a2c5ce3db 215,555-560,565-572,578-603
+  s_030a94a2f319d8::t_30e37d5c6c041a 17-26
+  s_030a94a2f319d8::t_6a4aab3243cbfc 387-389
+  s_030a94a2f319d8::t_5987b48cb76145 630
+  s_030a94a2f319d8::t_3c7579918448f5 367-386,390-393,395-415,418-420,423-451,453-455,458-464,466-467,469
+  s_030a94a2f319d8::t_75106504638af1 339-357
+  s_030a94a2f319d8::t_e4e39dac435f60 89-96
+  s_030a94a2f319d8::t_36e9aca49e9ff4 132-135,144-146,148-154,163,165-168,174-179,183-187,190-197,209-214
+  s_030a94a2f319d8::t_50f584efbc6d9d 563
+  s_030a94a2f319d8::t_cce17b0b41d523 65,216,465
+desktop/context-for-claude/Sources/ContextCore/Queries.swift
+  s_030a94a2f319d8::t_823e437e9a6273 106-109
+  s_030a94a2f319d8::t_e453c544d26e88 21-88,91,93-96,105,112-115
+  s_030a94a2f319d8::t_8b1b9cbfb87e23 598-599,601-606,609-610,614-617,619-620,623-624,626-631
+  s_030a94a2f319d8::t_c65f432dcaf43c 316-328,340,342-349
+  s_030a94a2f319d8::t_398f1258d77780 357,361,363-364,378-380,383-387,393,397,399-400,414,417-425
+  s_030a94a2f319d8::t_74bd761735567d 545-549,552-553,557,561-563
+  s_030a94a2f319d8::t_548b46a8593910 509-544,550-551,554-556,558-560,564-597,600,607-608,611-613,618,621-622,625,632-646
+  s_030a94a2f319d8::t_0abd4130879786 111,118
+  s_0e62a9e2988b29::t_af96f98728366b 110
+desktop/context-for-claude/Sources/ContextMCP/main.swift
+  s_0e62a9e2988b29::t_eaf7e1545df47f 12-18,23-32
+desktop/context-for-claude/Sources/ContextMCPKit/Tools.swift
+  s_030a94a2f319d8::t_dc857eb8073270 808,811,845-855,859,868
+  s_0e62a9e2988b29::t_6083516ecec163 661-664,666-675
+  s_0e62a9e2988b29::t_a76164fa9491d5 1171,1175-1184
+  s_030a94a2f319d8::t_8ba8faea1fd467 1161-1162
+  s_0e62a9e2988b29::t_23a7ddf0d7a9f9 101-133,137
+  s_0e62a9e2988b29::t_89d0432f22a42c 1185
+  s_030a94a2f319d8::t_a0354bda2f5863 1430-1432
+  s_030a94a2f319d8::t_011c5117a015f4 1159-1160
+desktop/context-for-claude/Sources/ContextCore/Redaction.swift
+  s_030a94a2f319d8::t_6bb6f9692f133e 175
+  s_030a94a2f319d8::t_7e09664845dcac 180-182
+  s_030a94a2f319d8::t_303fbabc56b7c5 45
+  s_030a94a2f319d8::t_a337cdd7428c4a 312-318,321-322
+  s_030a94a2f319d8::t_2a8d0f1e82bc94 106
+  s_030a94a2f319d8::t_17373519da59c2 1-44,46-104,117-174,176-177,179,183,185-243,245-250,252-256,258-311,319-320,323-352
+  s_030a94a2f319d8::t_be8d2f33bddcce 105
+  s_030a94a2f319d8::t_8f308322751557 107-109,114-116
+  s_030a94a2f319d8::t_76890e2f7c0fbf 178
+  s_030a94a2f319d8::t_2cdfd5ab2ead20 184
+  s_030a94a2f319d8::t_e860eb134dd5f2 244
+  s_030a94a2f319d8::t_969a9798384f36 251
+  s_030a94a2f319d8::t_e2ad421aa8b0af 257
+  s_3386c7c0f81c0c::t_465d41381f299e 110-113
+desktop/context-for-claude/Tests/ContextCoreTests/RedactionTests.swift
+  s_030a94a2f319d8::t_f2ed483f8afac3 1-100
+desktop/context-for-claude/Sources/ContextMCPKit/OmiBackend.swift
+  s_030a94a2f319d8::t_b20c3d68c421a4 435-438,440-443
+  s_030a94a2f319d8::t_e3deab8e520f48 80-82
+  s_030a94a2f319d8::t_2b0496c8479a23 11-13,33-38,42-44
+  s_030a94a2f319d8::t_7ef03485d92ed8 67,69
+  s_030a94a2f319d8::t_1a8945663c67e4 97-109
+desktop/context-for-claude/docs/ocr-quality.md
+  s_030a94a2f319d8::t_ae269547d55510 1-434
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_030a94a2f319d8::t_791eb80728678b 55-57,118-127
+desktop/context-for-claude/Sources/ContextCore/Paths.swift
+  s_030a94a2f319d8::t_276e16f3dcf74e 134-159
+desktop/context-for-claude/Tests/ContextMCPKitTests/ToolsTests.swift
+  s_030a94a2f319d8::t_a07f32cd4f4a52 132-177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "e7afa321905411b30ed53697d47915020c1a24f5",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_0e62a9e2988b29": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1ded8078-9066-48c6-b3a2-945bc7bce508",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_3386c7c0f81c0c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-abb434cbd0c989fda",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
