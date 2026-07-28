@@ -225,6 +225,11 @@ extension Tools {
 
     Filter with `app` ("Safari", "Xcode", "Slack", "Figma") when you know where to look, and bound \
     it with `since` / `until`. For the shape of the day rather than its contents, use `activity`.
+
+    One freshness rule matters here: the Omi account's screen history is uploaded in batches and \
+    runs hours behind this Mac's own capture, so the last couple of hours come from the `live` half \
+    only. A gap there means "not synced yet", not "not on screen" — `recent` is the tool for the \
+    current session.
     """
 
     static let activityDescription = """
@@ -252,6 +257,10 @@ extension Tools {
 
     This is also the tool to reach for when the user asks whether Omi is working, why you seem to be \
     missing something, or how far back your knowledge of their life goes.
+
+    Read the history-depth section carefully: the dates in it come from a bounded probe of the \
+    account, so they are a floor on what was sampled, never the date the user's record begins. \
+    Searching with a `since` older than anything printed there is expected and does return results.
     """
 }
 
@@ -403,7 +412,7 @@ extension Tools {
         // One round trip, two requests: memories are the durable facts, conversations the episodes.
         let omi = OmiBackend.shared.recall(query: query, since: since, until: until, limit: limit)
 
-        var merged = local.map(liveHit)
+        var merged = local.rows.map(liveHit)
         merged += omi.conversations.map(omiConversationHit)
         merged = dedupe(merged)
         merged = Array(merged.prefix(limit))
@@ -412,18 +421,30 @@ extension Tools {
         guard !merged.isEmpty || !memories.isEmpty else {
             return emptyMessage(
                 store,
-                "Nothing in \(scopeSearched(omi.failures)) matches \"\(query)\"\(rangeSuffix(since, until))."
-            ) + footerBlock(omi.failures, notes)
+                nothingFound(
+                    what: "matches for \"\(query)\"\(rangeSuffix(since, until))",
+                    localSearched: local.searched,
+                    omiSearched: omiSearched(omi.failures),
+                    omiClause: omiNotSearchedClause(omi.failures)
+                )
+            ) + footerBlock(omi.failures, notes, localSearched: local.searched)
         }
 
-        var out = header(for: merged, memories: memories, query: query, since: since, until: until)
+        var out = header(
+            for: merged,
+            memories: memories,
+            query: query,
+            since: since,
+            until: until,
+            localSearched: local.searched
+        )
         if !merged.isEmpty {
             out += "\n\n" + renderMerged(merged, order: .newestFirst)
         }
         if !memories.isEmpty {
             out += "\n\n" + renderMemories(memories)
         }
-        return out + footerBlock(omi.failures, notes)
+        return out + footerBlock(omi.failures, notes, localSearched: local.searched)
     }
 
     private static func header(
@@ -431,7 +452,8 @@ extension Tools {
         memories: [OmiMemory],
         query: String,
         since: Double?,
-        until: Double?
+        until: Double?,
+        localSearched: Bool
     ) -> String {
         // Local hits are a literal full-text match; Omi's are not. `conversations/search` and
         // `memories/search` are semantic — they return nearest neighbours with no relevance floor,
@@ -447,15 +469,13 @@ extension Tools {
         if omi > 0 { parts.append("\(number(omi)) related from Omi's history") }
         if !memories.isEmpty { parts.append(plural(memories.count, "related fact") + " Omi remembers") }
 
-        let headline: String
-        if live > 0 {
-            headline = "**\(plural(live, "match", "matches")) for \"\(query)\"\(rangeSuffix(since, until))**"
-        } else if omi > 0 || !memories.isEmpty {
-            headline = "**Nothing on this Mac matched \"\(query)\"\(rangeSuffix(since, until)) — "
-                + "here is what Omi found related to it**"
-        } else {
-            headline = "**No results for \"\(query)\"\(rangeSuffix(since, until))**"
-        }
+        let headline = recallHeadline(
+            query: query,
+            range: rangeSuffix(since, until),
+            liveMatches: live,
+            omiRelated: omi + memories.count,
+            localSearched: localSearched
+        )
 
         let breakdown = parts.isEmpty ? "" : " — " + parts.joined(separator: ", ")
         let caveat = (omi > 0 || !memories.isEmpty)
@@ -464,6 +484,39 @@ extension Tools {
                 + "evidence the words were said._"
             : ""
         return headline + breakdown + caveat
+    }
+
+    /// The one line a reader takes away from `recall` — and the one that used to lie.
+    ///
+    /// "Nothing on this Mac matched X" is a **negative result**: it says the local half looked and
+    /// came up empty, which is exactly the evidence a model is licensed to act on. It was printed
+    /// verbatim when the local half had never run — no database to open, or a read that threw — so
+    /// a search that could not execute read as proof that the thing never happened. A search that
+    /// did not run is not a result, and this is where the two are kept apart.
+    static func recallHeadline(
+        query: String,
+        range: String,
+        liveMatches: Int,
+        omiRelated: Int,
+        localSearched: Bool
+    ) -> String {
+        if liveMatches > 0 {
+            return "**\(plural(liveMatches, "match", "matches")) for \"\(query)\"\(range)**"
+        }
+        if !localSearched {
+            let tail = omiRelated > 0 ? " Here is what Omi found related to it." : ""
+            return """
+            **This Mac's local capture was not searched for "\(query)"\(range) — the search could \
+            not run, so nothing here is evidence about what was said or on screen at this Mac.\(tail)**
+            """
+        }
+        if omiRelated > 0 {
+            return """
+            **Context for Claude searched this Mac's local capture for "\(query)"\(range) and found \
+            no match — here is what Omi found related to it**
+            """
+        }
+        return "**No results for \"\(query)\"\(range)**"
     }
 
     private static func runRecent(_ args: JSONValue?, _ store: ContextStore?) throws -> String {
@@ -506,17 +559,23 @@ extension Tools {
         let failures = backend.failure.map { ["conversations: \($0.reason)"] } ?? []
 
         var entries = (backend.value ?? []).map(omiConversationEntry)
-        entries += sessions.map(localConversationEntry)
+        entries += sessions.rows.map(localConversationEntry)
         entries.sort { $0.at > $1.at }
         entries = Array(entries.prefix(limit))
 
         guard !entries.isEmpty else {
             return emptyMessage(
                 store,
-                "No conversations\(rangeSuffix(since, until)) were found in \(scopeSearched(failures))."
-            ) + footerBlock(failures, notes)
+                nothingFound(
+                    what: "conversations\(rangeSuffix(since, until))",
+                    localSearched: sessions.searched,
+                    omiSearched: omiSearched(failures),
+                    omiClause: omiNotSearchedClause(failures)
+                )
+            ) + footerBlock(failures, notes, localSearched: sessions.searched)
         }
-        return renderConversations(entries, since: since, until: until) + footerBlock(failures, notes)
+        return renderConversations(entries, since: since, until: until)
+            + footerBlock(failures, notes, localSearched: sessions.searched)
     }
 
     private static func runTranscript(_ args: JSONValue?, _ store: ContextStore?) throws -> String {
@@ -619,20 +678,66 @@ extension Tools {
         let backend = OmiBackend.shared.screenActivity(since: since, until: until, app: app, limit: limit)
         let failures = backend.failure.map { ["screen history: \($0.reason)"] } ?? []
 
-        var merged = local.map(liveHit)
+        var merged = local.rows.map(liveHit)
         merged += (backend.value ?? []).map(omiScreenHit)
         merged = dedupe(merged)
+
+        // The header prints the range it was asked for, so the range is enforced *here* rather than
+        // trusted to whichever half answered. Printing a filter that was not applied is the same
+        // class of lie as an understated coverage window: the reader believes it is looking at one
+        // slice of the user's day while it is actually looking at another.
+        let ranged = restrictToRange(merged, since: since, until: until)
+        merged = ranged.kept
+        if ranged.droppedOutOfRange > 0 {
+            notes.append("""
+            \(plural(ranged.droppedOutOfRange, "record")) came back outside the \
+            `since` / `until` range that was asked for and \
+            \(ranged.droppedOutOfRange == 1 ? "was" : "were") dropped here, so the range printed \
+            above is the range actually applied.
+            """)
+        }
+        if ranged.undated > 0 {
+            notes.append("""
+            \(plural(ranged.undated, "record")) carried no timestamp, so \
+            \(ranged.undated == 1 ? "it" : "they") could not be checked against the range and \
+            \(ranged.undated == 1 ? "is" : "are") listed under "Undated" rather than dropped.
+            """)
+        }
+
+        // Newest-first is a promise this tool makes in its description and its header; sort for it
+        // here so the promise holds whatever order either half happened to return.
+        merged.sort { $0.at > $1.at }
+        let available = merged.count
         merged = Array(merged.prefix(limit))
 
         let appSuffix = app.map { " in \($0)" } ?? ""
         guard !merged.isEmpty else {
-            return emptyMessage(
+            var out = emptyMessage(
                 store,
-                "Nothing on screen\(appSuffix)\(rangeSuffix(since, until)) was found in \(scopeSearched(failures))."
-            ) + footerBlock(failures, notes)
+                nothingFound(
+                    what: "screen observations\(appSuffix)\(rangeSuffix(since, until))",
+                    localSearched: local.searched,
+                    omiSearched: omiSearched(failures),
+                    omiClause: omiNotSearchedClause(failures)
+                )
+            )
+            if let lag = omiScreenLagCaveat(until: until) { out += "\n\n" + lag }
+            return out + footerBlock(failures, notes, localSearched: local.searched)
         }
-        let header = "**\(plural(merged.count, "screen observation"))\(appSuffix)\(rangeSuffix(since, until))**"
-        return header + "\n\n" + renderMerged(merged, order: .newestFirst) + footerBlock(failures, notes)
+
+        let header = """
+        **\(plural(merged.count, "screen observation"))\(appSuffix)\(rangeSuffix(since, until))**, \
+        newest first
+        """
+        var out = header + "\n\n" + renderMerged(merged, order: .newestFirst)
+        if available > merged.count {
+            out += "\n\n" + """
+            _These are the \(number(merged.count)) newest of at least \(number(available)) \
+            observations that matched; raise `limit` or narrow `since` / `until` to see older ones._
+            """
+        }
+        if let lag = omiScreenLagCaveat(until: until) { out += "\n\n" + lag }
+        return out + footerBlock(failures, notes, localSearched: local.searched)
     }
 
     private static func runActivity(_ args: JSONValue?, _ store: ContextStore?) throws -> String {
@@ -682,20 +787,100 @@ extension Tools {
 // sources, either one being down is a partial answer, never an exception.
 
 extension Tools {
-    /// Runs a local query, turning a missing or unreadable database into an empty result plus a
-    /// note. Absent is not the same as broken, and neither is the same as an exception.
+    /// The outcome of a local query, keeping apart the two things a bare `[]` destroys: **a search
+    /// that ran and found nothing is evidence; a search that never ran is not.** Collapsing them is
+    /// how `recall` came to headline "Nothing on this Mac matched X" for a database it had not
+    /// managed to open — a failed search rendered as proof of absence.
+    fileprivate struct LocalRead<Element> {
+        let rows: [Element]
+        /// True only when the query actually executed against a readable database.
+        let searched: Bool
+    }
+
+    /// Runs a local query, turning a missing or unreadable database into a *non-result* plus a
+    /// note. Absent is not the same as broken, and neither is the same as an empty history.
     private static func readLocal<Element>(
         _ store: ContextStore?,
         _ notes: inout [String],
         _ body: (ContextStore) throws -> [Element]
-    ) -> [Element] {
-        guard let store else { return [] }
-        do {
-            return try body(store)
-        } catch {
-            notes.append("Context for Claude's local database on this Mac could not be read (\(error)).")
-            return []
+    ) -> LocalRead<Element> {
+        guard let store else {
+            let note = """
+            Context for Claude has no readable capture database on this Mac, so its local half was \
+            not searched at all — an absence above is not evidence about this Mac.
+            """
+            notes.append(note)
+            return LocalRead(rows: [], searched: false)
         }
+        do {
+            return LocalRead(rows: try body(store), searched: true)
+        } catch {
+            let note = """
+            Context for Claude's local database on this Mac is present but could not be read \
+            (\(error)), so its local half was not searched — that is a reader fault, not an empty \
+            history.
+            """
+            notes.append(note)
+            return LocalRead(rows: [], searched: false)
+        }
+    }
+
+    /// True when the Omi half actually ran. `isConfigured` alone is not enough: a configured account
+    /// that answered 429 was not searched either.
+    fileprivate static func omiSearched(_ backendFailures: [String]) -> Bool {
+        OmiBackend.shared.isConfigured && backendFailures.isEmpty
+    }
+
+    /// Why the Omi half did not run, as a clause that reads inside a sentence.
+    fileprivate static func omiNotSearchedClause(_ backendFailures: [String]) -> String {
+        guard OmiBackend.shared.isConfigured else { return "no Omi MCP API key is configured" }
+        guard !backendFailures.isEmpty else { return "it was searched" }
+        return "it could not be read (\(backendFailures.joined(separator: "; ")))"
+    }
+}
+
+// MARK: - Freshness
+//
+// The two halves are not equally fresh, and the gap is widest exactly where it hurts most. Speech
+// reaches the Omi account within minutes; **screen observations reach it hours later**, because they
+// are uploaded in batches behind everything else. So the freshest hour of the user's screen is
+// precisely the hour the account cannot show — and a model that does not know this reads the gap as
+// "the user was not looking at that", when the truth is "this has not synced yet".
+
+extension Tools {
+    /// How far the Omi account's screen half is expected to trail this Mac's own capture. Measured
+    /// against a live account: conversations arrived in minutes, screen rows in roughly two hours.
+    static let omiScreenSyncLag: Double = 2 * 3_600
+
+    /// Printed only when the account is readable at all and the window the caller asked for reaches
+    /// into the unsynced tail — the same caveat on a query about last March would be noise.
+    static func omiScreenLagCaveat(until: Double?, now: Double = ContextTime.now) -> String? {
+        guard OmiBackend.shared.isConfigured else { return nil }
+        return screenLagSentence(until: until, now: now)
+    }
+
+    /// The pure half: does this window reach into the part of the day Omi has not ingested yet?
+    /// `until` in the past by more than the lag means the whole window has had time to arrive.
+    static func screenLagSentence(until: Double?, now: Double) -> String? {
+        if let until, until < now - omiScreenSyncLag { return nil }
+        return """
+        _Freshness: the Omi account's screen history syncs in batches and runs roughly \
+        \(duration(omiScreenSyncLag)) behind this Mac, while its conversations lag only minutes. \
+        Anything on screen in the last couple of hours therefore exists only in the `live` rows from \
+        this Mac — a gap there means "not synced to Omi yet", never "not on screen". Use `recent` \
+        for the current session._
+        """
+    }
+
+    /// The same fact, said in `status`, where a model goes to find out what these tools can see.
+    static var screenLagStatusLine: String {
+        """
+        Freshness: this Mac's own capture is seconds old. The Omi account's *conversations* trail it \
+        by minutes, but its *screen* history trails it by roughly \(duration(omiScreenSyncLag)) — it \
+        is uploaded in batches. The most recent couple of hours of screen text therefore exist only \
+        here, on this Mac, and are missing from the account half of `recall` and `screen`. Do not \
+        read that gap as "it was not on screen".
+        """
     }
 }
 
@@ -743,8 +928,52 @@ private struct MergedHit {
     let line: String
 }
 
+/// What enforcing the caller's window actually cost, so the tool can say it rather than hide it.
+private struct RangedHits {
+    let kept: [MergedHit]
+    let droppedOutOfRange: Int
+    /// Undated records are kept — dropping real history over missing metadata is worse — but they
+    /// are counted, because a reader must know they were never checked against the range.
+    let undated: Int
+}
+
 extension Tools {
     fileprivate enum HitOrder { case oldestFirst, newestFirst }
+
+    /// Whether a record may be shown under the range the header prints.
+    ///
+    /// The header is a claim about what was filtered. If the filter did not run — a query that
+    /// ignored `since`, a backend that ignored `start_date` — then the header is a lie unless the
+    /// rendering layer makes it true. Undated records cannot be judged, so they are kept and
+    /// reported separately rather than silently counted as in-range.
+    static func isWithinRange(_ at: Double, since: Double?, until: Double?) -> Bool {
+        guard at > 0 else { return true }
+        if let since, at < since { return false }
+        if let until, at > until { return false }
+        return true
+    }
+
+    fileprivate static func restrictToRange(
+        _ hits: [MergedHit],
+        since: Double?,
+        until: Double?
+    ) -> RangedHits {
+        guard since != nil || until != nil else {
+            return RangedHits(kept: hits, droppedOutOfRange: 0, undated: 0)
+        }
+        var kept: [MergedHit] = []
+        var dropped = 0
+        var undated = 0
+        for hit in hits {
+            if hit.at <= 0 { undated += 1 }
+            if isWithinRange(hit.at, since: since, until: until) {
+                kept.append(hit)
+            } else {
+                dropped += 1
+            }
+        }
+        return RangedHits(kept: kept, droppedOutOfRange: dropped, undated: undated)
+    }
 
     /// Roughly 1500 rendered lines, whichever of the two limits bites first.
     private static let maxHitLines = 1500
@@ -1215,6 +1444,11 @@ extension Tools {
             """)
         }
 
+        // Said whatever the local half holds: the two halves are not equally fresh, and the gap is
+        // widest on exactly the data a "what was I just looking at?" question needs.
+        out.append("")
+        out.append(screenLagStatusLine)
+
         out.append("")
         if status.capabilities.isEmpty {
             out.append("""
@@ -1239,6 +1473,200 @@ extension Tools {
         out.append("")
         out.append("Database: `\(status.databasePath)`")
         return out.joined(separator: "\n")
+    }
+
+    /// One answer to "does the account hold any conversation at or before this instant?".
+    ///
+    /// Three cases, not two: **a request that failed is not an empty account.** Folding them
+    /// together is how a rate-limited `status` call would end up printing "nothing before August
+    /// 2024" about an account with years of history before it — the same lie, one level down.
+    enum HistoryProbeAnswer: Equatable {
+        case found(Double)
+        case empty
+        case unavailable
+    }
+
+    /// What a bounded walk back through the account actually established, as opposed to sampled.
+    struct HistoryFloor: Equatable {
+        /// Where the walk began — the sampled date it was trying to get behind.
+        let startedFrom: Double
+        /// The oldest conversation start seen for real. Proof, not a sample. Equal to `startedFrom`
+        /// when the walk learned nothing older, which must not then be dressed up as proof.
+        let provenOldest: Double
+        /// An instant the account was asked about and found to hold nothing at or before it. With
+        /// `provenOldest` it brackets where the record begins.
+        let emptyAtOrBefore: Double?
+        let probesUsed: Int
+        /// True when a probe answered with something *newer* than the window it asked for, i.e. the
+        /// date filter was not applied. Nothing may be concluded from a filter that did not run.
+        let filterIgnored: Bool
+        /// True when the walk stopped because a request could not be read, rather than because it
+        /// had learned enough. The difference decides whether "no older records" may be implied.
+        let haltedByFailure: Bool
+    }
+
+    /// At most this many extra requests. `status` may not turn into a crawl of the account: the read
+    /// budget is 300 an hour and Claude is blocked on the answer.
+    static let deepeningProbeBudget = 4
+
+    /// Stop bisecting once the bracket is this tight. A month of uncertainty about where a
+    /// multi-year history began is not worth another request.
+    static let deepeningStopWindow: Double = 30 * 86_400
+
+    /// How far past the requested end a record may land before the filter counts as ignored. Omi's
+    /// list endpoint takes a datetime but some paths round to the day, and one day of slack must not
+    /// be mistaken for a server that dropped the filter entirely.
+    static let deepeningFilterTolerance: Double = 86_400
+
+    /// Walks back from a sampled date to find out how far the account *really* reaches.
+    ///
+    /// `OmiBackend.history()` samples one conversation `historyProbeOffset` back and dates it. That
+    /// date is a fact about the probe, not about the user: on a busy account 500 conversations is a
+    /// couple of months, while the account itself goes back years. Reported as a floor it understated
+    /// a real account by nearly two years, and a model that reads it as the start of the record will
+    /// decline to search earlier — the worst outcome this product has, because the data is right
+    /// there.
+    ///
+    /// So: ask the cheapest possible question a few times — "is there any conversation at or before
+    /// this instant?" — stepping the anchor back exponentially, then bisecting once a miss brackets
+    /// the start. Every hit is proof. Pure apart from `probe`, so the walk is testable without a
+    /// network.
+    static func deepenHistory(
+        from sampled: Double,
+        budget: Int = Tools.deepeningProbeBudget,
+        probe: (Double) -> HistoryProbeAnswer
+    ) -> HistoryFloor {
+        var proven = sampled
+        var empty: Double?
+        var used = 0
+        var halted = false
+        var step: Double = 365 * 86_400
+
+        while used < budget {
+            let anchor: Double
+            if let empty {
+                // A miss brackets the start; bisecting halves the uncertainty per request.
+                guard proven - empty > deepeningStopWindow else { break }
+                anchor = empty + (proven - empty) / 2
+            } else {
+                anchor = proven - step
+                step *= 2
+            }
+            used += 1
+
+            switch probe(anchor) {
+            case let .found(at) where at > anchor + deepeningFilterTolerance:
+                // The account answered with a conversation newer than the window asked for, so the
+                // date filter was not applied. Anything built on it would be a claim from a filter
+                // that did not run.
+                return HistoryFloor(
+                    startedFrom: sampled,
+                    provenOldest: proven,
+                    emptyAtOrBefore: empty,
+                    probesUsed: used,
+                    filterIgnored: true,
+                    haltedByFailure: false
+                )
+            case let .found(at) where at > 0:
+                proven = min(proven, at)
+            case .found:
+                // A record with no usable date proves nothing about depth and cannot be a bound.
+                halted = true
+            case .empty:
+                empty = anchor
+            case .unavailable:
+                halted = true
+            }
+            if halted { break }
+        }
+        return HistoryFloor(
+            startedFrom: sampled,
+            provenOldest: proven,
+            emptyAtOrBefore: empty,
+            probesUsed: used,
+            filterIgnored: false,
+            haltedByFailure: halted
+        )
+    }
+
+    /// How far back the account goes, reported as what it is: a sample, plus whatever a bounded
+    /// probe could prove.
+    ///
+    /// The wording this replaced printed the date of conversation number 501 and said the account
+    /// "reaches at least that far" — literally true, and read by every model as the date the user's
+    /// history begins. A sampling limit is a fact about the probe. Presenting one as a fact about
+    /// the user's life is the defect this whole file exists to avoid.
+    static func historyDepthLines(
+        probeOffset: Int,
+        sampledStart: Double?,
+        floor: HistoryFloor?
+    ) -> [String] {
+        var lines: [String] = []
+        let depth = number(probeOffset + 1)
+
+        if let sampledStart, sampledStart > 0 {
+            lines.append("""
+            History depth — **this is a sample, not the start of the record.** Context for Claude \
+            read a single conversation \(depth) back from the newest one: it starts at \
+            \(ContextTime.describe(sampledStart)). That proves the account holds at least \(depth) \
+            conversations and reaches at least that far back. It is where this probe stopped, not \
+            where the history stops.
+            """)
+        } else {
+            lines.append("""
+            History depth: the probe \(depth) conversations back came back with nothing. That means \
+            either the account holds fewer than \(depth) conversations **or** that one request did \
+            not succeed — this tool cannot tell which, so it is not a count of the user's history.
+            """)
+        }
+
+        if let floor, floor.probesUsed > 0 {
+            if floor.filterIgnored {
+                lines.append("""
+                A deeper date probe was attempted, but Omi answered it with a record newer than the \
+                window requested — the date filter did not apply, so nothing was concluded from it.
+                """)
+            } else {
+                // Only call it proof when the walk actually got behind the sample. Restating the
+                // sample as a "proven" floor would be the original defect wearing a new label.
+                var line = floor.provenOldest < floor.startedFrom
+                    ? """
+                    Probed further back with \(plural(floor.probesUsed, "extra request")): the \
+                    account still holds a conversation from \
+                    \(ContextTime.describe(floor.provenOldest)), which is proven rather than sampled.
+                    """
+                    : """
+                    Probed further back with \(plural(floor.probesUsed, "extra request")) without \
+                    finding a record older than the sample above.
+                    """
+                if let empty = floor.emptyAtOrBefore, !floor.haltedByFailure {
+                    line += """
+                     The account also answered that it holds nothing at or before \
+                    \(ContextTime.describe(empty)), so the record begins somewhere between those two \
+                    dates.
+                    """
+                } else if floor.haltedByFailure {
+                    line += """
+                     Probing stopped because a further request could not be read — that is a gap in \
+                    this check, not a bound on the history, which may go back much further.
+                    """
+                } else {
+                    line += """
+                     Probing stopped there to stay inside Omi's 300-reads-an-hour limit; the history \
+                    may go back further still.
+                    """
+                }
+                lines.append(line)
+            }
+        }
+
+        lines.append("""
+        Every date above is a probe result, not a boundary on what can be searched: `recall`, \
+        `conversations` and `screen` accept a `since` older than any of them and will read that far \
+        back. Never decline to look earlier — or tell the user their history starts here — because \
+        of a depth printed in this section.
+        """)
+        return lines
     }
 
     /// The other half of honesty: an unreachable account and an empty account must never read the
@@ -1267,19 +1695,30 @@ extension Tools {
             } else {
                 out.append("The account is reachable but holds no conversations yet.")
             }
-            if let deep = probe.atProbeOffset, let at = deep.startedAt {
-                out.append("""
-                History depth: at least \(number(probe.probeOffset + 1)) conversations — counting back, \
-                number \(number(probe.probeOffset + 1)) starts at \(ContextTime.describe(at)), so the \
-                account reaches at least that far. Context for Claude stops probing there to stay inside Omi's \
-                300-reads-an-hour limit; the real history may go back further.
-                """)
-            } else if probe.newest != nil {
-                out.append("""
-                History depth: fewer than \(number(probe.probeOffset + 1)) conversations, ending at the \
-                date above.
-                """)
+            // The offset probe is a *sample*, and the deepening walk is what stops it from being
+            // read as the beginning of the user's life. Both are only worth running once the
+            // account has answered at all.
+            var floor: HistoryFloor?
+            if let anchor = probe.atProbeOffset?.startedAt ?? probe.newest?.startedAt, anchor > 0 {
+                floor = deepenHistory(from: anchor) { at in
+                    let answer = backend.conversations(since: nil, until: at, limit: 1)
+                    guard let rows = answer.value else { return .unavailable }
+                    guard let oldest = rows.first else { return .empty }
+                    // A conversation that exists but carries no date is not an empty account.
+                    guard let startedAt = oldest.startedAt, startedAt > 0 else { return .unavailable }
+                    return .found(startedAt)
+                }
             }
+            // Each of these is a paragraph in its own right; run together they read as one claim.
+            for line in historyDepthLines(
+                probeOffset: probe.probeOffset,
+                sampledStart: probe.atProbeOffset?.startedAt,
+                floor: floor
+            ) {
+                out.append("")
+                out.append(line)
+            }
+            out.append("")
             if let range = backend.seenRange, range.oldest > 0 {
                 out.append("Oldest Omi record read in this session: \(ContextTime.describe(range.oldest)).")
             }
@@ -1303,11 +1742,22 @@ extension Tools {
     /// The single most important non-result in the product: it is what stops Claude from turning
     /// "not captured" into "never happened".
     private static func emptyMessage(_ store: ContextStore?, _ sentence: String) -> String {
-        guard let store, let status = try? Queries.status(store) else {
+        guard let store else {
             return sentence + "\n\n" + """
             Context for Claude has captured nothing on this Mac (no local database), so this answer rests \
             entirely on the Omi account. Treat it as "not found in what could be read" rather than \
             "did not happen", and call `status` to see which halves are actually available.
+            """
+        }
+        // A database that opens and then refuses to answer is the third state, and the one a `try?`
+        // used to fold into "nothing was captured". The file is right there: this is a fault in the
+        // reader, and saying anything about the user's history from it is a fabrication.
+        guard let status = try? Queries.status(store) else {
+            return sentence + "\n\n" + """
+            Context for Claude's local database is present on this Mac but could not be read for this \
+            answer, so its coverage window is unknown and its half of the search did not run. That is \
+            a reader fault, not an empty history — do not report this as "nothing was captured". Call \
+            `status` for the detail.
             """
         }
         if status.segmentCount == 0 && status.frameCount == 0 {
@@ -1341,23 +1791,68 @@ extension Tools {
         return out
     }
 
-    /// Names what was actually searched, so an empty answer never claims to have looked somewhere it
-    /// could not reach. This is the difference between "your Omi history has nothing on that" and
-    /// "your Omi history was not read".
-    private static func scopeSearched(_ backendFailures: [String]) -> String {
-        guard OmiBackend.shared.isConfigured, backendFailures.isEmpty else {
-            return "Context for Claude's local capture on this Mac (the Omi account could not be searched)"
+    /// Says whether an empty answer is evidence at all.
+    ///
+    /// Two very different things end in nothing to show — "both halves were searched and there is
+    /// nothing there" and "nothing could be searched" — and only the first is a result. A tool that
+    /// prints one sentence for both teaches a reader to treat a broken search as proof of absence,
+    /// which is the exact failure this product exists to prevent. So the sentence is built from the
+    /// two facts, and names the half that did not run.
+    static func nothingFound(
+        what: String,
+        localSearched: Bool,
+        omiSearched: Bool,
+        omiClause: String
+    ) -> String {
+        // Neutral on purpose: it covers "there is no database here" and "the database would not
+        // answer" alike, and the footer note below names which of the two it was.
+        let localClause = "Context for Claude's capture on this Mac could not be read"
+        switch (localSearched, omiSearched) {
+        case (true, true):
+            return """
+            No \(what) were found in the Omi account or Context for Claude's local capture on this \
+            Mac. Both halves were searched, so this is a real empty result rather than a failed \
+            search.
+            """
+        case (true, false):
+            return """
+            No \(what) were found in Context for Claude's local capture on this Mac. The Omi account \
+            was **not** searched — \(omiClause) — so nothing here is evidence about the user's \
+            account history.
+            """
+        case (false, true):
+            return """
+            No \(what) were found in the user's Omi account. This Mac's local capture was **not** \
+            searched — \(localClause) — so nothing here is evidence about what was said or on screen \
+            at this Mac.
+            """
+        case (false, false):
+            return """
+            **No search ran.** Neither half could be read: \(localClause), and \(omiClause). This is \
+            a failed search, not a negative result — it says nothing at all about whether there are \
+            \(what), so do not report this as something that did not happen.
+            """
         }
-        return "the Omi account or Context for Claude's local capture on this Mac"
     }
 
     /// The one place a degraded answer is explained. Everything above it is real; this says exactly
     /// what is missing and why, which is what makes reasoning over a partial answer safe.
-    private static func footerBlock(_ backendFailures: [String], _ localNotes: [String]) -> String {
+    private static func footerBlock(
+        _ backendFailures: [String],
+        _ localNotes: [String],
+        localSearched: Bool = true
+    ) -> String {
         var lines: [String] = []
 
         if !OmiBackend.shared.isConfigured {
-            lines.append("_\(OmiBackend.notConfiguredSentence)_")
+            // The shared sentence ends by saying the local capture *was* searched. True in the
+            // normal case, and a lie in the one where the local half did not run either — so that
+            // case gets its own wording rather than a claim plus a contradiction two lines later.
+            lines.append(localSearched ? "_\(OmiBackend.notConfiguredSentence)_" : """
+            _Omi account history is unavailable: no Omi MCP API key is configured — sign in to the \
+            Omi account from Context for Claude in the menu bar. This Mac's local capture could not \
+            be read either, so nothing at all was searched for this answer._
+            """)
         } else if !backendFailures.isEmpty {
             lines.append("""
             _Omi account history could not be reached — \(backendFailures.joined(separator: "; ")). \
@@ -1367,12 +1862,16 @@ extension Tools {
         } else {
             lines.append("""
             _Origins: `live` = captured by Context for Claude on this Mac, seconds fresh; `omi` = the user's Omi \
-            account history, which lags a conversation by a few minutes._
+            account history, which lags a conversation by a few minutes and its screen text by \
+            about \(duration(omiScreenSyncLag))._
             """)
         }
 
+        // The notes are already whole sentences that say which half did not run and why — appending
+        // a fixed clause to them used to assert "results above come from the Omi account only" even
+        // when the Omi half had not run either.
         for note in localNotes {
-            lines.append("_\(note) Results above come from the Omi account only._")
+            lines.append("_\(note)_")
         }
 
         return lines.isEmpty ? "" : "\n\n" + lines.joined(separator: "\n\n")
