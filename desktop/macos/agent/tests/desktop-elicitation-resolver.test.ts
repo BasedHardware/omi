@@ -64,7 +64,15 @@ function kernelStub(overrides: Record<string, unknown> = {}) {
     for (const subscriber of [...subscribers]) subscriber(event);
   };
 
-  return { kernel, created, emitResolution, subscriberCount: () => subscribers.length };
+  const emitRunEvent = (type: string, runId: string) => {
+    const event = {
+      eventId: "evt-run", sessionId: "sess-1", runId, attemptId: null, type,
+      retentionClass: "standard", visibility: "internal", payloadJson: "{}", createdAtMs: 0,
+    } as unknown as AgentEvent;
+    for (const subscriber of [...subscribers]) subscriber(event);
+  };
+
+  return { kernel, created, emitResolution, emitRunEvent, subscriberCount: () => subscribers.length };
 }
 
 describe("elicitation dispatch creation", () => {
@@ -275,6 +283,47 @@ describe("resolution mapping", () => {
       .toEqual({ kind: "cancelled", reason: "cancelled" });
     expect(outcomeFromResolution(permissionRequest, "expired", null))
       .toEqual({ kind: "cancelled", reason: "expired" });
+  });
+});
+
+describe("a question does not outlive its run", () => {
+  it("releases the card when the run it belongs to ends", async () => {
+    const stub = kernelStub();
+    const resolved: string[] = [];
+    const promise = askUser(
+      {
+        kernel: stub.kernel as any,
+        log: () => {},
+        notifier: { pending: () => {}, resolved: (i: any) => resolved.push(i.outcome) },
+      },
+      questionRequest,
+      { sessionId: "sess-9", ownerId: "owner-9", runId: "run-9" },
+    );
+    await Promise.resolve();
+
+    // The turn was cancelled while the question was still on screen. Without
+    // this the card sat there and the user answered a revoked run.
+    stub.emitRunEvent("run.cancelled", "run-9");
+    await expect(promise).resolves.toMatchObject({ kind: "cancelled" });
+    expect(resolved).toEqual(["cancelled"]);
+  });
+
+  it("ignores a terminal event from a different run", async () => {
+    const stub = kernelStub();
+    let settled = false;
+    const promise = askUser(
+      { kernel: stub.kernel as any, log: () => {} },
+      questionRequest,
+      { sessionId: "sess-9", ownerId: "owner-9", runId: "run-9" },
+    ).then((outcome) => { settled = true; return outcome; });
+    await Promise.resolve();
+
+    stub.emitRunEvent("run.failed", "some-other-run");
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    stub.emitResolution({ dispatchId: "disp-1", status: "resolved", resolution: { optionId: "main" } });
+    await expect(promise).resolves.toEqual({ kind: "selected", optionIds: ["main"] });
   });
 });
 

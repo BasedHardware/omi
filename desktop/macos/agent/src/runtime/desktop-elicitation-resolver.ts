@@ -218,7 +218,7 @@ export async function askUser(
   inFlightElicitations += 1;
   let outcome: ElicitationOutcome;
   try {
-    outcome = await waitForDispatchResolution(deps, request, dispatch.dispatchId);
+    outcome = await waitForDispatchResolution(deps, request, dispatch.dispatchId, binding.runId);
   } finally {
     // Decremented on every exit, so a throw cannot leave a watchdog permanently
     // believing someone is still being asked.
@@ -238,13 +238,36 @@ export async function askUser(
  * Resolve when the dispatch does. Subscribes before returning so a resolution
  * arriving immediately after creation is still observed.
  */
+/**
+ * Run states after which nothing can consume an answer.
+ *
+ * A question outlives its run when the turn is cancelled, fails, or is
+ * superseded. The card used to stay on screen regardless, so the user could
+ * answer a run whose authority was already revoked and watch nothing happen.
+ */
+const TERMINAL_RUN_EVENTS: ReadonlySet<string> = new Set([
+  "run.succeeded",
+  "run.failed",
+  "run.cancelled",
+  "run.timed_out",
+  "run.orphaned",
+]);
+
 function waitForDispatchResolution(
   deps: KernelElicitationDeps,
   request: ElicitationRequest,
   dispatchId: string,
+  runId: string | null,
 ): Promise<ElicitationOutcome> {
   return new Promise<ElicitationOutcome>((resolve) => {
     const unsubscribe = deps.kernel.subscribe((event) => {
+      // The run this question belongs to has ended. Release the waiter so the
+      // surface retires the card instead of collecting an answer for nobody.
+      if (runId && event.runId === runId && TERMINAL_RUN_EVENTS.has(event.type)) {
+        unsubscribe();
+        resolve({ kind: "cancelled", reason: `run_${event.type.replace("run.", "")}` });
+        return;
+      }
       if (event.type !== "approval.resolved") return;
       let payload: Record<string, unknown> | null;
       try {
