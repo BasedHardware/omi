@@ -62,6 +62,17 @@ class ContiguousFlashPageLedgerTest {
     }
 
     @Test
+    fun ackCompletionOnlyClearsPagesCoveredByThatInFlightAck() {
+        val ledger = ContiguousFlashPageLedger(4, 6) { true }
+        ledger.offer(page(4))
+        ledger.offer(page(5))
+        ledger.markAcked(4)
+
+        assertEquals(1, ledger.pagesSinceAck)
+        assertEquals(5, ledger.lastAppendedPageIndex)
+    }
+
+    @Test
     fun gapBufferIsBounded() {
         val ledger = ContiguousFlashPageLedger(100, 200) { true }
 

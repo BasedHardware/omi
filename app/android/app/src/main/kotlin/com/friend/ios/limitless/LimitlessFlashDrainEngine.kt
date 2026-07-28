@@ -58,8 +58,8 @@ class LimitlessFlashDrainEngine(
     private val fragmentBuffer = mutableMapOf<Int, MutableMap<Int, ByteArray>>()
     private var endPage = 0
     private var pageLedger: ContiguousFlashPageLedger? = null
-    private var lastAckedPageIndex = -1
-    private var ackBarrierFailed = false
+    private var ackGate = LimitlessAckCommitGate(-1)
+    private var pendingFinishReason: String? = null
     private var lastPageAtMs = 0L
     private var cycleTask: ScheduledFuture<*>? = null
     private var statusTimeoutTask: ScheduledFuture<*>? = null
@@ -175,10 +175,21 @@ class LimitlessFlashDrainEngine(
         fragmentBuffer.clear()
         endPage = state.newestFlashPage
         pageLedger = ContiguousFlashPageLedger(state.oldestFlashPage, state.newestFlashPage) { page ->
-            page.opusFrames.isEmpty() || writer.append(page.opusFrames, page.timestampMs)
+            val pageIndex = page.index
+            when {
+                page.opusFrames.isEmpty() -> true
+                pageIndex == null -> false
+                else -> writer.append(
+                    address,
+                    requireNotNull(pageIndex),
+                    page.session ?: state.currentStorageSession,
+                    page.opusFrames,
+                    page.timestampMs,
+                )
+            }
         }
-        lastAckedPageIndex = state.oldestFlashPage - 1
-        ackBarrierFailed = false
+        ackGate = LimitlessAckCommitGate(state.oldestFlashPage - 1)
+        pendingFinishReason = null
         lastPageAtMs = System.currentTimeMillis()
         phase = Phase.DRAINING
         setBoolPref("pendantDraining", true)
@@ -223,30 +234,48 @@ class LimitlessFlashDrainEngine(
         }
     }
 
-    /** fsync barrier, then ACK the contiguous prefix appended so far.
-     *  A failed barrier blocks every later ACK in this drain cycle. */
+    /** Fsync barrier, then start an ACK for the contiguous prefix appended so far.
+     *  The destructive watermark advances only from the successful BLE callback. */
     private fun ackWritten(): Boolean {
         val address = deviceAddress ?: return true
-        if (ackBarrierFailed) return false
         val ledger = pageLedger ?: return true
         val lastAppendedPageIndex = ledger.lastAppendedPageIndex
-        if (lastAppendedPageIndex <= lastAckedPageIndex) return true
-        if (!writer.sync()) {
-            Log.w(TAG, "fsync failed — blocking ACKs so pages redrain next cycle")
-            ackBarrierFailed = true
-            return false
+        val result = ackGate.request(
+            lastAppendedPageIndex,
+            durableBarrier = writer::sync,
+            transmit = { pageIndex, callback ->
+                write(
+                    address,
+                    LimitlessProtocol.encodeAcknowledgeProcessedData(messageIndex++, ++requestId, pageIndex),
+                ) { callback(it.isSuccess) }
+            },
+        ) { success, pageIndex ->
+            if (success) pageLedger?.markAcked(pageIndex)
+            else Log.w(TAG, "ACK write failed — pages remain on pendant for retry")
+            pendingFinishReason?.let { reason ->
+                pendingFinishReason = null
+                completeDrain(reason)
+            }
         }
-        write(address, LimitlessProtocol.encodeAcknowledgeProcessedData(messageIndex++, ++requestId, lastAppendedPageIndex))
-        lastAckedPageIndex = lastAppendedPageIndex
-        ledger.markAcked()
-        return true
+        if (result == LimitlessAckCommitGate.RequestResult.BLOCKED) {
+            Log.w(TAG, "fsync failed — blocking ACKs so pages redrain next cycle")
+        }
+        return result != LimitlessAckCommitGate.RequestResult.BLOCKED
     }
 
     private fun finishDrain(reason: String) {
         if (phase != Phase.DRAINING) return
         stallCheckTask?.cancel(false)
         stallCheckTask = null
-        ackWritten()
+        pendingFinishReason = reason
+        if (!ackWritten() || !ackGate.inFlight) {
+            pendingFinishReason = null
+            completeDrain(reason)
+        }
+    }
+
+    private fun completeDrain(reason: String) {
+        if (phase != Phase.DRAINING) return
         val address = deviceAddress
         // Return the pendant to record-to-flash — unless batch mode was turned off
         // mid-drain, in which case the Dart connector owns the mode ({0,1}) and a
@@ -259,7 +288,7 @@ class LimitlessFlashDrainEngine(
         Log.i(
             TAG,
             "drain finished ($reason): appended<=${pageLedger?.lastAppendedPageIndex ?: -1} " +
-                "acked<=$lastAckedPageIndex end=$endPage",
+                "acked<=${ackGate.lastAckedPageIndex} end=$endPage",
         )
         pageLedger = null
     }
@@ -271,17 +300,22 @@ class LimitlessFlashDrainEngine(
         stallCheckTask = null
         fragmentBuffer.clear()
         pageLedger = null
-        ackBarrierFailed = false
+        pendingFinishReason = null
         if (phase == Phase.DRAINING) {
-            Log.i(TAG, "drain aborted ($reason): acked<=$lastAckedPageIndex")
+            Log.i(TAG, "drain aborted ($reason): acked<=${ackGate.lastAckedPageIndex}")
             setBoolPref("pendantDraining", false)
         }
+        ackGate = LimitlessAckCommitGate(-1)
         phase = Phase.IDLE
     }
 
     // ── IO helpers ──
 
-    private fun write(address: String, data: ByteArray) {
+    private fun write(
+        address: String,
+        data: ByteArray,
+        completion: ((Result<Unit>) -> Unit)? = null,
+    ) {
         OmiBleManager.instance.writeCharacteristic(
             address,
             limitlessServiceUuid(),
@@ -289,6 +323,7 @@ class LimitlessFlashDrainEngine(
             data,
         ) { result ->
             result.exceptionOrNull()?.let { Log.w(TAG, "TX write failed: ${it.message}") }
+            executor.execute { completion?.invoke(result) }
         }
     }
 

@@ -60,7 +60,7 @@ internal class ContiguousFlashPageLedger(
         return if (progressed) OfferResult.PROGRESSED else OfferResult.NO_PROGRESS
     }
 
-    fun markAcked() {
-        pagesSinceAck = 0
+    fun markAcked(throughPageIndex: Int) {
+        pagesSinceAck = (lastAppendedPageIndex - throughPageIndex).coerceAtLeast(0)
     }
 }

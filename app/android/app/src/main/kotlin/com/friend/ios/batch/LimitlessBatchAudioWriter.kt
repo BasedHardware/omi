@@ -1,9 +1,12 @@
 package com.friend.ios.batch
 
 import com.friend.ios.ble.OmiBleManager
+import com.friend.ios.limitless.LimitlessPageDeduplicator
 
 import android.content.Context
 import java.io.File
+import java.io.RandomAccessFile
+import java.util.Locale
 import kotlin.math.abs
 
 /**
@@ -23,9 +26,10 @@ import kotlin.math.abs
  *    recordings scanner matching, and the `limitless` substring makes the backend tag
  *    the resulting conversation `source=limitless`.
  *
- * ACK safety: the drain engine must call [sync] (fsync barrier) and get `true` back
- * BEFORE ACKing pages to the pendant — an ACK deletes the pendant's copy, so bytes
- * must be durable on phone storage first. [append] itself only fsyncs periodically.
+ * ACK safety: each page append fsyncs its audio and synchronously persists a
+ * per-device/session page watermark. A redrain after an ambiguous ACK therefore
+ * recognizes the durable page instead of appending it twice. The drain engine also
+ * calls [sync] before sending the cumulative pendant-deletion ACK.
  */
 class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG, "audio_${DEVICE_MARKER}_") {
     companion object {
@@ -35,6 +39,8 @@ class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context
         private const val MAX_AUDIO_SECONDS = 900L // 15 min of audio per file
         private const val FRAMES_PER_SECOND = 50L // opus_fs320 = 20 ms frames
         private const val MIN_VALID_TS_MS = 1_577_836_800_000L // 2020-01-01: pendant clock sanity gate
+        private const val PENDING_PATH_KEY = "limitlessPendingAppend.path"
+        private const val PENDING_OFFSET_KEY = "limitlessPendingAppend.offset"
     }
 
     private var lastPageTimestampMs: Long = 0
@@ -42,13 +48,33 @@ class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context
     /**
      * Append the opus frames extracted from one flash page. [pageTimestampMs] is the
      * pendant-clock capture time of that page. Returns true once the frames are
-     * written (durability requires a subsequent [sync] before ACK).
+     * written and its durable identity is committed.
      */
-    fun append(frames: List<ByteArray>, pageTimestampMs: Long): Boolean {
+    fun append(
+        deviceId: String,
+        pageIndex: Int,
+        session: Int,
+        frames: List<ByteArray>,
+        pageTimestampMs: Long,
+    ): Boolean {
         if (frames.isEmpty()) return true
         val now = System.currentTimeMillis()
 
         synchronized(lock) {
+            if (!recoverPendingAppendLocked()) return false
+            val watermarkKey = pageWatermarkKey(deviceId, session)
+            val deduplicator = LimitlessPageDeduplicator(
+                readWatermark = { prefs().getInt(it, Int.MIN_VALUE) },
+                writeWatermark = { key, value ->
+                    prefs().edit()
+                        .putInt(key, value)
+                        .remove(PENDING_PATH_KEY)
+                        .remove(PENDING_OFFSET_KEY)
+                        .commit()
+                },
+            )
+            if (deduplicator.isDurable(watermarkKey, pageIndex)) return true
+
             // Pendant clock sanity: pages recorded before the first msg6 time-sync carry
             // a bogus epoch. Inside an open session inherit the last valid timestamp so a
             // bogus page can't fake a session gap; otherwise fall back to drain wall-clock.
@@ -76,12 +102,53 @@ class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context
                 if (!openLocked(dir, name, startSec, now)) return false // storage full or open failed
             }
 
-            if (!writeFramesLocked(frames)) return false
+            val checkpoint = checkpointLocked()
+            val path = currentFilePathLocked() ?: return false
+            if (!prefs().edit()
+                    .putString(PENDING_PATH_KEY, path)
+                    .putLong(PENDING_OFFSET_KEY, checkpoint.first)
+                    .commit()
+            ) {
+                return false
+            }
+            val appended = deduplicator.appendOnce(
+                watermarkKey,
+                pageIndex,
+                appendDurably = { writeFramesLocked(frames) && fsyncLocked() },
+                rollback = { rollbackLocked(checkpoint) },
+            )
+            if (!appended) {
+                clearPendingAppend()
+                return false
+            }
             lastPageTimestampMs = ts
-            maybeFsyncLocked(now)
             return true
         }
     }
+
+    private fun pageWatermarkKey(deviceId: String, session: Int): String =
+        "limitlessPageWatermark.${deviceId.uppercase(Locale.US)}.session$session"
+
+    private fun recoverPendingAppendLocked(): Boolean {
+        val path = prefs().getString(PENDING_PATH_KEY, null) ?: return true
+        val offset = prefs().getLong(PENDING_OFFSET_KEY, -1L)
+        if (offset < 0L) return clearPendingAppend()
+        return try {
+            val file = File(path)
+            if (file.exists()) {
+                RandomAccessFile(file, "rw").use {
+                    it.setLength(offset)
+                    it.fd.sync()
+                }
+            }
+            clearPendingAppend()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun clearPendingAppend(): Boolean =
+        prefs().edit().remove(PENDING_PATH_KEY).remove(PENDING_OFFSET_KEY).commit()
 
     /** Fsync barrier: returns true when everything appended so far is durable on disk.
      *  The drain engine must get `true` here before ACKing the covered pages. */
