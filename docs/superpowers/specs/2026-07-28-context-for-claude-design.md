@@ -1,7 +1,7 @@
-# Earshot — design
+# Context for Claude — design
 
 **Status:** approved to build (2026-07-28)
-**Location:** `desktop/earshot/` on branch `feat/ambient-context`. Standalone app. **Not** merged into
+**Location:** `desktop/context-for-claude/` on branch `feat/ambient-context`. Standalone app. **Not** merged into
 the Omi macOS app, not a new repo, no PR.
 
 ## What it is
@@ -12,7 +12,7 @@ serves them to Claude over MCP. Claude gets continuous ambient context about you
 pasting anything.
 
 Success looks like: you type a request into Claude that references people, plans, and decisions you
-never told Claude about, and it just knows — because it queried Earshot.
+never told Claude about, and it just knows — because it queried Context for Claude.
 
 ## What it is not
 
@@ -34,11 +34,11 @@ apps when they are on screen.
 Three units, one SQLite file between them.
 
 ```
- ┌─────────────────────── Earshot.app (LSUIElement, no dock) ────────────────────┐
+ ┌─────────────────────── Context for Claude.app (LSUIElement, no dock) ────────────────────┐
  │  MicCapture ──────┐                                                           │
  │  (CoreAudio       ├─→ Transcriber(mic)     ──┐                                │
  │   IOProc)         │   (FluidAudio Parakeet)  │                                │
- │                   │                          ├─→ EarshotStore ──→ earshot.db  │
+ │                   │                          ├─→ ContextStore ──→ context.db  │
  │  SystemAudio ─────┤─→ Transcriber(system)  ──┤    (GRDB, WAL,                 │
  │  (CoreAudio       │   (FluidAudio Parakeet)  │     FTS5)                      │
  │   process tap)    │                          │                                │
@@ -81,7 +81,7 @@ proven approach rather than inventing one:
 
 ### Storage
 
-`~/Library/Application Support/Earshot/earshot.db`, GRDB, WAL, FTS5.
+`~/Library/Application Support/Context for Claude/context.db`, GRDB, WAL, FTS5.
 
 ```sql
 sessions(id, startedAt, endedAt, appHint)
@@ -162,12 +162,12 @@ Nothing about this app is allowed to be load-bearing on a good day and silent on
 
 ## Testing
 
-- `EarshotCoreTests` — schema migration, FTS round-trip, session gap segmentation, retention prune,
+- `ContextCoreTests` — schema migration, FTS round-trip, session gap segmentation, retention prune,
   every `Queries` function against a seeded fixture database.
-- `EarshotAppTests` — audio format conversion (stereo→mono→16 kHz→Int16), transcriber window
+- `ContextAppTests` — audio format conversion (stereo→mono→16 kHz→Int16), transcriber window
   boundaries and silence rejection, session-gap policy, permission state machine, and
   `ClaudeRegistrar` writing/merging both config shapes without clobbering existing servers.
-- `EarshotMCPKitTests` — JSON-RPC framing, `initialize`/`tools/list`/`tools/call` handshake, each tool's
+- `ContextMCPKitTests` — JSON-RPC framing, `initialize`/`tools/list`/`tools/call` handshake, each tool's
   schema and output against the fixture database.
 - End-to-end, by hand, on the real machine: build, sign, install, grant, speak, look at something,
   then ask Claude a question that can only be answered from ambient context.
