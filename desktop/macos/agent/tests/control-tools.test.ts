@@ -396,6 +396,7 @@ describe("agent control tools", () => {
       "build_desktop_context_packet",
       "route_desktop_intent",
       "evaluate_desktop_tool_policy",
+      "ask_user",
       "create_desktop_dispatch",
       "resolve_desktop_dispatch",
       "cancel_agent_run",

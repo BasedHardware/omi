@@ -27,6 +27,7 @@ export type AgentControlSurface = "desktopChat" | "realtimeHub";
 
 export interface AgentControlManifestTool {
   name:
+    | "ask_user"
     | "list_agent_sessions"
     | "get_agent_run"
     | "build_desktop_awareness_snapshot"
@@ -390,6 +391,48 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
       resourceRef: { type: "string", description: "Optional resource ref." },
     },
     required: ["selectedBundles"],
+  },
+  {
+    name: "ask_user",
+    label: "Ask User",
+    description:
+      "Ask the user a question mid-run and wait for their answer. Distinct from ask_followup, which drives the onboarding flow's own quick-reply UI and is available only during onboarding.",
+    promptSnippet: "ask_user - Ask the user a question and wait for the answer",
+    promptGuidelines: [
+      "Use when the work genuinely cannot proceed without a decision only the user can make.",
+      "Prefer options the user can click; set allow_free_text when an unlisted answer is reasonable.",
+      "Do not use for onboarding steps; ask_followup owns that flow.",
+      "The run blocks until the user answers or cancels, so ask once and act on the answer.",
+    ],
+    capabilityDoc: controlDoc(
+      "Ask User",
+      "Ask the user a question mid-run and wait for their answer.",
+      [
+        "Use when the work cannot proceed without a decision only the user can make.",
+        "Blocks the run until the user answers or cancels.",
+      ],
+    ),
+    latency: "async background",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlManagePolicy,
+    runtimePreconditions: [
+      "Records a routing_choice dispatch scoped to the calling session's owner.",
+      "Blocks until the user answers or the turn is cancelled; a runtime restart cancels it.",
+    ],
+    timeoutClass: "long",
+    properties: {
+      question: { type: "string", description: "The question to put to the user." },
+      options: {
+        type: "array",
+        items: { type: "string" },
+        description: "Optional answers the user can click.",
+      },
+      allow_free_text: {
+        type: "boolean",
+        description: "Whether the user may type an answer instead of choosing. Defaults to true.",
+      },
+    },
+    required: ["question"],
   },
   {
     name: "create_desktop_dispatch",

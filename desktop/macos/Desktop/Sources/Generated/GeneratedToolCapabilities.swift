@@ -179,6 +179,21 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
+      toolName: "ask_user",
+      title: "Ask User",
+      latency: .asyncBackground,
+      surfaces: Set([.desktopChat, .realtimeHub]),
+      summary: "Ask the user a question mid-run and wait for their answer.",
+      bullets: [
+      "Use when the work cannot proceed without a decision only the user can make.",
+      "Blocks the run until the user answers or cancels.",
+      "Use when the work genuinely cannot proceed without a decision only the user can make.",
+      "Prefer options the user can click; set allow_free_text when an unlisted answer is reasonable.",
+      "Do not use for onboarding steps; ask_followup owns that flow.",
+      "The run blocks until the user answers or cancels, so ask once and act on the answer."
+    ]
+    ),
+    Capability(
       toolName: "create_desktop_dispatch",
       title: "Create Desktop Dispatch",
       latency: .fastLocal,

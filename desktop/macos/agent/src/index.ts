@@ -83,7 +83,8 @@ import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapters/acp.js";
-import { createKernelElicitationResolver } from "./runtime/desktop-elicitation-resolver.js";
+import { askUser, createKernelElicitationResolver } from "./runtime/desktop-elicitation-resolver.js";
+import type { KernelElicitationDeps } from "./runtime/desktop-elicitation-resolver.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
@@ -1285,7 +1286,7 @@ async function main(): Promise<void> {
   // Give every ACP adapter a way to reach a person. Without this an adapter
   // fails closed on any permission its policy will not auto-resolve, so the
   // installation has to cover the pi adapter and each externally spawned one.
-  const elicitationResolver = createKernelElicitationResolver({
+  const elicitationDeps: KernelElicitationDeps = {
     kernel,
     log: logErr,
     notifier: {
@@ -1314,7 +1315,8 @@ async function main(): Promise<void> {
         outcome,
       }),
     },
-  });
+  };
+  const elicitationResolver = createKernelElicitationResolver(elicitationDeps);
   const installElicitationResolver = (adapter: RuntimeAdapter): void => {
     if (adapter instanceof AcpRuntimeAdapter) adapter.elicitationResolver = elicitationResolver;
   };
@@ -1389,6 +1391,7 @@ async function main(): Promise<void> {
   }
   agentControlToolContext = {
     kernel,
+    askUser: (request, binding) => askUser(elicitationDeps, request, binding),
     defaultAdapterId,
     providerBoundary: providerBoundaryForAdapter(defaultAdapterId),
     executionRole: "coordinator",

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  askUser,
   createKernelElicitationResolver,
   outcomeFromResolution,
 } from "../src/runtime/desktop-elicitation-resolver.js";
@@ -274,5 +275,45 @@ describe("resolution mapping", () => {
       .toEqual({ kind: "cancelled", reason: "cancelled" });
     expect(outcomeFromResolution(permissionRequest, "expired", null))
       .toEqual({ kind: "cancelled", reason: "expired" });
+  });
+});
+
+describe("ask_user records a question against the session it was called from", () => {
+  it("does not need an adapter-native session to reach the user", async () => {
+    const stub = kernelStub();
+    const seen: Array<Record<string, unknown>> = [];
+    const promise = askUser(
+      { kernel: stub.kernel as any, log: () => {}, notifier: { pending: (i: any) => seen.push(i), resolved: () => {} } },
+      questionRequest,
+      { sessionId: "sess-9", ownerId: "owner-9", runId: "run-9" },
+    );
+    await Promise.resolve();
+
+    // The ACP path has to look a session up; ask_user already knows one.
+    expect(stub.kernel.sessionForAdapterNativeSession).not.toHaveBeenCalled();
+    expect(stub.created[0]).toMatchObject({
+      ownerId: "owner-9",
+      sourceSessionId: "sess-9",
+      sourceRunId: "run-9",
+      kind: "routing_choice",
+      expiresAtMs: null,
+    });
+    expect(seen).toHaveLength(1);
+
+    stub.emitResolution({ dispatchId: "disp-1", status: "resolved", resolution: { text: "release/0.12" } });
+    await expect(promise).resolves.toEqual({ kind: "answered", text: "release/0.12" });
+  });
+
+  it("returns a cancellation when the user dismisses instead of answering", async () => {
+    const stub = kernelStub();
+    const promise = askUser(
+      { kernel: stub.kernel as any, log: () => {} },
+      questionRequest,
+      { sessionId: "sess-9", ownerId: "owner-9", runId: null },
+    );
+    await Promise.resolve();
+
+    stub.emitResolution({ dispatchId: "disp-1", status: "cancelled" });
+    await expect(promise).resolves.toMatchObject({ kind: "cancelled" });
   });
 });

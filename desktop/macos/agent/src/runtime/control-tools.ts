@@ -25,6 +25,8 @@ import {
   type AgentSpawnProducerJournalDescriptor,
 } from "./agent-spawn-journal.js";
 import { evaluateDesktopToolPolicy } from "./desktop-tool-policy.js";
+import { normalizeAskUser } from "./desktop-elicitation.js";
+import type { ElicitationOutcome, ElicitationRequest } from "./desktop-elicitation.js";
 import type { DesktopCoordinatorBundle } from "./desktop-tool-policy.js";
 import type {
   EvidenceRef,
@@ -176,6 +178,12 @@ const routeDesktopIntentSchema = strictObject({
   snapshotVersion: z.string().min(1).optional(),
   syntaxFacts: desktopIntentSyntaxFactsSchema.optional(),
   proposal: desktopIntentProposalSchema.optional(),
+});
+
+const askUserSchema = strictObject({
+  question: z.string().min(1),
+  options: z.array(z.string()).optional(),
+  allow_free_text: z.boolean().optional(),
 });
 
 const evaluateDesktopToolPolicySchema = strictObject({
@@ -472,6 +480,7 @@ export const agentControlToolSchemas = {
   get_desktop_open_loops: getDesktopOpenLoopsSchema,
   build_desktop_context_packet: buildDesktopContextPacketSchema,
   route_desktop_intent: routeDesktopIntentSchema,
+  ask_user: askUserSchema,
   evaluate_desktop_tool_policy: evaluateDesktopToolPolicySchema,
   create_desktop_dispatch: createDesktopDispatchSchema,
   resolve_desktop_dispatch: resolveDesktopDispatchSchema,
@@ -570,6 +579,15 @@ export interface AgentControlToolContext {
     /** Direct desktop control retains admitted children through owner transition. */
     retainRun?(runId: string): void;
   };
+  /**
+   * Puts a question to the user and resolves when they answer. Injected rather
+   * than imported so the control-tool layer does not construct its own notifier
+   * or duplicate the dispatch bookkeeping.
+   */
+  askUser?: (
+    request: ElicitationRequest,
+    binding: { sessionId: string; ownerId: string; runId: string | null },
+  ) => Promise<ElicitationOutcome>;
   recoverRunInput?: (adapterId: string) => Pick<ExecuteAgentRunInput, "maxAttempts" | "recoverAfterError">;
   buildMcpServers?: (
     mode: "ask" | "act",
@@ -961,6 +979,29 @@ export async function handleAgentControlToolCall(
         });
         return stringifyToolResult({ route });
       }
+      case "ask_user": {
+        const parsed = agentControlToolSchemas.ask_user.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, undefined);
+        const sessionId = context.callerSessionId;
+        if (!context.askUser || !sessionId) {
+          throw new Error("Asking the user is unavailable in this runtime");
+        }
+        const request = normalizeAskUser({
+          adapterId: context.defaultAdapterId ?? "acp",
+          agentLabel: "Omi",
+          args: parsed,
+        });
+        if (!request) {
+          throw new Error("ask_user requires a question");
+        }
+        const outcome = await context.askUser(request, {
+          sessionId,
+          ownerId,
+          runId: context.authorizedToolInvocation?.runId ?? null,
+        });
+        return stringifyToolResult({ outcome });
+      }
+
       case "evaluate_desktop_tool_policy": {
         const parsed = agentControlToolSchemas.evaluate_desktop_tool_policy.parse(input);
         const policy = evaluateDesktopToolPolicy({

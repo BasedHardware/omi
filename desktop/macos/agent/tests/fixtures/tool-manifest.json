@@ -1232,6 +1232,101 @@
     }
   },
   {
+    "name": "ask_user",
+    "label": "Ask User",
+    "description": "Ask the user a question mid-run and wait for their answer. Distinct from ask_followup, which drives the onboarding flow's own quick-reply UI and is available only during onboarding.",
+    "promptSnippet": "ask_user - Ask the user a question and wait for the answer",
+    "promptGuidelines": [
+      "Use when the work genuinely cannot proceed without a decision only the user can make.",
+      "Prefer options the user can click; set allow_free_text when an unlisted answer is reasonable.",
+      "Do not use for onboarding steps; ask_followup owns that flow.",
+      "The run blocks until the user answers or cancels, so ask once and act on the answer."
+    ],
+    "latency": "async background",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "The question to put to the user."
+        },
+        "options": {
+          "type": "array",
+          "description": "Optional answers the user can click.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allow_free_text": {
+          "type": "boolean",
+          "description": "Whether the user may type an answer instead of choosing. Defaults to true."
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "additionalProperties": false
+    },
+    "mcpInputSchema": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "The question to put to the user."
+        },
+        "options": {
+          "type": "array",
+          "description": "Optional answers the user can click.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allow_free_text": {
+          "type": "boolean",
+          "description": "Whether the user may type an answer instead of choosing. Defaults to true."
+        }
+      },
+      "required": [
+        "question"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "long",
+    "executor": {
+      "kind": "runtimeControl"
+    },
+    "surfaces": [
+      "desktop_chat",
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Ask User",
+      "summary": "Ask the user a question mid-run and wait for their answer.",
+      "bullets": [
+        "Use when the work cannot proceed without a decision only the user can make.",
+        "Blocks the run until the user answers or cancels."
+      ]
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Records a routing_choice dispatch scoped to the calling session's owner.",
+      "Blocks until the user answers or the turn is cancelled; a runtime restart cancels it."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true
+      }
+    }
+  },
+  {
     "name": "create_desktop_dispatch",
     "label": "Create Desktop Dispatch",
     "description": "Create a durable local DesktopCoordinatorDispatch for approvals, routing choices, artifact review, candidates, or sensitive context.",

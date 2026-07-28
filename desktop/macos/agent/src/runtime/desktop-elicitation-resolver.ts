@@ -119,56 +119,78 @@ export function createKernelElicitationResolver(deps: KernelElicitationDeps): El
       return failClosedOutcome(request, "no_kernel_binding");
     }
 
-    let dispatch: DesktopCoordinatorDispatch;
-    try {
-      dispatch = deps.kernel.createDesktopDispatch({
-        ownerId: binding.ownerId,
-        kind: dispatchKindFor(request),
-        priority: BLOCKING_DISPATCH_PRIORITY,
-        title: request.title,
-        decisionPrompt: request.prompt,
-        recommendedDefault: request.recommendedDefault,
-        sourceSessionId: binding.sessionId,
-        sourceRunId: binding.runId,
-        payloadJson: JSON.stringify({
-          channel: request.channel,
-          mode: request.mode,
-          adapterId: request.adapterId,
-          subject: request.subject,
-          context: request.context,
-          options: request.options,
-          allowsFreeText: request.allowsFreeText,
-        }),
-        // No expiry: the run waits in `waiting_approval` until the user acts or
-        // the turn is cancelled. Startup reconciliation, not a clock, is what
-        // clears a dispatch whose blocked request died with its process.
-        expiresAtMs: null,
-      });
-    } catch (error) {
-      deps.log(`Elicitation dispatch could not be recorded: ${String(error)}; failing closed`);
-      return failClosedOutcome(request, "dispatch_not_recorded");
-    }
-
-    deps.log(`Elicitation dispatch ${dispatch.dispatchId} pending for ${request.adapterId}`);
-    deps.notifier?.pending({
-      dispatchId: dispatch.dispatchId,
-      ownerId: binding.ownerId,
-      sessionId: binding.sessionId,
-      runId: binding.runId,
-      request,
-      createdAtMs: dispatch.createdAtMs,
-    });
-
-    const outcome = await waitForDispatchResolution(deps, request, dispatch.dispatchId);
-    // Announced for every terminal transition, not only a user answer, so a
-    // card cannot outlive the question it belongs to.
-    deps.notifier?.resolved({
-      dispatchId: dispatch.dispatchId,
-      ownerId: binding.ownerId,
-      outcome: outcome.kind === "cancelled" ? "cancelled" : "answered",
-    });
-    return outcome;
+    return await askUser(deps, request, binding);
   };
+}
+
+/** The kernel identity an elicitation is recorded against. */
+export interface ElicitationOwnerBinding {
+  sessionId: string;
+  ownerId: string;
+  runId: string | null;
+}
+
+/**
+ * Record the question, tell the surface, and wait for the user.
+ *
+ * Shared by the ACP path, which has to discover its binding from an
+ * adapter-native session, and by `ask_user`, which already knows the session it
+ * was called from.
+ */
+export async function askUser(
+  deps: KernelElicitationDeps,
+  request: ElicitationRequest,
+  binding: ElicitationOwnerBinding,
+): Promise<ElicitationOutcome> {
+  let dispatch: DesktopCoordinatorDispatch;
+  try {
+    dispatch = deps.kernel.createDesktopDispatch({
+      ownerId: binding.ownerId,
+      kind: dispatchKindFor(request),
+      priority: BLOCKING_DISPATCH_PRIORITY,
+      title: request.title,
+      decisionPrompt: request.prompt,
+      recommendedDefault: request.recommendedDefault,
+      sourceSessionId: binding.sessionId,
+      sourceRunId: binding.runId,
+      payloadJson: JSON.stringify({
+        channel: request.channel,
+        mode: request.mode,
+        adapterId: request.adapterId,
+        subject: request.subject,
+        context: request.context,
+        options: request.options,
+        allowsFreeText: request.allowsFreeText,
+      }),
+      // No expiry: the run waits in `waiting_approval` until the user acts or
+      // the turn is cancelled. Startup reconciliation, not a clock, is what
+      // clears a dispatch whose blocked request died with its process.
+      expiresAtMs: null,
+    });
+  } catch (error) {
+    deps.log(`Elicitation dispatch could not be recorded: ${String(error)}; failing closed`);
+    return failClosedOutcome(request, "dispatch_not_recorded");
+  }
+
+  deps.log(`Elicitation dispatch ${dispatch.dispatchId} pending for ${request.adapterId}`);
+  deps.notifier?.pending({
+    dispatchId: dispatch.dispatchId,
+    ownerId: binding.ownerId,
+    sessionId: binding.sessionId,
+    runId: binding.runId,
+    request,
+    createdAtMs: dispatch.createdAtMs,
+  });
+
+  const outcome = await waitForDispatchResolution(deps, request, dispatch.dispatchId);
+  // Announced for every terminal transition, not only a user answer, so a card
+  // cannot outlive the question it belongs to.
+  deps.notifier?.resolved({
+    dispatchId: dispatch.dispatchId,
+    ownerId: binding.ownerId,
+    outcome: outcome.kind === "cancelled" ? "cancelled" : "answered",
+  });
+  return outcome;
 }
 
 /**
