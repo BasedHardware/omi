@@ -186,6 +186,18 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('completed'), _asc('due_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'action_items_conversation_due',
+        'action_items',
+        'COLLECTION',
+        (_asc('conversation_id'), _asc('due_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'action_items_completed_conversation_due',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _asc('conversation_id'), _asc('due_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'candidate_integration_outbox_generation_status',
         'candidate_integration_outbox',
         'COLLECTION',
