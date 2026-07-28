@@ -219,7 +219,12 @@ jobs:
           RESOLVE_ON_MAIN="$(grep '^already_on_main=' "$RESOLVE_OUT" | tail -1 | cut -d= -f2-)"
 
           if [ -n "$RESOLVE_COMMIT" ]; then
-            test "$(git rev-parse "${RESOLVE_COMMIT}^1")" = "$PLANNED_SOURCE_SHA"
+            # already-on-main recovery after tip-bumps: consolidate^1 is the
+            # original planned source, not the current tip. Only enforce the
+            # parent identity when reusing a not-yet-merged branch tip.
+            if [ "$RESOLVE_ON_MAIN" != "true" ]; then
+              test "$(git rev-parse "${RESOLVE_COMMIT}^1")" = "$PLANNED_SOURCE_SHA"
+            fi
             git checkout -B "$BRANCH" "$RESOLVE_COMMIT"
             {
               echo "changed=true"
