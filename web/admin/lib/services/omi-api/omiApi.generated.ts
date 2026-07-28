@@ -132,7 +132,7 @@ export interface ActionItemsSearchResponse {
   action_items: Array<ActionItemResponse>;
 }
 
-export type ActionType = "create_conversation" | "create_facts" | "read_memories" | "read_conversations" | "read_tasks" | "persona_chat";
+export type ActionType = "create_conversation" | "create_facts" | "read_memories" | "read_conversations" | "read_tasks";
 
 export interface AddTesterRequest {
   apps: Array<string>;

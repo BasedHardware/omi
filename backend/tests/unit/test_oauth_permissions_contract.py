@@ -62,6 +62,5 @@ class TestOAuthPermissionContract:
             oauth_src,
         )
         assert m, (
-            "persona_chat capability must append the 'Reply to messages on your behalf' "
-            "permission in oauth.py."
+            "persona_chat capability must append the 'Reply to messages on your behalf' " "permission in oauth.py."
         )
