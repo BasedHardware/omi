@@ -12,6 +12,16 @@ Public surface:
 """
 
 from .records import StoredDocument
-from .ports import DocumentStore
+from .ports import DocumentStore, Transaction, Filter
+from .factory import get_document_store, reset_document_store
+from . import sentinels
 
-__all__ = ["StoredDocument", "DocumentStore"]
+__all__ = [
+    "StoredDocument",
+    "DocumentStore",
+    "Transaction",
+    "Filter",
+    "get_document_store",
+    "reset_document_store",
+    "sentinels",
+]
