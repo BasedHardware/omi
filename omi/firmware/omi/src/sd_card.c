@@ -676,11 +676,12 @@ static int read_packets_internal(uint64_t start_seq,
 
 static int advance_read_seq_durably_internal(uint64_t new_read_seq)
 {
-    if (new_read_seq < ring_state.read_seq || new_read_seq > ring_state.write_seq) {
+    ring_advance_action_t action = ring_advance_action(ring_state.read_seq, ring_state.write_seq, new_read_seq);
+    if (action == RING_ADVANCE_INVALID) {
         return -ERANGE;
     }
 
-    if (new_read_seq == ring_state.read_seq) {
+    if (action == RING_ADVANCE_IDEMPOTENT) {
         return 0;
     }
 

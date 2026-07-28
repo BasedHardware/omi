@@ -1410,23 +1410,18 @@ void pusher(void)
                 }
             }
 
-            bool sent_live = false;
-            if (conn && is_subscribed) {
-                sent_live = push_to_gatt(conn);
-            }
-
             bool storage_available = false;
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
             storage_available = is_sd_on();
 #endif
-            audio_delivery_route_t route = audio_delivery_route(sent_live, storage_available);
-            if (route == AUDIO_DELIVERY_STORAGE) {
+            bool live_available = conn && is_subscribed;
+            audio_delivery_route_t route = audio_delivery_route(live_available, storage_available);
+            if (route == AUDIO_DELIVERY_STORAGE || route == AUDIO_DELIVERY_LIVE_AND_STORAGE) {
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
                 /*
-                 * Preserve frames whenever live delivery cannot even be
-                 * queued: disconnect, missing subscription/MTU, or GATT TX
-                 * congestion. Successful live frames remain live-only
-                 * until the app has a duplicate-free live/ring identity.
+                 * Establish durable ownership before attempting the live
+                 * notification. Controller acceptance is only flow control;
+                 * the app's explicit ring ADVANCE is the reclaim authority.
                  */
                 if (!write_current_frame_to_storage()) {
                     /*
@@ -1435,11 +1430,18 @@ void pusher(void)
                      * before dequeuing newer audio.
                      */
                     retained_tx_frame = true;
+                } else if (route == AUDIO_DELIVERY_LIVE_AND_STORAGE) {
+                    /*
+                     * Live delivery is a best-effort low-latency duplicate.
+                     * A rejected enqueue needs no retry here because the ring
+                     * already owns the frame for duplicate-safe recovery.
+                     */
+                    (void) push_to_gatt(conn);
                 }
 #endif
             } else if (route == AUDIO_DELIVERY_DROP) {
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-                record_storage_rejection("live delivery and SD unavailable");
+                record_storage_rejection("SD unavailable; refusing live-only delivery");
                 retained_tx_frame = true;
 #endif
             }

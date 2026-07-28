@@ -150,12 +150,39 @@ static void test_invalid_frame_leaves_state_unchanged(void)
     assert(writer.record_count == 0U);
 }
 
-static void test_delivery_policy_falls_back_after_live_enqueue_failure(void)
+static void test_accepted_live_enqueue_remains_recoverable_after_disconnect(void)
 {
-    assert(audio_delivery_route(true, true) == AUDIO_DELIVERY_LIVE);
-    assert(audio_delivery_route(true, false) == AUDIO_DELIVERY_LIVE);
-    assert(audio_delivery_route(false, true) == AUDIO_DELIVERY_STORAGE);
+    audio_storage_packer_t packer;
+    fake_writer_t writer = {0};
+    uint8_t live_frame[160];
+
+    fill_frame(live_frame, sizeof(live_frame), 0xA4);
+    audio_storage_packer_init(&packer);
+
+    assert(audio_delivery_route(true, true) == AUDIO_DELIVERY_LIVE_AND_STORAGE);
+    assert(audio_storage_packer_push(&packer, live_frame, sizeof(live_frame), fake_write, &writer) ==
+           AUDIO_STORAGE_PACKER_ACCEPTED);
+
+    /* GATT accepted the duplicate, then the link disappeared before app ACK. */
+    assert(audio_storage_packer_pending_bytes(&packer) == sizeof(live_frame) + 1U);
+    assert(audio_storage_packer_flush(&packer, fake_write, &writer));
+    assert(writer.record_count == 1U);
+    assert_packed_frame(writer.records[0], 0U, live_frame, sizeof(live_frame));
+}
+
+static void test_durable_ack_reclaims_duplicate_once(void)
+{
+    assert(ring_advance_action(40U, 41U, 41U) == RING_ADVANCE_COMMIT);
+    assert(ring_advance_action(41U, 41U, 41U) == RING_ADVANCE_IDEMPOTENT);
+    assert(ring_advance_action(41U, 43U, 40U) == RING_ADVANCE_INVALID);
+    assert(ring_advance_action(41U, 43U, 44U) == RING_ADVANCE_INVALID);
+}
+
+static void test_storage_unavailable_refuses_accepted_live_only_drop(void)
+{
+    assert(audio_delivery_route(true, false) == AUDIO_DELIVERY_DROP);
     assert(audio_delivery_route(false, false) == AUDIO_DELIVERY_DROP);
+    assert(audio_delivery_route(false, true) == AUDIO_DELIVERY_STORAGE);
 }
 
 static void test_pre_pusher_queue_saturation_preserves_whole_frame(void)
@@ -306,7 +333,9 @@ int main(void)
     test_rejected_overflow_does_not_consume_or_reorder_new_frame();
     test_exact_fit_flushes_legacy_terminated_record_before_new_frame();
     test_invalid_frame_leaves_state_unchanged();
-    test_delivery_policy_falls_back_after_live_enqueue_failure();
+    test_accepted_live_enqueue_remains_recoverable_after_disconnect();
+    test_durable_ack_reclaims_duplicate_once();
+    test_storage_unavailable_refuses_accepted_live_only_drop();
     test_pre_pusher_queue_saturation_preserves_whole_frame();
     test_transfer_crc_and_done_notification_match_golden_wire_bytes();
     test_invalid_rtc_uses_zero_timestamp_without_rejecting_audio();

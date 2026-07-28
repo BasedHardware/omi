@@ -18,7 +18,20 @@ typedef struct {
     bool restore_pending;
 } ring_bulk_link_policy_t;
 
+typedef enum {
+    RING_ADVANCE_INVALID = 0,
+    RING_ADVANCE_IDEMPOTENT,
+    RING_ADVANCE_COMMIT,
+} ring_advance_action_t;
+
 uint32_t ring_transfer_crc32_update(uint32_t crc, const uint8_t *data, size_t length);
+
+/**
+ * Classify an app durable-ACK watermark without mutating ring ownership.
+ * Replaying the current watermark is an idempotent success; only a strictly
+ * newer in-range watermark may reclaim records.
+ */
+ring_advance_action_t ring_advance_action(uint64_t read_seq, uint64_t write_seq, uint64_t requested_seq);
 
 /**
  * Invalid/unsynchronized RTC values are represented as timestamp zero. Audio

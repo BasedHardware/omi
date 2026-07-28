@@ -22,15 +22,16 @@ typedef enum {
 
 typedef enum {
     AUDIO_DELIVERY_DROP = 0,
-    AUDIO_DELIVERY_LIVE,
     AUDIO_DELIVERY_STORAGE,
+    AUDIO_DELIVERY_LIVE_AND_STORAGE,
 } audio_delivery_route_t;
 
 /**
- * Select the authoritative owner for one popped frame. A failed/unavailable
- * live enqueue must fall back to storage whenever storage is available.
+ * Select the owners for one popped frame. Storage remains authoritative until
+ * the app explicitly advances the durable ring; live delivery is only a
+ * best-effort duplicate of a storage-owned frame.
  */
-audio_delivery_route_t audio_delivery_route(bool live_queued, bool storage_available);
+audio_delivery_route_t audio_delivery_route(bool live_available, bool storage_available);
 
 void audio_storage_packer_init(audio_storage_packer_t *packer);
 

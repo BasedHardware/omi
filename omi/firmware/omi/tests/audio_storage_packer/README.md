@@ -3,6 +3,8 @@
 These host-native tests exercise the production frame-to-record packer and ring
 transfer integrity helpers without BLE or SD hardware. They enforce that a
 rejected SD enqueue cannot consume, duplicate, or reorder the next Opus frame,
+that accepted live delivery retains a recoverable ring copy until durable app
+acknowledgment, and that unavailable storage refuses unsafe live-only delivery,
 pin the CRC32-extended `DONE` notification to golden wire bytes, and cover
 power-on reconciliation after transient queue/remount failures.
 
