@@ -34,6 +34,23 @@ DEPLOY_ACTION_PATH = ".github/actions/deploy-public-build/action.yml"
 PREPARE_ACTION_PATH = ".github/actions/prepare-public-build/action.yml"
 PROMOTION_ACTION_PATH = ".github/actions/public-build-candidate-promotion/action.yml"
 JIT_PREFLIGHT_WORKFLOW_PATH = ".github/workflows/public-build-config-preflight.yml"
+MANUAL_ENVIRONMENT_INPUT = """workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'prod'
+        type: choice
+        options: [development, prod]"""
+DEPLOY_ENVIRONMENT_EXPRESSION = (
+    "github.event_name == 'workflow_dispatch' && github.event.inputs.environment || "
+    "(github.ref == 'refs/heads/development' && 'development') || 'prod'"
+)
+CONCURRENCY_ENVIRONMENT_EXPRESSION = (
+    "github.event_name == 'workflow_dispatch' && github.event.inputs.environment || "
+    "github.ref == 'refs/heads/development' && 'development' || "
+    "github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id)"
+)
 
 
 @dataclass(frozen=True)
@@ -352,6 +369,30 @@ def _guarded_names(text: str) -> set[str]:
     return set() if match is None else set(match.group(1).split())
 
 
+def resolved_deploy_environment(*, event_name: str, ref: str, requested_environment: str | None = None) -> str:
+    """Model the workflow expression used by every browser-build deploy target."""
+    if event_name == "workflow_dispatch":
+        if requested_environment not in {"development", "prod"}:
+            raise ValueError("workflow_dispatch must select development or prod")
+        return requested_environment
+    return "development" if ref == "refs/heads/development" else "prod"
+
+
+def validate_manual_environment_dispatch(workflow_path: str, workflow: str) -> list[str]:
+    """Keep exact-head manual deployments bound to their selected environment."""
+    errors: list[str] = []
+    if MANUAL_ENVIRONMENT_INPUT not in workflow:
+        errors.append(f"{workflow_path}: must expose the shared environment workflow_dispatch choice")
+    expected_environment = f"environment: ${{{{ {DEPLOY_ENVIRONMENT_EXPRESSION} }}}}"
+    if workflow.count(expected_environment) < 2:
+        errors.append(
+            f"{workflow_path}: job and deploy action must select environment from workflow_dispatch before ref"
+        )
+    if CONCURRENCY_ENVIRONMENT_EXPRESSION not in workflow:
+        errors.append(f"{workflow_path}: concurrency must select environment from workflow_dispatch before ref")
+    return errors
+
+
 def validate_target(
     root: Path,
     target: Target,
@@ -402,6 +443,7 @@ def validate_target(
     if not workflow_path.is_file():
         return errors + [f"{target.name}: workflow is missing: {target.workflow}"]
     workflow = workflow_path.read_text(encoding="utf-8")
+    errors.extend(validate_manual_environment_dispatch(target.workflow, workflow))
     if DEPLOY_ACTION not in workflow:
         errors.append(f"{target.workflow}: missing centralized public-build deployment {DEPLOY_ACTION!r}")
     if target.gateway_required:
