@@ -255,26 +255,46 @@ final class AgentRuntimeProcessTests: XCTestCase {
       [.rejectWALFrame(turnID: "turn-terminal")])
   }
 
+  /// Builds an init handshake carrying exactly the capabilities given, so the
+  /// fixture is never a hand-copied duplicate of the required set.
+  private func initHandshake(
+    capabilities: [String],
+    protocolVersion: Int = AgentRuntimeProcess.expectedProtocolVersion
+  ) throws -> AgentRuntimeProcess.RuntimeMessage {
+    let list = capabilities.map { "\"\($0)\"" }.joined(separator: ",")
+    return try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"init","protocolVersion":\#(protocolVersion),"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":[\#(list)]}"#
+      ))
+  }
+
   func testRuntimeHandshakeRejectsStaleV2RuntimeWithoutRequiredCapability() throws {
-    let valid = try XCTUnwrap(
-      AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability"]}"#
-      ))
-    let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(valid)
+    // Derived, not restated: every capability added to the requirement is
+    // covered here the day it lands, instead of turning this test red until
+    // someone hand-edits the fixture to match.
+    let required = AgentRuntimeProcess.requiredRuntimeCapabilities.sorted()
+    XCTAssertFalse(required.isEmpty)
+
+    let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(
+      try initHandshake(capabilities: required))
     XCTAssertEqual(handshake.protocolVersion, AgentRuntimeProcess.expectedProtocolVersion)
-    XCTAssertTrue(handshake.capabilities.contains("journal_import_remote_turn"))
+    XCTAssertEqual(handshake.capabilities, AgentRuntimeProcess.requiredRuntimeCapabilities)
 
-    let stale = try XCTUnwrap(
-      AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":[]}"#
-      ))
-    XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(stale))
+    // A runtime that is stale by one capability is the real upgrade-skew case,
+    // and each required capability is load-bearing on its own.
+    for missing in required {
+      XCTAssertThrowsError(
+        try AgentRuntimeProcess.validateRuntimeHandshake(
+          try initHandshake(capabilities: required.filter { $0 != missing })),
+        "a runtime advertising everything but \(missing) must not complete the handshake")
+    }
 
-    let wrongProtocol = try XCTUnwrap(
-      AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn"]}"#
-      ))
-    XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(wrongProtocol))
+    XCTAssertThrowsError(
+      try AgentRuntimeProcess.validateRuntimeHandshake(try initHandshake(capabilities: [])))
+
+    XCTAssertThrowsError(
+      try AgentRuntimeProcess.validateRuntimeHandshake(
+        try initHandshake(capabilities: required, protocolVersion: 1)))
   }
 
   func testJournalDeadlineAcceptsResultAfterSQLiteBusyWindowWithoutWallClockDelay() {
