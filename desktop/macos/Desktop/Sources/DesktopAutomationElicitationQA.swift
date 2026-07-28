@@ -129,6 +129,28 @@ extension DesktopAutomationActionRegistry {
       }
 
       register(
+        name: "elicitation_cancel",
+        summary: "Dismiss the current elicitation the way clicking Cancel would. DEBUG non-prod only."
+      ) { _ in
+        guard AppBuild.isNonProduction else {
+          return ["error": "elicitation_cancel is disabled on production bundles"]
+        }
+        guard let provider = ChatProvider.mainInstance else {
+          return ["error": "main ChatProvider not yet initialized"]
+        }
+        let store = provider.elicitations
+        guard let current = store.focused else {
+          return ["cancelled": "false", "waiting_count": "0"]
+        }
+        store.answer(current, with: .cancel)
+        return [
+          "cancelled": "true",
+          "waiting_count": "\(store.waitingCount)",
+          "current_dispatch_id": store.focused?.id ?? "",
+        ]
+      }
+
+      register(
         name: "elicitation_answer",
         summary: "Answer the current elicitation the way clicking its option would. DEBUG non-prod only.",
         params: ["option_id"]
