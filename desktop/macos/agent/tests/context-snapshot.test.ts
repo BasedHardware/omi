@@ -225,6 +225,21 @@ describe("kernel ContextSnapshot", () => {
     expect(policy).toContain("Do not ask for a second confirmation merely to delegate");
   });
 
+  it("routes a decision to ask_user without loosening how often to ask", () => {
+    for (const role of ["coordinator", "leaf"] as const) {
+      const policy = kernelSystemPolicy("main_chat", role);
+      // The channel rule covers both roles: a background worker's prose
+      // question reaches nobody at all.
+      expect(policy, role).toContain("ask with the ask_user tool");
+      expect(policy, role).toContain("governs how you ask, not how often");
+    }
+
+    // The restrictive frequency policy must survive the channel rule.
+    expect(kernelSystemPolicy("main_chat", "coordinator")).toContain(
+      "preserve confirmation for external or destructive actions that were not explicitly requested",
+    );
+  });
+
   it("marks realtime history as historical-only visual context", () => {
     const { store, session } = fixture("realtime_voice");
     const surface = resolveSurfaceSession(store, {
