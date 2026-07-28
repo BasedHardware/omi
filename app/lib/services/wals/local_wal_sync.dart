@@ -28,7 +28,7 @@ import 'package:omi/utils/wal_file_manager.dart';
 /// below ('failed' with totalSegments==0) as the durable signal.
 const _kBackendBusyErrorHint = 'background worker likely died';
 const _freshSyncCutoffSeconds = 6 * 60 * 60;
-const _conversationBoundarySeconds = 2 * 60;
+const _defaultConversationBoundarySeconds = 2 * 60;
 const _captureUploadWalLimit = 2000;
 
 /// Legacy/historical files per upload batch. A conversation-bound capture uses
@@ -39,6 +39,33 @@ const _syncUploadBatchLimit = 20;
 typedef WalPersister = Future<bool> Function(List<Wal> wals);
 typedef WalPathResolver = Future<String?> Function(String? pathOrName);
 typedef SyncJobStatusFetcher = Future<SyncJobFetch> Function(String jobId);
+typedef ConversationBoundarySecondsProvider = int Function();
+
+class AuthorizedRecoverySyncResult {
+  const AuthorizedRecoverySyncResult({
+    required this.response,
+    required this.hasDeferredRecovery,
+  });
+
+  final SyncLocalFilesResponse? response;
+
+  /// Retryable raw/archive work inside the receipt still exists locally.
+  ///
+  /// A recent range remains deferred until the configured conversation close;
+  /// a failed upload remains deferred until a later retry. Newer and unrelated
+  /// backfill is deliberately outside this result.
+  final bool hasDeferredRecovery;
+}
+
+class _AuthorizedRecoveryScope {
+  const _AuthorizedRecoveryScope({
+    required this.deviceId,
+    required this.targetWriteSeq,
+  });
+
+  final String deviceId;
+  final int targetWriteSeq;
+}
 
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
 
@@ -85,18 +112,321 @@ bool _isUnboundStorageContinuity(Wal wal) =>
     wal.originalStorage == WalStorage.sdcard &&
     wal.conversationId == null;
 
-double _walEndSeconds(Wal wal) {
-  final fps = wal.codec.getFramesPerSecond();
-  final preciseDuration = fps > 0 && wal.totalFrames > 0 ? wal.totalFrames / fps : wal.seconds.toDouble();
-  return wal.timerStart + preciseDuration;
-}
+double _walEndSeconds(Wal wal) => wal.wallClockEndSeconds;
 
 bool _isRawRingFragment(Wal wal) => wal.originalStorage == WalStorage.sdcard && _ringSourceRange(wal) != null;
 
 bool _isRingRecoveryArtifact(Wal wal) =>
     wal.originalStorage == WalStorage.sdcard && RingProtocol.parseRecoverySourceRange(wal.sourceId) != null;
 
+bool _isDurableRingCoverageArtifact(Wal wal) =>
+    wal.originalStorage == WalStorage.sdcard && RingProtocol.parseDurableCoverageSourceRange(wal.sourceId) != null;
+
+bool _isLegacyRingArchive(Wal wal) =>
+    _isRingRecoveryArtifact(wal) &&
+    !_isDurableRingCoverageArtifact(wal) &&
+    wal.sourceId?.startsWith('archive_ring_') == true;
+
 bool _isUnassembledConversationRepair(Wal wal) => wal.conversationId != null && _isRingRecoveryArtifact(wal);
+
+bool _sameRingEncoding(Wal left, Wal right) =>
+    left.device == right.device &&
+    left.codec == right.codec &&
+    left.sampleRate == right.sampleRate &&
+    left.channel == right.channel &&
+    left.frameSize == right.frameSize;
+
+String _ringEncodingBucket(Wal wal) => [
+      wal.device,
+      wal.codec.name,
+      wal.sampleRate,
+      wal.channel,
+      wal.frameSize,
+    ].join('|');
+
+List<List<Wal>> _continuousRingRecoveryGroups(
+  Iterable<Wal> wals, {
+  required int conversationBoundarySeconds,
+  int? maxWallSeconds,
+  bool requireContiguousSequence = false,
+  int? sequenceBoundary,
+}) {
+  final buckets = <String, List<Wal>>{};
+  for (final wal in wals) {
+    buckets.putIfAbsent(_ringEncodingBucket(wal), () => []).add(wal);
+  }
+
+  final groups = <List<Wal>>[];
+  for (final bucket in buckets.values) {
+    bucket.sort((left, right) {
+      final timeCompare = left.timerStart.compareTo(right.timerStart);
+      if (timeCompare != 0) return timeCompare;
+      final leftRange = RingProtocol.parseRecoverySourceRange(left.sourceId);
+      final rightRange = RingProtocol.parseRecoverySourceRange(right.sourceId);
+      final sequenceCompare = (leftRange?.start ?? 0).compareTo(rightRange?.start ?? 0);
+      if (sequenceCompare != 0) return sequenceCompare;
+      return left.id.compareTo(right.id);
+    });
+
+    for (final wal in bucket) {
+      if (groups.isEmpty || !_sameRingEncoding(groups.last.last, wal)) {
+        groups.add([wal]);
+        continue;
+      }
+      final group = groups.last;
+      final wallGap = wal.timerStart - _walEndSeconds(group.last);
+      final wallSpan = _walEndSeconds(wal) - group.first.timerStart;
+      final sequenceJoins = !requireContiguousSequence || _sequenceRangeTouchesGroup(group, wal);
+      final boundaryJoins = sequenceBoundary == null || _sameSequenceBoundarySide(group, wal, sequenceBoundary);
+      if (wallGap < conversationBoundarySeconds &&
+          (maxWallSeconds == null || wallSpan <= maxWallSeconds) &&
+          sequenceJoins &&
+          boundaryJoins) {
+        group.add(wal);
+      } else {
+        groups.add([wal]);
+      }
+    }
+  }
+  return groups;
+}
+
+int _sequenceBoundarySide(Wal wal, int boundary) {
+  final range = RingProtocol.parseRecoverySourceRange(wal.sourceId);
+  if (range == null || (range.start < boundary && range.end > boundary)) {
+    return 0;
+  }
+  return range.end <= boundary ? -1 : 1;
+}
+
+bool _sameSequenceBoundarySide(List<Wal> group, Wal candidate, int boundary) {
+  final candidateSide = _sequenceBoundarySide(candidate, boundary);
+  if (candidateSide == 0) return false;
+  return group.every((wal) => _sequenceBoundarySide(wal, boundary) == candidateSide);
+}
+
+bool _sequenceRangeTouchesGroup(List<Wal> group, Wal candidate) {
+  final candidateRange = RingProtocol.parseRecoverySourceRange(candidate.sourceId);
+  if (candidateRange == null) return false;
+  final firstRange = RingProtocol.parseRecoverySourceRange(group.first.sourceId);
+  if (firstRange == null) return false;
+  var groupStart = firstRange.start;
+  var groupEnd = firstRange.end;
+  for (final wal in group.skip(1)) {
+    final range = RingProtocol.parseRecoverySourceRange(wal.sourceId);
+    if (range == null) return false;
+    if (range.start < groupStart) groupStart = range.start;
+    if (range.end > groupEnd) groupEnd = range.end;
+  }
+  return candidateRange.start <= groupEnd && candidateRange.end >= groupStart;
+}
+
+List<({int start, int end})> _orderedRecoveryRanges(List<Wal> wals) {
+  final ranges = wals
+      .map((wal) => RingProtocol.parseRecoverySourceRange(wal.sourceId))
+      .whereType<({int start, int end})>()
+      .toList()
+    ..sort((left, right) {
+      final startCompare = left.start.compareTo(right.start);
+      return startCompare != 0 ? startCompare : left.end.compareTo(right.end);
+    });
+  return ranges;
+}
+
+bool _hasNonOverlappingRecoverySequence(List<Wal> group) {
+  final ranges = _orderedRecoveryRanges(group);
+  if (ranges.length != group.length) return false;
+  for (var index = 1; index < ranges.length; index++) {
+    if (ranges[index].start < ranges[index - 1].end) return false;
+  }
+  return true;
+}
+
+Set<Wal>? _exactRecoveryUploadTile(List<Wal> group) {
+  final ranges = <Wal, ({int start, int end})>{};
+  for (final wal in group) {
+    final range = RingProtocol.parseRecoverySourceRange(wal.sourceId);
+    if (range == null || range.end <= range.start) return null;
+    ranges[wal] = range;
+  }
+  if (ranges.isEmpty) return <Wal>{};
+
+  final start = ranges.values.map((range) => range.start).reduce(min);
+  final end = ranges.values.map((range) => range.end).reduce(max);
+  final byStart = <int, List<Wal>>{};
+  for (final entry in ranges.entries) {
+    byStart.putIfAbsent(entry.value.start, () => []).add(entry.key);
+  }
+  for (final candidates in byStart.values) {
+    candidates.sort((left, right) {
+      final durableCompare = (_isLegacyRingArchive(left) ? 1 : 0).compareTo(_isLegacyRingArchive(right) ? 1 : 0);
+      if (durableCompare != 0) return durableCompare;
+      final endCompare = ranges[right]!.end.compareTo(ranges[left]!.end);
+      return endCompare != 0 ? endCompare : left.id.compareTo(right.id);
+    });
+  }
+
+  final best = <int, ({List<Wal> wals, int legacyCount})>{
+    start: (wals: const <Wal>[], legacyCount: 0),
+  };
+  final points = ranges.values.expand((range) => [range.start, range.end]).toSet().toList()..sort();
+  for (final point in points) {
+    final prefix = best[point];
+    if (prefix == null) continue;
+    for (final candidate in byStart[point] ?? const <Wal>[]) {
+      final candidateEnd = ranges[candidate]!.end;
+      final next = (
+        wals: [...prefix.wals, candidate],
+        legacyCount: prefix.legacyCount + (_isLegacyRingArchive(candidate) ? 1 : 0),
+      );
+      final current = best[candidateEnd];
+      if (current == null ||
+          next.legacyCount < current.legacyCount ||
+          (next.legacyCount == current.legacyCount && next.wals.length < current.wals.length)) {
+        best[candidateEnd] = next;
+      }
+    }
+  }
+  return best[end]?.wals.toSet();
+}
+
+List<List<Wal>> _recoverySequenceComponents(List<Wal> group) {
+  final ordered = List<Wal>.from(group)
+    ..sort((left, right) {
+      final leftRange = RingProtocol.parseRecoverySourceRange(left.sourceId)!;
+      final rightRange = RingProtocol.parseRecoverySourceRange(right.sourceId)!;
+      final startCompare = leftRange.start.compareTo(rightRange.start);
+      return startCompare != 0 ? startCompare : leftRange.end.compareTo(rightRange.end);
+    });
+  final components = <List<Wal>>[];
+  var componentEnd = -1;
+  for (final wal in ordered) {
+    final range = RingProtocol.parseRecoverySourceRange(wal.sourceId)!;
+    if (components.isEmpty || range.start > componentEnd) {
+      components.add([wal]);
+      componentEnd = range.end;
+      continue;
+    }
+    components.last.add(wal);
+    if (range.end > componentEnd) componentEnd = range.end;
+  }
+  return components;
+}
+
+Set<Wal> _blockedUnassembledRecoveryArtifacts(
+  List<Wal> pending, {
+  required int conversationBoundarySeconds,
+}) {
+  final blocked = Set<Wal>.identity();
+  final recoveryGroups = _continuousRingRecoveryGroups(
+    pending.where(
+      (wal) => wal.conversationId == null && _isRingRecoveryArtifact(wal),
+    ),
+    conversationBoundarySeconds: conversationBoundarySeconds,
+  );
+  for (final group in recoveryGroups) {
+    for (final component in _recoverySequenceComponents(group)) {
+      // A raw sibling means compaction has not yet committed this exact
+      // sequence component. Independent components in the same wall-time
+      // conversation remain eligible.
+      if (component.any(_isRawRingFragment)) {
+        blocked.addAll(component);
+        continue;
+      }
+      if (component.any(_isLegacyRingArchive)) {
+        // Old manifests can contain cumulative overlapping archives. Select
+        // one exact, nonduplicating path for upload, but never treat that
+        // legacy range as durable ADVANCE coverage.
+        final exactTile = _exactRecoveryUploadTile(component);
+        if (exactTile == null) {
+          blocked.addAll(component);
+        } else {
+          blocked.addAll(
+            component.where((wal) => !exactTile.contains(wal)),
+          );
+        }
+        continue;
+      }
+      if (!_hasNonOverlappingRecoverySequence(component)) {
+        blocked.addAll(component);
+      }
+    }
+  }
+  return blocked;
+}
+
+Set<Wal> _permanentlyBlockedLegacyRecoveryArtifacts(
+  List<Wal> pending, {
+  required int conversationBoundarySeconds,
+}) {
+  final blocked = Set<Wal>.identity();
+  final recoveryGroups = _continuousRingRecoveryGroups(
+    pending.where(
+      (wal) => wal.conversationId == null && _isRingRecoveryArtifact(wal),
+    ),
+    conversationBoundarySeconds: conversationBoundarySeconds,
+  );
+  for (final group in recoveryGroups) {
+    for (final component in _recoverySequenceComponents(group)) {
+      if (component.any(_isRawRingFragment) || !component.any(_isLegacyRingArchive)) {
+        continue;
+      }
+      if (_exactRecoveryUploadTile(component) == null) {
+        blocked.addAll(component);
+      }
+    }
+  }
+  return blocked;
+}
+
+Set<Wal> _legacyAliasesCoveredByBatch(
+  List<Wal> pending,
+  List<Wal> batch, {
+  required int conversationBoundarySeconds,
+}) {
+  final batchSet = Set<Wal>.identity()..addAll(batch);
+  final coveredAliases = Set<Wal>.identity();
+  final recoveryGroups = _continuousRingRecoveryGroups(
+    pending.where(
+      (wal) => wal.conversationId == null && _isRingRecoveryArtifact(wal),
+    ),
+    conversationBoundarySeconds: conversationBoundarySeconds,
+  );
+  for (final group in recoveryGroups) {
+    for (final component in _recoverySequenceComponents(group)) {
+      if (!component.any(_isLegacyRingArchive) || component.any(_isRawRingFragment)) {
+        continue;
+      }
+      final exactTile = _exactRecoveryUploadTile(component);
+      if (exactTile == null || !exactTile.every(batchSet.contains)) continue;
+      coveredAliases.addAll(
+        component.where((wal) => !exactTile.contains(wal)),
+      );
+    }
+  }
+  return coveredAliases;
+}
+
+bool _isAuthorizedHistoricalRecovery(
+  Wal wal,
+  _AuthorizedRecoveryScope? scope,
+) {
+  if (scope == null || wal.device != scope.deviceId || wal.conversationId != null || !_isRingRecoveryArtifact(wal)) {
+    return false;
+  }
+  final range = RingProtocol.parseRecoverySourceRange(wal.sourceId)!;
+  return range.end <= scope.targetWriteSeq;
+}
+
+bool _isEligibleForDrain(
+  Wal wal, {
+  required int nowSeconds,
+  required bool includeBackfill,
+  required _AuthorizedRecoveryScope? authorizedRecovery,
+}) =>
+    includeBackfill ||
+    _syncLaneForWal(wal, nowSeconds) == SyncUploadLane.fresh ||
+    _isAuthorizedHistoricalRecovery(wal, authorizedRecovery);
 
 @visibleForTesting
 Set<String> oversizedFreshConversationIds(List<Wal> pending, int nowSeconds) {
@@ -118,16 +448,24 @@ List<Wal> nextSyncUploadBatch(
   List<Wal> pending,
   int nowSeconds, {
   Set<String> forcedBackfillConversationIds = const {},
+  int conversationBoundarySeconds = _defaultConversationBoundarySeconds,
 }) {
   SyncUploadLane effectiveLane(Wal wal) =>
       wal.conversationId != null && forcedBackfillConversationIds.contains(wal.conversationId)
           ? SyncUploadLane.backfill
           : _syncLaneForWal(wal, nowSeconds);
 
+  final blockedRecoveryArtifacts = _blockedUnassembledRecoveryArtifacts(
+    pending,
+    conversationBoundarySeconds: conversationBoundarySeconds,
+  );
   final ordered = pending
       .where(
         (wal) =>
-            !_isUnboundStorageContinuity(wal) && !_isRawRingFragment(wal) && !_isUnassembledConversationRepair(wal),
+            !_isUnboundStorageContinuity(wal) &&
+            !_isRawRingFragment(wal) &&
+            !_isUnassembledConversationRepair(wal) &&
+            !blockedRecoveryArtifacts.contains(wal),
       )
       .toList()
     ..sort((a, b) {
@@ -149,6 +487,18 @@ List<Wal> nextSyncUploadBatch(
             wal.canonicalReplacement == canonicalReplacement,
       )
       .toList();
+  if (conversationId == null && _isRingRecoveryArtifact(ordered.first)) {
+    final recoveryRun = _continuousRingRecoveryGroups(
+      matching.where(_isRingRecoveryArtifact),
+      conversationBoundarySeconds: conversationBoundarySeconds,
+    ).firstWhere(
+      (run) => run.any((wal) => identical(wal, ordered.first)),
+    );
+    // Physical archives remain bounded, but every configured-timeout logical
+    // conversation is one ordered multipart job. The backend therefore sees
+    // one capture instead of one conversation per arbitrary archive boundary.
+    return recoveryRun;
+  }
   return matching.take(conversationId == null ? _syncUploadBatchLimit : _captureUploadWalLimit).toList();
 }
 
@@ -239,6 +589,10 @@ class _HistoricalRingArchive {
   final File? createdFile;
 }
 
+class _CanonicalSourceSnapshotChanged implements Exception {
+  const _CanonicalSourceSnapshotChanged();
+}
+
 class LocalWalSyncImpl implements LocalWalSync {
   List<Wal> _wals = [];
 
@@ -274,7 +628,12 @@ class LocalWalSyncImpl implements LocalWalSync {
   final WalPathResolver _walPathResolver;
   final OpusSilenceFrameFactory _silenceFrameFactory;
   final SyncJobStatusFetcher _syncJobStatusFetcher;
+  final ConversationBoundarySecondsProvider _conversationBoundarySecondsProvider;
   final Mutex _syncMutex = Mutex();
+  final Mutex _walAssemblyMutex = Mutex();
+  int _externalWalRegistrationsInFlight = 0;
+  int _externalWalRegistrationEpoch = 0;
+  Completer<void>? _externalWalRegistrationsIdle;
   Future<void>? _freshUploadWake;
   bool _freshUploadWakePending = false;
   String? _freshUploadWakeWalId;
@@ -288,11 +647,39 @@ class LocalWalSyncImpl implements LocalWalSync {
     WalPathResolver? walPathResolver,
     OpusSilenceFrameFactory? silenceFrameFactory,
     SyncJobStatusFetcher? syncJobStatusFetcher,
+    ConversationBoundarySecondsProvider? conversationBoundarySecondsProvider,
   })  : _uploadGateOverride = uploadGate,
         _walPersisterOverride = walPersister,
         _walPathResolver = walPathResolver ?? Wal.getFilePath,
         _silenceFrameFactory = silenceFrameFactory ?? _encodeOpusSilenceFrame,
-        _syncJobStatusFetcher = syncJobStatusFetcher ?? fetchSyncJobStatus;
+        _syncJobStatusFetcher = syncJobStatusFetcher ?? fetchSyncJobStatus,
+        _conversationBoundarySecondsProvider =
+            conversationBoundarySecondsProvider ?? (() => SharedPreferencesUtil().conversationSilenceDuration);
+
+  int _conversationBoundarySeconds() {
+    return effectiveConversationBoundarySeconds(
+      _conversationBoundarySecondsProvider(),
+    );
+  }
+
+  Future<T> _serializeWalAssembly<T>(
+    Future<T> Function() operation,
+  ) async {
+    await _walAssemblyMutex.acquire();
+    try {
+      return await operation();
+    } finally {
+      _walAssemblyMutex.release();
+    }
+  }
+
+  Future<void> _waitForExternalWalRegistrations() async {
+    while (_externalWalRegistrationsInFlight > 0) {
+      final idle = _externalWalRegistrationsIdle;
+      if (idle == null) continue;
+      await idle.future;
+    }
+  }
 
   static List<int> _encodeOpusSilenceFrame(BleAudioCodec codec) {
     final encoder = SimpleOpusEncoder(
@@ -331,12 +718,38 @@ class LocalWalSyncImpl implements LocalWalSync {
     Wal wal, {
     bool scheduleUpload = true,
   }) async {
+    if (_externalWalRegistrationsInFlight++ == 0) {
+      _externalWalRegistrationsIdle = Completer<void>();
+    }
+    try {
+      return await _addExternalWal(
+        wal,
+        scheduleUpload: scheduleUpload,
+      );
+    } finally {
+      _externalWalRegistrationsInFlight--;
+      _externalWalRegistrationEpoch++;
+      if (_externalWalRegistrationsInFlight == 0) {
+        final idle = _externalWalRegistrationsIdle;
+        _externalWalRegistrationsIdle = null;
+        if (idle != null && !idle.isCompleted) idle.complete();
+      }
+    }
+  }
+
+  Future<ExternalWalRegistration> _addExternalWal(
+    Wal wal, {
+    required bool scheduleUpload,
+  }) async {
+    _inheritCanonicalConversationOwner(wal);
     final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
     if (existingIndex >= 0) {
       final existing = _wals[existingIndex];
       if (!await _hasIdenticalFile(existing, wal)) {
         throw StateError('External WAL identity collision for ${wal.id}');
       }
+      await _upgradeConversationOwnerMetadata(existing, wal);
+      await _upgradeCaptureEndMetadata(existing, wal);
       Logger.debug("LocalWalSync: WAL ${wal.id} already durably registered");
       await _deleteDuplicateExternalFile(existing, wal);
       if (scheduleUpload && existing.status == WalStatus.miss && _mayAutoUploadExternalWal(existing)) {
@@ -354,6 +767,12 @@ class LocalWalSyncImpl implements LocalWalSync {
           existing.codec == wal.codec &&
           existing.originalStorage == wal.originalStorage &&
           await _hasIdenticalFile(existing, wal)) {
+        // Legacy archives are valid audio/upload inputs, but their source
+        // range may span a sequence hole. They cannot suppress a truthful raw
+        // reread after upgrade even when their bytes happen to match.
+        if (_isLegacyRingArchive(existing) && _isDurableRingCoverageArtifact(wal)) {
+          continue;
+        }
         // Old builds could overwrite a timestamp-named file after it had been
         // marked synced. Without the upload-time hash, its current bytes are
         // not proof of what reached the server. Re-register that legacy data
@@ -367,6 +786,8 @@ class LocalWalSyncImpl implements LocalWalSync {
         Logger.debug(
           "LocalWalSync: external WAL ${wal.id} matches legacy durable WAL ${existing.id}",
         );
+        await _upgradeConversationOwnerMetadata(existing, wal);
+        await _upgradeCaptureEndMetadata(existing, wal);
         await _deleteDuplicateExternalFile(existing, wal);
         return ExternalWalRegistration.alreadyRegistered;
       }
@@ -392,6 +813,86 @@ class LocalWalSyncImpl implements LocalWalSync {
       _scheduleFreshUpload(wal);
     }
     return ExternalWalRegistration.added;
+  }
+
+  void _inheritCanonicalConversationOwner(Wal recovered) {
+    if (recovered.conversationId != null || !_isRingRecoveryArtifact(recovered)) {
+      return;
+    }
+    final boundarySeconds = _conversationBoundarySeconds();
+    final candidates = <({Wal wal, double gap})>[];
+    for (final canonical in _wals) {
+      if (canonical.device != recovered.device ||
+          canonical.conversationId == null ||
+          canonical.sourceId?.startsWith('canonical_') != true) {
+        continue;
+      }
+      final gap = _wallIntervalGapSeconds(canonical, recovered);
+      if (gap < boundarySeconds) {
+        candidates.add((wal: canonical, gap: gap));
+      }
+    }
+    if (candidates.isEmpty) return;
+    candidates.sort((left, right) => left.gap.compareTo(right.gap));
+    final nearestGap = candidates.first.gap;
+    final nearestOwners = candidates
+        .where((candidate) => candidate.gap == nearestGap)
+        .map((candidate) => candidate.wal.conversationId!)
+        .toSet();
+    if (nearestOwners.length != 1) {
+      throw StateError(
+        'Recovered ring range ${recovered.id} has ambiguous canonical conversation ownership',
+      );
+    }
+    recovered.conversationId = nearestOwners.single;
+  }
+
+  double _wallIntervalGapSeconds(Wal left, Wal right) {
+    if (right.timerStart > left.wallClockEndSeconds) {
+      return right.timerStart - left.wallClockEndSeconds;
+    }
+    if (left.timerStart > right.wallClockEndSeconds) {
+      return left.timerStart - right.wallClockEndSeconds;
+    }
+    return 0;
+  }
+
+  Future<void> _upgradeConversationOwnerMetadata(
+    Wal existing,
+    Wal recovered,
+  ) async {
+    final recoveredOwner = recovered.conversationId;
+    if (recoveredOwner == null || existing.conversationId == recoveredOwner) {
+      return;
+    }
+    if (existing.conversationId != null) {
+      throw StateError(
+        'External WAL ${existing.id} conflicts with canonical conversation ownership',
+      );
+    }
+    existing.conversationId = recoveredOwner;
+    try {
+      await _saveWalsToFile();
+    } catch (_) {
+      existing.conversationId = null;
+      rethrow;
+    }
+    listener.onWalUpdated();
+  }
+
+  Future<void> _upgradeCaptureEndMetadata(Wal existing, Wal recovered) async {
+    if (existing.validatedCaptureEndSeconds != null) return;
+    final recoveredEnd = recovered.validatedCaptureEndSeconds;
+    if (recoveredEnd == null) return;
+    final previous = existing.captureEndSeconds;
+    existing.captureEndSeconds = recoveredEnd;
+    try {
+      await _saveWalsToFile();
+    } catch (_) {
+      existing.captureEndSeconds = previous;
+      rethrow;
+    }
+    listener.onWalUpdated();
   }
 
   bool _mayAutoUploadExternalWal(Wal wal) {
@@ -592,11 +1093,35 @@ class LocalWalSyncImpl implements LocalWalSync {
   @visibleForTesting
   Future<void> prepareHistoricalRingFragments({
     required int nowSeconds,
+    String? recoveryDeviceId,
+    int? recoverySequenceBoundary,
+    int? conversationBoundarySeconds,
   }) {
+    if ((recoveryDeviceId == null) != (recoverySequenceBoundary == null)) {
+      throw ArgumentError('Recovery compaction boundary requires both device and sequence');
+    }
+    final boundarySeconds = conversationBoundarySeconds ?? _conversationBoundarySeconds();
     final inFlight = _historicalCompaction;
-    if (inFlight != null) return inFlight;
+    if (inFlight != null) {
+      if (recoveryDeviceId == null) return inFlight;
+      return inFlight.then(
+        (_) => prepareHistoricalRingFragments(
+          nowSeconds: nowSeconds,
+          recoveryDeviceId: recoveryDeviceId,
+          recoverySequenceBoundary: recoverySequenceBoundary,
+          conversationBoundarySeconds: boundarySeconds,
+        ),
+      );
+    }
     late final Future<void> operation;
-    operation = _prepareHistoricalRingFragments(nowSeconds: nowSeconds).whenComplete(() {
+    operation = _serializeWalAssembly(
+      () => _prepareHistoricalRingFragments(
+        nowSeconds: nowSeconds,
+        recoveryDeviceId: recoveryDeviceId,
+        recoverySequenceBoundary: recoverySequenceBoundary,
+        conversationBoundarySeconds: boundarySeconds,
+      ),
+    ).whenComplete(() {
       if (identical(_historicalCompaction, operation)) {
         _historicalCompaction = null;
       }
@@ -607,12 +1132,15 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   Future<void> _prepareHistoricalRingFragments({
     required int nowSeconds,
+    required String? recoveryDeviceId,
+    required int? recoverySequenceBoundary,
+    required int conversationBoundarySeconds,
   }) async {
     final candidates = _wals
         .where(
           (wal) =>
               wal.conversationId == null &&
-              _isRawRingFragment(wal) &&
+              _isDurableRingCoverageArtifact(wal) &&
               wal.storage == WalStorage.disk &&
               (wal.status == WalStatus.miss || wal.status == WalStatus.synced),
         )
@@ -636,17 +1164,46 @@ class LocalWalSyncImpl implements LocalWalSync {
         if (timeCompare != 0) return timeCompare;
         return left.id.compareTo(right.id);
       });
-      for (final capture in _continuousRingGroups(bucket)) {
+      for (final capture in _continuousRingRecoveryGroups(
+        bucket,
+        conversationBoundarySeconds: conversationBoundarySeconds,
+      )) {
         final captureEnd = capture.map(_walEndSeconds).reduce(max);
-        if (nowSeconds - captureEnd < _conversationBoundarySeconds) {
+        if (nowSeconds - captureEnd < conversationBoundarySeconds) {
           continue;
         }
-        for (final group in _continuousRingGroups(
+        final sequenceBoundary = capture.first.device == recoveryDeviceId ? recoverySequenceBoundary : null;
+        for (final group in _continuousRingRecoveryGroups(
           capture,
+          conversationBoundarySeconds: conversationBoundarySeconds,
           maxWallSeconds: 30 * 60,
+          requireContiguousSequence: true,
+          sequenceBoundary: sequenceBoundary,
         )) {
+          if (sequenceBoundary != null &&
+              group.any(
+                (wal) => _sequenceBoundarySide(wal, sequenceBoundary) == 0,
+              )) {
+            // A source file itself straddles the receipt. Without per-record
+            // byte offsets it cannot be sliced safely, so retain it verbatim
+            // for a later receipt rather than manufacturing false coverage.
+            continue;
+          }
+          // A bounded archive is already the desired physical representation.
+          // It remains part of the logical capture above so a later adjacent
+          // archive/raw range can roll it forward, but it need not be rewritten
+          // on every compaction pass.
+          if (group.length == 1 && !_isRawRingFragment(group.single)) {
+            continue;
+          }
           try {
-            archives.add(await _prepareHistoricalRingArchive(group));
+            archives.add(
+              await _prepareHistoricalRingArchive(
+                group,
+                sequenceBoundary: sequenceBoundary,
+                conversationBoundarySeconds: conversationBoundarySeconds,
+              ),
+            );
           } catch (error) {
             Logger.debug(
               'LocalWalSync: historical archive group remains retryable: $error',
@@ -657,8 +1214,28 @@ class LocalWalSyncImpl implements LocalWalSync {
     }
     if (archives.isEmpty) return;
 
-    final before = _wals;
-    final compactedSources = archives.expand((archive) => archive.sources).toSet();
+    final producedCoverage = <String, RingSequenceCoverage>{};
+    for (final archive in archives) {
+      final range = RingProtocol.parseDurableCoverageSourceRange(archive.wal.sourceId)!;
+      producedCoverage.putIfAbsent(_ringEncodingBucket(archive.wal), RingSequenceCoverage.new).add(
+            range.start,
+            range.end,
+          );
+    }
+    final supersededLegacyArchives = _wals.where((wal) {
+      if (wal.conversationId != null ||
+          wal.storage != WalStorage.disk ||
+          (wal.status != WalStatus.miss && wal.status != WalStatus.synced) ||
+          !_isLegacyRingArchive(wal)) {
+        return false;
+      }
+      final range = RingProtocol.parseRecoverySourceRange(wal.sourceId)!;
+      return producedCoverage[_ringEncodingBucket(wal)]?.covers(range.start, range.end) == true;
+    }).toSet();
+    final compactedSources = {
+      ...archives.expand((archive) => archive.sources),
+      ...supersededLegacyArchives,
+    };
     _wals = [
       ..._wals.where((wal) => !compactedSources.contains(wal)),
       ...archives.map((archive) => archive.wal),
@@ -666,8 +1243,26 @@ class LocalWalSyncImpl implements LocalWalSync {
     try {
       await _saveWalsToFile();
     } catch (_) {
-      _wals = before;
-      await _deleteHistoricalArchiveFiles(archives);
+      // Publishing the manifest is the archive ownership commit. Restore the
+      // immutable sources without replacing the whole list: an external WAL
+      // may have registered while the failed archive write awaited disk.
+      final archiveWals = archives.map((archive) => archive.wal).toSet();
+      final restored = _wals.where((wal) => !archiveWals.contains(wal)).toList();
+      final tracked = Set<Wal>.identity()..addAll(restored);
+      for (final source in compactedSources) {
+        if (tracked.add(source)) restored.add(source);
+      }
+      _wals = restored;
+      try {
+        // WalFileManager serializes snapshots in invocation order. A
+        // registration that started while the failed archive write awaited
+        // may already have queued a newer snapshot containing that
+        // uncommitted archive. Queue restored ownership after it as the final
+        // durable barrier before removing the archive artifact.
+        await _saveWalsToFile();
+      } finally {
+        await _deleteHistoricalArchiveFiles(archives);
+      }
       rethrow;
     }
 
@@ -688,49 +1283,44 @@ class LocalWalSyncImpl implements LocalWalSync {
     DebugLogManager.logEvent('historical_ring_archive_compacted', {
       'source_fragment_count': compactedSources.length,
       'archive_artifact_count': archives.length,
+      'legacy_archive_retired_count': supersededLegacyArchives.length,
     });
     listener.onWalUpdated();
   }
 
-  List<List<Wal>> _continuousRingGroups(
-    List<Wal> ordered, {
-    int? maxWallSeconds,
-  }) {
-    final groups = <List<Wal>>[];
-    for (final wal in ordered) {
-      if (groups.isEmpty) {
-        groups.add([wal]);
-        continue;
-      }
-      final group = groups.last;
-      final wallGap = wal.timerStart - _walEndSeconds(group.last);
-      final wallSpan = _walEndSeconds(wal) - group.first.timerStart;
-      if (wallGap < _conversationBoundarySeconds && (maxWallSeconds == null || wallSpan <= maxWallSeconds)) {
-        group.add(wal);
-      } else {
-        groups.add([wal]);
-      }
-    }
-    return groups;
-  }
-
   Future<_HistoricalRingArchive> _prepareHistoricalRingArchive(
-    List<Wal> sources,
-  ) async {
+    List<Wal> sources, {
+    int? sequenceBoundary,
+    required int conversationBoundarySeconds,
+  }) async {
     if (sources.isEmpty) {
       throw ArgumentError.value(sources, 'sources', 'must not be empty');
     }
+    final contiguousRanges = _orderedRecoveryRanges(sources);
+    if (contiguousRanges.length != sources.length) {
+      throw StateError('Historical archive requires pendant sequence identity');
+    }
+    var coveredEnd = contiguousRanges.first.end;
+    for (final range in contiguousRanges.skip(1)) {
+      if (range.start > coveredEnd) {
+        throw StateError('Historical archive cannot claim an uncovered pendant sequence');
+      }
+      if (range.end > coveredEnd) coveredEnd = range.end;
+    }
+    if (sequenceBoundary != null && contiguousRanges.first.start < sequenceBoundary && coveredEnd > sequenceBoundary) {
+      throw StateError('Historical archive cannot cross an authorized receipt boundary');
+    }
     final orderedBySequence = List<Wal>.from(sources)
       ..sort(
-        (left, right) => _ringSourceRange(left)!.start.compareTo(
-              _ringSourceRange(right)!.start,
+        (left, right) => RingProtocol.parseRecoverySourceRange(left.sourceId)!.start.compareTo(
+              RingProtocol.parseRecoverySourceRange(right.sourceId)!.start,
             ),
       );
     final first = orderedBySequence.first;
-    final last = orderedBySequence.last;
-    final firstRange = _ringSourceRange(first)!;
-    final lastRange = _ringSourceRange(last)!;
-    final archiveSourceId = 'archive_ring_${firstRange.start}_${lastRange.end}_${first.timerStart}';
+    final sourceRanges = orderedBySequence.map((wal) => RingProtocol.parseRecoverySourceRange(wal.sourceId)!).toList();
+    final archiveStart = sourceRanges.map((range) => range.start).reduce(min);
+    final archiveEnd = sourceRanges.map((range) => range.end).reduce(max);
+    final archiveSourceId = 'archive2_ring_${archiveStart}_${archiveEnd}_${first.timerStart}';
     final archiveStatus = sources.any((wal) => wal.status == WalStatus.miss) ? WalStatus.miss : WalStatus.synced;
 
     if (sources.length == 1) {
@@ -742,6 +1332,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           filePath: first.filePath,
           timerStart: first.timerStart,
           totalFrames: first.totalFrames,
+          captureEndSeconds: first.wallClockEndSeconds,
           status: archiveStatus,
         ),
       );
@@ -766,7 +1357,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       parts: parts,
       destination: destination,
       silenceFrameFactory: _silenceFrameFactory,
-      conversationBoundarySeconds: _conversationBoundarySeconds,
+      conversationBoundarySeconds: conversationBoundarySeconds,
     );
     final fps = first.codec.getFramesPerSecond();
     return _HistoricalRingArchive(
@@ -778,6 +1369,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         filePath: assembly.file.path.split('/').last,
         timerStart: assembly.timerStart,
         totalFrames: assembly.totalFrames,
+        captureEndSeconds: assembly.captureEndSeconds,
         seconds: fps > 0 ? (assembly.totalFrames + fps - 1) ~/ fps : 0,
         status: archiveStatus,
       ),
@@ -790,6 +1382,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     required String? filePath,
     required int timerStart,
     required int totalFrames,
+    required double captureEndSeconds,
     required WalStatus status,
     int? seconds,
   }) {
@@ -800,6 +1393,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       channel: first.channel,
       sampleRate: first.sampleRate,
       seconds: seconds ?? (fps > 0 ? (totalFrames + fps - 1) ~/ fps : first.seconds),
+      captureEndSeconds: captureEndSeconds,
       totalFrames: totalFrames,
       status: status,
       storage: WalStorage.disk,
@@ -917,7 +1511,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         }
       }
       Logger.debug(
-        "${low} - ${high} - ${syncedOffset} - ${chunkFrameCount} - ${_framesPerSecond}",
+        "$low - $high - $syncedOffset - $chunkFrameCount - $_framesPerSecond",
       );
 
       Wal wal;
@@ -1171,66 +1765,211 @@ class LocalWalSyncImpl implements LocalWalSync {
       );
       return;
     }
-    final now = sessionEndSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    int stamped = 0;
-    final ringSources = <Wal>[];
-    for (final wal in _wals) {
-      final inSession = _walEndSeconds(wal) >= sessionStartSeconds && wal.timerStart <= now;
-      final ringContinuity =
-          wal.originalStorage == WalStorage.sdcard && RingProtocol.parseRecoverySourceRange(wal.sourceId) != null;
-      if (inSession &&
-          wal.conversationId == null &&
-          (wal.status == WalStatus.miss || (ringContinuity && wal.status == WalStatus.synced))) {
-        wal.conversationId = conversationId;
-        stamped++;
-      }
-      if (inSession &&
-          ringContinuity &&
-          wal.conversationId == conversationId &&
-          (wal.status == WalStatus.miss || wal.status == WalStatus.synced)) {
-        ringSources.add(wal);
-      }
-    }
-    if (stamped > 0 || ringSources.isNotEmpty) {
-      try {
-        await _compactRingConversation(
-          conversationId,
-          ringSources,
+    final sessionEnd = sessionEndSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var stamped = 0;
+    await _serializeWalAssembly(() async {
+      await _waitForExternalWalRegistrations();
+      final ringDeviceScope = _wals
+          .where(
+            (wal) =>
+                _isRingRecoveryArtifact(wal) &&
+                (wal.conversationId == null || wal.conversationId == conversationId) &&
+                _isInBoundedSession(
+                  wal,
+                  sessionStartSeconds: sessionStartSeconds,
+                  sessionEndSeconds: sessionEnd,
+                ),
+          )
+          .map((wal) => wal.device)
+          .toSet();
+      while (true) {
+        await _waitForExternalWalRegistrations();
+        final registrationEpoch = _externalWalRegistrationEpoch;
+        stamped += _stampBoundedSessionWals(
+          sessionStartSeconds: sessionStartSeconds,
+          sessionEndSeconds: sessionEnd,
+          conversationId: conversationId,
+          ringDeviceScope: ringDeviceScope,
         );
-      } catch (error) {
-        // Every immutable source remains in place. Persist its conversation
-        // owner, but never upload raw fragments. A later serialized sync pass
-        // retries canonical assembly.
-        await _saveWalsToFile();
-        Logger.debug(
-          'stampConversationId: canonical assembly failed for $conversationId: $error',
+        final ringSources = _boundedRingSourcesForConversation(
+          sessionStartSeconds: sessionStartSeconds,
+          sessionEndSeconds: sessionEnd,
+          conversationId: conversationId,
+          ringDeviceScope: ringDeviceScope,
         );
-      }
-      Logger.debug(
-        'stampConversationId: stamped $stamped WALs with conversation $conversationId',
-      );
-      Wal? uploadWakeWal;
-      for (final wal in _wals) {
-        if (wal.status == WalStatus.miss && wal.conversationId == conversationId && !_isRingRecoveryArtifact(wal)) {
-          uploadWakeWal = wal;
+        if (ringSources.isEmpty) {
+          if (stamped > 0) await _saveWalsToFile();
+          break;
+        }
+        if (_canonicalWalsForConversation(conversationId).isNotEmpty) {
+          // A canonical WAL intentionally drops its source sequence ranges.
+          // Without that proof, appending a late range can duplicate audio;
+          // replacing it can erase the already-complete transcript. Retain the
+          // bound range for a future merge contract instead of guessing.
+          await _saveWalsToFile();
+          Logger.debug(
+            'stampConversationId: retained late bound ring audio for $conversationId because its canonical owner cannot be safely extended',
+          );
+          break;
+        }
+
+        final sourceSnapshot = List<Wal>.from(ringSources);
+        try {
+          await _compactRingConversation(
+            conversationId,
+            sourceSnapshot,
+            sourceSnapshotIsStable: () =>
+                _externalWalRegistrationsInFlight == 0 &&
+                _externalWalRegistrationEpoch == registrationEpoch &&
+                !_hasUnownedWalInBoundedSession(
+                  sessionStartSeconds: sessionStartSeconds,
+                  sessionEndSeconds: sessionEnd,
+                  ringDeviceScope: ringDeviceScope,
+                ) &&
+                _sameIdentityWalSet(
+                  sourceSnapshot,
+                  _boundedRingSourcesForConversation(
+                    sessionStartSeconds: sessionStartSeconds,
+                    sessionEndSeconds: sessionEnd,
+                    conversationId: conversationId,
+                    ringDeviceScope: ringDeviceScope,
+                  ),
+                ),
+          );
+          break;
+        } on _CanonicalSourceSnapshotChanged {
+          // A tail registration completed while disk assembly was in flight.
+          // Its timestamp belongs to this already-closed server session, so
+          // rebuild from the expanded exact source set before publishing.
+          continue;
+        } catch (error) {
+          // Every immutable source remains in place. Persist its conversation
+          // owner, but never upload raw fragments.
+          await _saveWalsToFile();
+          Logger.debug(
+            'stampConversationId: canonical assembly failed for $conversationId: $error',
+          );
           break;
         }
       }
-      if (uploadWakeWal != null) {
-        // Active-conversation repair is independent of opt-in historical
-        // sync. The exact server owner is known, so wake one serialized drain.
-        _scheduleFreshUpload(uploadWakeWal);
+    });
+
+    Logger.debug(
+      'stampConversationId: stamped $stamped WALs with conversation $conversationId',
+    );
+    Wal? uploadWakeWal;
+    for (final wal in _wals) {
+      if (wal.status == WalStatus.miss && wal.conversationId == conversationId && !_isRingRecoveryArtifact(wal)) {
+        uploadWakeWal = wal;
+        break;
       }
     }
+    if (uploadWakeWal != null) {
+      // Active-conversation repair is independent of opt-in historical sync.
+      // The exact server owner is known, so wake one serialized drain.
+      _scheduleFreshUpload(uploadWakeWal);
+    }
+  }
+
+  bool _isInBoundedSession(
+    Wal wal, {
+    required int sessionStartSeconds,
+    required int sessionEndSeconds,
+  }) =>
+      _walEndSeconds(wal) >= sessionStartSeconds && wal.timerStart <= sessionEndSeconds;
+
+  bool _isStampableSessionWal(Wal wal) {
+    final ringContinuity = _isRingRecoveryArtifact(wal);
+    return wal.status == WalStatus.miss || (ringContinuity && wal.status == WalStatus.synced);
+  }
+
+  int _stampBoundedSessionWals({
+    required int sessionStartSeconds,
+    required int sessionEndSeconds,
+    required String conversationId,
+    required Set<String> ringDeviceScope,
+  }) {
+    var stamped = 0;
+    for (final wal in _wals) {
+      if (wal.conversationId == null &&
+          _isStampableSessionWal(wal) &&
+          (!_isRingRecoveryArtifact(wal) || ringDeviceScope.contains(wal.device)) &&
+          _isInBoundedSession(
+            wal,
+            sessionStartSeconds: sessionStartSeconds,
+            sessionEndSeconds: sessionEndSeconds,
+          )) {
+        wal.conversationId = conversationId;
+        stamped++;
+      }
+    }
+    return stamped;
+  }
+
+  bool _hasUnownedWalInBoundedSession({
+    required int sessionStartSeconds,
+    required int sessionEndSeconds,
+    required Set<String> ringDeviceScope,
+  }) =>
+      _wals.any(
+        (wal) =>
+            wal.conversationId == null &&
+            _isStampableSessionWal(wal) &&
+            (!_isRingRecoveryArtifact(wal) || ringDeviceScope.contains(wal.device)) &&
+            _isInBoundedSession(
+              wal,
+              sessionStartSeconds: sessionStartSeconds,
+              sessionEndSeconds: sessionEndSeconds,
+            ),
+      );
+
+  List<Wal> _boundedRingSourcesForConversation({
+    required int sessionStartSeconds,
+    required int sessionEndSeconds,
+    required String conversationId,
+    required Set<String> ringDeviceScope,
+  }) =>
+      _wals
+          .where(
+            (wal) =>
+                wal.conversationId == conversationId &&
+                _isRingRecoveryArtifact(wal) &&
+                ringDeviceScope.contains(wal.device) &&
+                (wal.status == WalStatus.miss || wal.status == WalStatus.synced) &&
+                _isInBoundedSession(
+                  wal,
+                  sessionStartSeconds: sessionStartSeconds,
+                  sessionEndSeconds: sessionEndSeconds,
+                ),
+          )
+          .toList();
+
+  List<Wal> _canonicalWalsForConversation(String conversationId) => _wals
+      .where(
+        (wal) => wal.conversationId == conversationId && wal.sourceId?.startsWith('canonical_') == true,
+      )
+      .toList();
+
+  bool _sameIdentityWalSet(List<Wal> left, List<Wal> right) {
+    if (left.length != right.length) return false;
+    final identities = Set<Wal>.identity()..addAll(left);
+    return right.every(identities.contains);
   }
 
   Future<void> _compactRingConversation(
     String conversationId,
-    List<Wal> sourceWals,
-  ) async {
+    List<Wal> sourceWals, {
+    int? conversationBoundarySeconds,
+    bool Function()? sourceSnapshotIsStable,
+  }) async {
     if (sourceWals.isEmpty) {
       await _saveWalsToFile();
       return;
+    }
+    if (_canonicalWalsForConversation(conversationId).isNotEmpty) {
+      throw StateError(
+        'Canonical conversation $conversationId already exists; refusing an unprovable partial replacement',
+      );
     }
 
     final byDevice = <String, List<Wal>>{};
@@ -1241,6 +1980,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       throw StateError('Canonical assembly requires one pendant per conversation');
     }
 
+    final boundarySeconds = conversationBoundarySeconds ?? _conversationBoundarySeconds();
     final canonicalWals = <Wal>[];
     final canonicalFiles = <File>[];
     final compactedSources = <Wal>{};
@@ -1279,7 +2019,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           parts: parts,
           destination: destination,
           silenceFrameFactory: _silenceFrameFactory,
-          conversationBoundarySeconds: _conversationBoundarySeconds,
+          conversationBoundarySeconds: boundarySeconds,
         );
         canonicalFiles.add(assembly.file);
         compactedSources.addAll(assembly.sourceWals);
@@ -1292,6 +2032,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             channel: first.channel,
             sampleRate: first.sampleRate,
             seconds: fps > 0 ? (assembly.totalFrames + fps - 1) ~/ fps : 0,
+            captureEndSeconds: assembly.captureEndSeconds,
             totalFrames: assembly.totalFrames,
             status: assembly.hadLiveGap ? WalStatus.miss : WalStatus.synced,
             storage: WalStorage.disk,
@@ -1307,14 +2048,44 @@ class LocalWalSyncImpl implements LocalWalSync {
         );
       }
 
-      // Assembly performs asynchronous disk reads. Preserve WALs registered by
-      // the BLE drain while those reads were in flight; replacing the original
-      // snapshot here could orphan already-acknowledged pendant records.
+      if (sourceWals.any((source) => !_wals.any((wal) => identical(wal, source))) ||
+          _canonicalWalsForConversation(conversationId).isNotEmpty ||
+          (sourceSnapshotIsStable != null && !sourceSnapshotIsStable())) {
+        throw const _CanonicalSourceSnapshotChanged();
+      }
+
+      // Assembly performs asynchronous disk reads. Preserve WALs outside the
+      // exact, synchronously revalidated source snapshot.
       _wals = [
         ..._wals.where((wal) => !compactedSources.contains(wal)),
         ...canonicalWals,
       ];
-      await _saveWalsToFile();
+      try {
+        await _saveWalsToFile();
+      } catch (_) {
+        // Publishing the manifest is the ownership commit. If it fails, put
+        // the immutable sources back without replacing the whole list: an
+        // external registration may have completed while persistence awaited.
+        final restored = _wals
+            .where(
+              (wal) => !canonicalWals.any(
+                (canonical) => identical(canonical, wal),
+              ),
+            )
+            .toList();
+        final tracked = Set<Wal>.identity()..addAll(restored);
+        for (final source in compactedSources) {
+          if (tracked.add(source)) restored.add(source);
+        }
+        _wals = restored;
+        // WalFileManager serializes snapshots in invocation order. A
+        // registration that started while the failed canonical write awaited
+        // may already have queued a newer snapshot containing that uncommitted
+        // canonical. Queue the restored ownership state after it as the final
+        // barrier before the canonical file is removed.
+        await _saveWalsToFile();
+        rethrow;
+      }
     } catch (_) {
       for (final file in canonicalFiles) {
         if (await file.exists()) await file.delete();
@@ -1433,6 +2204,89 @@ class LocalWalSyncImpl implements LocalWalSync {
   }) =>
       _syncAll(progress: progress, includeBackfill: false);
 
+  Future<AuthorizedRecoverySyncResult> syncAuthorizedRecovery({
+    required String deviceId,
+    required int targetWriteSeq,
+    IWalSyncProgressListener? progress,
+    int? nowSeconds,
+  }) async {
+    if (deviceId.isEmpty) {
+      throw ArgumentError.value(deviceId, 'deviceId', 'must not be empty');
+    }
+    if (targetWriteSeq < 0) {
+      throw ArgumentError.value(targetWriteSeq, 'targetWriteSeq', 'must not be negative');
+    }
+    final scope = _AuthorizedRecoveryScope(
+      deviceId: deviceId,
+      targetWriteSeq: targetWriteSeq,
+    );
+    final conversationBoundarySeconds = _conversationBoundarySeconds();
+    await _syncMutex.acquire();
+    try {
+      final response = await _syncAllOwned(
+        progress: progress,
+        includeBackfill: false,
+        authorizedRecovery: scope,
+        nowSecondsOverride: nowSeconds,
+        manualWal: null,
+        conversationBoundarySecondsOverride: conversationBoundarySeconds,
+      );
+      return AuthorizedRecoverySyncResult(
+        response: response,
+        hasDeferredRecovery: _hasDeferredAuthorizedRecovery(
+          scope,
+          conversationBoundarySeconds: conversationBoundarySeconds,
+        ),
+      );
+    } finally {
+      _syncMutex.release();
+    }
+  }
+
+  bool _hasDeferredAuthorizedRecovery(
+    _AuthorizedRecoveryScope scope, {
+    required int conversationBoundarySeconds,
+  }) {
+    final candidates = _wals
+        .where(
+          (wal) =>
+              wal.storage == WalStorage.disk &&
+              (wal.status == WalStatus.miss || wal.status == WalStatus.uploaded) &&
+              _isAuthorizedHistoricalRecovery(wal, scope),
+        )
+        .toList();
+    final permanentlyBlocked = _permanentlyBlockedLegacyRecoveryArtifacts(
+      candidates.where((wal) => wal.status == WalStatus.miss).toList(),
+      conversationBoundarySeconds: conversationBoundarySeconds,
+    );
+    return candidates.any(
+      (wal) => wal.status == WalStatus.uploaded || !permanentlyBlocked.contains(wal),
+    );
+  }
+
+  Set<String> _manualSyncWalIds(
+    Wal selected, {
+    required int conversationBoundarySeconds,
+  }) {
+    if (selected.conversationId != null || !_isRingRecoveryArtifact(selected)) {
+      return {selected.id};
+    }
+    final groups = _continuousRingRecoveryGroups(
+      _wals.where(
+        (wal) =>
+            wal.status == WalStatus.miss &&
+            wal.storage == WalStorage.disk &&
+            wal.conversationId == null &&
+            _isRingRecoveryArtifact(wal),
+      ),
+      conversationBoundarySeconds: conversationBoundarySeconds,
+    );
+    final selectedGroup = groups.where(
+      (group) => group.any((wal) => identical(wal, selected)),
+    );
+    return selectedGroup.isEmpty ? {selected.id} : selectedGroup.single.map((wal) => wal.id).toSet();
+  }
+
   Future<SyncLocalFilesResponse?> _syncAll({
     IWalSyncProgressListener? progress,
     required bool includeBackfill,
@@ -1442,6 +2296,10 @@ class LocalWalSyncImpl implements LocalWalSync {
       return await _syncAllOwned(
         progress: progress,
         includeBackfill: includeBackfill,
+        authorizedRecovery: null,
+        nowSecondsOverride: null,
+        manualWal: null,
+        conversationBoundarySecondsOverride: null,
       );
     } finally {
       _syncMutex.release();
@@ -1451,22 +2309,104 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<SyncLocalFilesResponse?> _syncAllOwned({
     IWalSyncProgressListener? progress,
     required bool includeBackfill,
+    required _AuthorizedRecoveryScope? authorizedRecovery,
+    required int? nowSecondsOverride,
+    required Wal? manualWal,
+    required int? conversationBoundarySecondsOverride,
   }) async {
+    int nowSeconds() => nowSecondsOverride ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final conversationBoundarySeconds = conversationBoundarySecondsOverride ?? _conversationBoundarySeconds();
+
     await _flush();
-    await prepareHistoricalRingFragments(
-      nowSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-    );
-    await _repairBoundRingConversations();
+    Wal? selectedManualWal = manualWal;
+    if (manualWal != null) {
+      final isTracked = _wals.any(
+        (candidate) => identical(candidate, manualWal),
+      );
+      if (!isTracked) {
+        DebugLogManager.logInfo(
+          'Single WAL upload skipped — WAL no longer tracked',
+          {'walId': manualWal.id},
+        );
+        return null;
+      }
+      if (_isUnassembledConversationRepair(manualWal)) {
+        final conversationId = manualWal.conversationId!;
+        final repairSources = _wals
+            .where(
+              (candidate) =>
+                  candidate.conversationId == conversationId &&
+                  _isRingRecoveryArtifact(candidate) &&
+                  (candidate.status == WalStatus.miss || candidate.status == WalStatus.synced),
+            )
+            .toList();
+        try {
+          await _serializeWalAssembly(
+            () => _compactRingConversation(
+              conversationId,
+              repairSources,
+              conversationBoundarySeconds: conversationBoundarySeconds,
+            ),
+          );
+          selectedManualWal = _wals.firstWhere(
+            (candidate) =>
+                candidate.conversationId == conversationId && candidate.sourceId?.startsWith('canonical_') == true,
+          )..canonicalReplacement = true;
+        } catch (error) {
+          Logger.debug(
+            'LocalWalSync: selected canonical repair remains local for $conversationId: $error',
+          );
+        }
+      }
+    } else {
+      await prepareHistoricalRingFragments(
+        nowSeconds: nowSeconds(),
+        recoveryDeviceId: authorizedRecovery?.deviceId,
+        recoverySequenceBoundary: authorizedRecovery?.targetWriteSeq,
+        conversationBoundarySeconds: conversationBoundarySeconds,
+      );
+      await _repairBoundRingConversations(
+        conversationBoundarySeconds: conversationBoundarySeconds,
+      );
+    }
     _isCancelled = false;
     _accumulatedResponse = null;
 
-    final initialNowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final initialNowSeconds = nowSeconds();
+    Wal? trackedManualWal;
+    if (selectedManualWal != null) {
+      for (final candidate in _wals) {
+        if (identical(candidate, selectedManualWal)) {
+          trackedManualWal = candidate;
+          break;
+        }
+      }
+    }
+    if (selectedManualWal != null && trackedManualWal == null) {
+      DebugLogManager.logInfo(
+        'Single WAL upload skipped — WAL no longer tracked',
+        {'walId': selectedManualWal.id},
+      );
+      return null;
+    }
+    final manualWalIds = trackedManualWal == null
+        ? null
+        : _manualSyncWalIds(
+            trackedManualWal,
+            conversationBoundarySeconds: conversationBoundarySeconds,
+          );
     var wals = _wals
         .where(
           (wal) =>
               wal.status == WalStatus.miss &&
               wal.storage == WalStorage.disk &&
-              (includeBackfill || _syncLaneForWal(wal, initialNowSeconds) == SyncUploadLane.fresh),
+              (manualWalIds?.contains(wal.id) ??
+                  _isEligibleForDrain(
+                    wal,
+                    nowSeconds: initialNowSeconds,
+                    includeBackfill: includeBackfill,
+                    authorizedRecovery: authorizedRecovery,
+                  )),
         )
         .toList();
     if (wals.isEmpty) {
@@ -1498,14 +2438,28 @@ class LocalWalSyncImpl implements LocalWalSync {
     final attemptedWalIds = <String>{};
     final blockedLanes = <SyncUploadLane>{};
     final forcedBackfillConversationIds = <String>{};
+    final trackedManualConversationId = trackedManualWal?.conversationId;
+    if (trackedManualConversationId != null) {
+      final pendingConversationCount = _wals
+          .where(
+            (wal) => wal.status == WalStatus.miss && wal.conversationId == trackedManualConversationId,
+          )
+          .length;
+      if (pendingConversationCount > (manualWalIds?.length ?? 0)) {
+        forcedBackfillConversationIds.add(trackedManualConversationId);
+      }
+    }
     while (true) {
       // Re-snapshot between batches so a newly captured WAL can preempt an
       // hours-long historical drain without waiting for the original list.
-      final batchNowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final batchNowSeconds = nowSeconds();
       final candidates = _wals
           .where(
             (wal) =>
-                wal.status == WalStatus.miss && wal.storage == WalStorage.disk && !attemptedWalIds.contains(wal.id),
+                wal.status == WalStatus.miss &&
+                wal.storage == WalStorage.disk &&
+                !attemptedWalIds.contains(wal.id) &&
+                (manualWalIds == null || manualWalIds.contains(wal.id)),
           )
           .toList();
       forcedBackfillConversationIds.addAll(
@@ -1518,7 +2472,10 @@ class LocalWalSyncImpl implements LocalWalSync {
       final pending = candidates
           .where(
             (wal) =>
-                (includeBackfill || effectiveLane(wal) == SyncUploadLane.fresh) &&
+                (manualWalIds != null ||
+                    includeBackfill ||
+                    effectiveLane(wal) == SyncUploadLane.fresh ||
+                    _isAuthorizedHistoricalRecovery(wal, authorizedRecovery)) &&
                 !blockedLanes.contains(effectiveLane(wal)),
           )
           .toList();
@@ -1527,8 +2484,14 @@ class LocalWalSyncImpl implements LocalWalSync {
         pending,
         batchNowSeconds,
         forcedBackfillConversationIds: forcedBackfillConversationIds,
+        conversationBoundarySeconds: conversationBoundarySeconds,
       );
       if (batch.isEmpty) break;
+      final coveredLegacyAliases = _legacyAliasesCoveredByBatch(
+        pending,
+        batch,
+        conversationBoundarySeconds: conversationBoundarySeconds,
+      );
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchLane =
           batch.first.conversationId != null && forcedBackfillConversationIds.contains(batch.first.conversationId)
@@ -1611,8 +2574,16 @@ class LocalWalSyncImpl implements LocalWalSync {
         }
       }
 
-      if (files.isEmpty) {
-        Logger.debug("Files are empty");
+      if (batchWals.length != batch.length) {
+        // A logical recovery transaction is all-or-nothing. Uploading the
+        // surviving subset would turn a missing local file into a permanent
+        // transcript hole and could incorrectly retire overlapping legacy
+        // aliases.
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+        }
+        await _saveWalsToFile();
+        listener.onWalUpdated();
         continue;
       }
 
@@ -1656,7 +2627,7 @@ class LocalWalSyncImpl implements LocalWalSync {
               (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
             ),
           );
-          for (final wal in batchWals) {
+          for (final wal in [...batchWals, ...coveredLegacyAliases]) {
             wal.status = WalStatus.synced;
             wal.isSyncing = false;
             wal.syncStartedAt = null;
@@ -1669,7 +2640,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           // synced / miss(retry) / corrupted out of the critical path. The
           // local file is retained until confirmed synced.
           final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-          for (final wal in batchWals) {
+          for (final wal in [...batchWals, ...coveredLegacyAliases]) {
             wal.status = WalStatus.uploaded;
             wal.jobId = result.jobId;
             wal.uploadedAt = now;
@@ -1719,7 +2690,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         listener.onWalUpdated();
         continue;
       } catch (e) {
-        print(
+        Logger.debug(
           'Local WAL upload batch failed: $e, pausing ${batchLane.name} lane',
         );
         batchesFailed++;
@@ -1745,6 +2716,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           wal.syncStartedAt = null;
           wal.syncEtaSeconds = null;
         }
+        if (manualWal != null) rethrow;
       } finally {
         if (preparedUpload != null) {
           await _deleteTemporaryUploadFiles(preparedUpload.temporaryFiles);
@@ -1768,7 +2740,18 @@ class LocalWalSyncImpl implements LocalWalSync {
     return resp;
   }
 
-  Future<void> _repairBoundRingConversations() async {
+  Future<void> _repairBoundRingConversations({
+    required int conversationBoundarySeconds,
+  }) =>
+      _serializeWalAssembly(
+        () => _repairBoundRingConversationsOwned(
+          conversationBoundarySeconds: conversationBoundarySeconds,
+        ),
+      );
+
+  Future<void> _repairBoundRingConversationsOwned({
+    required int conversationBoundarySeconds,
+  }) async {
     final sourcesByConversation = <String, List<Wal>>{};
     final existingCanonicalOwners = <String>{};
     for (final wal in _wals) {
@@ -1784,7 +2767,11 @@ class LocalWalSyncImpl implements LocalWalSync {
     for (final entry in sourcesByConversation.entries) {
       if (existingCanonicalOwners.contains(entry.key)) continue;
       try {
-        await _compactRingConversation(entry.key, entry.value);
+        await _compactRingConversation(
+          entry.key,
+          entry.value,
+          conversationBoundarySeconds: conversationBoundarySeconds,
+        );
       } catch (error) {
         Logger.debug(
           'LocalWalSync: canonical repair remains local for ${entry.key}: $error',
@@ -1798,177 +2785,19 @@ class LocalWalSyncImpl implements LocalWalSync {
     required Wal wal,
     IWalSyncProgressListener? progress,
   }) async {
-    await _flush();
-
-    final matches = _wals.where((w) => w == wal).toList();
-    if (matches.isEmpty) {
-      DebugLogManager.logInfo(
-        'Single WAL upload skipped — WAL no longer tracked',
-        {'walId': wal.id},
-      );
-      return null;
-    }
-    final walToSync = matches.first;
-
-    var resp = SyncLocalFilesResponse(
-      newConversationIds: [],
-      updatedConversationIds: [],
-    );
-
-    DebugLogManager.logInfo('Single WAL upload started', {
-      'walId': wal.id,
-      'seconds': wal.seconds,
-      'codec': wal.codec.toString(),
-    });
-
-    File? walFile;
-    if (wal.filePath == null) {
-      Logger.debug("file path is not found. wal id ${wal.id}");
-      wal.markCorrupted();
-      DebugLogManager.logWarning('Single WAL corrupted: file path missing', {
-        'walId': wal.id,
-      });
-    } else {
-      try {
-        final fullPath = await Wal.getFilePath(wal.filePath);
-        if (fullPath == null) {
-          Logger.debug("could not construct file path for wal id ${wal.id}");
-          wal.markCorrupted();
-          DebugLogManager.logWarning(
-            'Single WAL corrupted: cannot construct path',
-            {'walId': wal.id},
-          );
-        } else {
-          File file = File(fullPath);
-          if (!file.existsSync()) {
-            Logger.debug("file $fullPath does not exist");
-            wal.markCorrupted();
-            DebugLogManager.logWarning('Single WAL corrupted: file not found', {
-              'walId': wal.id,
-            });
-          } else {
-            walFile = file;
-            wal.isSyncing = true;
-          }
-        }
-      } catch (e) {
-        wal.markCorrupted();
-        print(e.toString());
-        DebugLogManager.logError(
-          e,
-          null,
-          'Single WAL corrupted: unexpected error - ${e.toString()}',
-          {'walId': wal.id},
-        );
-      }
-    }
-
-    listener.onWalUpdated();
-
-    // File unusable — nothing to upload (avoids a LateInit crash on walFile).
-    if (walFile == null) {
-      await _saveWalsToFile();
-      listener.onWalUpdated();
-      return resp;
-    }
-
+    await _syncMutex.acquire();
     try {
-      // Upload only — no poll-to-terminal. Reconciler resolves the job later.
-      var lane = _syncLaneForWal(
-        walToSync,
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      return await _syncAllOwned(
+        progress: progress,
+        includeBackfill: false,
+        authorizedRecovery: null,
+        nowSecondsOverride: null,
+        manualWal: wal,
+        conversationBoundarySecondsOverride: null,
       );
-      if (lane == SyncUploadLane.fresh && walToSync.conversationId != null) {
-        final pendingForConversation = _wals.where(
-          (candidate) => candidate.status == WalStatus.miss && candidate.conversationId == walToSync.conversationId,
-        );
-        // syncWal uploads one file. Claiming an immutable fresh manifest for
-        // it would strand any sibling WAL; the multi-file drain owns fresh
-        // conversation batching.
-        if (pendingForConversation.length > 1) lane = SyncUploadLane.backfill;
-      }
-      final result = await _uploadGate.upload(
-        [walFile],
-        lane: lane,
-        conversationId: walToSync.conversationId,
-      );
-
-      if (result.completed != null) {
-        final r = result.completed!;
-        resp.newConversationIds.addAll(
-          r.newConversationIds.where(
-            (id) => !resp.newConversationIds.contains(id),
-          ),
-        );
-        resp.updatedConversationIds.addAll(
-          r.updatedConversationIds.where(
-            (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
-          ),
-        );
-        walToSync.status = WalStatus.synced;
-        walToSync.isSyncing = false;
-        walToSync.syncStartedAt = null;
-        walToSync.syncEtaSeconds = null;
-        DebugLogManager.logInfo('Single WAL upload succeeded (fast-path)', {
-          'walId': wal.id,
-        });
-        listener.onWalSynced(wal);
-      } else {
-        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-        walToSync.status = WalStatus.uploaded;
-        walToSync.jobId = result.jobId;
-        walToSync.uploadedAt = now;
-        walToSync.isSyncing = false;
-        walToSync.syncStartedAt = null;
-        walToSync.syncEtaSeconds = null;
-        DebugLogManager.logInfo('Single WAL uploaded; reconciler will finish', {
-          'walId': wal.id,
-        });
-        listener.onWalUpdated();
-      }
-    } on SyncRateLimitedException {
-      // Account-level rate limit — leave the WAL pending without consuming its
-      // retry budget. The global upload gate owns the cooldown.
-      DebugLogManager.logEvent('single_wal_rate_limited', {'walId': wal.id});
-      walToSync.isSyncing = false;
-      walToSync.syncStartedAt = null;
-      walToSync.syncEtaSeconds = null;
-      await _saveWalsToFile();
-      listener.onWalUpdated();
-      return resp;
-    } on SyncRecoveryWindowExceededException {
-      // Terminal: older than the server's automatic-recovery window. A manual
-      // retry cannot succeed either, so stop presenting it as retryable work.
-      walToSync.isSyncing = false;
-      walToSync.syncStartedAt = null;
-      walToSync.syncEtaSeconds = null;
-      final retired = _retireOutsideRecoveryWindow([walToSync]);
-      DebugLogManager.logEvent('single_wal_outside_recovery_window', {
-        'walId': wal.id,
-        'retiredWalIds': retired.map((w) => w.id).toList(),
-      });
-      await _saveWalsToFile();
-      listener.onWalUpdated();
-      return resp;
-    } catch (e) {
-      Logger.debug('Single WAL upload failed: $e');
-      DebugLogManager.logError(
-        e,
-        null,
-        'Single WAL upload failed: ${e.toString()}',
-        {'walId': wal.id},
-      );
-      walToSync.isSyncing = false;
-      walToSync.syncStartedAt = null;
-      walToSync.syncEtaSeconds = null;
-      rethrow;
+    } finally {
+      _syncMutex.release();
     }
-
-    await _saveWalsToFile();
-    listener.onWalUpdated();
-
-    progress?.onWalSyncedProgress(1.0);
-    return resp;
   }
 
   /// Retires the recordings a `backfill_lookback_exceeded` rejection proves the

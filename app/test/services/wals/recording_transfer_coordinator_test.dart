@@ -257,6 +257,67 @@ void main() {
       expect(harness.scheduledCooldowns, hasLength(1));
       expect(harness.coordinator.nextCooldownAt, DateTime.utc(2026, 1, 1, 0, 0, 5));
     });
+
+    test('auto-sync opt-out preserves manual authority across repeated contention', () async {
+      final harness = _TransferHarness(autoUploadEnabled: false)..drainContended = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.userRetry);
+      expect(harness.drainPasses, 1);
+      expect(harness.drainTriggers, [WakeTrigger.userRetry]);
+      expect(harness.scheduledCooldowns.single.delay, const Duration(seconds: 5));
+
+      harness.scheduledCooldowns.single.callback();
+      await _settle();
+      expect(harness.drainPasses, 2);
+      expect(harness.drainTriggers, [
+        WakeTrigger.userRetry,
+        WakeTrigger.userRetry,
+      ]);
+      expect(harness.scheduledCooldowns.last.delay, const Duration(seconds: 10));
+
+      harness.drainContended = false;
+      harness.scheduledCooldowns.last.callback();
+      await _settle();
+
+      expect(harness.drainPasses, 3);
+      expect(harness.drainTriggers.last, WakeTrigger.userRetry);
+      expect(harness.backlog, isEmpty);
+    });
+
+    test('completed device snapshot retries as local upload without rearming', () async {
+      final harness = _TransferHarness(autoUploadEnabled: false)
+        ..drainFails = true
+        ..drainHasDeviceSnapshotReceipt = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.userRetry);
+      harness.scheduledCooldowns.single.callback();
+      await _settle();
+
+      expect(
+        harness.drainTriggers,
+        [WakeTrigger.userRetry, WakeTrigger.userRetryLocalUpload],
+      );
+    });
+
+    test('later success invalidates an older scheduled cooldown callback', () async {
+      final harness = _TransferHarness()..drainContended = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.userRetry);
+      final staleCooldown = harness.scheduledCooldowns.single;
+
+      harness.drainContended = false;
+      await harness.coordinator.wake(WakeTrigger.userRetry);
+      expect(harness.drainPasses, 2);
+      expect(harness.coordinator.nextCooldownAt, isNull);
+
+      staleCooldown.callback();
+      await _settle();
+
+      expect(harness.drainPasses, 2);
+    });
   });
 }
 
@@ -300,6 +361,7 @@ class _TransferHarness {
   bool drainFails = false;
   bool drainNeedsReconciliation = false;
   bool drainContended = false;
+  bool drainHasDeviceSnapshotReceipt = false;
   bool uploadedWalAwaitingReconcile = false;
   bool backgroundDeviceRecoveryEnabled = false;
   bool reconciledUploadedWal = false;
@@ -309,6 +371,7 @@ class _TransferHarness {
   int discoveryPasses = 0;
   int pendingRefreshes = 0;
   int drainPasses = 0;
+  final List<WakeTrigger> drainTriggers = [];
   int _concurrentDrains = 0;
   int maximumConcurrentDrains = 0;
 
@@ -333,9 +396,10 @@ class _TransferHarness {
     pendingRefreshes++;
   }
 
-  Future<RecordingTransferDrainResult> _drain() async {
+  Future<RecordingTransferDrainResult> _drain(WakeTrigger trigger) async {
     if (backlog.isEmpty) return const RecordingTransferDrainResult.skipped();
     drainPasses++;
+    drainTriggers.add(trigger);
     _concurrentDrains++;
     maximumConcurrentDrains = maximumConcurrentDrains < _concurrentDrains ? _concurrentDrains : maximumConcurrentDrains;
     try {
@@ -351,6 +415,7 @@ class _TransferHarness {
           attempted: true,
           failed: true,
           needsReconciliation: drainNeedsReconciliation,
+          hasDeviceSnapshotReceipt: drainHasDeviceSnapshotReceipt,
         );
       }
       drainedWalIds.addAll(backlog);

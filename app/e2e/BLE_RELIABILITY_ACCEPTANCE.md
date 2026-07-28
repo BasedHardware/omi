@@ -131,6 +131,51 @@ speed promise for every phone or radio environment. Keep the measured
 (approximately 16.5% below that clean baseline) until it is remeasured on the
 same path.
 
+## Storage-authoritative logical backlog
+
+Remote VAD and backlog grouping are independent contracts. Remote VAD adds a
+voice gate to the live transcription socket; it does not merge Sync-screen
+rows or change the local-files upload boundary. It is valid to retain multiple
+bounded ring/archive artifacts internally, but adjacent artifacts inside the
+configured conversation-silence boundary must appear as one logical recording
+and upload as one ordered multipart job.
+
+Run this case with the pendant off its charger and
+`autoSyncOfflineRecordings=false`; charging or enabling automatic offline sync
+independently authorizes a deep drain.
+
+1. Record the configured conversation-silence duration, Remote VAD state,
+   initial battery, and initial ring `read`, `write`, and `dropped` counters.
+   Preserve the WAL manifest and a SHA-256 inventory of audio artifacts.
+2. Cold-launch the authenticated dev app and establish live transcription.
+   Wait 60–90 seconds without tapping Sync. Recent live/recovery reads are
+   allowed, but old backlog must neither drain nor upload automatically.
+3. Confirm adjacent physical archives render as one pending row whose duration
+   spans their wall-clock capture interval. A five-minute storage boundary is
+   never, by itself, a conversation boundary.
+4. Tap Sync once while continuing to produce audio. Capture the
+   `manual backlog snapshot latched` log and its immutable
+   `target_write_seq=T`. Historical ranges authorized by this tap must end at
+   or before `T`; newer records may stream live but must not expand the
+   historical target.
+5. Disable Bluetooth after `NOTIFY_READ_BEGIN` and before `NOTIFY_DONE`, play a
+   unique offline marker, then re-enable Bluetooth. Do not tap Sync again. The
+   same pendant must reconnect, retry from durable coverage, resume the
+   existing live preview, and emit `manual backlog snapshot completed` for the
+   original `T`.
+6. After the configured conversation boundary closes, require one logical row
+   and one upload job for the continuous run. Every physical member must share
+   the terminal job result; sequence coverage through `T` must have no holes or
+   duplicate source identities. The offline marker must occur once in
+   timestamp order.
+
+A `429` or server `5xx` is not an end-to-end pass. Confirm bounded retry with
+local data retained, then verify the final transcript when the backend is
+available. Report record throughput (`count * 444 / elapsed`) and encoded-audio
+throughput (`count * 440 / elapsed`) separately, and keep interrupted retries
+out of the clean p50. Do not publish raw manifests, preferences, account IDs,
+or full Bluetooth addresses.
+
 ## Deterministic voice-gate fixture
 
 Use recorded or synthesized speech instead of tester speech when comparing

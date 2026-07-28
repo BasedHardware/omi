@@ -7,6 +7,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/wals/device_storage_routing.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/storage_sync.dart';
@@ -34,6 +35,7 @@ class WalSyncs implements IWalSync {
   BtDevice? _device;
   String? _firmwareVersion;
   bool _deviceCharging = false;
+  final Map<String, RingBacklogDrainReceipt> _automaticRingBacklogReceipts = {};
 
   /// Called from DeviceProvider when a device connects/disconnects so the
   /// firmware-version gate in syncAll() can route to the right Phase-0 sync.
@@ -79,6 +81,53 @@ class WalSyncs implements IWalSync {
     );
   }
 
+  /// The storage-authoritative live scheduler is a long-lived capture owner,
+  /// not a conflicting user-visible sync.
+  bool get isRingAudioTailActive => _ringSync.isAudioTailActive;
+
+  /// Latch one manual backlog snapshot onto the active live scheduler.
+  ///
+  /// Returns null when no live scheduler owns the ring, in which case the
+  /// caller should use the ordinary device-storage sync path.
+  Future<RingBacklogDrainReceipt?>? requestActiveRingBacklogDrain() => _ringSync.requestAudioTailBacklogDrain();
+
+  RingBacklogDrainReceipt? get pendingAutomaticRingBacklogReceipt =>
+      _automaticRingBacklogReceipts.isEmpty ? null : _automaticRingBacklogReceipts.values.first;
+
+  void completeAutomaticRingBacklogReceipt(
+    RingBacklogDrainReceipt receipt,
+  ) {
+    final current = _automaticRingBacklogReceipts[receipt.deviceId];
+    if (current?.targetWriteSeq != receipt.targetWriteSeq) return;
+    _automaticRingBacklogReceipts.remove(receipt.deviceId);
+    if (_automaticRingBacklogReceipts.isNotEmpty) {
+      unawaited(
+        RecordingTransferCoordinator.instance.wake(
+          WakeTrigger.ringBacklogSnapshotCompleted,
+        ),
+      );
+    }
+  }
+
+  /// Upload WALs that are already durable on the phone without starting a
+  /// second device-storage reader. LocalWalSync's mutex keeps fresh upload
+  /// wakes and this explicit drain idempotent.
+  Future<SyncLocalFilesResponse?> syncPhoneWals({
+    IWalSyncProgressListener? progress,
+    bool includeBackfill = false,
+  }) =>
+      includeBackfill ? _phoneSync.syncAll(progress: progress) : _phoneSync.syncFreshOnly(progress: progress);
+
+  Future<AuthorizedRecoverySyncResult> syncAuthorizedRingRecovery({
+    required RingBacklogDrainReceipt receipt,
+    IWalSyncProgressListener? progress,
+  }) =>
+      _phoneSync.syncAuthorizedRecovery(
+        deviceId: receipt.deviceId,
+        targetWriteSeq: receipt.targetWriteSeq,
+        progress: progress,
+      );
+
   WalSyncs(this.listener) {
     _phoneSync = LocalWalSyncImpl(listener);
     _sdcardSync = SDCardWalSyncImpl(listener);
@@ -90,6 +139,21 @@ class WalSyncs implements IWalSync {
         autoSyncEnabled: SharedPreferencesUtil().autoSyncOfflineRecordings,
         isCharging: _deviceCharging,
       ),
+      onBacklogSnapshotCompleted: (receipt) {
+        final preferences = SharedPreferencesUtil();
+        if (!preferences.autoSyncOfflineRecordings || preferences.useCustomStt) {
+          return;
+        }
+        final current = _automaticRingBacklogReceipts[receipt.deviceId];
+        if (current == null || receipt.targetWriteSeq > current.targetWriteSeq) {
+          _automaticRingBacklogReceipts[receipt.deviceId] = receipt;
+        }
+        unawaited(
+          RecordingTransferCoordinator.instance.wake(
+            WakeTrigger.ringBacklogSnapshotCompleted,
+          ),
+        );
+      },
     );
     _deviceStorageRouter = DeviceStorageRouter(
       bindLegacySdCard: _sdcardSync.setDevice,
@@ -473,7 +537,14 @@ class WalSyncs implements IWalSync {
   @override
   void cancelSync() {
     _isCancelled = true;
-    _ringSync.cancelSync();
+    final ringTailWasActive = _ringSync.isAudioTailActive;
+    // The manual request can outlive a disconnected tail. Explicit user
+    // cancellation must always resolve its Future even when no BLE owner is
+    // currently attached.
+    _ringSync.cancelRequestedAudioTailBacklogDrain();
+    if (!ringTailWasActive) {
+      _ringSync.cancelSync();
+    }
     _storageSync.cancelSync();
     _sdcardSync.cancelSync();
     _flashPageSync.cancelSync();

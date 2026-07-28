@@ -43,12 +43,17 @@ void main() {
     int packetsPerRead = 2,
     int? nowSeconds,
     bool deepBacklogEnabled = true,
+    RingConnectionResolver? connectionResolver,
+    RingConversationTimeoutSecondsProvider? conversationTimeoutSecondsProvider,
+    RingBacklogSnapshotCompleted? onBacklogSnapshotCompleted,
   }) {
     final sync = RingStorageSyncImpl(
       listener,
-      connectionResolver: (_) async => connection,
+      connectionResolver: connectionResolver ?? (_) async => connection,
       documentsDirectoryProvider: () async => directory,
       deepBacklogPolicy: () => deepBacklogEnabled,
+      conversationTimeoutSecondsProvider: conversationTimeoutSecondsProvider ?? () => 120,
+      onBacklogSnapshotCompleted: onBacklogSnapshotCompleted,
       packetsPerRead: packetsPerRead,
       inactivityTimeout: const Duration(milliseconds: 100),
       nowSeconds: () => nowSeconds ?? _FakeRingConnection.baseTimestamp + 10000,
@@ -90,6 +95,28 @@ void main() {
     expect(wal.status, WalStatus.synced);
   });
 
+  test('ring registration persists the last record wall-clock end across VAD pauses', () async {
+    const firstTimestamp = _FakeRingConnection.baseTimestamp + 100;
+    final connection = _FakeRingConnection(
+      readSeq: 100,
+      writeSeq: 102,
+      timestamps: {
+        100: firstTimestamp,
+        101: firstTimestamp + 2,
+      },
+      framesPerRecord: 100,
+    );
+    final local = localSync();
+
+    await ringSync(connection, local).syncWal(wal: virtualWal(2));
+
+    final recovered = local.testWals.single;
+    expect(recovered.timerStart, firstTimestamp);
+    expect(recovered.seconds, 2);
+    expect(recovered.captureEndSeconds, firstTimestamp + 3);
+    expect(recovered.wallClockEndSeconds, firstTimestamp + 3);
+  });
+
   test('deep backlog runs only by opt-in or while charging', () {
     expect(
       ringShouldDrainDeepBacklog(
@@ -112,6 +139,12 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  test('conversation timeout mirrors backend minimum and four-hour sentinel', () {
+    expect(effectiveConversationBoundarySeconds(30), 120);
+    expect(effectiveConversationBoundarySeconds(300), 300);
+    expect(effectiveConversationBoundarySeconds(-1), 4 * 60 * 60);
   });
 
   test('storage-authoritative scheduler persists the live head before draining backlog', () async {
@@ -195,6 +228,599 @@ void main() {
     await session!.cancel();
   });
 
+  test('manual Sync drains one tail-owned snapshot while preserving live priority', () async {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final timestamps = {
+      for (var seq = 0; seq < 192; seq++) seq: now - 1000,
+      for (var seq = 192; seq < 212; seq++) seq: now,
+    };
+    final connection = _FakeRingConnection(
+      readSeq: 0,
+      writeSeq: 212,
+      timestamps: timestamps,
+    );
+    final local = localSync();
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: now,
+      deepBacklogEnabled: false,
+    );
+    final liveDelivered = Completer<void>();
+
+    final session = await sync.startAudioTail(
+      onLiveFrames: (_) {
+        if (!liveDelivered.isCompleted) liveDelivered.complete();
+        return _delivered();
+      },
+    );
+
+    await liveDelivered.future.timeout(const Duration(seconds: 1));
+    await connection.secondRead.future.timeout(const Duration(seconds: 3));
+    final firstRequest = sync.requestAudioTailBacklogDrain();
+    final repeatedTap = sync.requestAudioTailBacklogDrain();
+
+    expect(firstRequest, isNotNull);
+    expect(repeatedTap, same(firstRequest));
+    final receipt = await firstRequest!.timeout(const Duration(seconds: 5));
+
+    expect(receipt?.targetWriteSeq, 212);
+    expect(receipt?.deviceId, 'cv1-test');
+    expect(connection.reads.take(3), [
+      (start: 192, count: 20),
+      (start: 96, count: 96),
+      (start: 0, count: 96),
+    ]);
+    expect(connection.successfulAdvances, [96, 212]);
+    expect(sync.isAudioTailActive, isTrue);
+
+    await session!.cancel();
+  });
+
+  test('manual snapshot caps a deep READ at its captured write sequence', () async {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final infoGate = Completer<RingInfo?>();
+    final connection = _FakeRingConnection(
+      readSeq: 200,
+      writeSeq: 212,
+      ringInfoGate: infoGate,
+      growWriteSeqAfterFirstReadBy: 30,
+      timestamps: {
+        for (var seq = 212; seq < 242; seq++) seq: now,
+      },
+    );
+    final local = localSync();
+    File('${directory.path}/future-coverage.bin').writeAsBytesSync([1, 2, 3]);
+    local.testWals = [
+      // Live resume metadata deliberately has no durable file. It suppresses
+      // replay but cannot authorize ADVANCE.
+      Wal(
+        timerStart: now - 1,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'cv1-test',
+        sourceId: 'ring_201_212',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 1,
+      ),
+      // A later durable island makes the unconstrained backlog end 300. The
+      // old manual receipt may authorize only [200, 212), never [212, 300).
+      Wal(
+        timerStart: now + 100,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'cv1-test',
+        sourceId: 'archive2_ring_300_320_${now + 100}',
+        uploadIntent: WalUploadIntent.historicalBackfill,
+        filePath: 'future-coverage.bin',
+        seconds: 2,
+      ),
+    ];
+    final liveRangeStored = Completer<void>();
+    listener.onWalUpdatedCallback = () {
+      if (!liveRangeStored.isCompleted && local.testWals.any((wal) => wal.sourceId == 'ring_212_242')) {
+        liveRangeStored.complete();
+      }
+    };
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: now,
+      deepBacklogEnabled: false,
+    );
+
+    final start = sync.startAudioTail(
+      onLiveFrames: (_) => _delivered(),
+      resumeLiveContinuity: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+    final request = sync.requestAudioTailBacklogDrain();
+    infoGate.complete(
+      RingInfo(
+        readSeq: 200,
+        writeSeq: 212,
+        capacityPackets: 1000000,
+        droppedPackets: 0,
+        packetSize: RingProtocol.recordSize,
+      ),
+    );
+
+    final session = await start;
+    final receipt = await request!.timeout(const Duration(seconds: 1));
+    await connection.secondRead.future.timeout(const Duration(seconds: 3));
+    await liveRangeStored.future.timeout(const Duration(seconds: 1));
+
+    expect(receipt?.targetWriteSeq, 212);
+    expect(connection.reads.take(2), [
+      (start: 200, count: 12),
+      (start: 212, count: 30),
+    ]);
+    expect(connection.successfulAdvances, [212]);
+    expect(
+      local.testWals.singleWhere((wal) => wal.sourceId == 'ring_200_212').uploadIntent,
+      WalUploadIntent.historicalBackfill,
+    );
+    expect(
+      local.testWals.singleWhere((wal) => wal.sourceId == 'ring_212_242').uploadIntent,
+      WalUploadIntent.liveContinuity,
+    );
+    expect(
+      local.testWals.where(
+        (wal) =>
+            wal.uploadIntent == WalUploadIntent.historicalBackfill &&
+            (RingProtocol.parseSourceRange(wal.sourceId)?.start ?? 0) >= 212,
+      ),
+      isEmpty,
+      reason: 'a later writeSeq may be streamed live but must not expand the completed manual snapshot',
+    );
+    await session!.cancel();
+  });
+
+  test('captured manual snapshot survives same-device tail replacement without expanding', () async {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final firstInfo = Completer<RingInfo?>();
+    final firstConnection = _FakeRingConnection(
+      readSeq: 200,
+      writeSeq: 212,
+      ringInfoGate: firstInfo,
+      rejectRead: true,
+    );
+    final replacementConnection = _FakeRingConnection(
+      readSeq: 200,
+      writeSeq: 242,
+      timestamps: {
+        for (var seq = 212; seq < 242; seq++) seq: now,
+      },
+    );
+    var activeConnection = firstConnection;
+    final local = localSync();
+    local.testWals = [
+      Wal(
+        timerStart: now - 1,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'cv1-test',
+        sourceId: 'ring_201_212',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 1,
+      ),
+    ];
+    final sync = ringSync(
+      firstConnection,
+      local,
+      nowSeconds: now,
+      deepBacklogEnabled: false,
+      connectionResolver: (_) async => activeConnection,
+    );
+
+    final firstStart = sync.startAudioTail(
+      onLiveFrames: (_) => _delivered(),
+      resumeLiveContinuity: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+    final originalRequest = sync.requestAudioTailBacklogDrain();
+    firstInfo.complete(
+      RingInfo(
+        readSeq: 200,
+        writeSeq: 212,
+        capacityPackets: 1000000,
+        droppedPackets: 0,
+        packetSize: RingProtocol.recordSize,
+      ),
+    );
+    final firstSession = await firstStart;
+    await expectLater(firstSession!.done, throwsA(isA<Exception>()));
+    expect(firstConnection.reads, [(start: 200, count: 12)]);
+
+    // Android's disconnect callback clears the bound device before the
+    // capture controller starts the replacement tail.
+    sync.setDevice(null);
+    activeConnection = replacementConnection;
+    sync.setDevice(_device());
+    final replacementSession = await sync.startAudioTail(
+      onLiveFrames: (_) => _delivered(),
+      resumeLiveContinuity: true,
+    );
+    final receipt = await originalRequest!.timeout(const Duration(seconds: 5));
+
+    expect(receipt?.deviceId, 'cv1-test');
+    expect(receipt?.targetWriteSeq, 212);
+    expect(replacementConnection.reads.take(2), [
+      (start: 212, count: 30),
+      (start: 200, count: 12),
+    ]);
+    expect(replacementConnection.successfulAdvances, [212]);
+    expect(
+      local.testWals.where(
+        (wal) =>
+            wal.uploadIntent == WalUploadIntent.historicalBackfill &&
+            (RingProtocol.parseSourceRange(wal.sourceId)?.start ?? 0) >= 212,
+      ),
+      isEmpty,
+    );
+    await replacementSession!.cancel();
+  });
+
+  test('pending manual snapshot is never adopted by a different device', () async {
+    final firstInfo = Completer<RingInfo?>();
+    final firstConnection = _FakeRingConnection(
+      readSeq: 200,
+      writeSeq: 212,
+      ringInfoGate: firstInfo,
+      rejectRead: true,
+    );
+    final otherConnection = _FakeRingConnection(
+      readSeq: 100,
+      writeSeq: 120,
+    );
+    final local = localSync();
+    local.testWals = [
+      Wal(
+        timerStart: _FakeRingConnection.baseTimestamp + 9999,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'cv1-other',
+        sourceId: 'ring_119_120',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 1,
+      ),
+    ];
+    final sync = ringSync(
+      firstConnection,
+      local,
+      deepBacklogEnabled: false,
+      connectionResolver: (deviceId) async => deviceId == 'cv1-test' ? firstConnection : otherConnection,
+    );
+
+    final firstStart = sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    await Future<void>.delayed(Duration.zero);
+    final request = sync.requestAudioTailBacklogDrain()!;
+    firstInfo.complete(
+      RingInfo(
+        readSeq: 200,
+        writeSeq: 212,
+        capacityPackets: 1000000,
+        droppedPackets: 0,
+        packetSize: RingProtocol.recordSize,
+      ),
+    );
+    final firstSession = await firstStart;
+    await expectLater(firstSession!.done, throwsA(isA<Exception>()));
+
+    sync.setDevice(null);
+    sync.setDevice(_device('cv1-other'));
+    expect(await request, isNull);
+
+    final otherSession = await sync.startAudioTail(
+      onLiveFrames: (_) => _delivered(),
+      resumeLiveContinuity: true,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(otherConnection.reads, isEmpty);
+    await otherSession!.cancel();
+  });
+
+  test('explicit cancellation resolves a request while its device is detached', () async {
+    final firstInfo = Completer<RingInfo?>();
+    final connection = _FakeRingConnection(
+      readSeq: 200,
+      writeSeq: 212,
+      ringInfoGate: firstInfo,
+      rejectRead: true,
+    );
+    final sync = ringSync(
+      connection,
+      localSync(),
+      deepBacklogEnabled: false,
+    );
+
+    final start = sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    await Future<void>.delayed(Duration.zero);
+    final request = sync.requestAudioTailBacklogDrain()!;
+    firstInfo.complete(
+      RingInfo(
+        readSeq: 200,
+        writeSeq: 212,
+        capacityPackets: 1000000,
+        droppedPackets: 0,
+        packetSize: RingProtocol.recordSize,
+      ),
+    );
+    final session = await start;
+    await expectLater(session!.done, throwsA(isA<Exception>()));
+
+    sync.setDevice(null);
+    // WalSyncs.cancelSync invokes this even when isAudioTailActive is false.
+    sync.cancelRequestedAudioTailBacklogDrain();
+    expect(await request, isNull);
+  });
+
+  test('cancelling manual Sync revokes deep drain without stopping live capture', () async {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final connection = _FakeRingConnection(
+      readSeq: 0,
+      writeSeq: 10000,
+      timestamps: {
+        for (var seq = 0; seq < 9980; seq++) seq: now - 1000,
+        for (var seq = 9980; seq < 10000; seq++) seq: now,
+      },
+    );
+    final local = localSync();
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: now,
+      deepBacklogEnabled: false,
+    );
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    await connection.secondRead.future.timeout(const Duration(seconds: 3));
+    final request = sync.requestAudioTailBacklogDrain();
+    sync.cancelRequestedAudioTailBacklogDrain();
+
+    expect(await request, isNull);
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    expect(connection.reads, [
+      (start: 9980, count: 20),
+      (start: 9884, count: 96),
+    ]);
+    expect(sync.isAudioTailActive, isTrue);
+
+    await session!.cancel();
+  });
+
+  test('restart advances archive-backed coverage without rereading it', () async {
+    final connection = _FakeRingConnection(readSeq: 100, writeSeq: 120);
+    final local = localSync();
+    File('${directory.path}/archive.bin').writeAsBytesSync([1, 2, 3]);
+    local.testWals = [
+      Wal(
+        timerStart: _FakeRingConnection.baseTimestamp,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'cv1-test',
+        sourceId: 'archive2_ring_100_120_${_FakeRingConnection.baseTimestamp}',
+        uploadIntent: WalUploadIntent.historicalBackfill,
+        filePath: 'archive.bin',
+        seconds: 2,
+      ),
+    ];
+    final sync = ringSync(
+      connection,
+      local,
+      deepBacklogEnabled: false,
+    );
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    await connection.firstAdvance.future.timeout(const Duration(seconds: 1));
+
+    expect(connection.advanceAttempts, [120]);
+    expect(connection.reads, isEmpty);
+
+    await session!.cancel();
+  });
+
+  test('legacy archive identity is never trusted for device ADVANCE', () async {
+    final connection = _FakeRingConnection(
+      readSeq: 100,
+      writeSeq: 120,
+      rejectRead: true,
+    );
+    final local = localSync();
+    File('${directory.path}/legacy-archive.bin').writeAsBytesSync([1, 2, 3]);
+    local.testWals = [
+      Wal(
+        timerStart: _FakeRingConnection.baseTimestamp,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'cv1-test',
+        sourceId: 'archive_ring_100_120_${_FakeRingConnection.baseTimestamp}',
+        uploadIntent: WalUploadIntent.historicalBackfill,
+        filePath: 'legacy-archive.bin',
+        seconds: 2,
+      ),
+    ];
+    final sync = ringSync(
+      connection,
+      local,
+      deepBacklogEnabled: false,
+    );
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    await expectLater(session!.done, throwsA(isA<Exception>()));
+
+    expect(connection.reads, [(start: 100, count: 20)]);
+    expect(connection.advanceAttempts, isEmpty);
+  });
+
+  for (final invalidProof in [
+    'corrupted',
+    'non-disk',
+    'null-path',
+    'missing-file',
+    'empty-file',
+  ]) {
+    test('$invalidProof recovery WAL cannot authorize device ADVANCE', () async {
+      final connection = _FakeRingConnection(
+        readSeq: 100,
+        writeSeq: 120,
+        rejectRead: true,
+      );
+      final local = localSync();
+      final fileName = '$invalidProof.bin';
+      if (invalidProof != 'missing-file' && invalidProof != 'null-path') {
+        File('${directory.path}/$fileName').writeAsBytesSync(
+          invalidProof == 'empty-file' ? [] : [1, 2, 3],
+        );
+      }
+      local.testWals = [
+        Wal(
+          timerStart: _FakeRingConnection.baseTimestamp,
+          codec: BleAudioCodec.opus,
+          status: invalidProof == 'corrupted' ? WalStatus.corrupted : WalStatus.miss,
+          storage: invalidProof == 'non-disk' ? WalStorage.mem : WalStorage.disk,
+          originalStorage: WalStorage.sdcard,
+          device: 'cv1-test',
+          sourceId: 'archive2_ring_100_120_${_FakeRingConnection.baseTimestamp}',
+          uploadIntent: WalUploadIntent.historicalBackfill,
+          filePath: invalidProof == 'null-path' ? null : fileName,
+          seconds: 2,
+        ),
+      ];
+      final sync = ringSync(
+        connection,
+        local,
+        deepBacklogEnabled: false,
+      );
+
+      final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
+      await expectLater(session!.done, throwsA(isA<Exception>()));
+
+      expect(connection.reads, [(start: 100, count: 20)]);
+      expect(connection.advanceAttempts, isEmpty);
+    });
+  }
+
+  test('tail ownership is visible while connection setup is pending and clears on null', () async {
+    final connectionGate = Completer<DeviceConnection?>();
+    final local = localSync();
+    final sync = RingStorageSyncImpl(
+      listener,
+      connectionResolver: (_) => connectionGate.future,
+      documentsDirectoryProvider: () async => directory,
+      deepBacklogPolicy: () => false,
+      conversationTimeoutSecondsProvider: () => 120,
+      inactivityTimeout: const Duration(milliseconds: 100),
+    )
+      ..setDevice(_device())
+      ..setLocalSync(local);
+
+    final start = sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    await Future<void>.delayed(Duration.zero);
+
+    expect(sync.isAudioTailActive, isTrue);
+    connectionGate.complete(null);
+    expect(await start, isNull);
+    expect(sync.isAudioTailActive, isFalse);
+  });
+
+  test('tail ownership clears when setup throws', () async {
+    final connection = _FakeRingConnection(
+      readSeq: 100,
+      writeSeq: 120,
+      codecError: StateError('codec failed'),
+    );
+    final sync = ringSync(
+      connection,
+      localSync(),
+      deepBacklogEnabled: false,
+    );
+
+    await expectLater(
+      sync.startAudioTail(onLiveFrames: (_) => _delivered()),
+      throwsA(isA<StateError>()),
+    );
+    expect(sync.isAudioTailActive, isFalse);
+  });
+
+  test('manual request shares reserved owner while ring info is pending', () async {
+    final infoGate = Completer<RingInfo?>();
+    final connection = _FakeRingConnection(
+      readSeq: 120,
+      writeSeq: 120,
+      ringInfoGate: infoGate,
+    );
+    final sync = ringSync(
+      connection,
+      localSync(),
+      deepBacklogEnabled: false,
+    );
+
+    final start = sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    await Future<void>.delayed(Duration.zero);
+    final request = sync.requestAudioTailBacklogDrain();
+
+    expect(sync.isAudioTailActive, isTrue);
+    expect(request, isNotNull);
+    expect(connection.ringInfoCalls, 1);
+    expect(connection.reads, isEmpty);
+
+    infoGate.complete(
+      RingInfo(
+        readSeq: 120,
+        writeSeq: 120,
+        capacityPackets: 1000000,
+        droppedPackets: 0,
+        packetSize: RingProtocol.recordSize,
+      ),
+    );
+    final session = await start;
+    final receipt = await request;
+
+    expect(receipt?.targetWriteSeq, 120);
+    expect(connection.reads, isEmpty);
+    await session!.cancel();
+  });
+
+  test('automatic deep snapshot reports one bounded cloud-work receipt', () async {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final connection = _FakeRingConnection(
+      readSeq: 0,
+      writeSeq: 212,
+      timestamps: {
+        for (var seq = 0; seq < 212; seq++) seq: now - 1000,
+      },
+    );
+    final completion = Completer<RingBacklogDrainReceipt>();
+    final sync = ringSync(
+      connection,
+      localSync(),
+      nowSeconds: now,
+      onBacklogSnapshotCompleted: (receipt) {
+        if (!completion.isCompleted) completion.complete(receipt);
+      },
+    );
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    final receipt = await completion.future.timeout(const Duration(seconds: 5));
+
+    expect(receipt.deviceId, 'cv1-test');
+    expect(receipt.targetWriteSeq, 212);
+    await session!.cancel();
+  });
+
   test('sparse old VAD records stop recent recovery after one timestamp probe', () async {
     const now = _FakeRingConnection.baseTimestamp + 10000;
     final timestamps = {
@@ -248,6 +874,58 @@ void main() {
     expect(connection.reads[1], (start: 120, count: 30));
     expect(connection.reads[1].start, connection.reads[0].start + connection.reads[0].count);
 
+    await session!.cancel();
+  });
+
+  test('tail snapshots a five-minute conversation timeout before asynchronous setup', () async {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final infoGate = Completer<RingInfo?>();
+    final connection = _FakeRingConnection(
+      readSeq: 100,
+      writeSeq: 120,
+      ringInfoGate: infoGate,
+      timestamps: {
+        for (var seq = 100; seq < 120; seq++) seq: now - 180,
+      },
+    );
+    var configuredTimeout = 300;
+    final local = localSync();
+    final stored = Completer<void>();
+    listener.onWalUpdatedCallback = () {
+      if (!stored.isCompleted && local.testWals.any((wal) => wal.sourceId == 'ring_100_120')) {
+        stored.complete();
+      }
+    };
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: now,
+      deepBacklogEnabled: false,
+      conversationTimeoutSecondsProvider: () => configuredTimeout,
+    );
+
+    final start = sync.startAudioTail(
+      onLiveFrames: (_) => _delivered(),
+      resumeLiveContinuity: true,
+    );
+    await Future<void>.delayed(Duration.zero);
+    configuredTimeout = 120;
+    infoGate.complete(
+      RingInfo(
+        readSeq: 100,
+        writeSeq: 120,
+        capacityPackets: 1000000,
+        droppedPackets: 0,
+        packetSize: RingProtocol.recordSize,
+      ),
+    );
+
+    final session = await start;
+    await stored.future.timeout(const Duration(seconds: 3));
+    expect(
+      local.testWals.singleWhere((wal) => wal.sourceId == 'ring_100_120').uploadIntent,
+      WalUploadIntent.liveContinuity,
+    );
     await session!.cancel();
   });
 
@@ -337,8 +1015,74 @@ void main() {
         readSeq: 0,
         writeSeq: 10000,
         nowSeconds: now,
+        recentSeconds: 120,
       ),
       9920,
+    );
+  });
+
+  test('live reconnect recency uses persisted capture end instead of compressed duration', () {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final vadSpanningWal = Wal(
+      timerStart: now - 1000,
+      codec: BleAudioCodec.opus,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      device: 'cv1-test',
+      sourceId: 'ring_9800_9900',
+      uploadIntent: WalUploadIntent.liveContinuity,
+      seconds: 2,
+      captureEndSeconds: now - 10,
+    );
+
+    expect(
+      ringLiveResumeSequence(
+        wals: [vadSpanningWal],
+        deviceId: 'cv1-test',
+        readSeq: 9000,
+        writeSeq: 10000,
+        nowSeconds: now,
+        recentSeconds: 120,
+      ),
+      9800,
+    );
+  });
+
+  test('live reconnect honors a configured five-minute open conversation', () {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final openConversationWal = Wal(
+      timerStart: now - 1000,
+      codec: BleAudioCodec.opus,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      device: 'cv1-test',
+      sourceId: 'ring_9800_9900',
+      uploadIntent: WalUploadIntent.liveContinuity,
+      seconds: 2,
+      captureEndSeconds: now - 180,
+    );
+
+    expect(
+      ringLiveResumeSequence(
+        wals: [openConversationWal],
+        deviceId: 'cv1-test',
+        readSeq: 9000,
+        writeSeq: 10000,
+        nowSeconds: now,
+        recentSeconds: 300,
+      ),
+      9800,
+    );
+    expect(
+      ringLiveResumeSequence(
+        wals: [openConversationWal],
+        deviceId: 'cv1-test',
+        readSeq: 9000,
+        writeSeq: 10000,
+        nowSeconds: now,
+        recentSeconds: 120,
+      ),
+      isNull,
     );
   });
 
@@ -384,6 +1128,7 @@ void main() {
         readSeq: 90,
         writeSeq: 130,
         nowSeconds: now,
+        recentSeconds: 120,
       ),
       120,
     );
@@ -396,6 +1141,8 @@ void main() {
       writeSeq: 130,
     );
     final local = localSync();
+    File('${directory.path}/range-100-110.bin').writeAsBytesSync([1, 2, 3]);
+    File('${directory.path}/range-110-120.bin').writeAsBytesSync([4, 5, 6]);
     local.testWals = [
       Wal(
         timerStart: now - 2,
@@ -405,6 +1152,7 @@ void main() {
         originalStorage: WalStorage.sdcard,
         device: 'cv1-test',
         sourceId: 'ring_100_110',
+        filePath: 'range-100-110.bin',
         uploadIntent: WalUploadIntent.liveContinuity,
         seconds: 1,
       ),
@@ -416,6 +1164,7 @@ void main() {
         originalStorage: WalStorage.sdcard,
         device: 'cv1-test',
         sourceId: 'ring_110_120',
+        filePath: 'range-110-120.bin',
         uploadIntent: WalUploadIntent.liveContinuity,
         seconds: 1,
       ),
@@ -459,6 +1208,7 @@ void main() {
         readSeq: 1000,
         writeSeq: 1200,
         nowSeconds: now,
+        recentSeconds: 120,
       ),
       1000,
     );
@@ -785,6 +1535,83 @@ void main() {
     expect(local.testWals.map((wal) => wal.timerStart), [1799999996, 1799999998]);
   });
 
+  test('invalid RTC fallback continues from the predecessor wall-clock capture end', () async {
+    final local = localSync();
+    local.testWals = [
+      Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 100,
+        captureEndSeconds: 2000.75,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'cv1-test',
+        sourceId: 'ring_100_200',
+      ),
+    ];
+    final connection = _FakeRingConnection(
+      readSeq: 200,
+      writeSeq: 201,
+      timestamps: const {200: 0},
+      framesPerRecord: 100,
+    );
+
+    await ringSync(connection, local, nowSeconds: 3000).syncWal(wal: virtualWal(1));
+
+    final recovered = local.testWals.singleWhere((wal) => wal.sourceId == 'ring_200_201');
+    expect(recovered.timerStart, 2000);
+    expect(recovered.captureEndSeconds, 2001);
+  });
+
+  test('tail restart continues invalid RTC chronology from an archive2 predecessor', () async {
+    final local = localSync();
+    File('${directory.path}/archive2-predecessor.bin').writeAsBytesSync([1, 2, 3]);
+    local.testWals = [
+      Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 100,
+        captureEndSeconds: 2000.75,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'cv1-test',
+        sourceId: 'archive2_ring_100_200_1000',
+        filePath: 'archive2-predecessor.bin',
+        uploadIntent: WalUploadIntent.historicalBackfill,
+      ),
+    ];
+    final stored = Completer<void>();
+    listener.onWalUpdatedCallback = () {
+      if (!stored.isCompleted && local.testWals.any((wal) => wal.sourceId == 'ring_200_201')) {
+        stored.complete();
+      }
+    };
+    final connection = _FakeRingConnection(
+      readSeq: 200,
+      writeSeq: 201,
+      timestamps: const {200: 0},
+      framesPerRecord: 100,
+    );
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: 3000,
+      deepBacklogEnabled: false,
+    );
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    await stored.future.timeout(const Duration(seconds: 3));
+
+    final recovered = local.testWals.singleWhere((wal) => wal.sourceId == 'ring_200_201');
+    expect(recovered.timerStart, 2000);
+    expect(recovered.captureEndSeconds, 2001);
+    await session!.cancel();
+  });
+
   test('byte-identical legacy timestamp WAL is reused instead of uploaded twice', () async {
     final local = localSync();
     final legacyFile = File('${directory.path}/legacy.bin')..writeAsBytesSync([1, 2, 3, 4]);
@@ -817,6 +1644,42 @@ void main() {
 
     expect(result, ExternalWalRegistration.alreadyRegistered);
     expect(local.testWals, hasLength(1));
+    expect(await candidateFile.exists(), isFalse);
+  });
+
+  test('byte-identical retry upgrades legacy capture-end metadata before acknowledgment', () async {
+    final local = localSync();
+    final legacyFile = File('${directory.path}/legacy-upgrade.bin')..writeAsBytesSync([1, 2, 3, 4]);
+    final candidateFile = File('${directory.path}/range-upgrade.bin')..writeAsBytesSync([1, 2, 3, 4]);
+    final legacy = Wal(
+      timerStart: 1700000850,
+      codec: BleAudioCodec.opus,
+      seconds: 1,
+      device: 'cv1-test',
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      originalStorage: WalStorage.sdcard,
+      filePath: legacyFile.path.split('/').last,
+    );
+    local.testWals = [legacy];
+    final candidate = Wal(
+      timerStart: 1700000850,
+      codec: BleAudioCodec.opus,
+      seconds: 1,
+      captureEndSeconds: 1700000860.5,
+      device: 'cv1-test',
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      originalStorage: WalStorage.sdcard,
+      filePath: candidateFile.path.split('/').last,
+      sourceId: 'ring_850_852',
+    );
+
+    final result = await local.addExternalWal(candidate);
+
+    expect(result, ExternalWalRegistration.alreadyRegistered);
+    expect(legacy.captureEndSeconds, 1700000860.5);
+    expect(local.testWals, [legacy]);
     expect(await candidateFile.exists(), isFalse);
   });
 
@@ -856,14 +1719,16 @@ void main() {
   });
 }
 
-BtDevice _device() => BtDevice(name: 'Omi', id: 'cv1-test', type: DeviceType.omi, rssi: -40);
+BtDevice _device([String id = 'cv1-test']) => BtDevice(name: 'Omi', id: id, type: DeviceType.omi, rssi: -40);
 
 class _Listener implements IWalSyncListener {
+  void Function()? onWalUpdatedCallback;
+
   @override
   void onWalSynced(Wal wal, {ServerConversation? conversation}) {}
 
   @override
-  void onWalUpdated() {}
+  void onWalUpdated() => onWalUpdatedCallback?.call();
 }
 
 class _FakeRingConnection implements DeviceConnection {
@@ -876,6 +1741,9 @@ class _FakeRingConnection implements DeviceConnection {
   final bool corruptCrc;
   final bool failAdvance;
   final bool connected;
+  final bool rejectRead;
+  final Object? codecError;
+  final Completer<RingInfo?>? ringInfoGate;
   final int framesPerRecord;
   final Map<int, int> timestamps;
   final reads = <({int start, int count})>[];
@@ -885,6 +1753,7 @@ class _FakeRingConnection implements DeviceConnection {
   final Completer<void> secondRead = Completer<void>();
   final Completer<void> thirdRead = Completer<void>();
   final StreamController<List<int>> _notifications = StreamController<List<int>>.broadcast(sync: true);
+  int ringInfoCalls = 0;
 
   _FakeRingConnection({
     required this.readSeq,
@@ -894,18 +1763,26 @@ class _FakeRingConnection implements DeviceConnection {
     this.corruptCrc = false,
     this.failAdvance = false,
     this.connected = true,
+    this.rejectRead = false,
+    this.codecError,
+    this.ringInfoGate,
     this.framesPerRecord = 1,
     this.timestamps = const {},
   });
 
   @override
-  Future<RingInfo?> getRingInfo() async => RingInfo(
-        readSeq: readSeq,
-        writeSeq: writeSeq,
-        capacityPackets: 1000000,
-        droppedPackets: 0,
-        packetSize: RingProtocol.recordSize,
-      );
+  Future<RingInfo?> getRingInfo() async {
+    ringInfoCalls++;
+    final gate = ringInfoGate;
+    if (gate != null && ringInfoCalls == 1) return gate.future;
+    return RingInfo(
+      readSeq: readSeq,
+      writeSeq: writeSeq,
+      capacityPackets: 1000000,
+      droppedPackets: 0,
+      packetSize: RingProtocol.recordSize,
+    );
+  }
 
   @override
   Future<StreamSubscription?> getBleStorageBytesListener({
@@ -917,6 +1794,7 @@ class _FakeRingConnection implements DeviceConnection {
   Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
     final count = packetCount!;
     reads.add((start: startSeq, count: count));
+    if (rejectRead) return false;
     if (reads.length == 1 && growWriteSeqAfterFirstReadBy > 0) {
       writeSeq += growWriteSeqAfterFirstReadBy;
     }
@@ -954,7 +1832,11 @@ class _FakeRingConnection implements DeviceConnection {
   Future<bool> isConnected() async => connected;
 
   @override
-  Future<BleAudioCodec> getAudioCodec() async => BleAudioCodec.opus;
+  Future<BleAudioCodec> getAudioCodec() async {
+    final error = codecError;
+    if (error != null) throw error;
+    return BleAudioCodec.opus;
+  }
 
   @override
   Future<bool> stopStorageSync() async => true;

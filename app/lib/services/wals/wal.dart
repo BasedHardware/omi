@@ -8,6 +8,21 @@ const sdcardChunkSizeSecs = 180;
 const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
+const _maximumPersistedCaptureFutureSkewSeconds = 24 * 60 * 60;
+const _minimumEffectiveConversationBoundarySeconds = 2 * 60;
+const _unlimitedConversationBoundarySeconds = 4 * 60 * 60;
+
+/// Mirrors the single-channel backend conversation timeout contract.
+///
+/// The settings UI uses `-1` for the four-hour option, while the backend
+/// clamps every shorter value to two minutes.
+int effectiveConversationBoundarySeconds(int configured) {
+  if (configured == -1) return _unlimitedConversationBoundarySeconds;
+  if (configured < _minimumEffectiveConversationBoundarySeconds) {
+    return _minimumEffectiveConversationBoundarySeconds;
+  }
+  return configured;
+}
 
 /// Sync lifecycle of a recording.
 ///
@@ -104,6 +119,14 @@ class Wal {
   int channel;
   int sampleRate;
   int seconds;
+
+  /// Wall-clock end of captured audio, in Unix seconds.
+  ///
+  /// Pendant VAD can omit silence between records, so [seconds] remains the
+  /// playable audio duration and cannot describe when the capture ended.
+  /// Legacy manifests leave this null and use [wallClockEndSeconds]'s duration
+  /// fallback.
+  double? captureEndSeconds;
   String device;
   String? deviceModel;
 
@@ -167,6 +190,29 @@ class Wal {
 
   String get id => sourceId == null ? '${device}_$timerStart' : '${device}_$sourceId';
 
+  /// Valid persisted wall-clock end, or null for legacy/corrupt metadata.
+  double? get validatedCaptureEndSeconds {
+    final persistedEnd = captureEndSeconds;
+    final nowSeconds = DateTime.now().millisecondsSinceEpoch / 1000;
+    if (persistedEnd == null ||
+        !persistedEnd.isFinite ||
+        persistedEnd < timerStart ||
+        persistedEnd > nowSeconds + _maximumPersistedCaptureFutureSkewSeconds) {
+      return null;
+    }
+    return persistedEnd;
+  }
+
+  /// Best available wall-clock end for recency and conversation boundaries.
+  double get wallClockEndSeconds {
+    final persistedEnd = validatedCaptureEndSeconds;
+    if (persistedEnd != null) return persistedEnd;
+    final framesPerSecond = codec.getFramesPerSecond();
+    final playableDuration =
+        framesPerSecond > 0 && totalFrames > 0 ? totalFrames / framesPerSecond : seconds.toDouble();
+    return timerStart + playableDuration;
+  }
+
   /// Single source of truth for how this recording's sync state is shown to the
   /// user. The sync page renders an explicit label + icon for every value so a
   /// not-yet-synced recording is never visually identical to a failed one.
@@ -220,6 +266,7 @@ class Wal {
     required this.timerStart,
     required this.codec,
     required this.seconds,
+    this.captureEndSeconds,
     this.sampleRate = 16000,
     this.channel = 1,
     this.status = WalStatus.inProgress,
@@ -256,6 +303,7 @@ class Wal {
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
+      captureEndSeconds: json['capture_end_seconds'] is num ? (json['capture_end_seconds'] as num).toDouble() : null,
       device: json['device'] ?? "phone",
       deviceModel: json['device_model'],
       storageOffset: json['storage_offset'] ?? 0,
@@ -277,6 +325,7 @@ class Wal {
   }
 
   Map<String, dynamic> toJson() {
+    final persistedCaptureEnd = validatedCaptureEndSeconds;
     return {
       'timer_start': timerStart,
       'codec': codec.toString(),
@@ -286,6 +335,7 @@ class Wal {
       'storage': storage.name,
       'file_path': filePath,
       'seconds': seconds,
+      if (persistedCaptureEnd != null) 'capture_end_seconds': persistedCaptureEnd,
       'device': device,
       'device_model': deviceModel,
       'storage_offset': storageOffset,
@@ -308,7 +358,7 @@ class Wal {
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timerStart}.bin";
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_$timerStart.bin";
   }
 
   getFileNameByTimeStarts(int timestarts, {String? sourceId}) {

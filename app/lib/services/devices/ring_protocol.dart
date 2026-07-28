@@ -223,7 +223,25 @@ class RingProtocol {
   static ({int start, int end})? parseRecoverySourceRange(String? sourceId) {
     final raw = parseSourceRange(sourceId);
     if (raw != null || sourceId == null) return raw;
-    final match = RegExp(r'^archive_ring_(\d+)_(\d+)_\d+$').firstMatch(sourceId);
+    final match = RegExp(r'^(?:archive|archive2)_ring_(\d+)_(\d+)_\d+$').firstMatch(sourceId);
+    if (match == null) return null;
+    final start = int.parse(match.group(1)!);
+    final end = int.parse(match.group(2)!);
+    if (end <= start) return null;
+    return (start: start, end: end);
+  }
+
+  /// Parse only source identities that prove contiguous durable ring coverage.
+  ///
+  /// Legacy `archive_ring_*` files may have been produced by a greedy grouper
+  /// that spanned sequence gaps, so they remain valid recovery/upload inputs
+  /// but can never authorize a device ADVANCE after an app upgrade.
+  static ({int start, int end})? parseDurableCoverageSourceRange(
+    String? sourceId,
+  ) {
+    final raw = parseSourceRange(sourceId);
+    if (raw != null || sourceId == null) return raw;
+    final match = RegExp(r'^archive2_ring_(\d+)_(\d+)_\d+$').firstMatch(sourceId);
     if (match == null) return null;
     final start = int.parse(match.group(1)!);
     final end = int.parse(match.group(2)!);

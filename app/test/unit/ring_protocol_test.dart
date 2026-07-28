@@ -169,7 +169,26 @@ void main() {
         (start: 42, end: 84),
       );
       expect(
+        RingProtocol.parseRecoverySourceRange('archive2_ring_42_84_1700000000'),
+        (start: 42, end: 84),
+      );
+      expect(
         RingProtocol.parseRecoverySourceRange('archive_ring_84_42_1700000000'),
+        isNull,
+      );
+    });
+
+    test('device ADVANCE trusts raw ranges and truthful v2 archives only', () {
+      expect(
+        RingProtocol.parseDurableCoverageSourceRange('ring_42_84'),
+        (start: 42, end: 84),
+      );
+      expect(
+        RingProtocol.parseDurableCoverageSourceRange('archive2_ring_42_84_1700000000'),
+        (start: 42, end: 84),
+      );
+      expect(
+        RingProtocol.parseDurableCoverageSourceRange('archive_ring_42_84_1700000000'),
         isNull,
       );
     });

@@ -77,6 +77,51 @@ void main() {
 
       expect(restored.uploadIntent, WalUploadIntent.liveContinuity);
     });
+
+    test('wall-clock capture end persists while playable duration remains independent', () {
+      final wal = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 2,
+        totalFrames: 200,
+        captureEndSeconds: 1007.75,
+      );
+
+      final restored = Wal.fromJson(wal.toJson());
+
+      expect(restored.seconds, 2);
+      expect(restored.captureEndSeconds, 1007.75);
+      expect(restored.wallClockEndSeconds, 1007.75);
+    });
+
+    test('legacy manifest derives wall-clock capture end from playable duration', () {
+      final restored = Wal.fromJson({
+        'timer_start': 1000,
+        'codec': 'BleAudioCodec.opus',
+        'seconds': 9,
+        'total_frames': 250,
+      });
+
+      expect(restored.captureEndSeconds, isNull);
+      expect(restored.wallClockEndSeconds, 1002.5);
+      expect(restored.toJson(), isNot(contains('capture_end_seconds')));
+    });
+
+    test('invalid persisted capture ends fail closed to the legacy duration fallback', () {
+      final farFuture = DateTime.now().millisecondsSinceEpoch / 1000 + const Duration(days: 2).inSeconds;
+      for (final invalidEnd in <Object>['not-a-number', double.nan, double.infinity, 999, farFuture]) {
+        final restored = Wal.fromJson({
+          'timer_start': 1000,
+          'codec': 'BleAudioCodec.opus',
+          'seconds': 9,
+          'total_frames': 200,
+          'capture_end_seconds': invalidEnd,
+        });
+
+        expect(restored.wallClockEndSeconds, 1002);
+        expect(restored.toJson(), isNot(contains('capture_end_seconds')));
+      }
+    });
   });
 
   group('Wal source identity', () {

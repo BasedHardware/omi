@@ -22,6 +22,7 @@ class ConversationAudioAssembly {
     required this.file,
     required this.timerStart,
     required this.totalFrames,
+    required this.captureEndSeconds,
     required this.hadLiveGap,
     required this.sourceWals,
   });
@@ -29,6 +30,7 @@ class ConversationAudioAssembly {
   final File file;
   final int timerStart;
   final int totalFrames;
+  final double captureEndSeconds;
   final bool hadLiveGap;
   final List<Wal> sourceWals;
 }
@@ -51,17 +53,19 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
     throw ArgumentError.value(parts, 'parts', 'must not be empty');
   }
 
-  final orderedSources = List<ConversationAudioPart>.from(parts)
-    ..sort((left, right) {
-      final leftRange = RingProtocol.parseRecoverySourceRange(left.wal.sourceId);
-      final rightRange = RingProtocol.parseRecoverySourceRange(right.wal.sourceId);
-      if (leftRange == null || rightRange == null) {
-        throw StateError('Canonical assembly requires pendant sequence identity');
-      }
-      final startCompare = leftRange.start.compareTo(rightRange.start);
-      if (startCompare != 0) return startCompare;
-      return rightRange.end.compareTo(leftRange.end);
-    });
+  final rangedSources = parts.map((part) {
+    final range = RingProtocol.parseRecoverySourceRange(part.wal.sourceId);
+    if (range == null) {
+      throw StateError('Canonical assembly requires pendant sequence identity');
+    }
+    return _RangedConversationAudioPart(
+      part: part,
+      start: range.start,
+      end: range.end,
+    );
+  }).toList()
+    ..sort(_compareRangedParts);
+  final orderedSources = rangedSources.map((source) => source.part).toList(growable: false);
 
   final formatReference = orderedSources.first.wal;
   if (!formatReference.codec.isOpusSupported()) {
@@ -72,12 +76,8 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
     throw StateError('Canonical assembly requires a positive frame rate');
   }
 
-  for (final part in orderedSources) {
-    final wal = part.wal;
-    final range = RingProtocol.parseRecoverySourceRange(wal.sourceId);
-    if (range == null) {
-      throw StateError('Canonical assembly requires pendant sequence identity');
-    }
+  for (final source in rangedSources) {
+    final wal = source.part.wal;
     if (wal.device != formatReference.device ||
         wal.codec != formatReference.codec ||
         wal.sampleRate != formatReference.sampleRate ||
@@ -89,49 +89,28 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
 
   /*
    * Reconnect replay can durably rediscover a range using different timestamp
-   * chunk boundaries. For example, [10, 20) + [20, 30) may later be replayed
-   * as [10, 30). The sequence union is identical, but treating every immutable
-   * durability artifact as independent audio duplicates speech and permanently
-   * blocks canonical assembly.
+   * chunk boundaries. Select a non-overlapping path that tiles each contiguous
+   * sequence-union component exactly. Greedily removing a covered artifact is
+   * unsafe: removing [10, 20) from [10, 20), [10, 15), [15, 21), [20, 30)
+   * leaves an overlap even though [10, 20) + [20, 30) is a lossless tiling.
    *
-   * Remove a source only when the remaining sources still cover its complete
-   * sequence range. Longest-first removal resolves both containing replays and
-   * crossing replay ranges while preserving the exact union. Any irreducible
-   * partial overlap still fails closed below.
+   * Every immutable source remains in [sourceWals] for lifecycle accounting;
+   * only the exact tiling is copied into the canonical audio file. A component
+   * without an exact tiling fails closed rather than duplicating or dropping
+   * pendant sequence.
    */
-  final ordered = List<ConversationAudioPart>.from(orderedSources);
-  final removalCandidates = List<ConversationAudioPart>.from(orderedSources)
-    ..sort((left, right) {
-      final leftRange = RingProtocol.parseRecoverySourceRange(left.wal.sourceId)!;
-      final rightRange = RingProtocol.parseRecoverySourceRange(right.wal.sourceId)!;
-      return (rightRange.end - rightRange.start).compareTo(
-        leftRange.end - leftRange.start,
-      );
-    });
-  for (final candidate in removalCandidates) {
-    if (!ordered.any((part) => identical(part, candidate))) continue;
-    final candidateRange = RingProtocol.parseRecoverySourceRange(candidate.wal.sourceId)!;
-    final remainingCoverage = RingSequenceCoverage(
-      ordered
-          .where((part) => !identical(part, candidate))
-          .map((part) => RingProtocol.parseRecoverySourceRange(part.wal.sourceId)!),
-    );
-    if (remainingCoverage.covers(candidateRange.start, candidateRange.end)) {
-      ordered.removeWhere((part) => identical(part, candidate));
-    }
-  }
+  final ordered = _selectExactSequenceTiling(rangedSources);
 
-  var expectedSequence = RingProtocol.parseRecoverySourceRange(ordered.first.wal.sourceId)!.start;
+  var expectedSequence = ordered.first.start;
   var hadLiveGap = orderedSources.any((part) => part.wal.status == WalStatus.miss);
-  for (final part in ordered) {
-    final range = RingProtocol.parseRecoverySourceRange(part.wal.sourceId)!;
-    if (range.start < expectedSequence) {
+  for (final source in ordered) {
+    if (source.start < expectedSequence) {
       throw StateError('Canonical assembly found irreducible overlapping pendant sequence');
     }
-    hadLiveGap = hadLiveGap || range.start > expectedSequence;
-    expectedSequence = range.end;
+    hadLiveGap = hadLiveGap || source.start > expectedSequence;
+    expectedSequence = source.end;
   }
-  final first = ordered.first.wal;
+  final first = ordered.first.part.wal;
 
   final partial = File('${destination.path}.partial');
   if (await destination.exists()) await destination.delete();
@@ -141,15 +120,19 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
   var sinkClosed = false;
   var totalFrames = 0;
   List<int>? silenceFrame;
+  _RangedConversationAudioPart? previousSource;
 
   try {
-    for (final part in ordered) {
+    for (final source in ordered) {
+      final part = source.part;
       final wal = part.wal;
-      final expectedStart = first.timerStart + totalFrames / fps;
-      final gapSeconds = wal.timerStart - expectedStart;
-      if (gapSeconds >= conversationBoundarySeconds) {
+      final previousWal = previousSource?.part.wal;
+      final wallGapSeconds = previousWal == null ? 0 : wal.timerStart - previousWal.wallClockEndSeconds;
+      if (wallGapSeconds >= conversationBoundarySeconds) {
         throw StateError('Canonical assembly crossed a conversation boundary');
       }
+      final expectedStart = first.timerStart + totalFrames / fps;
+      final gapSeconds = wal.timerStart - expectedStart;
       final silenceFrames = gapSeconds > 0 ? (gapSeconds * fps).round() : 0;
       if (silenceFrames > 0) {
         silenceFrame ??= silenceFrameFactory(first.codec);
@@ -172,6 +155,7 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
       sink.add(bytes);
       totalFrames += framesInFile;
       hadLiveGap = hadLiveGap || wal.status == WalStatus.miss;
+      previousSource = source;
     }
 
     await sink.flush();
@@ -195,9 +179,141 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
     file: destination,
     timerStart: first.timerStart,
     totalFrames: totalFrames,
+    captureEndSeconds: ordered.map((source) => source.part.wal.wallClockEndSeconds).reduce(
+          (left, right) => left > right ? left : right,
+        ),
     hadLiveGap: hadLiveGap,
     sourceWals: orderedSources.map((part) => part.wal).toList(growable: false),
   );
+}
+
+class _RangedConversationAudioPart {
+  const _RangedConversationAudioPart({
+    required this.part,
+    required this.start,
+    required this.end,
+  });
+
+  final ConversationAudioPart part;
+  final int start;
+  final int end;
+}
+
+class _TilingState {
+  const _TilingState.root()
+      : previous = null,
+        source = null,
+        partCount = 0,
+        syncedCount = 0;
+
+  _TilingState.extend(
+    _TilingState predecessor,
+    _RangedConversationAudioPart next,
+  )   : previous = predecessor,
+        source = next,
+        partCount = predecessor.partCount + 1,
+        syncedCount = predecessor.syncedCount + (next.part.wal.status == WalStatus.synced ? 1 : 0);
+
+  final _TilingState? previous;
+  final _RangedConversationAudioPart? source;
+  final int partCount;
+  final int syncedCount;
+}
+
+int _compareRangedParts(
+  _RangedConversationAudioPart left,
+  _RangedConversationAudioPart right,
+) {
+  final startCompare = left.start.compareTo(right.start);
+  if (startCompare != 0) return startCompare;
+  final endCompare = left.end.compareTo(right.end);
+  if (endCompare != 0) return endCompare;
+  final statusCompare = _statusPreference(left.part.wal.status).compareTo(
+    _statusPreference(right.part.wal.status),
+  );
+  if (statusCompare != 0) return statusCompare;
+  final sourceCompare = left.part.wal.sourceId!.compareTo(right.part.wal.sourceId!);
+  if (sourceCompare != 0) return sourceCompare;
+  return left.part.file.path.compareTo(right.part.file.path);
+}
+
+int _statusPreference(WalStatus status) {
+  if (status == WalStatus.synced) return 0;
+  return status.index + 1;
+}
+
+List<_RangedConversationAudioPart> _selectExactSequenceTiling(
+  List<_RangedConversationAudioPart> orderedSources,
+) {
+  final selected = <_RangedConversationAudioPart>[];
+  var componentStart = 0;
+  while (componentStart < orderedSources.length) {
+    var componentEnd = componentStart + 1;
+    var unionEnd = orderedSources[componentStart].end;
+    while (componentEnd < orderedSources.length && orderedSources[componentEnd].start <= unionEnd) {
+      if (orderedSources[componentEnd].end > unionEnd) {
+        unionEnd = orderedSources[componentEnd].end;
+      }
+      componentEnd++;
+    }
+
+    final component = orderedSources.sublist(componentStart, componentEnd);
+    final bestAt = <int, _TilingState>{
+      component.first.start: const _TilingState.root(),
+    };
+    for (final source in component) {
+      final prefix = bestAt[source.start];
+      if (prefix == null) continue;
+      final candidate = _TilingState.extend(prefix, source);
+      final incumbent = bestAt[source.end];
+      if (incumbent == null || _compareTilingStates(candidate, incumbent) < 0) {
+        bestAt[source.end] = candidate;
+      }
+    }
+
+    final winner = bestAt[unionEnd];
+    if (winner == null) {
+      throw StateError('Canonical assembly found irreducible overlapping pendant sequence');
+    }
+    final reversedTiling = <_RangedConversationAudioPart>[];
+    _TilingState? cursor = winner;
+    while (cursor?.source != null) {
+      reversedTiling.add(cursor!.source!);
+      cursor = cursor.previous;
+    }
+    selected.addAll(reversedTiling.reversed);
+    componentStart = componentEnd;
+  }
+  return selected;
+}
+
+int _compareTilingStates(_TilingState left, _TilingState right) {
+  final lengthCompare = left.partCount.compareTo(right.partCount);
+  if (lengthCompare != 0) return lengthCompare;
+
+  final syncedCompare = right.syncedCount.compareTo(left.syncedCount);
+  if (syncedCompare != 0) return syncedCompare;
+
+  /*
+   * Both paths have the same length. Walking from leaf to root and replacing
+   * the comparison whenever an earlier part differs produces the same result
+   * as a forward lexicographic comparison without allocating either prefix.
+   */
+  var lexicographicCompare = 0;
+  _TilingState? leftCursor = left;
+  _TilingState? rightCursor = right;
+  while (leftCursor?.source != null && rightCursor?.source != null) {
+    final sourceCompare = _compareRangedParts(
+      leftCursor!.source!,
+      rightCursor!.source!,
+    );
+    if (sourceCompare != 0) {
+      lexicographicCompare = sourceCompare;
+    }
+    leftCursor = leftCursor.previous;
+    rightCursor = rightCursor.previous;
+  }
+  return lexicographicCompare;
 }
 
 Uint8List _lengthPrefix(int length) {

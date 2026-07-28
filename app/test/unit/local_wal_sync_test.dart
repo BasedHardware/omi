@@ -10,6 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -429,6 +430,240 @@ void main() {
       expect(batch.map((wal) => wal.timerStart), historical.take(20).map((wal) => wal.timerStart));
     });
 
+    test('one recovery conversation stays one ordered transaction beyond the legacy 20-file batch', () {
+      const now = 2000000000;
+      final recoveryConversation = List.generate(
+        25,
+        (index) => _historicalRingWal(
+          timerStart: now - 600 + index * 3,
+          sourceId: 'archive_ring_${index * 10}_${(index + 1) * 10}_${now - 600 + index * 3}',
+          filePath: 'archive_$index.bin',
+          seconds: 3,
+          totalFrames: 300,
+        ),
+      );
+
+      final batch = nextSyncUploadBatch(
+        recoveryConversation.reversed.toList(),
+        now,
+      );
+
+      expect(batch, recoveryConversation);
+      expect(batch.length, greaterThan(20));
+    });
+
+    test('an exact two-minute recovery gap starts a separate upload transaction', () {
+      const now = 2000000000;
+      final older = _historicalRingWal(
+        timerStart: now - 600,
+        sourceId: 'archive_ring_100_200_${now - 600}',
+        filePath: 'older.bin',
+        seconds: 60,
+        totalFrames: 6000,
+      );
+      final newer = _historicalRingWal(
+        timerStart: now - 420,
+        sourceId: 'archive_ring_200_300_${now - 420}',
+        filePath: 'newer.bin',
+        seconds: 60,
+        totalFrames: 6000,
+      );
+
+      final batch = nextSyncUploadBatch([older, newer], now);
+
+      expect(batch, [newer]);
+    });
+
+    test('recovery grouping honors configured 60s and 300s conversation boundaries', () {
+      const now = 2000000000;
+      for (final boundary in [60, 300]) {
+        final older = _historicalRingWal(
+          timerStart: now - 1000,
+          sourceId: 'archive2_ring_100_200_${now - 1000}',
+          filePath: 'older_$boundary.bin',
+          seconds: 10,
+          totalFrames: 1000,
+        );
+        final inside = _historicalRingWal(
+          timerStart: now - 1000 + 10 + boundary - 1,
+          sourceId: 'archive2_ring_200_300_${now - 1000 + boundary + 9}',
+          filePath: 'inside_$boundary.bin',
+          seconds: 10,
+          totalFrames: 1000,
+        );
+        final exactBoundary = _historicalRingWal(
+          timerStart: inside.timerStart + inside.seconds + boundary,
+          sourceId: 'archive2_ring_300_400_${inside.timerStart + inside.seconds + boundary}',
+          filePath: 'boundary_$boundary.bin',
+          seconds: 10,
+          totalFrames: 1000,
+        );
+
+        expect(
+          nextSyncUploadBatch(
+            [older, inside],
+            now,
+            conversationBoundarySeconds: boundary,
+          ),
+          [older, inside],
+        );
+        expect(
+          nextSyncUploadBatch(
+            [older, inside, exactBoundary],
+            now,
+            conversationBoundarySeconds: boundary,
+          ),
+          [exactBoundary],
+        );
+      }
+    });
+
+    test('overlapping legacy archives upload one exact nonduplicating tile', () {
+      const now = 2000000000;
+      final prefix = _historicalRingWal(
+        timerStart: now - 600,
+        sourceId: 'archive_ring_100_200_${now - 600}',
+        filePath: 'prefix.bin',
+        seconds: 30,
+        totalFrames: 3000,
+      );
+      final suffix = _historicalRingWal(
+        timerStart: now - 570,
+        sourceId: 'archive_ring_200_300_${now - 570}',
+        filePath: 'suffix.bin',
+        seconds: 30,
+        totalFrames: 3000,
+      );
+      final rolledForward = _historicalRingWal(
+        timerStart: now - 600,
+        sourceId: 'archive_ring_100_300_${now - 600}',
+        filePath: 'rolled_forward.bin',
+        seconds: 60,
+        totalFrames: 6000,
+      );
+
+      expect(
+        nextSyncUploadBatch([prefix, suffix, rolledForward], now),
+        [rolledForward],
+      );
+    });
+
+    test('legacy aliases share the exact-tile acknowledgement and never reupload', () async {
+      SyncRateLimiter.instance.clear();
+      final prefixName = 'legacy_alias_${DateTime.now().microsecondsSinceEpoch}';
+      final prefixFile = File('${Directory.systemTemp.path}/${prefixName}_prefix.bin');
+      final suffixFile = File('${Directory.systemTemp.path}/${prefixName}_suffix.bin');
+      final rolledFile = File('${Directory.systemTemp.path}/${prefixName}_rolled.bin');
+      for (final file in [prefixFile, suffixFile, rolledFile]) {
+        await file.writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      }
+      addTearDown(() async {
+        for (final file in [prefixFile, suffixFile, rolledFile]) {
+          if (await file.exists()) await file.delete();
+        }
+      });
+
+      final uploads = <List<String>>[];
+      final legacySync = LocalWalSyncImpl(
+        listener,
+        uploadGate: _completedUploadGate(uploads),
+        walPersister: (_) async => true,
+      );
+      final prefix = _historicalRingWal(
+        timerStart: 1000,
+        sourceId: 'archive_ring_100_200_1000',
+        filePath: prefixFile.uri.pathSegments.last,
+        seconds: 30,
+        totalFrames: 3000,
+      );
+      final suffix = _historicalRingWal(
+        timerStart: 1030,
+        sourceId: 'archive_ring_200_300_1030',
+        filePath: suffixFile.uri.pathSegments.last,
+        seconds: 30,
+        totalFrames: 3000,
+      );
+      final rolled = _historicalRingWal(
+        timerStart: 1000,
+        sourceId: 'archive_ring_100_300_1000',
+        filePath: rolledFile.uri.pathSegments.last,
+        seconds: 60,
+        totalFrames: 6000,
+      );
+      legacySync.testWals = [prefix, suffix, rolled];
+
+      await legacySync.syncAll();
+      await legacySync.syncAll();
+
+      expect(uploads, hasLength(1));
+      expect(uploads.single.single, rolledFile.path);
+      expect(
+        legacySync.testWals.map((wal) => wal.status),
+        everyElement(WalStatus.synced),
+      );
+    });
+
+    test('irreducible legacy overlap does not block exact independent components', () {
+      const now = 2000000000;
+      final overlapA = _historicalRingWal(
+        timerStart: now - 600,
+        sourceId: 'archive_ring_100_220_${now - 600}',
+        filePath: 'overlap_a.bin',
+        seconds: 30,
+        totalFrames: 3000,
+      );
+      final overlapB = _historicalRingWal(
+        timerStart: now - 570,
+        sourceId: 'archive_ring_200_300_${now - 570}',
+        filePath: 'overlap_b.bin',
+        seconds: 30,
+        totalFrames: 3000,
+      );
+      final gapA = _historicalRingWal(
+        timerStart: now - 539,
+        sourceId: 'archive_ring_400_500_${now - 539}',
+        filePath: 'gap_a.bin',
+        seconds: 30,
+        totalFrames: 3000,
+      );
+      final gapB = _historicalRingWal(
+        timerStart: now - 509,
+        sourceId: 'archive_ring_520_600_${now - 509}',
+        filePath: 'gap_b.bin',
+        seconds: 30,
+        totalFrames: 3000,
+      );
+
+      expect(nextSyncUploadBatch([overlapA, overlapB], now), isEmpty);
+      expect(
+        nextSyncUploadBatch(
+          [overlapA, overlapB, gapA, gapB],
+          now,
+        ),
+        [gapA, gapB],
+      );
+    });
+
+    test('an archive stays local while an adjacent raw recovery fragment is unassembled', () {
+      const now = 2000000000;
+      final archive = _historicalRingWal(
+        timerStart: now - 600,
+        sourceId: 'archive_ring_100_200_${now - 600}',
+        filePath: 'archive.bin',
+        seconds: 60,
+        totalFrames: 6000,
+      );
+      final raw = _historicalRingWal(
+        timerStart: now - 539,
+        sourceId: 'ring_200_210',
+        filePath: 'raw.bin',
+        seconds: 3,
+        totalFrames: 300,
+      )..uploadIntent = WalUploadIntent.liveContinuity;
+
+      expect(nextSyncUploadBatch([archive, raw], now), isEmpty);
+    });
+
     test('an extraordinarily large fresh conversation is downgraded as one unit', () {
       const now = 2000000000;
       final oversized = List.generate(
@@ -450,6 +685,252 @@ void main() {
       // capture transaction rather than split into 20-file async jobs.
       expect(batch.length, 2000);
       expect(batch.every((wal) => wal.conversationId == 'oversized-conversation'), isTrue);
+    });
+  });
+
+  group('authorized recovery receipt drain', () {
+    test('irreducible legacy overlap stays pending without pinning the receipt', () async {
+      const now = 2000000000;
+      final overlapA = _historicalRingWal(
+        timerStart: now - 600,
+        sourceId: 'archive_ring_100_220_${now - 600}',
+        filePath: 'irreducible_a.bin',
+        seconds: 30,
+        totalFrames: 3000,
+      );
+      final overlapB = _historicalRingWal(
+        timerStart: now - 570,
+        sourceId: 'archive_ring_200_300_${now - 570}',
+        filePath: 'irreducible_b.bin',
+        seconds: 30,
+        totalFrames: 3000,
+      );
+      final receiptSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async => true,
+      )..testWals = [overlapA, overlapB];
+
+      final result = await receiptSync.syncAuthorizedRecovery(
+        deviceId: 'test-device',
+        targetWriteSeq: 300,
+        nowSeconds: now,
+      );
+
+      expect(result.hasDeferredRecovery, isFalse);
+      expect(receiptSync.testWals, [overlapA, overlapB]);
+      expect(receiptSync.testWals.map((wal) => wal.status), everyElement(WalStatus.miss));
+    });
+
+    test('splits at the receipt target and leaves newer recovery untouched', () async {
+      SyncRateLimiter.instance.clear();
+      const now = 2000000000;
+      final prefix = 'omi_authorized_split_${DateTime.now().microsecondsSinceEpoch}';
+      final firstFile = File('${Directory.systemTemp.path}/${prefix}_first.bin');
+      final secondFile = File('${Directory.systemTemp.path}/${prefix}_second.bin');
+      await firstFile.writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      await secondFile.writeAsBytes([1, 0, 0, 0, 2], flush: true);
+      addTearDown(() async {
+        for (final file in [firstFile, secondFile]) {
+          if (await file.exists()) await file.delete();
+        }
+      });
+
+      final uploads = <List<String>>[];
+      final receiptSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: _completedUploadGate(uploads),
+        walPersister: (_) async => true,
+        walPathResolver: (path) async => path == null ? null : '${Directory.systemTemp.path}/$path',
+        silenceFrameFactory: (_) => [0],
+      )..testWals = [
+          _historicalRingWal(
+            timerStart: now - 500,
+            sourceId: 'ring_100_200',
+            filePath: firstFile.path.split('/').last,
+          ),
+          _historicalRingWal(
+            timerStart: now - 499,
+            sourceId: 'ring_200_300',
+            filePath: secondFile.path.split('/').last,
+          ),
+        ];
+
+      final result = await receiptSync.syncAuthorizedRecovery(
+        deviceId: 'test-device',
+        targetWriteSeq: 200,
+        nowSeconds: now,
+      );
+
+      expect(uploads, hasLength(1));
+      expect(uploads.single, [firstFile.path]);
+      final authorized = receiptSync.testWals.singleWhere(
+        (wal) => wal.sourceId == 'archive2_ring_100_200_${now - 500}',
+      );
+      final newer = receiptSync.testWals.singleWhere(
+        (wal) => wal.sourceId == 'archive2_ring_200_300_${now - 499}',
+      );
+      expect(authorized.status, WalStatus.synced);
+      expect(newer.status, WalStatus.miss);
+      expect(result.hasDeferredRecovery, isFalse);
+    });
+
+    test('recent authorized raw stays deferred until its configured close', () async {
+      SyncRateLimiter.instance.clear();
+      const captureStart = 1000;
+      final prefix = 'omi_authorized_recent_${DateTime.now().microsecondsSinceEpoch}';
+      final sourceFile = File('${Directory.systemTemp.path}/${prefix}_source.bin');
+      await sourceFile.writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      addTearDown(() async {
+        if (await sourceFile.exists()) await sourceFile.delete();
+      });
+
+      final uploads = <List<String>>[];
+      final receiptSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: _completedUploadGate(uploads),
+        walPersister: (_) async => true,
+        walPathResolver: (path) async => path == null ? null : '${Directory.systemTemp.path}/$path',
+        silenceFrameFactory: (_) => [0],
+        conversationBoundarySecondsProvider: () => 300,
+      )..testWals = [
+          _historicalRingWal(
+            timerStart: captureStart,
+            sourceId: 'ring_100_200',
+            filePath: sourceFile.path.split('/').last,
+          ),
+        ];
+
+      final deferred = await receiptSync.syncAuthorizedRecovery(
+        deviceId: 'test-device',
+        targetWriteSeq: 200,
+        nowSeconds: captureStart + 300,
+      );
+
+      expect(uploads, isEmpty);
+      expect(receiptSync.testWals.single.sourceId, 'ring_100_200');
+      expect(deferred.hasDeferredRecovery, isTrue);
+
+      final closed = await receiptSync.syncAuthorizedRecovery(
+        deviceId: 'test-device',
+        targetWriteSeq: 200,
+        nowSeconds: captureStart + 301,
+      );
+
+      expect(uploads, hasLength(1));
+      expect(receiptSync.testWals.single.sourceId, 'archive2_ring_100_200_$captureStart');
+      expect(receiptSync.testWals.single.status, WalStatus.synced);
+      expect(closed.hasDeferredRecovery, isFalse);
+    });
+
+    test('local close timing mirrors the backend minimum conversation timeout', () async {
+      SyncRateLimiter.instance.clear();
+      const captureStart = 1000;
+      final fileName = 'effective_timeout_${DateTime.now().microsecondsSinceEpoch}.bin';
+      final sourceFile = File('${Directory.systemTemp.path}/$fileName');
+      await sourceFile.writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      addTearDown(() async {
+        if (await sourceFile.exists()) await sourceFile.delete();
+      });
+      final uploads = <List<String>>[];
+      final receiptSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: _completedUploadGate(uploads),
+        walPersister: (_) async => true,
+        walPathResolver: (path) async => path == null ? null : '${Directory.systemTemp.path}/$path',
+        silenceFrameFactory: (_) => [0],
+        conversationBoundarySecondsProvider: () => 30,
+      )..testWals = [
+          _historicalRingWal(
+            timerStart: captureStart,
+            sourceId: 'ring_100_200',
+            filePath: fileName,
+          ),
+        ];
+
+      final stillOpen = await receiptSync.syncAuthorizedRecovery(
+        deviceId: 'test-device',
+        targetWriteSeq: 200,
+        nowSeconds: captureStart + 61,
+      );
+      expect(stillOpen.hasDeferredRecovery, isTrue);
+      expect(uploads, isEmpty);
+
+      final closed = await receiptSync.syncAuthorizedRecovery(
+        deviceId: 'test-device',
+        targetWriteSeq: 200,
+        nowSeconds: captureStart + 121,
+      );
+      expect(closed.hasDeferredRecovery, isFalse);
+      expect(uploads, hasLength(1));
+    });
+
+    test('uploaded receipt work retains authority through reconciliation and retry', () async {
+      SyncRateLimiter.instance.clear();
+      const now = 2000000000;
+      final prefix = 'omi_authorized_pending_${DateTime.now().microsecondsSinceEpoch}';
+      final sourceFile = File('${Directory.systemTemp.path}/${prefix}_source.bin');
+      await sourceFile.writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      addTearDown(() async {
+        if (await sourceFile.exists()) await sourceFile.delete();
+      });
+
+      final uploads = <List<String>>[];
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (
+          files, {
+          onUploadProgress,
+          conversationId,
+          syncLane = SyncUploadLane.fresh,
+          replaceTranscript = false,
+        }) async {
+          uploads.add(files.map((file) => file.path).toList());
+          return UploadFilesResult.queued('authorized-retry-job');
+        },
+      );
+      final pending = _historicalRingWal(
+        timerStart: now - 500,
+        sourceId: 'archive2_ring_100_200_${now - 500}',
+        filePath: sourceFile.path.split('/').last,
+      )
+        ..status = WalStatus.uploaded
+        ..jobId = 'pending-job';
+      final receiptSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: gate,
+        walPersister: (_) async => true,
+        walPathResolver: (path) async => path == null ? null : '${Directory.systemTemp.path}/$path',
+        silenceFrameFactory: (_) => [0],
+      )..testWals = [pending];
+
+      final waiting = await receiptSync.syncAuthorizedRecovery(
+        deviceId: 'test-device',
+        targetWriteSeq: 200,
+        nowSeconds: now,
+      );
+      expect(uploads, isEmpty);
+      expect(waiting.hasDeferredRecovery, isTrue);
+
+      pending.status = WalStatus.synced;
+      final completed = await receiptSync.syncAuthorizedRecovery(
+        deviceId: 'test-device',
+        targetWriteSeq: 200,
+        nowSeconds: now,
+      );
+      expect(completed.hasDeferredRecovery, isFalse);
+
+      pending
+        ..status = WalStatus.miss
+        ..jobId = null;
+      final retried = await receiptSync.syncAuthorizedRecovery(
+        deviceId: 'test-device',
+        targetWriteSeq: 200,
+        nowSeconds: now,
+      );
+      expect(uploads, hasLength(1));
+      expect(pending.status, WalStatus.uploaded);
+      expect(retried.hasDeferredRecovery, isTrue);
     });
   });
 
@@ -502,6 +983,220 @@ void main() {
   });
 
   group('historical ring archive migration', () {
+    test('sub-two-second VAD pauses stay one open conversation until the true capture end closes', () async {
+      final directory = await Directory.systemTemp.createTemp('omi_ring_vad_wall_clock_');
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      await File('${directory.path}/first.bin').writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      await File('${directory.path}/second.bin').writeAsBytes([1, 0, 0, 0, 2], flush: true);
+      final archiveSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async => true,
+        walPathResolver: (path) async => path == null ? null : '${directory.path}/$path',
+        silenceFrameFactory: (_) => [0],
+      )..testWals = [
+          _historicalRingWal(
+            timerStart: 1000,
+            sourceId: 'ring_10_20',
+            filePath: 'first.bin',
+            captureEndSeconds: 1100,
+          ),
+          _historicalRingWal(
+            timerStart: 1219,
+            sourceId: 'ring_20_30',
+            filePath: 'second.bin',
+            captureEndSeconds: 1300,
+          ),
+        ];
+
+      // The playable files contain only two 10 ms speech frames, but their
+      // record timestamps show one VAD-spanning conversation whose latest
+      // capture is only 50 seconds old.
+      await archiveSync.prepareHistoricalRingFragments(nowSeconds: 1350);
+
+      expect(archiveSync.testWals.map((wal) => wal.sourceId), ['ring_10_20', 'ring_20_30']);
+
+      await archiveSync.prepareHistoricalRingFragments(nowSeconds: 1421);
+
+      expect(archiveSync.testWals, hasLength(1));
+      expect(archiveSync.testWals.single.sourceId, 'archive2_ring_10_30_1000');
+      expect(archiveSync.testWals.single.captureEndSeconds, 1300);
+      expect(archiveSync.testWals.single.wallClockEndSeconds, 1300);
+    });
+
+    test('rolls adjacent bounded archives forward when later recovery data arrives', () async {
+      final directory = await Directory.systemTemp.createTemp('omi_ring_archive_roll_forward_');
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+
+      Future<Wal> writeRecoveryWal({
+        required int timerStart,
+        required int seconds,
+        required String sourceId,
+        required String fileName,
+      }) async {
+        const codec = BleAudioCodec.opusFS320;
+        final totalFrames = seconds * codec.getFramesPerSecond();
+        final bytes = <int>[];
+        for (var index = 0; index < totalFrames; index++) {
+          bytes.addAll([1, 0, 0, 0, 1]);
+        }
+        await File('${directory.path}/$fileName').writeAsBytes(bytes, flush: true);
+        return Wal(
+          timerStart: timerStart,
+          codec: codec,
+          seconds: seconds,
+          totalFrames: totalFrames,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          originalStorage: WalStorage.sdcard,
+          filePath: fileName,
+          device: 'test-device',
+          sourceId: sourceId,
+          uploadIntent:
+              sourceId.startsWith('ring_') ? WalUploadIntent.liveContinuity : WalUploadIntent.historicalBackfill,
+        );
+      }
+
+      final first = await writeRecoveryWal(
+        timerStart: 1000,
+        seconds: 275,
+        sourceId: 'archive2_ring_100_200_1000',
+        fileName: 'first.bin',
+      );
+      final second = await writeRecoveryWal(
+        timerStart: 1275,
+        seconds: 79,
+        sourceId: 'archive2_ring_200_300_1275',
+        fileName: 'second.bin',
+      );
+      final laterRaw = await writeRecoveryWal(
+        timerStart: 1354,
+        seconds: 336,
+        sourceId: 'ring_300_400',
+        fileName: 'later.bin',
+      );
+      final archiveSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async => true,
+        walPathResolver: (path) async => path == null ? null : '${directory.path}/$path',
+        silenceFrameFactory: (_) => [0],
+      )..testWals = [first, second, laterRaw];
+
+      await archiveSync.prepareHistoricalRingFragments(nowSeconds: 2000);
+
+      expect(archiveSync.testWals, hasLength(1));
+      final rolledForward = archiveSync.testWals.single;
+      expect(rolledForward.sourceId, 'archive2_ring_100_400_1000');
+      expect(rolledForward.seconds, 690);
+      expect(rolledForward.totalFrames, 34500);
+      expect(await File('${directory.path}/${rolledForward.filePath}').exists(), isTrue);
+      expect(await File('${directory.path}/first.bin').exists(), isFalse);
+      expect(await File('${directory.path}/second.bin').exists(), isFalse);
+      expect(await File('${directory.path}/later.bin').exists(), isFalse);
+    });
+
+    test('never lets an archive claim sequence records missing from the phone', () async {
+      final directory = await Directory.systemTemp.createTemp('omi_ring_archive_sequence_gap_');
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final firstFile = File('${directory.path}/first.bin');
+      final secondFile = File('${directory.path}/second.bin');
+      await firstFile.writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      await secondFile.writeAsBytes([1, 0, 0, 0, 2], flush: true);
+
+      final archiveSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async => true,
+        walPathResolver: (path) async => path == null ? null : '${directory.path}/$path',
+        silenceFrameFactory: (_) => [0],
+      )..testWals = [
+          _historicalRingWal(
+            timerStart: 1000,
+            sourceId: 'ring_100_200',
+            filePath: firstFile.path.split('/').last,
+          ),
+          _historicalRingWal(
+            timerStart: 1001,
+            sourceId: 'ring_220_300',
+            filePath: secondFile.path.split('/').last,
+          ),
+        ];
+
+      await archiveSync.prepareHistoricalRingFragments(nowSeconds: 2000);
+
+      expect(archiveSync.testWals, hasLength(2));
+      expect(
+        archiveSync.testWals.map((wal) => wal.sourceId).toSet(),
+        {'archive2_ring_100_200_1000', 'archive2_ring_220_300_1001'},
+      );
+      expect(
+        archiveSync.testWals.any((wal) => wal.sourceId == 'archive2_ring_100_300_1000'),
+        isFalse,
+      );
+      final restartCoverage = RingSequenceCoverage(
+        archiveSync.testWals.map(
+          (wal) => RingProtocol.parseRecoverySourceRange(wal.sourceId)!,
+        ),
+      );
+      expect(restartCoverage.contiguousEndFrom(100), 200);
+      expect(restartCoverage.firstUncovered(100, 300), 200);
+
+      // Timestamp continuity still owns the cloud transaction: the server gets
+      // one ordered conversation job, while restart coverage retains the hole.
+      expect(
+        nextSyncUploadBatch(archiveSync.testWals, 2000),
+        archiveSync.testWals,
+      );
+    });
+
+    test('a legacy archive cannot suppress its truthful raw reread after upgrade', () async {
+      final directory = await Directory.systemTemp.createTemp('omi_ring_archive_upgrade_');
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final legacyFile = File('${directory.path}/legacy.bin');
+      final rawFile = File('${directory.path}/raw.bin');
+      const bytes = [1, 0, 0, 0, 1];
+      await legacyFile.writeAsBytes(bytes, flush: true);
+      await rawFile.writeAsBytes(bytes, flush: true);
+
+      final archiveSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async => true,
+        walPathResolver: (path) async => path == null ? null : '${directory.path}/$path',
+        silenceFrameFactory: (_) => [0],
+      )..testWals = [
+          _historicalRingWal(
+            timerStart: 1000,
+            sourceId: 'archive_ring_100_200_1000',
+            filePath: legacyFile.path.split('/').last,
+          ),
+        ];
+      final truthfulRaw = _historicalRingWal(
+        timerStart: 1000,
+        sourceId: 'ring_100_200',
+        filePath: rawFile.path.split('/').last,
+      );
+
+      final registration = await archiveSync.addExternalWal(
+        truthfulRaw,
+        scheduleUpload: false,
+      );
+      expect(registration, ExternalWalRegistration.added);
+      expect(archiveSync.testWals, hasLength(2));
+
+      await archiveSync.prepareHistoricalRingFragments(nowSeconds: 2000);
+
+      expect(archiveSync.testWals, hasLength(1));
+      expect(archiveSync.testWals.single.sourceId, 'archive2_ring_100_200_1000');
+      expect(await legacyFile.exists(), isFalse);
+      expect(await rawFile.exists(), isTrue);
+    });
+
     test('replaces many raw fragments with one playable local artifact', () async {
       final directory = await Directory.systemTemp.createTemp('omi_ring_archive_');
       addTearDown(() async {
@@ -530,7 +1225,7 @@ void main() {
         ),
         _historicalRingWal(
           timerStart: 1002,
-          sourceId: 'ring_12_13',
+          sourceId: 'ring_11_12',
           filePath: secondFile.path.split('/').last,
         )..status = WalStatus.synced,
       ];
@@ -540,13 +1235,87 @@ void main() {
       expect(persistedSizes, [1]);
       expect(archiveSync.testWals, hasLength(1));
       final archive = archiveSync.testWals.single;
-      expect(archive.sourceId, startsWith('archive_ring_10_13_'));
+      expect(archive.sourceId, startsWith('archive2_ring_10_12_'));
       expect(archive.uploadIntent, WalUploadIntent.historicalBackfill);
       expect(archive.status, WalStatus.miss);
       expect(archive.totalFrames, 201);
       expect(await File('${directory.path}/${archive.filePath}').exists(), isTrue);
       expect(await firstFile.exists(), isFalse);
       expect(await secondFile.exists(), isFalse);
+    });
+
+    test('serializes historical compaction with canonical conversation stamping', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'omi_ring_archive_stamp_race_',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final firstFile = File('${directory.path}/first.bin');
+      final secondFile = File('${directory.path}/second.bin');
+      await firstFile.writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      await secondFile.writeAsBytes([1, 0, 0, 0, 2], flush: true);
+
+      final resolverStarted = Completer<void>();
+      final releaseResolver = Completer<void>();
+      var heldCompaction = false;
+      final archiveSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async => true,
+        walPathResolver: (path) async {
+          if (path == 'first.bin' && !heldCompaction) {
+            heldCompaction = true;
+            resolverStarted.complete();
+            await releaseResolver.future;
+          }
+          return path == null ? null : '${directory.path}/$path';
+        },
+        silenceFrameFactory: (_) => [0],
+      )..testWals = [
+          _historicalRingWal(
+            timerStart: 1000,
+            sourceId: 'ring_10_11',
+            filePath: 'first.bin',
+          )..status = WalStatus.synced,
+          _historicalRingWal(
+            timerStart: 1002,
+            sourceId: 'ring_11_12',
+            filePath: 'second.bin',
+          )..status = WalStatus.synced,
+        ];
+
+      final compaction = archiveSync.prepareHistoricalRingFragments(
+        nowSeconds: 2000,
+      );
+      await resolverStarted.future.timeout(const Duration(seconds: 1));
+      var stampCompleted = false;
+      final stamp = archiveSync
+          .stampConversationId(
+            900,
+            'serialized-conversation',
+            hasServerSpeechProof: true,
+            sessionEndSeconds: 1100,
+          )
+          .whenComplete(() => stampCompleted = true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(stampCompleted, isFalse);
+      releaseResolver.complete();
+      await Future.wait([compaction, stamp]).timeout(
+        const Duration(seconds: 2),
+      );
+
+      final canonical = archiveSync.testWals.single;
+      expect(
+        canonical.sourceId,
+        startsWith('canonical_serialized-conversation'),
+      );
+      expect(canonical.conversationId, 'serialized-conversation');
+      expect(canonical.totalFrames, 201);
+      expect(
+        await File('${directory.path}/${canonical.filePath}').exists(),
+        isTrue,
+      );
     });
 
     test('keeps every source when the archive manifest commit fails', () async {
@@ -588,7 +1357,132 @@ void main() {
       expect(await firstFile.exists(), isTrue);
       expect(await secondFile.exists(), isTrue);
       expect(
-        directory.listSync().whereType<File>().where((file) => file.path.contains('archive_ring_')),
+        directory.listSync().whereType<File>().where((file) => file.path.contains('archive2_ring_')),
+        isEmpty,
+      );
+    });
+
+    test('failed archive persistence restores sources and preserves concurrent registration', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'omi_ring_archive_persist_failure_',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final firstFile = File('${directory.path}/first.bin');
+      final secondFile = File('${directory.path}/second.bin');
+      final concurrentFile = File('${directory.path}/concurrent.bin');
+      await firstFile.writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      await secondFile.writeAsBytes([1, 0, 0, 0, 2], flush: true);
+      await concurrentFile.writeAsBytes([1, 0, 0, 0, 3], flush: true);
+
+      final archivePersistStarted = Completer<void>();
+      final releaseArchivePersist = Completer<void>();
+      final concurrentSaveQueued = Completer<void>();
+      var rejectedArchiveCommit = false;
+      var persistenceCallCount = 0;
+      var persistenceBarrier = Future<void>.value();
+      var durableSourceIds = <String>[];
+      final persistedSnapshots = <List<String>>[];
+      final archiveSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (wals) {
+          final call = ++persistenceCallCount;
+          final snapshot = wals.map((wal) => wal.sourceId!).toList(growable: false);
+          persistedSnapshots.add(snapshot);
+          if (call == 2) concurrentSaveQueued.complete();
+          final operation = persistenceBarrier.then((_) async {
+            final hasArchive = snapshot.any(
+              (sourceId) => sourceId.startsWith('archive2_ring_'),
+            );
+            if (hasArchive && !rejectedArchiveCommit) {
+              rejectedArchiveCommit = true;
+              archivePersistStarted.complete();
+              await releaseArchivePersist.future;
+              return false;
+            }
+            durableSourceIds = snapshot;
+            return true;
+          });
+          persistenceBarrier = operation.then<void>(
+            (_) {},
+            onError: (error, stackTrace) {},
+          );
+          return operation;
+        },
+        walPathResolver: (path) async => path == null ? null : '${directory.path}/$path',
+        silenceFrameFactory: (_) => [0],
+      );
+      final first = _historicalRingWal(
+        timerStart: 1000,
+        sourceId: 'ring_10_11',
+        filePath: 'first.bin',
+      );
+      final second = _historicalRingWal(
+        timerStart: 1002,
+        sourceId: 'ring_11_12',
+        filePath: 'second.bin',
+      );
+      final concurrent = _historicalRingWal(
+        timerStart: 1000,
+        sourceId: 'ring_90_91',
+        filePath: 'concurrent.bin',
+      )..device = 'other-device';
+      archiveSync.testWals = [first, second];
+
+      final compaction = archiveSync.prepareHistoricalRingFragments(
+        nowSeconds: 2000,
+      );
+      await archivePersistStarted.future.timeout(const Duration(seconds: 1));
+      final concurrentRegistration = archiveSync.addExternalWal(
+        concurrent,
+        scheduleUpload: false,
+      );
+      await concurrentSaveQueued.future.timeout(const Duration(seconds: 1));
+      expect(
+        persistedSnapshots[1],
+        containsAll(<String>[
+          'archive2_ring_10_12_1000',
+          'ring_90_91',
+        ]),
+      );
+
+      releaseArchivePersist.complete();
+      expect(
+        await concurrentRegistration,
+        ExternalWalRegistration.added,
+      );
+      await expectLater(
+        compaction.timeout(const Duration(seconds: 2)),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(rejectedArchiveCommit, isTrue);
+      expect(
+        archiveSync.testWals,
+        containsAllInOrder([concurrent, first, second]),
+      );
+      expect(
+        archiveSync.testWals.any(
+          (wal) => wal.sourceId?.startsWith('archive2_ring_') == true,
+        ),
+        isFalse,
+      );
+      expect(await firstFile.exists(), isTrue);
+      expect(await secondFile.exists(), isTrue);
+      expect(await concurrentFile.exists(), isTrue);
+      expect(
+        durableSourceIds.toSet(),
+        {'ring_10_11', 'ring_11_12', 'ring_90_91'},
+      );
+      expect(
+        persistedSnapshots.last.toSet(),
+        {'ring_10_11', 'ring_11_12', 'ring_90_91'},
+      );
+      expect(
+        directory.listSync().whereType<File>().where(
+              (file) => file.path.contains('archive2_ring_'),
+            ),
         isEmpty,
       );
     });
@@ -695,13 +1589,13 @@ void main() {
         )..uploadIntent = WalUploadIntent.liveContinuity,
         _historicalRingWal(
           timerStart: now - 298,
-          sourceId: 'ring_12_13',
+          sourceId: 'ring_11_12',
           filePath: secondFile.path.split('/').last,
         )..uploadIntent = WalUploadIntent.liveContinuity,
       ];
 
       await archiveSync.prepareHistoricalRingFragments(nowSeconds: now);
-      expect(archiveSync.testWals.single.sourceId, startsWith('archive_ring_'));
+      expect(archiveSync.testWals.single.sourceId, startsWith('archive2_ring_'));
       expect(archiveSync.testWals.single.status, WalStatus.miss);
 
       await archiveSync.stampConversationId(
@@ -1079,11 +1973,13 @@ void main() {
         required int timerStart,
         required String fileName,
         required String sourceId,
+        required double captureEndSeconds,
       }) =>
           Wal(
             timerStart: timerStart,
             codec: BleAudioCodec.opus,
             seconds: 1,
+            captureEndSeconds: captureEndSeconds,
             status: WalStatus.miss,
             storage: WalStorage.disk,
             originalStorage: WalStorage.sdcard,
@@ -1100,6 +1996,7 @@ void main() {
             timerStart: now - 2,
             fileName: firstFileName,
             sourceId: 'ring_1_2',
+            captureEndSeconds: now - 1.25,
           ),
         ),
         ExternalWalRegistration.added,
@@ -1110,6 +2007,7 @@ void main() {
             timerStart: now - 1,
             fileName: secondFileName,
             sourceId: 'ring_2_3',
+            captureEndSeconds: now - 0.25,
           ),
         ),
         ExternalWalRegistration.added,
@@ -1135,6 +2033,7 @@ void main() {
       expect(uploadedReplaceModes, [isTrue]);
       expect(externalSync.testWals, hasLength(1));
       expect(externalSync.testWals.single.canonicalReplacement, isTrue);
+      expect(externalSync.testWals.single.captureEndSeconds, now - 0.25);
     });
 
     test('conversation ownership without speech proof cannot create an upload job', () async {
@@ -1358,9 +2257,531 @@ void main() {
         hasLength(1),
       );
     });
+
+    test('canonical commit rescans and includes a same-device WAL registered during assembly', () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final sourceName = 'canonical_same_device_source_${DateTime.now().microsecondsSinceEpoch}.bin';
+      final lateName = 'canonical_same_device_late_${DateTime.now().microsecondsSinceEpoch}.bin';
+      final sourceFile = File('${Directory.systemTemp.path}/$sourceName');
+      final lateFile = File('${Directory.systemTemp.path}/$lateName');
+      await sourceFile.writeAsBytes([1, 0, 0, 0, 7], flush: true);
+      await lateFile.writeAsBytes([1, 0, 0, 0, 8], flush: true);
+      addTearDown(() async {
+        for (final file in [sourceFile, lateFile]) {
+          if (await file.exists()) await file.delete();
+        }
+      });
+
+      final resolverStarted = Completer<void>();
+      final releaseResolver = Completer<void>();
+      var heldFirstAssembly = false;
+      final externalSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async => true,
+        walPathResolver: (path) async {
+          if (path == sourceName && !heldFirstAssembly) {
+            heldFirstAssembly = true;
+            resolverStarted.complete();
+            await releaseResolver.future;
+          }
+          return path == null ? null : '${Directory.systemTemp.path}/$path';
+        },
+      );
+      addTearDown(() async {
+        for (final wal in externalSync.testWals) {
+          final path = wal.filePath;
+          if (path == null || !path.contains('canonical_conversation-same-device')) continue;
+          final file = File('${Directory.systemTemp.path}/$path');
+          if (await file.exists()) await file.delete();
+        }
+      });
+      final source = Wal(
+        timerStart: now - 10,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 1,
+        captureEndSeconds: now - 9.99,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: sourceName,
+        device: 'same-device',
+        sourceId: 'ring_10_11',
+        uploadIntent: WalUploadIntent.liveContinuity,
+      );
+      final late = Wal(
+        timerStart: now - 10,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 1,
+        captureEndSeconds: now - 9.99,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: lateName,
+        device: 'same-device',
+        sourceId: 'ring_11_12',
+        uploadIntent: WalUploadIntent.liveContinuity,
+      );
+      await externalSync.addExternalWal(source, scheduleUpload: false);
+
+      final stamp = externalSync.stampConversationId(
+        now - 20,
+        'conversation-same-device',
+        hasServerSpeechProof: true,
+        sessionEndSeconds: now,
+      );
+      await resolverStarted.future.timeout(const Duration(seconds: 1));
+      await externalSync.addExternalWal(late, scheduleUpload: false);
+      releaseResolver.complete();
+      await stamp.timeout(const Duration(seconds: 2));
+
+      final canonical = externalSync.testWals.single;
+      expect(canonical.sourceId, startsWith('canonical_conversation-same-device'));
+      expect(canonical.conversationId, 'conversation-same-device');
+      expect(canonical.totalFrames, 2);
+      expect(await File('${Directory.systemTemp.path}/${canonical.filePath}').length(), 10);
+    });
+
+    test('failed canonical persistence restores sources and preserves concurrent registration', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'omi_canonical_persist_failure_',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final sourceFile = File('${directory.path}/source.bin');
+      final concurrentFile = File('${directory.path}/concurrent.bin');
+      await sourceFile.writeAsBytes([1, 0, 0, 0, 7], flush: true);
+      await concurrentFile.writeAsBytes([1, 0, 0, 0, 8], flush: true);
+
+      final canonicalPersistStarted = Completer<void>();
+      final releaseCanonicalPersist = Completer<void>();
+      final concurrentSaveQueued = Completer<void>();
+      var rejectedCanonicalCommit = false;
+      var persistenceCallCount = 0;
+      var persistenceBarrier = Future<void>.value();
+      var durableSourceIds = <String>[];
+      final persistedSnapshots = <List<String>>[];
+      final externalSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (wals) {
+          final call = ++persistenceCallCount;
+          final snapshot = wals.map((wal) => wal.sourceId!).toList(growable: false);
+          persistedSnapshots.add(snapshot);
+          if (call == 2) concurrentSaveQueued.complete();
+          final operation = persistenceBarrier.then((_) async {
+            final hasCanonical = snapshot.any(
+              (sourceId) => sourceId.startsWith('canonical_'),
+            );
+            if (hasCanonical && !rejectedCanonicalCommit) {
+              rejectedCanonicalCommit = true;
+              canonicalPersistStarted.complete();
+              await releaseCanonicalPersist.future;
+              return false;
+            }
+            durableSourceIds = snapshot;
+            return true;
+          });
+          persistenceBarrier = operation.then<void>(
+            (_) {},
+            onError: (error, stackTrace) {},
+          );
+          return operation;
+        },
+        walPathResolver: (path) async {
+          return path == null ? null : '${directory.path}/$path';
+        },
+        silenceFrameFactory: (_) => [0],
+      );
+      final source = _historicalRingWal(
+        timerStart: 1000,
+        sourceId: 'ring_10_11',
+        filePath: 'source.bin',
+      )
+        ..status = WalStatus.synced
+        ..uploadIntent = WalUploadIntent.liveContinuity;
+      final concurrent = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 1,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: 'concurrent.bin',
+        device: 'other-device',
+        sourceId: 'ring_90_91',
+        uploadIntent: WalUploadIntent.historicalBackfill,
+      );
+      externalSync.testWals = [source];
+
+      final stamp = externalSync.stampConversationId(
+        900,
+        'persist-failure',
+        hasServerSpeechProof: true,
+        sessionEndSeconds: 1100,
+      );
+      await canonicalPersistStarted.future.timeout(
+        const Duration(seconds: 1),
+      );
+      final concurrentRegistration = externalSync.addExternalWal(
+        concurrent,
+        scheduleUpload: false,
+      );
+      await concurrentSaveQueued.future.timeout(const Duration(seconds: 1));
+      expect(
+        persistedSnapshots[1].any(
+          (sourceId) => sourceId.startsWith('canonical_'),
+        ),
+        isTrue,
+      );
+      expect(persistedSnapshots[1], contains('ring_90_91'));
+      releaseCanonicalPersist.complete();
+      expect(
+        await concurrentRegistration,
+        ExternalWalRegistration.added,
+      );
+      await stamp.timeout(const Duration(seconds: 2));
+
+      expect(rejectedCanonicalCommit, isTrue);
+      expect(
+        externalSync.testWals.any(
+          (wal) => wal.sourceId?.startsWith('canonical_') == true,
+        ),
+        isFalse,
+      );
+      expect(externalSync.testWals, containsAllInOrder([concurrent, source]));
+      expect(source.conversationId, 'persist-failure');
+      expect(concurrent.conversationId, isNull);
+      expect(await sourceFile.exists(), isTrue);
+      expect(await concurrentFile.exists(), isTrue);
+      expect(
+        durableSourceIds.toSet(),
+        {'ring_10_11', 'ring_90_91'},
+      );
+      expect(
+        persistedSnapshots.last.toSet(),
+        {'ring_10_11', 'ring_90_91'},
+      );
+      expect(
+        persistedSnapshots.last.any(
+          (sourceId) => sourceId.startsWith('canonical_'),
+        ),
+        isFalse,
+      );
+      expect(
+        directory.listSync().whereType<File>().where(
+              (file) => file.path.contains('canonical_persist-failure'),
+            ),
+        isEmpty,
+      );
+    });
+
+    test('post-commit late ring audio inherits canonical ownership and never uploads alone', () async {
+      SyncRateLimiter.instance.clear();
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final canonicalName = 'canonical_post_commit_${DateTime.now().microsecondsSinceEpoch}.bin';
+      final lateName = 'canonical_post_commit_late_${DateTime.now().microsecondsSinceEpoch}.bin';
+      final canonicalFile = File('${Directory.systemTemp.path}/$canonicalName');
+      final lateFile = File('${Directory.systemTemp.path}/$lateName');
+      await canonicalFile.writeAsBytes([1, 0, 0, 0, 7], flush: true);
+      await lateFile.writeAsBytes([1, 0, 0, 0, 8], flush: true);
+      addTearDown(() async {
+        for (final file in [canonicalFile, lateFile]) {
+          if (await file.exists()) await file.delete();
+        }
+      });
+      var uploadCalls = 0;
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (
+          files, {
+          onUploadProgress,
+          conversationId,
+          syncLane = SyncUploadLane.fresh,
+          replaceTranscript = false,
+        }) async {
+          uploadCalls++;
+          return UploadFilesResult.queued('must-not-upload-gap');
+        },
+      );
+      final canonical = Wal(
+        timerStart: now - 10,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 1,
+        captureEndSeconds: now - 9,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: canonicalName,
+        device: 'same-device',
+        sourceId: 'canonical_conversation-post-commit_test',
+        conversationId: 'conversation-post-commit',
+        uploadIntent: WalUploadIntent.liveContinuity,
+      );
+      final late = Wal(
+        timerStart: now - 8,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 1,
+        captureEndSeconds: now - 7,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: lateName,
+        device: 'same-device',
+        sourceId: 'ring_11_12',
+        uploadIntent: WalUploadIntent.liveContinuity,
+      );
+      final externalSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: gate,
+        walPersister: (_) async => true,
+      )..testWals = [canonical];
+
+      await externalSync.addExternalWal(late, scheduleUpload: false);
+      await externalSync.syncWal(wal: late);
+
+      expect(late.conversationId, 'conversation-post-commit');
+      expect(late.status, WalStatus.miss);
+      expect(uploadCalls, 0);
+      expect(
+        externalSync.testWals.where((wal) => wal.sourceId?.startsWith('canonical_') == true),
+        [canonical],
+      );
+      expect(await canonicalFile.readAsBytes(), [1, 0, 0, 0, 7]);
+    });
   });
 
   group('syncWal — orphan WAL guard', () {
+    test('selected ring row uploads its configured-boundary run only', () async {
+      SyncRateLimiter.instance.clear();
+      final prefix = 'manual_ring_run_${DateTime.now().microsecondsSinceEpoch}';
+      final files = <String, File>{};
+      for (final name in ['selected', 'adjacent', 'boundary', 'unrelated']) {
+        final file = File('${Directory.systemTemp.path}/${prefix}_$name.bin');
+        await file.writeAsBytes([1, 0, 0, 0, name.length], flush: true);
+        files[name] = file;
+      }
+      addTearDown(() async {
+        for (final file in files.values) {
+          if (await file.exists()) await file.delete();
+        }
+      });
+
+      final uploadCalls = <List<String>>[];
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (
+          artifacts, {
+          onUploadProgress,
+          conversationId,
+          syncLane = SyncUploadLane.fresh,
+          replaceTranscript = false,
+        }) async {
+          uploadCalls.add(
+            artifacts.map((file) => file.uri.pathSegments.last).toList(),
+          );
+          return UploadFilesResult.done(
+            SyncLocalFilesResponse(
+              newConversationIds: ['manual-run'],
+              updatedConversationIds: [],
+            ),
+          );
+        },
+      );
+      final manualSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: gate,
+        walPersister: (_) async => true,
+        conversationBoundarySecondsProvider: () => 300,
+      );
+      final selected = _historicalRingWal(
+        timerStart: 1000,
+        sourceId: 'archive2_ring_100_200_1000',
+        filePath: files['selected']!.uri.pathSegments.last,
+        seconds: 300,
+        totalFrames: 30000,
+      );
+      final adjacent = _historicalRingWal(
+        timerStart: 1599,
+        sourceId: 'archive2_ring_200_300_1599',
+        filePath: files['adjacent']!.uri.pathSegments.last,
+        seconds: 300,
+        totalFrames: 30000,
+      );
+      final exactBoundary = _historicalRingWal(
+        timerStart: 2199,
+        sourceId: 'archive2_ring_300_400_2199',
+        filePath: files['boundary']!.uri.pathSegments.last,
+        seconds: 300,
+        totalFrames: 30000,
+      );
+      final unrelated = _historicalRingWal(
+        timerStart: 1599,
+        sourceId: 'archive2_ring_900_1000_1599',
+        filePath: files['unrelated']!.uri.pathSegments.last,
+        seconds: 300,
+        totalFrames: 30000,
+      )..device = 'other-device';
+      manualSync.testWals = [
+        selected,
+        adjacent,
+        exactBoundary,
+        unrelated,
+      ];
+
+      await manualSync.syncWal(wal: selected);
+
+      expect(uploadCalls, hasLength(1));
+      expect(
+        uploadCalls.single.toSet(),
+        {
+          files['selected']!.uri.pathSegments.last,
+          files['adjacent']!.uri.pathSegments.last,
+        },
+      );
+      expect(selected.status, WalStatus.synced);
+      expect(adjacent.status, WalStatus.synced);
+      expect(exactBoundary.status, WalStatus.miss);
+      expect(unrelated.status, WalStatus.miss);
+    });
+
+    test('canonical single-row retry preserves replaceTranscript', () async {
+      SyncRateLimiter.instance.clear();
+      final filename = 'canonical_retry_${DateTime.now().microsecondsSinceEpoch}.bin';
+      final file = File('${Directory.systemTemp.path}/$filename');
+      await file.writeAsBytes([1, 0, 0, 0, 7], flush: true);
+      addTearDown(() async {
+        if (await file.exists()) await file.delete();
+      });
+
+      final uploadedConversationIds = <String?>[];
+      final uploadedReplaceModes = <bool>[];
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (
+          files, {
+          onUploadProgress,
+          conversationId,
+          syncLane = SyncUploadLane.fresh,
+          replaceTranscript = false,
+        }) async {
+          uploadedConversationIds.add(conversationId);
+          uploadedReplaceModes.add(replaceTranscript);
+          return UploadFilesResult.done(
+            SyncLocalFilesResponse(
+              newConversationIds: [],
+              updatedConversationIds: ['conversation-repair'],
+            ),
+          );
+        },
+      );
+      final manualSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: gate,
+        walPersister: (_) async => true,
+      );
+      final canonical = Wal(
+        timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        totalFrames: 3000,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: filename,
+        device: 'test-device',
+        sourceId: 'canonical_conversation-repair_test',
+        conversationId: 'conversation-repair',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        canonicalReplacement: true,
+      );
+      manualSync.testWals = [canonical];
+
+      await manualSync.syncWal(wal: canonical);
+
+      expect(uploadedConversationIds, ['conversation-repair']);
+      expect(uploadedReplaceModes, [isTrue]);
+      expect(canonical.status, WalStatus.synced);
+    });
+
+    test('bound ring row retry repairs and retargets the canonical replacement', () async {
+      SyncRateLimiter.instance.clear();
+      final filename = 'bound_retry_${DateTime.now().microsecondsSinceEpoch}.bin';
+      final file = File('${Directory.systemTemp.path}/$filename');
+      await file.writeAsBytes([1, 0, 0, 0, 9], flush: true);
+
+      final uploadedFiles = <String>[];
+      final uploadedConversationIds = <String?>[];
+      final uploadedReplaceModes = <bool>[];
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        fairUseStatusLoader: () async => {'stage': 'none'},
+        uploader: (
+          files, {
+          onUploadProgress,
+          conversationId,
+          syncLane = SyncUploadLane.fresh,
+          replaceTranscript = false,
+        }) async {
+          uploadedFiles.addAll(
+            files.map((candidate) => candidate.uri.pathSegments.last),
+          );
+          uploadedConversationIds.add(conversationId);
+          uploadedReplaceModes.add(replaceTranscript);
+          return UploadFilesResult.done(
+            SyncLocalFilesResponse(
+              newConversationIds: [],
+              updatedConversationIds: ['bound-conversation'],
+            ),
+          );
+        },
+      );
+      final manualSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: gate,
+        walPersister: (_) async => true,
+        silenceFrameFactory: (_) => [0],
+      );
+      addTearDown(() async {
+        if (await file.exists()) await file.delete();
+        for (final wal in manualSync.testWals) {
+          final path = wal.filePath;
+          if (path == null || !path.contains('canonical_bound-conversation')) {
+            continue;
+          }
+          final canonicalFile = File('${Directory.systemTemp.path}/$path');
+          if (await canonicalFile.exists()) await canonicalFile.delete();
+        }
+      });
+      final bound = _historicalRingWal(
+        timerStart: 1000,
+        sourceId: 'ring_100_200',
+        filePath: filename,
+        seconds: 1,
+        totalFrames: 1,
+      )..conversationId = 'bound-conversation';
+      manualSync.testWals = [bound];
+
+      await manualSync.syncWal(wal: bound);
+
+      expect(uploadedFiles.single, contains('canonical_bound-conversation'));
+      expect(uploadedConversationIds, ['bound-conversation']);
+      expect(uploadedReplaceModes, [isTrue]);
+      expect(manualSync.testWals, hasLength(1));
+      expect(
+        manualSync.testWals.single.sourceId,
+        startsWith('canonical_bound-conversation'),
+      );
+      expect(manualSync.testWals.single.status, WalStatus.synced);
+    });
+
     // A WAL the user taps "sync" on may already be gone from `_wals` (a
     // concurrent delete/reload). Previously `.first` on the empty match list
     // threw an uncaught StateError; the guard now bails out to null instead.
@@ -1387,12 +2808,16 @@ Wal _historicalRingWal({
   required int timerStart,
   required String sourceId,
   required String filePath,
+  int seconds = 1,
+  int totalFrames = 1,
+  double? captureEndSeconds,
 }) =>
     Wal(
       timerStart: timerStart,
       codec: BleAudioCodec.opus,
-      seconds: 1,
-      totalFrames: 1,
+      seconds: seconds,
+      captureEndSeconds: captureEndSeconds,
+      totalFrames: totalFrames,
       status: WalStatus.miss,
       storage: WalStorage.disk,
       originalStorage: WalStorage.sdcard,
@@ -1400,4 +2825,24 @@ Wal _historicalRingWal({
       device: 'test-device',
       sourceId: sourceId,
       uploadIntent: WalUploadIntent.historicalBackfill,
+    );
+
+SyncUploadGate _completedUploadGate(List<List<String>> uploads) => SyncUploadGate(
+      limiter: SyncRateLimiter.instance,
+      fairUseStatusLoader: () async => {'stage': 'none'},
+      uploader: (
+        files, {
+        onUploadProgress,
+        conversationId,
+        syncLane = SyncUploadLane.fresh,
+        replaceTranscript = false,
+      }) async {
+        uploads.add(files.map((file) => file.path).toList());
+        return UploadFilesResult.done(
+          SyncLocalFilesResponse(
+            newConversationIds: ['authorized-conversation-${uploads.length}'],
+            updatedConversationIds: [],
+          ),
+        );
+      },
     );

@@ -540,7 +540,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             // Index suffix because `wal.id` (device_timerStart) is not unique
             // across SD-card + on-phone copies of the same recording.
             key: ValueKey('${wal.id}#$i'),
-            direction: state == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
+            direction: state == WalSyncDisplayState.syncing || !syncProvider.canDeleteWal(wal)
+                ? DismissDirection.none
+                : DismissDirection.endToStart,
             confirmDismiss: (direction) {
               final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
               return OmiConfirmDialog.show(
@@ -591,6 +593,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       behavior: HitTestBehavior.opaque,
       onTap: () {
         final syncProvider = context.read<SyncProvider>();
+        if (syncProvider.isLogicalRingArchiveDisplayWal(wal)) return;
         if (syncProvider.isSyncing && wal.storage == WalStorage.sdcard) {
           ScaffoldMessenger.of(
             context,

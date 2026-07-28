@@ -35,6 +35,14 @@ class _LocalSyncs {
   Future<void> deleteAllPendingWals() => phone.deleteAllPendingWals();
 
   Future<void> deleteAllCorruptedWals() => phone.deleteAllCorruptedWals();
+
+  Future<void> deleteWal(Wal wal) => phone.deleteWal(wal);
+
+  Future<SyncLocalFilesResponse?> syncWal({
+    required Wal wal,
+    IWalSyncProgressListener? progress,
+  }) =>
+      phone.syncWal(wal: wal, progress: progress);
 }
 
 class _WalService implements IWalService {
@@ -242,9 +250,80 @@ void main() {
     await syncProvider.initialized;
 
     expect(syncProvider.allWals, [rawRange, assembledArchive]);
-    expect(syncProvider.userVisibleWals, [assembledArchive]);
-    expect(syncProvider.pendingWals, [assembledArchive]);
-    expect(syncProvider.displaySortedWals, [assembledArchive]);
-    expect(syncProvider.walsForDisplayFilter(WalDisplayFilter.all), [assembledArchive]);
+    expect(syncProvider.userVisibleWals, hasLength(1));
+    final logicalArchive = syncProvider.userVisibleWals.single;
+    expect(syncProvider.isLogicalRingArchiveDisplayWal(logicalArchive), isTrue);
+    expect(syncProvider.logicalRingArchiveMembersForTest(logicalArchive), [assembledArchive]);
+    expect(syncProvider.pendingWals, [logicalArchive]);
+    expect(syncProvider.displaySortedWals, [logicalArchive]);
+    expect(syncProvider.walsForDisplayFilter(WalDisplayFilter.all), [logicalArchive]);
+  });
+
+  test('logical archive sync submits every physical part in one job while row deletion stays non-destructive',
+      () async {
+    SharedPreferencesUtil().conversationSilenceDuration = 120;
+    final uploadedBatches = <List<String>>[];
+    final gate = SyncUploadGate(
+      limiter: SyncRateLimiter.instance,
+      uploader: (
+        files, {
+        onUploadProgress,
+        conversationId,
+        syncLane = SyncUploadLane.fresh,
+        replaceTranscript = false,
+      }) async {
+        uploadedBatches.add(files.map((file) => file.path).toList());
+        return UploadFilesResult.done(
+          SyncLocalFilesResponse(
+            newConversationIds: ['logical-archive-conversation'],
+            updatedConversationIds: [],
+          ),
+        );
+      },
+      fairUseStatusLoader: () async => {'stage': 'none'},
+    );
+    localSync = LocalWalSyncImpl(_Listener(), uploadGate: gate);
+    final archives = <Wal>[];
+    for (var index = 0; index < 10; index++) {
+      final timerStart = 1000 + index * 300;
+      final fileName = 'logical-archive-$index.bin';
+      File('${tempDir.path}/$fileName').writeAsBytesSync([1, 0, 0, 0, index]);
+      archives.add(
+        Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 300,
+          captureEndSeconds: timerStart + 300,
+          totalFrames: 1,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          originalStorage: WalStorage.sdcard,
+          device: 'cv1',
+          filePath: fileName,
+          sourceId: 'archive2_ring_${index * 100}_${(index + 1) * 100}_$timerStart',
+          uploadIntent: WalUploadIntent.historicalBackfill,
+        ),
+      );
+    }
+    localSync.testWals = archives;
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: gate,
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+    final logical = syncProvider.userVisibleWals.single;
+
+    await syncProvider.deleteWal(logical);
+
+    expect(localSync.testWals, archives);
+    expect(archives.every((wal) => File('${tempDir.path}/${wal.filePath}').existsSync()), isTrue);
+
+    await syncProvider.syncWal(logical);
+
+    expect(uploadedBatches, hasLength(1));
+    expect(uploadedBatches.single, hasLength(10));
+    expect(archives.every((wal) => wal.status == WalStatus.synced), isTrue);
   });
 }

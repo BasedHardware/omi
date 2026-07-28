@@ -67,6 +67,21 @@ enum WalServiceStatus { init, ready, stop }
 
 enum ExternalWalRegistration { added, alreadyRegistered }
 
+/// Proof that the live ring owner durably consumed one bounded device snapshot.
+///
+/// Cloud retries carry this receipt instead of asking the pendant for another
+/// snapshot, so newly recorded audio cannot silently expand an older manual or
+/// automatic backlog request.
+class RingBacklogDrainReceipt {
+  const RingBacklogDrainReceipt({
+    required this.deviceId,
+    required this.targetWriteSeq,
+  });
+
+  final String deviceId;
+  final int targetWriteSeq;
+}
+
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {
   Future<ExternalWalRegistration> addExternalWal(
@@ -122,9 +137,12 @@ abstract class RingStorageSync implements IWalSync {
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   bool get isSyncing;
+  bool get isAudioTailActive;
   double get currentSpeedKBps;
   Future<bool> hasFilesToSync();
   Future<void> refreshWalsFromDevice();
+  Future<RingBacklogDrainReceipt?>? requestAudioTailBacklogDrain();
+  void cancelRequestedAudioTailBacklogDrain();
 }
 
 abstract class FlashPageWalSync implements IWalSync {

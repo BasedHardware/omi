@@ -11,7 +11,6 @@ import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -131,8 +130,9 @@ class WalListItem extends StatelessWidget {
           decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
           child: Dismissible(
             key: Key(wal.id),
-            direction:
-                displayState == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
+            direction: displayState == WalSyncDisplayState.syncing || !syncProvider.canDeleteWal(wal)
+                ? DismissDirection.none
+                : DismissDirection.endToStart,
             confirmDismiss: (direction) {
               final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
               return OmiConfirmDialog.show(
@@ -150,11 +150,12 @@ class WalListItem extends StatelessWidget {
               child: const Icon(Icons.delete, color: Colors.white),
             ),
             onDismissed: (direction) {
-              ServiceManager.instance().wal.getSyncs().deleteWal(wal);
+              syncProvider.deleteWal(wal);
             },
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
+                if (syncProvider.isLogicalRingArchiveDisplayWal(wal)) return;
                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => WalItemDetailPage(wal: wal)));
               },
               child: Padding(
