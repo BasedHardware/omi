@@ -98,24 +98,13 @@ enum NotchVoiceMorphGeometry {
   /// inside the 21pt identity slot: 6.93×1.24 + 3.78/2 ≈ 10.48 ≤ 10.5.
   static let speakingPushMax: CGFloat = 0.24
 
-  /// Temporal period of the speaking wave at any fixed dot. The three-crest
-  /// pattern advances exactly one dot every 3/8 period, always in the same
-  /// direction around the ring.
-  static let speakingWavePeriod: TimeInterval = 0.6
-
-  /// Circular sound-wave displacement for one speaking-ring dot: three
-  /// crests orbiting the ring in one fixed direction, scaled by the live
-  /// output level. Three lobes at a brisk period read as a ripple sweeping
-  /// the ring; two slow opposite lobes read as jaws chewing. Squaring
-  /// sharpens the crests and calms the troughs. Always outward (0…level) so
-  /// the ring is pushed by the voice.
-  static func speakingRadialPush(index: Int, time: TimeInterval, level: CGFloat) -> CGFloat {
-    let bounded = clamp(level)
-    guard bounded > 0 else { return 0 }
-    let angle = Double(index) / Double(dotCount) * 2 * .pi
-    let phase = angle * 3 - time * 2 * .pi / speakingWavePeriod
-    let crest = (sin(phase) + 1) / 2
-    return bounded * CGFloat(crest * crest)
+  /// Uniform outward expansion of the speaking ring: every dot pushes out
+  /// together by the live output level, so the whole ring spikes on each
+  /// sound peak and relaxes between them. All the motion comes from the
+  /// fast attack/release on the level itself — no spatial wave, which in
+  /// practice read as chewing or wobbling rather than a voice.
+  static func speakingExpansion(level: CGFloat) -> CGFloat {
+    clamp(level)
   }
 
   // MARK: - Listening waveform
@@ -250,11 +239,13 @@ struct NotchVoiceMorphMark: View {
   /// RMS after the capture noise floor; post-mixer reply speech ~0.1–0.25.
   /// The mic side attacks tight so the wave snaps to syllables, but its peak
   /// half-life is short so a loud opening word doesn't crush the quieter
-  /// tail of the phrase, and release rides through inter-syllable dips.
+  /// tail of the phrase, and release rides through inter-syllable dips. The
+  /// voice side is tuned fast both ways: the uniform ring expansion IS the
+  /// level, so it must spike and relax per sound peak, not glide.
   @State private var micLevelDisplay = VoiceLevelDisplay(
     minPeak: 0.035, peakHalfLife: 2, attackTau: 0.02, releaseTau: 0.16)
   @State private var voiceLevelDisplay = VoiceLevelDisplay(
-    minPeak: 0.1, attackTau: 0.03, releaseTau: 0.14)
+    minPeak: 0.1, attackTau: 0.012, releaseTau: 0.09)
 
   var body: some View {
     TimelineView(.animation(paused: !isListening && !isThinking && !isSpeaking)) { timeline in
@@ -301,12 +292,12 @@ struct NotchVoiceMorphMark: View {
       isThinking && !reduceMotion && morphProgress < 0.001
       ? time * 2 * .pi / 0.9
       : 0
-    // Response playback renders the ring as a circular sound wave: each dot
-    // is pushed outward by a travelling angular wave whose magnitude IS the
-    // assistant's live output level (mixer tap). Pauses in the reply leave a
-    // clean still ring; speech ripples around it. Dot size stays constant —
-    // the voice displaces the ring, it doesn't inflate it. Listening owns
-    // the waveform, so this applies only in ring formation.
+    // Response playback expands the whole ring uniformly by the assistant's
+    // live output level (mixer tap): every sound peak spikes the ring
+    // outward and it snaps back between peaks. Pauses in the reply leave a
+    // clean still ring. Dot size stays constant — the voice displaces the
+    // ring, it doesn't inflate it. Listening owns the waveform, so this
+    // applies only in ring formation.
     let speakingPresentation = isSpeaking && !isListening && morphProgress < 0.001
     let speakingLevel =
       speakingPresentation && !reduceMotion
@@ -330,8 +321,7 @@ struct NotchVoiceMorphMark: View {
         let angle =
           Double(index) / Double(NotchVoiceMorphGeometry.dotCount) * Double.pi * 2
           - Double.pi + thinkingRotation
-        let push = NotchVoiceMorphGeometry.speakingRadialPush(
-          index: index, time: time, level: speakingLevel)
+        let push = NotchVoiceMorphGeometry.speakingExpansion(level: speakingLevel)
         let ringRadius =
           base * NotchVoiceMorphGeometry.ringRadiusRatio
           * (1 + NotchVoiceMorphGeometry.speakingPushMax * push)
