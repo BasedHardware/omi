@@ -12,6 +12,8 @@ from unittest.mock import patch
 import pytest
 
 from utils.projections import generation as generation_module
+from utils.projections.aesthetic import AESTHETIC
+from utils.projections.archetypes import STAGE_IMAGERY
 from utils.projections.errors import NoProjectionSubject
 from utils.projections.evidence import assemble_packet
 from utils.projections.selector import ProjectionStage, SelectedSubject, SubjectSelection
@@ -66,10 +68,15 @@ def test_the_image_is_rendered_from_the_selected_subject(stub_reads):
         with patch.object(generation_module, '_generate_image', return_value=b'png') as generate_image:
             projection = generation_module.generate_projection('uid-1')
 
-    # The prompt is the selected projection, not a constant: the picture is about the thing
-    # the line is about.
-    assert generate_image.call_args.args[0] == SUBJECT.projection
-    assert projection['generation']['prompt'] == SUBJECT.projection
+    # The prompt carries the selected projection, not a constant: the picture is about the
+    # thing the line is about. It is composed rather than passed through — the register and
+    # the stage's own directives are what keep it off the model's default — and the composed
+    # prompt is what gets recorded, since that is what actually produced the image.
+    prompt = generate_image.call_args.args[0]
+    assert prompt.endswith(SUBJECT.projection)
+    assert prompt.startswith(AESTHETIC)
+    assert STAGE_IMAGERY[SUBJECT.stage].composition in prompt
+    assert projection['generation']['prompt'] == prompt
     assert projection['imperative'] == SUBJECT.imperative
     assert projection['image_url'] == 'https://img/x.png'
 

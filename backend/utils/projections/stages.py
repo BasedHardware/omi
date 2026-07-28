@@ -4,8 +4,8 @@ Ten stations of the Hero's Journey, used as an index into the archetypal layer. 
 correspondence is a translation and the seams are real: Campbell's arc advances through
 numbered stations while Jung's individuation spirals and repeats, and the alchemical sequence
 (nigredo -> albedo -> citrinitas -> rubedo) is the load-bearing part of the mapping. This
-module carries only the vocabulary; the archetypal, palette and value directives that each
-stage owns arrive with the image-prompt layer.
+module carries only the vocabulary — the selector ranks into it and the image layer composes
+against it. What each stage means for the image, and why, is `archetypes.py`.
 """
 
 from __future__ import annotations
