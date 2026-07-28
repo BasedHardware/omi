@@ -64,7 +64,8 @@ class MemoriesProvider extends ChangeNotifier {
       // When the server does not support device_scope, legacy memories have no
       // primary_capture_device/capture_device_ids. Skip the local device filter
       // in that case to avoid hiding all legacy rows on the "This device" view.
-      final deviceMatch = !_filterThisDeviceOnly ||
+      final deviceMatch =
+          !_filterThisDeviceOnly ||
           !_deviceScopeSupported ||
           ClientDeviceService.instance.memoryMatchesThisDevice(
             primaryCaptureDevice: memory.primaryCaptureDevice,
@@ -72,8 +73,7 @@ class MemoriesProvider extends ChangeNotifier {
           );
 
       return matchesSearch && categoryMatch && deviceMatch;
-    }).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setFilterThisDeviceOnly(bool enabled) {
@@ -223,10 +223,22 @@ class MemoriesProvider extends ChangeNotifier {
       if (generation != _sessionGeneration) return;
     }
 
-    final result = await getMemoriesResult(limit: limit, thisDeviceOnly: _filterThisDeviceOnly);
-    if (generation != _sessionGeneration) return;
-    _memories = result.memories;
-    _deviceScopeSupported = result.deviceScopeSupported;
+    // Page until a short page: backend no longer expands the first page to 5000
+    // (prod GET /v3/memories 504s). Cap total fetch so a huge account cannot hang the UI.
+    const maxPages = 20;
+    final all = <Memory>[];
+    var offset = 0;
+    var deviceScopeSupported = true;
+    for (var page = 0; page < maxPages; page++) {
+      final result = await getMemoriesResult(limit: limit, offset: offset, thisDeviceOnly: _filterThisDeviceOnly);
+      if (generation != _sessionGeneration) return;
+      deviceScopeSupported = result.deviceScopeSupported;
+      all.addAll(result.memories);
+      if (result.memories.length < limit) break;
+      offset += result.memories.length;
+    }
+    _memories = all;
+    _deviceScopeSupported = deviceScopeSupported;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;

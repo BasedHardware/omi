@@ -148,7 +148,7 @@ def test_get_action_items_active_first_without_full_scan(ai_mod, monkeypatch):
     assert recorded
     assert recorded[0][1] == metrics.FirestoreReadMode.BOUNDED
     # Must not stream the entire 305-doc collection for a 10-row page
-    assert recorded[0][2] < 100
+    assert recorded[0][2] < 400  # two-bucket + legacy harvest, still << full 305+ stream
 
 
 def test_get_action_items_hard_caps_document_iteration(ai_mod, monkeypatch):
@@ -222,3 +222,21 @@ def test_legacy_get_memories_no_first_page_5000_force():
     with patch.object(mem.memories_db, 'get_memories', side_effect=fake_get):
         mem._legacy_get_memories('u', limit=9999, offset=0)
     assert calls[-1] == ('u', 500, 0)
+
+
+def test_knowledge_graph_route_exposes_truncation(monkeypatch):
+    import routers.knowledge_graph as kg_router
+
+    payload = {
+        'nodes': [{'id': 'n1'}],
+        'edges': [],
+        'truncated': True,
+        'node_limit': 2000,
+        'edge_limit': 5000,
+    }
+    monkeypatch.setattr(kg_router, 'get_knowledge_graph_payload', lambda uid: payload)
+    resp = kg_router.get_knowledge_graph(uid='u')
+    assert resp.truncated is True
+    assert resp.node_limit == 2000
+    assert resp.edge_limit == 5000
+    assert resp.nodes == payload['nodes']

@@ -391,9 +391,6 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
 # Hard safety caps for list reads. Unbounded streams + in-process sort caused prod GET
 # /v1/action-items to hit HTTP_GET_TIMEOUT (30s) → 504 on large accounts.
 _ACTION_ITEMS_LIST_HARD_MAX = 2000
-_ACTION_ITEMS_LIST_DEFAULT_LIMIT = 500
-# Extra documents scanned to absorb soft-deleted rows while still filling `need`.
-_ACTION_ITEMS_DELETED_SLACK_FACTOR = 2
 
 
 def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
@@ -404,47 +401,6 @@ def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
         item.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
         -(item.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
     )
-
-
-def _build_action_items_base_query(
-    uid: str,
-    *,
-    conversation_id: Optional[str],
-    completed: Optional[bool],
-    start_date: Optional[datetime],
-    end_date: Optional[datetime],
-    due_start_date: Optional[datetime],
-    due_end_date: Optional[datetime],
-) -> Any:
-    user_ref = db.collection('users').document(uid)
-    query = user_ref.collection(action_items_collection)
-
-    if conversation_id is not None:
-        query = query.where(filter=FieldFilter('conversation_id', '==', conversation_id))
-
-    if completed is not None:
-        query = query.where(filter=FieldFilter('completed', '==', completed))
-
-    # Date inequality filters require orderBy on the same field. When both created_at and
-    # due_at ranges are supplied, prefer due_at (historical behavior).
-    due_at_filtering = due_start_date is not None or due_end_date is not None
-    if due_at_filtering:
-        if due_start_date is not None:
-            query = query.where(filter=FieldFilter('due_at', '>=', due_start_date))
-        if due_end_date is not None:
-            query = query.where(filter=FieldFilter('due_at', '<=', due_end_date))
-        query = query.order_by('due_at', direction=firestore.Query.DESCENDING)
-    else:
-        if start_date is not None:
-            query = query.where(filter=FieldFilter('created_at', '>=', start_date))
-        if end_date is not None:
-            query = query.where(filter=FieldFilter('created_at', '<=', end_date))
-        # Only attach order_by when a range filter needs it; otherwise we sort in process
-        # after a bounded stream (avoids composite-index requirements for completed+order).
-        if start_date is not None or end_date is not None:
-            query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
-
-    return query
 
 
 def _stream_action_items_bounded(query: Any, *, max_docs: int) -> tuple[List[Dict[str, Any]], int]:
@@ -467,6 +423,32 @@ def _stream_action_items_bounded(query: Any, *, max_docs: int) -> tuple[List[Dic
     return action_items, document_count
 
 
+def _apply_action_item_date_filters(
+    query: Any,
+    *,
+    start_date: Optional[datetime],
+    end_date: Optional[datetime],
+    due_start_date: Optional[datetime],
+    due_end_date: Optional[datetime],
+) -> Any:
+    due_at_filtering = due_start_date is not None or due_end_date is not None
+    if due_at_filtering:
+        if due_start_date is not None:
+            query = query.where(filter=FieldFilter('due_at', '>=', due_start_date))
+        if due_end_date is not None:
+            query = query.where(filter=FieldFilter('due_at', '<=', due_end_date))
+        # Soonest-due first so a bounded prefix matches product sort on due_at.
+        query = query.order_by('due_at', direction=firestore.Query.ASCENDING)
+        return query
+    if start_date is not None:
+        query = query.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date is not None:
+        query = query.where(filter=FieldFilter('created_at', '<=', end_date))
+    if start_date is not None or end_date is not None:
+        query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+    return query
+
+
 def get_action_items(
     uid: str,
     conversation_id: Optional[str] = None,
@@ -481,74 +463,82 @@ def get_action_items(
     """
     Get action items for a user with optional filters.
 
-    Args:
-        uid: User ID
-        conversation_id: Filter by conversation ID (None for standalone items)
-        completed: Filter by completion status
-        start_date: Filter by created_at start date (inclusive) - applied at database level
-        end_date: Filter by created_at end date (inclusive) - applied at database level
-        due_start_date: Filter by due_at start date (inclusive) - applied at database level
-        due_end_date: Filter by due_at end date (inclusive) - applied at database level
-        limit: Maximum number of items to return
-        offset: Number of items to skip
-
-    Returns:
-        List of action items
-
-    Note:
-        If both created_at and due_at filters are provided, only due_at filters will be applied
-        (due to Firestore limitation requiring inequality filters on same field as orderBy).
-
-        Default (completed=None) lists preserve active-first product order by reading the
-        incomplete bucket first, then the completed bucket — never a full-collection stream.
-        All paths are hard-capped so GET /v1/action-items cannot unbounded-scan under
-        HTTP_GET_TIMEOUT.
+    Default (completed=None) lists preserve active-first product order by reading the
+    incomplete bucket first, then the completed bucket — never a full-collection stream.
+    Legacy documents with missing/null ``completed`` are harvested via a separate bounded
+    unfiltered scan and treated as active after ``_prepare_action_item_for_read``.
+    All paths are hard-capped so GET /v1/action-items cannot unbounded-scan under
+    HTTP_GET_TIMEOUT. Pagination is applied after the product sort.
     """
     offset = max(0, int(offset or 0))
     if limit is None or limit <= 0:
-        effective_limit = _ACTION_ITEMS_LIST_DEFAULT_LIMIT
+        effective_limit = _ACTION_ITEMS_LIST_HARD_MAX
     else:
         effective_limit = min(int(limit), _ACTION_ITEMS_LIST_HARD_MAX)
 
-    # How many kept rows we need before slicing (offset + page), capped hard.
     need = min(offset + effective_limit, _ACTION_ITEMS_LIST_HARD_MAX)
-    # Scan budget absorbs soft-deleted docs while remaining bounded.
-    scan_budget = min(
-        _ACTION_ITEMS_LIST_HARD_MAX,
-        max(need * _ACTION_ITEMS_DELETED_SLACK_FACTOR, need + 32),
-    )
-
     total_docs = 0
 
-    def _fetch(completed_filter: Optional[bool], row_budget: int) -> List[Dict[str, Any]]:
-        nonlocal total_docs
-        if row_budget <= 0:
-            return []
-        q = _build_action_items_base_query(
-            uid,
-            conversation_id=conversation_id,
-            completed=completed_filter,
+    def _base_query() -> Any:
+        user_ref = db.collection('users').document(uid)
+        q = user_ref.collection(action_items_collection)
+        if conversation_id is not None:
+            q = q.where(filter=FieldFilter('conversation_id', '==', conversation_id))
+        return _apply_action_item_date_filters(
+            q,
             start_date=start_date,
             end_date=end_date,
             due_start_date=due_start_date,
             due_end_date=due_end_date,
         )
-        bucket_scan = min(scan_budget, max(row_budget * _ACTION_ITEMS_DELETED_SLACK_FACTOR, row_budget + 32))
-        items, docs = _stream_action_items_bounded(q, max_docs=bucket_scan)
+
+    def _fetch_filtered(completed_filter: Optional[bool], row_budget: int) -> List[Dict[str, Any]]:
+        nonlocal total_docs
+        if row_budget <= 0:
+            return []
+        q = _base_query()
+        if completed_filter is not None:
+            q = q.where(filter=FieldFilter('completed', '==', completed_filter))
+        scan = min(_ACTION_ITEMS_LIST_HARD_MAX, max(row_budget * 2, row_budget + 32))
+        items, docs = _stream_action_items_bounded(q, max_docs=scan)
         total_docs += docs
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]
 
     if completed is not None:
-        action_items = _fetch(completed, need)
+        action_items = _fetch_filtered(completed, need)
     else:
-        # Active-first without full-collection scan: incomplete bucket first, then completed.
-        active = _fetch(False, need)
+        # Explicit incomplete first (server-side equality — excludes missing-field legacy docs).
+        active = _fetch_filtered(False, need)
+        seen = {item['id'] for item in active}
+        # Legacy/partial docs: completed missing or null. Equality filters exclude them; harvest
+        # with a bounded unfiltered scan and keep only those that prepare to active and are new.
+        if len(active) < need:
+            # Bound unfiltered scan generously enough to product-sort before capping:
+            # early-stopping mid-stream would freeze Firestore order instead of due-date order.
+            legacy_scan = min(
+                _ACTION_ITEMS_LIST_HARD_MAX,
+                max(need * 8, 128),
+            )
+            raw_legacy, docs = _stream_action_items_bounded(_base_query(), max_docs=legacy_scan)
+            total_docs += docs
+            for item in raw_legacy:
+                if item['id'] in seen:
+                    continue
+                # Only pull true actives from the unfiltered scan into the active bucket.
+                if item.get('completed'):
+                    continue
+                active.append(item)
+                seen.add(item['id'])
+            active.sort(key=_action_item_list_sort_key)
+            active = active[:need]
+
         if len(active) >= need:
             action_items = active
         else:
-            remaining = need - len(active)
-            done = _fetch(True, remaining)
+            done = _fetch_filtered(True, need - len(active))
+            # Drop any ids already present from legacy harvest
+            done = [item for item in done if item['id'] not in seen]
             action_items = active + done
 
     record_firestore_read(
