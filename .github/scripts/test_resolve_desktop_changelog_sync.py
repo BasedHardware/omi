@@ -82,6 +82,40 @@ class ResolveDesktopChangelogSyncTests(unittest.TestCase):
         self.assertEqual(result["commit"], cons)
         self.assertIn("10787", str(result["pr_url"]))
 
+    def test_parent_mismatch_rejects_when_unreleased_fragments_advance(self) -> None:
+        """Codex P2: do not reuse old consolidate when planned source gained fragments."""
+        repo = self._repo()
+        git(repo, "checkout", "-b", "changelog-side")
+        (repo / "c").write_text("c\n", encoding="utf-8")
+        git(repo, "add", "c")
+        git(repo, "commit", "-m", "chore: consolidate changelog for v0.12.143")
+        cons = git(repo, "rev-parse", "HEAD")
+        git(repo, "checkout", "main")
+        git(
+            repo,
+            "merge",
+            "--no-ff",
+            "changelog-side",
+            "-m",
+            "Update desktop changelog for v0.12.143 [skip ci] (#10787)",
+        )
+        frag = repo / "desktop" / "macos" / "changelog" / "unreleased" / "20260728-99.json"
+        frag.parent.mkdir(parents=True, exist_ok=True)
+        frag.write_text('{"change": "new fragment after consolidate"}\n', encoding="utf-8")
+        git(repo, "add", str(frag.relative_to(repo)))
+        git(repo, "commit", "-m", "feat: desktop change with changelog fragment")
+        tip = git(repo, "rev-parse", "HEAD")
+        result = resolve.resolve_changelog_sync(
+            repo,
+            planned_source_sha=tip,
+            version="0.12.143",
+            main_ref="main",
+            repository_slug="BasedHardware/omi",
+        )
+        self.assertEqual(result["mode"], "missing")
+        self.assertEqual(result["commit"], "")
+        self.assertFalse(result["already_on_main"])
+
     def test_missing_when_no_consolidate(self) -> None:
         repo = self._repo()
         tip = git(repo, "rev-parse", "HEAD")
