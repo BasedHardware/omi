@@ -87,6 +87,7 @@ fn test_request(messages: Vec<ChatMessage>) -> ChatCompletionRequest {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     }
 }
 
@@ -396,6 +397,7 @@ fn test_translate_request_basic() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -439,6 +441,7 @@ fn test_translate_request_caches_latest_user_message() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -480,6 +483,7 @@ fn test_translate_request_caches_tool_result_turn() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -509,6 +513,7 @@ fn test_translate_request_max_tokens_cap() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -533,6 +538,7 @@ fn test_translate_request_default_max_tokens() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -571,6 +577,7 @@ fn test_translate_request_developer_role_treated_as_system() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -604,6 +611,7 @@ fn test_translate_request_system_prompt_uses_cache_control_blocks() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -653,6 +661,7 @@ fn test_translate_request_splits_ptt_escalation_context_cache_boundary() {
             tools: None,
             tool_choice: None,
             reasoning_effort: None,
+            omi_web_search: None,
         };
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
     let system = result.system.unwrap();
@@ -692,6 +701,7 @@ fn test_translate_request_without_system_prompt_omits_system() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -731,6 +741,7 @@ fn test_translate_request_empty_system_prompt_omits_system() {
             tools: None,
             tool_choice: None,
             reasoning_effort: None,
+            omi_web_search: None,
         };
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -763,6 +774,7 @@ fn test_translate_request_max_completion_tokens_preferred() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -788,6 +800,7 @@ fn test_translate_request_max_completion_tokens_only() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -814,6 +827,7 @@ fn test_translate_request_max_completion_tokens_cap() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -861,6 +875,7 @@ fn test_translate_request_tool_result() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -901,6 +916,7 @@ fn test_translate_request_public_lookup_keeps_web_search_available() {
         }]),
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request_inner(
@@ -953,6 +969,7 @@ fn test_translate_request_web_search_disabled() {
         }]),
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request_inner(
@@ -991,6 +1008,83 @@ fn test_translate_request_anaphoric_lookup_stays_tool_free_without_client_tools(
         .unwrap()
         .to_string()
         .contains("omi_retrieval_policy"));
+}
+
+#[test]
+fn test_omi_web_search_opt_in_injects_server_tool_without_client_tools() {
+    // Regression: PTT ask_higher_model escalations carry no client tools, so
+    // the agentic-turn heuristic never injected web_search and every voice
+    // escalation for current facts (weather, prices, scores) ran blind.
+    let mut req = test_request(vec![user_message("What's the weather in NYC right now?")]);
+    req.omi_web_search = Some(true);
+
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+    let tools = result.tools.unwrap();
+    assert_eq!(tools.len(), 1);
+    assert_eq!(
+        serde_json::to_value(&tools[0]).unwrap()["name"],
+        "web_search"
+    );
+}
+
+#[test]
+fn test_omi_web_search_opt_in_still_respects_private_no_web_turns() {
+    // The explicit opt-in widens the agentic heuristic only; the user's
+    // private/no-web instruction remains the hard boundary.
+    let mut req = test_request(vec![user_message(
+        "Do not use the web. From my conversations only: what did I say about the launch?",
+    )]);
+    req.omi_web_search = Some(true);
+
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+    assert!(result.tools.is_none());
+}
+
+#[test]
+fn test_omi_web_search_opt_in_reports_the_degrade_when_search_is_unsupported() {
+    // Regression: the opt-in was added to the injection condition but not to
+    // the fallback predicate, so a PTT escalation (no client tools) that lost
+    // web search — haiku route or the kill switch — answered from model
+    // knowledge with no `chat_retrieval` fallback event at all.
+    let mut req = test_request(vec![user_message("What's the weather in NYC right now?")]);
+    req.omi_web_search = Some(true);
+    assert!(req.tools.is_none());
+
+    assert!(should_record_web_search_fallback(&req, false));
+    assert!(!should_record_web_search_fallback(&req, true));
+
+    let result = translate_request_inner(
+        &req,
+        "claude-sonnet-4-6",
+        false,
+        ReasoningEffort::Unspecified,
+    )
+    .unwrap();
+    assert_eq!(server_tool_available_from(&result.tools), "model_knowledge");
+}
+
+#[test]
+fn test_omi_web_search_opt_in_does_not_report_a_degrade_on_a_private_turn() {
+    // A private/no-web turn never wanted the tool, so losing it is not a
+    // degrade — reporting one would make the fallback rate unreadable.
+    let mut req = test_request(vec![user_message(
+        "Do not use the web. From my conversations only: what did I say about the launch?",
+    )]);
+    req.omi_web_search = Some(true);
+
+    assert!(!should_record_web_search_fallback(&req, false));
 }
 
 #[test]
@@ -1558,6 +1652,7 @@ fn test_translate_request_no_web_search_on_haiku() {
         }]),
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
     let result =
         translate_request_inner(&req, "claude-haiku-4-5", true, ReasoningEffort::Unspecified)
@@ -1638,6 +1733,7 @@ fn test_translate_request_no_web_search_without_client_tools() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
     let result = translate_request_inner(
         &req,
@@ -1901,6 +1997,7 @@ fn test_tool_choice_none_strips_tools() {
         }]),
         tool_choice: Some(json!("none")),
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
@@ -1930,6 +2027,7 @@ fn test_translate_request_unsupported_role() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
 
     let result = translate_request(&req, "claude-sonnet-4-6");
@@ -2032,6 +2130,7 @@ fn test_translate_request_invalid_tool_choice_propagates_error() {
         tools: None,
         tool_choice: Some(json!("bogus")),
         reasoning_effort: None,
+        omi_web_search: None,
     };
     let result = translate_request(&req, "claude-sonnet-4-6");
     assert!(result.is_err(), "invalid tool_choice must propagate as Err");
@@ -2057,6 +2156,7 @@ fn test_max_tokens_zero() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
     assert_eq!(
@@ -2083,6 +2183,7 @@ fn test_max_tokens_at_cap() {
         tools: None,
         tool_choice: None,
         reasoning_effort: None,
+        omi_web_search: None,
     };
     let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
     assert_eq!(
