@@ -172,6 +172,30 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
     XCTAssertNotEqual(atOnce[0], later, accuracy: 0.01)
   }
 
+  func testSpeakingWaveAlwaysTravelsInOneDirection() {
+    // The crest pattern advances exactly one dot per quarter period, always
+    // the same way around the ring: shifting one dot forward in space and a
+    // quarter period forward in time reproduces the wave exactly.
+    let dotStep = NotchVoiceMorphGeometry.speakingWavePeriod / 4
+    for time in stride(from: 0.0, through: 2.0, by: 0.17) {
+      for index in 0..<NotchVoiceMorphGeometry.dotCount {
+        let here = NotchVoiceMorphGeometry.speakingRadialPush(
+          index: index, time: time, level: 1)
+        let handedOff = NotchVoiceMorphGeometry.speakingRadialPush(
+          index: (index + 1) % NotchVoiceMorphGeometry.dotCount,
+          time: time + dotStep,
+          level: 1)
+        XCTAssertEqual(handedOff, here, accuracy: 0.0001)
+      }
+    }
+    // The reversed hand-off does not reproduce it — the travel is
+    // unidirectional, not a standing oscillation.
+    let forward = NotchVoiceMorphGeometry.speakingRadialPush(index: 3, time: 0.4, level: 1)
+    let reversed = NotchVoiceMorphGeometry.speakingRadialPush(
+      index: 2, time: 0.4 + dotStep, level: 1)
+    XCTAssertNotEqual(forward, reversed, accuracy: 0.05)
+  }
+
   func testSilenceAndRoomNoiseRenderFlatButRealSpeechFillsTheRange() {
     let display = VoiceLevelDisplay(minPeak: 0.035)
     // Silence and ambient room noise (0.005–0.013 measured on real hardware)
@@ -191,6 +215,30 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
       level = display.step(rawLevel: 0, at: 1.0 + Double(i) * 0.016)
     }
     XCTAssertLessThan(level, 0.05)
+  }
+
+  func testQuietPhraseTailRidesThroughTheGateInsteadOfFlatlining() {
+    let display = VoiceLevelDisplay(minPeak: 0.035, peakHalfLife: 2)
+    var t = 0.0
+    for _ in 0..<20 {
+      _ = display.step(rawLevel: 0.1, at: t)
+      t += 0.016
+    }
+    // The trailing end of the phrase drops below the opening gate while the
+    // speaker is still talking; within the hangover it must stay visible.
+    var tail: CGFloat = 1
+    for _ in 0..<20 {
+      tail = display.step(rawLevel: 0.011, at: t)
+      t += 0.016
+    }
+    XCTAssertGreaterThan(tail, 0.05, "Tail-of-phrase speech must not flatline mid-word")
+    // But once the speaker actually stops, silence still closes the wave —
+    // and true near-silence never renders, hangover or not.
+    for _ in 0..<80 {
+      tail = display.step(rawLevel: 0.004, at: t)
+      t += 0.016
+    }
+    XCTAssertLessThan(tail, 0.05)
   }
 
   func testAutoGainAdaptsToLoudSpeechButKeepsQuietWordsVisible() {
