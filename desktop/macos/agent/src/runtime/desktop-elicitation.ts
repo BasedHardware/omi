@@ -267,13 +267,70 @@ export interface AskUserArgs {
   args: unknown;
 }
 
+/**
+ * Keys a model plausibly uses for the human-readable part of an option, in the
+ * order we trust them. `label` is what the tool documents; the rest are what
+ * models actually send.
+ */
+const OPTION_LABEL_KEYS = ["label", "description", "title", "name", "text", "value"] as const;
+
+function labelFromOptionRecord(record: Record<string, unknown>): string | null {
+  for (const key of OPTION_LABEL_KEYS) {
+    const label = asNonEmptyString(record[key]);
+    if (label) return label;
+  }
+  return null;
+}
+
+/**
+ * Pull the human-readable label out of one option entry.
+ *
+ * Models send this three ways: a plain string, an object, and — the one that
+ * bit us — an object serialized to a JSON string. Taking a string verbatim
+ * rendered `{"description": "..."}` on the card as though it were the answer
+ * text, so a string that parses to an object is unwrapped before it is trusted
+ * as a label.
+ */
+function labelFromOptionEntry(entry: unknown): string | null {
+  const record = asRecord(entry);
+  if (record) return labelFromOptionRecord(record);
+
+  const direct = asNonEmptyString(entry);
+  if (!direct) return null;
+
+  const trimmed = direct.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      const parsedRecord = asRecord(parsed);
+      if (parsedRecord) return labelFromOptionRecord(parsedRecord) ?? null;
+      const parsedString = asNonEmptyString(parsed);
+      if (parsedString) return parsedString;
+      // Parsed to something with no readable label — an array, a number. The
+      // raw JSON is not an answer a person can choose, so drop it rather than
+      // print it.
+      return null;
+    } catch {
+      // Not JSON after all; a question can legitimately offer a label that
+      // merely starts with a brace.
+      return direct;
+    }
+  }
+  return direct;
+}
+
 function normalizeAskUserOptions(rawOptions: unknown): ElicitationOption[] {
   if (!Array.isArray(rawOptions)) return [];
   const options: ElicitationOption[] = [];
+  const seen = new Set<string>();
   for (const entry of rawOptions) {
-    const label = typeof entry === "string" ? entry : asNonEmptyString(asRecord(entry)?.label);
+    const label = labelFromOptionEntry(entry);
     if (!label) continue;
     const optionId = asNonEmptyString(asRecord(entry)?.id) ?? label;
+    // Two identical ids would make the answer ambiguous, and a duplicate row is
+    // not a choice the user can meaningfully make.
+    if (seen.has(optionId)) continue;
+    seen.add(optionId);
     options.push({ optionId, label, effect: "choice" });
   }
   return options;

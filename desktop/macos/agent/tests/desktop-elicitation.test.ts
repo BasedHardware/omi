@@ -313,6 +313,86 @@ describe("ask_user normalization", () => {
     expect(requests[1].options.map((option) => option.label)).toEqual(["Vercel", "Fly"]);
   });
 
+  it("unwraps an option the model serialized to a JSON string", () => {
+    // Observed live: options arrived as JSON text, so the card rendered
+    // {"description": "..."} as though the braces were part of the answer.
+    const [request] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [{
+          question: "What does the project do?",
+          options: [
+            '{"description": "Something you\'ll share with people you know"}',
+            '{"label": "A tool others discover and sign up for"}',
+            "A plain string option",
+          ],
+        }],
+      },
+    });
+
+    expect(request.options.map((option) => option.label)).toEqual([
+      "Something you'll share with people you know",
+      "A tool others discover and sign up for",
+      "A plain string option",
+    ]);
+    for (const option of request.options) {
+      expect(option.label).not.toContain("{");
+    }
+  });
+
+  it("reads the label from whichever key the model used", () => {
+    const [request] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [{
+          question: "Pick",
+          options: [
+            { description: "by description" },
+            { title: "by title" },
+            { name: "by name" },
+            { value: "by value" },
+            { id: "stable", label: "by label" },
+          ],
+        }],
+      },
+    });
+
+    expect(request.options.map((option) => option.label)).toEqual([
+      "by description", "by title", "by name", "by value", "by label",
+    ]);
+    expect(request.options.at(-1)?.optionId).toBe("stable");
+  });
+
+  it("keeps a label that merely starts with a brace, and drops unreadable JSON", () => {
+    const [request] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [{
+          question: "Pick",
+          options: ["{not json after all", "[1,2,3]", "{}", "real option"],
+        }],
+      },
+    });
+
+    expect(request.options.map((option) => option.label)).toEqual([
+      "{not json after all",
+      "real option",
+    ]);
+  });
+
+  it("drops a duplicate option rather than offering the same answer twice", () => {
+    const [request] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: { questions: [{ question: "Pick", options: ["Vercel", "Vercel", "Fly"] }] },
+    });
+
+    expect(request.options.map((option) => option.label)).toEqual(["Vercel", "Fly"]);
+  });
+
   it("drops an entry that asks nothing rather than carding an empty question", () => {
     const requests = normalizeAskUser({
       adapterId: "acp",
