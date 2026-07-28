@@ -21,7 +21,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
-from database.users import get_agent_vm
+from database.users import get_agent_vm, update_agent_vm, clear_agent_vm
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
@@ -176,8 +176,6 @@ def _update_firestore_vm(uid: str, ip: str | None, status: str):
     persisted: it is truthy, so it passes each `if ip:` reader, fails every
     health probe, and leaves the record permanently unrepairable.
     """
-    from database.users import db as firestore_db
-
     if status == "ready" and not _is_usable_vm_ip(ip):
         raise ValueError(f"refusing to persist ready agentVm without usable ip for uid={uid}")
 
@@ -186,7 +184,7 @@ def _update_firestore_vm(uid: str, ip: str | None, status: str):
         if not _is_usable_vm_ip(ip):
             raise ValueError(f"refusing to persist unusable agentVm.ip for uid={uid}")
         update["agentVm.ip"] = ip
-    firestore_db.collection('users').document(uid).update(update)
+    update_agent_vm(uid, update)
 
 
 def _clear_agent_vm(uid: str):
@@ -196,10 +194,7 @@ def _clear_agent_vm(uid: str):
     provision endpoint reports `exists`, so keeping it leaves the user's agent
     permanently broken. Clearing it is what lets a replacement be provisioned.
     """
-    from google.cloud import firestore
-    from database.users import db as firestore_db
-
-    firestore_db.collection('users').document(uid).update({"agentVm": firestore.DELETE_FIELD})
+    clear_agent_vm(uid)
 
 
 async def _restart_vm_background(uid: str, vm_name: str, zone: str):

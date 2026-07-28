@@ -121,3 +121,21 @@ def get_screen_activity_summary(
         'apps': apps,
         'total_screenshots': len(rows),
     }
+
+
+def get_screen_activity_ocr_text(uid: str, sid: str, max_len: int = 200) -> str:
+    """Return the OCR text for one screen-activity document, truncated to max_len.
+
+    Returns '' if the document is missing or has no OCR text.
+    """
+    doc = (
+        db.collection(USERS_COLLECTION)
+        .document(uid)
+        .collection(SCREEN_ACTIVITY_COLLECTION)
+        .document(str(sid))
+        .get()
+    )
+    if getattr(doc, 'exists', False):
+        data = cast(Dict[str, Any], doc.to_dict() or {})
+        return (data.get('ocrText', '') or '')[:max_len]
+    return ''

@@ -1870,6 +1870,16 @@ def get_agent_vm(uid: str) -> Optional[dict]:
     return None
 
 
+def update_agent_vm(uid: str, update: dict) -> None:
+    """Apply a partial update to the user's agentVm fields (dotted-key update dict)."""
+    db.collection('users').document(uid).update(update)
+
+
+def clear_agent_vm(uid: str) -> None:
+    """Delete the user's agentVm record."""
+    db.collection('users').document(uid).update({'agentVm': firestore.DELETE_FIELD})
+
+
 def set_user_transcription_preferences(uid: str, single_language_mode: bool = None, vocabulary: list = None) -> None:
     """
     Set the user's transcription preferences.
