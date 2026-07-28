@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -12,8 +13,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from pr_metadata import PullRequestMetadata, load_from_api, load_from_gh
-from run_checks import load_manifest, resolve_checks
+from pr_metadata import TransientPRMetadataError, PullRequestMetadata, load_from_api, load_from_event_file, load_from_gh
+from run_checks import detect_platform, load_manifest, resolve_checks
 
 
 @dataclass(frozen=True)
@@ -35,14 +36,56 @@ def run_git(root: Path, *args: str) -> str:
 
 
 def changed_files(root: Path, base: str, head: str) -> list[str]:
-    output = run_git(root, "diff", "--name-only", "--diff-filter=ACMR", f"{base}...{head}")
+    output = run_git(
+        root,
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--diff-filter=ACMRTD",
+        f"{base}...{head}",
+    )
     return [line for line in output.splitlines() if line]
 
 
-def select_checks(files: list[str], lane: str = "ci") -> list[Check]:
+def select_checks(files: list[str], lane: str = "ci", platform: str | None = None) -> list[Check]:
     root = Path(__file__).resolve().parents[2]
     manifest = load_manifest(root / ".github/checks-manifest.yaml")
-    return [Check(check.id, check.reason) for check in resolve_checks(manifest, files, lane)]
+    return [
+        Check(check.id, check.reason)
+        for check in resolve_checks(manifest, files, lane, platform=platform or detect_platform())
+    ]
+
+
+def format_failure_class_suggest(payload: dict) -> str:
+    """Render manual failure-class guidance alongside invariant suggestions.
+
+    Failure classes deliberately do not infer a classification from paths or a
+    diff. This formatter therefore supplies the required field and structured
+    choices while making the author-owned decision explicit.
+    """
+    lines = ["## Failure class (fixes)", ""]
+    if not payload.get("requires_declaration"):
+        lines.extend(["No `fix:` commits were detected; no declaration is required.", ""])
+        return "\n".join(lines)
+
+    patch = payload.get("pr_body_patch", {})
+    declaration = (
+        patch.get("text", "Failure-Class: none\n").strip() if isinstance(patch, dict) else "Failure-Class: none"
+    )
+    lines.extend(
+        [
+            declaration,
+            "",
+            "<!-- A `fix:` commit is in this diff. Choose manually: this command does not infer a class from paths or diffs.",
+            "Before opening the PR, inspect a relevant class with `scripts/failure-class explain FC-<slug> --format json`; replace `none` only if an existing class applies, or use `new` for a genuinely new class.",
+            "Available classes:",
+        ]
+    )
+    for candidate in payload.get("advisory_candidates", []):
+        if isinstance(candidate, dict):
+            lines.append(f"- {candidate['id']}: {candidate['violated_contract']}")
+    lines.extend(["-->", ""])
+    return "\n".join(lines)
 
 
 def resolve_pr_metadata(
@@ -50,6 +93,7 @@ def resolve_pr_metadata(
     body_file: Path | None,
     repository: str | None,
     pr_number: int | None,
+    event_payload_file: Path | None,
 ) -> PullRequestMetadata | None:
     if body_file is None:
         env_body = os.getenv("OMI_PR_BODY_FILE", "").strip()
@@ -67,7 +111,17 @@ def resolve_pr_metadata(
             source=str(resolved.resolve()),
         )
     if repository and pr_number:
-        return load_from_api(repository, pr_number, os.getenv("GITHUB_TOKEN", ""))
+        try:
+            return load_from_api(repository, pr_number, os.getenv("GITHUB_TOKEN", ""))
+        except TransientPRMetadataError as api_error:
+            if event_payload_file is None:
+                raise
+            try:
+                metadata = load_from_event_file(event_payload_file, pr_number)
+            except RuntimeError as event_error:
+                raise RuntimeError(f"{api_error}; GitHub event fallback failed: {event_error}") from event_error
+            print(f"WARNING: {api_error}; using the PR snapshot from {event_payload_file}.", file=sys.stderr)
+            return metadata
     try:
         return load_from_gh(root)
     except RuntimeError as exc:
@@ -85,12 +139,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pr-body-file", type=Path)
     parser.add_argument("--repository", help="GitHub repository as owner/name; requires --pr-number")
     parser.add_argument("--pr-number", type=int, help="Load current PR metadata through the GitHub API")
+    parser.add_argument(
+        "--event-payload-file",
+        type=Path,
+        help="Use the triggering pull_request event only after transient GitHub API metadata failures",
+    )
     parser.add_argument("--head-branch", help="PR head branch, used for release-changelog policy")
     parser.add_argument("--list", action="store_true", help="Print selected checks without running them")
     parser.add_argument(
         "--suggest",
         action="store_true",
-        help="Print a paste-ready product-invariants PR body section for the diff and exit 0",
+        help="Print paste-ready product-invariant and failure-class PR guidance for the diff and exit 0",
     )
     parser.add_argument("--root", type=Path)
     return parser.parse_args()
@@ -122,7 +181,7 @@ def main() -> int:
         files_path = temp / "changed-files.txt"
         files_path.write_text("".join(f"{path}\n" for path in files), encoding="utf-8")
         if args.suggest:
-            return subprocess.run(
+            invariants = subprocess.run(
                 [
                     sys.executable,
                     ".github/scripts/check_product_invariants.py",
@@ -132,10 +191,57 @@ def main() -> int:
                 ],
                 cwd=root,
                 check=False,
-            ).returncode
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            if invariants.stdout:
+                print(invariants.stdout, end="")
+            if invariants.returncode:
+                return invariants.returncode
+
+            suggestion_body = temp / "suggest-pr-body.md"
+            suggestion_body.write_text("", encoding="utf-8")
+            failure_classes = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/failure-class",
+                    "prepare",
+                    "--base",
+                    args.base,
+                    "--head",
+                    args.head,
+                    "--pr-body-file",
+                    str(suggestion_body),
+                    "--format",
+                    "json",
+                ],
+                cwd=root,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            if failure_classes.returncode:
+                print("FAIL: failure-class preparation failed.", file=sys.stderr)
+                if failure_classes.stdout:
+                    print(failure_classes.stdout, end="", file=sys.stderr)
+                return failure_classes.returncode
+            try:
+                payload = json.loads(failure_classes.stdout)
+            except json.JSONDecodeError:
+                print(
+                    "FAIL: failure-class preparation returned invalid JSON.",
+                    file=sys.stderr,
+                )
+                return 1
+            print(format_failure_class_suggest(payload), end="")
+            return 0
 
         try:
-            metadata = resolve_pr_metadata(root, args.pr_body_file, args.repository, args.pr_number)
+            metadata = resolve_pr_metadata(
+                root, args.pr_body_file, args.repository, args.pr_number, args.event_payload_file
+            )
         except RuntimeError as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1

@@ -2,7 +2,7 @@ import Foundation
 
 /// Loads bundle `.env` into the process environment before Firebase/auth bootstrap.
 enum BundleEnvironment {
-  private static var didLoad = false
+  private nonisolated(unsafe) static var didLoad = false
   /// Capture process-provided values before any bundled environment file is
   /// applied. This makes explicit `open`/launchd overrides authoritative while
   /// retaining the existing merge order between bundled, working-directory,

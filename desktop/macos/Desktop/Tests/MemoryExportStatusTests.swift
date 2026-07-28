@@ -7,6 +7,7 @@ final class MemoryExportStatusTests: XCTestCase {
 
   override func setUp() {
     super.setUp()
+    DesktopDiagnosticsManager.shared.resetForTests()
     resetMemoryExportDefaults()
     tempHome = FileManager.default.temporaryDirectory
       .appendingPathComponent("memory-export-status-\(UUID().uuidString)", isDirectory: true)
@@ -39,6 +40,18 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertFalse(claudeCodeStatus.hasConnection)
     XCTAssertFalse(openClawStatus.hasConnection)
     XCTAssertFalse(hermesStatus.hasConnection)
+  }
+
+  /// The ChatGPT directory listing is a single global plugin that always
+  /// authorizes under `omi-chatgpt-prod`, even on a build pointed at the dev
+  /// backend. Grant verification must accept that prod client ID regardless of
+  /// `chatgptOAuthClientID`'s env switch, or ChatGPT never flips to connected on
+  /// Beta (the shipped symptom: Claude verified, ChatGPT stuck).
+  func testChatGPTGrantVerificationAcceptsProdDirectoryClientOnAnyBackend() {
+    XCTAssertTrue(MemoryExportDestination.chatgpt.cloudOAuthGrantClientIDs.contains("omi-chatgpt-prod"))
+    XCTAssertTrue(MemoryExportDestination.chatgpt.cloudOAuthGrantClientIDs.contains("omi-chatgpt-dev"))
+    XCTAssertEqual(MemoryExportDestination.claude.cloudOAuthGrantClientIDs, ["omi-claude-prod"])
+    XCTAssertTrue(MemoryExportDestination.notion.cloudOAuthGrantClientIDs.isEmpty)
   }
 
   func testMarkConnectedDoesNotMaskMissingLocalMCPConfig() async {
@@ -76,6 +89,21 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertEqual(presentation.primaryActionTitle, "Add Omi to ChatGPT")
   }
 
+  func testCachedCloudGrantStatusReadSignalsInferredConnectorAuthority() async {
+    await MemoryExportService.shared.markConnected(.chatgpt)
+
+    let status = await MemoryExportService.shared.status(for: .chatgpt)
+
+    XCTAssertTrue(status.hasConnection)
+    let signal = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().last {
+      $0["seam"] as? String == DesktopStateAuthoritySeam.connectorStatus.rawValue
+    }
+    XCTAssertEqual(signal?["direction"] as? String, "cloud_grant_status_inferred")
+    XCTAssertEqual(signal?["from"] as? String, "cached_or_derived")
+    XCTAssertEqual(signal?["to"] as? String, "connected")
+    XCTAssertEqual(signal?["subject"] as? String, "chatgpt")
+  }
+
   func testOnlyLocalAgentSetupDestinationsHaveLocallyVerifiableLiveSetup() {
     XCTAssertFalse(MemoryExportDestination.chatgpt.hasLocallyVerifiableLiveSetup)
     XCTAssertFalse(MemoryExportDestination.claude.hasLocallyVerifiableLiveSetup)
@@ -91,10 +119,10 @@ final class MemoryExportStatusTests: XCTestCase {
     let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
     try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
     try """
-      [mcp_servers.omi-memory]
-      command = "npx"
-      args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
-      """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
 
     let codexStatus = await MemoryExportService.shared.status(for: .codex)
     let chatGPTStatus = await MemoryExportService.shared.status(for: .chatgpt)
@@ -121,10 +149,10 @@ final class MemoryExportStatusTests: XCTestCase {
     let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
     try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
     try """
-      [mcp_servers.omi-memory]
-      command = "npx"
-      args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
-      """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
 
     statuses = await MemoryExportService.shared.allStatuses()
     let presentation = MemoryExportConnectionPresentation.make(
@@ -149,10 +177,10 @@ final class MemoryExportStatusTests: XCTestCase {
     let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
     try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
     try """
-      [mcp_servers.omi-memory]
-      command = "npx"
-      args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer old-key"]
-      """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer old-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
 
     let status = await MemoryExportService.shared.status(for: .codex)
 
@@ -164,10 +192,10 @@ final class MemoryExportStatusTests: XCTestCase {
     let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
     try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
     try """
-      [mcp_servers.omi-memory]
-      command = "npx"
-      args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
-      """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
 
     let status = await MemoryExportService.shared.status(for: .codex)
 
@@ -180,10 +208,10 @@ final class MemoryExportStatusTests: XCTestCase {
     let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
     try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
     try """
-      # [mcp_servers.omi-memory]
-      # command = "npx"
-      # args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
-      """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+    # [mcp_servers.omi-memory]
+    # command = "npx"
+    # args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
 
     let status = await MemoryExportService.shared.status(for: .codex)
 
@@ -193,18 +221,18 @@ final class MemoryExportStatusTests: XCTestCase {
   func testExistingClaudeMCPConfigMarksClaudeCodeConnected() async throws {
     storeOwnedMCPKey()
     try """
-      {
-        "mcpServers": {
-          "omi-memory": {
-            "type": "http",
-            "url": "\(MemoryExportDestination.mcpServerURL)",
-            "headers": {
-              "Authorization": "Bearer test-key"
-            }
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpServerURL)",
+          "headers": {
+            "Authorization": "Bearer test-key"
           }
         }
       }
-      """.write(to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+    }
+    """.write(to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
 
     let status = await MemoryExportService.shared.status(for: .claudeCode)
 
@@ -218,18 +246,18 @@ final class MemoryExportStatusTests: XCTestCase {
       "Library/Application Support/Claude", isDirectory: true)
     try FileManager.default.createDirectory(at: claudeDesktop, withIntermediateDirectories: true)
     try """
-      {
-        "mcpServers": {
-          "omi-memory": {
-            "type": "http",
-            "url": "\(MemoryExportDestination.mcpServerURL)",
-            "headers": {
-              "Authorization": "Bearer test-key"
-            }
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpServerURL)",
+          "headers": {
+            "Authorization": "Bearer test-key"
           }
         }
       }
-      """.write(to: claudeDesktop.appendingPathComponent("claude_desktop_config.json"), atomically: true, encoding: .utf8)
+    }
+    """.write(to: claudeDesktop.appendingPathComponent("claude_desktop_config.json"), atomically: true, encoding: .utf8)
 
     let claudeStatus = await MemoryExportService.shared.status(for: .claude)
     let claudeCodeStatus = await MemoryExportService.shared.status(for: .claudeCode)
@@ -245,20 +273,20 @@ final class MemoryExportStatusTests: XCTestCase {
     let openClaw = tempHome.appendingPathComponent(".openclaw", isDirectory: true)
     try FileManager.default.createDirectory(at: openClaw, withIntermediateDirectories: true)
     try """
-      {
-        "mcp": {
-          "servers": {
-            "omi-memory": {
-              "enabled": false,
-              "url": "\(MemoryExportDestination.mcpServerURL)",
-              "headers": {
-                "Authorization": "Bearer test-key"
-              }
+    {
+      "mcp": {
+        "servers": {
+          "omi-memory": {
+            "enabled": false,
+            "url": "\(MemoryExportDestination.mcpServerURL)",
+            "headers": {
+              "Authorization": "Bearer test-key"
             }
           }
         }
       }
-      """.write(to: openClaw.appendingPathComponent("openclaw.json"), atomically: true, encoding: .utf8)
+    }
+    """.write(to: openClaw.appendingPathComponent("openclaw.json"), atomically: true, encoding: .utf8)
 
     let status = await MemoryExportService.shared.status(for: .openclaw)
 
@@ -270,11 +298,11 @@ final class MemoryExportStatusTests: XCTestCase {
     let hermes = tempHome.appendingPathComponent(".hermes", isDirectory: true)
     try FileManager.default.createDirectory(at: hermes, withIntermediateDirectories: true)
     try """
-      mcp_servers:
-      #  omi-memory:
-      #    command: npx
-      #    args: ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
-      """.write(to: hermes.appendingPathComponent("config.yaml"), atomically: true, encoding: .utf8)
+    mcp_servers:
+    #  omi-memory:
+    #    command: npx
+    #    args: ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: hermes.appendingPathComponent("config.yaml"), atomically: true, encoding: .utf8)
 
     let status = await MemoryExportService.shared.status(for: .hermes)
 
@@ -286,11 +314,11 @@ final class MemoryExportStatusTests: XCTestCase {
     let hermes = tempHome.appendingPathComponent(".hermes", isDirectory: true)
     try FileManager.default.createDirectory(at: hermes, withIntermediateDirectories: true)
     try """
-      mcp_servers:
-        omi-memory:
-          command: npx
-          args: ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
-      """.write(to: hermes.appendingPathComponent("config.yaml"), atomically: true, encoding: .utf8)
+    mcp_servers:
+      omi-memory:
+        command: npx
+        args: ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: hermes.appendingPathComponent("config.yaml"), atomically: true, encoding: .utf8)
 
     let status = await MemoryExportService.shared.status(for: .hermes)
 
@@ -316,18 +344,18 @@ final class MemoryExportStatusTests: XCTestCase {
     let config = codex.appendingPathComponent("config.toml")
     try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
     try """
-      [mcp_servers.omi-memory]
-      command = "npx"
-      args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
-      """.write(to: config, atomically: true, encoding: .utf8)
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: config, atomically: true, encoding: .utf8)
 
     XCTAssertTrue(MemoryExportConnectionDetector.hasExistingConnection(for: .codex, matchingKey: "test-key"))
 
     try """
-      [mcp_servers.other]
-      command = "npx"
-      args = ["different-size"]
-      """.write(to: config, atomically: true, encoding: .utf8)
+    [mcp_servers.other]
+    command = "npx"
+    args = ["different-size"]
+    """.write(to: config, atomically: true, encoding: .utf8)
 
     XCTAssertFalse(MemoryExportConnectionDetector.hasExistingConnection(for: .codex, matchingKey: "test-key"))
   }

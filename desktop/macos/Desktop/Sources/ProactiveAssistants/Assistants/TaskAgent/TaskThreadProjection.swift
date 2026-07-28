@@ -1,6 +1,6 @@
 import Foundation
 
-protocol TaskWorkstreamAPI {
+protocol TaskWorkstreamAPI: Sendable {
   func workflowControl(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.TaskWorkflowControl
@@ -342,102 +342,102 @@ enum TaskThreadContextPacket {
 /// Privacy-safe product context for the scenario harness. Artifact state is
 /// supplied by the running kernel bridge rather than frozen in this fixture.
 #if DEBUG
-enum TaskThreadScenario13Fixture {
-  static let workstreamID = "scenario-13-workstream"
-  static let firstTaskID = "scenario-13-task-draft"
-  static let secondTaskID = "scenario-13-task-review"
+  enum TaskThreadScenario13Fixture {
+    static let workstreamID = "scenario-13-workstream"
+    static let firstTaskID = "scenario-13-task-draft"
+    static let secondTaskID = "scenario-13-task-review"
 
-  static var baseDetail: OmiAPI.WorkstreamDetailProjection {
-    let json = """
-      {
-        "workstream": {
-          "workstream_id": "scenario-13-workstream",
-          "title": "Prepare the launch email",
-          "objective": "Draft, revise, and approve the launch email",
-          "status": "open",
-          "current_state_summary": "The Friday date is incorporated in v2; approval is still pending.",
-          "latest_event_sequence": 3,
-          "created_at": "2026-07-09T10:00:00Z",
-          "updated_at": "2026-07-09T12:00:00Z"
-        },
-        "tasks": [
-          {
-            "id": "scenario-13-task-draft",
-            "description": "Draft the launch email",
-            "completed": true,
-            "status": "completed",
+    static var baseDetail: OmiAPI.WorkstreamDetailProjection {
+      let json = """
+        {
+          "workstream": {
             "workstream_id": "scenario-13-workstream",
+            "title": "Prepare the launch email",
+            "objective": "Draft, revise, and approve the launch email",
+            "status": "open",
+            "current_state_summary": "The Friday date is incorporated in v2; approval is still pending.",
+            "latest_event_sequence": 3,
             "created_at": "2026-07-09T10:00:00Z",
-            "updated_at": "2026-07-09T11:00:00Z"
+            "updated_at": "2026-07-09T12:00:00Z"
           },
-          {
-            "id": "scenario-13-task-review",
-            "description": "Review and approve the launch email",
-            "completed": false,
-            "status": "active",
-            "workstream_id": "scenario-13-workstream",
-            "created_at": "2026-07-09T10:05:00Z",
-            "updated_at": "2026-07-09T12:00:00Z",
-            "provenance": [
-              {"kind":"conversation","id":"conversation-friday","scope":"canonical","version":"conversation.v1"}
-            ]
-          }
-        ],
-        "recent_events": [
-          {
-            "event_id": "event-created",
-            "workstream_id": "scenario-13-workstream",
-            "sequence": 1,
-            "kind": "user_note",
-            "summary": "Draft requested",
-            "sensitivity": "normal",
-            "created_at": "2026-07-09T10:00:00Z"
-          },
-          {
-            "event_id": "event-friday",
-            "workstream_id": "scenario-13-workstream",
-            "sequence": 3,
-            "kind": "conversation",
-            "summary": "Launch date changed to Friday",
-            "sensitivity": "normal",
-            "created_at": "2026-07-09T12:00:00Z",
-            "evidence_refs": [
-              {"kind":"conversation","id":"conversation-friday","scope":"canonical","version":"conversation.v1"}
-            ]
-          },
-          {
-            "event_id": "event-sensitive",
-            "workstream_id": "scenario-13-workstream",
-            "sequence": 2,
-            "kind": "user_note",
-            "summary": "Confidential acquisition detail",
-            "sensitivity": "sensitive",
-            "created_at": "2026-07-09T11:30:00Z"
-          }
-        ],
-        "artifacts": [],
-        "checkpoints": []
+          "tasks": [
+            {
+              "id": "scenario-13-task-draft",
+              "description": "Draft the launch email",
+              "completed": true,
+              "status": "completed",
+              "workstream_id": "scenario-13-workstream",
+              "created_at": "2026-07-09T10:00:00Z",
+              "updated_at": "2026-07-09T11:00:00Z"
+            },
+            {
+              "id": "scenario-13-task-review",
+              "description": "Review and approve the launch email",
+              "completed": false,
+              "status": "active",
+              "workstream_id": "scenario-13-workstream",
+              "created_at": "2026-07-09T10:05:00Z",
+              "updated_at": "2026-07-09T12:00:00Z",
+              "provenance": [
+                {"kind":"conversation","id":"conversation-friday","scope":"canonical","version":"conversation.v1"}
+              ]
+            }
+          ],
+          "recent_events": [
+            {
+              "event_id": "event-created",
+              "workstream_id": "scenario-13-workstream",
+              "sequence": 1,
+              "kind": "user_note",
+              "summary": "Draft requested",
+              "sensitivity": "normal",
+              "created_at": "2026-07-09T10:00:00Z"
+            },
+            {
+              "event_id": "event-friday",
+              "workstream_id": "scenario-13-workstream",
+              "sequence": 3,
+              "kind": "conversation",
+              "summary": "Launch date changed to Friday",
+              "sensitivity": "normal",
+              "created_at": "2026-07-09T12:00:00Z",
+              "evidence_refs": [
+                {"kind":"conversation","id":"conversation-friday","scope":"canonical","version":"conversation.v1"}
+              ]
+            },
+            {
+              "event_id": "event-sensitive",
+              "workstream_id": "scenario-13-workstream",
+              "sequence": 2,
+              "kind": "user_note",
+              "summary": "Confidential acquisition detail",
+              "sensitivity": "sensitive",
+              "created_at": "2026-07-09T11:30:00Z"
+            }
+          ],
+          "artifacts": [],
+          "checkpoints": []
+        }
+        """
+      do {
+        return try JSONDecoder().decode(
+          OmiAPI.WorkstreamDetailProjection.self,
+          from: Data(json.utf8)
+        )
+      } catch {
+        preconditionFailure("Invalid scenario-13 task-thread fixture: \(error)")
       }
-      """
-    do {
-      return try JSONDecoder().decode(
-        OmiAPI.WorkstreamDetailProjection.self,
-        from: Data(json.utf8)
+    }
+
+    static func detail(artifacts: [OmiAPI.ArtifactDescriptor]) -> OmiAPI.WorkstreamDetailProjection {
+      let base = baseDetail
+      return OmiAPI.WorkstreamDetailProjection(
+        artifacts: artifacts,
+        checkpoints: base.checkpoints,
+        recentEvents: base.recentEvents,
+        tasks: base.tasks,
+        workstream: base.workstream
       )
-    } catch {
-      preconditionFailure("Invalid scenario-13 task-thread fixture: \(error)")
     }
   }
-
-  static func detail(artifacts: [OmiAPI.ArtifactDescriptor]) -> OmiAPI.WorkstreamDetailProjection {
-    let base = baseDetail
-    return OmiAPI.WorkstreamDetailProjection(
-      artifacts: artifacts,
-      checkpoints: base.checkpoints,
-      recentEvents: base.recentEvents,
-      tasks: base.tasks,
-      workstream: base.workstream
-    )
-  }
-}
 #endif

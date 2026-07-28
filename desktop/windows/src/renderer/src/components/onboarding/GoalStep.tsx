@@ -41,9 +41,7 @@ function GoalCard({
       onClick={onClick}
       className={
         'rounded-xl px-5 py-4 text-left text-sm font-medium transition-colors ' +
-        (selected
-          ? 'bg-white text-black'
-          : 'bg-white/[0.06] text-white/80 hover:bg-white/[0.1]') +
+        (selected ? 'bg-white text-black' : 'bg-white/[0.06] text-white/80 hover:bg-white/[0.1]') +
         ' ' +
         className
       }

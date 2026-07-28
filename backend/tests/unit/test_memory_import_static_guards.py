@@ -7,6 +7,7 @@ IMPORT_MARKERS = ("import_kind", "sourceType: \"gmail\"", "sourceType: \"apple_n
 IMPORTER_NAME_MARKERS = ("Import", "ReaderService", "OnboardingPagedIntroCoordinator")
 ALLOWLIST = {
     DESKTOP_SOURCES / "APIClient.swift",
+    DESKTOP_SOURCES / "Services" / "APIClient" / "APIClient+Memories.swift",
     DESKTOP_SOURCES / "Onboarding" / "OnboardingImportEvidenceService.swift",
 }
 
@@ -49,7 +50,7 @@ def test_desktop_importers_pair_legacy_payloads_with_import_evidence_calls():
 
 
 def test_import_evidence_client_targets_import_endpoint():
-    source = (DESKTOP_SOURCES / "APIClient.swift").read_text(encoding="utf-8")
+    source = "\n".join(path.read_text(encoding="utf-8") for path in sorted(DESKTOP_SOURCES.rglob("APIClient*.swift")))
     assert 'post("v3/memory-imports/batch"' in source
     assert "func createMemoryImportBatch" in source
 

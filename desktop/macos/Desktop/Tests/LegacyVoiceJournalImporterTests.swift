@@ -7,18 +7,16 @@ final class LegacyVoiceJournalImporterTests: XCTestCase {
   private var defaults: UserDefaults!
   private var suiteName: String!
 
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
     suiteName = "LegacyVoiceJournalImporterTests.\(UUID().uuidString)"
     defaults = UserDefaults(suiteName: suiteName)
     defaults.removePersistentDomain(forName: suiteName)
   }
 
-  override func tearDown() {
+  override func tearDown() async throws {
     defaults.removePersistentDomain(forName: suiteName)
     defaults = nil
     suiteName = nil
-    super.tearDown()
   }
 
   func testImportIsBoundedOwnerScopedAndOnlyDeletesAcknowledgedEntries() throws {

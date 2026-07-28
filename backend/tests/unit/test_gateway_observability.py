@@ -4,6 +4,12 @@ import logging
 from unittest.mock import MagicMock
 
 from utils.llm import gateway_observability
+from utils.llm import gateway_client
+from utils.llm.gateway_client import (
+    LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
+    LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
+    raise_if_gateway_feature_mode_blocks_direct_model_surface,
+)
 
 
 class _CounterStub:
@@ -76,13 +82,6 @@ def test_record_direct_exception_surface_increments_counter(monkeypatch):
 
 
 def test_raise_if_gateway_feature_mode_records_direct_exception_when_allowed(monkeypatch):
-    from utils.llm import gateway_client
-    from utils.llm.gateway_client import (
-        LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
-        LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
-        raise_if_gateway_feature_mode_blocks_direct_model_surface,
-    )
-
     recorded: list[dict[str, str]] = []
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, 'true')

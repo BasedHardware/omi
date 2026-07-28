@@ -132,7 +132,8 @@ final class ChatStreamingBuffer {
     switch (last, segment) {
     case (.text(let lastMessageId, let existing), .text(let messageId, let text)) where lastMessageId == messageId:
       pendingSegments[pendingSegments.count - 1] = .text(messageId: messageId, text: existing + text)
-    case (.thinking(let lastMessageId, let existing), .thinking(let messageId, let text)) where lastMessageId == messageId:
+    case (.thinking(let lastMessageId, let existing), .thinking(let messageId, let text))
+    where lastMessageId == messageId:
       pendingSegments[pendingSegments.count - 1] = .thinking(messageId: messageId, text: existing + text)
     default:
       pendingSegments.append(segment)
@@ -147,7 +148,8 @@ final class ChatStreamingBuffer {
     message.text = normalizeText(message, message.text + text)
 
     if let lastBlockIndex = message.contentBlocks.indices.last,
-       case .text(let blockId, let existing) = message.contentBlocks[lastBlockIndex] {
+      case .text(let blockId, let existing) = message.contentBlocks[lastBlockIndex]
+    {
       message.contentBlocks[lastBlockIndex] = .text(
         id: blockId,
         text: normalizeText(message, existing + text)
@@ -161,7 +163,8 @@ final class ChatStreamingBuffer {
 
   private func appendThinkingSegment(_ text: String, to message: inout ChatMessage) {
     if let lastBlockIndex = message.contentBlocks.indices.last,
-       case .thinking(let thinkId, let existing) = message.contentBlocks[lastBlockIndex] {
+      case .thinking(let thinkId, let existing) = message.contentBlocks[lastBlockIndex]
+    {
       message.contentBlocks[lastBlockIndex] = .thinking(id: thinkId, text: existing + text)
     } else {
       message.contentBlocks.append(.thinking(id: UUID().uuidString, text: text))
@@ -197,7 +200,8 @@ enum ToolCallBlockUpdater {
         toolUseId: normalizedToolUseId
       ) {
         if case .toolCall(let id, let name, let existingStatus, let existingToolUseId, let existingInput, let output) =
-          blocks[existingIndex] {
+          blocks[existingIndex]
+        {
           blocks[existingIndex] = .toolCall(
             id: id,
             name: name,
@@ -223,15 +227,17 @@ enum ToolCallBlockUpdater {
     }
 
     for index in blocks.indices {
-      guard case .toolCall(let id, let name, let existingStatus, let existingToolUseId, let existingInput, let output) =
-        blocks[index],
+      guard
+        case .toolCall(let id, let name, let existingStatus, let existingToolUseId, let existingInput, let output) =
+          blocks[index],
         existingStatus.isInFlight,
         toolMatches(
           name: name,
           toolUseId: existingToolUseId,
           requestedName: toolName,
           requestedToolUseId: normalizedToolUseId
-        ) else {
+        )
+      else {
         continue
       }
 
@@ -252,7 +258,8 @@ enum ToolCallBlockUpdater {
   ) {
     for index in blocks.indices {
       if case .toolCall(let id, let name, let status, let toolUseId, let input, let output) = blocks[index],
-         status.isInFlight {
+        status.isInFlight
+      {
         blocks[index] = .toolCall(
           id: id,
           name: name,
@@ -273,14 +280,16 @@ enum ToolCallBlockUpdater {
   ) {
     let normalizedToolUseId = toolUseId.isEmpty ? nil : toolUseId
     for index in blocks.indices {
-      guard case .toolCall(let id, let blockName, let status, let existingToolUseId, let input, _) =
-        blocks[index],
+      guard
+        case .toolCall(let id, let blockName, let status, let existingToolUseId, let input, _) =
+          blocks[index],
         toolMatches(
           name: blockName,
           toolUseId: existingToolUseId,
           requestedName: name,
           requestedToolUseId: normalizedToolUseId
-        ) else {
+        )
+      else {
         continue
       }
 
@@ -313,7 +322,8 @@ enum ToolCallBlockUpdater {
 
     for index in stride(from: blocks.count - 1, through: 0, by: -1) {
       guard case .toolCall(_, let name, let status, let existingToolUseId, _, _) = blocks[index],
-            status.isInFlight else {
+        status.isInFlight
+      else {
         continue
       }
 

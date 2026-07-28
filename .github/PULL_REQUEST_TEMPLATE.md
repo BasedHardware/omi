@@ -22,12 +22,29 @@
      Feature: point to the tests for the core path and main error path.
      No test change: explain why none was needed. -->
 
-## Root cause and durable guard (bug fixes)
+## Failure class (fixes)
 
-<!-- Name the violated contract, similar recent failures you checked, and the
-     shared state model / harness / compatibility check / static guard that
-     prevents this failure class. If a risky migration is deliberately separate,
-     link its tracking issue and explain the rollback boundary. -->
+<!-- Every `fix:` commit needs this exact, machine-validated declaration.
+     Use `scripts/failure-class prepare` or `explain` to choose a class.
+     `harden:` commits may cite a class but do not need a declaration. -->
+
+Failure-Class: none
+
+## Failure-class transition narrative (only when needed)
+
+<!-- Required only when declaring `new`, changing a class's canonical prevention
+     primitive/owner, or making a registry-only lifecycle transition. A dormant
+     transition sets `status: dormant` and an ISO-8601 `dormant_since`; a reopen
+     sets `status: open` and removes `dormant_since`. Make that transition in a
+     separate PR, never in the instance-fix PR. State the violated contract, the
+     canonical guard, and the supporting evidence. Delete this section for an
+     ordinary instance fix. -->
+
+## New guards (only when adding a check or ratchet)
+
+<!-- Cite the real merged PR or incident this guard would have caught, then answer
+     in one sentence: why is this not a shared primitive instead? Delete this
+     section when no check or ratchet is added. -->
 
 ## Scoped cleanups (optional)
 

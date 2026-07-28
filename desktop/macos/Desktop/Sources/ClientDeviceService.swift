@@ -11,7 +11,7 @@ enum ClientDeviceKeychainReadResult {
 
 /// Stable per-installation device identity for capture provenance (mirrors Flutter `deviceIdHash`).
 final class ClientDeviceService {
-  static let shared = ClientDeviceService()
+  nonisolated(unsafe) static let shared = ClientDeviceService()
 
   private let keychainAccount = "install-uuid"
   private let devInstallIdDefaultsKey = "dev-client-device-install-uuid"
@@ -131,8 +131,9 @@ final class ClientDeviceService {
   private var usesUserDefaultsInstallId: Bool {
     guard let bundleIdentifier else { return false }
     // Any non-production com.omi.* bundle (desktop-dev + omi-*) — avoid Keychain.
+    // Production-family bundles (stable + Omi Beta) keep the durable Keychain id.
     return bundleIdentifier.hasPrefix("com.omi.")
-      && bundleIdentifier != AppBuild.productionBundleIdentifier
+      && !AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier)
   }
 
   private func loadOrCreateDevInstallId() -> String {

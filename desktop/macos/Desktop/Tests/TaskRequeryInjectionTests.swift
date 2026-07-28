@@ -30,13 +30,19 @@ final class TaskRequeryInjectionTests: XCTestCase {
     }
     // The recompute guard that the hook exercises must still gate on the flag —
     // this is the actual TASK-06 mechanism; removing it is the regression.
-    XCTAssertTrue(src.contains("&& !suppressDatabaseRequery"),
+    XCTAssertTrue(
+      src.contains("&& !suppressDatabaseRequery"),
       "recompute requery must remain gated on suppressDatabaseRequery")
     // The counter must live PAST the empty-filter early return (count real DB reads).
-    let requeryFn = src.range(of: "private func loadFilteredTasksFromDatabase() async {")!.upperBound
-    let guardIdx = src.range(of: "else {\n            filteredFromDatabase = []", range: requeryFn..<src.endIndex)!.lowerBound
-    let counterIdx = src.range(of: "automationRequeryCount += 1", range: requeryFn..<src.endIndex)!.lowerBound
-    XCTAssertGreaterThan(counterIdx, guardIdx,
+    let requeryFn = try XCTUnwrap(src.range(of: "private func loadFilteredTasksFromDatabase() async {")).upperBound
+    let guardIdx = try XCTUnwrap(
+      src.range(of: "else {\n      filteredFromDatabase = []", range: requeryFn..<src.endIndex)
+    ).lowerBound
+    let counterIdx = try XCTUnwrap(
+      src.range(of: "automationRequeryCount += 1", range: requeryFn..<src.endIndex)
+    ).lowerBound
+    XCTAssertGreaterThan(
+      counterIdx, guardIdx,
       "the requery counter must increment only past the empty-filter early return")
   }
 }

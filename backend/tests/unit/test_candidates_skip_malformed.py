@@ -42,13 +42,12 @@ def test_list_candidates_skips_malformed_without_logging_private_input(monkeypat
     bad.id = "bad"
     bad.to_dict.return_value = {"bad": True, "description": secret, secret: "private-value"}
 
-    def fake_from_storage(data):
+    def fake_validate(data):
         if data.get("bad"):
             _Probe(x=data)  # a dict is not an int -> raises a genuine pydantic ValidationError
         return data  # stand-in for a parsed CandidateRecord
 
-    monkeypatch.setattr(candidates_db, "_snapshot_dict", lambda snap: snap.to_dict())
-    monkeypatch.setattr(candidates_db.CandidateRecord, "from_storage", staticmethod(fake_from_storage))
+    monkeypatch.setattr(candidates_db.CandidateRecord, "model_validate", staticmethod(fake_validate))
 
     with patch.object(candidates_db, "db", _fake_candidates_db([good, bad])):
         result = candidates_db.list_candidates("u1")
@@ -68,8 +67,7 @@ def test_list_candidates_does_not_swallow_unexpected_error(monkeypatch):
     def boom(_data):
         raise RuntimeError("unexpected parsing failure")
 
-    monkeypatch.setattr(candidates_db, "_snapshot_dict", lambda snap: snap.to_dict())
-    monkeypatch.setattr(candidates_db.CandidateRecord, "from_storage", staticmethod(boom))
+    monkeypatch.setattr(candidates_db.CandidateRecord, "model_validate", staticmethod(boom))
 
     with patch.object(candidates_db, "db", _fake_candidates_db([good])):
         with pytest.raises(RuntimeError):

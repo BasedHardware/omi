@@ -8,7 +8,10 @@ that the namespaced OmiAPI types cover the desktop's highest-traffic read DTOs.
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import os
+import subprocess
+import sys
+from pathlib import Path, PureWindowsPath
 
 from scripts import generate_swift_openapi_types
 
@@ -149,3 +152,29 @@ def test_swift_generator_emits_required_headers_and_client_default_headers():
     assert 'idempotencyKey: String' in generated
     assert 'for (name, value) in client.headers' in generated
     assert 'req.setValue(String(idempotencyKey), forHTTPHeaderField: "Idempotency-Key")' in generated
+
+
+def test_swift_source_label_is_stable_for_windows_paths():
+    root = PureWindowsPath('C:/src/omi')
+    spec_path = root / 'docs' / 'api-reference' / 'app-client-openapi.json'
+
+    assert (
+        generate_swift_openapi_types.source_label_for_path(spec_path, root)
+        == 'docs/api-reference/app-client-openapi.json'
+    )
+
+
+def test_swift_generator_cli_uses_utf8_when_the_process_locale_does_not():
+    env = os.environ.copy()
+    env.update({'LANG': 'C', 'LC_ALL': 'C', 'PYTHONCOERCECLOCALE': '0', 'PYTHONUTF8': '0'})
+
+    completed = subprocess.run(
+        [sys.executable, str(generate_swift_openapi_types.__file__), '--check'],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=ROOT_DIR,
+        env=env,
+    )
+
+    assert completed.returncode == 0, completed.stderr

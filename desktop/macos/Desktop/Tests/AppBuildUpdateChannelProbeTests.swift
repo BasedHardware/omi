@@ -2,6 +2,11 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class Box<T>: @unchecked Sendable {
+  var value: T
+  init(_ value: T) { self.value = value }
+}
+
 /// Launch-time update-channel probe (#9192).
 ///
 /// The probe runs on the main thread inside `AppState.init()`, before the first frame,
@@ -73,7 +78,7 @@ final class AppBuildUpdateChannelProbeTests: XCTestCase {
   func testAppcastAnsweringAfterTheBudgetCorrectsTheStoredChannel() {
     var pendingCompletion: ((String?) -> Void)?
     let corrected = expectation(description: "late appcast corrects the stored channel")
-    var correctedTo: String?
+    let correctedTo = Box<String?>(nil)
 
     let resolved = AppBuild.probeFreshInstallUpdateChannel(
       fallback: "stable",
@@ -81,7 +86,7 @@ final class AppBuildUpdateChannelProbeTests: XCTestCase {
       mainThreadBudget: 0,
       fetchAppcast: { completion in pendingCompletion = completion },
       persistLateCorrection: { channel in
-        correctedTo = channel
+        correctedTo.value = channel
         corrected.fulfill()
       }
     )
@@ -91,7 +96,7 @@ final class AppBuildUpdateChannelProbeTests: XCTestCase {
     pendingCompletion?(Self.betaAppcast)
 
     wait(for: [corrected], timeout: 5)
-    XCTAssertEqual(correctedTo, "beta")
+    XCTAssertEqual(correctedTo.value, "beta")
   }
 
   func testLateAppcastAgreeingWithTheInferredChannelWritesNothing() {

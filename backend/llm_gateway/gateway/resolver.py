@@ -19,6 +19,7 @@ AUTO_LANE_PREFIX = 'omi:auto:'
 NEVER_LKG_FAILURE_CLASSES = frozenset(
     {
         FailureClass.CAPABILITY_MISMATCH,
+        FailureClass.PROVIDER_INVALID_REQUEST,
         FailureClass.INVALID_CONFIG,
         FailureClass.BYOK_AUTH,
         FailureClass.BYOK_QUOTA,

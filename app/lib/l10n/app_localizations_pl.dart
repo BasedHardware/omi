@@ -1469,7 +1469,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get payYourSttProvider => 'Swobodnie korzystaj z Omi. Płacisz tylko swojemu dostawcy STT bezpośrednio.';
 
   @override
-  String get freeMinutesMonth => '600 darmowych minut/miesiąc w zestawie. Nieograniczone z ';
+  String get freeMinutesMonth => '300 darmowych minut/miesiąc w zestawie. Nieograniczone z ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1792,20 +1792,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Podoba Ci się Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Pomóż nam dotrzeć do większej liczby osób, zostawiając recenzję w App Store. Twoja opinia wiele dla nas znaczy!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Pomóż nam dotrzeć do większej liczby osób, zostawiając recenzję w Google Play Store. Twoja opinia wiele dla nas znaczy!';
-
-  @override
-  String get rateOnAppStore => 'Oceń w App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Oceń w Google Play';
 
   @override
   String get maybeLater => 'Może później';
@@ -2142,6 +2128,18 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Edytuj wspomnienie';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Lubię jeść lody...';
@@ -4717,7 +4715,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nie skonfigurowano konkretnego dostępu do danych.';
 
   @override
-  String get basicPlanDescription => '600 minut premium + nieograniczone na urządzeniu';
+  String get basicPlanDescription => '300 minut premium + nieograniczone na urządzeniu';
 
   @override
   String get minutes => 'minut';
@@ -6010,7 +6008,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 minut premium/miesiąc. Zakładka Na urządzeniu oferuje nieograniczoną darmową transkrypcję.';
+      '300 minut premium/miesiąc. Zakładka Na urządzeniu oferuje nieograniczoną darmową transkrypcję.';
 
   @override
   String get viewUsage => 'Zobacz wykorzystanie';
@@ -6092,7 +6090,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 minut premium/miesiąc. Karta Na urządzeniu oferuje nieograniczoną bezpłatną transkrypcję. ';
+      '300 minut premium/miesiąc. Karta Na urządzeniu oferuje nieograniczoną bezpłatną transkrypcję. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9008,7 +9006,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get billingYearly => 'Rocznie';
 
   @override
-  String get savePercent => 'Oszczędź ~17%';
+  String savePercent(int percent) {
+    return 'Oszczędź ~$percent%';
+  }
 
   @override
   String get popular => 'Popularne';
@@ -9368,7 +9368,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Na razie działa z urządzeniami Omi i Limitless. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.';
+      'Działa z mikrofonem telefonu oraz urządzeniami Omi i Limitless. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9621,4 +9621,181 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Urządzenie jest prawie pełne — zsynchronizuj, aby zwolnić miejsce.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Brak połączenia – nagrywanie lokalne. Transkrypcja nastąpi po ponownym połączeniu z siecią.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Twoje dane są domyślnie zabezpieczone silnym szyfrowaniem, a Ty decydujesz o tym, jak są przechowywane i wykorzystywane.';
+
+  @override
+  String get sttModelAccuracy => 'Dokładność';
+
+  @override
+  String get whisperModelSizeBase => 'Podstawowy';
+
+  @override
+  String get cloudTranscription => 'Transkrypcja w chmurze';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Usuń model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Czy na pewno chcesz usunąć ten model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Pobrano';
+
+  @override
+  String get sttModelFaster => 'Szybciej';
+
+  @override
+  String get sttFilterAuto => 'Automatycznie';
+
+  @override
+  String get sttModelHigher => 'Wyższa';
+
+  @override
+  String get whisperModelSizeLarge => 'Duży';
+
+  @override
+  String get sttModelLower => 'Niższa';
+
+  @override
+  String get whisperModelSizeMedium => 'Średni';
+
+  @override
+  String get onDeviceModelDeleted => 'Model usunięty';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Nie udało się pobrać modelu';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Nie udało się pobrać modelu Whisper. Spróbuj ponownie.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model pobrany';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Model Whisper został pomyślnie pobrany';
+
+  @override
+  String get onDeviceModelSize => 'Rozmiar modelu';
+
+  @override
+  String get sttNone => 'Brak';
+
+  @override
+  String get onDeviceTranscription => 'Transkrypcja na urządzeniu';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkrypcja jest przetwarzana lokalnie na Twoim urządzeniu';
+
+  @override
+  String get sttModelSlower => 'Wolniej';
+
+  @override
+  String get whisperModelSizeSmall => 'Mały';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Dostawca mowy na tekst';
+
+  @override
+  String get speechToTextProviderDesc => 'Wybierz usługę używaną do transkrypcji';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Szybkość';
+
+  @override
+  String get whisperModelSizeTiny => 'Bardzo mały';
+
+  @override
+  String get transcriptionLanguage => 'Język transkrypcji';
+
+  @override
+  String get transcriptionLanguageDesc => 'Wybierz język transkrypcji mowy';
+
+  @override
+  String get whisperModel => 'Model Whisper';
+
+  @override
+  String get whisperModelDesc => 'Wybierz model do transkrypcji na urządzeniu';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Przejść na plan darmowy?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Napotkasz następujące ograniczenia:';
+
+  @override
+  String get downgradeLimitBattery => '7x większe zużycie baterii';
+
+  @override
+  String get downgradeLimitQuality => 'Jakość transkrypcji niższa o 30%';
+
+  @override
+  String get downgradeLimitDelay => 'Opóźnienie 5-7 sekund';
+
+  @override
+  String get downgradeLimitSpeakers => 'Brak rozpoznawania mówców';
+
+  @override
+  String get downgradeAnyway => 'Mimo to obniż plan';
+
+  @override
+  String get googleCalendarNotConnected => 'Kalendarz Google nie jest połączony';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Połącz swój Kalendarz Google, aby powiązywać rozmowy z wydarzeniami w kalendarzu.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Powiązano z „$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Nie udało się powiązać wydarzenia z kalendarza';
+
+  @override
+  String get thanksForYourFeedback => 'Dziękujemy za opinię!';
+
+  @override
+  String get copyMessage => 'Kopiuj wiadomość';
+
+  @override
+  String get searchSettings => 'Szukaj ustawień…';
+
+  @override
+  String get errorLoadingAudio => 'Błąd ładowania dźwięku';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Wybierz mikrofon Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Wybierz mikrofon Bluetooth okularów. Muzyka zostanie wstrzymana, gdy Omi będzie go używać.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nie znaleziono mikrofonów Bluetooth. Połącz okulary w Ustawieniach iPhone\'a i spróbuj ponownie.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Nie udało się wczytać mikrofonów Bluetooth. Sprawdź, czy Bluetooth jest włączony, i spróbuj ponownie.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Nie udało się połączyć z tym mikrofonem. Upewnij się, że jest połączony w Ustawieniach iPhone\'a.';
 }

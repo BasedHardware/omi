@@ -36,7 +36,7 @@ actor EmbeddingService {
 
   /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
-    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingCString: cString), !url.isEmpty {
       return url.hasSuffix("/") ? url : url + "/"
     }
     return ""
@@ -318,7 +318,9 @@ actor EmbeddingService {
         log("EmbeddingService: Backfill complete — \(totalProcessed) items embedded")
       }
     } catch let error as EmbeddingError where error.isExpectedBackendState {
-      log("EmbeddingService: Backfill stopped after \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)")
+      log(
+        "EmbeddingService: Backfill stopped after \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)"
+      )
     } catch {
       logError("EmbeddingService: Backfill failed after \(totalProcessed) items", error: error)
     }

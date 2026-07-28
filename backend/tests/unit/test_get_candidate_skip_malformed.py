@@ -56,7 +56,7 @@ def test_get_candidate_skips_malformed(monkeypatch):
     def raise_err(data):
         raise err
 
-    monkeypatch.setattr(candidates.CandidateRecord, 'from_storage', staticmethod(raise_err))
+    monkeypatch.setattr(candidates.CandidateRecord, 'model_validate', staticmethod(raise_err))
     _patch_db(monkeypatch, _snap(True, {'bad': 'doc'}))
     assert candidates.get_candidate('u1', 'c1') is None  # malformed -> None (router 404s), not a 500
 
@@ -71,7 +71,7 @@ def test_get_candidate_unexpected_error_propagates(monkeypatch):
     def boom(data):
         raise RuntimeError('unexpected')
 
-    monkeypatch.setattr(candidates.CandidateRecord, 'from_storage', staticmethod(boom))
+    monkeypatch.setattr(candidates.CandidateRecord, 'model_validate', staticmethod(boom))
     _patch_db(monkeypatch, _snap(True, {'x': 1}))
     with pytest.raises(RuntimeError):
         candidates.get_candidate('u1', 'c1')

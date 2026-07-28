@@ -134,9 +134,7 @@ private final class RuntimeOwnerTransitionCleanupAuthority: @unchecked Sendable 
     }
   }
 
-  func activeCapability(forPreviousOwnerID ownerID: String) ->
-    RuntimeOwnerTransitionCleanupCapability?
-  {
+  func activeCapability(forPreviousOwnerID ownerID: String) -> RuntimeOwnerTransitionCleanupCapability? {
     lock.withLock {
       guard let activeCapability, activeCapability.previousOwnerID == ownerID else { return nil }
       return activeCapability
@@ -226,33 +224,45 @@ enum RuntimeOwnerIdentity {
   static func performEffectiveOwnerTransition<T: Sendable>(
     defaults: UserDefaults = .standard,
     allowAutomationOverride: Bool = AppBuild.isNonProduction,
-    plannedNextOwner: @escaping @Sendable (
-      _ defaults: UserDefaults, _ previousOwner: String?
-    ) -> String?,
-    quiesceVoice: @escaping @Sendable (
-      _ previousOwner: String?, _ cleanupCapability: RuntimeOwnerTransitionCleanupCapability
-    ) async -> Void = { previousOwner, cleanupCapability in
-      await PushToTalkManager.shared.quiesceForEffectiveOwnerTransition(
-        previousOwnerID: previousOwner,
-        cleanupCapability: cleanupCapability)
-    },
-    revokeKernelOwner: (@Sendable (
-      _ previousOwner: String, _ cleanupCapability: RuntimeOwnerTransitionCleanupCapability
-    ) async -> Void)? = nil,
-    retargetLocalStorage: @escaping @Sendable (
-      _ previousOwner: String?, _ nextOwner: String?
-    ) async -> Void = { previousOwner, nextOwner in
-      await RuntimeOwnerIdentity.retargetOwnerBoundLocalStorage(
-        previousOwner: previousOwner,
-        nextOwner: nextOwner)
-    },
+    plannedNextOwner:
+      @escaping @Sendable (
+        _ defaults: UserDefaults, _ previousOwner: String?
+      ) -> String?,
+    quiesceVoice:
+      @escaping @Sendable (
+        _ previousOwner: String?, _ cleanupCapability: RuntimeOwnerTransitionCleanupCapability
+      ) async -> Void = { previousOwner, cleanupCapability in
+        await PushToTalkManager.shared.quiesceForEffectiveOwnerTransition(
+          previousOwnerID: previousOwner,
+          cleanupCapability: cleanupCapability)
+      },
+    revokeKernelOwner: (
+      @Sendable (
+        _ previousOwner: String, _ cleanupCapability: RuntimeOwnerTransitionCleanupCapability
+      ) async -> Void
+    )? = nil,
+    retargetLocalStorage:
+      @escaping @Sendable (
+        _ previousOwner: String?, _ nextOwner: String?
+      ) async -> Void = { previousOwner, nextOwner in
+        await RuntimeOwnerIdentity.retargetOwnerBoundLocalStorage(
+          previousOwner: previousOwner,
+          nextOwner: nextOwner)
+      },
+    prepareLocalStorageTransition:
+      @escaping @Sendable (
+        _ previousOwner: String?, _ plannedNextOwner: String?
+      ) async throws -> Void = { _, _ in
+        RewindIndexer.shared.suspendForOwnerTransition()
+        try await RewindStorage.shared.resetForOwnerTransition()
+      },
     ownerDidChange: @escaping @Sendable () async -> Void = {
       await MainActor.run {
         NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
       }
     },
     _ transition: @escaping @Sendable (UserDefaults) async throws -> T
-  ) async rethrows -> T {
+  ) async throws -> T {
     let defaultsReference = RuntimeOwnerDefaultsReference(value: defaults)
     let cleanupCapabilitySlot = RuntimeOwnerTransitionCleanupCapabilitySlot()
     return try await EffectiveOwnerTransitionFence.shared.performEffectiveOwnerTransition(
@@ -280,9 +290,10 @@ enum RuntimeOwnerIdentity {
         } else {
           assertionFailure("Effective-owner cleanup capability was not installed")
         }
-        RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: persistedOwnerId(
-          defaults: defaultsReference.value,
-          allowAutomationOverride: allowAutomationOverride))
+        RuntimeOwnerAuthorizationAuthority.shared.endTransition(
+          ownerID: persistedOwnerId(
+            defaults: defaultsReference.value,
+            allowAutomationOverride: allowAutomationOverride))
         EffectiveOwnerAuthorizationRevocation.shared.end()
       },
       quiescePreviousOwner: { previousOwner, _ in
@@ -303,6 +314,10 @@ enum RuntimeOwnerIdentity {
             previousOwnerID: previousOwner,
             cleanupCapability: cleanupCapability)
         }
+      },
+      prepareLocalStorageTransition: prepareLocalStorageTransition,
+      finalizeLocalStorageTransition: {
+        await RewindIndexer.shared.resumeAfterOwnerTransition()
       },
       transition: {
         try await transition(defaultsReference.value)
@@ -346,8 +361,7 @@ enum RuntimeOwnerIdentity {
     // Wait for an active file scan to leave its actor before closing the pool
     // it captured. New-owner mutations remain parked by the fence.
     await FileIndexerService.shared.invalidateCache()
-    await RewindIndexer.shared.reset()
-    await RewindStorage.shared.reset()
+    await OCREmbeddingService.shared.reset()
     await RewindDatabase.shared.retargetEffectiveOwner(to: nextOwner)
     await TranscriptionStorage.shared.invalidateCache()
     await MemoryStorage.shared.invalidateCache()
@@ -410,24 +424,86 @@ enum RuntimeOwnerIdentity {
   ) async -> String? {
     let trimmed = ownerBId.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
-    return await performEffectiveOwnerTransition(
-      defaults: defaults,
-      allowAutomationOverride: true,
-      plannedNextOwner: { _, _ in trimmed }
-    ) { defaults in
-      let ownerA = defaults.string(forKey: .authUserId)?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      defaults.set(trimmed, forKey: .automationOwnerOverride)
-      // Preserve an existing backup (nested/re-entrant swap). Only seed when absent
-      // so a second override cannot replace the real Firebase uid with owner B.
-      let existingBackup = defaults.string(forKey: .automationOwnerABackup)?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      if existingBackup == nil || existingBackup?.isEmpty == true,
-        let ownerA, !ownerA.isEmpty, ownerA != trimmed
-      {
-        defaults.set(ownerA, forKey: .automationOwnerABackup)
+    do {
+      return try await performEffectiveOwnerTransition(
+        defaults: defaults,
+        allowAutomationOverride: true,
+        plannedNextOwner: { _, _ in trimmed }
+      ) { defaults in
+        let ownerA = defaults.string(forKey: .authUserId)?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        defaults.set(trimmed, forKey: .automationOwnerOverride)
+        // Preserve an existing backup (nested/re-entrant swap). Only seed when absent
+        // so a second override cannot replace the real Firebase uid with owner B.
+        let existingBackup = defaults.string(forKey: .automationOwnerABackup)?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        if existingBackup == nil || existingBackup?.isEmpty == true,
+          let ownerA, !ownerA.isEmpty, ownerA != trimmed
+        {
+          defaults.set(ownerA, forKey: .automationOwnerABackup)
+        }
+        return ownerA
       }
-      return ownerA
+    } catch {
+      logError("RuntimeOwnerIdentity: Could not prepare local storage for automation owner", error: error)
+      return nil
+    }
+  }
+
+  /// Installs an automation owner only if the owner is still absent after this
+  /// request has acquired the serialized effective-owner transition fence.
+  /// A preflight outside that fence could otherwise overwrite a real owner
+  /// that signed in while a reset was queued.
+  static func applyAutomationOwnerOverrideIfMissing(
+    _ ownerID: String,
+    defaults: UserDefaults = .standard
+  ) async -> Bool {
+    let trimmed = ownerID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    do {
+      return try await performEffectiveOwnerTransition(
+        defaults: defaults,
+        allowAutomationOverride: true,
+        plannedNextOwner: { _, previousOwner in previousOwner ?? trimmed }
+      ) { defaults in
+        guard persistedOwnerId(defaults: defaults, allowAutomationOverride: true) == nil else {
+          return false
+        }
+        defaults.set(trimmed, forKey: .automationOwnerOverride)
+        return true
+      }
+    } catch {
+      logError("RuntimeOwnerIdentity: Could not prepare local storage for temporary owner", error: error)
+      return false
+    }
+  }
+
+  /// Temporarily establishes a non-production owner only when no effective
+  /// owner exists. Harness reset operations still execute through the normal
+  /// owner-scoped kernel boundary; they do not bypass it because a faulted
+  /// auth endpoint left the bundle in auth recovery.
+  static func withAutomationOwnerIfMissing<Result: Sendable>(
+    _ ownerID: String,
+    defaults: UserDefaults = .standard,
+    operation: @MainActor () async throws -> Result
+  ) async rethrows -> Result {
+    let normalizedOwnerID = ownerID.trimmingCharacters(in: .whitespacesAndNewlines)
+    precondition(!normalizedOwnerID.isEmpty, "automation owner must not be empty")
+    let installedTemporaryOwner = await applyAutomationOwnerOverrideIfMissing(
+      normalizedOwnerID,
+      defaults: defaults)
+
+    do {
+      let result = try await operation()
+      if installedTemporaryOwner {
+        _ = await clearAutomationOwnerOverride(defaults: defaults)
+      }
+      return result
+    } catch {
+      if installedTemporaryOwner {
+        _ = await clearAutomationOwnerOverride(defaults: defaults)
+      }
+      throw error
     }
   }
 
@@ -436,44 +512,49 @@ enum RuntimeOwnerIdentity {
   static func clearAutomationOwnerOverride(
     defaults: UserDefaults = .standard
   ) async -> (restored: Bool, ownerId: String?) {
-    await performEffectiveOwnerTransition(
-      defaults: defaults,
-      allowAutomationOverride: true,
-      plannedNextOwner: { defaults, previousOwner in
-        plannedOwnerAfterClearingAutomationOverride(
-          defaults: defaults,
-          previousOwner: previousOwner)
-      }
-    ) { defaults in
-      let override = defaults.string(forKey: .automationOwnerOverride)?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      let hadOverride = !(override?.isEmpty ?? true)
-      let backup = defaults.string(forKey: .automationOwnerABackup)?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      defaults.removeObject(forKey: .automationOwnerOverride)
-
-      if let backup, !backup.isEmpty {
-        let currentAuthUserId = defaults.string(forKey: .authUserId)?
-          .trimmingCharacters(in: .whitespacesAndNewlines)
-        // Only rewrite auth_userId when it still looks like a synthetic overwrite
-        // (empty, equals the override we cleared, or legacy backup-only heal).
-        // Never clobber a legitimately updated auth uid from a mid-session sign-in.
-        let shouldHealAuthUserId =
-          currentAuthUserId == nil
-          || currentAuthUserId?.isEmpty == true
-          || (hadOverride && currentAuthUserId == override)
-          || (!hadOverride && currentAuthUserId != backup)
-        if shouldHealAuthUserId {
-          defaults.set(backup, forKey: .authUserId)
+    do {
+      return try await performEffectiveOwnerTransition(
+        defaults: defaults,
+        allowAutomationOverride: true,
+        plannedNextOwner: { defaults, previousOwner in
+          plannedOwnerAfterClearingAutomationOverride(
+            defaults: defaults,
+            previousOwner: previousOwner)
         }
-        defaults.removeObject(forKey: .automationOwnerABackup)
-        return (true, defaults.string(forKey: .authUserId) ?? backup)
-      }
+      ) { defaults in
+        let override = defaults.string(forKey: .automationOwnerOverride)?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        let hadOverride = !(override?.isEmpty ?? true)
+        let backup = defaults.string(forKey: .automationOwnerABackup)?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        defaults.removeObject(forKey: .automationOwnerOverride)
 
-      if hadOverride {
-        return (true, defaults.string(forKey: .authUserId))
+        if let backup, !backup.isEmpty {
+          let currentAuthUserId = defaults.string(forKey: .authUserId)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+          // Only rewrite auth_userId when it still looks like a synthetic overwrite
+          // (empty, equals the override we cleared, or legacy backup-only heal).
+          // Never clobber a legitimately updated auth uid from a mid-session sign-in.
+          let shouldHealAuthUserId =
+            currentAuthUserId == nil
+            || currentAuthUserId?.isEmpty == true
+            || (hadOverride && currentAuthUserId == override)
+            || (!hadOverride && currentAuthUserId != backup)
+          if shouldHealAuthUserId {
+            defaults.set(backup, forKey: .authUserId)
+          }
+          defaults.removeObject(forKey: .automationOwnerABackup)
+          return (true, defaults.string(forKey: .authUserId) ?? backup)
+        }
+
+        if hadOverride {
+          return (true, defaults.string(forKey: .authUserId))
+        }
+        return (false, nil)
       }
-      return (false, nil)
+    } catch {
+      logError("RuntimeOwnerIdentity: Could not prepare local storage while clearing automation owner", error: error)
+      return (false, currentOwnerId(defaults: defaults, allowAutomationOverride: true))
     }
   }
 

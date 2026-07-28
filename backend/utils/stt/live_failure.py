@@ -6,8 +6,14 @@ import logging
 from typing import Any, Protocol
 
 from models.message_event import MessageServiceStatusEvent
+from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.transcription import record_live_stt_failure
-from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome, failure_from_exception
+from utils.stt.outcomes import (
+    TranscriptionFailure,
+    TranscriptionOutcome,
+    bounded_provider,
+    failure_from_exception,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +40,7 @@ class LiveSTTSession(Protocol):
     active: bool
     close_code: int
     stt_terminal_failure: bool
+    live_transcription_attempt: Any
 
 
 class LiveSTTClientSocket(Protocol):
@@ -105,6 +112,9 @@ async def terminate_live_stt_session(
             outcome=failure.outcome,
             phase=_FAILURE_PHASE_BY_REASON[bounded_reason],
         )
+        attempt = getattr(session, 'live_transcription_attempt', None)
+        if attempt is not None:
+            attempt.finish('failure', phase=_FAILURE_PHASE_BY_REASON[bounded_reason])
     except Exception as error:
         logger.warning(
             'Unable to record terminal live STT failure error_type=%s',
@@ -155,6 +165,12 @@ async def send_live_stt_audio(
     platform: str | None,
 ) -> bool:
     """Send one audio chunk, terminating the client if the provider is unusable."""
+
+    # Observed on every provider, not just Velma: whether production emits frames that
+    # are not whole 16-bit samples is otherwise unmeasurable without exposing users to
+    # Velma, which rejects them outright. Deepgram tolerates them silently.
+    if len(audio) % 2:
+        OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(provider=bounded_provider(provider), stage='buffer').inc()
 
     if stt_socket is None:
         await terminate_live_stt_session(

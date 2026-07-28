@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 /// Settings page that wraps SettingsView with proper dark theme styling for the main window
 struct SettingsPage: View {
@@ -126,6 +126,7 @@ struct SettingsContentView: View {
 
   // Master monitoring state (screen analysis)
   @State var isMonitoring: Bool
+  @State var screenCaptureHealth: ScreenCaptureHealth
   @State var isToggling: Bool = false
   @State var permissionError: String?
 
@@ -150,6 +151,7 @@ struct SettingsContentView: View {
   @State var glowOverlayEnabled: Bool
   @State var analysisDelay: Int
   @State var focusNotificationsEnabled: Bool
+  @State var liveSuggestionsEnabled: Bool
   @State var focusExcludedApps: Set<String>
 
   // Task Assistant states
@@ -213,6 +215,10 @@ struct SettingsContentView: View {
   // Notification settings (from backend)
   @State var dailySummaryEnabled: Bool = true
   @State var dailySummaryHour: Int = 22
+  // UI-only date for the Summary Time stepper field; the backend stores whole hours,
+  // so this glides freely while only the hour component is persisted.
+  @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
+    forHour: 22, referenceDate: Date())
   @State var notificationsEnabled: Bool = true
   @State var notificationFrequency: Int = 3
 
@@ -294,8 +300,6 @@ struct SettingsContentView: View {
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
   @AppStorage("realtimeOmniProvider") var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") var askModeEnabled = false
-  @AppStorage("claudeMdEnabled") var claudeMdEnabled = true
-  @AppStorage("projectClaudeMdEnabled") var projectClaudeMdEnabled = true
   @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = ""
   @State var aiChatClaudeMdContent: String?
   @State var aiChatClaudeMdPath: String?
@@ -303,8 +307,7 @@ struct SettingsContentView: View {
   @State var aiChatProjectClaudeMdPath: String?
   @State var aiChatDiscoveredSkills: [(name: String, description: String, path: String)] =
     []
-  @State var aiChatProjectDiscoveredSkills:
-    [(name: String, description: String, path: String)] = []
+  @State var aiChatProjectDiscoveredSkills: [(name: String, description: String, path: String)] = []
   @State var aiChatDisabledSkills: Set<String> = []
   @State var showFileViewer = false
   @State var fileViewerContent = ""
@@ -313,6 +316,7 @@ struct SettingsContentView: View {
 
   // Dev Mode setting
   @AppStorage("devModeEnabled") var devModeEnabled = false
+  @AppStorage(BetaEnhancedDiagnosticsConfiguration.defaultsKey) var betaEnhancedDiagnosticsEnabled = true
 
   // Browser Extension settings
   @AppStorage("playwrightUseExtension") var playwrightUseExtension = true
@@ -466,6 +470,7 @@ struct SettingsContentView: View {
     self.chatProvider = chatProvider
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
+    _screenCaptureHealth = State(initialValue: ProactiveAssistantsPlugin.shared.screenCaptureHealth)
     _isTranscribing = State(initialValue: appState.isTranscribing)
     _focusEnabled = State(initialValue: FocusAssistantSettings.shared.isEnabled)
     _cooldownInterval = State(initialValue: FocusAssistantSettings.shared.cooldownInterval)
@@ -473,6 +478,7 @@ struct SettingsContentView: View {
     _analysisDelay = State(initialValue: settings.analysisDelay)
     _focusNotificationsEnabled = State(
       initialValue: FocusAssistantSettings.shared.notificationsEnabled)
+    _liveSuggestionsEnabled = State(initialValue: SuggestionAssistantSettings.shared.isEnabled)
     _focusExcludedApps = State(initialValue: FocusAssistantSettings.shared.excludedApps)
     _taskEnabled = State(initialValue: TaskAssistantSettings.shared.isEnabled)
     _taskChatAgentEnabled = State(initialValue: TaskAgentSettings.shared.isChatEnabled)
@@ -582,12 +588,14 @@ struct SettingsContentView: View {
       chatProvider?.checkClaudeConnectionStatus()
       // Refresh notification permission state
       appState.checkNotificationPermission()
+      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) {
       notification in
       if let userInfo = notification.userInfo, let state = userInfo["isMonitoring"] as? Bool {
         isMonitoring = state
       }
+      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
     .onChange(of: appState.isTranscribing) { _, newValue in
       isTranscribing = newValue
@@ -618,8 +626,7 @@ struct SettingsContentView: View {
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
       selectedSection = .floatingBar
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh notification permission when app becomes active (user may have changed it in System Settings)
       appState.checkNotificationPermission()
     }
@@ -646,7 +653,6 @@ struct SettingsContentView: View {
       .fixedSize()
     }
   }
-
 
   @ObservedObject var fontScaleSettings = FontScaleSettings.shared
   @ObservedObject var rewindSettings = RewindSettings.shared

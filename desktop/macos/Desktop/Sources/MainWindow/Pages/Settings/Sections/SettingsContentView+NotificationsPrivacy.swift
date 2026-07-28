@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   var notificationsSection: some View {
@@ -11,13 +11,7 @@ extension SettingsContentView {
       settingsCard(settingId: "notifications.settings") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
-            Image(systemName: "bell.badge.fill")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
-
-            Text("Notifications")
-              .scaledFont(size: OmiType.subheading, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+            settingsCardHeader(icon: "bell.badge.fill", title: "Notifications")
 
             Spacer()
 
@@ -38,6 +32,22 @@ extension SettingsContentView {
               .background(OmiColors.backgroundQuaternary)
 
             notificationFrequencySlider(settingId: "notifications.frequency")
+
+            // Sits under the master toggle and the frequency slider because both gate it:
+            // frequency caps how often any proactive card is delivered, and this decides
+            // whether live suggestions are generated at all.
+            settingRow(
+              title: "Live Suggestions",
+              subtitle: "Suggest things in the notch, using what Omi already knows",
+              settingId: "notifications.livesuggestions"
+            ) {
+              Toggle("", isOn: $liveSuggestionsEnabled)
+                .toggleStyle(OmiToggleStyle())
+                .labelsHidden()
+                .onChange(of: liveSuggestionsEnabled) { _, newValue in
+                  SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
+                }
+            }
 
             settingRow(
               title: "Focus Notifications", subtitle: "Show notification on focus changes",
@@ -95,7 +105,7 @@ extension SettingsContentView {
                 .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: memoryNotificationsEnabled) { _, newValue in
-                  MemoryAssistantSettings.shared.notificationsEnabled = newValue
+                  MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: newValue)
                   SettingsSyncManager.shared.pushPartialUpdate(
                     AssistantSettingsResponse(
                       memory: MemorySettingsResponse(notificationsEnabled: newValue)))
@@ -109,13 +119,7 @@ extension SettingsContentView {
       settingsCard(settingId: "notifications.dailysummary") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
-            Image(systemName: "text.badge.checkmark")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
-
-            Text("Daily Summary")
-              .scaledFont(size: OmiType.subheading, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+            settingsCardHeader(icon: "text.badge.checkmark", title: "Daily Summary")
 
             Spacer()
 
@@ -139,15 +143,19 @@ extension SettingsContentView {
               title: "Summary Time", subtitle: "When to send your daily summary",
               settingId: "notifications.summarytime"
             ) {
-              Picker("", selection: $dailySummaryHour) {
-                ForEach(hourOptions, id: \.self) { hour in
-                  Text(formatHour(hour)).tag(hour)
-                }
-              }
-              .pickerStyle(.menu)
-              .frame(width: 200)
-              .onChange(of: dailySummaryHour) { _, newValue in
-                updateDailySummarySettings(hour: newValue)
+              DatePicker(
+                "",
+                selection: $dailySummaryTime,
+                displayedComponents: .hourAndMinute
+              )
+              .datePickerStyle(.stepperField)
+              .labelsHidden()
+              .fixedSize()
+              .onChange(of: dailySummaryTime) { _, selectedTime in
+                let hour = SettingsControlMetrics.dailySummaryHour(from: selectedTime)
+                guard hour != dailySummaryHour else { return }
+                dailySummaryHour = hour
+                updateDailySummarySettings(hour: hour)
               }
             }
           }
@@ -164,9 +172,7 @@ extension SettingsContentView {
       // Data Controls
       settingsCard(settingId: "privacy.storerecordings") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          Text("Data Controls")
-            .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+          settingsCardHeader(icon: "shield", title: "Data Controls")
 
           privacyToggleRow(
             icon: "mic.fill",
@@ -193,16 +199,7 @@ extension SettingsContentView {
       // Encryption
       settingsCard(settingId: "privacy.encryption") {
         VStack(alignment: .leading, spacing: OmiSpacing.md) {
-          HStack(spacing: OmiSpacing.sm) {
-            Image(systemName: "shield.lefthalf.filled")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
-              .frame(width: 20)
-
-            Text("Encryption")
-              .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
-          }
+          settingsCardHeader(icon: "shield.lefthalf.filled", title: "Encryption")
 
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "checkmark.circle.fill")

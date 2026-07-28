@@ -26,18 +26,13 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        for attempt in $(seq 1 30); do
-          ready="$(gcloud run revisions describe "${{ inputs.revision }}" \
-            --project="${{ inputs.project_id }}" \
-            --region="${{ inputs.region }}" \
-            --format="value(status.conditions[?type='Ready'].status)")"
-          if [ "$ready" = "True" ]; then
-            exit 0
-          fi
-          sleep 5
-        done
-        echo "candidate revision did not become ready" >&2
-        exit 1
+        python3 backend/scripts/wait_cloud_run_candidate_readiness.py \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --service="${{ inputs.service }}" \
+          --revision="${{ inputs.revision }}" \
+          --timeout-seconds=150 \
+          --poll-interval-seconds=5
 
     - name: Resolve and browser-smoke exact candidate
       shell: bash

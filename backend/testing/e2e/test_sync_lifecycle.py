@@ -95,7 +95,7 @@ def _patch_sync_pipeline(
             )
         ]
 
-    def fake_process_conversation(uid, language, conversation):
+    def fake_process_conversation(uid, language, conversation, persistence_observer=None):
         import database.conversations as conversations_db
         from models.structured import Structured
 
@@ -119,6 +119,8 @@ def _patch_sync_pipeline(
             is_locked=conversation.is_locked,
         )
         conversations_db.upsert_conversation_with_lifecycle(uid, conversation_obj.dict())
+        if persistence_observer is not None:
+            persistence_observer(True)
         return conversation_obj
 
     def fake_reprocess_after_update(uid, conversation_id, language):

@@ -120,7 +120,7 @@ from tests.unit.test_ws_i_write_convergence import (
     _trusted_account_generation,
 )
 
-NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
+NOW = datetime.now(timezone.utc)
 
 _WS_B_RUNTIME_MODULE_NAMES = (
     "database.memory_apply_store",
@@ -460,6 +460,32 @@ def test_expired_short_term_hidden_from_default_reads(monkeypatch):
     assert read_canonical_memories(uid, db_client=db) == []
 
 
+def test_canonical_read_uses_explicit_time_for_short_term_visibility(monkeypatch):
+    uid = "uid-canonical-read-clock"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    memory_id = _seed_canonical_short_term(
+        db,
+        uid=uid,
+        conversation_id="conv-read-clock",
+        content="Time-bounded note",
+        monkeypatch=monkeypatch,
+    )
+    path = f"users/{uid}/memory_items/{memory_id}"
+    read_time = datetime(2040, 1, 15, 12, 0, tzinfo=timezone.utc)
+    db.docs[path] |= {
+        "captured_at": (read_time - timedelta(days=1)).isoformat(),
+        "updated_at": (read_time - timedelta(days=1)).isoformat(),
+        "expires_at": (read_time + timedelta(hours=1)).isoformat(),
+    }
+
+    visible = read_canonical_memories(uid, db_client=db, now=read_time)
+    expired = read_canonical_memories(uid, db_client=db, now=read_time + timedelta(hours=1))
+
+    assert [memory.id for memory in visible] == [memory_id]
+    assert expired == []
+
+
 def test_legacy_uid_promotion_and_lifecycle_are_noop(monkeypatch):
     uid = "uid-legacy"
     assert resolve_memory_system(uid, db_client=_PromotionFakeDb()) == MemorySystem.LEGACY
@@ -638,6 +664,93 @@ def test_required_processing_receipt_unlocks_durable_promotion(monkeypatch):
     assert report.promoted_memory_ids == [memory_id]
     assert stored["tier"] == MemoryTier.long_term.value
     assert stored["promotion"]["processing_receipt"]["processor_id"] == "canonical_required_memory"
+
+
+def test_required_processing_does_not_extend_persisted_expiry_when_delayed(monkeypatch):
+    uid = "uid-canonical-required-delayed-processing"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    payload = required_promotion_payload(
+        {"id": "manual-required-delayed-processing", "content": "Remember tea", "manually_added": True},
+        source_surface="mcp",
+    )
+    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    captured_at = db.docs[item_path]["captured_at"]
+    original_expires_at = db.docs[item_path]["expires_at"]
+
+    result = process_required_memory_item(
+        uid,
+        memory_id,
+        db_client=db,
+        processor=lambda _item: ProcessedRequiredMemory(content="The user prefers tea."),
+        now=captured_at + timedelta(days=10),
+    )
+
+    assert result.processed is True
+    assert db.docs[item_path]["expires_at"] == original_expires_at
+
+
+def test_required_processing_preserves_expiry_when_clock_precedes_capture(monkeypatch):
+    uid = "uid-canonical-required-clock-skew"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    payload = required_promotion_payload(
+        {"id": "manual-required-clock-skew", "content": "Remember tea", "manually_added": True},
+        source_surface="mcp",
+    )
+    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    captured_at = db.docs[item_path]["captured_at"]
+    original_expires_at = db.docs[item_path]["expires_at"]
+
+    result = process_required_memory_item(
+        uid,
+        memory_id,
+        db_client=db,
+        processor=lambda _item: ProcessedRequiredMemory(content="The user prefers tea."),
+        now=captured_at - timedelta(days=31),
+    )
+
+    assert result.processed is True
+    assert db.docs[item_path]["expires_at"] == original_expires_at
+
+
+def test_required_processing_receipt_time_does_not_predate_capture(monkeypatch):
+    uid = "uid-canonical-required-receipt-clock-skew"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    payload = required_promotion_payload(
+        {"id": "manual-required-receipt-clock-skew", "content": "Remember tea", "manually_added": True},
+        source_surface="mcp",
+    )
+    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    captured_at = db.docs[item_path]["captured_at"]
+
+    result = process_required_memory_item(
+        uid,
+        memory_id,
+        db_client=db,
+        processor=lambda _item: ProcessedRequiredMemory(content="The user prefers tea."),
+        now=captured_at - timedelta(days=31),
+    )
+
+    assert result.processed is True
+    receipt = db.docs[item_path]["promotion"]["processing_receipt"]
+    assert datetime.fromisoformat(receipt["processed_at"]) == captured_at
 
 
 def test_required_processing_receipt_is_bound_to_current_content_and_revision(monkeypatch):

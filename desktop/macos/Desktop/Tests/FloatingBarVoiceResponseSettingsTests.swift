@@ -1,60 +1,61 @@
 import XCTest
+
 @testable import Omi_Computer
 
 @MainActor
 final class FloatingBarVoiceResponseSettingsTests: XCTestCase {
 
-    func testDefaultVoiceIsShimmerOpenAIHumanVoice() {
-        XCTAssertEqual(ShortcutSettings.defaultVoiceID, ShortcutSettings.openAIShimmerVoiceID)
+  func testDefaultVoiceIsShimmerOpenAIHumanVoice() {
+    XCTAssertEqual(ShortcutSettings.defaultVoiceID, ShortcutSettings.openAIShimmerVoiceID)
 
-        let voice = ShortcutSettings.voiceOption(for: ShortcutSettings.defaultVoiceID)
-        XCTAssertEqual(voice.name, "Shimmer")
-        XCTAssertEqual(voice.gender, .female)
-        XCTAssertTrue(voice.isOpenAI)
-        XCTAssertEqual(voice.provider, .openAI)
-        XCTAssertEqual(voice.openAIVoice, "shimmer")
+    let voice = ShortcutSettings.voiceOption(for: ShortcutSettings.defaultVoiceID)
+    XCTAssertEqual(voice.name, "Shimmer")
+    XCTAssertEqual(voice.gender, .female)
+    XCTAssertTrue(voice.isOpenAI)
+    XCTAssertEqual(voice.provider, .openAI)
+    XCTAssertEqual(voice.openAIVoice, "shimmer")
+  }
+
+  func testShimmerVoiceHasNeutralDisplayName() {
+    let voice = ShortcutSettings.voiceOption(for: ShortcutSettings.openAIShimmerVoiceID)
+    XCTAssertEqual(voice.name, "Shimmer")
+    XCTAssertEqual(voice.openAIVoice, "shimmer")
+  }
+
+  func testOnlyOpenAIVoicesAreAvailableInPicker() {
+    XCTAssertFalse(ShortcutSettings.availableVoices.contains { $0.isLocalSystem })
+  }
+
+  func testLegacyProxyVoicesAreNotAvailableInPicker() {
+    XCTAssertFalse(
+      ShortcutSettings.availableVoices.contains {
+        $0.name.localizedCaseInsensitiveContains("Sloane")
+          || $0.id == "BAMYoBHLZM7lJgJAmFz0"
+      }
+    )
+  }
+
+  func testInvalidVoiceFallsBackToDefaultOpenAIVoice() {
+    let voice = ShortcutSettings.voiceOption(for: "missing")
+    XCTAssertEqual(voice.id, ShortcutSettings.defaultVoiceID)
+    XCTAssertTrue(voice.isOpenAI)
+    XCTAssertEqual(voice.openAIVoice, "shimmer")
+  }
+
+  func testVoiceQueryAlwaysSpeaksAndTypedQueryUsesToggle() {
+    let settings = ShortcutSettings.shared
+    let originalTypedSetting = settings.floatingBarTypedQuestionVoiceAnswersEnabled
+
+    defer {
+      settings.floatingBarTypedQuestionVoiceAnswersEnabled = originalTypedSetting
     }
 
-    func testShimmerVoiceHasNeutralDisplayName() {
-        let voice = ShortcutSettings.voiceOption(for: ShortcutSettings.openAIShimmerVoiceID)
-        XCTAssertEqual(voice.name, "Shimmer")
-        XCTAssertEqual(voice.openAIVoice, "shimmer")
-    }
+    settings.floatingBarTypedQuestionVoiceAnswersEnabled = false
+    XCTAssertTrue(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: true))
+    XCTAssertFalse(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: false))
 
-    func testOnlyOpenAIVoicesAreAvailableInPicker() {
-        XCTAssertFalse(ShortcutSettings.availableVoices.contains { $0.isLocalSystem })
-    }
-
-    func testLegacyProxyVoicesAreNotAvailableInPicker() {
-        XCTAssertFalse(
-            ShortcutSettings.availableVoices.contains {
-                $0.name.localizedCaseInsensitiveContains("Sloane")
-                    || $0.id == "BAMYoBHLZM7lJgJAmFz0"
-            }
-        )
-    }
-
-    func testInvalidVoiceFallsBackToDefaultOpenAIVoice() {
-        let voice = ShortcutSettings.voiceOption(for: "missing")
-        XCTAssertEqual(voice.id, ShortcutSettings.defaultVoiceID)
-        XCTAssertTrue(voice.isOpenAI)
-        XCTAssertEqual(voice.openAIVoice, "shimmer")
-    }
-
-    func testVoiceQueryAlwaysSpeaksAndTypedQueryUsesToggle() {
-        let settings = ShortcutSettings.shared
-        let originalTypedSetting = settings.floatingBarTypedQuestionVoiceAnswersEnabled
-
-        defer {
-            settings.floatingBarTypedQuestionVoiceAnswersEnabled = originalTypedSetting
-        }
-
-        settings.floatingBarTypedQuestionVoiceAnswersEnabled = false
-        XCTAssertTrue(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: true))
-        XCTAssertFalse(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: false))
-
-        settings.floatingBarTypedQuestionVoiceAnswersEnabled = true
-        XCTAssertTrue(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: true))
-        XCTAssertTrue(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: false))
-    }
+    settings.floatingBarTypedQuestionVoiceAnswersEnabled = true
+    XCTAssertTrue(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: true))
+    XCTAssertTrue(settings.shouldSpeakFloatingBarResponse(forVoiceQuery: false))
+  }
 }

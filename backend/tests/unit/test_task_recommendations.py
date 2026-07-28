@@ -1005,6 +1005,83 @@ def test_accepted_task_capture_confidence_gates_shortlist_eligibility():
     assert [subject.subject_id for subject in shortlist] == ['task-accepted-high']
 
 
+def test_malformed_stored_capture_confidence_does_not_break_the_evaluation():
+    """A null or boolean capture_confidence must degrade to 0.0, not crash or score 1.0.
+
+    `dict.get(key, default)` returns None when the key is present holding null, so the
+    0.0 default never fired and `float(None)` raised TypeError out of _build_subjects —
+    taking down the entire What Matters Now projection, not just the offending row.
+    A stored `True` was worse than a crash: float(True) == 1.0 marked a poison row
+    maximally confident and shortlist-eligible. database.candidates._stored_confidence
+    already guards both cases when reading these same action_items fields.
+    """
+    canonical = EvidenceRef(
+        kind=EvidenceKind.conversation,
+        id='conversation-1',
+        scope=EvidenceScope.canonical,
+    ).model_dump(mode='json')
+    base = {
+        'status': 'active',
+        'due_at': NOW + timedelta(days=1),
+        'updated_at': NOW,
+        'provenance': [canonical],
+    }
+    state = {
+        'tasks': [
+            {**base, 'task_id': 'task-null-confidence', 'description': 'Null confidence', 'capture_confidence': None},
+            {**base, 'task_id': 'task-bool-confidence', 'description': 'Bool confidence', 'capture_confidence': True},
+            {**base, 'task_id': 'task-str-confidence', 'description': 'Str confidence', 'capture_confidence': 'high'},
+            {**base, 'task_id': 'task-good', 'description': 'Send the budget', 'capture_confidence': 0.95},
+        ],
+        'candidates': [],
+        'goals': [],
+        'workstreams': [],
+        'artifacts': [],
+    }
+
+    subjects = recommendations._build_subjects(state, context=None, open_loop_snapshots=[], now=NOW)
+    by_id = {subject.subject_id: subject for subject in subjects}
+
+    assert by_id['task-null-confidence'].facts.capture_confidence == 0.0
+    assert by_id['task-bool-confidence'].facts.capture_confidence == 0.0
+    assert by_id['task-str-confidence'].facts.capture_confidence == 0.0
+    for poisoned in ('task-null-confidence', 'task-bool-confidence', 'task-str-confidence'):
+        assert not by_id[poisoned].eligibility.passes_recommendation_gates
+
+    # The healthy row still evaluates — one bad document must not sink the projection.
+    assert by_id['task-good'].facts.capture_confidence == 0.95
+    shortlist = recommendations.filter_shortlist(subjects, set())
+    assert [subject.subject_id for subject in shortlist] == ['task-good']
+
+
+def test_malformed_candidate_confidence_does_not_break_the_evaluation():
+    """Same guard for the candidate reads (capture_confidence / ownership_confidence)."""
+    state = {
+        'tasks': [],
+        'candidates': [
+            {
+                'candidate_id': 'candidate-null',
+                'status': 'pending',
+                'subject_kind': 'task_change',
+                'task_change': {'description': 'Review the deck', 'due_at': NOW + timedelta(days=1)},
+                'capture_confidence': None,
+                'ownership_confidence': None,
+                'updated_at': NOW,
+                'evidence_refs': [],
+            }
+        ],
+        'goals': [],
+        'workstreams': [],
+        'artifacts': [],
+    }
+
+    subjects = recommendations._build_subjects(state, context=None, open_loop_snapshots=[], now=NOW)
+
+    by_id = {subject.subject_id: subject for subject in subjects}
+    assert by_id['candidate-null'].facts.capture_confidence == 0.0
+    assert not by_id['candidate-null'].eligibility.passes_recommendation_gates
+
+
 def test_recently_created_manual_task_qualifies_without_reanimating_old_edits_or_generated_rows():
     state = {
         'tasks': [

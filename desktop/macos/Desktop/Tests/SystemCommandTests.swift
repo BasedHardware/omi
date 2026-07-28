@@ -18,7 +18,7 @@ final class SystemCommandTests: XCTestCase {
   func testExitedNonZeroCapturesCodeAndStderr() {
     let outcome = SystemCommand.run(
       executable: "/bin/sh", arguments: ["-c", "echo boom 1>&2; exit 3"])
-    guard case let .exitedNonZero(code, stderr) = outcome else {
+    guard case .exitedNonZero(let code, let stderr) = outcome else {
       return XCTFail("expected exitedNonZero, got \(outcome)")
     }
     XCTAssertEqual(code, 3)

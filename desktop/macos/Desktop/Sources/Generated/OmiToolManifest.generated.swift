@@ -10,6 +10,13 @@ enum OmiToolManifest {
         "query": [
           "type": "string",
           "description": "SQL query to execute",
+        ],
+        "parameters": [
+          "type": "array",
+          "description": "Optional positional values bound to ? placeholders in query. Use this instead of interpolating values into SQL literals.",
+          "items": [
+            "type": "string",
+          ],
         ]
       ],
       required: [
@@ -172,7 +179,7 @@ enum OmiToolManifest {
     ),
     LocalAgentTool(
       name: "get_work_context",
-      description: "Get the user's current screen plus a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. Call this first when seeing the user's current work would help.",
+      description: "Get a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. It is historical context, not current visual evidence.",
       properties: [
         "minutes": [
           "type": "number",

@@ -119,6 +119,68 @@ def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():
     assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in secrets
 
 
+def test_cloud_run_clone_removes_retired_source_env():
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {'name': 'HOSTED_PUSHER_API_URL', 'value': 'http://retired-pusher.local'},
+                                {'name': 'REDIS_DB_HOST', 'value': '10.0.0.1'},
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    env_vars, secrets = clone_environment(
+        service,
+        'HOSTED_PUSHER_API_URL=http://overlay-should-not-survive.local',
+        'HOSTED_PUSHER_API_URL=HOSTED_PUSHER_API_URL:latest',
+        remove_env_vars='HOSTED_PUSHER_API_URL',
+    )
+
+    assert 'HOSTED_PUSHER_API_URL' not in env_vars
+    assert 'HOSTED_PUSHER_API_URL' not in secrets
+    assert 'REDIS_DB_HOST=10.0.0.1' in env_vars
+
+
+def test_cloud_run_clone_escapes_inherited_literals_without_reencoding_renderer_overlay():
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {
+                                    'name': 'STT_PRERECORDED_MODEL',
+                                    'value': r'modulate-velma-2,parakeet\primary',
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    env_vars, _ = clone_environment(
+        service,
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
+        '',
+    )
+
+    assert env_vars.splitlines() == [
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
+        r'STT_PRERECORDED_MODEL=modulate-velma-2\,parakeet\\primary',
+    ]
+
+
 def test_deploy_contract_routes_both_backfill_budget_alerts():
     action = (Path(__file__).resolve().parents[3] / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
     manual = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()
@@ -157,12 +219,17 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'id: deploy-backend-sync-backfill' in action
     assert 'render_cloud_run_clone_env.py' in action
     assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
-    assert '--min-instances=0' in action
-    assert '--max-instances=4' in action
+    # Dispatch concurrency must equal the worker's max instances: offering more
+    # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
+    # back it off, which previously stranded recordings for hours. A warm
+    # instance keeps a scale-from-zero poke from being rejected outright.
+    assert '--min-instances=1' in action
+    assert '--max-instances=30' in action
     assert '--concurrency=1' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     assert 'gcloud tasks queues create sync-backfill' in action
-    assert '--max-concurrent-dispatches=4' in action
+    assert '--max-concurrent-dispatches=30' in action
+    assert '--max-backoff=60s' in action
     assert 'collection-group=sync_content_ledger' in action
     assert "inputs.provision_sync_ledger_ttl == 'true'" in action
     assert "inputs.provision_budget_alerts == 'true'" in action
@@ -202,9 +269,48 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
     assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in manual
     assert 'Remove passed transcription candidate tag' in manual
     assert 'Remove failed transcription candidate tag' in manual
-    assert 'if: ${{ failure() && steps.deploy-backend.outcome == \'success\' }}' in manual
+    assert "github.event.inputs.environment == 'development'" in manual
     assert manual.index('Gate backend candidate on known audio') < manual.index(
         'Shift Cloud Run traffic to validated revisions'
+    )
+
+
+def test_production_cloud_run_only_smokes_the_promoted_serving_api():
+    """Prod Cloud Run promotion rolls back on runner-local serving smoke failure."""
+    import yaml
+
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load((root / '.github/workflows/gcp_backend.yml').read_text())
+    steps = workflow['jobs']['deploy']['steps']
+    by_name = {step.get('name'): step for step in steps}
+
+    public_probe = by_name['Gate backend candidate on known audio']
+    assert public_probe['if'] == "${{ github.event.inputs.environment == 'development' }}"
+
+    serving_smoke = by_name['Smoke promoted production serving API']
+    assert serving_smoke['if'] == "${{ github.event.inputs.environment == 'prod' }}"
+    assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']
+    assert '--candidate-api-url https://api.omi.me' in serving_smoke['run']
+    assert 'firebase-production-serving-token' in serving_smoke['run']
+    assert 'FIREBASE_PROBE_TOKEN' not in serving_smoke['run']
+
+    for name in (
+        'Resolve transcription candidate URL',
+        'Remove passed transcription candidate tag',
+        'Remove failed transcription candidate tag',
+    ):
+        condition = by_name[name].get('if') or ''
+        assert "github.event.inputs.environment == 'development'" in condition
+
+    deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
+    assert "github.event.inputs.environment == 'development'" in deploy_flags
+    assert steps.index(by_name['Verify serving backend release vector']) < steps.index(serving_smoke)
+    assert steps.index(serving_smoke) < steps.index(
+        by_name['Restore Cloud Run traffic snapshot after failed promotion']
+    )
+    assert (
+        "steps.smoke-promoted-production-serving-api.outcome == 'failure'"
+        in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
     )
 
 

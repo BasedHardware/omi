@@ -1,6 +1,7 @@
-import XCTest
-@testable import Omi_Computer
 import OmiWAL
+import XCTest
+
+@testable import Omi_Computer
 
 final class WALCloudSyncLogicTests: XCTestCase {
 
@@ -165,6 +166,43 @@ final class WALCloudSyncLogicTests: XCTestCase {
     XCTAssertEqual(wals[0].uploadedAt, 0)
   }
 
+  func testCleanupCandidatesSelectsOnlyOldSynced() {
+    let cutoff = 1_000
+    func mk(_ ts: Int, _ status: WALStatus) -> WALEntry {
+      WALEntry(
+        timerStart: ts, codec: "opus", status: status, storage: .disk,
+        filePath: "f", seconds: 1, device: "d", deviceModel: "Omi")
+    }
+    let wals = [
+      mk(cutoff - 1, .synced),  // old + synced   → candidate
+      mk(cutoff + 1, .synced),  // young + synced → keep (inside retention)
+      mk(cutoff - 1, .miss),  // old + miss     → keep (never uploaded)
+      mk(cutoff - 1, .uploaded),  // old + uploaded → keep (job in flight)
+      mk(cutoff - 1, .corrupted),  // old + corrupted → keep
+    ]
+    let candidates = WALCloudSyncLogic.cleanupCandidates(wals: wals, cutoffTimestamp: cutoff)
+    XCTAssertEqual(candidates.map { $0.status }, [.synced], "only the old *synced* entry is reclaimable")
+  }
+
+  func testReconcileUnauthorizedRevertsToMissForReupload() {
+    // A 401 (or a token-mint failure) on the status GET could not authenticate
+    // the poll. Like .forbidden it is durable for this fetch: the WAL leaves
+    // .uploaded and reverts to .miss so the authenticated upload path re-uploads
+    // and refreshes auth — the poll itself never invalidates the session.
+    var wals = [makeWal(status: .uploaded)]
+    wals[0].jobId = "job-1"
+    let changed = WALCloudSyncLogic.applyReconcileFetch(
+      wals: &wals,
+      memberWalIds: [wals[0].id],
+      fetch: SyncJobFetch(outcome: .unauthorized),
+      fileExists: { _ in true }
+    )
+    XCTAssertTrue(changed)
+    XCTAssertEqual(wals[0].status, .miss)
+    XCTAssertNil(wals[0].jobId)
+    XCTAssertEqual(wals[0].uploadedAt, 0)
+  }
+
   // MARK: - mergeReconciledUploads
 
   private func makeWal(timerStart: Int, status: WALStatus, jobId: String? = nil) -> WALEntry {
@@ -241,7 +279,7 @@ final class WALCloudSyncLogicTests: XCTestCase {
   func testMergeIsNoOpWhenNothingReconciled() {
     let a = makeWal(timerStart: 1_700_000_000, status: .uploaded, jobId: "job-1")
     let snapshot = [a]
-    let reconciled = snapshot // unchanged
+    let reconciled = snapshot  // unchanged
     let live = [a]
     let merged = WALCloudSyncLogic.mergeReconciledUploads(
       live: live, snapshot: snapshot, reconciled: reconciled)

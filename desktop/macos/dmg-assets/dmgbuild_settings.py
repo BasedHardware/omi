@@ -23,6 +23,8 @@ files = [app_path]
 symlinks = {"Applications": "/Applications"}
 
 # Window settings
+# dmgbuild automatically compiles background.png with background@2x.png into a
+# multi-resolution TIFF that Finder selects at the display's native scale.
 background = bg_path
 show_status_bar = False
 show_tab_view = False
@@ -43,8 +45,9 @@ icon_locations = {
     "Applications": (455, 175),
 }
 
-# Hide extension for the app
-hide_extensions = [app_name + ".app"]
+# Hiding the extension attaches com.apple.FinderInfo to the signed app bundle,
+# which makes codesign --deep --strict reject the app copied into the DMG.
+hide_extensions = []
 
 # Volume icon
 if icon_path:

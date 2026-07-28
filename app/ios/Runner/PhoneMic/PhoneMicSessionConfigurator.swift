@@ -20,8 +20,13 @@ enum PhoneMicSessionConfigurator {
     /// .mixWithOthers: recording must not stop the user's music/podcasts.
     /// Bluetooth options keep AirPods/headset mics routable, matching the
     /// behavior of the previous flutter_sound-based capture path.
+    /// .defaultToSpeaker: this session stays active after capture stops (we
+    /// never deactivate a shared session) and the app's players do no session
+    /// configuration of their own — without this option, playAndRecord routes
+    /// subsequent in-app playback to the earpiece receiver, which users hear
+    /// as near-silent audio.
     static let options: AVAudioSession.CategoryOptions = [
-        .mixWithOthers, .allowBluetoothHFP, .allowBluetoothA2DP,
+        .mixWithOthers, .allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker,
     ]
 
     static func configureAndActivate() throws {

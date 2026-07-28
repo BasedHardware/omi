@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Ensure scripts are executable
         run: chmod +x scripts/export_onboarding_sync_bundle.sh scripts/prepare_onboarding_sync_bundle.sh scripts/publish_onboarding_sync_branch.sh
@@ -28,7 +28,7 @@ jobs:
         run: scripts/export_onboarding_sync_bundle.sh "$RUNNER_TEMP/onboarding-sync-bundle" "$SOURCE_COMMIT" "$SOURCE_BRANCH"
 
       - name: Upload bundle artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: onboarding-sync-bundle
           path: ${{ runner.temp }}/onboarding-sync-bundle

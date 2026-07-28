@@ -15,6 +15,26 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
     XCTAssertNil(store.error)
   }
 
+  func testConcurrentSameOwnerLoadsDedupeToASingleFetch() async {
+    let api = FakeDashboardIntelligenceClient()
+    api.projection = projection(items: [])
+    let store = DashboardIntelligenceStore(client: api, outboxStore: MemoryDashboardOutbox())
+
+    // Two same-owner loads launched together. load() must claim its dedup slot
+    // (loadingOwnerID) SYNCHRONOUSLY — before it yields at its first await —
+    // otherwise the second load runs on the MainActor before the first load's
+    // performLoad Task sets loadingOwnerID, sees it unset, and starts a second
+    // concurrent fetch. Because the claim is synchronous, the second load always
+    // observes it and awaits the in-flight load, so only one fetch happens.
+    let first = Task { await store.load() }
+    let second = Task { await store.load() }
+    await first.value
+    await second.value
+
+    XCTAssertEqual(
+      api.projectionLoads, 1, "concurrent same-owner loads must dedupe to a single fetch")
+  }
+
   func testControlFailureUsesDashboardErrorWithoutLeakingBackendDetail() async {
     let api = FakeDashboardIntelligenceClient()
     api.controlError = APIError.httpError(
@@ -863,31 +883,31 @@ final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
 }
 
 private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient {
-  var workflowMode = OmiAPI.TaskWorkflowMode.read
-  var projection: OmiAPI.WhatMattersNowProjection!
-  var goals: [OmiAPI.GoalResponse] = []
-  var detail: OmiAPI.GoalDetailProjection?
-  var projectionLoads = 0
-  var projectionError: Error?
-  var projectionSuspensionsRemaining = 0
-  var projectionRelease: CheckedContinuation<Void, Never>?
-  var controlError: Error?
-  var goalsError: Error?
-  var detailLoads = 0
-  var focusRequests: [(goalID: String, replacementID: String?)] = []
-  var focusError: Error?
-  var failFeedback = false
-  var feedbackKeys: [String] = []
-  var feedbackSuspensionsRemaining = 0
-  var feedbackRelease: CheckedContinuation<Void, Never>?
-  var outcomeRequests: [OmiAPI.OutcomeCreate] = []
-  var outcomeKeys: [String] = []
-  var failOutcome = false
-  var lastDeviceID: String?
-  var createdGoal:
+  nonisolated(unsafe) var workflowMode = OmiAPI.TaskWorkflowMode.read
+  nonisolated(unsafe) var projection: OmiAPI.WhatMattersNowProjection
+  nonisolated(unsafe) var goals: [OmiAPI.GoalResponse] = []
+  nonisolated(unsafe) var detail: OmiAPI.GoalDetailProjection?
+  nonisolated(unsafe) var projectionLoads = 0
+  nonisolated(unsafe) var projectionError: Error?
+  nonisolated(unsafe) var projectionSuspensionsRemaining = 0
+  nonisolated(unsafe) var projectionRelease: CheckedContinuation<Void, Never>?
+  nonisolated(unsafe) var controlError: Error?
+  nonisolated(unsafe) var goalsError: Error?
+  nonisolated(unsafe) var detailLoads = 0
+  nonisolated(unsafe) var focusRequests: [(goalID: String, replacementID: String?)] = []
+  nonisolated(unsafe) var focusError: Error?
+  nonisolated(unsafe) var failFeedback = false
+  nonisolated(unsafe) var feedbackKeys: [String] = []
+  nonisolated(unsafe) var feedbackSuspensionsRemaining = 0
+  nonisolated(unsafe) var feedbackRelease: CheckedContinuation<Void, Never>?
+  nonisolated(unsafe) var outcomeRequests: [OmiAPI.OutcomeCreate] = []
+  nonisolated(unsafe) var outcomeKeys: [String] = []
+  nonisolated(unsafe) var failOutcome = false
+  nonisolated(unsafe) var lastDeviceID: String?
+  nonisolated(unsafe) var createdGoal:
     (desiredOutcome: String, successCriteria: [String], generation: Int, idempotencyKey: String)?
-  var exactCandidate: OmiAPI.CandidateRecord?
-  var exactTask: TaskActionItem?
+  nonisolated(unsafe) var exactCandidate: OmiAPI.CandidateRecord?
+  nonisolated(unsafe) var exactTask: TaskActionItem?
 
   init() {
     projection = OmiAPI.WhatMattersNowProjection(
@@ -909,7 +929,7 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   func getWhatMattersNow(deviceID: String?) async throws -> OmiAPI.WhatMattersNowProjection {
     projectionLoads += 1
     lastDeviceID = deviceID
-    let result = projection!
+    let result = projection
     let resultError = projectionError
     if projectionSuspensionsRemaining > 0 {
       projectionSuspensionsRemaining -= 1

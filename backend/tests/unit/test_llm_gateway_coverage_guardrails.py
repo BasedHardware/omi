@@ -51,14 +51,12 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
-    DirectUse('utils/llm/app_generator.py', 'OpenAI'),
     DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/gateway_anthropic.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
-    DirectUse('utils/llm/gateway_byok.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
     DirectUse('utils/memory_ingestion/export_runner.py', 'OPENAI_API_KEY'),
@@ -66,7 +64,6 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/other/chat_file.py', 'openai.beta'),
     DirectUse('utils/other/chat_file.py', 'openai.files'),
     DirectUse('utils/retrieval/agentic.py', 'anthropic_client.messages'),
-    DirectUse('utils/retrieval/tools/perplexity_tools.py', 'PERPLEXITY_API_KEY'),
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
 }
@@ -109,6 +106,13 @@ def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
         assert route.primary.model == expected_provider_model
         assert route.primary.provider == provider
         assert route.provider_options == expected_options
+
+
+def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
+    overrides = load_generated_route_overrides()
+
+    assert overrides['persona_chat'].primary.model == 'gpt-5.4-nano'
+    assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
 
 
 def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_support():

@@ -152,7 +152,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "27",
-      "threshold": "0.5"
+      "threshold": "0.5",
+      "summary": "Omi plugin integrations alert: Backend-integration - 4XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi plugin integrations production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "isPaused": false,
     "notification_settings": {
@@ -161,7 +166,10 @@
     "record": null,
     "labels": {
       "severity": "warning",
-      "instatus_component": "plugins"
+      "instatus_component": "plugins",
+      "alert_identity": "eew96lge97gg0e",
+      "component": "plugins",
+      "impact": "product"
     }
   },
   {
@@ -313,11 +321,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "27",
-      "threshold": "0.5"
+      "threshold": "0.5",
+      "summary": "Omi plugin integrations alert: Backend-integration - 5XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi plugin integrations production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
       "instatus_component": "plugins",
-      "severity": "critical"
+      "severity": "critical",
+      "alert_identity": "eew96o25qztvkf",
+      "component": "plugins",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -470,7 +486,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "24",
-      "threshold": "3"
+      "threshold": "3",
+      "summary": "Omi plugin integrations alert: Backend-integration RPS is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi plugin integrations production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -479,7 +500,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "plugins"
+      "instatus_component": "plugins",
+      "alert_identity": "bew95or0pnke8c",
+      "component": "plugins",
+      "impact": "infrastructure"
     }
   },
   {
@@ -627,7 +651,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "29",
-      "threshold": "30 instances"
+      "threshold": "30 instances",
+      "summary": "Omi plugin integrations alert: Backend-integration instance count is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi plugin integrations production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -636,7 +665,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "plugins"
+      "instatus_component": "plugins",
+      "alert_identity": "cew96qrmucp34c",
+      "component": "plugins",
+      "impact": "infrastructure"
     }
   },
   {
@@ -792,7 +824,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "25",
-      "threshold": "80"
+      "threshold": "80",
+      "summary": "Omi plugin integrations alert: Backend-integration max concurrent requests are high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi plugin integrations production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -801,7 +838,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "plugins"
+      "instatus_component": "plugins",
+      "alert_identity": "bew95rob32tc0d",
+      "component": "plugins",
+      "impact": "infrastructure"
     }
   }
 ]

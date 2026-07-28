@@ -10,6 +10,7 @@ import {
   inheritContextSnapshotForSession,
   kernelSystemPolicy,
   renderContextSnapshot,
+  renderContextSnapshotForBinding,
   updateContextSource,
 } from "../src/runtime/context-snapshot.js";
 import {
@@ -92,6 +93,126 @@ describe("kernel ContextSnapshot", () => {
     expect(cacheBoundedPolicy).not.toContain(at65!.contextPlan.dynamicContextIdentity);
     expect(renderContextSnapshot(at65!, "main_chat", "coordinator"))
       .toContain(at65!.contextPlan.dynamicContextIdentity);
+    store.close();
+  });
+
+  it("delivers full history once per binding, then only new or changed canonical turns", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-delta",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "delta" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    for (let sequence = 1; sequence <= 64; sequence += 1) {
+      recordJournalTurn(store, {
+        ownerId: "owner-delta",
+        conversationId: surface.conversationId,
+        turnId: `delta-turn-${sequence}`,
+        role: sequence % 2 ? "user" : "assistant",
+        surfaceKind: "main_chat",
+        origin: "typed_chat",
+        status: "completed",
+        content: `delta canonical turn ${sequence}`,
+        contentBlocks: [],
+        createdAtMs: sequence,
+      });
+    }
+
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-delta", 64);
+    const full = renderContextSnapshotForBinding(first, "main_chat", "coordinator");
+    expect(full.deliveryMode).toBe("full");
+    expect(full.rendered).toContain("delta canonical turn 1");
+    expect(full.rendered).toContain("delta canonical turn 64");
+
+    recordJournalTurn(store, {
+      ownerId: "owner-delta",
+      conversationId: surface.conversationId,
+      turnId: "delta-turn-65",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "delta canonical turn 65",
+      contentBlocks: [],
+      createdAtMs: 65,
+    });
+    const second = buildContextSnapshot(store, surface.agentSessionId, "owner-delta", 65);
+    const delta = renderContextSnapshotForBinding(second, "main_chat", "coordinator", full.next);
+    expect(delta.deliveryMode).toBe("delta");
+    expect(delta.rendered).toContain('"includedTurnCount":1');
+    expect(delta.rendered).toContain("delta canonical turn 65");
+    expect(delta.rendered).not.toContain("delta canonical turn 2");
+
+    updateJournalTurn(store, {
+      ownerId: "owner-delta",
+      conversationId: surface.conversationId,
+      turnId: "delta-turn-65",
+      content: "delta canonical turn 65 corrected",
+      status: "completed",
+    });
+    const corrected = buildContextSnapshot(store, surface.agentSessionId, "owner-delta", 66);
+    const correction = renderContextSnapshotForBinding(corrected, "main_chat", "coordinator", delta.next);
+    expect(correction.rendered).toContain('"includedTurnCount":1');
+    expect(correction.rendered).toContain("delta canonical turn 65 corrected");
+    store.close();
+  });
+
+  it("falls back to full delivery when previously retained turns disappear", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-shrink",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "shrink" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    for (let sequence = 1; sequence <= 5; sequence += 1) {
+      recordJournalTurn(store, {
+        ownerId: "owner-shrink",
+        conversationId: surface.conversationId,
+        turnId: `shrink-turn-${sequence}`,
+        role: sequence % 2 ? "user" : "assistant",
+        surfaceKind: "main_chat",
+        origin: "typed_chat",
+        status: "completed",
+        content: `shrink canonical turn ${sequence}`,
+        contentBlocks: [],
+        createdAtMs: sequence,
+      });
+    }
+
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-shrink", 5);
+    const full = renderContextSnapshotForBinding(first, "main_chat", "coordinator");
+    expect(full.deliveryMode).toBe("full");
+
+    // Simulate journal_clear_turns: delete some turns so the retained set shrinks.
+    store.execute(
+      "DELETE FROM conversation_turns WHERE conversation_id = ? AND turn_id IN (?, ?)",
+      [surface.conversationId, "shrink-turn-1", "shrink-turn-2"],
+    );
+
+    // New turn arrives after the clear.
+    recordJournalTurn(store, {
+      ownerId: "owner-shrink",
+      conversationId: surface.conversationId,
+      turnId: "shrink-turn-6",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "shrink canonical turn 6",
+      contentBlocks: [],
+      createdAtMs: 6,
+    });
+
+    const afterShrink = buildContextSnapshot(store, surface.agentSessionId, "owner-shrink", 7);
+    const result = renderContextSnapshotForBinding(afterShrink, "main_chat", "coordinator", full.next);
+    // Must be a full re-render, not a delta, so the model knows turns 1 and 2
+    // are gone. A delta with no tombstone would let the model believe they still
+    // exist in the binding's conversation history.
+    expect(result.deliveryMode).toBe("full");
+    expect(result.rendered).not.toContain("delivery=delta");
+    expect(result.rendered).toContain("shrink canonical turn 3");
+    expect(result.rendered).toContain("shrink canonical turn 6");
+    expect(result.rendered).not.toContain("shrink canonical turn 1");
     store.close();
   });
 
@@ -325,6 +446,35 @@ describe("kernel ContextSnapshot", () => {
     expect(aAgain.version).toBe(first.snapshot.version);
     expect(aAgain.snapshotGeneration).toBeGreaterThan(b.snapshotGeneration);
     expect(aAgain.snapshotId).toBe(aAgain.version);
+    store.close();
+  });
+
+  it("accepts a newer observation for identical revision material", () => {
+    const { store, session } = fixture("realtime_voice");
+    const first = updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "workspace",
+      sourceRevision: "workspace@same-content",
+      outcome: "available",
+      capturedAtMs: 100,
+      payload: { workingDirectory: "/tmp/context-workspace" },
+    }, 100);
+    const concurrentObservation = updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "workspace",
+      sourceRevision: "workspace@same-content",
+      outcome: "available",
+      capturedAtMs: 101,
+      payload: { workingDirectory: "/tmp/context-workspace" },
+    }, 101);
+
+    expect(concurrentObservation.changed).toBe(true);
+    expect(concurrentObservation.snapshot.version).toBe(first.snapshot.version);
+    expect(
+      concurrentObservation.snapshot.sourceOutcomes.find((source) => source.source === "workspace")?.capturedAtMs,
+    ).toBe(101);
     store.close();
   });
 
@@ -800,6 +950,77 @@ describe("kernel ContextSnapshot", () => {
     expect(childInput.admittedContextSnapshot.sessionId).toBe(delegated.childSession.sessionId);
     expect(childInput.admittedContextSnapshot.capabilityVersion)
       .not.toBe(parentInput.admittedContextSnapshot.capabilityVersion);
+    store.close();
+  });
+
+  it("projects only recent bounded terminal child output into coordinator context", () => {
+    const { store, session } = fixture("realtime_voice");
+    const parent = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "realtime",
+      requestId: "parent",
+      status: "running",
+      mode: "act",
+      createdAtMs: 1_000,
+      updatedAtMs: 1_000,
+    });
+    const beforeCompletion = buildContextSnapshot(store, session.sessionId, session.ownerId, 1_000_000);
+    const childSession = store.insertSession({
+      ownerId: session.ownerId,
+      surfaceKind: "background_agent",
+      title: "Research agent",
+      defaultAdapterId: "fake",
+      executionRole: "leaf",
+    });
+    const completed = store.insertRun({
+      sessionId: childSession.sessionId,
+      parentRunId: parent.runId,
+      clientId: "realtime",
+      requestId: "completed-child",
+      status: "succeeded",
+      mode: "act",
+      finalText: `completed answer ${"x".repeat(1_500)}`,
+      completedAtMs: 999_950,
+      updatedAtMs: 999_950,
+    });
+    store.insertRun({
+      sessionId: childSession.sessionId,
+      clientId: "realtime",
+      requestId: "unrelated-terminal",
+      status: "succeeded",
+      mode: "act",
+      finalText: "must not leak",
+      completedAtMs: 999_950,
+      updatedAtMs: 999_950,
+    });
+    store.insertRun({
+      sessionId: childSession.sessionId,
+      parentRunId: parent.runId,
+      clientId: "realtime",
+      requestId: "expired-child",
+      status: "succeeded",
+      mode: "act",
+      finalText: "expired output",
+      completedAtMs: 1,
+      updatedAtMs: 1,
+    });
+
+    const snapshot = buildContextSnapshot(store, session.sessionId, session.ownerId, 1_000_000);
+    expect(snapshot.recentCompletedRuns).toEqual([
+      expect.objectContaining({
+        runId: completed.runId,
+        parentRunId: parent.runId,
+        status: "succeeded",
+        title: "Research agent",
+        completedAtMs: 999_950,
+      }),
+    ]);
+    expect(snapshot.recentCompletedRuns[0]?.finalText).toHaveLength(1_200);
+    expect(snapshot.renderedContext).toContain(completed.runId);
+    expect(snapshot.renderedContext).not.toContain("must not leak");
+    expect(snapshot.renderedContext).not.toContain("expired output");
+    expect(renderContextSnapshot(snapshot, "delegated_agent", "leaf")).not.toContain(completed.runId);
+    expect(snapshot.rendererFingerprint).not.toBe(beforeCompletion.rendererFingerprint);
     store.close();
   });
 });

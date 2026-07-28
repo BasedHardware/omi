@@ -52,19 +52,25 @@ is the complementary read-only control-plane check. It needs `actions: read`
 and resolves the reviewed source from the exact GitHub ref being deployed; it
 never prints values. It fails before image build if the source is missing,
 unreadable, malformed, or has a required empty input. Every deploy invokes the
-same composite action, and a scheduled workflow checks development and
-production daily.
+same composite action. Pull requests that change this contract run the same
+reviewed-source preflight; there is no scheduled reconciliation job.
 
 Every production change is deployed as a no-traffic tagged Cloud Run candidate.
-The shared promotion action waits for that exact revision, resolves its tag URL,
-runs the contract's headless-browser client-initialization canary, confirms the
-candidate is still the latest revision, and only then shifts traffic. A failed
+The centralized deploy action reads the target's Cloud Run region, Docker
+context, resource flags, and runtime Secret Manager references from the same
+contract. After authentication and before Docker builds, it confirms each
+declared secret version is enabled and that existing target bindings are either
+absent or the exact declared secret reference. The shared promotion action then
+waits for that exact revision, resolves its tag URL, runs the contract's
+headless-browser client-initialization canary, confirms the candidate is still
+the latest revision, and only then shifts traffic. A failed preflight or
 candidate leaves the serving revision untouched.
 
-When adding a public input, update the contract, classification, Dockerfile,
-reviewed values, client canary, workflow, and focused checker fixture together.
-Do not add a target-specific source scan, a console-only GitHub variable, or a
-fallback/default. This is the enforceable contract introduced by
+When adding a public input or changing a public target's deployment shape,
+update the contract, classification, Dockerfile, reviewed values, client
+canary, centralized deploy action, and focused checker fixture together. Do
+not add target-specific build/deploy wiring, a console-only GitHub variable, or
+a fallback/default. This is the enforceable contract introduced by
 [#9824](https://github.com/BasedHardware/omi/issues/9824).
 
 ## Backend runtime ConfigMap rollout

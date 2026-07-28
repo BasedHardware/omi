@@ -53,7 +53,8 @@ extension APIClient {
   ) throws -> RequestAuthPolicy {
     if let authorizationSnapshot {
       if let expectedOwnerId {
-        let normalizedExpectedOwnerId = expectedOwnerId
+        let normalizedExpectedOwnerId =
+          expectedOwnerId
           .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedExpectedOwnerId.isEmpty,
           normalizedExpectedOwnerId == authorizationSnapshot.ownerID

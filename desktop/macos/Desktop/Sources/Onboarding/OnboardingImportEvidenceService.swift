@@ -109,8 +109,8 @@ enum OnboardingImportEvidenceService {
         }
         let delay = retryBackoffSeconds[attempt]
         log(
-          "\(logPrefix): Retrying import evidence batch after \(delay)s " +
-            "(\(chunk.count) items, attempt \(attempt + 2)): \(error)"
+          "\(logPrefix): Retrying import evidence batch after \(delay)s "
+            + "(\(chunk.count) items, attempt \(attempt + 2)): \(error)"
         )
         await sleep(delay)
       }
@@ -120,7 +120,7 @@ enum OnboardingImportEvidenceService {
   }
 
   private static func shouldRetry(_ error: Error) -> Bool {
-    if case let APIError.httpError(statusCode, _) = error {
+    if case APIError.httpError(let statusCode, _) = error {
       return statusCode == 429 || (500...599).contains(statusCode)
     }
 
@@ -143,7 +143,7 @@ enum OnboardingImportEvidenceService {
   }
 
   private static func isLegacyMemorySystemError(_ error: Error) -> Bool {
-    guard case let APIError.httpError(statusCode, detail) = error else { return false }
+    guard case APIError.httpError(let statusCode, let detail) = error else { return false }
     if statusCode == 403 && detail == "memory_import_requires_canonical" { return true }
     // Deployments without the canonical import router (prod today) 404 this
     // endpoint; without falling back the whole scan context is silently lost.
@@ -151,7 +151,8 @@ enum OnboardingImportEvidenceService {
   }
 
   private static func newImportRunId(sourceType: String) -> String {
-    let normalizedSource = sourceType
+    let normalizedSource =
+      sourceType
       .lowercased()
       .replacingOccurrences(of: #"[^a-z0-9_:-]+"#, with: "-", options: .regularExpression)
       .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
@@ -211,8 +212,8 @@ enum OnboardingMemoryBatchImportService {
         }
         let delay = retryBackoffSeconds[attempt]
         log(
-          "\(logPrefix): Retrying legacy memory batch after \(delay)s " +
-            "(\(chunk.count) items, attempt \(attempt + 2)): \(error)"
+          "\(logPrefix): Retrying legacy memory batch after \(delay)s "
+            + "(\(chunk.count) items, attempt \(attempt + 2)): \(error)"
         )
         await sleep(delay)
       }
@@ -222,7 +223,7 @@ enum OnboardingMemoryBatchImportService {
   }
 
   private static func shouldRetry(_ error: Error) -> Bool {
-    if case let APIError.httpError(statusCode, _) = error {
+    if case APIError.httpError(let statusCode, _) = error {
       return statusCode == 429 || (500...599).contains(statusCode)
     }
 

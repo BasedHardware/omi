@@ -9,7 +9,6 @@ final class CaptureScreenToolTests: XCTestCase {
   private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
 
   override func setUp() async throws {
-    try await super.setUp()
     ownerFixture = RuntimeOwnerAuthorityTestFixture()
     await ownerFixture.establish(authOwnerID: "capture-screen-test-owner")
   }
@@ -18,7 +17,6 @@ final class CaptureScreenToolTests: XCTestCase {
     UserDefaults.standard.removeObject(forKey: screenshotKey)
     await ownerFixture.restore()
     ownerFixture = nil
-    try await super.tearDown()
   }
 
   // MARK: - Tool dispatch

@@ -174,6 +174,7 @@ def search_vector_memory(
             limit=limit,
             required_projection_commit_id=rollout.vector_projection_commit_id,
             required_account_generation=rollout.rollout_capabilities.account_generation,
+            now=_current_time(),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

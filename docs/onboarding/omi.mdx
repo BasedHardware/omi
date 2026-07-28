@@ -83,10 +83,15 @@ Understanding your Omi's status through LED colors:
 | Color | Status |
 |-------|--------|
 | 🔴 **Solid Red** | Device is on but disconnected from your phone |
+| 🔴 **Blinking Red** | Device hasn't synced the time yet — connect it to the Omi app |
 | 🔵 **Solid Blue** | Device is on and connected to your phone |
 | 🟢 **Blinking Green + Red** | Charging while disconnected |
 | 🟢 **Blinking Green + Blue** | Charging while connected |
 | 🟢 **Solid Green** | Fully charged (battery ≥ 98%) |
+
+<Note>
+A **blinking red** light just means your Omi hasn't received the current time yet. It gets the time from your phone over Bluetooth, so **connect the device to the Omi app** and it will sync automatically and stop blinking. If it's already connected but keeps blinking, **disconnect and reconnect** it in the app.
+</Note>
 
 ---
 
@@ -134,6 +139,12 @@ Understanding your Omi's status through LED colors:
     3. Try turning it off and on again
 
     If the issue persists, ask in [Discord](http://discord.omi.me) or contact [help@omi.me](mailto:help@omi.me)
+  </Accordion>
+  <Accordion title="Blinking red light" icon="clock">
+    A blinking red light means the device hasn't synced the time yet. Omi gets the current time from your phone over Bluetooth.
+
+    1. Open the Omi app and connect to your device — the time syncs automatically and the light stops blinking.
+    2. If the device is already connected but the light keeps blinking, disconnect and reconnect it in the app.
   </Accordion>
   <Accordion title="Device won't pair" icon="bluetooth">
     - Make sure Bluetooth is enabled on your phone

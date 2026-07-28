@@ -3,18 +3,23 @@
 
 from __future__ import annotations
 
+from contextlib import redirect_stderr
 import io
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+import urllib.error
 from pathlib import Path
+from unittest.mock import Mock, patch
 
-from pr_metadata import load_from_api
-from pr_preflight import select_checks
+import preflight_runner
+from pr_metadata import TransientPRMetadataError, load_from_api, load_from_event_file
+from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -57,8 +62,123 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(captured["authorization"], "Bearer test-token")
         self.assertEqual(captured["timeout"], 15)
 
+    def test_api_loader_retries_transient_failures_then_succeeds(self) -> None:
+        payload = json.dumps({"number": 9847, "body": "ok", "updated_at": "u", "labels": []}).encode()
+        outcomes: list[object] = [
+            urllib.error.HTTPError("url", 502, "bad gateway", None, io.BytesIO()),  # type: ignore[arg-type]
+            TimeoutError("timed out"),
+            FakeResponse(payload),
+        ]
+        sleeps: list[float] = []
+
+        def opener(request: object, timeout: int) -> FakeResponse:
+            outcome = outcomes.pop(0)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome  # type: ignore[return-value]
+
+        metadata = load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=sleeps.append)
+        self.assertEqual(metadata.number, 9847)
+        self.assertEqual(sleeps, [2.0, 4.0])
+
+    def test_api_loader_does_not_retry_permanent_http_errors(self) -> None:
+        calls = {"count": 0}
+
+        def opener(request: object, timeout: int) -> FakeResponse:
+            calls["count"] += 1
+            raise urllib.error.HTTPError("url", 404, "not found", None, io.BytesIO())  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(RuntimeError, "HTTP 404") as raised:
+            load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
+        self.assertEqual(calls["count"], 1)
+        cause = raised.exception.__cause__
+        self.assertIsInstance(cause, urllib.error.HTTPError)
+        cause.close()  # type: ignore[union-attr]
+
+    def test_api_loader_raises_after_exhausting_transient_retries(self) -> None:
+        calls = {"count": 0}
+
+        def opener(request: object, timeout: int) -> FakeResponse:
+            calls["count"] += 1
+            raise TimeoutError("timed out")
+
+        with self.assertRaisesRegex(TransientPRMetadataError, "request failed"):
+            load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
+        self.assertEqual(calls["count"], 3)
+
+    def test_event_payload_loader_uses_top_level_pr_number(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / "event.json"
+            event_path.write_text(
+                json.dumps(
+                    {
+                        "number": 9847,
+                        "pull_request": {
+                            "body": "INV-MEM-1",
+                            "updated_at": "2026-07-16T23:30:00Z",
+                            "labels": [{"name": "no-changelog-needed"}],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            metadata = load_from_event_file(event_path, 9847)
+
+        self.assertEqual(metadata.number, 9847)
+        self.assertEqual(metadata.body, "INV-MEM-1")
+        self.assertEqual(metadata.labels, ("no-changelog-needed",))
+
+    def test_event_payload_loader_rejects_missing_pull_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / "event.json"
+            event_path.write_text(json.dumps({"number": 9847}), encoding="utf-8")
+
+            with self.assertRaisesRegex(RuntimeError, "pull_request"):
+                load_from_event_file(event_path, 9847)
+
+    def test_pr_metadata_uses_event_payload_only_after_transient_api_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / "event.json"
+            event_path.write_text(
+                json.dumps({"number": 9847, "pull_request": {"body": "current", "labels": []}}),
+                encoding="utf-8",
+            )
+            warnings = io.StringIO()
+            with patch.dict(os.environ, {"OMI_PR_BODY_FILE": ""}), patch(
+                "pr_preflight.load_from_api", side_effect=TransientPRMetadataError("GitHub API unavailable")
+            ), redirect_stderr(warnings):
+                metadata = resolve_pr_metadata(REPO_ROOT, None, "BasedHardware/omi", 9847, event_path)
+
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.body, "current")
+        self.assertIn("using the PR snapshot", warnings.getvalue())
+
+    def test_pr_metadata_does_not_use_event_payload_after_permanent_api_failure(self) -> None:
+        with patch.dict(os.environ, {"OMI_PR_BODY_FILE": ""}), patch(
+            "pr_preflight.load_from_api", side_effect=RuntimeError("GitHub API returned HTTP 403")
+        ):
+            with self.assertRaisesRegex(RuntimeError, "HTTP 403"):
+                resolve_pr_metadata(REPO_ROOT, None, "BasedHardware/omi", 9847, Path("event.json"))
+
 
 class SelectionTests(unittest.TestCase):
+    def test_changed_files_disables_rename_detection_to_preserve_both_move_paths(self) -> None:
+        root = Path("/repo")
+        source = "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift"
+        destination = "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift"
+        with patch("pr_preflight.run_git", return_value=f"{source}\n{destination}\n") as run_git:
+            self.assertEqual(changed_files(root, "base", "head"), [source, destination])
+
+        run_git.assert_called_once_with(
+            root,
+            "diff",
+            "--name-only",
+            "--no-renames",
+            "--diff-filter=ACMRTD",
+            "base...head",
+        )
+
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
         result = subprocess.run(
             ["make", "-n", "preflight"],
@@ -79,7 +199,8 @@ class SelectionTests(unittest.TestCase):
             [
                 "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift",
                 "desktop/macos/agent/src/runtime/control-tools.ts",
-            ]
+            ],
+            platform="macos",
         )
         names = {check.name for check in checks}
         self.assertIn("product-invariants", names)
@@ -95,6 +216,8 @@ class SelectionTests(unittest.TestCase):
                 "diff-hygiene",
                 "architecture-guardrails",
                 "product-invariants",
+                "failure-class-protocol",
+                "failure-class-guard-artifact-ratchet",
                 "desktop-changelog-data",
                 "deferred-work-markers",
                 "lifecycle-headers",
@@ -149,7 +272,7 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(coverage.returncode, 1, coverage.stdout)
             self.assertIn("UNCOVERED", coverage.stdout)
 
-    def test_suggest_flag_prints_paste_ready_invariants(self) -> None:
+    def test_suggest_flag_prints_paste_ready_pr_metadata(self) -> None:
         result = subprocess.run(
             [
                 sys.executable,
@@ -168,6 +291,26 @@ class SelectionTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("## Product invariants affected", result.stdout)
+        self.assertIn("## Failure class (fixes)", result.stdout)
+        self.assertIn("No `fix:` commits were detected", result.stdout)
+
+    def test_failure_class_suggestion_keeps_classification_manual(self) -> None:
+        output = format_failure_class_suggest(
+            {
+                "requires_declaration": True,
+                "pr_body_patch": {"text": "Failure-Class: none\n"},
+                "advisory_candidates": [
+                    {
+                        "id": "FC-malformed-doc-read",
+                        "violated_contract": "Stored documents must be validated at the read boundary.",
+                    }
+                ],
+            }
+        )
+        self.assertIn("Failure-Class: none", output)
+        self.assertIn("does not infer a class from paths or diffs", output)
+        self.assertIn("scripts/failure-class explain FC-<slug> --format json", output)
+        self.assertIn("FC-malformed-doc-read", output)
 
     def test_pr_body_file_env_is_honored(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -192,8 +335,84 @@ class SelectionTests(unittest.TestCase):
                 stderr=subprocess.STDOUT,
                 text=True,
             )
-            self.assertEqual(result.returncode, 0, result.stdout)
+            # This test isolates metadata-file selection. Other manifest-selected
+            # repository guardrails may legitimately fail as global state evolves;
+            # requiring a zero exit here made the metadata contract time-dependent.
             self.assertIn(str(body.resolve()), result.stdout)
+            self.assertNotIn("No PR metadata file is available", result.stdout)
+
+    def test_repo_checks_routes_metadata_events_to_the_narrow_preflight(self) -> None:
+        """Metadata-only PR updates must not restart the full hygiene suite."""
+        workflow = (REPO_ROOT / ".github/workflows/repo-checks.yml").read_text(encoding="utf-8")
+        metadata_job = workflow.split("  metadata-preflight:\n", 1)[1].split("\n  changes:\n", 1)[0]
+        changes_job = workflow.split("  changes:\n", 1)[1].split("\n  hygiene:\n", 1)[0]
+        hygiene_job = workflow.split("  hygiene:\n", 1)[1].split("\n  formatting:\n", 1)[0]
+
+        for event in ("edited", "labeled", "unlabeled"):
+            self.assertIn(event, metadata_job)
+            self.assertIn(event, changes_job)
+            self.assertIn(event, hygiene_job)
+        self.assertIn("scripts/pr-preflight", metadata_job)
+        self.assertIn("github.event.pull_request.base.sha", metadata_job)
+        self.assertIn("astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84", metadata_job)
+        self.assertLess(metadata_job.index("Set up uv"), metadata_job.index("Run current PR metadata preflight"))
+        self.assertIn("github.event_name != 'pull_request'", changes_job)
+        self.assertIn("github.event_name != 'pull_request'", hygiene_job)
+
+        # The manifest can select the Firestore admission proof for either PR
+        # preflight path. Java must be present before the selected check runs.
+        for job, gate in (
+            (metadata_job, "Run current PR metadata preflight"),
+            (hygiene_job, "Run shared PR contract preflight"),
+        ):
+            self.assertIn("actions/setup-java@v5", job)
+            self.assertIn("java-version: '21'", job)
+            self.assertLess(job.index("Set up Java for manifest-selected Firestore checks"), job.index(gate))
+
+    def test_issue_sync_action_is_pinned(self) -> None:
+        workflow = (REPO_ROOT / ".github/workflows/main.yml").read_text(encoding="utf-8")
+
+        self.assertIn("paritytech/github-issue-sync@34a24348bf2f2a73924e322f43d6132e0c276b5f", workflow)
+        self.assertNotIn("paritytech/github-issue-sync@master", workflow)
+
+    def test_standard_actions_no_longer_use_node_20_majors(self) -> None:
+        deprecated_references = (
+            "actions/checkout@v3",
+            "actions/checkout@v4",
+            "actions/setup-python@v5",
+            "actions/setup-node@v3",
+            "actions/setup-node@v4",
+            "actions/cache@v4",
+            "actions/cache/restore@v4",
+            "actions/cache/save@v4",
+            "actions/upload-artifact@v4",
+            "actions/download-artifact@v4",
+            "actions/github-script@v6",
+            "actions/github-script@v7",
+            "actions/create-github-app-token@v1",
+            "actions/configure-pages@v3",
+            "actions/deploy-pages@v4",
+            "actions/upload-pages-artifact@v3",
+            "actions/setup-dotnet@v4",
+            "google-github-actions/auth@v2",
+            "google-github-actions/setup-gcloud@v2",
+            "google-github-actions/get-gke-credentials@v2",
+            "google-github-actions/deploy-cloudrun@v2",
+            "docker/build-push-action@v6",
+            "docker/setup-buildx-action@v3",
+            "azure/setup-helm@v3",
+            "gradle/actions/setup-gradle@v4",
+            "pnpm/action-setup@v4",
+            "opentofu/setup-opentofu@v1",
+            "peter-evans/create-pull-request@v5",
+            "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78",
+        )
+        workflow_files = (*REPO_ROOT.glob(".github/workflows/*.yml"), *REPO_ROOT.glob(".github/actions/*/action.yml"))
+
+        for path in workflow_files:
+            text = path.read_text(encoding="utf-8")
+            for reference in deprecated_references:
+                self.assertNotIn(reference, text, f"{path}: update {reference} to a non-Node-20 action")
 
 
 class SingleFlightTests(unittest.TestCase):
@@ -275,6 +494,60 @@ class SingleFlightTests(unittest.TestCase):
                 first.stdout.read()
                 first.stdout.close()
             self.assertEqual(first.wait(), 0)
+
+
+class SignalPortabilityTests(unittest.TestCase):
+    """The single-flight wrapper must start on hosts without POSIX signal APIs.
+
+    Windows Python defines neither ``signal.SIGHUP`` nor ``os.killpg``. Building the
+    handler map from a hard-coded tuple containing SIGHUP raised AttributeError inside
+    ``run_owned()``, so every ``git push`` failed before the pre-push checks began.
+    These exercise the selection/forwarding seams directly — no real signal is sent.
+    """
+
+    def test_forwardable_signals_omits_signals_absent_on_host(self) -> None:
+        had_sighup = hasattr(signal, "SIGHUP")
+        original = getattr(signal, "SIGHUP", None)
+        try:
+            if had_sighup:
+                delattr(signal, "SIGHUP")  # simulate Windows
+            selected = preflight_runner.forwardable_signals()
+        finally:
+            if had_sighup:
+                signal.SIGHUP = original
+        self.assertIn(signal.SIGINT, selected)
+        self.assertIn(signal.SIGTERM, selected)
+        self.assertTrue(all(signum is not None for signum in selected))
+
+    @unittest.skipUnless(hasattr(signal, "SIGHUP"), "POSIX-only")
+    def test_forwardable_signals_includes_sighup_on_posix(self) -> None:
+        self.assertIn(signal.SIGHUP, preflight_runner.forwardable_signals())
+
+    @unittest.skipUnless(hasattr(os, "killpg"), "POSIX-only")
+    def test_forwards_to_process_group_when_available(self) -> None:
+        child = Mock(pid=4321)
+        with patch.object(os, "killpg") as killpg:
+            preflight_runner.signal_child(child, signal.SIGTERM)
+        killpg.assert_called_once_with(4321, signal.SIGTERM)
+        child.send_signal.assert_not_called()
+
+    def test_forwards_via_send_signal_when_process_groups_unavailable(self) -> None:
+        child = Mock(pid=4321)
+        had_killpg = hasattr(os, "killpg")
+        original = getattr(os, "killpg", None)
+        try:
+            if had_killpg:
+                delattr(os, "killpg")  # simulate Windows
+            preflight_runner.signal_child(child, signal.SIGTERM)
+        finally:
+            if had_killpg:
+                os.killpg = original
+        child.send_signal.assert_called_once_with(signal.SIGTERM)
+
+    def test_forwarding_swallows_dead_child(self) -> None:
+        child = Mock(pid=4321)
+        with patch.object(os, "killpg", side_effect=ProcessLookupError):
+            preflight_runner.signal_child(child, signal.SIGTERM)  # must not raise
 
 
 if __name__ == "__main__":

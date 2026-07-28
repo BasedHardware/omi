@@ -9,6 +9,13 @@ export LC_NUMERIC=C
 # ─── Arguments ─────────────────────────────────────────────────────────
 YOLO_MODE=0
 FORCE_FULL_BUNDLE="${OMI_FORCE_FULL_BUNDLE:-0}"
+# Reseeding replaces an existing named profile after preserving it. It must run
+# through the install/seed path; a fast executable patch intentionally skips it.
+if [ "${OMI_FORCE_REWIND_SEED:-0}" = "1" ]; then
+    FORCE_FULL_BUNDLE=1
+fi
+FAST_ONLY=0
+NO_WAIT="${NO_WAIT:-0}"
 SHOW_HELP=0
 for arg in "$@"; do
     case "$arg" in
@@ -17,6 +24,12 @@ for arg in "$@"; do
             ;;
         --full)
             FORCE_FULL_BUNDLE=1
+            ;;
+        --fast-only)
+            FAST_ONLY=1
+            ;;
+        --no-wait)
+            NO_WAIT=1
             ;;
         --help|-h)
             SHOW_HELP=1
@@ -27,6 +40,11 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if [ "$FAST_ONLY" = "1" ] && [ "$FORCE_FULL_BUNDLE" = "1" ]; then
+    echo "ERROR: --fast-only cannot be combined with --full or OMI_FORCE_FULL_BUNDLE=1" >&2
+    exit 2
+fi
 
 # ─── Help ──────────────────────────────────────────────────────────────
 if [ "$SHOW_HELP" = "1" ]; then
@@ -42,14 +60,18 @@ Options (via environment variables):
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
   OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
   OMI_SKIP_SETTINGS_SEED=1  Do not copy shortcuts/settings from Omi Dev into named bundles
+  OMI_SKIP_REWIND_SEED=1    Do not copy the local Rewind history into a new named bundle
+  OMI_FORCE_REWIND_SEED=1   Replace an existing named-bundle Rewind history with a fresh Omi Dev snapshot
   OMI_DEV_EAGER_PERMISSIONS=1  Preserve eager mic/screen/file startup behavior in named bundles
   OMI_PYTHON_API_URL="..."  Python backend URL (explicit override; named bundles default to dev)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
+  OMI_DESKTOP_BACKEND_RELEASE=1  Use an optimized Rust backend locally (debug is the fast default)
   OMI_FORCE_FULL_BUNDLE=1  Rebuild the complete app bundle on this launch
   OMI_SCAN_STALE_BUNDLES=1  Remove stale same-named app bundles under $HOME (recovery only)
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
   OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
   OMI_AUTOMATION_PORT=47777       Bridge port (set per bundle when running several at once)
+  OMI_FORCE_CANONICAL_MEMORY_ATLAS=1  Non-production-only local QA override for the canonical atlas rollout gate
   OMI_DESKTOP_LOCAL_PROFILE=1     Local harness profile; localhost endpoints/Auth emulator only
 
 Required files:
@@ -68,6 +90,8 @@ Examples:
   OMI_SKIP_TUNNEL=1 ./run.sh                # No Cloudflare tunnel (use direct URL)
   ./run.sh --yolo                            # Quick start: use dev backend, no local services
   ./run.sh --full                            # Rebuild every packaged dependency
+  ./run.sh --fast-only                       # Reuse an eligible installed bundle or fail without packaging
+  ./run.sh --fast-only --no-wait             # Relaunch an eligible remote/harness bundle, then return
 USAGE
     exit 0
 fi
@@ -79,8 +103,12 @@ fi
 apply_yolo_env() {
     export OMI_SKIP_BACKEND=1
     export OMI_SKIP_TUNNEL=1
-    export OMI_DESKTOP_API_URL="https://desktop-backend-dt5lrfkkoa-uc.a.run.app"
-    export OMI_PYTHON_API_URL="https://api.omiapi.com"
+    # `--yolo` supplies remote-development defaults, but must not discard an
+    # explicitly targeted backend. Named QA and fault-injection bundles use
+    # these overrides to exercise a chosen service revision without requiring
+    # a local Rust backend or .env file.
+    export OMI_DESKTOP_API_URL="${OMI_DESKTOP_API_URL:-https://desktop-backend-dt5lrfkkoa-uc.a.run.app}"
+    export OMI_PYTHON_API_URL="${OMI_PYTHON_API_URL:-https://api.omiapi.com}"
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 }
 
@@ -112,6 +140,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=fast-dev-bundle.sh
 source "$SCRIPT_DIR/scripts/fast-dev-bundle.sh"
+# shellcheck source=local-profile-env.sh
+source "$SCRIPT_DIR/scripts/local-profile-env.sh"
+# shellcheck source=rust-backend-dev.sh
+source "$SCRIPT_DIR/scripts/rust-backend-dev.sh"
 
 # Timing utilities
 SCRIPT_START_TIME=$(date +%s.%N)
@@ -199,6 +231,15 @@ if [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
     apply_yolo_env
 fi
 
+# A detached launch is safe only when another service owns the backend. It is
+# intended for the remote-dev and local-harness fast lanes; a run.sh-owned
+# backend must remain attached so its lifecycle and logs stay scoped here.
+if [ "$NO_WAIT" = "1" ] \
+    && { [ "${OMI_SKIP_BACKEND:-0}" != "1" ] || [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; }; then
+    echo "ERROR: --no-wait requires OMI_SKIP_BACKEND=1 and OMI_SKIP_TUNNEL=1 (use --yolo or the local harness)." >&2
+    exit 2
+fi
+
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
@@ -245,6 +286,15 @@ if [ "$LOCAL_PROFILE" = true ]; then
 fi
 AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-${AUTOMATION_PORT:-47777}}"
 AUTOMATION_CAPTURE_ROOT="${OMI_AUTOMATION_CAPTURE_ROOT:-$SCRIPT_DIR/.harness/runs}"
+# An external harness may request an ownership proof for a detached `open`
+# launch. The token is passed as an app argument (and therefore visible in the
+# spawned process command) and copied into the owner-only launch signal. It is
+# intentionally opt-in so ordinary local launches keep their existing behavior.
+DESKTOP_LAUNCH_TOKEN="${OMI_DESKTOP_LAUNCH_TOKEN:-}"
+if [[ -n "$DESKTOP_LAUNCH_TOKEN" && ! "$DESKTOP_LAUNCH_TOKEN" =~ ^[A-Za-z0-9_-]{16,128}$ ]]; then
+    echo "ERROR: OMI_DESKTOP_LAUNCH_TOKEN must be 16-128 URL-safe characters" >&2
+    exit 2
+fi
 AUTOMATION_ARGS=("--automation-port=$AUTOMATION_PORT" "--automation-capture-root=$AUTOMATION_CAPTURE_ROOT")
 if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
     AUTOMATION_ARGS=(--automation-bridge "${AUTOMATION_ARGS[@]}")
@@ -253,6 +303,9 @@ fi
 # Backend configuration (Rust)
 BACKEND_DIR="$(cd "$(dirname "$0")/Backend-Rust" && pwd)"
 BACKEND_PID=""
+BACKEND_REUSED_PID=""
+BACKEND_PIDFILE="$OMI_DEV_DIR/rust-backend.pid"
+BACKEND_METADATA="$OMI_DEV_DIR/rust-backend.meta"
 TUNNEL_PID=""
 TUNNEL_URL="${TUNNEL_URL:-}"
 AUTH_CACHE=""
@@ -296,6 +349,82 @@ resolve_signing_identity() {
         substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
     fi
 }
+
+fast_bundle_fingerprint() {
+    local desktop_api_fingerprint="${OMI_DESKTOP_API_URL:-}"
+    local python_api_fingerprint="${OMI_PYTHON_API_URL:-}"
+    # The local-profile writer refreshes both endpoint settings plus disposable
+    # Auth-emulator values inside the installed bundle on every fast patch.
+    # They are launch configuration, not a packaged-input boundary.
+    if [ "$LOCAL_PROFILE" = true ]; then
+        desktop_api_fingerprint="local-profile-refreshed"
+        python_api_fingerprint="local-profile-refreshed"
+    fi
+    omi_fast_bundle_fingerprint \
+        "$SCRIPT_DIR" \
+        "bundle-id=$BUNDLE_ID" \
+        "signing-identity=$SIGN_IDENTITY" \
+        "local-profile=$LOCAL_PROFILE" \
+        "yolo=$YOLO_MODE" \
+        "skip-backend=${OMI_SKIP_BACKEND:-0}" \
+        "skip-tunnel=${OMI_SKIP_TUNNEL:-0}" \
+        "desktop-api-url=$desktop_api_fingerprint" \
+        "python-api-url=$python_api_fingerprint" \
+        "backend-port=$BACKEND_PORT"
+}
+
+fast_bundle_profile_root() {
+    if [ "$IS_NAMED_BUNDLE" = true ]; then
+        printf '%s\n' "$HOME/Library/Application Support/Omi Dev Bundles/$BUNDLE_ID"
+    else
+        printf '%s\n' "$HOME/Library/Application Support/Omi"
+    fi
+}
+
+reset_local_profile_keychain_state() {
+    if [ "$LOCAL_PROFILE" = true ]; then
+        step "Resetting local-profile Keychain state..."
+        # Local profiles sign into the synthetic Auth emulator on every launch.
+        # Clear only this installed named bundle's scoped disposable items so an
+        # earlier ad-hoc build cannot block startup on a stale TrustedApplication
+        # ACL. The reset helper rejects Prod, Beta, Omi Dev, and identity mismatch.
+        ./scripts/omi-local-profile-keychain-reset.sh "$BUNDLE_ID" "$APP_PATH"
+    fi
+}
+
+fail_fast_only() {
+    local reason="$1"
+    printf 'launch_mode=failed fast_reason=%s bundle_id=%s profile_root=%q\n' \
+        "$reason" "$BUNDLE_ID" "$(fast_bundle_profile_root)" >&2
+    exit 3
+}
+
+# `--fast-only` is an inspection-first agent operation. Read the same selected
+# configuration that a normal launch will use, but do it before killing an app,
+# clearing a build directory, starting a tunnel, or starting a backend. This
+# makes an ineligible fast launch safe to probe repeatedly.
+prepare_fast_only_configuration() {
+    if [ "$LOCAL_PROFILE" = false ] && [ -f "$BACKEND_DIR/.env" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        source "$BACKEND_DIR/.env"
+        set +a
+    fi
+    if [ "$YOLO_MODE" = "1" ] || [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
+        apply_yolo_env
+    fi
+}
+
+FAST_BUNDLE_STAMP="$OMI_DEV_DIR/fast-dev-bundles/$BUNDLE_ID.stamp"
+if [ "$FAST_ONLY" = "1" ]; then
+    prepare_fast_only_configuration
+    resolve_signing_identity
+    FAST_BUNDLE_FINGERPRINT="$(fast_bundle_fingerprint)"
+    FAST_BUNDLE_REASON="$(omi_fast_bundle_eligibility_reason "$APP_PATH" "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT")"
+    if [ "$FAST_BUNDLE_REASON" != "reusable" ]; then
+        fail_fast_only "$FAST_BUNDLE_REASON"
+    fi
+fi
 
 sign_app_bundle() {
     local bundle="$1"
@@ -461,17 +590,20 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
-# Kill only THIS instance's old Rust backend (tracked via pidfile) — never other
-# worktrees' backends. Skip when the dev harness owns the backend process.
+# Keep an owned local Rust backend alive until a replacement has compiled. The
+# backend startup path refreshes Firebase keys before it binds, so restarting it
+# for a Swift-only edit adds network-dependent delay and makes a compiler error
+# take down an otherwise healthy development server.
 if [ -n "${OMI_HARNESS_INSTANCE:-}" ]; then
     substep "Keeping harness desktop-backend (OMI_HARNESS_INSTANCE=${OMI_HARNESS_INSTANCE})"
-elif [ -f "$OMI_DEV_DIR/rust-backend.pid" ]; then
-    OLD_BACKEND_PID="$(cat "$OMI_DEV_DIR/rust-backend.pid" 2>/dev/null)"
-    if [ -n "$OLD_BACKEND_PID" ] && kill -0 "$OLD_BACKEND_PID" 2>/dev/null; then
-        substep "Killing our old backend (PID: $OLD_BACKEND_PID, port $BACKEND_PORT)"
-        kill -9 "$OLD_BACKEND_PID" 2>/dev/null || true
+elif omi_rust_backend_pid_is_alive "$BACKEND_PIDFILE"; then
+    OLD_BACKEND_PID="$(omi_rust_backend_read_pid "$BACKEND_PIDFILE")"
+    substep "Deferring recorded backend verification until a candidate is ready (PID: $OLD_BACKEND_PID, port $BACKEND_PORT)"
+else
+    if [ -f "$BACKEND_PIDFILE" ] || [ -f "$BACKEND_METADATA" ]; then
+        substep "Removing stale owned backend metadata"
+        rm -f "$BACKEND_PIDFILE" "$BACKEND_METADATA"
     fi
-    rm -f "$OMI_DEV_DIR/rust-backend.pid"
 fi
 sleep 0.5  # Let cfprefsd flush after process death
 auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
@@ -480,35 +612,42 @@ auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'a
 # Each non-production app writes to its own bundle-and-launch log path. Never clear a
 # machine-global log here: another named QA or qualification bundle may still be running.
 
-step "Cleaning up conflicting app bundles..."
-# Clean old build names from local build dir
-rm -rf "$BUILD_DIR/Omi Computer.app" 2>/dev/null
-rm -rf "$APP_BUNDLE" 2>/dev/null
-CONFLICTING_APPS=(
-    "$APP_DESKTOP_PATH"
-    "$APP_DOWNLOADS_PATH"
-    "$(dirname "$0")/../../app/build/macos/Build/Products/Debug/Omi.app"
-    "$(dirname "$0")/../../app/build/macos/Build/Products/Release/Omi.app"
-)
-for app in "${CONFLICTING_APPS[@]}"; do
-    if [ -d "$app" ]; then
-        substep "Removing: $app"
-        rm -rf "$app"
-    fi
-done
-# Also remove any stale dev app bundles nested inside Flutter builds.
-find "$(dirname "$0")/../../app/build" -name "$APP_NAME.app" -type d -exec rm -rf {} + 2>/dev/null || true
-# A recursive $HOME scan can take minutes and is unnecessary when relaunching
-# the already-registered named dev bundle. Keep it as an explicit recovery tool
-# for a stale LaunchServices registration instead of charging every edit.
-if [ "${OMI_SCAN_STALE_BUNDLES:-0}" = "1" ] && [ "${OMI_SKIP_STALE_BUNDLE_SCAN:-0}" != "1" ]; then
-    substep "Scanning for stale clone bundles (OMI_SCAN_STALE_BUNDLES=1)"
-    find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
-        substep "Removing stale clone: $stale"
-        rm -rf "$stale"
-    done
+if [ "$FAST_ONLY" = "1" ]; then
+    # --fast-only already proved that the installed bundle fingerprint matches;
+    # scanning unrelated Flutter output and deleting staging bundles can only
+    # add latency to this strictly incremental path.
+    substep "Fast-only: skipping unrelated bundle cleanup"
 else
-    substep "Skipping stale clone scan (set OMI_SCAN_STALE_BUNDLES=1 to enable)"
+    step "Cleaning up conflicting app bundles..."
+    # Clean old build names from local build dir
+    rm -rf "$BUILD_DIR/Omi Computer.app" 2>/dev/null
+    rm -rf "$APP_BUNDLE" 2>/dev/null
+    CONFLICTING_APPS=(
+        "$APP_DESKTOP_PATH"
+        "$APP_DOWNLOADS_PATH"
+        "$(dirname "$0")/../../app/build/macos/Build/Products/Debug/Omi.app"
+        "$(dirname "$0")/../../app/build/macos/Build/Products/Release/Omi.app"
+    )
+    for app in "${CONFLICTING_APPS[@]}"; do
+        if [ -d "$app" ]; then
+            substep "Removing: $app"
+            rm -rf "$app"
+        fi
+    done
+    # Also remove any stale dev app bundles nested inside Flutter builds.
+    find "$(dirname "$0")/../../app/build" -name "$APP_NAME.app" -type d -exec rm -rf {} + 2>/dev/null || true
+    # A recursive $HOME scan can take minutes and is unnecessary when relaunching
+    # the already-registered named dev bundle. Keep it as an explicit recovery tool
+    # for a stale LaunchServices registration instead of charging every edit.
+    if [ "${OMI_SCAN_STALE_BUNDLES:-0}" = "1" ] && [ "${OMI_SKIP_STALE_BUNDLE_SCAN:-0}" != "1" ]; then
+        substep "Scanning for stale clone bundles (OMI_SCAN_STALE_BUNDLES=1)"
+        find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
+            substep "Removing stale clone: $stale"
+            rm -rf "$stale"
+        done
+    else
+        substep "Skipping stale clone scan (set OMI_SCAN_STALE_BUNDLES=1 to enable)"
+    fi
 fi
 
 if [ -n "${OMI_DESKTOP_API_URL:-}" ]; then
@@ -549,7 +688,8 @@ if [ ! -f ".env" ] && [ -f "../../backend/.env" ]; then
 elif [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
     cp "../Backend/.env" ".env"
 fi
-if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" != true ]; then
+if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" != true ] \
+    && { [ "${OMI_SKIP_BACKEND:-0}" != "1" ] || [ -z "${OMI_DESKTOP_API_URL:-}" ]; }; then
     echo ""
     echo "=== First-time setup ==="
     echo "No .env file found at $BACKEND_DIR/.env"
@@ -591,7 +731,10 @@ if [ "$YOLO_MODE" = "1" ] || [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; the
     apply_yolo_env
 fi
 
-# BACKEND_PORT / PORT already derived per-worktree near the top (scripts/dev-instance.sh).
+# A checked-in/local `.env` commonly contains PORT=10201. The worktree-derived
+# selection above remains authoritative so the child process, probes, and
+# ownership metadata all use the same isolated port.
+export PORT="$BACKEND_PORT"
 
 # Validate credentials (needed for both backend and auth)
 CREDS_PATH="$BACKEND_DIR/google-credentials.json"
@@ -627,53 +770,107 @@ cd - > /dev/null
 
 # ─── Start Rust backend ───────────────────────────────────────────────
 if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
-    step "Starting Rust backend..."
     cd "$BACKEND_DIR"
-
-    # Backend stdout is part of launch diagnostics, but must never share a file
-    # with a Swift named bundle or another QA run. `mktemp -d` creates a private
-    # per-launch directory; the backend itself writes only to stdout.
-    SAFE_BUNDLE_ID="$(printf '%s' "$BUNDLE_ID" | tr -c 'A-Za-z0-9._-' '-')"
-    BACKEND_LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-${SAFE_BUNDLE_ID}-backend.XXXXXX")"
-    chmod 700 "$BACKEND_LOG_DIR"
-    BACKEND_LOG_FILE="$BACKEND_LOG_DIR/backend.log"
-
-    # Fail loud (don't clobber) if our derived port is already held — another worktree
-    # likely owns it (or a stale process). Better to stop than to silently steal it.
-    PORT_HOLDER="$(lsof -ti tcp:"$BACKEND_PORT" -sTCP:LISTEN 2>/dev/null | head -1)"
-    if [ -n "$PORT_HOLDER" ]; then
-        echo "ERROR: backend port $BACKEND_PORT (instance '$OMI_INSTANCE') is already in use by pid $PORT_HOLDER:"
-        echo "  $(ps -o command= -p "$PORT_HOLDER" 2>/dev/null)"
-        echo "  Another worktree probably owns it. Stop that process, or run with PORT=<free> / OMI_INSTANCE=<name>."
-        exit 1
-    fi
-
-    # Build if binary doesn't exist or source is newer
-    if [ ! -f "target/release/omi-desktop-backend" ] || [ -n "$(find src -newer target/release/omi-desktop-backend 2>/dev/null)" ]; then
-        step "Building Rust backend (cargo build --release)..."
-        cargo build --release
-    fi
-
-    ./target/release/omi-desktop-backend >>"$BACKEND_LOG_FILE" 2>&1 &
-    BACKEND_PID=$!
-    echo "$BACKEND_PID" > "$OMI_DEV_DIR/rust-backend.pid"
-    substep "Backend log: $BACKEND_LOG_FILE"
-    cd - > /dev/null
-
-    step "Waiting for backend to start..."
-    for i in {1..30}; do
-        if curl -s "http://localhost:$BACKEND_PORT" > /dev/null 2>&1; then
-            substep "Backend is ready!"
-            break
+    RUST_BACKEND_PROFILE="$(omi_rust_backend_profile)"
+    RUST_BACKEND_BINARY="$(omi_rust_backend_binary "$BACKEND_DIR" "$RUST_BACKEND_PROFILE")"
+    OLD_BACKEND_PID=""
+    if omi_rust_backend_pid_is_alive "$BACKEND_PIDFILE"; then
+        OLD_BACKEND_PID="$(omi_rust_backend_read_pid "$BACKEND_PIDFILE")"
+        # A pidfile alone is never authority to signal a process: PIDs can be
+        # reused after a crash. Require the recorded process-start identity
+        # before a later replacement may stop it. This intentionally does not
+        # require the requested profile/configuration to match: a known-owned
+        # debug process must be safely replaceable by an explicit release run.
+        if ! omi_rust_backend_pid_matches_metadata "$BACKEND_METADATA" "$OLD_BACKEND_PID"; then
+            substep "Ignoring unverified Rust backend pidfile (PID: $OLD_BACKEND_PID)"
+            rm -f "$BACKEND_PIDFILE" "$BACKEND_METADATA"
+            OLD_BACKEND_PID=""
         fi
-        if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-            echo "ERROR: Backend failed to start. Check $BACKEND_DIR/.env and credentials."
+    fi
+
+    # The local harness already owns an isolated debug backend. Do not compete
+    # for its port or replace its process from the app launcher.
+    if [ -n "${OMI_HARNESS_INSTANCE:-}" ]; then
+        substep "Reusing harness desktop-backend (instance $OMI_HARNESS_INSTANCE)"
+    elif [ -n "$OLD_BACKEND_PID" ] \
+        && omi_rust_backend_metadata_matches "$BACKEND_METADATA" "$RUST_BACKEND_PROFILE" "$RUST_BACKEND_BINARY" "$BACKEND_PORT" \
+        && ! omi_rust_backend_sources_are_stale "$BACKEND_DIR" "$RUST_BACKEND_BINARY" \
+        && ! omi_rust_backend_config_is_newer "$BACKEND_DIR" "$BACKEND_PIDFILE" \
+        && omi_rust_backend_pid_listens_on_port "$OLD_BACKEND_PID" "$BACKEND_PORT" \
+        && omi_rust_backend_health_check "$BACKEND_PORT"; then
+        BACKEND_REUSED_PID="$OLD_BACKEND_PID"
+        substep "Reusing healthy $RUST_BACKEND_PROFILE Rust backend (PID: $BACKEND_REUSED_PID, port $BACKEND_PORT)"
+    else
+        # Compile before stopping the current owned backend. A Rust compiler
+        # error must leave the developer's last healthy server available.
+        if omi_rust_backend_sources_are_stale "$BACKEND_DIR" "$RUST_BACKEND_BINARY"; then
+            step "Building Rust backend (cargo build --locked, $RUST_BACKEND_PROFILE)..."
+            if [ "$RUST_BACKEND_PROFILE" = "release" ]; then
+                cargo build --locked --release
+            else
+                cargo build --locked
+            fi
+        fi
+
+        if [ ! -x "$RUST_BACKEND_BINARY" ]; then
+            echo "ERROR: Rust backend build did not produce $RUST_BACKEND_BINARY" >&2
             exit 1
         fi
-        sleep 0.5
-    done
+
+        if [ -n "$OLD_BACKEND_PID" ]; then
+            substep "Replacing owned Rust backend after successful build (PID: $OLD_BACKEND_PID)"
+            omi_rust_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
+        fi
+
+        # Fail loud (don't clobber) if our derived port is held by a different
+        # worktree. The pidfile only grants ownership over the process above.
+        PORT_HOLDER="$(lsof -ti tcp:"$BACKEND_PORT" -sTCP:LISTEN 2>/dev/null | head -1)"
+        if [ -n "$PORT_HOLDER" ]; then
+            echo "ERROR: backend port $BACKEND_PORT (instance '$OMI_INSTANCE') is already in use by pid $PORT_HOLDER:"
+            echo "  $(ps -o command= -p "$PORT_HOLDER" 2>/dev/null)"
+            echo "  Another worktree probably owns it. Stop that process, or run with PORT=<free> / OMI_INSTANCE=<name>."
+            exit 1
+        fi
+
+        # Backend stdout is part of launch diagnostics, but must never share a
+        # file with a Swift named bundle or another QA run.
+        SAFE_BUNDLE_ID="$(printf '%s' "$BUNDLE_ID" | tr -c 'A-Za-z0-9._-' '-')"
+        BACKEND_LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-${SAFE_BUNDLE_ID}-backend.XXXXXX")"
+        chmod 700 "$BACKEND_LOG_DIR"
+        BACKEND_LOG_FILE="$BACKEND_LOG_DIR/backend.log"
+
+        step "Starting Rust backend ($RUST_BACKEND_PROFILE)..."
+        "$RUST_BACKEND_BINARY" >>"$BACKEND_LOG_FILE" 2>&1 &
+        BACKEND_PID=$!
+        printf '%s\n' "$BACKEND_PID" > "$BACKEND_PIDFILE"
+        substep "Backend log: $BACKEND_LOG_FILE"
+
+        step "Waiting for backend to start..."
+        BACKEND_READY=0
+        for i in {1..30}; do
+            if omi_rust_backend_health_check "$BACKEND_PORT"; then
+                BACKEND_READY=1
+                substep "Backend is ready!"
+                break
+            fi
+            if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+                echo "ERROR: Backend failed to start. Check $BACKEND_DIR/.env and credentials."
+                omi_rust_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
+                exit 1
+            fi
+            sleep 0.5
+        done
+        if [ "$BACKEND_READY" != "1" ]; then
+            echo "ERROR: Backend did not become healthy on port $BACKEND_PORT. Check $BACKEND_LOG_FILE" >&2
+            omi_rust_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
+            exit 1
+        fi
+        omi_rust_backend_write_metadata \
+            "$BACKEND_METADATA" "$RUST_BACKEND_PROFILE" "$RUST_BACKEND_BINARY" "$BACKEND_PORT" "$BACKEND_PID"
+    fi
+    cd - > /dev/null
 else
-    substep "Skipping backend (OMI_SKIP_BACKEND=1) — using OMI_DESKTOP_API_URL from .env"
+    substep "Skipping backend (OMI_SKIP_BACKEND=1) — using OMI_DESKTOP_API_URL"
 fi
 
 # Wait only for SwiftPM instances building THIS checkout. Parallel worktrees
@@ -701,33 +898,20 @@ while true; do
 done
 
 FAST_BUNDLE=0
-FAST_BUNDLE_STAMP="$OMI_DEV_DIR/fast-dev-bundles/$BUNDLE_ID.stamp"
-fast_bundle_fingerprint() {
-    omi_fast_bundle_fingerprint \
-        "$SCRIPT_DIR" \
-        "bundle-id=$BUNDLE_ID" \
-        "signing-identity=$SIGN_IDENTITY" \
-        "yolo=$YOLO_MODE" \
-        "skip-backend=${OMI_SKIP_BACKEND:-0}" \
-        "skip-tunnel=${OMI_SKIP_TUNNEL:-0}" \
-        "desktop-api-url=${OMI_DESKTOP_API_URL:-}" \
-        "python-api-url=${OMI_PYTHON_API_URL:-}" \
-        "backend-port=$BACKEND_PORT"
-}
+FAST_BUNDLE_REASON=""
 
 step "Checking reusable development bundle..."
 resolve_signing_identity
 FAST_BUNDLE_FINGERPRINT="$(fast_bundle_fingerprint)"
+FAST_BUNDLE_REASON="$(omi_fast_bundle_eligibility_reason "$APP_PATH" "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT")"
 if [ "$FORCE_FULL_BUNDLE" = "1" ]; then
+    FAST_BUNDLE_REASON="full_requested"
     substep "Full bundle requested (--full or OMI_FORCE_FULL_BUNDLE=1)"
-elif [ "$LOCAL_PROFILE" = true ]; then
-    # The profile generates credential-bearing .env files. Keep that isolated
-    # harness lane conservative until its configuration has a secret-free stamp.
-    substep "Local profile requires a full bundle"
-elif [ ! -d "$APP_PATH/Contents" ]; then
-    substep "No installed bundle at $APP_PATH"
-elif ! omi_fast_bundle_stamp_matches "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT"; then
-    substep "Packaged inputs or launch configuration changed"
+elif [ "$FAST_BUNDLE_REASON" != "reusable" ]; then
+    substep "Fast bundle unavailable: $FAST_BUNDLE_REASON"
+    if [ "$FAST_ONLY" = "1" ]; then
+        fail_fast_only "$FAST_BUNDLE_REASON"
+    fi
 else
     FAST_BUNDLE=1
     substep "Fast path: reusing installed bundle at $APP_PATH"
@@ -744,10 +928,17 @@ if [ "$FAST_BUNDLE" = "1" ]; then
     install_name_tool -add_rpath "@executable_path/../Frameworks" "$PATCHED_BINARY" 2>/dev/null || true
     rewrite_bundled_dylib_load_path "$PATCHED_BINARY" "libwebp.7.dylib"
     mv -f "$PATCHED_BINARY" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
-    update_app_desktop_api_url "$APP_PATH/Contents/Resources/.env"
+    if [ "$LOCAL_PROFILE" = true ]; then
+        EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
+        omi_write_local_profile_env "$APP_PATH/Contents/Resources/.env"
+        substep "Refreshed local-profile bundle environment"
+    else
+        update_app_desktop_api_url "$APP_PATH/Contents/Resources/.env"
+    fi
 
     step "Signing updated app with hardened runtime..."
     sign_app_bundle "$APP_PATH" false
+    reset_local_profile_keychain_state
 else
 step "Preparing agent runtime..."
 "$(dirname "$0")/scripts/prepare-agent-runtime.sh" --universal-node
@@ -906,22 +1097,7 @@ fi
 substep "Copying .env.app"
 if [ "$LOCAL_PROFILE" = true ]; then
     EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
-    : > "$APP_BUNDLE/Contents/Resources/.env"
-    {
-        echo "OMI_DESKTOP_LOCAL_PROFILE=1"
-        echo "OMI_DESKTOP_API_URL=$OMI_DESKTOP_API_URL"
-        echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL"
-        echo "OMI_LOCAL_PROFILE_STORAGE_NAME=${OMI_LOCAL_PROFILE_STORAGE_NAME:-Omi}"
-        echo "OMI_LOCAL_AUTH_USER=$OMI_LOCAL_AUTH_USER"
-        echo "OMI_LOCAL_AUTH_EMAIL=$OMI_LOCAL_AUTH_EMAIL"
-        echo "OMI_LOCAL_AUTH_PASSWORD=$OMI_LOCAL_AUTH_PASSWORD"
-        echo "OMI_LOCAL_AUTH_DISPLAY_NAME=$OMI_LOCAL_AUTH_DISPLAY_NAME"
-        echo "FIREBASE_AUTH_EMULATOR_HOST=$FIREBASE_AUTH_EMULATOR_HOST"
-        echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
-        echo "FIREBASE_AUTH_PROJECT_ID=${FIREBASE_AUTH_PROJECT_ID:-$FIREBASE_PROJECT_ID}"
-        echo "FIRESTORE_DATABASE_ID=${FIRESTORE_DATABASE_ID:-(default)}"
-        echo "FIREBASE_API_KEY=$FIREBASE_API_KEY"
-    } >> "$APP_BUNDLE/Contents/Resources/.env"
+    omi_write_local_profile_env "$APP_BUNDLE/Contents/Resources/.env"
     substep "Omi Dev local harness .env contains localhost endpoints/Auth emulator bootstrap only"
 else
 if [ -f ".env.app.dev" ]; then
@@ -1034,14 +1210,7 @@ FAST_BUNDLE_FINGERPRINT="$(fast_bundle_fingerprint)"
 omi_fast_bundle_write_stamp "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT"
 substep "Recorded reusable bundle fingerprint"
 
-if [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ]; then
-    step "Resetting local-profile Keychain state..."
-    # Local profiles sign into the synthetic Auth emulator on every launch.
-    # Clear only this installed named bundle's scoped disposable items so an
-    # earlier ad-hoc build cannot block startup on a stale TrustedApplication
-    # ACL. The reset helper rejects Prod, Beta, Omi Dev, and identity mismatch.
-    ./scripts/omi-local-profile-keychain-reset.sh "$BUNDLE_ID" "$APP_PATH"
-fi
+reset_local_profile_keychain_state
 
 if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
     step "Seeding auth from Omi Dev..."
@@ -1076,7 +1245,39 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; t
     fi
 fi
 
+if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_REWIND_SEED:-0}" != "1" ]; then
+    step "Seeding Rewind history from Omi Dev..."
+    if ! ./scripts/omi-rewind-seed.sh "$BUNDLE_ID"; then
+        echo "Warning: could not seed Rewind history into $BUNDLE_ID. Launching with its existing local profile."
+    fi
+fi
+
 fi # full bundle path
+
+signal_desktop_launch() {
+    local signal_file="${OMI_DESKTOP_LAUNCH_SIGNAL_FILE:-}"
+    local launch_transport="${1:-unknown}"
+    local signal_dir signal_tmp
+    [ -n "$signal_file" ] || return 0
+    signal_dir="$(dirname "$signal_file")"
+    if [ ! -d "$signal_dir" ]; then
+        echo "ERROR: desktop launch signal directory does not exist: $signal_dir" >&2
+        return 1
+    fi
+    signal_tmp="${signal_file}.tmp.$$"
+    # A harness cleanup proof is valid only when this token has also been
+    # passed to the process launched by `open`. Do not emit half a proof.
+    if [ -n "$DESKTOP_LAUNCH_TOKEN" ]; then
+        umask 077
+        printf 'schema_version=1\nbundle_id=%s\napp_path=%s\nexecutable_path=%s\nlaunch_token=%s\nlaunch_transport=%s\n' \
+            "$BUNDLE_ID" "$APP_PATH" "$APP_PATH/Contents/MacOS/$BINARY_NAME" \
+            "$DESKTOP_LAUNCH_TOKEN" "$launch_transport" > "$signal_tmp"
+        chmod 600 "$signal_tmp"
+    else
+        printf 'bundle_id=%s\napp_path=%s\n' "$BUNDLE_ID" "$APP_PATH" > "$signal_tmp"
+    fi
+    mv -f "$signal_tmp" "$signal_file"
+}
 
 step "Starting app..."
 
@@ -1088,6 +1289,10 @@ echo ""
 echo "=== Services Running (total: ${TOTAL_TIME%.*}s) ==="
 if [ -n "$BACKEND_PID" ]; then
     echo "Backend:  http://localhost:$BACKEND_PORT (PID: $BACKEND_PID)"
+elif [ -n "$BACKEND_REUSED_PID" ]; then
+    echo "Backend:  http://localhost:$BACKEND_PORT (reused PID: $BACKEND_REUSED_PID)"
+elif [ -n "${OMI_HARNESS_INSTANCE:-}" ] && [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
+    echo "Backend:  http://localhost:$BACKEND_PORT (reused harness instance: $OMI_HARNESS_INSTANCE)"
 else
     echo "Backend:  skipped (OMI_SKIP_BACKEND=1)"
 fi
@@ -1104,18 +1309,61 @@ fi
 echo "========================================"
 echo ""
 
-auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
-    open "$APP_PATH" --args "${AUTOMATION_ARGS[@]}" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
-else
-    open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
+LAUNCH_MODE="full"
+[ "$FAST_BUNDLE" = "1" ] && LAUNCH_MODE="fast"
+PROFILE_ROOT="$HOME/Library/Application Support/Omi"
+if [ "$IS_NAMED_BUNDLE" = true ]; then
+    PROFILE_ROOT="$HOME/Library/Application Support/Omi Dev Bundles/$BUNDLE_ID"
 fi
+printf 'launch_mode=%s fast_reason=%s bundle_id=%s profile_root=%q\n' \
+    "$LAUNCH_MODE" "$FAST_BUNDLE_REASON" "$BUNDLE_ID" "$PROFILE_ROOT"
+
+auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
+
+# `open` starts the app from launchd, not this shell, so documented QA
+# overrides must be forwarded explicitly or they silently do nothing. Only the
+# direct-exec fallback below inherits this shell's environment.
+build_launch_env_args() {
+    LAUNCH_ENV_ARGS=()
+    if [ -n "${OMI_FORCE_CANONICAL_MEMORY_ATLAS:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CANONICAL_MEMORY_ATLAS=$OMI_FORCE_CANONICAL_MEMORY_ATLAS")
+    fi
+}
+
+build_launch_env_args
+
+LAUNCH_TRANSPORT="open"
+if [ -n "$DESKTOP_LAUNCH_TOKEN" ]; then
+    # `-n` guarantees this invocation creates a process carrying the capability
+    # token instead of focusing an existing instance of the same app.
+    LAUNCH_ARGS=("${AUTOMATION_ARGS[@]}" "--omi-launch-token=$DESKTOP_LAUNCH_TOKEN")
+    if ! open -n ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${LAUNCH_ARGS[@]}"; then
+        LAUNCH_TRANSPORT="direct"
+        "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${LAUNCH_ARGS[@]}" &
+    fi
+elif [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
+    if ! open ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${AUTOMATION_ARGS[@]}"; then
+        LAUNCH_TRANSPORT="direct"
+        "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
+    fi
+else
+    if ! open ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH"; then
+        LAUNCH_TRANSPORT="direct"
+        "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
+    fi
+fi
+signal_desktop_launch "$LAUNCH_TRANSPORT"
 
 # Launch finished — free this worktree's lock so other checkouts (and a later
 # rebuild here) are not blocked by the long-running wait below. Kept through
 # open so a same-worktree contender cannot rm -rf $APP_PATH mid-launch.
 omi_run_sh_release_build_lock
 substep "Released per-worktree build lock"
+
+if [ "$NO_WAIT" = "1" ]; then
+    echo "Detached launch complete (backend and tunnel are externally owned)."
+    exit 0
+fi
 
 # Keep script running until Ctrl+C
 echo "Press Ctrl+C to stop all services..."

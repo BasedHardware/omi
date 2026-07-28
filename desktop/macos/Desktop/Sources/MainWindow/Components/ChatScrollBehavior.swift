@@ -1,10 +1,173 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
+
+/// The narrow distance from the live edge that means the reader has actually
+/// returned to it. A generous threshold makes a deliberate small upward scroll
+/// look like "follow the stream" and pulls the reader back down on the next token.
+enum ChatScrollLiveEdge {
+  static let intentEpsilon: CGFloat = 2
+  /// A jump button fires before SwiftUI has necessarily finished laying out a
+  /// newly expanded final row. Repeating the bottom-anchor scroll on the next
+  /// turn makes the explicit intent land at the true live edge.
+  static let explicitJumpSettlingDelay: TimeInterval = 0.05
+
+  static func isAtBottom(visibleMaxY: CGFloat, documentHeight: CGFloat) -> Bool {
+    visibleMaxY >= documentHeight - intentEpsilon
+  }
+}
+
+/// Owns the legacy scroller state while a prompt rail is visible. The original
+/// state is restored when the rail disappears, so narrower transcript surfaces
+/// retain their normal AppKit scrolling affordance.
+@MainActor
+final class ChatPromptTimelineScrollerController {
+  private struct ScrollerVisualState {
+    let isHidden: Bool
+    let alphaValue: CGFloat
+  }
+
+  private weak var scrollView: NSScrollView?
+  private weak var verticalScroller: NSScroller?
+  private var originalHasVerticalScroller: Bool?
+  private var originalScrollerVisualState: ScrollerVisualState?
+  private var isSuppressed = false
+
+  func attach(to scrollView: NSScrollView) {
+    guard self.scrollView !== scrollView else { return }
+    restore()
+    self.scrollView = scrollView
+    applyVisibility()
+  }
+
+  @discardableResult
+  func setSuppressed(_ isSuppressed: Bool) -> Bool {
+    guard self.isSuppressed != isSuppressed else { return false }
+    self.isSuppressed = isSuppressed
+    applyVisibility()
+    return true
+  }
+
+  func restore() {
+    if let originalHasVerticalScroller, let scrollView {
+      scrollView.hasVerticalScroller = originalHasVerticalScroller
+    }
+    if let originalScrollerVisualState, let verticalScroller {
+      verticalScroller.isHidden = originalScrollerVisualState.isHidden
+      verticalScroller.alphaValue = originalScrollerVisualState.alphaValue
+    }
+    originalHasVerticalScroller = nil
+    originalScrollerVisualState = nil
+    verticalScroller = nil
+    scrollView = nil
+  }
+
+  private func applyVisibility() {
+    guard let scrollView else { return }
+    if isSuppressed {
+      if originalHasVerticalScroller == nil {
+        originalHasVerticalScroller = scrollView.hasVerticalScroller
+        verticalScroller = scrollView.verticalScroller
+        if let verticalScroller {
+          originalScrollerVisualState = ScrollerVisualState(
+            isHidden: verticalScroller.isHidden,
+            alphaValue: verticalScroller.alphaValue)
+        }
+      }
+      scrollView.hasVerticalScroller = false
+      verticalScroller?.isHidden = true
+      verticalScroller?.alphaValue = 0
+    } else if let originalHasVerticalScroller {
+      scrollView.hasVerticalScroller = originalHasVerticalScroller
+      if let originalScrollerVisualState, let verticalScroller {
+        verticalScroller.isHidden = originalScrollerVisualState.isHidden
+        verticalScroller.alphaValue = originalScrollerVisualState.alphaValue
+      }
+      self.originalHasVerticalScroller = nil
+      self.originalScrollerVisualState = nil
+      verticalScroller = nil
+    }
+  }
+}
+
+/// A zero-chrome AppKit bridge mounted inside the transcript document view.
+/// It reaches the enclosing SwiftUI NSScrollView and hides its legacy vertical
+/// scroller while the custom prompt rail is available.
+struct ChatTimelineScrollerSuppressionHost: NSViewRepresentable {
+  let isSuppressed: Bool
+
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView()
+    _ = context.coordinator.setSuppressed(isSuppressed)
+    scheduleAttachment(of: view, with: context.coordinator)
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    if context.coordinator.setSuppressed(isSuppressed) {
+      scheduleAttachment(of: nsView, with: context.coordinator)
+    }
+  }
+
+  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    coordinator.restore()
+  }
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
+  }
+
+  private func scheduleAttachment(of view: NSView, with coordinator: Coordinator) {
+    // SwiftUI can create the background representable before inserting it into
+    // the document view. Retry through the next layout turns so the actual
+    // transcript NSScrollView is always found rather than leaving its overlay
+    // scroller visible for this rail session.
+    for delay in [0.0, 0.1, 0.3] {
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        coordinator.attach(toEnclosingScrollViewOf: view)
+      }
+    }
+  }
+
+  final class Coordinator: NSObject, @unchecked Sendable {
+    private let controller = ChatPromptTimelineScrollerController()
+
+    func setSuppressed(_ isSuppressed: Bool) -> Bool {
+      MainActor.assumeIsolated {
+        controller.setSuppressed(isSuppressed)
+      }
+    }
+
+    func attach(toEnclosingScrollViewOf view: NSView) {
+      MainActor.assumeIsolated {
+        var current: NSView? = view
+        while let candidate = current {
+          if let scrollView = candidate as? NSScrollView {
+            controller.attach(to: scrollView)
+            return
+          }
+          current = candidate.superview
+        }
+      }
+    }
+
+    func restore() {
+      MainActor.assumeIsolated {
+        controller.restore()
+      }
+    }
+
+    deinit {
+      MainActor.assumeIsolated {
+        controller.restore()
+      }
+    }
+  }
+}
 
 /// Detects scroll position changes by observing the underlying NSScrollView.
 struct ScrollPositionDetector: NSViewRepresentable {
-  let onScrollPositionChange: (Bool) -> Void  // true if at bottom
+  let onScrollPositionChange: (ChatScrollPosition) -> Void
 
   func makeNSView(context: Context) -> NSView {
     let view = NSView()
@@ -20,64 +183,220 @@ struct ScrollPositionDetector: NSViewRepresentable {
     Coordinator(onScrollPositionChange: onScrollPositionChange)
   }
 
-  class Coordinator: NSObject {
-    let onScrollPositionChange: (Bool) -> Void
+  final class Coordinator: NSObject, @unchecked Sendable {
+    let onScrollPositionChange: (ChatScrollPosition) -> Void
     private var scrollView: NSScrollView?
-    private var observation: NSObjectProtocol?
+    private var boundsObservation: NSObjectProtocol?
+    private var documentFrameObservation: NSObjectProtocol?
     private var coalesceWorkItem: DispatchWorkItem?
-    private var lastReportedValue: Bool?
+    private var lastReportedPosition: ChatScrollPosition?
+    private var pendingPosition: ChatScrollPosition?
 
-    init(onScrollPositionChange: @escaping (Bool) -> Void) {
+    init(onScrollPositionChange: @escaping (ChatScrollPosition) -> Void) {
       self.onScrollPositionChange = onScrollPositionChange
     }
 
     func setupScrollObserver(for view: NSView) {
-      var current: NSView? = view
-      while let v = current {
-        if let sv = v as? NSScrollView {
-          scrollView = sv
-          break
+      MainActor.assumeIsolated {
+        var current: NSView? = view
+        while let v = current {
+          if let sv = v as? NSScrollView {
+            scrollView = sv
+            break
+          }
+          current = v.superview
         }
-        current = v.superview
-      }
 
-      guard let scrollView else { return }
-      let clipView = scrollView.contentView
-      clipView.postsBoundsChangedNotifications = true
-      observation = NotificationCenter.default.addObserver(
-        forName: NSView.boundsDidChangeNotification,
-        object: clipView,
-        queue: .main
-      ) { [weak self] _ in
-        self?.checkScrollPosition()
-      }
+        guard let scrollView else { return }
+        let clipView = scrollView.contentView
+        clipView.postsBoundsChangedNotifications = true
+        boundsObservation = NotificationCenter.default.addObserver(
+          forName: NSView.boundsDidChangeNotification,
+          object: clipView,
+          queue: .main
+        ) { [weak self] _ in
+          self?.checkScrollPosition()
+        }
 
-      checkScrollPosition()
+        // Document growth is just as important as reader movement: it is how
+        // the rail learns that a streaming final response changed the true live
+        // edge. Observe it from AppKit rather than feeding SwiftUI geometry
+        // measurements back into the transcript's own layout pass.
+        let documentView = scrollView.documentView
+        documentView?.postsFrameChangedNotifications = true
+        documentFrameObservation = NotificationCenter.default.addObserver(
+          forName: NSView.frameDidChangeNotification,
+          object: documentView,
+          queue: .main
+        ) { [weak self] _ in
+          self?.checkScrollPosition()
+        }
+
+        checkScrollPosition()
+      }
     }
 
     func checkScrollPosition() {
-      guard let scrollView, let documentView = scrollView.documentView else { return }
+      MainActor.assumeIsolated {
+        guard let scrollView, let documentView = scrollView.documentView else { return }
 
-      let clipBounds = scrollView.contentView.bounds
-      let documentHeight = documentView.frame.height
-      let visibleMaxY = clipBounds.origin.y + clipBounds.height
-      let threshold: CGFloat = 100
-      let isAtBottom = visibleMaxY >= documentHeight - threshold
-      guard isAtBottom != lastReportedValue else { return }
+        let clipBounds = scrollView.contentView.bounds
+        let documentHeight = documentView.frame.height
+        let visibleMaxY = clipBounds.origin.y + clipBounds.height
+        let position = ChatScrollPosition(
+          isAtBottom: ChatScrollLiveEdge.isAtBottom(
+            visibleMaxY: visibleMaxY,
+            documentHeight: documentHeight),
+          scrollTop: clipBounds.origin.y,
+          viewportHeight: clipBounds.height,
+          documentHeight: documentHeight
+        )
+        guard shouldReport(position) else { return }
 
-      coalesceWorkItem?.cancel()
-      let workItem = DispatchWorkItem { [weak self] in
-        self?.lastReportedValue = isAtBottom
-        self?.onScrollPositionChange(isAtBottom)
+        coalesceWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+          guard let self, let pendingPosition = self.pendingPosition else { return }
+          self.lastReportedPosition = pendingPosition
+          self.onScrollPositionChange(pendingPosition)
+        }
+        coalesceWorkItem = workItem
+        pendingPosition = position
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: workItem)
       }
-      coalesceWorkItem = workItem
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: workItem)
+    }
+
+    private func shouldReport(_ position: ChatScrollPosition) -> Bool {
+      guard let lastReportedPosition else { return true }
+      return position.isAtBottom != lastReportedPosition.isAtBottom
+        || abs(position.scrollTop - lastReportedPosition.scrollTop) >= 4
+        || abs(position.viewportHeight - lastReportedPosition.viewportHeight) >= 4
+        || abs(position.documentHeight - lastReportedPosition.documentHeight) >= 4
     }
 
     deinit {
       coalesceWorkItem?.cancel()
-      if let observation {
-        NotificationCenter.default.removeObserver(observation)
+      if let boundsObservation {
+        NotificationCenter.default.removeObserver(boundsObservation)
+      }
+      if let documentFrameObservation {
+        NotificationCenter.default.removeObserver(documentFrameObservation)
+      }
+    }
+  }
+}
+
+/// An AppKit-owned snapshot of the transcript viewport. Sending this through
+/// the scroll detector keeps scroll/layout measurement out of the SwiftUI
+/// `LazyVStack`, which otherwise risks an AttributeGraph feedback loop.
+struct ChatScrollPosition: Equatable {
+  let isAtBottom: Bool
+  let scrollTop: CGFloat
+  let viewportHeight: CGFloat
+  let documentHeight: CGFloat
+}
+
+/// Reports a user prompt's document position after AppKit has completed its
+/// layout. SwiftUI geometry actions inside the transcript's `LazyVStack` used
+/// to feed those measurements back into the same layout transaction and could
+/// pin the main thread in AttributeGraph. This bridge keeps the prompt rail's
+/// exact ordering without reintroducing that feedback edge.
+struct ChatPromptRowAnchorReporter: NSViewRepresentable {
+  let markID: String
+  let geometry: ChatTranscriptGeometry
+
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView()
+    context.coordinator.configure(view: view, markID: markID, geometry: geometry)
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    context.coordinator.configure(view: nsView, markID: markID, geometry: geometry)
+  }
+
+  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    coordinator.stop()
+  }
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
+  }
+
+  final class Coordinator: NSObject, @unchecked Sendable {
+    private weak var view: NSView?
+    private weak var geometry: ChatTranscriptGeometry?
+    private var markID = ""
+    private var frameObservation: NSObjectProtocol?
+    private var reportWorkItem: DispatchWorkItem?
+
+    func configure(view: NSView, markID: String, geometry: ChatTranscriptGeometry) {
+      MainActor.assumeIsolated {
+        let isNewAnchor = self.view !== view || self.markID != markID || self.geometry !== geometry
+        guard isNewAnchor else { return }
+        stop()
+        self.view = view
+        self.markID = markID
+        self.geometry = geometry
+        view.postsFrameChangedNotifications = true
+        frameObservation = NotificationCenter.default.addObserver(
+          forName: NSView.frameDidChangeNotification,
+          object: view,
+          queue: .main
+        ) { [weak self] _ in
+          self?.scheduleReport()
+        }
+        scheduleReport()
+      }
+    }
+
+    func stop() {
+      MainActor.assumeIsolated {
+        reportWorkItem?.cancel()
+        reportWorkItem = nil
+        if let frameObservation {
+          NotificationCenter.default.removeObserver(frameObservation)
+        }
+        frameObservation = nil
+        view = nil
+        geometry = nil
+      }
+    }
+
+    private func scheduleReport() {
+      MainActor.assumeIsolated {
+        reportWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+          MainActor.assumeIsolated {
+            guard let self, let view = self.view, let geometry = self.geometry else { return }
+            guard let documentView = Self.enclosingScrollView(for: view)?.documentView else { return }
+            let origin = view.convert(view.bounds.origin, to: documentView)
+            let offset =
+              documentView.isFlipped
+              ? origin.y
+              : documentView.bounds.height - origin.y - view.bounds.height
+            geometry.setRowOffset(offset, for: self.markID)
+          }
+        }
+        reportWorkItem = work
+        DispatchQueue.main.async(execute: work)
+      }
+    }
+
+    @MainActor
+    private static func enclosingScrollView(for view: NSView) -> NSScrollView? {
+      var current: NSView? = view
+      while let candidate = current {
+        if let scrollView = candidate as? NSScrollView {
+          return scrollView
+        }
+        current = candidate.superview
+      }
+      return nil
+    }
+
+    deinit {
+      MainActor.assumeIsolated {
+        stop()
       }
     }
   }
@@ -103,7 +422,7 @@ struct UserScrollDetector: NSViewRepresentable {
     Coordinator(onUserScroll: onUserScroll, onScrollSettledAtBottom: onScrollSettledAtBottom)
   }
 
-  class Coordinator: NSObject {
+  final class Coordinator: NSObject, @unchecked Sendable {
     let onUserScroll: () -> Void
     let onScrollSettledAtBottom: () -> Void
     private var monitor: Any?
@@ -123,46 +442,50 @@ struct UserScrollDetector: NSViewRepresentable {
     }
 
     func install(for view: NSView) {
-      var scrollView: NSScrollView?
-      var current: NSView? = view
-      while let v = current {
-        if let sv = v as? NSScrollView {
-          scrollView = sv
-          break
+      MainActor.assumeIsolated {
+        var scrollView: NSScrollView?
+        var current: NSView? = view
+        while let v = current {
+          if let sv = v as? NSScrollView {
+            scrollView = sv
+            break
+          }
+          current = v.superview
         }
-        current = v.superview
-      }
-      let targetScrollView = scrollView
+        let targetScrollView = scrollView
 
-      monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .keyDown]) {
-        [weak self] event in
-        guard let self, let targetScrollView else { return event }
-        guard event.window == targetScrollView.window else { return event }
+        let handler: @MainActor (NSEvent) -> NSEvent? = { [weak self] event in
+          guard let self, let targetScrollView else { return event }
+          guard event.window == targetScrollView.window else { return event }
 
-        if event.type == .keyDown {
-          guard Self.scrollNavigationKeyCodes.contains(event.keyCode) else { return event }
-          guard Self.isScrollViewKeyboardTarget(in: event.window, scrollView: targetScrollView) else { return event }
-          self.onUserScroll()
-        } else {
-          let locationInWindow = event.locationInWindow
-          let locationInScrollView = targetScrollView.convert(locationInWindow, from: nil)
-          guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
-          if event.type == .scrollWheel {
-            if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
+          if event.type == .keyDown {
+            guard Self.scrollNavigationKeyCodes.contains(event.keyCode) else { return event }
+            guard Self.isScrollViewKeyboardTarget(in: event.window, scrollView: targetScrollView) else { return event }
+            self.onUserScroll()
+          } else {
+            let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
+            guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
+            if event.type == .scrollWheel {
+              if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
+                self.onUserScroll()
+              }
+            } else {
               self.onUserScroll()
             }
-          } else {
-            self.onUserScroll()
           }
+          self.scheduleSettledBottomChecks(for: targetScrollView)
+          return event
         }
-        self.scheduleSettledBottomChecks(for: targetScrollView)
-        return event
+        monitor = NSEvent.addLocalMonitorForEvents(
+          matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .keyDown], handler: handler)
       }
     }
 
     private static func isScrollViewKeyboardTarget(in window: NSWindow?, scrollView: NSScrollView) -> Bool {
-      guard let window, let firstResponderView = window.firstResponder as? NSView else { return false }
-      return firstResponderView === scrollView || firstResponderView.isDescendant(of: scrollView)
+      MainActor.assumeIsolated {
+        guard let window, let firstResponderView = window.firstResponder as? NSView else { return false }
+        return firstResponderView === scrollView || firstResponderView.isDescendant(of: scrollView)
+      }
     }
 
     private func scheduleSettledBottomChecks(for scrollView: NSScrollView) {
@@ -175,12 +498,16 @@ struct UserScrollDetector: NSViewRepresentable {
     }
 
     private static func isAtBottom(_ scrollView: NSScrollView) -> Bool {
-      guard let documentView = scrollView.documentView else { return false }
-      let clipBounds = scrollView.contentView.bounds
-      let documentHeight = documentView.frame.height
-      let visibleMaxY = clipBounds.origin.y + clipBounds.height
-      let threshold: CGFloat = 100
-      return visibleMaxY >= documentHeight - threshold
+      MainActor.assumeIsolated {
+        guard let documentView = scrollView.documentView else { return false }
+        let clipBounds = scrollView.contentView.bounds
+        let documentHeight = documentView.frame.height
+        let visibleMaxY = clipBounds.origin.y + clipBounds.height
+        return ChatScrollLiveEdge.isAtBottom(
+          visibleMaxY: visibleMaxY,
+          documentHeight: documentHeight
+        )
+      }
     }
 
     deinit {
@@ -256,8 +583,8 @@ struct ChatScrollContainer<Content: View>: View {
 
   private var scrollDetectors: some View {
     ZStack {
-      ScrollPositionDetector { atBottom in
-        if atBottom && scrollMode == .freeScrolling {
+      ScrollPositionDetector { position in
+        if position.isAtBottom && scrollMode == .freeScrolling {
           cancelAllPendingScrolls()
           userIsScrolling = false
           scrollMode = .followingBottom

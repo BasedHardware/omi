@@ -1,3 +1,4 @@
+import { AcpError, isAcpProviderAuthFailure } from "../adapters/acp.js";
 import type { ProductionAdapterId } from "../adapters/interface.js";
 
 export type RuntimeFailureSource = "adapter_process" | "adapter_execution" | "runtime";
@@ -70,6 +71,17 @@ export function failureFromError(
 ): RuntimeFailure {
   if (error instanceof AdapterRuntimeError) {
     return error.failure;
+  }
+  if (error instanceof AcpError && isAcpProviderAuthFailure(error)) {
+    return normalizeRuntimeFailure({
+      code: "provider_auth_required",
+      failureCode: "authentication",
+      userMessage: "Claude sign-in is required to continue this chat.",
+      technicalMessage: messageFrom(error),
+      source: fallback.source ?? "adapter_execution",
+      adapterId: fallback.adapterId ?? "acp",
+      retryable: false,
+    });
   }
   return normalizeRuntimeFailure({
     ...fallback,

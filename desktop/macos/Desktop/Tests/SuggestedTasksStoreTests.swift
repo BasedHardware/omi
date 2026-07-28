@@ -498,6 +498,36 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertTrue(outbox.entries.isEmpty)
   }
 
+  func testConcurrentSameOwnerLoadAwaitsInFlightDataInsteadOfNoOp() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-a", status: .pending)]
+    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+
+    // First same-owner load suspends inside getCandidateWorkflowControl.
+    api.controlSuspensionsRemaining = 1
+    let first = Task { await store.load() }
+    while api.controlRelease == nil { await Task.yield() }
+    let release = api.controlRelease
+
+    // Second same-owner load launched while the first is in flight. It must
+    // AWAIT the in-flight load rather than return a no-op, so by the time it
+    // returns the candidates are populated. The old guard returned immediately,
+    // leaving a dashboard→Suggested navigation reveal to run against empty state.
+    let secondSawData = Task { () -> Bool in
+      await store.load()
+      return store.candidates.map(\.id) == ["candidate-a"]
+    }
+    await Task.yield()
+    release?.resume()
+
+    let sawData = await secondSawData.value
+    await first.value
+
+    XCTAssertTrue(
+      sawData, "A concurrent same-owner load must await the in-flight load's data before returning")
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-a"])
+  }
+
   func testOwnerSwitchSupersedesDelayedFailingControlLoadWithoutExposingPriorCards() async {
     let api = FakeSuggestedTasksClient()
     let suppression = MemorySuppressionStore()
@@ -719,7 +749,7 @@ private final class MemoryFeedbackOutboxStore: SuggestedFeedbackOutboxPersisting
   }
 }
 
-private final class FakeSuggestedTasksClient: SuggestedTasksClient {
+private final class FakeSuggestedTasksClient: SuggestedTasksClient, @unchecked Sendable {
   var records: [OmiAPI.CandidateRecord] = []
   var listError: Error?
   var registeredInterventionCandidateIDs: Set<String> = []
@@ -761,8 +791,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
     return result
   }
 
-  func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord]
-  {
+  func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord] {
     if let listError { throw listError }
     return Array(records.prefix(limit))
   }
@@ -770,7 +799,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func registerTaskIntervention(
     _ request: OmiAPI.InterventionCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.InterventionRecord {
-    onRegisterIntervention?()
+    await MainActor.run { onRegisterIntervention?() }
     if failIntervention { throw FakeError.failed }
     registeredInterventionCandidateIDs.insert(request.subjectId)
     registeredInterventionDedupeKeys.append(request.dedupeKey)
@@ -830,7 +859,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func acceptCanonicalCandidate(
     candidateID: String, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
-    onAccept?()
+    await MainActor.run { onAccept?() }
     if failAccept { throw FakeError.failed }
     acceptedCandidateIDs.append(candidateID)
     return receipt(candidateID: candidateID, status: .accepted, taskID: acceptedTaskID)
@@ -839,14 +868,14 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func rejectCanonicalCandidate(
     candidateID: String, reason: String?, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
-    onReject?()
+    await MainActor.run { onReject?() }
     if failReject { throw FakeError.failed }
     rejectedCandidateIDs.append(candidateID)
     return receipt(candidateID: candidateID, status: .rejected, taskID: nil)
   }
 
   func updateSuggestedTaskDescription(id: String, description: String) async throws {
-    onUpdate?()
+    await MainActor.run { onUpdate?() }
     updatedTaskDescriptions[id] = description
   }
 

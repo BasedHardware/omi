@@ -366,6 +366,17 @@ class ServerConversation {
     if (structured != null) {
       normalized['structured'] = structured.toGenerated().toJson();
     }
+    // Legacy caches (< toJson wire-format fix) wrote plugins_results entries as
+    // {'appId', 'content'}; the wire parser requires the plugin_id key.
+    final rawPluginResults = normalized['plugins_results'];
+    if (rawPluginResults is List) {
+      normalized['plugins_results'] = rawPluginResults.map((entry) {
+        if (entry is Map<String, dynamic> && !entry.containsKey('plugin_id')) {
+          return {...entry, 'plugin_id': entry['appId'] ?? entry['app_id']};
+        }
+        return entry;
+      }).toList();
+    }
     final generated = wire.GeneratedConversation.fromJson(normalized);
     return ServerConversation.fromGenerated(
       generated,
@@ -388,7 +399,9 @@ class ServerConversation {
       startedAt: generated.startedAt,
       finishedAt: generated.finishedAt,
       transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
-      appResults: generated.appsResults.map(AppResponse.fromGenerated).toList(),
+      appResults: generated.appsResults.isNotEmpty
+          ? generated.appsResults.map(AppResponse.fromGenerated).toList()
+          : generated.pluginsResults.map((result) => AppResponse(result.content, appId: result.pluginId)).toList(),
       suggestedSummarizationApps: generated.suggestedSummarizationApps,
       geolocation:
           geolocation ?? (generated.geolocation == null ? null : Geolocation.fromGenerated(generated.geolocation!)),
@@ -423,7 +436,10 @@ class ServerConversation {
       'started_at': startedAt?.toUtc().toIso8601String(),
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
-      'plugins_results': appResults.map((result) => result.toJson()).toList(),
+      'apps_results': appResults.map((result) => result.toGenerated().toJson()).toList(),
+      'plugins_results': appResults.map((result) {
+        return wire.GeneratedPluginResult(pluginId: result.appId, content: result.content).toJson();
+      }).toList(),
       'suggested_summarization_apps': suggestedSummarizationApps,
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),

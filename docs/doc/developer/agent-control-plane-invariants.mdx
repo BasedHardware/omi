@@ -292,6 +292,13 @@ boundary, even when the control bridge itself uses managed-cloud routing. An
 adapter ID alone may not use that exception, and neither may cross a parent
 run's boundary or override an existing session's adapter.
 
+For model-driven external surfaces, that selector is valid only when the
+current user explicitly names the exact provider. The external-surface policy
+normalizes a matching provider, strips an invented/stale/mismatched provider,
+and therefore defaults generic delegation to the managed Omi adapter before the
+kernel mints a child session. A signed desktop UI selection remains explicit
+user control and follows the same provider-boundary rules.
+
 Guard surface:
 
 - `execution-policy.ts` is the shared resolver used by control tools and the
@@ -300,6 +307,8 @@ Guard surface:
   `control-tools.test.ts` exhaust production declarations, managed routing,
   directed and signed top-level local-provider starts, and signed local-session
   resumption.
+- `external-surface-authority.test.ts` verifies generic PTT delegation cannot
+  select a local provider while an explicitly named provider is preserved.
 
 ### Execution role owns agent-management authority
 

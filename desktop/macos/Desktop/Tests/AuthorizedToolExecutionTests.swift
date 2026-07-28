@@ -1,3 +1,4 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
@@ -24,20 +25,23 @@ final class AuthorizedToolExecutionTests: XCTestCase {
 
   func testWrongOwnerAndManifestFailClosed() {
     XCTAssertThrowsError(
-      try AuthorizedToolExecution.parse(payload(), currentOwnerID: "owner-other")) { error in
-        XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .wrongOwner)
-      }
+      try AuthorizedToolExecution.parse(payload(), currentOwnerID: "owner-other")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .wrongOwner)
+    }
     XCTAssertThrowsError(
       try AuthorizedToolExecution.parse(
         payload(overrides: ["manifestVersion": GeneratedToolExecutors.manifestVersion + 1]),
-        currentOwnerID: "owner-1")) { error in
-          XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .staleManifest)
-        }
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .staleManifest)
+    }
     XCTAssertThrowsError(
       try AuthorizedToolExecution.parse(
         payload(overrides: ["manifestDigest": "sha256:stale"]),
-        currentOwnerID: "owner-1")) { error in
-          XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .staleManifest)
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .staleManifest)
     }
   }
 
@@ -95,11 +99,13 @@ final class AuthorizedToolExecutionTests: XCTestCase {
       command: command,
       executionResult: .failed(rejection))
 
-    XCTAssertEqual(Set(failed.keys), Set([
-      "type", "protocolVersion", "invocationId", "ownerId", "sessionId", "runId",
-      "attemptId", "profileGeneration", "manifestVersion", "manifestDigest",
-      "daemonBootEpoch", "executionGeneration", "inputHash", "outcome", "result",
-    ]))
+    XCTAssertEqual(
+      Set(failed.keys),
+      Set([
+        "type", "protocolVersion", "invocationId", "ownerId", "sessionId", "runId",
+        "attemptId", "profileGeneration", "manifestVersion", "manifestDigest",
+        "daemonBootEpoch", "executionGeneration", "inputHash", "outcome", "result",
+      ]))
     XCTAssertEqual(failed["type"] as? String, "authorized_tool_execution_result")
     XCTAssertEqual(failed["invocationId"] as? String, command.invocationID)
     XCTAssertEqual(failed["ownerId"] as? String, command.ownerID)
@@ -200,18 +206,20 @@ final class AuthorizedToolExecutionTests: XCTestCase {
           "effectClass": "non_idempotent_write",
           "retryPolicy": "safe_retry",
         ]),
-        currentOwnerID: "owner-1")) { error in
-          XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidRetryPolicy)
-        }
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidRetryPolicy)
+    }
   }
 
   func testInputHashMismatchFailsClosed() {
     XCTAssertThrowsError(
       try AuthorizedToolExecution.parse(
         payload(overrides: ["inputHash": "sha256:wrong"]),
-        currentOwnerID: "owner-1")) { error in
-          XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .inputHashMismatch)
-        }
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .inputHashMismatch)
+    }
   }
 
   func testPermissionDelegationRecoveryIsBoundedToNativePermissionTools() throws {
@@ -225,17 +233,19 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     XCTAssertThrowsError(
       try AuthorizedToolExecution.parse(
         payload(overrides: ["policyRecovery": "permission_delegation_to_native"]),
-        currentOwnerID: "owner-1")) { error in
-          XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidPolicyRecovery)
-        }
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidPolicyRecovery)
+    }
     XCTAssertThrowsError(
       try AuthorizedToolExecution.parse(
         payload(
           toolName: "request_permission",
           overrides: ["policyRecovery": "unbounded_recovery"]),
-        currentOwnerID: "owner-1")) { error in
-          XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidPolicyRecovery)
-        }
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidPolicyRecovery)
+    }
   }
 
   func testCanonicalInputHashMatchesKernelNestedJSONFixture() throws {

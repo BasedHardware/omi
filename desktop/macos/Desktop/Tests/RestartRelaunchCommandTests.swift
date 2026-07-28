@@ -20,10 +20,11 @@ final class RestartRelaunchCommandTests: XCTestCase {
 
   func testNonProdRelaunchRePassesTheAutomationPort() {
     let cmd = AppState.relaunchCommand(
-      appPath: "/Applications/omi-perm06v.app", isNonProduction: true, automationPort: 47894)
+      appPath: "/Applications/omi-perm06v.app", isNonProduction: true, automationPort: 47894,
+      terminatingProcessIdentifier: 1234)
     XCTAssertTrue(
-      cmd.contains("open \"/Applications/omi-perm06v.app\""),
-      "must open the resolved bundle path")
+      cmd.contains("open -n \"/Applications/omi-perm06v.app\""),
+      "must create a replacement process after the original has exited")
     XCTAssertTrue(
       cmd.contains("--args --automation-port=47894"),
       "non-prod relaunch must re-pass the port so the reopened bundle rebinds it")
@@ -31,17 +32,19 @@ final class RestartRelaunchCommandTests: XCTestCase {
 
   func testProdRelaunchIsBareOpenWithNoAutomationArgs() {
     let cmd = AppState.relaunchCommand(
-      appPath: "/Applications/Omi.app", isNonProduction: false, automationPort: 47894)
+      appPath: "/Applications/Omi.app", isNonProduction: false, automationPort: 47894,
+      terminatingProcessIdentifier: 1234)
     XCTAssertEqual(
-      cmd, "sleep 0.5 && open \"/Applications/Omi.app\"",
-      "production relaunch must stay a plain `open` — no automation args, byte-identical to before")
+      cmd, "sleep 0.5 && while kill -0 1234 2>/dev/null; do sleep 0.1; done && open \"/Applications/Omi.app\"",
+      "production relaunch must wait for the old process, then use plain open without automation args")
   }
 
   func testDelayPrecedesOpenSoTheRestartResponseFlushes() {
     // restartApp() terminates the process; the relaunch must be scheduled after the
     // `sleep` so the in-flight HTTP/UI action completes before the app dies.
     let cmd = AppState.relaunchCommand(
-      appPath: "/Applications/omi-x.app", isNonProduction: true, automationPort: 1)
+      appPath: "/Applications/omi-x.app", isNonProduction: true, automationPort: 1,
+      terminatingProcessIdentifier: 1234)
     guard let sleepIdx = cmd.range(of: "sleep"), let openIdx = cmd.range(of: "open") else {
       return XCTFail("relaunch command must both sleep and open")
     }
@@ -52,7 +55,18 @@ final class RestartRelaunchCommandTests: XCTestCase {
     // The re-passed flag must be the exact one the bridge parses, so DRY on the
     // single source of truth rather than a hardcoded string that could drift.
     let cmd = AppState.relaunchCommand(
-      appPath: "/Applications/omi-x.app", isNonProduction: true, automationPort: 40000)
+      appPath: "/Applications/omi-x.app", isNonProduction: true, automationPort: 40000,
+      terminatingProcessIdentifier: 1234)
     XCTAssertTrue(cmd.contains("\(DesktopAutomationLaunchOptions.portPrefix)40000"))
+  }
+
+  func testWaitsForTheTerminatingProcessBeforeOpening() {
+    let cmd = AppState.relaunchCommand(
+      appPath: "/Applications/omi-x.app", isNonProduction: true, automationPort: 40000,
+      terminatingProcessIdentifier: 4321)
+    guard let wait = cmd.range(of: "kill -0 4321"), let open = cmd.range(of: "open -n") else {
+      return XCTFail("relaunch must wait on the original PID and then create a replacement")
+    }
+    XCTAssertLessThan(wait.lowerBound, open.lowerBound)
   }
 }

@@ -2,6 +2,13 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# At the 40-pod HPA ceiling, Pusher needs fourteen waves. The committed probe
+# and availability settings make that a 8960s healthy-rollout budget; retain
+# one 640s per-pod allowance of scheduler headroom above it. CI recalculates
+# this bound from the chart whenever any rollout input changes.
+minReadySeconds: 0
+progressDeadlineSeconds: 9600
+
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
@@ -12,6 +19,10 @@ image:
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
+  # Build-once promotion: set `digest: sha256:<64 lowercase hex>` (and clear
+  # `tag`, set `pullPolicy: IfNotPresent`) to promote the exact dev-qualified
+  # image by content address. Malformed/ambiguous identity is rejected at
+  # render time. See backend/scripts/verify_pusher_rollout_gate.py.
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -62,6 +73,12 @@ service:
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
     cloud.google.com/backend-config: '{"default": "prod-pusher-backend-config"}'  # Link to BackendConfig
+
+# BackendConfig connectionDraining: bounds how long the LB waits before cutting
+# in-flight WS on endpoint removal (must be <= terminationGracePeriodSeconds 120).
+backendConfig:
+  connectionDraining:
+    drainingTimeoutSec: 60
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -127,6 +144,8 @@ env:
       configMapKeyRef:
         name: prod-omi-backend-config
         key: REDIS_DB_HOST
+      # Clear the historical Secret source during the named-env strategic merge.
+      secretKeyRef: null
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
@@ -137,11 +156,19 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
+  # This is the self-hosted Deepgram credential used only with dg.omi.me.
+  # Hosted Deepgram is disabled by the serving policy and is not injected into
+  # backend-listen or Cloud Run workloads.
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: DEEPGRAM_API_KEY
+  - name: MODULATE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MODULATE_API_KEY
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
@@ -236,6 +263,12 @@ env:
     value: "true"
   - name: DEEPGRAM_SELF_HOSTED_URL
     value: "https://dg.omi.me"
+  - name: HOSTED_PARAKEET_API_URL
+    value: "http://parakeet.omi.me"
+  - name: STT_PRERECORDED_MODEL
+    value: "parakeet,modulate-velma-2"
+  - name: STT_SERVICE_MODELS
+    value: "modulate-velma-2,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -249,7 +282,7 @@ env:
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "600"
+    value: "300"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -302,10 +335,12 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /health
+    path: /ready
     port: 8080
   failureThreshold: 3
+  initialDelaySeconds: 0
   periodSeconds: 10
+  successThreshold: 1
   timeoutSeconds: 5
 
 startupProbe:
@@ -313,6 +348,7 @@ startupProbe:
     path: /health
     port: 8080
   failureThreshold: 60
+  initialDelaySeconds: 0
   periodSeconds: 10
   timeoutSeconds: 5
 
@@ -360,7 +396,9 @@ terminationGracePeriodSeconds: 120
 lifecycle:
   preStop:
     exec:
-      command: ["sh", "-c", "sleep 15"]
+      # preStop flips readiness (via Lane A /__internal/drain) so the kubelet removes the endpoint
+      # early; sleep covers NEG->backend-service->ALB reprogram convergence before SIGTERM.
+      command: ["sh", "-c", "curl -sf -m 5 -X POST http://localhost:8080/__internal/drain || true; sleep 15"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []

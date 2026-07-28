@@ -1,0 +1,39 @@
+{
+  "captured_at_utc": "2026-07-22T19:44:29.878541+00:00",
+  "gate": "INV-BETA-1 side-by-side runtime evidence",
+  "running_omi_processes": {
+    "Omi Beta": 13492,
+    "omi": 22053,
+    "omi-richmond": 41200
+  },
+  "installed_identities": {
+    "/Applications/omi.app": "com.omi.computer-macos",
+    "/Applications/Omi Beta.app": "com.omi.computer-macos.beta"
+  },
+  "on_screen_windows": [
+    {
+      "owner": "Omi Beta",
+      "pid": 13492,
+      "w": 40,
+      "h": 14
+    },
+    {
+      "owner": "Omi Beta",
+      "pid": 13492,
+      "w": 1200,
+      "h": 712
+    }
+  ],
+  "isolated_storage_roots": {
+    "Omi": true,
+    "Omi Beta": true
+  },
+  "log_files_identity": {
+    "/tmp/omi.log": "com.omi.computer-macos",
+    "/tmp/omi-beta.log": "com.omi.computer-macos.beta"
+  },
+  "single_instance_guard_refusals": {
+    "/tmp/omi.log": 8,
+    "/tmp/omi-beta.log": 1
+  }
+}

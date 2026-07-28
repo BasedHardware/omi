@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 @MainActor
 final class DesktopUpdatePolicyManager: ObservableObject {
@@ -65,7 +65,7 @@ final class DesktopUpdatePolicyManager: ObservableObject {
       policy = nil
       log("DesktopUpdatePolicy: unavailable error_type=\(String(reflecting: type(of: error)))")
       DesktopDiagnosticsManager.shared.recordFallback(
-        area: "other",
+        area: "desktop_update",
         from: "desktop_update_policy",
         to: "desktop_update_appcast",
         reason: "other",

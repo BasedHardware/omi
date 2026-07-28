@@ -110,7 +110,8 @@ enum RewindStorageTestIsolation {
   static func userDirectory(for testUserId: String) -> URL {
     let appSupport = FileManager.default
       .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    return appSupport
+    return
+      appSupport
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)

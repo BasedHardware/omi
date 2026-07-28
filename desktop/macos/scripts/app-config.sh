@@ -28,6 +28,13 @@ derive_omi_app_config() {
             echo "ERROR: OMI_APP_NAME must contain at least one letter or number" >&2
             return 1
         fi
+        case "$app_slug" in
+            omi-*) ;;
+            *)
+                echo "ERROR: named OMI_APP_NAME values must use the omi- prefix (got '$app_name' -> '$app_slug')" >&2
+                return 1
+                ;;
+        esac
         expected_bundle_id="com.omi.$app_slug"
         expected_url_scheme="omi-$app_slug"
     fi

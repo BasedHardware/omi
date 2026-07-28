@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 import firebase_admin
 from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
 
 from database.google_credentials import prepare_google_credentials
 
@@ -72,6 +73,7 @@ from routers import (
     memory_product,
     task_recommendations,
     conversation_finalization,
+    public_shared_conversation_chat,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -87,6 +89,7 @@ from utils.executors import (
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from services.conversation_finalization import reconcile_listen_finalization_jobs
+from services.conversation_finalization import reconcile_stale_processing_conversations
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 
 # Log LangSmith tracing status at startup
@@ -112,10 +115,28 @@ else:
 
 app = FastAPI()
 
+# Explicit, default-deny CORS: this API is Bearer-token authenticated (mobile/
+# desktop apps, not ambient browser cookies), so no cross-origin browser
+# caller needs to be allowed by default. CORS_ALLOWED_ORIGINS lets an operator
+# opt a specific web frontend in (comma-separated exact origins — never "*",
+# and never combined with allow_credentials, which would let any site read
+# authenticated responses for a signed-in visitor).
+_cors_allowed_origins = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()]
+if '*' in _cors_allowed_origins:
+    raise RuntimeError('CORS_ALLOWED_ORIGINS must not contain "*" — list explicit origins instead')
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_allowed_origins,
+    allow_credentials=False,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
+
 app.include_router(transcribe.router)
 app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
 app.include_router(conversations.router)
+app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
 app.include_router(candidates.router)
 app.include_router(task_integrations.router)
@@ -217,6 +238,10 @@ async def startup_event():
         run_blocking(db_executor, _drain_listen_finalization_jobs),
         name='startup_listen_finalization_reconcile',
     )
+    start_background_task(
+        run_blocking(db_executor, _drain_stale_processing_conversations),
+        name='startup_stale_processing_reconcile',
+    )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
 
 
@@ -256,8 +281,29 @@ def _drain_listen_finalization_jobs():
         logger.error(f"Startup listen-finalization reconciliation failed: {e}")
 
 
-async def _periodic_listen_finalization_reconcile(interval_seconds: int = 300):
+def _drain_stale_processing_conversations():
+    """Best-effort recovery of bare-`processing` conversations orphaned by a sync-route crash."""
+    try:
+        result = reconcile_stale_processing_conversations()
+        if result.get('completed') or result.get('migrated'):
+            logger.info(f"Startup stale-processing reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup stale-processing reconciliation failed: {e}")
+
+
+def _listen_finalization_reconcile_interval_seconds() -> int:
+    """Periodic reconcile cadence; overridable for hermetic behavioral tests."""
+    try:
+        seconds = int(os.getenv('LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS', '300'))
+    except ValueError:
+        seconds = 300
+    return max(1, seconds)
+
+
+async def _periodic_listen_finalization_reconcile(interval_seconds: int | None = None):
     """Replay stale finalization leases and publish durable backlog metrics."""
+    if interval_seconds is None:
+        interval_seconds = _listen_finalization_reconcile_interval_seconds()
     while True:
         await asyncio.sleep(interval_seconds)
         try:
@@ -266,6 +312,12 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int = 300):
                 logger.info(f"Periodic listen-finalization reconciliation: {result}")
         except Exception as e:
             logger.error(f"Periodic listen-finalization reconciliation failed: {e}")
+        try:
+            stale_result = await run_blocking(db_executor, reconcile_stale_processing_conversations)
+            if stale_result.get('completed') or stale_result.get('migrated'):
+                logger.info(f"Periodic stale-processing reconciliation: {stale_result}")
+        except Exception as e:
+            logger.error(f"Periodic stale-processing reconciliation failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring

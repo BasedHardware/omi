@@ -19,11 +19,12 @@ final class TrialBannerService {
     case expired
   }
 
-  typealias NotificationPresenter = @MainActor (
-    _ ownerID: String,
-    _ title: String,
-    _ message: String
-  ) -> OwnerBoundNotificationPresentationResult
+  typealias NotificationPresenter =
+    @MainActor (
+      _ ownerID: String,
+      _ title: String,
+      _ message: String
+    ) -> OwnerBoundNotificationPresentationResult
 
   private var activeOwnerID: String?
 

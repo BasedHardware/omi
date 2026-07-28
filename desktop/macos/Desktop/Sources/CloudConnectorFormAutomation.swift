@@ -404,33 +404,33 @@ enum CloudConnectorFormAutomation {
     )
   }
 
-  static func systemSettingsWindowAppKitFrame() -> CGRect? {
-    guard
-      let app = NSWorkspace.shared.runningApplications.first(where: {
-        $0.bundleIdentifier == "com.apple.systempreferences"
-      })
+  static func systemSettingsWindowAppKitFrame(pid: pid_t? = nil) -> CGRect? {
+    let settingsPID =
+      pid
+      ?? NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences")
+      .first?.processIdentifier
+    guard let settingsPID,
+      let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]]
     else { return nil }
-    let appElement = AXUIElementCreateApplication(app.processIdentifier)
-    var windowElement: AXUIElement?
-    var focused: CFTypeRef?
-    if AXUIElementCopyAttributeValue(appElement, "AXFocusedWindow" as CFString, &focused)
-      == .success,
-      let focused
-    {
-      windowElement = (focused as! AXUIElement)
-    } else {
-      var windowsRef: CFTypeRef?
-      if AXUIElementCopyAttributeValue(appElement, "AXWindows" as CFString, &windowsRef)
-        == .success,
-        let windows = windowsRef as? [AXUIElement], let first = windows.first
-      {
-        windowElement = first
+    return appKitWindowFrame(pid: settingsPID, windows: windows)
+  }
+
+  static func appKitWindowFrame(pid: pid_t, windows: [[String: Any]]) -> CGRect? {
+    windows
+      .compactMap { window -> CGRect? in
+        guard (window[kCGWindowOwnerPID as String] as? Int32) == pid,
+          (window[kCGWindowLayer as String] as? Int) == 0,
+          let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
+          let x = bounds["X"],
+          let y = bounds["Y"],
+          let width = bounds["Width"],
+          let height = bounds["Height"],
+          min(width, height) > 100
+        else { return nil }
+        return CGRect(x: x, y: y, width: width, height: height)
       }
-    }
-    guard let windowElement else { return nil }
-    let topLeft = frameAttribute(windowElement)
-    guard !topLeft.isNull, !topLeft.isEmpty else { return nil }
-    return SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: topLeft)
+      .max(by: { $0.width * $0.height < $1.width * $1.height })
+      .map(SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame:))
   }
 
   /// Read-only diagnostic: runs the real Claude detection (no overlay, no clicks) and
@@ -1199,8 +1199,7 @@ enum CloudConnectorFormAutomation {
     return nil
   }
 
-  private static func claudeConnectorPageState(nodes: [AccessibleNode]) -> ClaudeConnectorPageState
-  {
+  private static func claudeConnectorPageState(nodes: [AccessibleNode]) -> ClaudeConnectorPageState {
     let text = nodes.map(\.searchableText).joined(separator: " ")
     return classifyClaudeConnectorPageText(text)
   }
@@ -1259,8 +1258,7 @@ enum CloudConnectorFormAutomation {
   }
 
   private static func setField(_ element: AXUIElement, to value: String) -> Bool {
-    if AXUIElementSetAttributeValue(element, "AXValue" as CFString, value as CFTypeRef) == .success
-    {
+    if AXUIElementSetAttributeValue(element, "AXValue" as CFString, value as CFTypeRef) == .success {
       return true
     }
     _ = AXUIElementSetAttributeValue(element, "AXFocused" as CFString, kCFBooleanTrue)
@@ -1625,8 +1623,7 @@ enum CloudConnectorFormAutomation {
     return ""
   }
 
-  private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement?
-  {
+  private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
     var raw: CFTypeRef?
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success else {
       return nil

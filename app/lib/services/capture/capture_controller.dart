@@ -4,24 +4,20 @@ import 'dart:io';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -31,6 +27,8 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
+import 'package:omi/services/capture/conversation_source_for_device.dart';
+import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -43,6 +41,7 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -70,6 +69,8 @@ class CaptureController extends ChangeNotifier
   static const MethodChannel _nativeBleTranscriptChannel = MethodChannel('com.friend.ios/native_ble_transcript');
   static const int _maxInProgressConversationRefreshAttempts = 30;
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
+
+  final ConversationLocationCapture _conversationLocationCapture = ConversationLocationCapture();
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -120,6 +121,13 @@ class CaptureController extends ChangeNotifier
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
 
+  // True while a phone-mic Transcribe Later (batch) session is running: the
+  // native recorder writes .bin files directly, so no socket/WAL/AudioSource is
+  // active. Distinct from the Live phone-mic path (_phoneMicWalActive).
+  bool _phoneMicBatchActive = false;
+
+  bool get isPhoneMicBatchRecording => _phoneMicBatchActive;
+
   bool _isLoadingInProgressConversation = false;
 
   late final CaptureMetricsTracker _metrics = CaptureMetricsTracker(onNotify: notifyListeners);
@@ -164,17 +172,24 @@ class CaptureController extends ChangeNotifier
   bool _micInterrupted = false;
 
   void _onMicInterruption(bool began) {
-    if (_activeSource is! PhoneMicSource) return;
+    // Live phone mic drives an AudioSource; batch has none (_activeSource stays
+    // null) but still needs its interruption state mirrored.
+    if (_activeSource is! PhoneMicSource && !_phoneMicBatchActive) return;
     _micInterrupted = began;
     if (began) {
       updateRecordingState(RecordingState.interrupted);
+    } else if (_phoneMicBatchActive) {
+      // Batch has no onRecording callback to restore the state; native already
+      // resumed, so flip back to record here.
+      updateRecordingState(RecordingState.record);
     }
-    // On end, native capture has already resumed; onRecording restores
+    // On end (Live), native capture has already resumed; onRecording restores
     // RecordingState.record once frames flow again.
     notifyListeners();
   }
 
   bool _phoneMicRestartInFlight = false;
+  bool _phoneMicBatchRestartInFlight = false;
 
   Future<void> _restartPhoneMicRecording() async {
     if (_phoneMicRestartInFlight) return;
@@ -183,10 +198,6 @@ class CaptureController extends ChangeNotifier
       ServiceManager.instance().phoneMic.stop();
       // Re-assert interrupted so the recorder's stop callback doesn't overwrite it.
       updateRecordingState(RecordingState.interrupted);
-      if (!Platform.isIOS) {
-        // flutter_sound needs a beat to finish native teardown before restart.
-        await Future.delayed(const Duration(milliseconds: 250));
-      }
       // _activeSource is cleared if the user manually stopped — bail in that case.
       if (_activeSource is! PhoneMicSource) return;
       // Use _resumeMicRecording (not streamRecording) to preserve existing socket/segments.
@@ -251,29 +262,7 @@ class CaptureController extends ChangeNotifier
   BtDevice? _recordingDevice;
 
   String? _getConversationSourceFromDevice() {
-    if (_recordingDevice == null) {
-      return null;
-    }
-    switch (_recordingDevice!.type) {
-      case DeviceType.friendPendant:
-        return 'friend_com';
-      case DeviceType.omi:
-        return 'omi';
-      case DeviceType.openglass:
-        return 'openglass';
-      case DeviceType.fieldy:
-        return 'fieldy';
-      case DeviceType.bee:
-        return 'bee';
-      case DeviceType.plaud:
-        return 'plaud';
-      case DeviceType.appleWatch:
-        return 'apple_watch';
-      case DeviceType.limitless:
-        return 'limitless';
-      case DeviceType.raybanMeta:
-        return 'rayban_meta';
-    }
+    return conversationSourceForDeviceType(_recordingDevice?.type);
   }
 
   ServerConversation? _conversation;
@@ -493,6 +482,10 @@ class CaptureController extends ChangeNotifier
 
   bool get deviceSupportsTranscribeLater => supportsTranscribeLater(_recordingDevice?.type);
 
+  // The phone microphone can capture Transcribe Later (batch) audio where a
+  // native recorder module exists — iOS (AVAudioEngine) and Android (AudioRecord).
+  static bool get phoneMicSupportsTranscribeLater => Platform.isIOS || Platform.isAndroid;
+
   Future<bool> setBatchMode(bool enabled) async {
     if (SharedPreferencesUtil().batchModeEnabled == enabled) return true;
     // With batch on the realtime socket is suppressed for every device type, so a
@@ -512,6 +505,20 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', enableNativeStreaming);
     await _applyLimitlessRealtimeSuppression(enabled);
     notifyListeners();
+    // A phone-mic session's mode is fixed at start, so a mid-session toggle
+    // must roll the session into a fresh one — otherwise _resetState() tears
+    // the socket down under a still-running Live session (no transcript, audio
+    // silently diverted to the offline WAL) and the UI keeps the Live card.
+    final phoneMicSessionActive = _phoneMicBatchActive || _activeSource is PhoneMicSource;
+    if (phoneMicSessionActive) {
+      try {
+        await stopStreamRecording();
+        await streamRecording();
+      } catch (e, st) {
+        Logger.error('[CaptureProvider] mode-switch session roll failed: $e\n$st');
+      }
+      return true;
+    }
     try {
       await onRecordProfileSettingChanged();
     } catch (_) {}
@@ -1307,36 +1314,26 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  /// Sends current geolocation to backend if location services are enabled and permission is granted
-  Future<void> _sendCurrentGeolocation() async {
-    try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        Logger.log('Location service is not enabled, skipping geolocation update');
-        return;
-      }
-
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        Logger.log('Location permission not granted, skipping geolocation update');
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition();
-      final geolocation = Geolocation(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        altitude: position.altitude,
-        accuracy: position.accuracy,
-        time: position.timestamp.toUtc(),
-      );
-
-      await updateUserGeolocation(geolocation: geolocation);
-    } catch (e) {
-      Logger.error('Error sending geolocation: $e');
-    }
-  }
-
   streamRecording() async {
+    // The backend snapshots its cached location when finalizing a conversation.
+    // Complete this bounded update before any live or batch capture path can
+    // create/finalize that conversation.
+    await _conversationLocationCapture.captureAndUpload();
+
+    // Mode is fixed for the whole session at start. On iOS and Android the phone
+    // mic can capture Transcribe Later (batch) audio: explicitly when the user
+    // enabled it, or automatically as an offline fallback when there is no
+    // network. Both write .bin files natively instead of opening the realtime socket.
+    final mode = selectPhoneMicSessionMode(
+      supportsBatch: phoneMicSupportsTranscribeLater,
+      batchModeEnabled: SharedPreferencesUtil().batchModeEnabled,
+      hasNetwork: ConnectivityService().isConnected,
+    );
+    if (mode != PhoneMicSessionMode.live) {
+      await _startPhoneMicBatch(auto: mode == PhoneMicSessionMode.batchAuto);
+      return;
+    }
+
     updateRecordingState(RecordingState.initialising);
     final micPermission = await Permission.microphone.request();
     if (!micPermission.isGranted) {
@@ -1344,9 +1341,6 @@ class CaptureController extends ChangeNotifier
       updateRecordingState(RecordingState.stop);
       return;
     }
-
-    // Send current location when conversation starts
-    _sendCurrentGeolocation();
 
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
@@ -1400,6 +1394,19 @@ class CaptureController extends ChangeNotifier
   }
 
   stopStreamRecording() async {
+    // Batch (Transcribe Later) phone-mic session: no WAL flush or socket to
+    // close. Native stop() finalizes the current .bin before it resolves; the
+    // recordings list refreshes from onBatchRecordingFinalized.
+    if (_phoneMicBatchActive) {
+      _micInterrupted = false;
+      ServiceManager.instance().phoneMic.stop();
+      _endOfflineSession();
+      await _cleanupCurrentState();
+      _phoneMicBatchActive = false;
+      updateRecordingState(RecordingState.stop);
+      return;
+    }
+
     // Flush remaining phone mic WAL buffer before stopping
     if (_phoneMicWalActive) {
       final flushed = _activeSource?.flush() ?? [];
@@ -1419,6 +1426,84 @@ class CaptureController extends ChangeNotifier
     await _socket?.stop(reason: 'stop stream recording');
   }
 
+  /// Start a phone-mic Transcribe Later (batch) session. Native opus-encodes and
+  /// writes WAL-compatible .bin files; no socket, WAL, or AudioSource is used
+  /// (_activeSource stays null). [auto] selects the file marker: false = explicit
+  /// Transcribe Later, true = automatic offline fallback.
+  Future<void> _startPhoneMicBatch({required bool auto}) async {
+    updateRecordingState(RecordingState.initialising);
+    final micPermission = await Permission.microphone.request();
+    if (!micPermission.isGranted) {
+      Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic batch');
+      updateRecordingState(RecordingState.stop);
+      return;
+    }
+
+    await _cleanupCurrentState();
+
+    // batchAudioDir may never have been written if batch was chosen via the
+    // offline auto-switch (setBatchMode was never called with batch on).
+    final docs = await getApplicationDocumentsDirectory();
+    await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
+    await SharedPreferencesUtil().saveBool('phoneBatchAuto', auto);
+    if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
+    if (SharedPreferencesUtil().batchCutRequested) SharedPreferencesUtil().batchCutRequested = false;
+
+    _phoneMicBatchActive = true;
+    // Offline-session bookkeeping drives the capture-card timer (mirrors
+    // _initiateDeviceAudioStreaming); _onOfflineRecordingFinalized resets it on
+    // each native file rotation.
+    _offlineSessionStartSeconds = _nowSeconds;
+    _offlineMuteStartedAt = null;
+
+    updateRecordingState(RecordingState.record);
+    try {
+      await ServiceManager.instance().phoneMic.startBatch(
+            onStop: () {
+              if (!_micInterrupted && !_phoneMicBatchRestartInFlight) {
+                updateRecordingState(RecordingState.stop);
+              }
+            },
+            onInterruption: _onMicInterruption,
+            onBatchStalled: _onBatchStalled,
+            onError: _onBatchCaptureError,
+          );
+    } catch (e, st) {
+      // No socket to clean in batch — fail visibly instead of recording nothing.
+      Logger.error('[CaptureProvider] phone mic batch start failed: $e\n$st');
+      _phoneMicBatchActive = false;
+      _endOfflineSession();
+      updateRecordingState(RecordingState.stop);
+    }
+  }
+
+  /// Batch liveness watchdog escalation: the native progress feed went silent, so
+  /// tear the session down and start a fresh one. Never routes through the Live
+  /// restart path (_restartPhoneMicRecording), which assumes a socket/WAL.
+  Future<void> _onBatchStalled() async {
+    if (!_phoneMicBatchActive || _phoneMicBatchRestartInFlight) return;
+    _phoneMicBatchRestartInFlight = true;
+    try {
+      ServiceManager.instance().phoneMic.stop();
+      if (!_phoneMicBatchActive) return; // user stopped while restarting
+      await _startPhoneMicBatch(auto: SharedPreferencesUtil().phoneBatchAuto);
+    } catch (e, st) {
+      Logger.error('[CaptureProvider] _onBatchStalled restart failed: $e\n$st');
+    } finally {
+      _phoneMicBatchRestartInFlight = false;
+    }
+  }
+
+  Future<void> _onBatchCaptureError(String code, String message) async {
+    Logger.error('[CaptureProvider] batch capture error $code: $message');
+    if (code == 'batch_storage_full') {
+      // The flag is written natively; reload so the Dart prefs cache sees it
+      // before the UI re-reads it on notify.
+      await SharedPreferencesUtil.reload();
+      notifyListeners();
+    }
+  }
+
   Future streamDeviceRecording({BtDevice? device}) async {
     Logger.debug("streamDeviceRecording $device");
     if (deviceOnboardingProvider == null && SharedPreferencesUtil().batchModeSuspendedForOnboarding) {
@@ -1428,8 +1513,9 @@ class CaptureController extends ChangeNotifier
 
     bool wasPaused = _isPaused;
 
-    // Send current location when conversation starts
-    _sendCurrentGeolocation();
+    // Ensure even very short device recordings have a location in Redis before
+    // the backend is able to finalize their conversation.
+    await _conversationLocationCapture.captureAndUpload();
 
     await _resetStateVariables();
     await _resetState();

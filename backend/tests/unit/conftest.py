@@ -12,6 +12,12 @@ from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for
     snapshot_sys_modules,
 )
 
+# Cache the real google.api_core.exceptions in sys.modules before any test stubs the `google`
+# namespace at module scope. Modules that catch google.api_core exceptions (database/users.py,
+# database/advice.py, ...) then import cleanly regardless of test-file collection order, instead of
+# failing with ModuleNotFoundError once a later-collected test has replaced `google` with a stub.
+import google.api_core.exceptions  # noqa: F401,E402
+
 
 def _install_prometheus_client_stub():
     if 'prometheus_client' in sys.modules:

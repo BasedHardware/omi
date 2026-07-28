@@ -183,7 +183,7 @@ final class ChatResourceTests: XCTestCase {
           sessionId: "session-1",
           runId: "run-1",
           state: .ready
-        ),
+        )
       ]
     )
     let resources = ChatResource.decodeResourcesFromMessageMetadata(metadata)

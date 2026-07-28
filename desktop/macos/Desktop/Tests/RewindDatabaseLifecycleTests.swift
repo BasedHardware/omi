@@ -7,8 +7,11 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
 
   func testCloseClearsRunningFlag() async throws {
     let testUserId = "rewind-db-lifecycle-\(UUID().uuidString)"
-    let userDir = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let applicationSupportDirectory = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
+    let userDir =
+      applicationSupportDirectory
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
@@ -30,8 +33,11 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
 
   func testPoolGenerationAdvancesAcrossReopen() async throws {
     let testUserId = "rewind-db-pool-generation-\(UUID().uuidString)"
-    let userDir = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let applicationSupportDirectory = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
+    let userDir =
+      applicationSupportDirectory
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
@@ -68,16 +74,62 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     RewindDatabase.currentUserId = nil
   }
 
+  func testAgentSyncDatabaseFailureReportingClosesPoolForRecovery() async throws {
+    let testUserId = "rewind-agent-sync-recovery-\(UUID().uuidString)"
+    let applicationSupportDirectory = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
+    let userDir =
+      applicationSupportDirectory
+      .appendingPathComponent("Omi", isDirectory: true)
+      .appendingPathComponent("users", isDirectory: true)
+      .appendingPathComponent(testUserId, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: userDir) }
+
+    await RewindDatabase.shared.close()
+    RewindDatabase.currentUserId = testUserId
+    await RewindDatabase.shared.configure(userId: testUserId)
+    try await RewindDatabase.shared.initialize()
+
+    // DatabasePool can bridge SQLite error 10 through a generic NSError while
+    // preserving it in the localized text; AgentSync must still let the shared
+    // recovery owner rotate the stale pool.
+    let ioError = NSError(
+      domain: "GRDB.DatabaseError",
+      code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "SQLite error 10: disk I/O error"])
+    for _ in 0..<5 {
+      await AgentSyncService.reportDatabaseReadFailure(ioError)
+    }
+
+    let isInitializedAfterFailures = await RewindDatabase.shared.isInitialized
+    XCTAssertFalse(
+      isInitializedAfterFailures,
+      "AgentSync must let repeated recoverable local read failures rotate the stale pool"
+    )
+
+    try await RewindDatabase.shared.initialize()
+    let isInitializedAfterRecovery = await RewindDatabase.shared.isInitialized
+    XCTAssertTrue(isInitializedAfterRecovery)
+
+    await RewindDatabase.shared.close()
+    RewindDatabase.currentUserId = nil
+  }
+
   func testInitializeReopensDatabaseClosedAfterIndexerInitialization() async throws {
     let testUserId = "rewind-indexer-reinitialize-\(UUID().uuidString)"
-    let userDir = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let applicationSupportDirectory = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
+    let userDir =
+      applicationSupportDirectory
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
     defer { try? FileManager.default.removeItem(at: userDir) }
 
     await RewindIndexer.shared.reset()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = testUserId
     await RewindDatabase.shared.configure(userId: testUserId)
@@ -97,20 +149,25 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
       "initializing the indexer must reopen a database closed after the indexer was initialized")
 
     await RewindIndexer.shared.reset()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = nil
   }
 
   func testProcessFrameReopensDatabaseClosedAfterIndexerInitialization() async throws {
     let testUserId = "rewind-indexer-process-frame-reinitialize-\(UUID().uuidString)"
-    let userDir = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let applicationSupportDirectory = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
+    let userDir =
+      applicationSupportDirectory
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
     defer { try? FileManager.default.removeItem(at: userDir) }
 
     await RewindIndexer.shared.reset()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = testUserId
     await RewindDatabase.shared.configure(userId: testUserId)
@@ -142,6 +199,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
       "processing a frame must reopen a database closed after the indexer was initialized")
 
     await RewindIndexer.shared.reset()
+    await RewindStorage.shared.reset()
     await RewindDatabase.shared.close()
     RewindDatabase.currentUserId = nil
   }
@@ -149,14 +207,15 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
   private func makeTestFrameImage() throws -> CGImage {
     let width = 96
     let height = 64
-    let context = try XCTUnwrap(CGContext(
-      data: nil,
-      width: width,
-      height: height,
-      bitsPerComponent: 8,
-      bytesPerRow: width * 4,
-      space: CGColorSpaceCreateDeviceRGB(),
-      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    let context = try XCTUnwrap(
+      CGContext(
+        data: nil,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: width * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
     context.setFillColor(NSColor.systemBlue.cgColor)
     context.fill(CGRect(x: 0, y: 0, width: width, height: height))
     return try XCTUnwrap(context.makeImage())

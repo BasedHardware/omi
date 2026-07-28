@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class APIClientUploadLocalFilesV2Tests: XCTestCase {
@@ -11,8 +12,8 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
     SyncUploadURLProtocol.setResponse(
       statusCode: 202,
       body: """
-      {"job_id":"job-123","status":"queued","total_files":1,"total_segments":0,"poll_after_ms":1000}
-      """.data(using: .utf8)!
+        {"job_id":"job-123","status":"queued","total_files":1,"total_segments":0,"poll_after_ms":1000}
+        """.data(using: .utf8)!
     )
 
     let client = APIClient(session: makeSession())
@@ -29,8 +30,8 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
     SyncUploadURLProtocol.setResponse(
       statusCode: 200,
       body: """
-      {"new_memories":["c1"],"updated_memories":[],"failed_segments":0,"total_segments":1,"errors":[]}
-      """.data(using: .utf8)!
+        {"new_memories":["c1"],"updated_memories":[],"failed_segments":0,"total_segments":1,"errors":[]}
+        """.data(using: .utf8)!
     )
 
     let client = APIClient(session: makeSession())
@@ -48,8 +49,8 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
     SyncUploadURLProtocol.setResponse(
       statusCode: 200,
       body: """
-      {"new_memories":["c1"],"updated_memories":[],"failed_segments":1,"total_segments":2,"errors":[]}
-      """.data(using: .utf8)!
+        {"new_memories":["c1"],"updated_memories":[],"failed_segments":1,"total_segments":2,"errors":[]}
+        """.data(using: .utf8)!
     )
 
     let client = APIClient(session: makeSession())
@@ -87,6 +88,30 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
     }
   }
 
+  func testSyncJobFetchOutcomeStatusMapping() {
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(200), .ok)
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(401), .unauthorized)
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(403), .forbidden)
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(404), .notFound)
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(500), .transient)
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(418), .transient)
+  }
+
+  func testFetchSyncJobStatus401IsDurableUnauthorizedNotTransient() async {
+    // A 401 on the status poll used to fall through to `.transient`, parking the
+    // WAL in a forever-retry. It must now be `.unauthorized` so the reconciler
+    // reverts the WAL for re-upload through the authenticated path.
+    SyncUploadURLProtocol.setResponse(
+      statusCode: 401, body: Data("{\"detail\":\"token expired\"}".utf8))
+    let client = APIClient(session: makeSession())
+    await client.setTestAuthHeader("Bearer test-token")
+
+    let fetch = await client.fetchSyncJobStatus(jobId: "job-401")
+
+    XCTAssertEqual(fetch.outcome, .unauthorized)
+    XCTAssertNil(fetch.status)
+  }
+
   private func makeSession() -> URLSession {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [SyncUploadURLProtocol.self]
@@ -102,11 +127,11 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
 
 private final class SyncUploadURLProtocol: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var statusCode = 403
-  private static var body = Data()
-  private static var responseHeaders: [String: String] = [:]
-  static var lastRequestURL: URL?
-  static var lastRequestMethod: String?
+  private nonisolated(unsafe) static var statusCode = 403
+  private nonisolated(unsafe) static var body = Data()
+  private nonisolated(unsafe) static var responseHeaders: [String: String] = [:]
+  nonisolated(unsafe) static var lastRequestURL: URL?
+  nonisolated(unsafe) static var lastRequestMethod: String?
 
   static func reset() {
     lock.lock()

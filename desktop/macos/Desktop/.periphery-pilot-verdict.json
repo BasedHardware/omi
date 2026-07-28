@@ -1,0 +1,11 @@
+{
+  "verdict": "deferred",
+  "periphery_version": "2.21.2",
+  "installation": "brew install peripheryapp/periphery/periphery",
+  "index_store_contract": "desktop/macos/scripts/swift-index-store.sh (Ticket 09)",
+  "index_store_path": "Desktop/.build/debug/index/store",
+  "attempt_date": "2026-07-15",
+  "outcome": "Periphery 2.21.2 binary fails to initialize on this environment: 'Failed to initialize shell: i/o error: No such file or directory (os error 2)'. The error occurs before any scan logic runs, suggesting a binary/architecture incompatibility. The tool cannot be evaluated.",
+  "next_steps": "Retry with a source-built Periphery or a different installation method. The index store contract (Ticket 09) is verified and ready — Periphery would consume it with --skip-build --index-store-path. When the tool runs successfully, normalize debug/Objective-C/dynamic-reference exclusions and commit an advisory finding snapshot with triage categories.",
+  "promotion_decision": "Non-promotion (cannot evaluate). Advisory operation retained. A no-new-findings guard is NOT promoted because the pilot could not produce signal."
+}

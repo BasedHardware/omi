@@ -79,6 +79,13 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     return true
   }
 
+  /// Server list/detail responses project soft retirement through canonical
+  /// lifecycle status and may omit the legacy `deleted` field. Keep that
+  /// projection here so every local cache and surface applies the same rule.
+  var isRetired: Bool {
+    deleted == true || taskStatus == "cancelled" || taskStatus == "superseded"
+  }
+
   /// Custom Equatable: compares only display-relevant fields.
   /// Skips `metadata` (JSON key ordering is non-deterministic after SQLite round-trip),
   /// `updatedAt` (set to Date() when nil on sync), and fields lost through SQLite.
@@ -222,12 +229,15 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     id = try wire?.id ?? container.decode(String.self, forKey: .id)
     description = try wire?.description_ ?? container.decodeIfPresent(String.self, forKey: .description) ?? ""
     completed = try wire?.completed ?? container.decodeIfPresent(Bool.self, forKey: .completed) ?? false
-    createdAt = try parseWireDate(wire?.createdAt)
+    createdAt =
+      try parseWireDate(wire?.createdAt)
       ?? container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try parseWireDate(wire?.updatedAt)
+    updatedAt =
+      try parseWireDate(wire?.updatedAt)
       ?? container.decodeIfPresent(Date.self, forKey: .updatedAt)
     dueAt = try parseWireDate(wire?.dueAt) ?? container.decodeIfPresent(Date.self, forKey: .dueAt)
-    completedAt = try parseWireDate(wire?.completedAt)
+    completedAt =
+      try parseWireDate(wire?.completedAt)
       ?? container.decodeIfPresent(Date.self, forKey: .completedAt)
     conversationId = try wire?.conversationId ?? container.decodeIfPresent(String.self, forKey: .conversationId)
     source = try wire?.source ?? container.decodeIfPresent(String.self, forKey: .source)
@@ -242,7 +252,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     goalId = try wire?.goalId ?? container.decodeIfPresent(String.self, forKey: .goalId)
     fromStaged = try container.decodeIfPresent(Bool.self, forKey: .fromStaged)
     recurrenceRule = try wire?.recurrenceRule ?? container.decodeIfPresent(String.self, forKey: .recurrenceRule)
-    recurrenceParentId = try wire?.recurrenceParentId ?? container.decodeIfPresent(String.self, forKey: .recurrenceParentId)
+    recurrenceParentId =
+      try wire?.recurrenceParentId ?? container.decodeIfPresent(String.self, forKey: .recurrenceParentId)
     taskId = try wire?.taskId ?? container.decodeIfPresent(String.self, forKey: .taskId)
     taskStatus = try wire?.status?.rawValue ?? container.decodeIfPresent(String.self, forKey: .taskStatus)
     taskOwner = try wire?.owner?.rawValue ?? container.decodeIfPresent(String.self, forKey: .taskOwner)
@@ -492,4 +503,3 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     return lines.joined(separator: "\n")
   }
 }
-

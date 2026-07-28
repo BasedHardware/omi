@@ -8,12 +8,12 @@ struct OmiHTTPTransport {
   let encoder: JSONEncoder
 
   // Cached formatters — avoid allocating per-field on large payloads.
-  private static let isoFractional: ISO8601DateFormatter = {
+  private nonisolated(unsafe) static let isoFractional: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
   }()
-  private static let isoStandard = ISO8601DateFormatter()
+  private nonisolated(unsafe) static let isoStandard = ISO8601DateFormatter()
 
   /// When set, `buildHeaders` uses this instead of calling AuthService (test-only).
   var testAuthHeader: String?

@@ -11,12 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = ROOT / "config" / "public-build-contract.json"
 DEFAULT_VALUES = ROOT / "config" / "public-build-values.json"
 DEFAULT_CLASSIFICATION = ROOT / "config" / "deployment-setting-classification.json"
 NAME = re.compile(r"[A-Z][A-Z0-9_]*\Z")
+SECRET_REFERENCE = re.compile(r"[A-Za-z0-9_-]+:(?:latest|[1-9][0-9]*)\Z")
 ARG = re.compile(r"^\s*ARG\s+([A-Z][A-Z0-9_]*)\s*$", re.MULTILINE)
 GUARD = re.compile(r'^\s*ENV\s+OMI_REQUIRED_PUBLIC_BUILD_INPUTS="([A-Z0-9_ ]*)"\s*$', re.MULTILINE)
 WEB_WORKFLOWS = frozenset(
@@ -27,10 +27,13 @@ WEB_WORKFLOWS = frozenset(
         ".github/workflows/gcp_personas.yml",
     }
 )
+DEPLOY_ACTION = "uses: ./.github/actions/deploy-public-build"
 PREPARE_ACTION = "uses: ./.github/actions/prepare-public-build"
 PROMOTION_ACTION = "uses: ./.github/actions/public-build-candidate-promotion"
+DEPLOY_ACTION_PATH = ".github/actions/deploy-public-build/action.yml"
 PREPARE_ACTION_PATH = ".github/actions/prepare-public-build/action.yml"
 PROMOTION_ACTION_PATH = ".github/actions/public-build-candidate-promotion/action.yml"
+JIT_PREFLIGHT_WORKFLOW_PATH = ".github/workflows/public-build-config-preflight.yml"
 
 
 @dataclass(frozen=True)
@@ -48,11 +51,24 @@ class CandidateAcceptance:
 
 
 @dataclass(frozen=True)
+class Deployment:
+    region: str
+    build_context: str
+    platforms: tuple[str, ...]
+    flags: tuple[str, ...]
+    runtime_secrets: dict[str, str]
+    preserve_runtime_secrets: tuple[str, ...]
+    runtime_env_vars: dict[str, str]
+    remove_runtime_secrets: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Target:
     name: str
     service: str
     dockerfile: str
     workflow: str
+    deployment: Deployment
     canary_component: str
     inputs: tuple[PublicInput, ...]
     candidate_acceptance: CandidateAcceptance
@@ -93,17 +109,109 @@ def _parse_input(raw_input: Any, *, target_name: str) -> PublicInput:
     return PublicInput(name=name, required=required, source=source, allowed_scopes=tuple(raw_scopes))
 
 
+def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
+    if not isinstance(raw_deployment, Mapping):
+        raise ValueError(f"target {target_name} must declare deployment")
+    region = _require_string(raw_deployment.get("region"), field=f"target {target_name} deployment region")
+    build_context = _require_string(
+        raw_deployment.get("build_context"), field=f"target {target_name} deployment build_context"
+    )
+    raw_platforms = raw_deployment.get("platforms")
+    if (
+        not isinstance(raw_platforms, list)
+        or not raw_platforms
+        or not all(isinstance(platform, str) and platform for platform in raw_platforms)
+    ):
+        raise ValueError(f"target {target_name} deployment platforms must be non-empty strings")
+    raw_flags = raw_deployment.get("flags")
+    if not isinstance(raw_flags, list) or not all(
+        isinstance(flag, str) and flag.startswith("--") and "\n" not in flag and "\r" not in flag for flag in raw_flags
+    ):
+        raise ValueError(f"target {target_name} deployment flags must be safe gcloud flags")
+    raw_runtime_secrets = raw_deployment.get("runtime_secrets")
+    if not isinstance(raw_runtime_secrets, Mapping) or not all(
+        isinstance(name, str)
+        and NAME.fullmatch(name)
+        and isinstance(reference, str)
+        and SECRET_REFERENCE.fullmatch(reference)
+        for name, reference in raw_runtime_secrets.items()
+    ):
+        raise ValueError(
+            f"target {target_name} deployment runtime_secrets must map environment names to secret:version"
+        )
+
+    raw_preserve_runtime_secrets = raw_deployment.get("preserve_runtime_secrets", [])
+    if not isinstance(raw_preserve_runtime_secrets, list) or not all(
+        isinstance(name, str) and NAME.fullmatch(name) for name in raw_preserve_runtime_secrets
+    ):
+        raise ValueError(f"target {target_name} deployment preserve_runtime_secrets must be environment names")
+    if len(set(raw_preserve_runtime_secrets)) != len(raw_preserve_runtime_secrets):
+        raise ValueError(f"target {target_name} deployment preserve_runtime_secrets must be unique")
+
+    raw_runtime_env_vars = raw_deployment.get("runtime_env_vars", {})
+    if not isinstance(raw_runtime_env_vars, Mapping) or not all(
+        isinstance(name, str)
+        and NAME.fullmatch(name)
+        and isinstance(value, str)
+        and value
+        and value == value.strip()
+        and not any(character in value for character in ("\\", ",", "\n", "\r", "\x00", "\u2028", "\u2029"))
+        for name, value in raw_runtime_env_vars.items()
+    ):
+        raise ValueError(
+            f"target {target_name} deployment runtime_env_vars must map environment names to non-empty deploy-safe values"
+        )
+
+    raw_remove_runtime_secrets = raw_deployment.get("remove_runtime_secrets", [])
+    if not isinstance(raw_remove_runtime_secrets, list) or not all(
+        isinstance(name, str) and NAME.fullmatch(name) for name in raw_remove_runtime_secrets
+    ):
+        raise ValueError(f"target {target_name} deployment remove_runtime_secrets must be environment names")
+    if len(set(raw_remove_runtime_secrets)) != len(raw_remove_runtime_secrets):
+        raise ValueError(f"target {target_name} deployment remove_runtime_secrets must be unique")
+
+    binding_groups = {
+        "runtime_secrets": set(raw_runtime_secrets),
+        "preserve_runtime_secrets": set(raw_preserve_runtime_secrets),
+        "runtime_env_vars": set(raw_runtime_env_vars),
+        "remove_runtime_secrets": set(raw_remove_runtime_secrets),
+    }
+    group_names = tuple(binding_groups)
+    overlaps = [
+        f"{left} and {right}: {', '.join(sorted(binding_groups[left] & binding_groups[right]))}"
+        for index, left in enumerate(group_names)
+        for right in group_names[index + 1 :]
+        if binding_groups[left] & binding_groups[right]
+    ]
+    if overlaps:
+        raise ValueError(
+            f"target {target_name} deployment runtime binding groups cannot overlap: {'; '.join(overlaps)}"
+        )
+    return Deployment(
+        region=region,
+        build_context=build_context,
+        platforms=tuple(raw_platforms),
+        flags=tuple(raw_flags),
+        runtime_secrets=dict(raw_runtime_secrets),
+        preserve_runtime_secrets=tuple(raw_preserve_runtime_secrets),
+        runtime_env_vars=dict(raw_runtime_env_vars),
+        remove_runtime_secrets=tuple(raw_remove_runtime_secrets),
+    )
+
+
 def load_contract(path: Path) -> Contract:
     raw = _read_json(path)
-    if not isinstance(raw, Mapping) or raw.get("schema_version") != 2:
+    if not isinstance(raw, Mapping) or raw.get("schema_version") != 4:
         raise ValueError(f"{path}: unsupported public-build contract schema")
     configuration = raw.get("configuration")
     if not isinstance(configuration, Mapping) or configuration.get("source") != "repository_config":
         raise ValueError(f"{path}: configuration source must be repository_config")
     config_path = _require_string(configuration.get("path"), field=f"{path}: configuration path")
     raw_environments = configuration.get("environments")
-    if not isinstance(raw_environments, list) or not raw_environments or not all(
-        isinstance(environment, str) and environment for environment in raw_environments
+    if (
+        not isinstance(raw_environments, list)
+        or not raw_environments
+        or not all(isinstance(environment, str) and environment for environment in raw_environments)
     ):
         raise ValueError(f"{path}: configuration environments must be non-empty strings")
     environments = tuple(raw_environments)
@@ -137,6 +245,7 @@ def load_contract(path: Path) -> Contract:
             service=_require_string(raw_target.get("service"), field=f"target {target_name} service"),
             dockerfile=_require_string(raw_target.get("dockerfile"), field=f"target {target_name} dockerfile"),
             workflow=_require_string(raw_target.get("workflow"), field=f"target {target_name} workflow"),
+            deployment=_parse_deployment(raw_target.get("deployment"), target_name=target_name),
             canary_component=_require_string(
                 raw_target.get("canary_component"), field=f"target {target_name} canary_component"
             ),
@@ -208,15 +317,25 @@ def build_args(target: Target, values: Mapping[str, str]) -> str:
     return "\n".join(f"{item.name}={values[item.name]}" for item in target.inputs if item.name in values)
 
 
-def public_build_names(classification_path: Path) -> set[str]:
+def deployment_setting_names(classification_path: Path) -> dict[str, set[str]]:
     raw = _read_json(classification_path)
     try:
-        names = raw["kinds"]["public_build"]
+        kinds = raw["kinds"]
     except (KeyError, TypeError) as exc:
-        raise ValueError(f"{classification_path}: kinds.public_build must be a list") from exc
-    if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
-        raise ValueError(f"{classification_path}: kinds.public_build must be a list")
-    return set(names)
+        raise ValueError(f"{classification_path}: kinds must be an object") from exc
+    if not isinstance(kinds, Mapping):
+        raise ValueError(f"{classification_path}: kinds must be an object")
+    names_by_kind: dict[str, set[str]] = {}
+    for kind in ("config", "public_build"):
+        names = kinds.get(kind)
+        if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+            raise ValueError(f"{classification_path}: kinds.{kind} must be a list")
+        names_by_kind[kind] = set(names)
+    return names_by_kind
+
+
+def public_build_names(classification_path: Path) -> set[str]:
+    return deployment_setting_names(classification_path)["public_build"]
 
 
 def _docker_public_args(text: str, classified_public: set[str]) -> set[str]:
@@ -228,11 +347,22 @@ def _guarded_names(text: str) -> set[str]:
     return set() if match is None else set(match.group(1).split())
 
 
-def validate_target(root: Path, target: Target, classified_public: set[str]) -> list[str]:
+def validate_target(
+    root: Path,
+    target: Target,
+    classified_public: set[str],
+    classified_runtime_config: set[str] | None = None,
+) -> list[str]:
     errors: list[str] = []
     names = all_names(target)
     unclassified = sorted(names - classified_public)
     errors.extend(f"{target.name}: input {name} is not classified public_build" for name in unclassified)
+    runtime_config_names = set(target.deployment.runtime_env_vars)
+    runtime_config_classification = classified_runtime_config or set()
+    errors.extend(
+        f"{target.name}: runtime env {name} is not classified config"
+        for name in sorted(runtime_config_names - runtime_config_classification)
+    )
     for item in target.inputs:
         if item.source != "repository_config":
             errors.append(f"{target.name}: input {item.name} must use repository_config")
@@ -242,6 +372,9 @@ def validate_target(root: Path, target: Target, classified_public: set[str]) -> 
     dockerfile_path = root / target.dockerfile
     if not dockerfile_path.is_file():
         return errors + [f"{target.name}: Dockerfile is missing: {target.dockerfile}"]
+    build_context_path = root / target.deployment.build_context
+    if not build_context_path.is_dir():
+        errors.append(f"{target.name}: Docker build context is missing: {target.deployment.build_context}")
     dockerfile = dockerfile_path.read_text(encoding="utf-8")
     docker_args = _docker_public_args(dockerfile, classified_public)
     errors.extend(f"{target.dockerfile}: required public ARG {name} is missing" for name in sorted(names - docker_args))
@@ -253,9 +386,7 @@ def validate_target(root: Path, target: Target, classified_public: set[str]) -> 
     if not guard_names:
         errors.append(f"{target.dockerfile}: missing OMI_REQUIRED_PUBLIC_BUILD_INPUTS guard")
     required = required_names(target)
-    errors.extend(
-        f"{target.dockerfile}: empty-value guard omits {name}" for name in sorted(required - guard_names)
-    )
+    errors.extend(f"{target.dockerfile}: empty-value guard omits {name}" for name in sorted(required - guard_names))
     errors.extend(
         f"{target.dockerfile}: empty-value guard includes undeclared {name}" for name in sorted(guard_names - required)
     )
@@ -266,15 +397,28 @@ def validate_target(root: Path, target: Target, classified_public: set[str]) -> 
     if not workflow_path.is_file():
         return errors + [f"{target.name}: workflow is missing: {target.workflow}"]
     workflow = workflow_path.read_text(encoding="utf-8")
-    for marker in (PREPARE_ACTION, "id: public-build", "build-args: ${{ steps.public-build.outputs.build_args }}"):
-        if marker not in workflow:
-            errors.append(f"{target.workflow}: missing shared public-build preparation {marker!r}")
+    if DEPLOY_ACTION not in workflow:
+        errors.append(f"{target.workflow}: missing centralized public-build deployment {DEPLOY_ACTION!r}")
     for name in sorted(names):
         if f"vars.{name}" in workflow:
             errors.append(f"{target.workflow}: input {name} bypasses repository_config via GitHub vars")
-    for marker in ("no_traffic: true", "--revision-suffix=", "--tag=", PROMOTION_ACTION):
+    for marker in (
+        PREPARE_ACTION,
+        PROMOTION_ACTION,
+        "docker/build-push-action@",
+        "google-github-actions/deploy-cloudrun@",
+        "gcloud auth configure-docker",
+        "docker build",
+        "docker push",
+        "gcloud run deploy",
+        "no_traffic: true",
+        "--revision-suffix=",
+        "--tag=",
+        "gcloud run services update-traffic",
+    ):
         if marker not in workflow:
-            errors.append(f"{target.workflow}: missing candidate promotion marker {marker!r}")
+            continue
+        errors.append(f"{target.workflow}: bypasses centralized public-build deployment via {marker!r}")
     if "revision_traffic:" in workflow or "LATEST=100" in workflow:
         errors.append(f"{target.workflow}: must not promote direct traffic during candidate deployment")
     if target.candidate_acceptance.command[1] != ".github/scripts/smoke_public_build_browser.py":
@@ -294,6 +438,40 @@ def validate_target(root: Path, target: Target, classified_public: set[str]) -> 
 
 def validate_shared_actions(root: Path) -> list[str]:
     errors: list[str] = []
+    deploy_path = root / DEPLOY_ACTION_PATH
+    if not deploy_path.is_file():
+        errors.append(f"centralized public-build deployment action is missing: {DEPLOY_ACTION_PATH}")
+    else:
+        deploy = deploy_path.read_text(encoding="utf-8")
+        required_markers = (
+            "config/public-build-contract.json",
+            ".deployment.runtime_secrets",
+            ".deployment.runtime_env_vars",
+            ".deployment.remove_runtime_secrets",
+            PREPARE_ACTION,
+            "google-github-actions/auth@",
+            "preflight_public_build_runtime.py",
+            "docker/build-push-action@",
+            "google-github-actions/deploy-cloudrun@",
+            "no_traffic: true",
+            "--revision-suffix=",
+            "--tag=",
+            "--remove-secrets=",
+            "env_vars_update_strategy: merge",
+            "secrets_update_strategy: merge",
+            PROMOTION_ACTION,
+        )
+        for marker in required_markers:
+            if marker not in deploy:
+                errors.append(f"{DEPLOY_ACTION_PATH}: missing centralized deployment marker {marker!r}")
+        build_index = deploy.find("docker/build-push-action@")
+        runtime_preflight_index = deploy.find("preflight_public_build_runtime.py")
+        promotion_index = deploy.find(PROMOTION_ACTION)
+        if runtime_preflight_index == -1 or build_index == -1 or runtime_preflight_index > build_index:
+            errors.append(f"{DEPLOY_ACTION_PATH}: runtime preflight must run before image build")
+        if promotion_index == -1 or build_index == -1 or promotion_index < build_index:
+            errors.append(f"{DEPLOY_ACTION_PATH}: candidate promotion must follow image build")
+
     prepare_path = root / PREPARE_ACTION_PATH
     if not prepare_path.is_file():
         errors.append(f"shared public-build preparation action is missing: {PREPARE_ACTION_PATH}")
@@ -325,14 +503,37 @@ def validate_shared_actions(root: Path) -> list[str]:
     return errors
 
 
-def validate(root: Path, contract: Contract, classified_public: set[str]) -> list[str]:
+def validate_jit_preflight_workflow(root: Path) -> list[str]:
+    workflow_path = root / JIT_PREFLIGHT_WORKFLOW_PATH
+    if not workflow_path.is_file():
+        return [f"JIT public-build preflight workflow is missing: {JIT_PREFLIGHT_WORKFLOW_PATH}"]
+    workflow = workflow_path.read_text(encoding="utf-8")
+    errors: list[str] = []
+    if "pull_request:" not in workflow:
+        errors.append(f"{JIT_PREFLIGHT_WORKFLOW_PATH}: must validate public-build changes in pull requests")
+    if "workflow_dispatch:" not in workflow:
+        errors.append(f"{JIT_PREFLIGHT_WORKFLOW_PATH}: must support explicit JIT validation")
+    if "schedule:" in workflow:
+        errors.append(f"{JIT_PREFLIGHT_WORKFLOW_PATH}: must not schedule drift checks; validation is JIT only")
+    return errors
+
+
+def validate(root: Path, contract: Contract, classified_settings: Mapping[str, set[str]]) -> list[str]:
     errors: list[str] = []
     workflows = {target.workflow for target in contract.targets.values()}
     if workflows != WEB_WORKFLOWS:
         errors.append("contract must cover exactly the four browser deploy workflows")
     for target in contract.targets.values():
-        errors.extend(validate_target(root, target, classified_public))
+        errors.extend(
+            validate_target(
+                root,
+                target,
+                classified_settings["public_build"],
+                classified_settings["config"],
+            )
+        )
     errors.extend(validate_shared_actions(root))
+    errors.extend(validate_jit_preflight_workflow(root))
     values_path = root / contract.config_path
     try:
         values = load_values(values_path)
@@ -354,7 +555,7 @@ def main() -> int:
     classification_path = (args.classification or root / DEFAULT_CLASSIFICATION.relative_to(ROOT)).resolve()
     try:
         contract = load_contract(contract_path)
-        errors = validate(root, contract, public_build_names(classification_path))
+        errors = validate(root, contract, deployment_setting_names(classification_path))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"public-build contract check failed: {exc}", file=sys.stderr)
         return 1

@@ -2,6 +2,9 @@
 
 Verifies that connect_to_deepgram returns None when dg_connection.start()
 returns False, preventing dead connections from being passed to callers.
+
+Hosted Deepgram serving is disabled; connect_to_deepgram is only reachable
+when self-hosted Deepgram is configured, so these tests enable that gate.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,6 +17,7 @@ from utils.stt.streaming import connect_to_deepgram
 class TestConnectToDeepgramStartGuard:
     """Verify connect_to_deepgram returns None when start() returns False."""
 
+    @patch('utils.stt.streaming.is_dg_self_hosted', True)
     @patch('utils.stt.streaming.deepgram')
     def test_returns_none_when_start_fails(self, mock_dg):
         """If dg_connection.start() returns False, must return None (#6302)."""
@@ -31,6 +35,7 @@ class TestConnectToDeepgramStartGuard:
         )
         assert result is None
 
+    @patch('utils.stt.streaming.is_dg_self_hosted', True)
     @patch('utils.stt.streaming.deepgram')
     def test_returns_connection_when_start_succeeds(self, mock_dg):
         """If dg_connection.start() returns True, returns the connection."""

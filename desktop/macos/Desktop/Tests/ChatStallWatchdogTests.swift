@@ -2,8 +2,8 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// CHAT-02: a stalled agent must surface "Response took too long" within the 180s
-/// send watchdog, not vanish silently.
+/// CHAT-02: a silent bridge with no active tool must surface "Response took too
+/// long" after the 60s generic watchdog, not vanish silently.
 ///
 /// The bug: the watchdog's own `interrupt()` resumes the in-flight request with
 /// `BridgeError.stopped`, which the send-loop catch treated as a *user stop*
@@ -11,7 +11,7 @@ import XCTest
 /// fix marks the watchdog-fired generation so the catch surfaces the timeout for
 /// it while a genuine user Stop stays silent.
 ///
-/// The full 180s race is a runtime path (Codex owns that proof). These lock in the
+/// The full 60s race is a runtime path (Codex owns that proof). These lock in the
 /// load-bearing decision and its wiring hermetically.
 final class ChatStallWatchdogTests: XCTestCase {
 
@@ -30,7 +30,15 @@ final class ChatStallWatchdogTests: XCTestCase {
   func testToolStallStopSurfacesToolTimeoutMessage() {
     XCTAssertEqual(
       ChatProvider.stoppedTurnErrorMessage(watchdogFired: false, toolStallAbortFired: true),
-      "A tool took too long. Try again.")
+      "A tool stopped reporting progress. Try again.")
+  }
+
+  func testGenericWatchdogDefersToAnActiveTool() throws {
+    let source = try chatProviderSource()
+    XCTAssertTrue(source.contains("genericWatchdogInactivityMs = 60_000"))
+    XCTAssertTrue(
+      source.contains("stallDetector.isSilentWithoutActiveTools"),
+      "An active tool owns its no-progress timeout before the generic bridge watchdog can fire")
   }
 
   // MARK: - Source-invariant: the marker is set before interrupt() and consumed by the catch
@@ -40,15 +48,17 @@ final class ChatStallWatchdogTests: XCTestCase {
     // (never skips) if they drift. Whitespace-tolerant regex so auto-format churn
     // can't break the invariant.
     let source = try chatProviderSource()
-    guard let mark = source.range(
-      of: #"sendWatchdogFiredGeneration\s*=\s*sendGen"#, options: .regularExpression)
+    guard
+      let mark = source.range(
+        of: #"sendWatchdogFiredGeneration\s*=\s*sendGen"#, options: .regularExpression)
     else {
       return XCTFail("watchdog must mark the generation (sendWatchdogFiredGeneration = sendGen)")
     }
     // The interrupt that must come AFTER the mark is the watchdog's own call.
     // Searching from just past the mark proves the mark precedes it.
-    guard source[mark.upperBound...].range(
-      of: #"resolvedAgentClient\(\)\s*\.\s*interrupt\(\)"#, options: .regularExpression) != nil
+    guard
+      source[mark.upperBound...].range(
+        of: #"resolvedAgentClient\(\)\s*\.\s*interrupt\(\)"#, options: .regularExpression) != nil
     else {
       return XCTFail("watchdog must call interrupt() AFTER marking the generation")
     }
@@ -66,15 +76,17 @@ final class ChatStallWatchdogTests: XCTestCase {
       "the .stopped catch must check the watchdog marker")
     XCTAssertNotNil(
       source.range(
-        of: #"stoppedTurnErrorMessage\(\s*watchdogFired:\s*watchdogFired[\s\S]*?toolStallAbortFired:\s*toolStallAbortFired\s*\)"#,
+        of:
+          #"stoppedTurnErrorMessage\(\s*watchdogFired:\s*watchdogFired[\s\S]*?toolStallAbortFired:\s*toolStallAbortFired\s*\)"#,
         options: .regularExpression),
       "the .stopped catch must derive its message from the shared helper")
   }
 
   func testToolStallGuardMarksGenerationBeforeInterrupting() throws {
     let source = try chatProviderSource()
-    guard let mark = source.range(
-      of: #"sendToolStallAbortGeneration\s*=\s*sendGen"#, options: .regularExpression)
+    guard
+      let mark = source.range(
+        of: #"sendToolStallAbortGeneration\s*=\s*sendGen"#, options: .regularExpression)
     else {
       return XCTFail("tool stall guard must mark the active generation")
     }

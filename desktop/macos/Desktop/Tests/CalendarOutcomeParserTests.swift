@@ -18,7 +18,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
       "events": [["id": "1", "summary": "Standup"]],
       "attempts": [["browser": "Arc", "stage": "ok", "reason": "ok", "had_auth": true]],
     ]
-    guard case let .success(events, browser) = CalendarOutcomeParser.parse(json) else {
+    guard case .success(let events, let browser) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected success")
     }
     XCTAssertEqual(browser, "Arc")
@@ -32,7 +32,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
       "events": [],
       "attempts": [["browser": "Chrome (Default)", "stage": "ok", "reason": "ok", "had_auth": true]],
     ]
-    guard case let .success(events, browser) = CalendarOutcomeParser.parse(json) else {
+    guard case .success(let events, let browser) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected success")
     }
     XCTAssertEqual(browser, "Chrome (Default)")
@@ -52,7 +52,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
         ["browser": "Chrome (Profile 3)", "stage": "auth", "reason": "no Google auth cookies", "had_auth": false],
       ],
     ]
-    guard case let .failure(cls, _, attempts) = CalendarOutcomeParser.parse(json) else {
+    guard case .failure(let cls, _, let attempts) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .notSignedIn)
@@ -70,7 +70,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
         ["browser": "Chrome (Default)", "stage": "fetch", "reason": "HTTP 401", "had_auth": true, "http": 401]
       ],
     ]
-    guard case let .failure(cls, _, _) = CalendarOutcomeParser.parse(json) else {
+    guard case .failure(let cls, _, _) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .sessionExpired)
@@ -92,7 +92,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
         ]
       ],
     ]
-    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+    guard case .failure(let cls, let summary, _) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .configuration)
@@ -114,11 +114,13 @@ final class CalendarOutcomeParserTests: XCTestCase {
         ]
       ],
     ]
-    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+    guard case .failure(let cls, let summary, _) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .configuration)
-    XCTAssertEqual(cls.asError(summary: summary).errorDescription, "Couldn't use Google Calendar: Calendar API key is invalid or unavailable.")
+    XCTAssertEqual(
+      cls.asError(summary: summary).errorDescription,
+      "Couldn't use Google Calendar: Calendar API key is invalid or unavailable.")
   }
 
   func testNetworkSummaryAvoidsDoublePrefix() {
@@ -131,7 +133,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
       "ok": false, "error_class": "no_browser",
       "summary": "No supported browser with a readable session was found.", "attempts": [],
     ]
-    guard case let .failure(cls, _, attempts) = CalendarOutcomeParser.parse(json) else {
+    guard case .failure(let cls, _, let attempts) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .noBrowser)
@@ -140,7 +142,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
 
   func testUnknownErrorClassFallsBackGracefully() {
     let json: [String: Any] = ["ok": false, "error_class": "something_new", "attempts": []]
-    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+    guard case .failure(let cls, let summary, _) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .unknown)
@@ -156,7 +158,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
       "summary": "New failure mode from Python helper.",
       "attempts": [],
     ]
-    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+    guard case .failure(let cls, let summary, _) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .unknown)
@@ -177,7 +179,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
         ["browser": "Chrome (Default)", "stage": "fetch", "reason": "HTTP 500", "had_auth": true, "http": 500]
       ],
     ]
-    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+    guard case .failure(let cls, let summary, _) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(cls, .network)
@@ -192,7 +194,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
       "error_class": "network",
       "attempts": [],
     ]
-    guard case let .failure(cls, summary, _) = CalendarOutcomeParser.parse(json) else {
+    guard case .failure(let cls, let summary, _) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
     XCTAssertEqual(summary, cls.plainFallbackSummary)
@@ -212,7 +214,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
         ["browser": "Arc", "stage": "auth", "reason": "no Google auth cookies", "had_auth": false]
       ],
     ]
-    guard case let .failure(_, _, attempts) = CalendarOutcomeParser.parse(json) else {
+    guard case .failure(_, _, let attempts) = CalendarOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
     let line = CalendarOutcomeParser.diagnosticsLine(attempts)
@@ -238,13 +240,15 @@ final class CalendarOutcomeParserTests: XCTestCase {
 
   func testCalendarReadsWaitForBackendServedAPIKeys() throws {
     let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let sourceURL = testsURL
+    let sourceURL =
+      testsURL
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/CalendarReaderService.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
     guard let readRange = source.range(of: "func readEvents("),
-      let keyWaitRange = source.range(of: "await APIKeyService.shared.waitForKeys()", range: readRange.upperBound..<source.endIndex),
+      let keyWaitRange = source.range(
+        of: "await APIKeyService.shared.waitForKeys()", range: readRange.upperBound..<source.endIndex),
       let fetchRange = source.range(of: "fetchCalendarViaCookies(", range: readRange.upperBound..<source.endIndex)
     else {
       return XCTFail("Calendar reads must wait for backend-served API keys before fetching")

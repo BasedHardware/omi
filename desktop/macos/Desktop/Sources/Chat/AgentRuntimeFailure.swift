@@ -63,7 +63,8 @@ struct AgentRuntimeFailure: Equatable, Sendable {
       return nil
     }
 
-    let userMessage = (payload["userMessage"] as? String)
+    let userMessage =
+      (payload["userMessage"] as? String)
       ?? (payload["message"] as? String)
       ?? (payload["technicalMessage"] as? String)
       ?? "Agent run failed"
@@ -82,8 +83,8 @@ struct AgentRuntimeFailure: Equatable, Sendable {
   }
 }
 
-private extension String {
-  var nilIfEmpty: String? {
+extension String {
+  fileprivate var nilIfEmpty: String? {
     isEmpty ? nil : self
   }
 }

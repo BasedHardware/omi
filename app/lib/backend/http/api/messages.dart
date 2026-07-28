@@ -57,6 +57,15 @@ Future<List<ServerMessage>> clearChatServer({String? appId}) async {
 }
 
 ServerMessageChunk? parseMessageChunk(String line, String messageId) {
+  if (line.startsWith('error: ')) {
+    final message = line.substring('error: '.length).trim();
+    return ServerMessageChunk(
+      messageId,
+      message.isEmpty ? ServerMessageChunk.failedMessage().text : message,
+      MessageChunkType.error,
+    );
+  }
+
   if (line.startsWith('think: ')) {
     return ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
   }

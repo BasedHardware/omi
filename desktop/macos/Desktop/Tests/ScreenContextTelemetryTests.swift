@@ -190,30 +190,50 @@ final class ScreenContextTelemetryTests: XCTestCase {
     )
   }
 
-  func testPTTTranscriptVocabularyDoesNotFallbackToStaleScreenshots() throws {
-    let source = try String(
-      contentsOf: URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Sources/FloatingControlBar/PTTContextVocabularyProvider.swift"),
-      encoding: .utf8
+  func testExplicitCurrentScreenPayloadOnlyAcceptsTurnScopedAttachedImage() throws {
+    let formatter = ISO8601DateFormatter()
+    let capturedAt = Date(timeIntervalSince1970: 1_000)
+    let delivered = ScreenContextWorkContextBuilder.explicitCurrentScreenPayload(
+      screenRecordingGranted: true,
+      imageAttached: true,
+      capturedAt: capturedAt,
+      formatter: formatter
     )
+    let unavailable = ScreenContextWorkContextBuilder.explicitCurrentScreenPayload(
+      screenRecordingGranted: true,
+      imageAttached: false,
+      capturedAt: capturedAt,
+      formatter: formatter
+    )
+    let deliveredJSON = String(
+      data: try JSONSerialization.data(withJSONObject: delivered, options: [.sortedKeys]),
+      encoding: .utf8
+    )!
 
-    XCTAssertTrue(source.contains("transcription keyword"))
-    XCTAssertTrue(source.contains("loadRecentActivityScreenshots"))
-    XCTAssertTrue(source.contains("getScreenshots(\n        from: startDate"))
-    XCTAssertFalse(source.contains("getRecentScreenshots(limit: 8)"))
-    XCTAssertFalse(source.contains("return try await RewindDatabase.shared.getRecentScreenshots"))
+    XCTAssertTrue(deliveredJSON.contains(#""source":"turn_scoped_live_capture""#))
+    XCTAssertEqual(
+      ((delivered["screen_now"] as? [String: Any])?["image_delivered_to_model"] as? NSNumber)?.boolValue,
+      true
+    )
+    XCTAssertFalse(deliveredJSON.contains("Rewind"))
+    XCTAssertEqual((unavailable["screen_now"] as? [String: Any])?["available"] as? Bool, false)
+    XCTAssertEqual(unavailable["failure_code"] as? String, "image_unavailable")
+  }
+
+  func testPTTTranscriptVocabularyUsesOnlyTurnScopedOCRAndExplicitVocabulary() {
+    let snapshot = PTTContextVocabularyProvider.snapshot(
+      capturedAt: Date(timeIntervalSince1970: 1_000),
+      settingsVocabulary: ["Omi"],
+      immediateOCRText: "Codex is open on the current screen")
+
+    XCTAssertEqual(snapshot.sourceCount, 1)
+    XCTAssertTrue(snapshot.keywords.contains("Omi"))
+    XCTAssertTrue(snapshot.keywords.contains("Codex"))
+    XCTAssertFalse(snapshot.keywords.contains("Cursor"))
   }
 
   func testPTTDoesNotCreateAnAmbientScreenContextSideChannel() throws {
-    let hubSource = try String(
-      contentsOf: URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift"),
-      encoding: .utf8
-    )
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let pttSource = try String(
       contentsOf: URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
@@ -241,7 +261,8 @@ final class ScreenContextTelemetryTests: XCTestCase {
 
     XCTAssertTrue(source.contains("failureCode = .imageUnavailable"))
     XCTAssertTrue(source.contains(#""available": false"#))
-    XCTAssertTrue(source.contains("Latest finalized work-context frame was older than \\(staleThresholdSeconds) seconds"))
+    XCTAssertTrue(
+      source.contains("Latest finalized work-context frame was older than \\(staleThresholdSeconds) seconds"))
     XCTAssertTrue(source.contains(#""stale_inspection_ignored""#))
     XCTAssertFalse(source.contains(#""image_base64": data.base64EncodedString()"#))
     XCTAssertTrue(source.contains(#""raw_image_tool": "capture_screen""#))
@@ -261,26 +282,29 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertTrue(postHog.contains(#""has_selected_app_context""#))
   }
 
-  func testDesktopPromptSendsCurrentScreenQuestionsToWorkContextFirst() {
+  func testDesktopPromptSeparatesCurrentScreenCaptureFromHistoricalWorkContext() {
     let prompt = DesktopCapabilityRegistry.desktopToolPrompt
-    XCTAssertTrue(prompt.contains("Current screen/current work questions"))
-    XCTAssertTrue(prompt.contains("get_work_context first"))
-    XCTAssertTrue(prompt.contains("Raw screenshot pixels"))
+    XCTAssertTrue(prompt.contains("Direct current-screen questions"))
+    XCTAssertTrue(prompt.contains("get_work_context only for recent historical activity"))
+    XCTAssertTrue(prompt.contains("never proves the screen is current"))
+    XCTAssertTrue(prompt.contains("capture_screen"))
     XCTAssertTrue(prompt.contains("only after explicit current-turn consent"))
     XCTAssertTrue(prompt.contains("request_permission"))
   }
 
   func testScopedDesktopPromptDoesNotMentionExcludedScreenTools() {
     let prompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(
-      excluding: ["get_work_context", "capture_screen", "get_screenshot", "request_permission", "check_permission_status"]
+      excluding: [
+        "get_work_context", "capture_screen", "get_screenshot", "request_permission", "check_permission_status",
+      ]
     )
     XCTAssertFalse(prompt.contains("get_work_context"))
     XCTAssertFalse(prompt.contains("capture_screen"))
     XCTAssertFalse(prompt.contains("get_screenshot"))
     XCTAssertFalse(prompt.contains("request_permission"))
     XCTAssertFalse(prompt.contains("check_permission_status"))
-    XCTAssertFalse(prompt.contains("Current screen/current work questions"))
-    XCTAssertFalse(prompt.contains("Raw screenshot pixels"))
+    XCTAssertFalse(prompt.contains("Direct current-screen questions"))
+    XCTAssertFalse(prompt.contains("Recent work/activity history"))
   }
 
   func testScopedDesktopPromptDoesNotMentionPartiallyExcludedAlternatives() {
@@ -351,5 +375,54 @@ final class ScreenContextTelemetryTests: XCTestCase {
         systemPromptStyle: .main,
         turnOwner: .mainChat
       ))
+  }
+
+  func testOnboardingFloatingTurnsAreExplicitScreenRequests() {
+    // The demo's suggested query has no screen-cue words; during onboarding a
+    // floating turn must still attempt a real capture so failures surface.
+    XCTAssertEqual(
+      ScreenContextAutoIncludePolicy.reason(
+        userText: "Which computer should I buy?",
+        systemPromptStyle: .floating,
+        turnOwner: .floatingDefault,
+        onboardingActive: true
+      ),
+      .explicitScreenRequest
+    )
+    XCTAssertEqual(
+      ScreenContextAutoIncludePolicy.reason(
+        userText: "Which computer should I buy?",
+        systemPromptStyle: .floating,
+        turnOwner: .floatingDefault,
+        onboardingActive: false
+      ),
+      .ambientSurfaceContext
+    )
+    // Onboarding must not change non-floating owners.
+    XCTAssertNil(
+      ScreenContextAutoIncludePolicy.reason(
+        userText: "hello",
+        systemPromptStyle: .main,
+        turnOwner: .mainChat,
+        onboardingActive: true
+      ))
+  }
+
+  func testCaptureFailureGuidanceTellsUserToRelaunch() {
+    let payload = ScreenContextWorkContextBuilder.explicitCurrentScreenPayload(
+      screenRecordingGranted: true,
+      imageAttached: false
+    )
+    let guidance = payload["guidance"] as? String ?? ""
+    XCTAssertTrue(guidance.contains("quit and reopen Omi"))
+  }
+
+  func testAmbientPermissionUnavailablePayloadIsConditionalOnScreenDependence() {
+    let payload = ScreenContextWorkContextBuilder.ambientPermissionUnavailablePayload()
+    let guidance = payload["guidance"] as? String ?? ""
+    XCTAssertTrue(guidance.contains("enable Screen Recording"))
+    XCTAssertTrue(guidance.contains("ONLY if"))
+    let permission = payload["permission"] as? [String: String]
+    XCTAssertEqual(permission?["screen_recording"], "not_granted")
   }
 }

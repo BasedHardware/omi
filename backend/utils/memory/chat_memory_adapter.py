@@ -179,6 +179,7 @@ def search_memory_default_chat_memories_vector_text(
     db_client: Any,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> Optional[str]:
     """Compatibility wrapper for explicit chat vector read decisions.
 
@@ -194,6 +195,7 @@ def search_memory_default_chat_memories_vector_text(
         db_client=db_client,
         vector_query=vector_query,
         required_projection_commit_id=required_projection_commit_id,
+        now=now,
         allow_legacy_safe_fallback=True,
     )
     if result.read_decision != MemoryReadDecision.USE_MEMORY:
@@ -209,6 +211,7 @@ def search_memory_default_chat_memories_vector_decision_text(
     db_client: Any,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
+    now: Optional[datetime] = None,
     allow_legacy_safe_fallback: bool = False,
 ) -> ChatMemorySearchResult:
     """Return explicit memory read-decision semantics for Omi chat vector reads.
@@ -263,6 +266,7 @@ def search_memory_default_chat_memories_vector_decision_text(
         consumer=MemoryConsumer.omi_chat,
         vector_query=vector_query,
         required_projection_commit_id=required_projection_commit_id,
+        now=now,
         item_formatter=_vector_line,
         score_attacher=_attach_vector_line,
     )

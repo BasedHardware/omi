@@ -15,6 +15,13 @@
         "query": {
           "type": "string",
           "description": "SQL query to execute"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional positional values bound to ? placeholders in query. Use this instead of interpolating values into SQL literals."
         }
       },
       "required": [
@@ -426,19 +433,10 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
+      "realtimeDescription": "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, omit status filters: session archive state is not run completion. List recent sessions, then answer from latestRun.finalText or inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
       "schemaOverride": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "open",
-              "archived",
-              "closed"
-            ],
-            "description": "Optional session status filter."
-          },
           "surfaceKind": {
             "type": "string",
             "enum": [
@@ -2506,6 +2504,11 @@
           "type": "object",
           "description": "Small structured metadata for this run.",
           "additionalProperties": true
+        },
+        "toolPolicy": {
+          "type": "object",
+          "description": "Optional child tool restriction: { allowedToolNames: string[] } of canonical Omi tool names. The child's tools become the intersection with its default set; an empty intersection leaves the child with no tools.",
+          "additionalProperties": true
         }
       },
       "required": [
@@ -2588,6 +2591,11 @@
           "type": "object",
           "description": "Small structured metadata for this run.",
           "additionalProperties": true
+        },
+        "toolPolicy": {
+          "type": "object",
+          "description": "Optional child tool restriction: { allowedToolNames: string[] } of canonical Omi tool names. The child's tools become the intersection with its default set; an empty intersection leaves the child with no tools.",
+          "additionalProperties": true
         }
       },
       "required": [
@@ -2628,7 +2636,9 @@
     "promptGuidelines": [
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
+      "The primary coordinator decides in its model loop whether to call spawn_agent. When the current user explicitly asks OpenClaw or Hermes to do work, call spawn_agent in that same turn with that provider; do not delegate that instruction to another agent, use a text-pattern handoff, or narrate that only another chat surface can do it.",
+      "Pass provider='openclaw' or provider='hermes' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
+      "Pass toolPolicy.allowedToolNames to restrict which Omi tools the child agent may call; it can only narrow, never widen, the child's tool set.",
       "Inspect progress with list_agent_sessions or get_agent_run."
     ],
     "latency": "async background",
@@ -2645,7 +2655,7 @@
         },
         "provider": {
           "type": "string",
-          "description": "Optional local provider override.",
+          "description": "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent.",
           "enum": [
             "openclaw",
             "hermes"
@@ -2695,6 +2705,11 @@
           "type": "object",
           "description": "Small structured metadata for this run.",
           "additionalProperties": true
+        },
+        "toolPolicy": {
+          "type": "object",
+          "description": "Optional child tool restriction: { allowedToolNames: string[] } of canonical Omi tool names. The child's tools become the intersection with its default set; an empty intersection leaves the child with no tools.",
+          "additionalProperties": true
         }
       },
       "required": [
@@ -2715,7 +2730,7 @@
         },
         "provider": {
           "type": "string",
-          "description": "Optional local provider override.",
+          "description": "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent.",
           "enum": [
             "openclaw",
             "hermes"
@@ -2764,6 +2779,11 @@
         "metadata": {
           "type": "object",
           "description": "Small structured metadata for this run.",
+          "additionalProperties": true
+        },
+        "toolPolicy": {
+          "type": "object",
+          "description": "Optional child tool restriction: { allowedToolNames: string[] } of canonical Omi tool names. The child's tools become the intersection with its default set; an empty intersection leaves the child with no tools.",
           "additionalProperties": true
         }
       },
@@ -2807,7 +2827,7 @@
               "openclaw",
               "hermes"
             ],
-            "description": "Optional local provider override."
+            "description": "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent."
           },
           "parent_run_id": {
             "type": "string",
@@ -3337,15 +3357,15 @@
   {
     "name": "load_skill",
     "label": "Load Skill",
-    "description": "Load the full instructions for a named skill listed in available_skills.",
-    "promptSnippet": "load_skill - Load the full SKILL.md instructions for an available skill",
+    "description": "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    "promptSnippet": "load_skill - Load a relevant skill returned by the catalog or search_skills",
     "latency": "fast local",
     "inputSchema": {
       "type": "object",
       "properties": {
         "name": {
           "type": "string",
-          "description": "Skill name exactly as listed in available_skills"
+          "description": "Skill name returned by the compact catalog or search_skills"
         }
       },
       "required": [
@@ -3382,6 +3402,62 @@
       "summary": "Load the full instructions for a named skill listed in available_skills.",
       "bullets": [
         "Use the exact skill name from available_skills."
+      ]
+    }
+  },
+  {
+    "name": "search_skills",
+    "label": "Search Skills",
+    "description": "Search installed skill names and compact descriptions for a workflow relevant to the user's request.",
+    "promptSnippet": "search_skills - Find a relevant specialized workflow before loading it",
+    "promptGuidelines": [
+      "Use only when the current user request plausibly needs a specialized workflow.",
+      "Do not browse skills merely to explore options or because a related term appears in conversation context."
+    ],
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Short description of the user's request"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "nodeTool"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Requires a local SKILL.md under the configured skill roots."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true
+      }
+    },
+    "surfaces": [
+      "desktop_chat"
+    ],
+    "capabilityDoc": {
+      "title": "Search Skills",
+      "summary": "Search installed skill names and compact descriptions before loading a specialized workflow.",
+      "bullets": [
+        "Use only when the user's request may benefit from a specialized workflow.",
+        "Load a returned skill only when it is relevant to the user's request."
       ]
     }
   },
@@ -3994,10 +4070,10 @@
   {
     "name": "capture_screen",
     "label": "Capture Screen",
-    "description": "Capture raw screenshot pixels only when get_work_context is insufficient. Returns the saved full-screen image path plus native-resolution detail tiles on large screens, after approval. Use the Read tool to view the images after capturing.",
+    "description": "Capture a live current-screen image. Returns the saved full-screen image path plus native-resolution detail tiles on large screens, after approval. Use the Read tool to view the images after capturing.",
     "promptSnippet": "capture_screen - Take a screenshot of the user's current screen",
     "promptGuidelines": [
-      "Call get_work_context first when the user asks about what's on their screen or what they're looking at.",
+      "For a direct current-screen question, capture a live image instead of using get_work_context as current visual evidence.",
       "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
       "After capture_screen returns, use Read to view the full-screen image.",
       "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
@@ -4039,9 +4115,9 @@
     ],
     "capabilityDoc": {
       "title": "Capture Screen",
-      "summary": "Capture raw screenshot pixels after screen summary context is not enough.",
+      "summary": "Capture a live current-screen image after the user asks about what is visible now.",
       "bullets": [
-        "For screen-awareness questions, call get_work_context first.",
+        "For a direct current-screen question, use this live capture instead of treating screen history as current evidence.",
         "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
         "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them."
       ]
@@ -4700,19 +4776,19 @@
   {
     "name": "report_screen_observation",
     "label": "Report Screen Observation",
-    "description": "Submit one current-screen observation after screenshot succeeds.",
-    "promptSnippet": "report_screen_observation - Submit a grounded current-screen answer",
+    "description": "Verify one current-screen observation after screenshot succeeds.",
+    "promptSnippet": "report_screen_observation - Verify grounding before answering a current-screen request",
     "latency": "fast local",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "answer": {
+        "observation": {
           "type": "string",
-          "description": "Concise visual detail only; do not name or identify an app."
+          "description": "Concise visual grounding observation from the attached image; this is not the user-facing answer."
         }
       },
       "required": [
-        "answer"
+        "observation"
       ],
       "additionalProperties": false
     },
@@ -4736,14 +4812,14 @@
     ],
     "capabilityDoc": {
       "title": "Report Screen Observation",
-      "summary": "Report a grounded current-screen answer.",
+      "summary": "Verify grounding from the current-screen image.",
       "bullets": [
         "Only call after screenshot returns the current image.",
-        "Put only visual detail in the answer; native evidence supplies application identity."
+        "Submit a concise visual observation, then answer the user's original request naturally."
       ]
     },
     "voice": {
-      "realtimeDescription": "After screenshot succeeds for a current-screen question, report exactly one observation with concise visual detail. Never identify, name, or claim an application in the answer because the desktop supplies app identity from native evidence. Do not speak or answer the current-screen question outside this report."
+      "realtimeDescription": "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image."
     }
   },
   {
@@ -4909,12 +4985,12 @@
   {
     "name": "get_work_context",
     "label": "Get Work Context",
-    "description": "Get the user's current screen plus a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. Call this first when seeing the user's current work would help.",
-    "promptSnippet": "get_work_context - Get current screen and recent work context",
+    "description": "Get a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. It is historical context, not current visual evidence.",
+    "promptSnippet": "get_work_context - Get recent work context",
     "promptGuidelines": [
-      "Call get_work_context first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
-      "Use its screen_now and timeline fields to answer directly when possible.",
-      "Only request get_screenshot or capture_screen approval if raw image pixels are necessary after get_work_context."
+      "Use this for recent work/activity history, not for direct current-screen questions.",
+      "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
+      "For current visual detail, use capture_screen when approval is available rather than answering from this tool."
     ],
     "latency": "fast local",
     "inputSchema": {

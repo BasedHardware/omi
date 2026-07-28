@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   var accountSection: some View {
@@ -154,7 +154,10 @@ extension SettingsContentView {
                 .stroke(OmiColors.backgroundQuaternary, lineWidth: 3)
               Circle()
                 .trim(from: 0, to: trialProgress(trial))
-                .stroke(trialTimeColor(remaining: trial.trialRemainingSeconds), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .stroke(
+                  trialTimeColor(remaining: trial.trialRemainingSeconds),
+                  style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                )
                 .rotationEffect(.degrees(-90))
             }
             .frame(width: 32, height: 32)
@@ -242,9 +245,9 @@ extension SettingsContentView {
   }
 
   func trialTimeColor(remaining: Int) -> Color {
-    if remaining <= 3600 { return OmiColors.warning }      // < 1 hour: warning orange
-    if remaining <= 24 * 3600 { return .yellow }           // < 24 hours: yellow
-    return OmiColors.success                                // plenty of time: green
+    if remaining <= 3600 { return OmiColors.warning }  // < 1 hour: warning orange
+    if remaining <= 24 * 3600 { return .yellow }  // < 24 hours: yellow
+    return OmiColors.success  // plenty of time: green
   }
 
   func trialProgress(_ trial: TrialMetadataResponse) -> CGFloat {
@@ -395,18 +398,23 @@ extension SettingsContentView {
       settingsCard(settingId: "planusage.overage") {
         VStack(alignment: .leading, spacing: OmiSpacing.sm) {
           HStack(spacing: OmiSpacing.sm) {
-            Image(systemName: info.excessQuestions > 0
-              ? "dollarsign.circle.fill"
-              : "checkmark.circle.fill")
-              .scaledFont(size: OmiType.heading)
-              .foregroundColor(info.excessQuestions > 0
+            Image(
+              systemName: info.excessQuestions > 0
+                ? "dollarsign.circle.fill"
+                : "checkmark.circle.fill"
+            )
+            .scaledFont(size: OmiType.heading)
+            .foregroundColor(
+              info.excessQuestions > 0
                 ? OmiColors.warning
                 : OmiColors.success)
-            Text(info.excessQuestions > 0
-              ? "Usage-based overage"
-              : "No overage yet this cycle")
-              .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+            Text(
+              info.excessQuestions > 0
+                ? "Usage-based overage"
+                : "No overage yet this cycle"
+            )
+            .scaledFont(size: OmiType.body, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
             Spacer()
             if info.excessQuestions > 0 {
               Text(String(format: "$%.2f", info.overageUsd))

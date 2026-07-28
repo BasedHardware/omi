@@ -428,8 +428,20 @@ async fn promote_release(
     }
 }
 
+pub fn updates_routes() -> Router<AppState> {
+    Router::new()
+        .route("/appcast.xml", get(get_appcast))
+        .route("/updates/latest", get(get_latest_version))
+        .route("/updates/releases", post(create_release))
+        .route("/updates/releases/promote", patch(promote_release))
+        .route("/download", get(download_redirect))
+}
+
 #[cfg(test)]
 mod tests {
+    // Tests may unwrap: the crate-level unwrap_used deny targets production
+    // code; a test failing on unwrap is the test doing its job.
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     fn make_release(
@@ -566,13 +578,4 @@ mod tests {
             release.download_url
         );
     }
-}
-
-pub fn updates_routes() -> Router<AppState> {
-    Router::new()
-        .route("/appcast.xml", get(get_appcast))
-        .route("/updates/latest", get(get_latest_version))
-        .route("/updates/releases", post(create_release))
-        .route("/updates/releases/promote", patch(promote_release))
-        .route("/download", get(download_redirect))
 }

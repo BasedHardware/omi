@@ -30,7 +30,8 @@
   },
   "overrides": {
     "postcss": "^8.5.10",
-    "ws": "^8.20.1"
+    "ws": "^8.21.0",
+    "js-yaml": "^4.1.1"
   },
   "sideEffects": [
     "*.css"

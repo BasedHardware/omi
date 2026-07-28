@@ -136,15 +136,24 @@ async fn upsert_pinecone_vectors(
                 .map(|dt| dt.timestamp())
                 .unwrap_or(0);
 
+            let storage_id = row.storage_id();
+            let mut metadata = serde_json::json!({
+                "uid": uid,
+                "screenshot_id": storage_id,
+                "timestamp": ts,
+                "appName": row.app_name,
+            });
+            if let Some(device_name) = &row.device_name {
+                metadata["deviceName"] = serde_json::json!(device_name);
+            }
+            if let Some(client_device_id) = &row.client_device_id {
+                metadata["clientDeviceId"] = serde_json::json!(client_device_id);
+            }
+
             Some(serde_json::json!({
-                "id": format!("{}-sa-{}", uid, row.id),
+                "id": format!("{}-sa-{}", uid, row.storage_id()),
                 "values": embedding,
-                "metadata": {
-                    "uid": uid,
-                    "screenshot_id": row.id.to_string(),
-                    "timestamp": ts,
-                    "appName": row.app_name,
-                }
+                "metadata": metadata
             }))
         })
         .collect();
@@ -153,7 +162,7 @@ async fn upsert_pinecone_vectors(
         return Ok(());
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::services::http::bounded_client(std::time::Duration::from_secs(30));
     let url = format!("{}/vectors/upsert", host);
 
     // Pinecone limit: 100 vectors per upsert

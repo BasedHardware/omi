@@ -452,7 +452,7 @@ class GetSummaryWidgets extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 2),
                   Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),

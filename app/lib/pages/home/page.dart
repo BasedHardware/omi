@@ -74,7 +74,6 @@ import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'widgets/battery_info_widget.dart';
-import 'widgets/capture_mode_chip.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -788,10 +787,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         child: Row(
           children: [
             const SizedBox(width: 18),
-            Expanded(
+            const Expanded(
               child: Text(
                 'Ask Omi anything about your life...',
-                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
+                style: TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -919,7 +918,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
-                            icon: FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
+                            icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
                               // Open date picker to change date, cancel clears filter
@@ -1037,7 +1036,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
                         child: IconButton(
                           padding: EdgeInsets.zero,
-                          icon: FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
+                          icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
                             PlatformManager.instance.analytics.exportTasksBannerClicked();
@@ -1117,21 +1116,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   );
                 },
               ),
-              // Recording mode chip — home tab only, when a Transcribe-Later-capable device is connected
-              Consumer2<HomeProvider, DeviceProvider>(
-                builder: (context, homeProvider, deviceProvider, _) {
-                  final device = deviceProvider.connectedDevice;
-                  if (homeProvider.selectedIndex != 0 ||
-                      device == null ||
-                      !CaptureModeChip.supportsDevice(device.type)) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: CaptureModeChip(deviceType: device.type),
-                  );
-                },
-              ),
               // Settings button - always visible
               Container(
                 width: 36,
@@ -1139,7 +1123,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
                 child: IconButton(
                   padding: EdgeInsets.zero,
-                  icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
+                  icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
                   onPressed: () {
                     HapticFeedback.mediumImpact();
                     PlatformManager.instance.analytics.pageOpened('Settings');

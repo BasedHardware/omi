@@ -126,7 +126,10 @@ final class ClipboardWatcher {
     }
 
     deinit {
-        timer?.invalidate()
+        // Timer uses [weak self] (no retain cycle), so it fires harmlessly if
+        // deallocated before stop(); deterministic cleanup happens in stop().
+        // Strict concurrency forbids touching the non-Sendable Timer from a
+        // nonisolated deinit of this @MainActor type.
     }
 
     /// Check whether the clipboard changed since the last tick. If yes,

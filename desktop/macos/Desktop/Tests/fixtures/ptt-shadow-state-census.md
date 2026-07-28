@@ -12,8 +12,8 @@ Floor list plus adjacent turn/run/spawn/journal facts on `RealtimeHubController`
 | `authorizedRealtimeInvocations` | (b) genuinely local | In-flight envelopes |
 | `externalRunAuthorityState` / `externalRunTerminalizations` | (b) genuinely local | In-flight `Task` handles |
 | `toolEffectIdentityByTransportKey` | (b) genuinely local | Transport↔reducer correlation |
-| `cancelContinuityFence*` / `ownerBoundaryGeneration` | (b) genuinely local | Race fences |
-| `reconnectAudioBuffer` / `replacementAudioBuffer` | (b) genuinely local | Buffered PCM for this process |
+| `ownerBoundaryGeneration` | (b) genuinely local | Race fence |
+| `reconnectAudioBuffer` / `replacementAudioBuffer` / `admittedInputTurnID` | (b) genuinely local | Buffered PCM and the one opened provider-input boundary for this process |
 | `geminiSessionNeedsTurnBoundary` | (b) genuinely local | Provider-specific fence |
 
 Proven (c) seam: `RealtimeHubContinuityRestore.kernelOwnsExchange` + `RealtimeTurnJournalAuthority.persist(kernelOwnsExchange:)` — reuses `KernelTurnProjection.stableTurnIDs`, no omnibus protocol, no ledger disk persistence.

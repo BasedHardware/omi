@@ -1793,20 +1793,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get lovingOmi => 'Älskar du Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Hjälp oss att nå fler människor genom att lämna en recension i App Store. Din återkoppling betyder världen för oss!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Hjälp oss att nå fler människor genom att lämna en recension i Google Play Store. Din återkoppling betyder världen för oss!';
-
-  @override
-  String get rateOnAppStore => 'Betygsätt i App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Betygsätt i Google Play';
-
-  @override
   String get maybeLater => 'Kanske senare';
 
   @override
@@ -2141,6 +2127,18 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Redigera minne';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Jag gillar att äta glass...';
@@ -8993,7 +8991,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get billingYearly => 'Årsvis';
 
   @override
-  String get savePercent => 'Spara ~17%';
+  String savePercent(int percent) {
+    return 'Spara ~$percent%';
+  }
 
   @override
   String get popular => 'Populärt';
@@ -9348,7 +9348,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Fungerar med Omi- och Limitless-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.';
+      'Fungerar med telefonens mikrofon samt Omi- och Limitless-enheter. Ljudet stannar på din telefon tills du väljer att ladda upp det.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9600,4 +9600,180 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Enheten är nästan full — synkronisera för att frigöra utrymme.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Ingen anslutning – spelas in lokalt. Det transkriberas när du är online igen.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Dina data skyddas som standard med stark kryptering, och du bestämmer hur de lagras och används.';
+
+  @override
+  String get sttModelAccuracy => 'Noggrannhet';
+
+  @override
+  String get whisperModelSizeBase => 'Bas';
+
+  @override
+  String get cloudTranscription => 'Molntranskription';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Radera modell';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Är du säker på att du vill radera den här modellen?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Nedladdad';
+
+  @override
+  String get sttModelFaster => 'Snabbare';
+
+  @override
+  String get sttFilterAuto => 'Automatisk';
+
+  @override
+  String get sttModelHigher => 'Högre';
+
+  @override
+  String get whisperModelSizeLarge => 'Stor';
+
+  @override
+  String get sttModelLower => 'Lägre';
+
+  @override
+  String get whisperModelSizeMedium => 'Mellan';
+
+  @override
+  String get onDeviceModelDeleted => 'Modellen har raderats';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Nedladdningen av modellen misslyckades';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Det gick inte att ladda ner Whisper-modellen. Försök igen.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Modellen har laddats ner';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper-modellen laddades ner';
+
+  @override
+  String get onDeviceModelSize => 'Modellstorlek';
+
+  @override
+  String get sttNone => 'Ingen';
+
+  @override
+  String get onDeviceTranscription => 'Transkription på enheten';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkription bearbetas lokalt på din enhet';
+
+  @override
+  String get sttModelSlower => 'Långsammare';
+
+  @override
+  String get whisperModelSizeSmall => 'Liten';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Tal-till-text-leverantör';
+
+  @override
+  String get speechToTextProviderDesc => 'Välj tjänsten som används för transkription';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Hastighet';
+
+  @override
+  String get whisperModelSizeTiny => 'Mycket liten';
+
+  @override
+  String get transcriptionLanguage => 'Transkriptionsspråk';
+
+  @override
+  String get transcriptionLanguageDesc => 'Välj språk för taltranskription';
+
+  @override
+  String get whisperModel => 'Whisper-modell';
+
+  @override
+  String get whisperModelDesc => 'Välj modell för transkription på enheten';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Nedgradera till gratisversionen?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Du kommer att märka dessa begränsningar:';
+
+  @override
+  String get downgradeLimitBattery => '7 gånger högre batteriförbrukning';
+
+  @override
+  String get downgradeLimitQuality => '30 % sämre transkriptionskvalitet';
+
+  @override
+  String get downgradeLimitDelay => '5–7 sekunders fördröjning';
+
+  @override
+  String get downgradeLimitSpeakers => 'Talare kan inte identifieras';
+
+  @override
+  String get downgradeAnyway => 'Nedgradera ändå';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Kalender är inte ansluten';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Anslut din Google Kalender för att länka samtal till kalenderhändelser.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Länkad till ”$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Det gick inte att länka kalenderhändelsen';
+
+  @override
+  String get thanksForYourFeedback => 'Tack för din feedback!';
+
+  @override
+  String get copyMessage => 'Kopiera meddelande';
+
+  @override
+  String get searchSettings => 'Sök inställningar…';
+
+  @override
+  String get errorLoadingAudio => 'Det gick inte att läsa in ljudet';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Välj din Ray-Ban Meta-mikrofon';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Välj Bluetooth-mikrofonen för dina glasögon. Musiken pausas medan Omi använder den.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Inga Bluetooth-mikrofoner hittades. Anslut glasögonen i iPhone-inställningarna och försök igen.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth-mikrofonerna kunde inte läsas in. Kontrollera att Bluetooth är på och försök igen.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Det gick inte att ansluta till mikrofonen. Kontrollera att den är ansluten i iPhone-inställningarna.';
 }

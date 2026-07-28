@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingDataSourcesStepView: View {
   @ObservedObject var coordinator: OnboardingPagedIntroCoordinator
@@ -36,23 +36,28 @@ struct OnboardingDataSourcesStepView: View {
             .foregroundColor(OmiColors.warning)
         }
 
-        if coordinator.isResearchComplete {
-          Button("Continue") {
-            onContinue()
-          }
-          .buttonStyle(OmiButtonStyle(.primary))
-          .keyboardShortcut(.defaultAction)
-          .transition(.opacity.combined(with: .scale(scale: 0.95)))
-        } else {
-          HStack(spacing: OmiSpacing.sm) {
-            ProgressView()
-              .controlSize(.small)
-              .tint(OmiColors.textTertiary)
-            Text("Scanning your data sources...")
-              .font(.system(size: 13, weight: .medium))
-              .foregroundColor(OmiColors.textTertiary)
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if coordinator.isResearchComplete {
+            Button("Continue") {
+              onContinue()
+            }
+            .buttonStyle(OmiButtonStyle(.primary))
+            .keyboardShortcut(.defaultAction)
+            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+          } else {
+            HStack(spacing: OmiSpacing.sm) {
+              ProgressView()
+                .controlSize(.small)
+                .tint(OmiColors.textTertiary)
+              Text("Scanning your data sources...")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(OmiColors.textTertiary)
+            }
           }
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {

@@ -4,11 +4,16 @@
     <meta charset="UTF-8" />
     <title>omi</title>
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <!-- Sign-in runs in the SYSTEM browser via main (src/main/ipc/auth.ts) —
+         the popup-era allowances (frame-src firebaseapp/accounts.google,
+         script-src apis.google/gstatic) were removed in the Phase 8 sweep.
+         cdn.jsdelivr.net stays: @ricky0123/vad-web fetches its worklet/wasm
+         from there. -->
     <meta
       http-equiv="Content-Security-Policy"
       content="
         default-src 'self';
-        script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://apis.google.com https://www.gstatic.com https://cdn.jsdelivr.net;
+        script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net;
         style-src 'self' 'unsafe-inline';
         img-src 'self' data: blob: https: https://*.googleusercontent.com;
         font-src 'self' data:;
@@ -23,11 +28,15 @@
           https://api.omi.me
           wss://api.omi.me
           https://desktop-backend-hhibjajaja-uc.a.run.app
+          https://api.openai.com
+          wss://api.openai.com
+          https://generativelanguage.googleapis.com
+          wss://generativelanguage.googleapis.com
           https://api.deepgram.com
           wss://api.deepgram.com
           https://accounts.google.com
           https://cdn.jsdelivr.net;
-        frame-src 'self' https://based-hardware.firebaseapp.com https://accounts.google.com;
+        frame-src 'self';
         worker-src 'self' blob:;
       "
     />

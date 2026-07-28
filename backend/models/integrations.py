@@ -52,7 +52,7 @@ class ExternalIntegrationMemory(BaseModel):
 
 
 class ExternalIntegrationCreateMemory(BaseModel):
-    text: Optional[str] = Field(description="The original text from which the fact was extracted")
+    text: Optional[str] = Field(description="The original text from which the fact was extracted", default=None)
     text_source: ExternalIntegrationMemorySource = Field(
         description="The source of the text", default=ExternalIntegrationMemorySource.other
     )

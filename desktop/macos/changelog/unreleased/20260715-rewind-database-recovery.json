@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Rewind capture getting stuck after a recoverable local database failure instead of reopening its database automatically"
-}

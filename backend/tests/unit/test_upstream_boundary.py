@@ -12,7 +12,7 @@ import types
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -361,7 +361,9 @@ class TestNoConversationAsMemory:
             mock_delete.return_value = {"vector_delete_ids": []}
             pc._extract_memories_inner("uid-ext", conversation)
 
-        mock_text_extractor.assert_called_once_with("uid-ext", integration_text, "email", language="en")
+        mock_text_extractor.assert_called_once_with(
+            "uid-ext", integration_text, "email", language="en", content_date=ANY
+        )
         mock_segment_extractor.assert_not_called()
 
         text_arg = mock_text_extractor.call_args[0][1]

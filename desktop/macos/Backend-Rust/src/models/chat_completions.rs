@@ -25,6 +25,11 @@ pub struct ChatCompletionRequest {
     pub tools: Option<Vec<ToolDefinition>>,
     #[serde(default)]
     pub tool_choice: Option<serde_json::Value>,
+    // OpenAI reasoning-effort knob. Accepted for compatibility with clients
+    // that send it in the body; the desktop app sends the authoritative value
+    // via the `x-omi-reasoning-effort` header (see routes/chat/route.rs).
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -104,6 +109,11 @@ pub struct Usage {
     pub prompt_tokens: i64,
     pub completion_tokens: i64,
     pub total_tokens: i64,
+    /// Bounded proof that the provider executed the gateway-owned public web tool.
+    ///
+    /// OpenAI-compatible clients ignore unknown usage fields. Release probes use
+    /// this count to distinguish a real web turn from a model-only answer.
+    pub web_search_requests: i64,
     // OpenAI-standard cached-token reporting. Populated from Anthropic's
     // cache_read_input_tokens so prompt-cache hits propagate through pi-mono
     // (usage.cacheRead) to the Swift query trace. Omitted when zero.
@@ -137,12 +147,17 @@ pub struct ChunkChoice {
     pub finish_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct ChunkDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    /// Streamed adaptive-thinking text (OpenAI-compatible reasoning field,
+    /// as popularized by DeepSeek/OpenRouter). Clients that don't understand
+    /// it ignore the field; the answer still arrives via `content`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ChunkToolCall>>,
 }
@@ -181,15 +196,19 @@ pub struct AnthropicRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     pub stream: bool,
+    /// Adaptive thinking config (`{"type": "adaptive"}`) — set on quality
+    /// (typed-chat) turns so the model decides how much to reason per query.
+    /// Omitted entirely on speed (PTT) turns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<serde_json::Value>,
+    /// Output-level effort control (`{"effort": "low"}`) — set on speed (PTT)
+    /// turns to keep voice answers fast and terse.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_config: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<AnthropicToolDef>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<serde_json::Value>,
-    /// Gateway-owned execution metadata. A public-web turn may use Anthropic's
-    /// long-running server tool and therefore needs internal pause-turn
-    /// continuation before an OpenAI-compatible response is emitted.
-    #[serde(skip)]
-    pub requires_public_web: bool,
 }
 
 /// A tool definition in an Anthropic request: either a client-executed custom
@@ -281,6 +300,18 @@ pub enum AnthropicContentBlock {
     /// Never surfaced to the OpenAI client.
     #[serde(rename = "web_search_tool_result")]
     WebSearchToolResult {},
+    /// Adaptive-thinking reasoning block. Streamed thinking text is forwarded
+    /// as OpenAI `reasoning_content` deltas; the non-streaming block is not
+    /// included in the OpenAI `content` field.
+    #[serde(rename = "thinking")]
+    Thinking {
+        #[serde(default)]
+        #[allow(dead_code)] // deserialized but not surfaced in non-streaming translation
+        thinking: String,
+    },
+    /// Redacted thinking — opaque; never surfaced.
+    #[serde(rename = "redacted_thinking")]
+    RedactedThinking {},
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -357,6 +388,13 @@ pub enum AnthropicDelta {
     /// Dropped in translation — the OpenAI chunk format has no citation slot.
     #[serde(rename = "citations_delta")]
     CitationsDelta {},
+    /// Adaptive-thinking reasoning text — forwarded as OpenAI
+    /// `reasoning_content` so clients that render reasoning can show it.
+    #[serde(rename = "thinking_delta")]
+    ThinkingDelta { thinking: String },
+    /// Thinking-block integrity signature — internal to Anthropic; dropped.
+    #[serde(rename = "signature_delta")]
+    SignatureDelta {},
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -483,6 +521,10 @@ pub fn anthropic_usage_to_openai(usage: &AnthropicUsage) -> Usage {
         prompt_tokens,
         completion_tokens,
         total_tokens: prompt_tokens + completion_tokens,
+        web_search_requests: usage
+            .server_tool_use
+            .as_ref()
+            .map_or(0, |server_tools| server_tools.web_search_requests),
         prompt_tokens_details,
     }
 }

@@ -31,70 +31,7 @@ import sys
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
-# ---------------------------------------------------------------------------
-# Extracted pure functions from routers/transcribe.py
-# (copied here to avoid importing the full module with all its dependencies)
-# ---------------------------------------------------------------------------
-from dataclasses import dataclass
-
-
-@dataclass
-class ChannelConfig:
-    channel_id: int
-    label: str
-    is_user: bool
-    speaker_label: str
-
-
-def build_channel_config(source: str):
-    """Build channel configuration based on source type."""
-    if source == 'phone_call':
-        return [
-            ChannelConfig(channel_id=0x01, label='mic', is_user=True, speaker_label='SPEAKER_00'),
-            ChannelConfig(channel_id=0x02, label='remote', is_user=False, speaker_label='SPEAKER_01'),
-        ]
-    elif source == 'desktop':
-        return [
-            ChannelConfig(channel_id=0x01, label='mic', is_user=True, speaker_label='SPEAKER_00'),
-            ChannelConfig(channel_id=0x02, label='system_audio', is_user=False, speaker_label='SPEAKER_01'),
-        ]
-    return [
-        ChannelConfig(channel_id=0x01, label='mic', is_user=True, speaker_label='SPEAKER_00'),
-        ChannelConfig(channel_id=0x02, label='remote', is_user=False, speaker_label='SPEAKER_01'),
-    ]
-
-
-def mix_n_channel_buffers(buffers):
-    """Mix N 16-bit PCM mono buffers sample-by-sample into one mono stream, clamping to int16 range."""
-    min_len = min((len(b) for b in buffers), default=0)
-    if min_len < 2:
-        return b''
-    min_len = min_len - (min_len % 2)
-    num_samples = min_len // 2
-    channel_samples = [struct.unpack(f'<{num_samples}h', b[:min_len]) for b in buffers]
-    mixed = []
-    for i in range(num_samples):
-        s = sum(ch[i] for ch in channel_samples)
-        mixed.append(max(-32768, min(32767, s)))
-    return struct.pack(f'<{num_samples}h', *mixed)
-
-
-def resample_pcm(pcm_data, source_rate, target_rate):
-    """Simple resampling by sample duplication/decimation."""
-    if source_rate == target_rate:
-        return pcm_data
-    num_samples = len(pcm_data) // 2
-    if num_samples == 0:
-        return pcm_data
-    samples = struct.unpack(f'<{num_samples}h', pcm_data)
-    ratio = target_rate / source_rate
-    new_length = int(num_samples * ratio)
-    resampled = []
-    for i in range(new_length):
-        src_idx = min(int(i / ratio), num_samples - 1)
-        resampled.append(samples[src_idx])
-    return struct.pack(f'<{len(resampled)}h', *resampled)
-
+from utils.listen_audio import ChannelConfig, build_channel_config, mix_n_channel_buffers, resample_pcm
 
 # ===================================================================
 # SECTION 1: Pure Audio Functions (resample, mix, channel config)

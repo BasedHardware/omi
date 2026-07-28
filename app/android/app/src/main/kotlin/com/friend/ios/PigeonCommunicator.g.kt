@@ -355,6 +355,41 @@ data class RayBanMetaGlasses (
 
   override fun hashCode(): Int = toList().hashCode()
 }
+
+/**
+ * A Bluetooth Hands-Free Profile input exposed by iOS.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class BluetoothHfpInput (
+  val uid: String,
+  val name: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): BluetoothHfpInput {
+      val uid = pigeonVar_list[0] as String
+      val name = pigeonVar_list[1] as String
+      return BluetoothHfpInput(uid, name)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      uid,
+      name,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is BluetoothHfpInput) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonCommunicatorPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
 private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -388,6 +423,11 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
           RayBanMetaGlasses.fromList(it)
         }
       }
+      135.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          BluetoothHfpInput.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -415,6 +455,10 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
       }
       is RayBanMetaGlasses -> {
         stream.write(134)
+        writeValue(stream, value.toList())
+      }
+      is BluetoothHfpInput -> {
+        stream.write(135)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1400,15 +1444,16 @@ interface RayBanMetaHostAPI {
    * Starts capturing the glasses microphone over the Bluetooth HFP route and
    * streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
    */
-  fun startAudioCapture()
+  fun startAudioCapture(inputUid: String?)
   fun stopAudioCapture()
   /** True when the active audio input route is the glasses' Bluetooth HFP mic. */
   fun isGlassesAudioRouteActive(): Boolean
   /**
-   * Bluetooth HFP input port names currently available, for the audio-only
-   * fallback when the DAT SDK is not part of this build.
+   * Bluetooth HFP input ports currently available, for the audio-only
+   * fallback when the DAT SDK is not part of this build. The UID is the
+   * stable identity; the user-visible name may change.
    */
-  fun getBluetoothHfpInputNames(): List<String>
+  fun getBluetoothHfpInputs(): List<BluetoothHfpInput>
   /**
    * Starts the DAT camera stream session so photo capture is ready. While
    * active the glasses' capture LED is on (hardware-enforced by Meta).
@@ -1611,9 +1656,11 @@ interface RayBanMetaHostAPI {
       run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.startAudioCapture$separatedMessageChannelSuffix", codec)
         if (api != null) {
-          channel.setMessageHandler { _, reply ->
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val inputUidArg = args[0] as String?
             val wrapped: List<Any?> = try {
-              api.startAudioCapture()
+              api.startAudioCapture(inputUidArg)
               listOf(null)
             } catch (exception: Throwable) {
               PigeonCommunicatorPigeonUtils.wrapError(exception)
@@ -1656,11 +1703,11 @@ interface RayBanMetaHostAPI {
         }
       }
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getBluetoothHfpInputNames$separatedMessageChannelSuffix", codec)
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getBluetoothHfpInputs$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
-              listOf(api.getBluetoothHfpInputNames())
+              listOf(api.getBluetoothHfpInputs())
             } catch (exception: Throwable) {
               PigeonCommunicatorPigeonUtils.wrapError(exception)
             }

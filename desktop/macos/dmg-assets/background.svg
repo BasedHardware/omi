@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 610 365" width="1220" height="730">
+  <rect width="610" height="365" fill="#1d1d1d"/>
+  <path fill="#fff" d="M210 166h155v-21l36 31-36 31v-21H210z"/>
+  <text x="305" y="241" fill="#fff" font-family="Helvetica, Arial, sans-serif" font-size="14" text-anchor="middle">
+    Drag to Applications to install
+  </text>
+</svg>

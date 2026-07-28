@@ -3,7 +3,7 @@
 // ── Active routes (have real traffic) ─────────────────────────────────────────
 pub mod agent;
 pub mod auth;
-pub mod chat_completions;
+mod chat;
 pub mod config;
 pub mod crisp;
 pub mod health;
@@ -11,7 +11,6 @@ pub mod llm_stub;
 pub mod proxy;
 pub mod rate_limit;
 pub mod realtime;
-mod retrieval_policy;
 pub mod screen_activity;
 pub mod tts;
 pub mod updates;
@@ -25,7 +24,7 @@ pub mod deprecated;
 // ── Active re-exports ─────────────────────────────────────────────────────────
 pub use agent::agent_routes;
 pub use auth::auth_routes;
-pub use chat_completions::chat_completions_routes;
+pub(crate) use chat::chat_completions_routes;
 pub use config::config_routes;
 pub use crisp::crisp_routes;
 pub(crate) use deprecated::deprecated_routes;

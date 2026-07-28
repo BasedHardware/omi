@@ -1,4 +1,101 @@
 import Foundation
+import VoiceTurnDomain
+
+#if DEBUG
+  /// Deterministic provider decisions for the hermetic desktop profile. This type
+  /// is absent from release builds and is reachable only through `ptt_test_turn`.
+  struct RealtimeLocalProfileTurnPlan: Equatable {
+    struct Spawn: Equatable {
+      let objective: String
+      let title: String
+    }
+
+    static let exactMemoryAgentRequest =
+      "Have an agent look through my memories today and surface one surprising insight."
+
+    let assistantText: String
+    let spawn: Spawn?
+
+    static func make(
+      transcript rawTranscript: String,
+      voiceContext: String,
+      localProfileEnabled: Bool
+    ) -> Self? {
+      guard localProfileEnabled else { return nil }
+      let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !transcript.isEmpty else { return nil }
+
+      if transcript == exactMemoryAgentRequest {
+        return Self(
+          assistantText: "I started a background agent to review today's memories.",
+          spawn: Spawn(objective: transcript, title: "Today's memory insight"))
+      }
+
+      if transcript.localizedCaseInsensitiveContains("what was the last thing i asked you for"),
+        let reference = lastHarnessReference(in: voiceContext)
+      {
+        return Self(
+          assistantText: "The last request was the background-agent task tagged \(reference).",
+          spawn: nil)
+      }
+
+      if let marker = lastHarnessReference(in: transcript) {
+        return Self(assistantText: "Stub saw marker: \(marker)", spawn: nil)
+      }
+      return Self(assistantText: "Hermetic realtime stub response.", spawn: nil)
+    }
+
+    private static func lastHarnessReference(in text: String) -> String? {
+      guard
+        let expression = try? NSRegularExpression(
+          pattern: #"(?:GAUNTLET|RESILIENCE)[A-Z0-9-]*"#),
+        let match = expression.matches(
+          in: text, range: NSRange(text.startIndex..., in: text)
+        ).last,
+        let range = Range(match.range, in: text)
+      else { return nil }
+      return String(text[range])
+    }
+  }
+#endif
+
+/// Audio and text are two transports for the same response. Keeping every
+/// presentation gate here prevents one transport from exposing output the other
+/// correctly withheld.
+enum RealtimeProviderOutputPresentationPolicy {
+  enum Disposition: Equatable {
+    case present
+    case suppressScreenGrounding
+    case suppressReducerOwnedOutput
+  }
+
+  static func decide(
+    screenGroundingState: RealtimeScreenGroundingState,
+    reducerOutputSuppressed: Bool
+  ) -> Disposition {
+    if screenGroundingState.suppressesProviderOutput {
+      return .suppressScreenGrounding
+    }
+    return reducerOutputSuppressed ? .suppressReducerOwnedOutput : .present
+  }
+}
+
+/// Logging must distinguish an unbound handoff from an actual OpenAI session.
+/// During a controller-owned reconnect, `sessionProvider` is briefly nil while
+/// the next physical provider is being selected. Treating that as OpenAI made
+/// a Gemini-only turn look like a voice/provider switch in diagnostics.
+enum RealtimeHubProviderLogTag {
+  static func current(_ provider: RealtimeHubProvider?) -> String {
+    switch provider {
+    case .gemini:
+      return "gemini"
+    case .openai:
+      return "openai"
+    case nil:
+      return "unbound"
+    }
+  }
+}
 
 /// Safe, non-sensitive classification for realtime WebSocket teardown messages.
 ///
@@ -13,6 +110,14 @@ import Foundation
 enum RealtimeHubCloseCategory: String {
   case expectedIdleTeardown = "expected_idle_teardown"
   case expectedSessionRotation = "expected_session_rotation"
+  case localAddressUnavailable = "local_address_unavailable"
+  case transportConfiguration = "transport_configuration"
+  case transportConnect = "transport_connect"
+  case transportHandshake = "transport_handshake"
+  case transportReceive = "transport_receive"
+  case transportSend = "transport_send"
+  case transportProtocolViolation = "transport_protocol_violation"
+  case providerError = "provider_error"
   case providerAuthFailed = "provider_auth_failed"
   case providerQuotaExceeded = "provider_quota_exceeded"
   case providerPolicyCloseFast = "provider_policy_close_fast"
@@ -27,8 +132,158 @@ enum RealtimeHubSessionRotationPlan: Equatable {
   case terminateActiveTurnAndRewarm
 }
 
+struct RealtimeHubFailureReportingPlan: Equatable {
+  let localMessage: String
+  let sentryMessage: String
+
+  static func make(
+    failure: RealtimeHubTransportFailure,
+    category: RealtimeHubCloseCategory?,
+    provider: String,
+    aliveFor: TimeInterval,
+    activeTurn: Bool
+  ) -> Self {
+    let categoryText = category?.rawValue ?? "unclassified"
+    let bounded =
+      "RealtimeHub: session error"
+      + " category=\(categoryText)"
+      + " provider=\(provider)"
+      + " activeTurn=\(activeTurn)"
+    return Self(
+      localMessage:
+        "RealtimeHub: session closed"
+        + " category=\(categoryText)"
+        + " provider=\(provider)"
+        + " aliveFor=\(Int(aliveFor))s"
+        + " detail=\(failure.message)",
+      sentryMessage: bounded)
+  }
+}
+
+/// Serializes physical transport replacement. The old transport must finish
+/// close before `start` can create its successor, and duplicate replacement
+/// requests coalesce behind the one authoritative drain.
+@MainActor
+final class RealtimeHubTransportReplacementGate {
+  private var task: Task<Void, Never>?
+  private var generation: UInt64 = 0
+  private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+
+  var isPending: Bool { task != nil }
+
+  @discardableResult
+  func replace(
+    reconnectDelayNanoseconds: UInt64 = 0,
+    stop: @escaping @MainActor () async -> Void,
+    start: @escaping @MainActor () -> Void
+  ) -> Bool {
+    guard task == nil else { return false }
+    generation &+= 1
+    let admittedGeneration = generation
+    task = Task { @MainActor [weak self] in
+      await stop()
+      guard let self else { return }
+      guard !Task.isCancelled, self.generation == admittedGeneration else {
+        self.finish()
+        return
+      }
+      if reconnectDelayNanoseconds > 0 {
+        do {
+          try await Task.sleep(nanoseconds: reconnectDelayNanoseconds)
+        } catch {
+          self.finish()
+          return
+        }
+      }
+      guard !Task.isCancelled, self.generation == admittedGeneration else {
+        self.finish()
+        return
+      }
+      self.finish()
+      start()
+    }
+    return true
+  }
+
+  func waitUntilIdle() async {
+    guard task != nil else { return }
+    await withCheckedContinuation { idleWaiters.append($0) }
+  }
+
+  func cancel() {
+    generation &+= 1
+    task?.cancel()
+  }
+
+  private func finish() {
+    guard task != nil else { return }
+    task = nil
+    let waiters = idleWaiters
+    idleWaiters.removeAll()
+    for waiter in waiters {
+      waiter.resume()
+    }
+  }
+}
+
+/// Realtime provider tool schemas are immutable per physical session. A
+/// directed-agent capability change therefore needs a fresh socket, but a PTT
+/// turn already buffered behind its canonical context refresh remains owned by
+/// the reducer and must be replayed on that fresh socket.
+enum RealtimeHubSchemaRefreshPlan: Equatable {
+  case keepCurrentSession
+  case replaceSession(preservingReconnectInput: Bool)
+}
+
+enum RealtimeHubSchemaRefreshPolicy {
+  static func plan(
+    currentDirectedProviderIDs: [String],
+    nextDirectedProviderIDs: [String],
+    hasLiveSession: Bool,
+    hasPendingReconnectInput: Bool
+  ) -> RealtimeHubSchemaRefreshPlan {
+    guard currentDirectedProviderIDs != nextDirectedProviderIDs, hasLiveSession else {
+      return .keepCurrentSession
+    }
+    return .replaceSession(preservingReconnectInput: hasPendingReconnectInput)
+  }
+}
+
 enum RealtimeHubCloseClassifier {
   static let idleTeardownThreshold: TimeInterval = 60
+
+  static func category(
+    failure: RealtimeHubTransportFailure,
+    aliveFor: TimeInterval,
+    hasActiveTurn: Bool = false,
+    provider: RealtimeHubProvider = .openai
+  ) -> RealtimeHubCloseCategory? {
+    switch failure.kind {
+    case .localAddressUnavailable:
+      return .localAddressUnavailable
+    case .configuration:
+      return .transportConfiguration
+    case .connect:
+      return .transportConnect
+    case .handshake:
+      return .transportHandshake
+    case .receive:
+      return .transportReceive
+    case .send:
+      return .transportSend
+    case .protocolViolation:
+      return .transportProtocolViolation
+    case .providerError:
+      return .providerError
+    case .providerClose, .unknown:
+      break
+    }
+    return category(
+      message: failure.message,
+      aliveFor: aliveFor,
+      hasActiveTurn: hasActiveTurn,
+      provider: provider)
+  }
 
   static func category(
     message: String,
@@ -39,7 +294,7 @@ enum RealtimeHubCloseClassifier {
     let lower = message.lowercased()
     if provider == .openai,
       lower.contains("your session hit the maximum duration")
-      && lower.contains("60 minutes")
+        && lower.contains("60 minutes")
     {
       return .expectedSessionRotation
     }
@@ -197,7 +452,8 @@ enum RealtimeProviderToolResultPolicy {
         provider: provider, name: name, error: error, originalOutput: originalOutput),
     ]
     let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-    let bounded = data.flatMap { String(data: $0, encoding: .utf8) }
+    let bounded =
+      data.flatMap { String(data: $0, encoding: .utf8) }
       ?? #"{"ok":false,"error":{"code":"tool_result_too_large"}}"#
     return RealtimeProviderToolResult(
       output: bounded,
@@ -359,12 +615,27 @@ enum RealtimeHubLifecyclePolicy {
     !replacementPending
   }
 
-  static func shouldResumeCanceledTurnRefresh(
-    fenceTurnID: VoiceTurnID?,
-    terminalTurnID: VoiceTurnID
+  /// Whether the persistence-fence refresh loop may retry after a kernel
+  /// snapshot failed to resolve.
+  ///
+  /// Retrying is only safe while the fence still owns the authenticated scope it
+  /// started under. Once the owner changes or signs out (session invalidation),
+  /// the kernel snapshot can never resolve — the agent bridge refuses to start
+  /// without a current authorization — so the snapshot fails *instantly* on
+  /// every iteration. Looping in that state spins agent-bridge startup at full
+  /// speed (thousands of "sign in to use AI chat" failures per minute). Signed-in
+  /// snapshot failures are naturally rate-limited by their network round-trip, so
+  /// this owner-scope gate is what prevents the busy-loop.
+  static func canRetryPersistenceFence(
+    taskCancelled: Bool,
+    fenceOwnerScope: RealtimeHubOwnerScope,
+    currentOwnerScope: RealtimeHubOwnerScope
   ) -> Bool {
-    fenceTurnID != terminalTurnID
+    guard !taskCancelled else { return false }
+    guard case .authenticated = currentOwnerScope else { return false }
+    return fenceOwnerScope == currentOwnerScope
   }
+
 }
 
 /// Immutable account identity attached to a realtime socket, its context, and
@@ -393,37 +664,37 @@ enum RealtimeHubOwnerScope: Equatable, Sendable {
 }
 
 #if DEBUG
-struct RealtimeHubOwnerBoundarySnapshot: Equatable {
-  let hasPhysicalSession: Bool
-  let physicalOwnerID: String?
-  let prefetchedOwnerID: String?
-  let prefetchedContextIsEmpty: Bool
-  let hasPendingOwnerWork: Bool
-  let hubConnected: Bool
-  let turnAudioByteCount: Int
-}
-
-/// Exact non-production capability for the hermetic local-profile transport.
-/// A process-wide "test mode" boolean is not enough: the authority is bound to
-/// one physical session and one immutable owner scope, so a replaced socket or
-/// an owner transition cannot inherit the provider-warm bypass.
-struct RealtimeLocalProfileTransportAuthority: Equatable {
-  let sourceID: ObjectIdentifier
-  let ownerScope: RealtimeHubOwnerScope
-  let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-
-  func accepts(
-    sourceID candidateSourceID: ObjectIdentifier?,
-    currentOwnerID: String?,
-    localProfileEnabled: Bool,
-    authorizationIsCurrent: Bool
-  ) -> Bool {
-    localProfileEnabled
-      && candidateSourceID == sourceID
-      && ownerScope.isCurrent(currentOwnerID: currentOwnerID)
-      && authorizationIsCurrent
+  struct RealtimeHubOwnerBoundarySnapshot: Equatable {
+    let hasPhysicalSession: Bool
+    let physicalOwnerID: String?
+    let prefetchedOwnerID: String?
+    let prefetchedContextIsEmpty: Bool
+    let hasPendingOwnerWork: Bool
+    let hubConnected: Bool
+    let turnAudioByteCount: Int
   }
-}
+
+  /// Exact non-production capability for the hermetic local-profile transport.
+  /// A process-wide "test mode" boolean is not enough: the authority is bound to
+  /// one physical session and one immutable owner scope, so a replaced socket or
+  /// an owner transition cannot inherit the provider-warm bypass.
+  struct RealtimeLocalProfileTransportAuthority: Equatable {
+    let sourceID: ObjectIdentifier
+    let ownerScope: RealtimeHubOwnerScope
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+
+    func accepts(
+      sourceID candidateSourceID: ObjectIdentifier?,
+      currentOwnerID: String?,
+      localProfileEnabled: Bool,
+      authorizationIsCurrent: Bool
+    ) -> Bool {
+      localProfileEnabled
+        && candidateSourceID == sourceID
+        && ownerScope.isCurrent(currentOwnerID: currentOwnerID)
+        && authorizationIsCurrent
+    }
+  }
 #endif
 
 /// Shared owner policy used by warm reuse, delayed mint completion, and
@@ -561,10 +832,24 @@ struct RealtimeHubToolFailure: Equatable {
 enum RealtimeHubReconnectIdentityPolicy {
   static func responseIDAfterSessionDetach(
     preservingReconnectAudio: Bool,
-    pendingReconnect: RealtimeReconnectAudioBuffer?
+    pendingReconnect: RealtimeReconnectAudioBuffer?,
+    preservingBargeInReplacement: Bool,
+    pendingBargeInReplacement: RealtimeReplacementAudioBuffer?
   ) -> VoiceResponseID? {
-    guard preservingReconnectAudio, let pendingReconnect else { return nil }
-    return pendingReconnect.responseID
+    let reconnectResponseID =
+      preservingReconnectAudio ? pendingReconnect?.responseID : nil
+    let replacementResponseID =
+      preservingBargeInReplacement ? pendingBargeInReplacement?.responseID : nil
+    switch (reconnectResponseID, replacementResponseID) {
+    case (.some(let reconnect), .some(let replacement)):
+      // These buffers should never coexist. If they ever do, only an exact
+      // shared identity is safe to retain across the physical handoff.
+      return reconnect == replacement ? reconnect : nil
+    case (.some(let responseID), .none), (.none, .some(let responseID)):
+      return responseID
+    case (.none, .none):
+      return nil
+    }
   }
 
   /// Production boundary that admits/fences provider session callbacks before
@@ -590,13 +875,36 @@ enum RealtimeHubReconnectIdentityPolicy {
 }
 
 enum RealtimeHubEventOwnership {
+  enum Admission: Equatable {
+    case accept
+    case dropStaleTurn
+    case rejectCurrentTurnResponse
+  }
+
+  static func admission(
+    _ identity: RealtimeHubEventIdentity?,
+    activeTurnID: VoiceTurnID?,
+    activeResponseID: VoiceResponseID?
+  ) -> Admission {
+    guard let identity, identity.turnID == activeTurnID else {
+      return .dropStaleTurn
+    }
+    guard identity.responseID == activeResponseID else {
+      return .rejectCurrentTurnResponse
+    }
+    return .accept
+  }
+
   static func accepts(
     _ identity: RealtimeHubEventIdentity?,
     activeTurnID: VoiceTurnID?,
     activeResponseID: VoiceResponseID?
   ) -> Bool {
-    guard let identity else { return false }
-    return identity.turnID == activeTurnID && identity.responseID == activeResponseID
+    admission(
+      identity,
+      activeTurnID: activeTurnID,
+      activeResponseID: activeResponseID
+    ) == .accept
   }
 }
 
@@ -639,16 +947,40 @@ enum RealtimeHubBargeInAction: Equatable {
 }
 
 enum RealtimeProviderTurnDoneDisposition: Equatable {
-  case awaitToolContinuation
+  /// The provider ended a cycle while local tool work is still active. Tool delivery owns the
+  /// next provider response; do not start a competing synthetic continuation.
+  case awaitPendingTools
+  /// All tool results were delivered but the provider emitted no answer. One bounded internal
+  /// continuation may recover the same physical turn.
+  case requestPostToolContinuation
   case finalizeLogicalTurn
 
   static func decide(
     pendingToolCount: Int,
     postToolContinuationRequired: Bool
   ) -> Self {
-    pendingToolCount > 0 || postToolContinuationRequired
-      ? .awaitToolContinuation
-      : .finalizeLogicalTurn
+    if pendingToolCount > 0 { return .awaitPendingTools }
+    return postToolContinuationRequired ? .requestPostToolContinuation : .finalizeLogicalTurn
+  }
+}
+
+/// The session reports an immutable continuation-start fact; only the controller may turn it
+/// into a reducer terminal event. This keeps an old session callback from owning a replacement
+/// voice turn while making genuine no-answer exhaustion fail promptly rather than time out.
+enum RealtimePostToolContinuationControllerAction: Equatable {
+  case waitForProvider
+  case ignoreStaleCallback
+  case finishProviderNoResponse
+
+  static func decide(_ result: RealtimePostToolContinuationStartResult) -> Self {
+    switch result {
+    case .started, .alreadyInFlight:
+      return .waitForProvider
+    case .stale:
+      return .ignoreStaleCallback
+    case .exhausted, .transportUnavailable:
+      return .finishProviderNoResponse
+    }
   }
 }
 
@@ -664,6 +996,23 @@ enum RealtimeHeadlessPTTSessionSwapPolicy {
   }
 }
 
+/// A headless PTT probe is successful only when the same physical turn reaches a
+/// terminal reducer state. Persistence diagnostics arrive earlier, while native
+/// playback may still be draining, so treating them as completion hides exactly the
+/// cut-off and fallback regressions this harness is meant to catch.
+enum RealtimeHeadlessPTTCompletionPolicy {
+  /// Persistence diagnostics are observability, not user-visible completion. A probe may return
+  /// only when its exact reducer turn reaches a terminal state, after native playback and all
+  /// other logical fences have drained.
+  static func terminalReason(
+    for turnID: VoiceTurnID,
+    lastTerminal: VoiceTurnTerminalRecord?
+  ) -> VoiceTurnTerminalReason? {
+    guard lastTerminal?.turnID == turnID else { return nil }
+    return lastTerminal?.reason
+  }
+}
+
 enum RealtimeHubBargeInContinuity {
   enum Outcome: Equatable {
     case started
@@ -674,7 +1023,7 @@ enum RealtimeHubBargeInContinuity {
 
   static let maximumContextRefreshAttempts = 8
 
-  static func prepareReplacementSession(
+  @MainActor static func prepareReplacementSession(
     resolveInterruptedTurn: () async -> InterruptedTurnPayload?,
     recordInterruptedTurn: (InterruptedTurnPayload) async -> Bool,
     refreshVoiceContext: () async -> Set<String>?,

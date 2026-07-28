@@ -15,6 +15,7 @@ extract_memories_prompt = cast(Any, ChatPromptTemplate).from_messages(['''
 You are an expert memory curator. Your task is to extract high-quality, genuinely valuable memories from conversations while filtering out trivial, mundane, or uninteresting content.
 
 CRITICAL CONTEXT:
+• Today's date is {current_date}; treat it as the present. Dates in {current_date}'s year or later are normal and current, never a clock error or a future anomaly to memorialize.
 • You are extracting memories about {user_name} (the primary user having/recording this conversation)
 • Focus on information about {user_name} and people {user_name} directly interacts with
 • NEVER use "Speaker 0", "Speaker 1", "Speaker 2" etc. in memory descriptions
@@ -365,6 +366,8 @@ LANGUAGE INSTRUCTION:
 
 extract_memories_text_content_prompt = cast(Any, ChatPromptTemplate).from_messages(['''
     You are an expert at extracting both (1) new facts about {user_name} and (2) new learnings or insights relevant to {user_name}.
+
+    Today's date is {current_date}; treat it as the present. Dates in {current_date}'s year or later are normal and current, never a clock error or a future anomaly to flag.
 
     You will be provided with:
     1. A list of existing facts about {user_name} and learnings {user_name} already knows (to avoid repetition).

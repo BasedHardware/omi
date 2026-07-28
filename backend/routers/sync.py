@@ -72,6 +72,7 @@ from utils.fair_use import (
     get_enforcement_stage,
     get_hard_restriction_status,
     get_rolling_speech_ms,
+    is_daily_audio_ceiling_exceeded,
     is_dg_budget_exhausted,
     record_dg_usage_ms,
     record_speech_ms,
@@ -88,7 +89,13 @@ from utils.metrics import (
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
 from utils.subscription import has_transcription_credits
 from utils.sync import playback as sync_playback
-from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration, retrieve_file_paths
+from utils.sync.files import (
+    decode_files_to_wav,
+    detect_source_from_filenames,
+    get_timestamp_from_path,
+    get_wav_duration,
+    retrieve_file_paths,
+)
 from utils.sync.pipeline import (
     _OrderedTurnstile,
     _cleanup_files,
@@ -96,6 +103,7 @@ from utils.sync.pipeline import (
     _download_staged_files,
     _finalize_sync_job_failure,
     finalize_sync_job_failure_now,
+    finalize_sync_job_superseded,
     SyncJobRunLeaseLost,
     bind_or_converge_sync_ledger_completion,
     _finalize_sync_audio_files,
@@ -106,6 +114,7 @@ from utils.sync.pipeline import (
     build_person_embeddings_cache,
     process_segment,
     retrieve_vad_segments,
+    SyncConversationPersistenceFenced,
 )
 from utils.stt.outcomes import TranscriptionOutcome, failure_from_exception
 from utils.sync.rate_limit import (
@@ -566,15 +575,27 @@ async def sync_local_files(
             base_headers=_V1_DEPRECATION_HEADERS,
         )
 
+    # Hard anti-abuse daily-audio ceiling (all plans): reject fresh sync once the user is
+    # already over the rolling-24h total. Set high enough that no legitimate user hits it;
+    # it exists to stop bulk-sync dumps. Backfill has its own separate pacing.
+    if lane_decision.lane == SyncLane.FRESH and is_daily_audio_ceiling_exceeded(uid):
+        logger.info(f'sync: daily audio ceiling reached uid={uid}')
+        return await _fair_use_restriction_response(
+            uid=uid,
+            retry_after=_retry_after_until_next_utc_day(),
+            client_platform=client_device_context.platform,
+            device_hash=client_device_context.device_hash,
+            app_version=client_device_context.app_version,
+            request_id=request.headers.get('x-request-id'),
+            cloud_trace_context=request.headers.get('x-cloud-trace-context'),
+            base_headers=_V1_DEPRECATION_HEADERS,
+        )
+
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
     should_lock = not has_transcription_credits(uid)
 
     # Detect source from filenames
-    source = ConversationSource.omi
-    for f in files:
-        if f.filename and 'limitless' in f.filename.lower():
-            source = ConversationSource.limitless
-            break
+    source = detect_source_from_filenames([f.filename for f in files])
 
     paths = []
     wav_paths = []
@@ -657,8 +678,10 @@ async def sync_local_files(
             meter_source = 'sync_backfill' if lane_decision.lane == SyncLane.BACKFILL else 'sync_fresh'
             record_speech_ms(uid, total_speech_ms, source=meter_source)
             if lane_decision.lane == SyncLane.FRESH:
+                fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+                fair_use_plan = fair_use_sub.plan if fair_use_sub else None
                 speech_totals = get_rolling_speech_ms(uid)
-                triggered_caps = check_soft_caps(uid, speech_totals=speech_totals)
+                triggered_caps = check_soft_caps(uid, speech_totals=speech_totals, plan=fair_use_plan)
                 if triggered_caps:
                     logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
                     asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
@@ -946,15 +969,22 @@ async def sync_local_files_v2(
                 request_id=x_request_id if isinstance(x_request_id, str) else None,
                 cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
             )
+        if await run_blocking(db_executor, is_daily_audio_ceiling_exceeded, uid):
+            logger.info('sync_v2: daily audio ceiling reached uid=%s', uid)
+            return await _fair_use_restriction_response(
+                uid=uid,
+                retry_after=_retry_after_until_next_utc_day(),
+                client_platform=client_device_context.platform,
+                device_hash=client_device_context.device_hash,
+                app_version=client_device_context.app_version,
+                request_id=x_request_id if isinstance(x_request_id, str) else None,
+                cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
+            )
 
     should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 
     # Detect source
-    source = ConversationSource.omi
-    for f in files:
-        if f.filename and 'limitless' in f.filename.lower():
-            source = ConversationSource.limitless
-            break
+    source = detect_source_from_filenames([f.filename for f in files])
 
     cloud_tasks_dispatch_enabled = is_cloud_tasks_dispatch_enabled()
     byok_enabled = has_byok_keys()
@@ -1411,7 +1441,9 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
                             job_id=job_id,
                             uid=uid,
                             content_id=locked_job.get('content_id'),
-                            error_code='sync_worker_stale',
+                            error_code=(
+                                'sync_dispatch_lost' if locked_job.get('status') == 'queued' else 'sync_worker_stale'
+                            ),
                             outcome=TranscriptionOutcome.UPSTREAM_ERROR,
                             provider=locked_job.get('stt_provider', 'unknown'),
                             model=locked_job.get('stt_model', 'unknown'),
@@ -1646,6 +1678,25 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 content_run_bound=ledger_fence_active,
                 ledger_fence_active=ledger_fence_active,
             )
+        except SyncConversationPersistenceFenced:
+            latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job
+            await finalize_sync_job_superseded(
+                job_id=job_id,
+                run_lock_token=lock_token if ledger_fence_active else None,
+                lane=sync_lane,
+                provider=latest_job.get('stt_provider') or 'unknown',
+                model=latest_job.get('stt_model') or 'unknown',
+            )
+            if sync_lane == SyncLane.BACKFILL.value:
+                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+            if content_id:
+                release_claim = (
+                    release_sync_content_claim_after_job_retired if ledger_fence_active else release_sync_content_claim
+                )
+                await run_blocking(db_executor, release_claim, uid, content_id, job_id)
+            await _delete_staged_blobs_async(blob_paths)
+            logger.info('event=sync_transcription_job outcome=superseded lane=%s', sync_lane)
+            return JSONResponse(status_code=200, content={'status': 'superseded'})
         except SyncJobRunLeaseLost as error:
             latest_job = await run_blocking(db_executor, get_sync_job, job_id)
             if latest_job and latest_job.get('status') in TERMINAL_STATUSES:
@@ -1680,9 +1731,33 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     status_code=500,
                     content={'status': 'terminal_cleanup_retry', 'job_status': latest_job.get('status')},
                 )
+            if ledger_fence_active and task_retry_count >= max_attempts - 1:
+                # A pipeline leaf can durably complete the content ledger and
+                # then fail before it publishes the matching Redis terminal
+                # result. This must win even on the task's final delivery:
+                # there may be no later Cloud Tasks retry to converge it.
+                try:
+                    converged = await run_blocking(
+                        db_executor,
+                        bind_or_converge_sync_ledger_completion,
+                        job_id=job_id,
+                        uid=uid,
+                        content_id=content_id,
+                        run_lock_token=lock_token,
+                    )
+                except SyncJobRunLeaseLost:
+                    release_lock = False
+                    logger.warning('event=sync_transcription_job outcome=lease_lost retry_material=preserved')
+                    return JSONResponse(status_code=409, content={'status': 'locked'})
+                if converged is not None:
+                    logger.info('event=sync_transcription_job outcome=reconciled_after_pipeline_exception')
+                    await _delete_staged_blobs_async(blob_paths)
+                    if sync_lane == SyncLane.BACKFILL.value:
+                        await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+                    return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
             failure = failure_from_exception(e, provider=latest_job.get('stt_provider'))
             sync_model = latest_job.get('stt_model')
-            if task_retry_count >= max_attempts - 1:
+            if not failure.retryable or task_retry_count >= max_attempts - 1:
                 logger.error(
                     'event=sync_transcription_job outcome=%s status=failed_final lane=%s '
                     'attempt=%d exception_type=%s',

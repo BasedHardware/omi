@@ -43,7 +43,7 @@ Prioritized feature map to guide desktop E2E coverage. Uses the same two-dimensi
 | 4 | Home stage (hub / chat / connect) | intelligence (3) | 9 | 2 | 2 | ✅ flow: `home-stage.yaml` |
 | 5 | Capture lifecycle (hermetic transcript seam) | capture (5) | 15 | 2 | 1 | ✅ flow: `capture-lifecycle.yaml` |
 | 6 | Screen capture (Rewind) | capture (5) | 15 | 0 | 2 | ⚠️ manual: `rewind.yaml`, `screen-recording-permission.yaml` (TCC) |
-| 7 | Audio recording (desktop mic) | capture (5) | 15 | 0 | 1 | ⚠️ manual: `audio-recording.yaml` (mic permission) |
+| 7 | Audio recording (desktop mic) | capture (5) | 15 | 0 | 1 | ⚠️ manual: `audio-recording.yaml` (mic permission); added `recording-finalization.yaml` |
 | 8 | Memory list & browse | memory (4) | 12 | 2 | 2 | ✅ flow: `memories.yaml` (nav + search step) |
 | 9 | Memory search | memory (4) | 12 | 3 | 2 | ✅ flow: `memory-depth.yaml` + `memories.yaml` |
 | 10 | Tasks — list, refresh | retrieval-action (3) | 9 | 3 | 2 | ✅ flow: `tasks-crud.yaml` + `tasks.yaml` |

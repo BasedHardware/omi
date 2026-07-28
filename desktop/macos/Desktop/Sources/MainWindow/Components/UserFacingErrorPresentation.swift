@@ -98,7 +98,7 @@ enum UserFacingErrorPresentation {
     if let urlError = error as? URLError {
       switch urlError.code {
       case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .networkConnectionLost,
-           .notConnectedToInternet, .timedOut:
+        .notConnectedToInternet, .timedOut:
         return "Check your connection and try again."
       default:
         return fallback(for: context)

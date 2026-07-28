@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class StreamingPCMPlaybackQueueTests: XCTestCase {
@@ -14,7 +15,8 @@ final class StreamingPCMPlaybackQueueTests: XCTestCase {
     )
 
     XCTAssertTrue(source.contains("var onPlaybackScheduled: ((Int) -> Void)?"))
-    XCTAssertTrue(source.contains("let scheduledPlaybackEpoch = playbackEpoch\n    onPlaybackScheduled?(scheduledPlaybackEpoch)"))
+    XCTAssertTrue(
+      source.contains("let scheduledPlaybackEpoch = playbackEpoch\n    onPlaybackScheduled?(scheduledPlaybackEpoch)"))
     XCTAssertTrue(source.contains("for buffer in buffersToReplay {\n        self.schedule(buffer)\n      }"))
   }
 

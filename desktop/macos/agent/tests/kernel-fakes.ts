@@ -49,10 +49,12 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   sinks = new Map<string, AdapterEventSink>();
   failNextOpenError: unknown;
   failNextExecutionError: unknown;
+  eventBeforeExecutionError: OutboundMessage | undefined;
   failNextResume = false;
   failNextExecutionAsStale = false;
   deferOnlyPromptIncludes: string | undefined;
   nextArtifacts: AdapterArtifactReference[] | undefined;
+  nextText: string | undefined;
   writeFileOnExecute: { name: string; contents: string } | undefined;
   /** When set, FakeRuntimeAdapter reports this as the adapter-effective MCP set. */
   effectiveMcpServersOverride: Record<string, unknown>[] | null = null;
@@ -129,6 +131,10 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     if (this.failNextExecutionError) {
       const error = this.failNextExecutionError;
       this.failNextExecutionError = undefined;
+      if (this.eventBeforeExecutionError) {
+        sink(this.eventBeforeExecutionError);
+        this.eventBeforeExecutionError = undefined;
+      }
       throw error;
     }
     const promptText = context.prompt
@@ -144,8 +150,10 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     }
     const artifacts = this.nextArtifacts;
     this.nextArtifacts = undefined;
+    const text = this.nextText ?? `done-${context.attemptId}`;
+    this.nextText = undefined;
     return {
-      text: `done-${context.attemptId}`,
+      text,
       adapterSessionId: context.binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
       inputTokens: 1,

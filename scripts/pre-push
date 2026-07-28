@@ -31,24 +31,18 @@ while read -r local_ref local_oid remote_ref remote_oid; do
 done
 
 if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
-  echo "Running fast pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
+  echo "Running bounded pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
 else
-  echo "Running fast pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
+  echo "Running bounded pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
 fi
 
 declare -a CHANGED_FILES=()
 if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
   for update in "${PUSH_UPDATES[@]}"; do
     IFS=: read -r local_oid remote_oid remote_ref <<<"$update"
-    if [ -z "$remote_oid" ] || [ "$remote_oid" = "$ZERO_SHA" ]; then
-      DIFF_BASE=$(git merge-base "$BASE_REMOTE_REF" "$local_oid")
-    elif git cat-file -e "$remote_oid^{commit}" 2>/dev/null; then
-      DIFF_BASE="$remote_oid"
-    elif TRACKING_REF="refs/remotes/${PUSH_REMOTE}/${remote_ref#refs/heads/}" && git rev-parse --verify "$TRACKING_REF" >/dev/null 2>&1; then
-      DIFF_BASE=$(git rev-parse "$TRACKING_REF")
-    else
-      DIFF_BASE=$(git merge-base "$BASE_REMOTE_REF" "$local_oid")
-    fi
+    # Check selection describes the final review surface, not every historical
+    # commit needed to reconcile a stale remote PR branch.
+    DIFF_BASE=$(scripts/pre-push-diff-base "$BASE_REMOTE_REF" "$local_oid")
     changed_count=$(scripts/changed-files "$DIFF_BASE" "$local_oid" | wc -l | tr -d ' ')
     DIFF_SUMMARIES+=("${remote_ref:-$local_oid}: ${changed_count} changed file(s) since ${DIFF_BASE:0:12}")
     while IFS= read -r file; do
@@ -84,16 +78,62 @@ CHANGED_FILES_LIST=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-changed-files.XXXXXX")
 SELECTED_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests.XXXXXX")
 SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests-reason.XXXXXX")
 FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
-trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS"' EXIT
+RELEASE_GUARD_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-release-guard-tests.XXXXXX")
+trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS" "$RELEASE_GUARD_TESTS"' EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
 BACKEND_PYTHON="$PWD/backend/.venv/bin/python"
+
+declare -a CI_PREDICTION_VERIFIED=()
+declare -a CI_PREDICTION_DEFERRED=()
+declare -a CI_PREDICTION_SKIPPED=()
+CI_PREDICTION_SELECTION=""
+
+ci_prediction_note_verified() {
+  CI_PREDICTION_VERIFIED+=("$1")
+}
+
+ci_prediction_note_deferred() {
+  CI_PREDICTION_DEFERRED+=("$1")
+}
+
+ci_prediction_note_skipped() {
+  CI_PREDICTION_SKIPPED+=("$1")
+}
+
+ci_prediction_selected() {
+  printf '%s\n' "$CI_PREDICTION_SELECTION" | grep -Fqx "$1"
+}
+
+print_ci_prediction_summary() {
+  local item
+
+  echo "CI prediction (bounded local evidence)"
+  if [ "${#CI_PREDICTION_VERIFIED[@]}" -gt 0 ]; then
+    echo "  verified:"
+    for item in "${CI_PREDICTION_VERIFIED[@]}"; do
+      echo "    - $item"
+    done
+  fi
+  if [ "${#CI_PREDICTION_DEFERRED[@]}" -gt 0 ]; then
+    echo "  deferred to CI:"
+    for item in "${CI_PREDICTION_DEFERRED[@]}"; do
+      echo "    - $item"
+    done
+  fi
+  if [ "${#CI_PREDICTION_SKIPPED[@]}" -gt 0 ]; then
+    echo "  deliberately skipped (not locally certified):"
+    for item in "${CI_PREDICTION_SKIPPED[@]}"; do
+      echo "    - $item"
+    done
+  fi
+}
 
 require_backend_python() {
   if [[ -x "$BACKEND_PYTHON" ]]; then
     return 0
   fi
   echo "FAIL: a selected backend check requires backend/.venv/bin/python, but it was not found." >&2
-  echo "      Create it with: cd backend && bash scripts/sync-python-deps.sh" >&2
+  echo "      Create it with: make setup" >&2
   return 1
 }
 
@@ -123,10 +163,40 @@ changed_matches() {
   return 1
 }
 
+CI_PREDICTION_SELECTION=$(python3 scripts/pre_push_ci_prediction.py --changed-files "$CHANGED_FILES_LIST" --base "$BASE_REF")
+if ci_prediction_selected "app-ci-only"; then
+  ci_prediction_note_deferred "full Flutter analyzer/tests and platform compiles"
+fi
+if ci_prediction_selected "desktop-ci-only"; then
+  ci_prediction_note_deferred "full desktop harness, release builds, and platform packaging"
+fi
+if ci_prediction_selected "windows-kgworker-native-closure"; then
+  ci_prediction_note_deferred "Windows packaged build and real asar worker proof"
+fi
+
 check_pr_preflight() {
+  local has_supplied_pr_body=0
+
   if [ "${PRE_PUSH_SKIP_PR_PREFLIGHT:-}" = "1" ]; then
+    # The broad preflight hatch is useful when local PR metadata discovery is
+    # unavailable, but it must not let a recurring failure class bypass the
+    # guard-artifact ratchet that CI enforces. That check is deterministic and
+    # needs only the already-required local PR body, so keep it mandatory.
+    if [ -z "${OMI_PR_BODY_FILE:-}" ] || [ ! -f "${OMI_PR_BODY_FILE}" ]; then
+      echo "FAIL: PRE_PUSH_SKIP_PR_PREFLIGHT=1 requires OMI_PR_BODY_FILE so the failure-class guard-artifact ratchet still runs." >&2
+      return 1
+    fi
     echo "Skipping shared PR preflight because PRE_PUSH_SKIP_PR_PREFLIGHT=1."
+    echo "==> failure-class guard-artifact ratchet (mandatory under preflight hatch)"
+    python3 .github/scripts/check_failure_class_guard_ratchet.py \
+      --pr-body-file "$OMI_PR_BODY_FILE"
+    ci_prediction_note_verified "failure-class guard-artifact ratchet (mandatory under PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
+    ci_prediction_note_skipped "shared PR contract and hygiene (PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
     return
+  fi
+
+  if [ -n "${OMI_PR_BODY_FILE:-}" ]; then
+    has_supplied_pr_body=1
   fi
 
   # Same cheap contracts Hygiene runs (invariants, e2e covers, changelog schema, …).
@@ -135,6 +205,12 @@ check_pr_preflight() {
   #   scripts/pr-preflight --pr-body-file /tmp/pr-body.md
   # or: OMI_PR_BODY_FILE=/tmp/pr-body.md git push
   scripts/pr-preflight --lane local --base "$BASE_REF" --head HEAD --head-branch "$CURRENT_BRANCH"
+  if [ "$has_supplied_pr_body" -eq 1 ]; then
+    ci_prediction_note_verified "shared PR contract, hygiene, and supplied PR body"
+  else
+    ci_prediction_note_verified "shared PR hygiene and diff contracts"
+    ci_prediction_note_deferred "final PR metadata/body: draft a body then scripts/pr-preflight --pr-body-file <file> (or set OMI_PR_BODY_FILE)"
+  fi
 }
 
 check_optional_formatters() {
@@ -166,9 +242,22 @@ check_optional_formatters() {
   done
 
   if [ "${#dart_files[@]}" -gt 0 ]; then
-    if command -v dart >/dev/null 2>&1; then
+    if [ "${PRE_PUSH_SKIP_DART_FORMAT:-}" = "1" ]; then
+      echo "Skipping Dart format check because PRE_PUSH_SKIP_DART_FORMAT=1."
+      if ci_prediction_selected "app-dart-format"; then
+        ci_prediction_note_skipped "Dart formatting (PRE_PUSH_SKIP_DART_FORMAT=1)"
+      fi
+    elif command -v dart >/dev/null 2>&1; then
       echo "==> dart format --set-exit-if-changed (${#dart_files[@]} file(s))"
       dart format --line-length 120 --set-exit-if-changed --output=none "${dart_files[@]}"
+      if ci_prediction_selected "app-dart-format"; then
+        ci_prediction_note_verified "Dart formatting"
+      fi
+    elif ci_prediction_selected "app-dart-format"; then
+      echo "FAIL: changed app Dart files require the Dart SDK for local CI certification." >&2
+      echo "      Install Flutter (which includes Dart), then ensure 'dart' is on PATH." >&2
+      echo "      Deliberate hatch: PRE_PUSH_SKIP_DART_FORMAT=1 git push" >&2
+      return 1
     else
       echo "Skipping Dart format check; dart is not installed."
     fi
@@ -226,6 +315,136 @@ PY
   fi
 }
 
+require_flutter_generated_prerequisites() {
+  if [ ! -f app/.dart_tool/package_config.json ]; then
+    echo "FAIL: Flutter generated-output checks need resolved app dependencies." >&2
+    echo "      Run: cd app && flutter pub get" >&2
+    # make setup provisions the backend venv only, so a contributor who never
+    # touches app/ can reach this with no Flutter toolchain at all -- and the
+    # selector wakes this lane for any ROUTING_INPUTS edit. CI still runs it.
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_FLUTTER_GENERATED=1 git push" >&2
+    return 1
+  fi
+}
+
+check_flutter_generated_if_needed() {
+  local untracked
+
+  if ! ci_prediction_selected "flutter-codegen" && ! ci_prediction_selected "flutter-l10n"; then
+    return
+  fi
+
+  if [ "${PRE_PUSH_SKIP_FLUTTER_GENERATED:-}" = "1" ]; then
+    echo "Skipping Flutter generated-output checks because PRE_PUSH_SKIP_FLUTTER_GENERATED=1."
+    ci_prediction_note_skipped "Flutter generated output (PRE_PUSH_SKIP_FLUTTER_GENERATED=1)"
+    return
+  fi
+
+  require_flutter_generated_prerequisites
+
+  if ci_prediction_selected "flutter-codegen"; then
+    if ! command -v flutter >/dev/null 2>&1 || ! command -v dart >/dev/null 2>&1; then
+      echo "FAIL: changed Flutter generator inputs require Flutter and Dart for local CI certification." >&2
+      echo "      Install Flutter, then ensure both 'flutter' and its bundled 'dart' are on PATH." >&2
+      echo "      Deliberate hatch: PRE_PUSH_SKIP_FLUTTER_GENERATED=1 git push" >&2
+      return 1
+    fi
+    echo "==> Flutter build_runner generated-output check"
+    (
+      cd app
+      flutter pub run build_runner build --delete-conflicting-outputs
+      git diff --exit-code -- lib || {
+        echo "FAIL: generated Dart files are stale. Run: cd app && flutter pub run build_runner build --delete-conflicting-outputs" >&2
+        exit 1
+      }
+      untracked=$(git ls-files --others --exclude-standard -- lib)
+      if [ -n "$untracked" ]; then
+        echo "FAIL: generated Dart files are stale; untracked generated files were produced:" >&2
+        echo "$untracked" >&2
+        exit 1
+      fi
+    )
+    ci_prediction_note_verified "Flutter build_runner generated output"
+  fi
+
+  if ci_prediction_selected "flutter-l10n"; then
+    if ! command -v flutter >/dev/null 2>&1; then
+      echo "FAIL: changed Flutter localization inputs require Flutter for local CI certification." >&2
+      echo "      Install Flutter, then ensure 'flutter' is on PATH." >&2
+      echo "      Deliberate hatch: PRE_PUSH_SKIP_FLUTTER_GENERATED=1 git push" >&2
+      return 1
+    fi
+    echo "==> Flutter l10n generated-output check"
+    (
+      cd app
+      flutter gen-l10n
+      git diff --exit-code -- lib/l10n || {
+        echo "FAIL: generated localization files are stale. Run: cd app && flutter gen-l10n" >&2
+        exit 1
+      }
+      untracked=$(git ls-files --others --exclude-standard -- lib/l10n)
+      if [ -n "$untracked" ]; then
+        echo "FAIL: generated localization files are stale; untracked generated files were produced:" >&2
+        echo "$untracked" >&2
+        exit 1
+      fi
+    )
+    ci_prediction_note_verified "Flutter localization generated output"
+  fi
+}
+
+check_desktop_flow_lint_if_needed() {
+  if ! ci_prediction_selected "desktop-flow-lint"; then
+    return
+  fi
+
+  if [ "${PRE_PUSH_SKIP_DESKTOP_FLOW_LINT:-}" = "1" ]; then
+    echo "Skipping desktop E2E flow lint because PRE_PUSH_SKIP_DESKTOP_FLOW_LINT=1."
+    ci_prediction_note_skipped "desktop E2E flow metadata (PRE_PUSH_SKIP_DESKTOP_FLOW_LINT=1)"
+    return
+  fi
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "FAIL: desktop E2E flow metadata checks require python3 and PyYAML." >&2
+    echo "      Install Python 3 and run: python3 -m pip install PyYAML" >&2
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_DESKTOP_FLOW_LINT=1 git push" >&2
+    return 1
+  fi
+
+  echo "==> desktop E2E flow metadata lint"
+  python3 desktop/macos/scripts/desktop-flow-lint.py
+  ci_prediction_note_verified "desktop E2E flow metadata and bridge-action references"
+}
+
+check_windows_kgworker_native_closure_if_needed() {
+  if ! ci_prediction_selected "windows-kgworker-native-closure"; then
+    return
+  fi
+
+  if [ "${PRE_PUSH_SKIP_WINDOWS_KGWORKER_NATIVE_CLOSURE:-}" = "1" ]; then
+    echo "Skipping Windows KG worker native-closure test because PRE_PUSH_SKIP_WINDOWS_KGWORKER_NATIVE_CLOSURE=1."
+    ci_prediction_note_skipped "Windows KG worker native-module closure (PRE_PUSH_SKIP_WINDOWS_KGWORKER_NATIVE_CLOSURE=1)"
+    return
+  fi
+
+  if ! command -v pnpm >/dev/null 2>&1 \
+    || [ ! -x desktop/windows/node_modules/.bin/vitest ] \
+    || [ ! -f desktop/windows/node_modules/better-sqlite3/package.json ] \
+    || [ ! -f desktop/windows/node_modules/electron-builder/package.json ]; then
+    echo "FAIL: Windows KG worker native-closure validation requires pnpm and installed desktop/windows dependencies." >&2
+    echo "      Run: cd desktop/windows && pnpm install --frozen-lockfile" >&2
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_WINDOWS_KGWORKER_NATIVE_CLOSURE=1 git push" >&2
+    return 1
+  fi
+
+  echo "==> Windows KG worker native-module closure"
+  (
+    cd desktop/windows
+    pnpm exec vitest run scripts/kgworker-native-closure.test.mjs
+  )
+  ci_prediction_note_verified "Windows KG worker native-module closure"
+}
+
 check_backend_runtime_env_if_needed() {
   if [ "${PRE_PUSH_SKIP_BACKEND_RUNTIME_ENV:-}" = "1" ]; then
     echo "Skipping backend runtime env checks because PRE_PUSH_SKIP_BACKEND_RUNTIME_ENV=1."
@@ -259,16 +478,8 @@ check_backend_typecheck_if_needed() {
     return
   fi
 
-  if ! changed_matches \
-    'backend/*.py' \
-    'backend/**/*.py' \
-    'backend/pyrightconfig.json' \
-    'backend/scripts/typecheck.sh' \
-    'backend/requirements.txt' \
-    'backend/pylock*.toml' \
-    '.github/workflows/backend-unit-tests.yml' \
-    'scripts/pre-push'
-  then
+  if ! printf '%s\n' "${CHANGED_FILES[@]}" | backend/scripts/needs-typecheck.sh; then
+    echo "Skipping backend type check: changed paths do not affect the typed boundary."
     return
   fi
 
@@ -334,6 +545,8 @@ check_backend_unit_tests_if_needed() {
     return
   fi
 
+  # #9440: pre-push is intentionally a bounded local-feedback gate, not a CI clone.
+  # Keep this cap: a broad selector must not turn ordinary pushes into the full suite.
   max_pre_push_tests="${PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40}"
   if [ "$selected_count" -gt "$max_pre_push_tests" ]; then
     : > "$FAST_BACKEND_TESTS"
@@ -366,6 +579,38 @@ check_backend_unit_tests_if_needed() {
   )
 }
 
+check_runtime_image_source_closure_if_needed() {
+  if [ "${PRE_PUSH_SKIP_RUNTIME_IMAGE_SOURCE_CLOSURE:-}" = "1" ]; then
+    echo "Skipping runtime-image contract check because PRE_PUSH_SKIP_RUNTIME_IMAGE_SOURCE_CLOSURE=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/*.py' \
+    'backend/**/*.py' \
+    'backend/**/Dockerfile*' \
+    'backend/runtime_images.json' \
+    'backend/scripts/runtime_image_contracts.py' \
+    '.github/workflows/runtime_image_contracts.yml' \
+    '.github/workflows/gcp_backend*.yml' \
+    '.github/workflows/gcp_diarizer.yml' \
+    '.github/workflows/gcp_models.yml' \
+    '.github/workflows/gcp_parakeet.yml' \
+    '.github/workflows/gcp_nllb_translation.yml' \
+    '.github/workflows/gcp_memory_maintenance_job*.yml' \
+    '.github/workflows/gcp_notifications_job.yml' \
+    '.github/workflows/gcp_plugins.yml' \
+    'plugins/*.py' \
+    'plugins/**/*.py' \
+    'plugins/Dockerfile' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+    python3 backend/scripts/runtime_image_contracts.py check
+}
+
 check_openapi_contract_if_needed() {
   if [ "${PRE_PUSH_SKIP_OPENAPI_CONTRACT:-}" = "1" ]; then
     echo "Skipping OpenAPI contract check because PRE_PUSH_SKIP_OPENAPI_CONTRACT=1."
@@ -373,20 +618,13 @@ check_openapi_contract_if_needed() {
   fi
 
   if ! changed_matches \
-    'backend/**' \
-    'docs/api-reference/openapi.json' \
+    'backend/models/*.py' \
+    'backend/models/**/*.py' \
+    'backend/routers/*.py' \
+    'backend/routers/**/*.py' \
     'docs/api-reference/app-client-openapi.json' \
-    'docs/api-reference/integration-public-openapi.json' \
     'app/lib/backend/http/api/**' \
     'app/lib/backend/schema/**' \
-    'app/lib/models/announcement.dart' \
-    'app/lib/models/subscription.dart' \
-    'app/lib/models/user_usage.dart' \
-    'desktop/windows/src/renderer/src/lib/omiApi.generated.ts' \
-    'web/app/src/lib/omiApi.generated.ts' \
-    'web/admin/lib/services/omi-api/omiApi.generated.ts' \
-    'web/personas-open-source/src/lib/omiApi.generated.ts' \
-    'docs/docs.json' \
     '.github/workflows/openapi-contract.yml' \
     'scripts/pre-push'
   then
@@ -398,14 +636,30 @@ check_openapi_contract_if_needed() {
     --base-ref "$BASE_REMOTE_REF"
   (
     cd backend
-    scripts/openapi_runner.sh scripts/export_openapi.py --check ../docs/api-reference/openapi.json
     scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --check ../docs/api-reference/app-client-openapi.json
-    scripts/openapi_runner.sh scripts/export_openapi.py --surface integration-public --check ../docs/api-reference/integration-public-openapi.json
   )
 
   "$BACKEND_PYTHON" backend/scripts/generate_dart_models.py --all --check
   "$BACKEND_PYTHON" backend/scripts/generate_ts_openapi_types.py --check
   "$BACKEND_PYTHON" backend/scripts/generate_swift_openapi_types.py --check
+}
+
+check_release_process_guards_if_needed() {
+  if ! changed_matches \
+    '.github/workflows/desktop_qualify_beta.yml' \
+    '.github/scripts/check-release-process-guards.py' \
+    'scripts/run-release-process-guards.sh' \
+    'backend/tests/unit/test_desktop_release_scripts.py'
+  then
+    return
+  fi
+
+  bash scripts/run-release-process-guards.sh
+  printf '%s\n' 'tests/unit/test_desktop_release_scripts.py' > "$RELEASE_GUARD_TESTS"
+  (
+    cd backend
+    BACKEND_UNIT_TEST_FILE_LIST="$RELEASE_GUARD_TESTS" PYTHON="$BACKEND_PYTHON" bash test.sh
+  )
 }
 
 check_workflows_if_needed() {
@@ -436,6 +690,7 @@ check_workflows_if_needed() {
     actionlint_cmd=(go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12)
   else
     echo "FAIL: actionlint or go is required to validate changed workflow files." >&2
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_ACTIONLINT=1 git push" >&2
     return 1
   fi
 
@@ -464,6 +719,8 @@ check_desktop_swift_if_needed() {
     return 1
   fi
 
+  # #9440: keep pre-push to this fast compile. The pinned-toolchain full suite and
+  # release compile belong to CI; adding them here causes push-time budget bloat.
   (
     cd desktop/macos
     xcrun swift build -c debug --package-path Desktop
@@ -558,9 +815,14 @@ run_step python3 .github/scripts/check-deployment-concurrency.py --self-test
 run_step python3 .github/scripts/check-deployment-concurrency.py
 run_step check_backend_runtime_env_if_needed
 run_step check_backend_typecheck_if_needed
+run_step check_runtime_image_source_closure_if_needed
 run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
+run_step check_release_process_guards_if_needed
 run_step check_workflows_if_needed
+run_step check_flutter_generated_if_needed
+run_step check_desktop_flow_lint_if_needed
+run_step check_windows_kgworker_native_closure_if_needed
 run_step check_desktop_swift_if_needed
 run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
@@ -568,4 +830,5 @@ run_step check_desktop_tool_surfaces_if_needed
 run_step check_gauntlet_evidence_if_needed
 run_step check_optional_formatters
 
-echo "Fast pre-push checks passed."
+print_ci_prediction_summary
+echo "Bounded pre-push gate passed; CI remains the full test authority."

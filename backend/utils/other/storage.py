@@ -1502,8 +1502,14 @@ def upload_app_logo(file_path: str, app_id: str):
 
 
 def delete_app_logo(img_url: str):
+    prefix = f'https://storage.googleapis.com/{omi_apps_bucket}/'
+    # Require the URL to START WITH the app-logo prefix, not merely contain it: a foreign-bucket URL
+    # embedding the prefix later could otherwise delete an unrelated object (this is a deletion path).
+    if not img_url.startswith(prefix):
+        logger.warning(f'delete_app_logo: url not in {omi_apps_bucket}, skipping')
+        return
     bucket = _get_storage_client().bucket(omi_apps_bucket)
-    path = img_url.split(f'https://storage.googleapis.com/{omi_apps_bucket}/')[1]
+    path = img_url[len(prefix) :]
     logger.info(f'delete_app_logo {path}')
     blob = bucket.blob(path)
     blob.delete()

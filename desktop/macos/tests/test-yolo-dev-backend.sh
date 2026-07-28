@@ -31,6 +31,18 @@ fi
 )
 
 (
+  export OMI_DESKTOP_API_URL="https://desktop-override.test"
+  export OMI_PYTHON_API_URL="https://python-override.test"
+  eval "$YOLO_FUNCTION"
+  apply_yolo_env
+
+  test "$OMI_SKIP_BACKEND" = "1"
+  test "$OMI_SKIP_TUNNEL" = "1"
+  test "$OMI_DESKTOP_API_URL" = "https://desktop-override.test"
+  test "$OMI_PYTHON_API_URL" = "https://python-override.test"
+)
+
+(
   export IS_NAMED_BUNDLE=true LOCAL_PROFILE=false
   unset OMI_SKIP_BACKEND OMI_SKIP_TUNNEL OMI_DESKTOP_API_URL OMI_PYTHON_API_URL
   eval "$NAMED_DEFAULT_FUNCTION"
@@ -61,5 +73,15 @@ fi
 grep -q 'BACKEND_LOG_FILE' "$RUN"
 grep -q 'mktemp -d' "$RUN"
 grep -q '>>"$BACKEND_LOG_FILE" 2>&1' "$RUN"
+
+# Backend-Rust/.env commonly carries the template PORT=10201. The launcher
+# must reassert its worktree-derived port after loading it so child/backend
+# ownership state cannot diverge.
+ENV_LOAD_LINE="$(grep -n 'set -a; source "\$BACKEND_DIR/.env"; set +a' "$RUN" | cut -d: -f1)"
+PORT_REASSERT_LINE="$(grep -n 'export PORT="\$BACKEND_PORT"' "$RUN" | tail -1 | cut -d: -f1)"
+if [[ -z "$ENV_LOAD_LINE" || -z "$PORT_REASSERT_LINE" || "$PORT_REASSERT_LINE" -le "$ENV_LOAD_LINE" ]]; then
+  echo "FAIL: run.sh must reassert its derived backend PORT after sourcing .env" >&2
+  exit 1
+fi
 
 echo "PASS: --yolo and implicit named bundles target development backends"

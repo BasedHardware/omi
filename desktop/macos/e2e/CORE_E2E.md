@@ -66,6 +66,7 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | Change area | Minimum tier |
 | --- | --- |
 | Transcription / audio capture | T2 |
+| Rewind artifact persistence / recovery / privacy admission | T2 |
 | ChatProvider / agent runtime | T0 + T3 |
 | Sidebar / navigation | T1 |
 | Redesigned Home stage (hub/chat/connect) | T2 (`home-stage.yaml`) |
@@ -86,6 +87,7 @@ healthy enough to boot the hermetic T2 stack. Stable nomination and production p
 | `navigation` | v2 | typed bridge | 1 | Sidebar navigation |
 | `claude-guidance-overlay` | v2 | typed bridge + visual | 2 | Overlay dogfood |
 | `capture-lifecycle` | v2 | typed bridge | 2 | STT seam via `capture_test_transcript` |
+| `rewind-artifact-recovery` | v2 | typed bridge | 2 | Synthetic Rewind → HEVC → SQLite → finalized-video readback, privacy admission, and database reopen |
 | `chat-hermetic` | v2 | typed bridge | 2 | Rust `OMI_LLM_STUB=1` |
 | `floating-bar-functional` | v2 | typed bridge | 2 | Ask Omi open + stubbed turn |
 | `memories` | v2 | typed bridge | 2 | Navigate + snapshot + search step |

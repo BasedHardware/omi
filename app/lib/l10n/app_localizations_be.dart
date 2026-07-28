@@ -1469,7 +1469,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get payYourSttProvider => 'Свабодна выкарыстоўвайце omi. Вы плаціце толькі вашаму паставальніку STT прама.';
 
   @override
-  String get freeMinutesMonth => '600 свабодных мінут/месяц уключана. Неабмежавана з ';
+  String get freeMinutesMonth => '300 свабодных мінут/месяц уключана. Неабмежавана з ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1791,20 +1791,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Нравіцца вам Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Дапамажыце нам дасягнуць больш людзей, пакідаючы водгук ў App Store. Ваш водгук значыць шмат для нас!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Дапамажыце нам дасягнуць больш людзей, пакідаючы водгук ў Google Play Store. Ваш водгук значыць шмат для нас!';
-
-  @override
-  String get rateOnAppStore => 'Агранізавіць ў App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Агранізавіць ў Google Play';
 
   @override
   String get maybeLater => 'Магчыма пазней';
@@ -2141,6 +2127,18 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Редагаваць спамін';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Мне нравіцца есці мароженае...';
@@ -6017,7 +6015,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.';
+      '300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.';
 
   @override
   String get viewUsage => 'Прагляд выкарыстання';
@@ -6099,7 +6097,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ';
+      '300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9013,7 +9011,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get billingYearly => 'Штогод';
 
   @override
-  String get savePercent => 'Зэканомце ~17%';
+  String savePercent(int percent) {
+    return 'Зэканомце ~$percent%';
+  }
 
   @override
   String get popular => 'Папулярны';
@@ -9371,7 +9371,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Пакуль працуе з прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
+      'Працуе з мікрафонам тэлефона, прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9625,4 +9625,180 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Прылада амаль запоўнена — сінхранізуйце, каб вызваліць месца.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Няма злучэння — запіс вядзецца лакальна. Транскрыпцыя адбудзецца, калі вы зноў будзеце ў сетцы.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Вашы даныя па змаўчанні абаронены моцным шыфраваннем, і вы кантралюеце, як яны захоўваюцца і выкарыстоўваюцца.';
+
+  @override
+  String get sttModelAccuracy => 'Дакладнасць';
+
+  @override
+  String get whisperModelSizeBase => 'Базавая';
+
+  @override
+  String get cloudTranscription => 'Воблачная транскрыпцыя';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Выдаліць мадэль';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Вы сапраўды хочаце выдаліць гэту мадэль?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Загружана';
+
+  @override
+  String get sttModelFaster => 'Хутчэй';
+
+  @override
+  String get sttFilterAuto => 'Аўта';
+
+  @override
+  String get sttModelHigher => 'Вышэй';
+
+  @override
+  String get whisperModelSizeLarge => 'Вялікая';
+
+  @override
+  String get sttModelLower => 'Ніжэй';
+
+  @override
+  String get whisperModelSizeMedium => 'Сярэдняя';
+
+  @override
+  String get onDeviceModelDeleted => 'Мадэль выдалена';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Не ўдалося загрузіць мадэль';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Не ўдалося загрузіць мадэль Whisper. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Мадэль загружана';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Мадэль Whisper паспяхова загружана';
+
+  @override
+  String get onDeviceModelSize => 'Памер мадэлі';
+
+  @override
+  String get sttNone => 'Няма';
+
+  @override
+  String get onDeviceTranscription => 'Транскрыпцыя на прыладзе';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Транскрыпцыя апрацоўваецца лакальна на вашай прыладзе';
+
+  @override
+  String get sttModelSlower => 'Павольней';
+
+  @override
+  String get whisperModelSizeSmall => 'Малая';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Пастаўшчык распазнавання маўлення';
+
+  @override
+  String get speechToTextProviderDesc => 'Выберыце сэрвіс для транскрыпцыі';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Хуткасць';
+
+  @override
+  String get whisperModelSizeTiny => 'Мініяцюрная';
+
+  @override
+  String get transcriptionLanguage => 'Мова транскрыпцыі';
+
+  @override
+  String get transcriptionLanguageDesc => 'Выберыце мову для транскрыпцыі маўлення';
+
+  @override
+  String get whisperModel => 'Мадэль Whisper';
+
+  @override
+  String get whisperModelDesc => 'Выберыце мадэль для транскрыпцыі на прыладзе';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Перайсці на бясплатны план?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Вы сутыкнецеся з такімі абмежаваннямі:';
+
+  @override
+  String get downgradeLimitBattery => 'У 7 разоў большы расход батарэі';
+
+  @override
+  String get downgradeLimitQuality => 'На 30% горшая якасць транскрыпцыі';
+
+  @override
+  String get downgradeLimitDelay => 'Затрымка 5–7 секунд';
+
+  @override
+  String get downgradeLimitSpeakers => 'Немагчыма распазнаць дыктараў';
+
+  @override
+  String get downgradeAnyway => 'Усё роўна перайсці';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar не падключаны';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Падключыце Google Calendar, каб звязваць размовы з падзеямі календара.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Звязана з «$title»';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Не ўдалося звязаць падзею календара';
+
+  @override
+  String get thanksForYourFeedback => 'Дзякуй за ваш водгук!';
+
+  @override
+  String get copyMessage => 'Капіяваць паведамленне';
+
+  @override
+  String get searchSettings => 'Пошук у параметрах…';
+
+  @override
+  String get errorLoadingAudio => 'Памылка загрузкі аўдыя';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Выберыце мікрафон Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Выберыце Bluetooth-мікрафон акуляраў. Музыка прыпыніцца, пакуль Omi яго выкарыстоўвае.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth-мікрафоны не знойдзены. Падключыце акуляры ў наладах iPhone і паўтарыце спробу.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Не ўдалося загрузіць Bluetooth-мікрафоны. Праверце, ці ўключаны Bluetooth, і паўтарыце спробу.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Не ўдалося падключыцца да гэтага мікрафона. Праверце, ці падключаны ён у наладах iPhone.';
 }

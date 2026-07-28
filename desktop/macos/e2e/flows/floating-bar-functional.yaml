@@ -4,12 +4,15 @@ tier: 2
 description: Ask Omi open + stubbed typed turn on the floating bar (distinct from perf benchmarks)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Chat/AgentCompletionVoiceDelivery.swift
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/DelayedActionScheduler.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarLaunchPolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarPresentation.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
@@ -18,6 +21,12 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+AgentCompletionContext.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+Tools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubControllerSupport.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubResumeOnceGate.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
@@ -27,11 +36,17 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift
+  - desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift
   - desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift
   - desktop/macos/Desktop/Sources/Generated/GeneratedRealtimeTools.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Tools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarReceiptCard.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchSystemControlsView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/SystemCaptureControls.swift
 preconditions:
   - automation_bridge_ready
 

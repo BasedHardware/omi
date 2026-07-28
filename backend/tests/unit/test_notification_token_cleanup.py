@@ -122,3 +122,21 @@ def test_send_notification_keeps_transient_failures() -> None:
         notifications.send_notification('user-1', 'omi', 'hello')
 
         notification_db.remove_bulk_tokens.assert_not_called()
+
+
+def test_send_notification_body_is_plain_text() -> None:
+    """Markdown in the body must not reach the OS notification (asterisks showed up literally)."""
+    with _loaded_notifications() as (notifications, notification_db, messaging):
+        notification_db.get_all_tokens.return_value = ['live-token']
+        messaging.send_each.return_value = _FakeBatchResponse([_FakeResponse(success=True)])
+
+        notifications.send_notification(
+            'user-1',
+            'omi says',
+            "- 🇺🇸 **US President**: Donald Trump\n- 🇮🇳 **India's President**: Droupadi Murmu",
+        )
+
+        sent_messages = messaging.send_each.call_args.args[0]
+        body = sent_messages[0].notification.body
+        assert '**' not in body
+        assert body == "• 🇺🇸 US President: Donald Trump\n• 🇮🇳 India's President: Droupadi Murmu"

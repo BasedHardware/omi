@@ -84,6 +84,7 @@ const LOCAL_READ_TOOLS = new Set([
   "get_daily_recap",
   "search_tasks",
   "load_skill",
+  "search_skills",
   "get_conversations",
   "search_conversations",
   "get_memories",

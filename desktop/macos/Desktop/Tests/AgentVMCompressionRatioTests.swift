@@ -10,21 +10,21 @@ import XCTest
 /// launch for signed-in users. `compressionPercent` now guards the divisor.
 final class AgentVMCompressionRatioTests: XCTestCase {
 
-    func testZeroOriginalSizeReturnsZeroInsteadOfTrapping() {
-        // Before the fix this line traps (UInt64 division by zero) and crashes.
-        XCTAssertEqual(AgentVMService.compressionPercent(compressed: 20, original: 0), 0)
-        XCTAssertEqual(AgentVMService.compressionPercent(compressed: 0, original: 0), 0)
-    }
+  func testZeroOriginalSizeReturnsZeroInsteadOfTrapping() {
+    // Before the fix this line traps (UInt64 division by zero) and crashes.
+    XCTAssertEqual(AgentVMService.compressionPercent(compressed: 20, original: 0), 0)
+    XCTAssertEqual(AgentVMService.compressionPercent(compressed: 0, original: 0), 0)
+  }
 
-    func testTypicalCompressionRatios() {
-        XCTAssertEqual(AgentVMService.compressionPercent(compressed: 25, original: 100), 25)
-        XCTAssertEqual(AgentVMService.compressionPercent(compressed: 50, original: 200), 25)
-        // Whole-number (integer) percent, matching the original log semantics.
-        XCTAssertEqual(AgentVMService.compressionPercent(compressed: 1, original: 3), 33)
-    }
+  func testTypicalCompressionRatios() {
+    XCTAssertEqual(AgentVMService.compressionPercent(compressed: 25, original: 100), 25)
+    XCTAssertEqual(AgentVMService.compressionPercent(compressed: 50, original: 200), 25)
+    // Whole-number (integer) percent, matching the original log semantics.
+    XCTAssertEqual(AgentVMService.compressionPercent(compressed: 1, original: 3), 33)
+  }
 
-    func testCompressedLargerThanOriginalIsNotClamped() {
-        // gzip on tiny inputs can exceed the original; the log just reports > 100%.
-        XCTAssertEqual(AgentVMService.compressionPercent(compressed: 40, original: 20), 200)
-    }
+  func testCompressedLargerThanOriginalIsNotClamped() {
+    // gzip on tiny inputs can exceed the original; the log just reports > 100%.
+    XCTAssertEqual(AgentVMService.compressionPercent(compressed: 40, original: 20), 200)
+  }
 }

@@ -1,5 +1,5 @@
-import XCTest
 import OmiSupport
+import XCTest
 
 @testable import Omi_Computer
 
@@ -74,7 +74,6 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
   private var createdOwnerIDs: [String] = []
 
   override func setUp() async throws {
-    try await super.setUp()
     originalPhase = AuthState.shared.sessionPhase
     clearAuthDefaults()
     auth = AuthService()
@@ -90,7 +89,7 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
 
   override func tearDown() async throws {
     let cleanupAttempt = auth.beginSessionAttempt()
-    _ = await auth.commitSignedOutSession(attempt: cleanupAttempt, phase: .signedOut)
+    _ = try? await auth.commitSignedOutSession(attempt: cleanupAttempt, phase: .signedOut)
     auth.tokenStorageHooks = .live
     auth.tokenRefreshHooks = .live
     auth = nil
@@ -101,7 +100,6 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
     }
     createdOwnerIDs = []
     AuthState.shared.transition(to: originalPhase)
-    try await super.tearDown()
   }
 
   func testNewSignInTokensSurviveSupersededSignOutWaitingOnOwnerTransition() async throws {
@@ -124,7 +122,7 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
 
     let signOutAttempt = auth.beginSessionAttempt()
     let signOutTask = Task {
-      await auth.commitSignedOutSession(attempt: signOutAttempt, phase: .signedOut)
+      try await auth.commitSignedOutSession(attempt: signOutAttempt, phase: .signedOut)
     }
     await EffectiveOwnerTransitionFence.shared.waitUntilTransitionIsPending()
 
@@ -138,7 +136,7 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
 
     await gate.release()
     try await leaseTask.value
-    let staleSignOutCommitted = await signOutTask.value
+    let staleSignOutCommitted = try await signOutTask.value
     let ownerBCommitted = try await signInTask.value
     XCTAssertFalse(staleSignOutCommitted)
     XCTAssertTrue(ownerBCommitted)
@@ -147,6 +145,36 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authTokenUserId), ownerB)
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "id-\(ownerB)")
     XCTAssertEqual(AuthState.shared.sessionPhase, .authenticated)
+  }
+
+  func testStoragePreparationFailureLeavesPreviousCredentialGenerationIntact() async throws {
+    enum PreparationFailure: Error { case injected }
+
+    let ownerA = makeOwnerID("failed-signout-a")
+    let seedAttempt = auth.beginSessionAttempt()
+    let seededOwnerA = try await auth.commitSignedInSession(
+      tokens: tokens(for: ownerA),
+      email: "a@example.test",
+      attempt: seedAttempt)
+    XCTAssertTrue(seededOwnerA)
+    let phaseBeforeSignOut = AuthState.shared.sessionPhase
+
+    let signOutAttempt = auth.beginSessionAttempt()
+    do {
+      _ = try await auth.commitSignedOutSession(
+        attempt: signOutAttempt,
+        phase: .signedOut,
+        prepareLocalStorageTransition: { _, _ in throw PreparationFailure.injected })
+      XCTFail("Storage preparation failure must be surfaced")
+    } catch PreparationFailure.injected {
+      // Expected: the transition closure must not clear credentials or owner state.
+    }
+
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), ownerA)
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authTokenUserId), ownerA)
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "id-\(ownerA)")
+    XCTAssertTrue(UserDefaults.standard.bool(forKey: .authIsSignedIn))
+    XCTAssertEqual(AuthState.shared.sessionPhase, phaseBeforeSignOut)
   }
 
   func testReplacementCredentialsPublishAtomicallyWithTheirOwner() async throws {
@@ -225,13 +253,13 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
 
     let signOutAttempt = auth.beginSessionAttempt()
     let signOutTask = Task {
-      await auth.commitSignedOutSession(attempt: signOutAttempt, phase: .signedOut)
+      try await auth.commitSignedOutSession(attempt: signOutAttempt, phase: .signedOut)
     }
 
     await gate.release()
     try await leaseTask.value
     let staleRestoreCommitted = await restoreTask.value
-    let signOutCommitted = await signOutTask.value
+    let signOutCommitted = try await signOutTask.value
     XCTAssertFalse(staleRestoreCommitted)
     XCTAssertTrue(signOutCommitted)
 
@@ -266,7 +294,7 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
     await responseGate.waitUntilReached()
 
     let signOutAttempt = auth.beginSessionAttempt()
-    let signedOut = await auth.commitSignedOutSession(
+    let signedOut = try await auth.commitSignedOutSession(
       attempt: signOutAttempt,
       phase: .signedOut)
     XCTAssertTrue(signedOut)

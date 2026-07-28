@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# shellcheck source=_resolve_python.sh
+source "$(dirname "$0")/_resolve_python.sh"
 cd "$(dirname "$0")/../.."
 
 echo "Omi local dev harness — one-time setup"
@@ -13,17 +15,19 @@ else
   echo "Keeping existing $secrets_file (not overwritten)"
 fi
 
-if [ ! -d backend/venv ]; then
-  python3 -m venv backend/venv
-  echo "Created backend/venv"
+PYTHON_BIN="$(dev_harness_python)"
+if [ "$PYTHON_BIN" = "python3" ]; then
+  python3 -m venv backend/.venv
+  PYTHON_BIN="$(dev_harness_python)"
+  echo "Created backend/.venv"
 fi
 
-if [ ! -x backend/venv/bin/pip ]; then
-  echo "backend/venv is incomplete; recreate it with: python3 -m venv backend/venv" >&2
+if ! "$PYTHON_BIN" -m pip --version >/dev/null; then
+  echo "${PYTHON_BIN%/bin/python} is incomplete; recreate it with: python3 -m venv backend/.venv" >&2
   exit 1
 fi
 
-backend/venv/bin/pip install -q -r backend/requirements.txt
+"$PYTHON_BIN" -m pip install -q -r backend/requirements.txt
 echo "Backend Python dependencies installed"
 
 hook=".git/hooks/pre-commit"

@@ -1,6 +1,6 @@
+import OmiTheme
 import SwiftUI
 import WebKit
-import OmiTheme
 
 struct BillingWebFlow: Identifiable {
   let id = UUID()
@@ -78,10 +78,11 @@ struct BillingWebView: NSViewRepresentable {
       self.onComplete = onComplete
     }
 
+    @MainActor
     func webView(
       _ webView: WKWebView,
       decidePolicyFor navigationAction: WKNavigationAction,
-      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+      decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
       guard let url = navigationAction.request.url else {
         decisionHandler(.allow)

@@ -1,8 +1,10 @@
 # Pusher — degraded session ratio high
 
-**What it means:** More than 5% of active pusher WebSocket sessions are in degraded mode (pusher unavailable, audio routed elsewhere).
+**What it means:** More than 5% of active listener WebSocket sessions are in degraded mode because the listener cannot use Pusher and routes audio elsewhere. This is a likely user-impact signal, not proof that every listener lost data.
 
-**PromQL:** `sum(pusher_sessions_degraded) / clamp_min(sum(pusher_active_ws_connections), 1)`
+**PromQL:** `sum(pusher_sessions_degraded{job="backend-listen-metrics"}) / clamp_min(sum(backend_listen_active_ws_connections{job="backend-listen-metrics"}), 1)`
+
+The degraded-session gauge is emitted by the backend-listen reconnect loop. Do not query the similarly named Pusher-process connection metric: it does not own this outcome.
 
 **Owner:** listen/pusher team.
 

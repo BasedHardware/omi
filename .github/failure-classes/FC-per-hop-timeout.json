@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-per-hop-timeout",
+  "violated_contract": "A multi-hop request must consume one request-level deadline budget rather than receive a full timeout at each hop.",
+  "canonical_prevention": "Compute the remaining request deadline before every downstream operation and fail when the shared budget is exhausted.",
+  "evidence_prs": [9533, 9644],
+  "scope_hints": ["backend/**", "desktop/macos/**"],
+  "status": "open"
+}

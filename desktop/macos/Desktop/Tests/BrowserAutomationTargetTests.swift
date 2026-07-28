@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class BrowserAutomationTargetTests: XCTestCase {
+@MainActor final class BrowserAutomationTargetTests: XCTestCase {
   func testDetectsExtensionInConfiguredProfileRoot() throws {
     let root = FileManager.default.temporaryDirectory
       .appendingPathComponent("omi-browser-target-\(UUID().uuidString)")

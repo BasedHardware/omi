@@ -1,5 +1,6 @@
-import SwiftUI
+@preconcurrency import AppKit
 import OmiTheme
+import SwiftUI
 
 // MARK: - Navigation Item Model
 enum SidebarNavItem: Int, CaseIterable {
@@ -65,7 +66,7 @@ enum SidebarNavItem: Int, CaseIterable {
 
   /// Items shown in the main navigation (top section)
   static var mainItems: [SidebarNavItem] {
-    [.dashboard, .conversations, .memories, .tasks, .rewind, .apps]
+    [.dashboard, .conversations, .memories, .tasks, .focus, .insight, .rewind, .apps]
   }
 }
 
@@ -379,8 +380,7 @@ struct SidebarView: View {
         }
       }
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh permissions when app becomes active (user may have changed them in System Settings)
       appState.checkAllPermissions()
     }
@@ -486,7 +486,6 @@ struct SidebarView: View {
           )
       )
   }
-
 
   // MARK: - Update Available Widget
   @State private var updateGlowAnimating = false
@@ -1517,7 +1516,6 @@ struct BottomNavItemView: View {
   }
 }
 
-
 // MARK: - Audio Level Nav Item Wrapper
 
 /// Isolates AudioLevelMonitor observation so audio level changes
@@ -1560,7 +1558,7 @@ private struct AudioLevelNavItem: View {
 /// Cache the Omi device WebP image so it's decoded once, not on every SwiftUI body evaluation.
 /// The original 1383x1383 WebP was being re-decoded by CoreAnimation every render frame.
 enum OmiDeviceImage {
-  static let shared: NSImage? = {
+  @MainActor static let shared: NSImage? = {
     guard
       let url = Bundle.resourceBundle.url(
         forResource: "omi-with-rope-no-padding", withExtension: "webp")
@@ -1569,4 +1567,124 @@ enum OmiDeviceImage {
     }
     return NSImage(contentsOf: url)
   }()
+}
+
+// MARK: - App Nav Rail (Second Brain)
+
+/// The thin, always-present left navigation rail for the redesigned app shell.
+/// Lives beside every page (not just Home) so you can move between Home, the
+/// memory/task surfaces, Focus, Insights, Rewind, and Apps without bouncing
+/// back through Home. Settings sits at the foot. Styled with the SB ink system
+/// so it matches the sign-in / onboarding aesthetic.
+struct AppNavRail: View {
+  @Binding var selectedIndex: Int
+  @Environment(\.sbTheme) private var sb
+  @State private var isExpanded = false
+
+  /// Rail width at rest (icons only) and expanded (icons + labels).
+  static let restWidth: CGFloat = 60
+  static let expandedWidth: CGFloat = 216
+
+  private struct RailItem: Hashable {
+    let index: Int
+    let title: String
+    let icon: String
+  }
+
+  /// Simplified, merged navigation: "Memory" folds in Conversations + Memories,
+  /// Rewind moved off the rail (it opens from a right-click on Capture), and
+  /// Insights/Focus are hidden from navigation. Each entry drives selectedIndex.
+  private var items: [RailItem] {
+    [
+      RailItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
+      RailItem(index: SidebarNavItem.conversations.rawValue, title: "Memory", icon: "brain"),
+      RailItem(index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist"),
+      RailItem(index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill"),
+    ]
+  }
+
+  var body: some View {
+    VStack(spacing: 4) {
+      ForEach(items, id: \.self) { item in
+        AppNavRailButton(
+          icon: item.icon,
+          title: item.title,
+          isSelected: selectedIndex == item.index,
+          isExpanded: isExpanded,
+          action: { select(item.index, title: item.title) }
+        )
+      }
+
+      Spacer(minLength: 12)
+
+      AppNavRailButton(
+        icon: SidebarNavItem.settings.icon,
+        title: SidebarNavItem.settings.title,
+        isSelected: selectedIndex == SidebarNavItem.settings.rawValue,
+        isExpanded: isExpanded,
+        action: { select(SidebarNavItem.settings.rawValue, title: "Settings") }
+      )
+    }
+    .padding(.vertical, 16)
+    .padding(.horizontal, 10)
+    .frame(width: isExpanded ? Self.expandedWidth : Self.restWidth, alignment: .leading)
+    .frame(maxHeight: .infinity, alignment: .top)
+    // Flat panel matching the content surface; floats over content when expanded.
+    .background(Color(red: 0.050, green: 0.052, blue: 0.059))
+    .overlay(alignment: .trailing) {
+      if isExpanded {
+        Rectangle().fill(sb.ink(.w07)).frame(width: 1)
+      }
+    }
+    .contentShape(Rectangle())
+    .onHover { hovering in
+      withAnimation(.easeOut(duration: 0.18)) { isExpanded = hovering }
+    }
+  }
+
+  private func select(_ index: Int, title: String) {
+    guard selectedIndex != index else { return }
+    selectedIndex = index
+    AnalyticsManager.shared.tabChanged(tabName: title)
+  }
+}
+
+private struct AppNavRailButton: View {
+  let icon: String
+  let title: String
+  let isSelected: Bool
+  let isExpanded: Bool
+  let action: () -> Void
+
+  @Environment(\.sbTheme) private var sb
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 12) {
+        Image(systemName: icon)
+          .font(.system(size: 15, weight: .medium))
+          .frame(width: 40, height: 40)
+
+        if isExpanded {
+          Text(title)
+            .geist(size: 14, weight: isSelected ? .medium : .regular)
+            .lineLimit(1)
+            .fixedSize()
+        }
+      }
+      .foregroundStyle(isSelected || isHovering ? sb.ink : sb.ink(.w38))
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(height: 40)
+      .background(
+        RoundedRectangle(cornerRadius: 11, style: .continuous)
+          .fill(isSelected ? sb.ink(.w09) : (isHovering ? sb.ink(.w05) : Color.clear))
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
+    .help(title)
+    .accessibilityLabel(title)
+  }
 }

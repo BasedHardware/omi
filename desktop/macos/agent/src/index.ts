@@ -21,7 +21,7 @@
  * 1. Create Unix socket server for omi-tools relay
  * 2. Spawn claude-code-acp as subprocess (JSON-RPC over stdio)
  * 3. Initialize ACP connection
- * 4. Handle auth if required (forward to Swift, wait for user action)
+ * 4. Handle auth if required (forward to Swift; never await OAuth inside a query/run)
  * 5. On query: reuse or create session, send prompt, translate notifications → JSON-lines
  * 6. On interrupt: cancel the session
  */
@@ -56,6 +56,7 @@ import type {
   JournalImportRemoteTurnMessage,
   JournalUpdateTurnMessage,
   JournalTerminalizeTurnMessage,
+  JournalRepairTurnsMessage,
   JournalListTurnsMessage,
   JournalClearTurnsMessage,
   EnsureAgentSpawnJournalMessage,
@@ -80,8 +81,9 @@ import {
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
-import { AcpError, AcpRuntimeAdapter, isRecoverableAcpAuthError } from "./adapters/acp.js";
+import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
+import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import {
@@ -135,6 +137,7 @@ import {
   listJournalTurns,
   recordJournalExchange,
   recordJournalTurn,
+  repairOrphanedJournalTurns,
   settleClearedBackendTurnClaim,
   assertPublicJournalUpdatePolicy,
   terminalizeJournalTurn,
@@ -156,6 +159,7 @@ import type {
   ConversationTurnOrigin,
   ConversationTurnStatus,
 } from "./runtime/types.js";
+import { createStdoutLineSender } from "./stdout-line-sender.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -173,12 +177,30 @@ const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
 
 // --- Helpers ---
 
-function send(msg: OutboundMessageDraft): void {
+function logErr(msg: string): void {
+  // Wrap to swallow EPIPE/ERR_STREAM_DESTROYED so a closed parent pipe
+  // doesn't bubble out as an uncaughtException and re-enter our handlers.
   try {
-    process.stdout.write(JSON.stringify(ensureOutboundProtocolVersion(msg)) + "\n");
-  } catch (err) {
+    process.stderr.write(`[agent] ${msg}\n`);
+  } catch {
+    // ignore — parent pipe is gone; we'll exit shortly anyway
+  }
+}
+
+// Queue stdout lines so a full parent pipe waits on `drain` instead of
+// blocking the event loop inside kernel subscribers / query completion.
+const writeStdoutLine = createStdoutLineSender(
+  (chunk) => process.stdout.write(chunk),
+  (listener) => {
+    process.stdout.once("drain", listener);
+  },
+  (err) => {
     logErr(`Failed to write to stdout: ${err}`);
   }
+);
+
+function send(msg: OutboundMessageDraft): void {
+  writeStdoutLine(JSON.stringify(ensureOutboundProtocolVersion(msg)) + "\n");
 }
 
 function runtimeErrorEnvelope(error: unknown): { message: string; failure: ReturnType<typeof failureFromError> } {
@@ -191,16 +213,6 @@ function runtimeErrorEnvelope(error: unknown): { message: string; failure: Retur
     userMessage: message,
   };
   return { message: failure.userMessage, failure };
-}
-
-function logErr(msg: string): void {
-  // Wrap to swallow EPIPE/ERR_STREAM_DESTROYED so a closed parent pipe
-  // doesn't bubble out as an uncaughtException and re-enter our handlers.
-  try {
-    process.stderr.write(`[agent] ${msg}\n`);
-  } catch {
-    // ignore — parent pipe is gone; we'll exit shortly anyway
-  }
 }
 
 function agentStateDir(): string {
@@ -942,6 +954,12 @@ async function restartAcpProcess(): Promise<void> {
  *
  * Idempotent: if a flow is already running, returns the same promise.
  */
+/** Notify Swift that provider auth is required without blocking the active turn. */
+function signalProviderAuthRequired(): void {
+  logErr("ACP provider auth required; signaling Swift without in-band OAuth");
+  send({ type: "auth_required", methods: authMethods });
+}
+
 async function startAuthFlow(): Promise<void> {
   if (activeAuthPromise) {
     logErr("Auth flow already in progress, waiting for it...");
@@ -1241,15 +1259,11 @@ async function main(): Promise<void> {
   logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
   const recoverRunInput = (adapterId: string) => {
     if (adapterId !== "acp") return {};
-    let recoveries = 0;
     return {
-      maxAttempts: 3,
       recoverAfterError: async (error: unknown) => {
-        if (recoveries >= 2 || !isRecoverableAcpAuthError(error)) return false;
-        recoveries += 1;
-        logErr("ACP auth required during run; starting OAuth flow before retry");
-        await startAuthFlow();
-        return true;
+        if (!isAcpProviderAuthFailure(error)) return false;
+        signalProviderAuthRequired();
+        return false;
       },
     };
   };
@@ -1343,11 +1357,10 @@ async function main(): Promise<void> {
     log: logErr,
     defaultAdapterId,
     buildMcpServers,
-    isRecoverableError: (error, adapterId) => adapterId === "acp" && isRecoverableAcpAuthError(error),
+    isRecoverableError: (error, adapterId) => adapterId === "acp" && isAcpProviderAuthFailure(error),
     onRecoverableError: async (_error, adapterId) => {
       if (adapterId !== "acp") return;
-      logErr("ACP auth required during query; starting OAuth flow before retry");
-      await startAuthFlow();
+      signalProviderAuthRequired();
     },
     maxRecoverableRetries: 2,
     activeOwnerId: establishedOwnerId,
@@ -1457,8 +1470,10 @@ async function main(): Promise<void> {
     }
   };
   let pumpingJournalOutbox = false;
-  const pumpJournalOutbox = () => {
-    if (!ownerAuthorityEstablished || pumpingJournalOutbox) return;
+  // Returns true when the pump ran (or was safely skipped) without throwing, so
+  // the timer can back off while it keeps failing instead of hot-looping.
+  const pumpJournalOutbox = (): boolean => {
+    if (!ownerAuthorityEstablished || pumpingJournalOutbox) return true;
     pumpingJournalOutbox = true;
     try {
       const activeOwnerId = currentOwnerId;
@@ -1481,7 +1496,12 @@ async function main(): Promise<void> {
           targetId: deletion.targetId,
         });
       }
-      for (const delivery of drainBackendTurnOutbox(store, { ownerId: activeOwnerId, limit: 20 })) {
+      for (const delivery of drainBackendTurnOutbox(store, {
+        ownerId: activeOwnerId,
+        limit: 20,
+        onQuarantine: (turnId) =>
+          logErr(`Journal outbox parked turn ${turnId}: canonical payload hash mismatch (not re-delivered)`),
+      })) {
         send({
           type: "journal_backend_sync",
           requestId: `journal:${delivery.turnId}:${delivery.deliveryGeneration}`,
@@ -1496,14 +1516,37 @@ async function main(): Promise<void> {
           payloadHash: delivery.payloadHash,
         });
       }
+      return true;
     } catch (error) {
       logErr(`Journal outbox pump failed: ${error}`);
+      return false;
     } finally {
       pumpingJournalOutbox = false;
     }
   };
-  const journalPumpTimer = setInterval(pumpJournalOutbox, 1_000);
-  journalPumpTimer.unref();
+  // Self-rescheduling timer with exponential backoff: a poisoned outbox row can
+  // make the pump throw indefinitely, so a fixed interval would re-throw every
+  // second forever. Back off on consecutive failures (capped at ~1/min) and snap
+  // back to base cadence the moment a pump completes cleanly.
+  let journalPumpTimer: ReturnType<typeof setTimeout> | undefined;
+  let journalPumpFailureStreak = 0;
+  const scheduleJournalPumpTick = (delayMs: number): void => {
+    journalPumpTimer = setTimeout(runJournalPumpTick, delayMs);
+    journalPumpTimer.unref();
+  };
+  const runJournalPumpTick = (): void => {
+    const clean = pumpJournalOutbox();
+    if (clean) {
+      if (journalPumpFailureStreak > 0) {
+        logErr(`Journal outbox pump recovered after ${journalPumpFailureStreak} consecutive failure(s)`);
+        journalPumpFailureStreak = 0;
+      }
+    } else {
+      journalPumpFailureStreak += 1;
+    }
+    scheduleJournalPumpTick(nextJournalPumpDelayMs(journalPumpFailureStreak));
+  };
+  scheduleJournalPumpTick(nextJournalPumpDelayMs(0));
   // 3. Signal readiness
   send({
     type: "init",
@@ -2407,6 +2450,55 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "journal_repair_turns": {
+        const request = msg as JournalRepairTurnsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const turns = repairOrphanedJournalTurns(store, {
+            ownerId,
+            turnIds: Array.isArray(request.turnIds)
+              ? request.turnIds.filter((turnId): turnId is string => typeof turnId === "string")
+              : [],
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "repair",
+            conversationId: turns[0]?.conversationId ?? "",
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turns: turns.map(journalTurnProjection),
+            clearedCount: 0,
+            highWaterTurnSeq: 0,
+            generationBaseTurnSeq: 0,
+            conversationGeneration: 1,
+          });
+          for (const turn of turns) {
+            for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
+              send({
+                type: "journal_turn_changed",
+                ...wake,
+              });
+            }
+          }
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
       case "journal_list_turns": {
         const request = msg as JournalListTurnsMessage;
         const ownerId = resolveActiveOwner(request.ownerId);
@@ -2459,6 +2551,7 @@ async function main(): Promise<void> {
           ownerId,
           conversationId: resolved.conversationId,
           expectedGeneration: request.expectedGeneration,
+          deleteBackend: request.deleteBackend,
         });
         send({
           type: "journal_operation_result",
@@ -2940,7 +3033,7 @@ async function main(): Promise<void> {
           "runtime_stopped",
           "Agent runtime stopped during tool execution",
         );
-        clearInterval(journalPumpTimer);
+        if (journalPumpTimer) clearTimeout(journalPumpTimer);
         store.close();
         await acpAdapter.stop();
         await Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));

@@ -19,8 +19,7 @@ private struct AutomationErrorEnvelope: Decodable {
 
 @MainActor
 private final class StubPresentationCoordinator: DesktopAutomationPresentationCoordinating {
-  private(set) var calls:
-    [(target: DesktopAutomationPresentationTarget, gate: DesktopAutomationPresentationGate)] = []
+  private(set) var calls: [(target: DesktopAutomationPresentationTarget, gate: DesktopAutomationPresentationGate)] = []
   var failure: DesktopAutomationPresentationFailure?
 
   func present(

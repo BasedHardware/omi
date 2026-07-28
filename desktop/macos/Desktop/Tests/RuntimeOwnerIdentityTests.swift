@@ -322,7 +322,7 @@ final class RuntimeOwnerIdentityTests: XCTestCase {
     let gate = RuntimeOwnerKernelRevokeGate(recorder: recorder)
 
     let transition = Task {
-      await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
         defaults: defaultsReference.value,
         allowAutomationOverride: true,
         plannedNextOwner: { _, _ in "owner-b" },
@@ -352,7 +352,11 @@ final class RuntimeOwnerIdentityTests: XCTestCase {
     XCTAssertEqual(recorder.snapshot(), ["voice_quiesced", "kernel_revoke_enter"])
 
     await gate.release()
-    await transition.value
+    do {
+      try await transition.value
+    } catch {
+      XCTFail("owner transition failed: \(error)")
+    }
 
     XCTAssertEqual(
       RuntimeOwnerIdentity.currentOwnerId(
@@ -385,7 +389,7 @@ final class RuntimeOwnerIdentityTests: XCTestCase {
     await probe.waitUntilEffectStarted()
 
     let transition = Task {
-      await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
         defaults: defaultsReference.value,
         allowAutomationOverride: true,
         plannedNextOwner: { _, _ in "owner-b" },
@@ -406,9 +410,10 @@ final class RuntimeOwnerIdentityTests: XCTestCase {
     await probe.waitUntilDrainStarted()
     XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-a")
     XCTAssertNil(defaults.string(forKey: .automationOwnerOverride))
-    XCTAssertNil(RuntimeOwnerIdentity.currentOwnerId(
-      defaults: defaults,
-      allowAutomationOverride: true))
+    XCTAssertNil(
+      RuntimeOwnerIdentity.currentOwnerId(
+        defaults: defaults,
+        allowAutomationOverride: true))
     XCTAssertEqual(
       recorder.snapshot(),
       ["effect_started", "voice_quiesced", "drain_started"])
@@ -422,11 +427,16 @@ final class RuntimeOwnerIdentityTests: XCTestCase {
     XCTAssertTrue(physicalEffect.isCancelled)
 
     await probe.releaseEffect()
-    await transition.value
+    do {
+      try await transition.value
+    } catch {
+      XCTFail("owner transition failed: \(error)")
+    }
 
-    XCTAssertEqual(RuntimeOwnerIdentity.currentOwnerId(
-      defaults: defaults,
-      allowAutomationOverride: true), "owner-b")
+    XCTAssertEqual(
+      RuntimeOwnerIdentity.currentOwnerId(
+        defaults: defaults,
+        allowAutomationOverride: true), "owner-b")
     XCTAssertEqual(
       recorder.snapshot(),
       [

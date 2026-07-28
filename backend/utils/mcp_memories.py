@@ -17,6 +17,7 @@ from utils.memory.default_read_surface import (
     rollout_decision_from_legacy_args,
 )
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
+from utils.observability import record_fallback
 
 ACTIVITY_TAGS = {
     'activity',
@@ -113,6 +114,29 @@ class McpMemoryListResult:
     @property
     def should_use_legacy_fallback(self) -> bool:
         return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
+
+
+def mcp_legacy_read_authorized(result: 'McpMemorySearchResult | McpMemoryListResult') -> bool:
+    """Whether an MCP memory read may serve the legacy `memories` surface.
+
+    True for an explicit legacy-safe decision, and for a legacy-cohort account
+    whose `memory_control/state` doc was never created (#9892): callers reach
+    this only on the non-canonical branch after `pin_memory_system`, where the
+    absent doc is the expected un-enrolled state and legacy reads are
+    authoritative. Every other deny reason stays fail-closed.
+    """
+    if result.read_decision == MemoryReadDecision.USE_LEGACY_SAFE:
+        return True
+    if result.read_decision == MemoryReadDecision.DENY_MEMORY and result.fallback_reason == 'missing_rollout_state':
+        record_fallback(
+            component='other',
+            from_mode='memory_default_read',
+            to_mode='legacy_memories',
+            reason='policy',
+            outcome='recovered',
+        )
+        return True
+    return False
 
 
 def _mcp_search_result(result: DefaultReadSearchResult) -> McpMemorySearchResult:
@@ -528,6 +552,7 @@ def search_default_mcp_memories_vector(
     rollout_decision: Optional[DefaultReadRolloutDecision] = None,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> McpMemorySearchResult:
     """Search hydrated memory vectors for the concrete MCP memory-search caller.
 
@@ -556,6 +581,7 @@ def search_default_mcp_memories_vector(
             consumer=MemoryConsumer.mcp,
             vector_query=vector_query,
             required_projection_commit_id=required_projection_commit_id,
+            now=now,
             item_formatter=_format_memory_mcp_default_memory_item,
             score_attacher=_attach_mcp_vector_score,
         )

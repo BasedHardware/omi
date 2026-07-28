@@ -52,9 +52,9 @@ The default is deliberately safe and compatible:
 LISTEN_FINALIZATION_DISPATCH_MODE=inline
 ```
 
-To enable the durable worker, a separately reviewed infrastructure change must
-create a **dedicated** queue and bind OIDC/IAM for the finalizer service. Do not
-reuse `sync-jobs` or `audio-merge`. The required runtime settings are:
+Production enables the durable worker through a **dedicated** queue and an
+OIDC/IAM binding for the `backend-sync` finalizer service. Do not reuse
+`sync-jobs` or `audio-merge`. The required runtime settings are:
 
 ```text
 LISTEN_FINALIZATION_DISPATCH_MODE=cloud_tasks
@@ -70,8 +70,39 @@ LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS=300
 `SYNC_TASKS_PROJECT` and `SYNC_TASKS_LOCATION` are shared Cloud Tasks client
 configuration. The finalizer's queue deadline, HTTP timeout, and Redis run-lock
 TTL must remain compatible; the default 1,500-second handler timeout matches
-the existing durable-work contract. This change does not create a queue, bind
-IAM, or enable the dispatch flag in any environment.
+the existing durable-work contract. The production deploy creates or updates
+the dedicated queue with five attempts and four concurrent dispatches. Other
+environments remain deliberately unconfigured, so the exact-ID customer route
+fails closed with `503` there instead of executing inline.
+
+## Customer exact-ID finalization
+
+`POST /v1/conversations/{conversation_id}/finalize` uses this same outbox for
+an already-persisted customer conversation. It returns a `processing`
+conversation promptly after the outbox transaction commits; the Cloud Tasks
+worker then owns enrichment, memory extraction, and integration fanout under
+the job lease. The job stores the route's `force_process` decision, while the
+admission transaction persists calendar meeting context on the conversation
+alongside the lifecycle transition. Replay therefore retains the prior
+request's correctness semantics.
+
+This route requires `LISTEN_FINALIZATION_DISPATCH_MODE=cloud_tasks`. If that
+durable worker is not configured, it returns `503` before changing the
+conversation instead of falling back to an in-process task or a pusher request
+that the HTTP caller cannot service. A task-create acknowledgement failure is
+different: the committed outbox row remains `queued` and the reconciler retries
+the opaque handoff.
+
+Clients can poll `GET /v1/conversations/{conversation_id}/finalization` for
+the authoritative job id, status, terminal flag, retryable flag, and bounded
+attempt counts. `queued` is the retryable state; a `dead_letter` job is
+terminal and its conversation is transitioned to `failed` and `discarded`, not
+left on `processing`.
+
+This first migration deliberately excludes `POST /v1/conversations` (the
+Redis current-conversation pointer), `reprocess`, and routes that create a
+conversation while processing request content. Their identity and generation
+contracts need their own durable-admission migration.
 
 ## Reconciliation and runbook
 

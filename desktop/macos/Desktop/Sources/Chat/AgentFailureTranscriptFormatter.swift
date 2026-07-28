@@ -1,12 +1,17 @@
 import Foundation
 
 enum AgentFailureTranscriptFormatter {
-  static let genericSpawnFailure = "Agent couldn't start — check OpenClaw setup"
+  // Provider-neutral fallback: the default background agent is Omi-native, so a
+  // generic start failure must not blame OpenClaw (or any external provider) —
+  // the user may never have installed or intended to use one. Genuine
+  // missing-adapter errors still map to provider-specific setup copy below.
+  static let genericSpawnFailure = "Agent couldn't start — try again"
 
   static func errorText(for projection: AgentRunProjection) -> String? {
     switch projection.status {
     case .failed, .timedOut, .orphaned:
-      let raw = projection.failure?.displayMessage
+      let raw =
+        projection.failure?.displayMessage
         ?? projection.errorMessage
         ?? projection.statusText
         ?? "Agent failed"

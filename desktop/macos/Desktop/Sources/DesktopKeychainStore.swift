@@ -36,7 +36,7 @@ enum DesktopKeychainStore {
     return resolved
   }
 
-  private static var _cachedSigningTeamID: String?
+  private nonisolated(unsafe) static var _cachedSigningTeamID: String?
 
   /// Team + bundle scoped service name.
   ///
@@ -150,7 +150,9 @@ enum DesktopKeychainStore {
         // Never delete an existing credential merely because a write is temporarily
         // unavailable. Delete-then-add can turn a recoverable locked-Keychain or ACL
         // condition into permanent session loss if the subsequent add also fails.
-        log("DesktopKeychainStore: update unavailable; preserving existing item for \(service)/\(account) (status \(updateStatus))")
+        log(
+          "DesktopKeychainStore: update unavailable; preserving existing item for \(service)/\(account) (status \(updateStatus))"
+        )
         return false
       } else {
         log("DesktopKeychainStore: update failed for \(service)/\(account) (status \(updateStatus))")

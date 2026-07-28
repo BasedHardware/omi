@@ -23,7 +23,7 @@ jobs:
       has_web_lint: ${{ steps.changes.outputs.has_web_lint }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -38,12 +38,12 @@ jobs:
     if: needs.changes.outputs.has_web_lint == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -65,6 +65,7 @@ jobs:
         run: |
           npm ci --legacy-peer-deps
           npm run lint
+          npm test
 
   build:
     name: Build
@@ -73,12 +74,12 @@ jobs:
     if: needs.changes.outputs.has_web_build == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'

@@ -1469,7 +1469,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get payYourSttProvider => 'Omi ಅನ್ನು ಅವಿರತವಾಗಿ ಬಳಸಿ. ನೀವು ಕೇವಲ ನಿಮ್ಮ STT ಪ್ರದಾನಕಾರಕನಿಗೆ ನೇರವಾಗಿ ಪಾವತಿ ಮಾಡಿ.';
 
   @override
-  String get freeMinutesMonth => '600 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ';
+  String get freeMinutesMonth => '300 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1791,20 +1791,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Omi ಪಸಂದ ಮಾಡುತ್ತಿದ್ದೀರೆ?';
-
-  @override
-  String get leaveReviewIos =>
-      'App Store ನಲ್ಲಿ ವಿಮರ್ಶೆ ಬಿಡುವುದರ ಮೂಲಕ ನಮಗೆ ಹೆಚ್ಚಿನ ಜನರ ಬಳಿ ತಲುಪಲು ಸಾಹಾಯ್ಯ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ನಮಗೆ ಬೇಸರ ಬರುತ್ತದೆ!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store ನಲ್ಲಿ ವಿಮರ್ಶೆ ಬಿಡುವುದರ ಮೂಲಕ ನಮಗೆ ಹೆಚ್ಚಿನ ಜನರ ಬಳಿ ತಲುಪಲು ಸಾಹಾಯ್ಯ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ನಮಗೆ ಬೇಸರ ಬರುತ್ತದೆ!';
-
-  @override
-  String get rateOnAppStore => 'App Store ನಲ್ಲಿ ರೇಟ್ ಮಾಡಿ';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play ನಲ್ಲಿ ರೇಟ್ ಮಾಡಿ';
 
   @override
   String get maybeLater => 'ಬಹುಶಃ ನಂತರ';
@@ -2144,6 +2130,18 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ ಸ್ಮೃತಿ ಸಂಪಾದಿಸಿ';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'ನಾನು ಐಸ್ ಕ್ರೀಮ್ ತಿನ್ನಲು ಪ್ರೀತಿ ಮಾಡುತ್ತೇನೆ...';
@@ -4727,7 +4725,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'ನಿರ್ದಿಷ್ಟ ಡೇಟಾ ಪ್ರವೇಶ ಸಂರೂಪಿತವಾಗಿಲ್ಲ.';
 
   @override
-  String get basicPlanDescription => '600 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್';
+  String get basicPlanDescription => '300 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್';
 
   @override
   String get minutes => 'ನಿಮಿಷಗಳು';
@@ -6022,7 +6020,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'ಪ್ರತಿ ತಿಂಗಳು 600 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
+      'ಪ್ರತಿ ತಿಂಗಳು 300 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
 
   @override
   String get viewUsage => 'ಬಳಕೆ ವಿವರಿಸಿ';
@@ -6104,7 +6102,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'ಪ್ರತಿ ತಿಂಗಳು 600 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
+      'ಪ್ರತಿ ತಿಂಗಳು 300 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
 
   @override
   String get audioProcessedLocally =>
@@ -9019,7 +9017,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get billingYearly => 'ವಾರ್ಷಿಕ';
 
   @override
-  String get savePercent => '~17% ಉಳಿಸಿ';
+  String savePercent(int percent) {
+    return '~$percent% ಉಳಿಸಿ';
+  }
 
   @override
   String get popular => 'ಜನಪ್ರಿಯ';
@@ -9374,7 +9374,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'ಸದ್ಯಕ್ಕೆ Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
+      'ಫೋನ್ ಮೈಕ್ರೊಫೋನ್, Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9625,4 +9625,182 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'ಸಂಪರ್ಕವಿಲ್ಲ — ಸ್ಥಳೀಯವಾಗಿ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ. ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್‌ಗೆ ಬಂದಾಗ ಇದನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'ನಿಮ್ಮ ಡೇಟಾ ಪೂರ್ವನಿಯೋಜಿತವಾಗಿ ಬಲವಾದ ಎನ್‌ಕ್ರಿಪ್ಶನ್‌ನಿಂದ ಸುರಕ್ಷಿತವಾಗಿದೆ, ಮತ್ತು ಅದನ್ನು ಹೇಗೆ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಬಳಸಲಾಗುತ್ತದೆ ಎಂಬುದನ್ನು ನೀವು ನಿಯಂತ್ರಿಸುತ್ತೀರಿ.';
+
+  @override
+  String get sttModelAccuracy => 'ನಿಖರತೆ';
+
+  @override
+  String get whisperModelSizeBase => 'ಮೂಲ';
+
+  @override
+  String get cloudTranscription => 'ಕ್ಲೌಡ್ ಪ್ರತಿಲೇಖನ';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'ಮಾದರಿಯನ್ನು ಅಳಿಸಿ';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'ಈ ಮಾದರಿಯನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಾ?';
+
+  @override
+  String get onDeviceModelDownloaded => 'ಡೌನ್‌ಲೋಡ್ ಆಗಿದೆ';
+
+  @override
+  String get sttModelFaster => 'ವೇಗವಾಗಿ';
+
+  @override
+  String get sttFilterAuto => 'ಸ್ವಯಂ';
+
+  @override
+  String get sttModelHigher => 'ಹೆಚ್ಚು';
+
+  @override
+  String get whisperModelSizeLarge => 'ದೊಡ್ಡದು';
+
+  @override
+  String get sttModelLower => 'ಕಡಿಮೆ';
+
+  @override
+  String get whisperModelSizeMedium => 'ಮಧ್ಯಮ';
+
+  @override
+  String get onDeviceModelDeleted => 'ಮಾದರಿಯನ್ನು ಅಳಿಸಲಾಗಿದೆ';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc =>
+      'Whisper ಮಾದರಿಯನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ಆಗಿದೆ';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper ಮಾದರಿಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಡೌನ್‌ಲೋಡ್ ಮಾಡಲಾಗಿದೆ';
+
+  @override
+  String get onDeviceModelSize => 'ಮಾದರಿಯ ಗಾತ್ರ';
+
+  @override
+  String get sttNone => 'ಯಾವುದೂ ಇಲ್ಲ';
+
+  @override
+  String get onDeviceTranscription => 'ಸಾಧನದಲ್ಲಿ ಪ್ರತಿಲೇಖನ';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'ಪ್ರತಿಲೇಖನವನ್ನು ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿಯೇ ಸ್ಥಳೀಯವಾಗಿ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ';
+
+  @override
+  String get sttModelSlower => 'ನಿಧಾನವಾಗಿ';
+
+  @override
+  String get whisperModelSizeSmall => 'ಚಿಕ್ಕದು';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'ಮಾತಿನಿಂದ ಪಠ್ಯ ಸೇವಾ ಪೂರೈಕೆದಾರ';
+
+  @override
+  String get speechToTextProviderDesc => 'ಪ್ರತಿಲೇಖನಕ್ಕೆ ಬಳಸುವ ಸೇವೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'ವೇಗ';
+
+  @override
+  String get whisperModelSizeTiny => 'ಅತಿ ಚಿಕ್ಕದು';
+
+  @override
+  String get transcriptionLanguage => 'ಪ್ರತಿಲೇಖನ ಭಾಷೆ';
+
+  @override
+  String get transcriptionLanguageDesc => 'ಮಾತಿನ ಪ್ರತಿಲೇಖನಕ್ಕೆ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ';
+
+  @override
+  String get whisperModel => 'Whisper ಮಾದರಿ';
+
+  @override
+  String get whisperModelDesc => 'ಸಾಧನದಲ್ಲಿನ ಪ್ರತಿಲೇಖನಕ್ಕೆ ಮಾದರಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ';
+
+  @override
+  String get downgradeToFreemiumTitle => 'ಉಚಿತ ಯೋಜನೆಗೆ ಡೌನ್‌ಗ್ರೇಡ್ ಮಾಡುವುದೇ?';
+
+  @override
+  String get downgradeLimitationsHeading => 'ನೀವು ಈ ಮಿತಿಗಳನ್ನು ಎದುರಿಸುತ್ತೀರಿ:';
+
+  @override
+  String get downgradeLimitBattery => '7 ಪಟ್ಟು ಹೆಚ್ಚು ಬ್ಯಾಟರಿ ಬಳಕೆ';
+
+  @override
+  String get downgradeLimitQuality => '30% ಕಡಿಮೆ ಪ್ರತಿಲೇಖನ ಗುಣಮಟ್ಟ';
+
+  @override
+  String get downgradeLimitDelay => '5-7 ಸೆಕೆಂಡ್ ವಿಳಂಬ';
+
+  @override
+  String get downgradeLimitSpeakers => 'ಮಾತನಾಡುವವರನ್ನು ಗುರುತಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ';
+
+  @override
+  String get downgradeAnyway => 'ಆದರೂ ಡೌನ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'ಸಂವಾದಗಳನ್ನು ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್‌ಗಳಿಗೆ ಲಿಂಕ್ ಮಾಡಲು ನಿಮ್ಮ Google Calendar ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String linkedToEvent(String title) {
+    return '“$title” ಗೆ ಲಿಂಕ್ ಮಾಡಲಾಗಿದೆ';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್ ಲಿಂಕ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ';
+
+  @override
+  String get thanksForYourFeedback => 'ನಿಮ್ಮ ಅಭಿಪ್ರಾಯಕ್ಕೆ ಧನ್ಯವಾದ!';
+
+  @override
+  String get copyMessage => 'ಸಂದೇಶವನ್ನು ನಕಲಿಸಿ';
+
+  @override
+  String get searchSettings => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಹುಡುಕಿ…';
+
+  @override
+  String get errorLoadingAudio => 'ಆಡಿಯೊ ಲೋಡ್ ಮಾಡುವಲ್ಲಿ ದೋಷ';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'ನಿಮ್ಮ Ray-Ban Meta ಮೈಕ್ರೊಫೋನ್ ಆಯ್ಕೆಮಾಡಿ';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'ನಿಮ್ಮ ಕನ್ನಡಕದ Bluetooth ಮೈಕ್ರೊಫೋನ್ ಆಯ್ಕೆಮಾಡಿ. Omi ಅದನ್ನು ಬಳಸುವಾಗ ಸಂಗೀತ ವಿರಾಮಗೊಳ್ಳುತ್ತದೆ.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'ಯಾವುದೇ Bluetooth ಮೈಕ್ರೊಫೋನ್ ಕಂಡುಬಂದಿಲ್ಲ. iPhone ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕನ್ನಡಕವನ್ನು ಸಂಪರ್ಕಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth ಮೈಕ್ರೊಫೋನ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. Bluetooth ಆನ್ ಆಗಿದೆಯೇ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'ಆ ಮೈಕ್ರೊಫೋನ್‌ಗೆ ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಅದು iPhone ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಸಂಪರ್ಕಗೊಂಡಿದೆಯೇ ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ.';
 }

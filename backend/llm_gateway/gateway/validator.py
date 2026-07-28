@@ -27,9 +27,11 @@ FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
         'max_tokens',
         'n',
         'presence_penalty',
+        'prompt_cache_options',
         'prompt_cache_key',
         'seed',
         'stop',
+        'stream_options',
         'temperature',
         'top_logprobs',
         'top_p',
@@ -104,7 +106,11 @@ def _is_text_content_part(part: object) -> bool:
     if not isinstance(part, Mapping):
         return False
     typed_part = cast(Mapping[str, object], part)
-    return typed_part.get('type') == 'text' and isinstance(typed_part.get('text'), str)
+    if typed_part.get('type') != 'text' or not isinstance(typed_part.get('text'), str):
+        return False
+    if 'prompt_cache_breakpoint' in typed_part:
+        _validate_prompt_cache_breakpoint(typed_part['prompt_cache_breakpoint'])
+    return True
 
 
 def _validate_response_format(value: object, lane: LaneConfig) -> Mapping[str, Any] | None:
@@ -156,7 +162,46 @@ def _validate_forwarded_params(request: Mapping[str, Any]) -> Mapping[str, Any]:
             param=unsupported[0],
         )
     forwarded = {key: request[key] for key in FORWARDED_CHAT_COMPLETION_PARAMS if key in request}
+    _validate_output_limit_aliases(forwarded)
+    if 'prompt_cache_options' in forwarded:
+        _validate_prompt_cache_options(forwarded['prompt_cache_options'])
     for key in ('tools', 'tool_choice', 'stream'):
         if key in request:
             forwarded[key] = request[key]
     return forwarded
+
+
+def _validate_prompt_cache_options(value: object) -> None:
+    if not isinstance(value, Mapping):
+        raise GatewayInvalidRequestError('prompt_cache_options must be an object', param='prompt_cache_options')
+    if set(value) != {'mode', 'ttl'} or value.get('mode') != 'explicit' or value.get('ttl') != '30m':
+        raise GatewayInvalidRequestError(
+            'prompt_cache_options must be {"mode": "explicit", "ttl": "30m"}',
+            param='prompt_cache_options',
+        )
+
+
+def _validate_prompt_cache_breakpoint(value: object) -> None:
+    if not isinstance(value, Mapping) or dict(value) != {'mode': 'explicit'}:
+        raise GatewayInvalidRequestError(
+            'prompt_cache_breakpoint must be {"mode": "explicit"}',
+            param='prompt_cache_breakpoint',
+        )
+
+
+def _validate_output_limit_aliases(forwarded: Mapping[str, Any]) -> None:
+    max_tokens = forwarded.get('max_tokens')
+    max_completion_tokens = forwarded.get('max_completion_tokens')
+    for key, value in (
+        ('max_tokens', max_tokens),
+        ('max_completion_tokens', max_completion_tokens),
+    ):
+        if value is None:
+            continue
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise GatewayInvalidRequestError(f'{key} must be a positive integer', param=key)
+    if max_tokens is not None and max_completion_tokens is not None and max_tokens != max_completion_tokens:
+        raise GatewayInvalidRequestError(
+            'max_tokens and max_completion_tokens must match when both are provided',
+            param='max_completion_tokens',
+        )

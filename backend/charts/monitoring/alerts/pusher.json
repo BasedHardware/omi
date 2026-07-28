@@ -122,7 +122,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "77",
-      "threshold": "1"
+      "threshold": "1",
+      "summary": "Omi live transcription alert: Pusher - 4XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "isPaused": false,
     "notification_settings": {
@@ -131,7 +136,10 @@
     "record": null,
     "labels": {
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "cew923rcn3ncwb",
+      "component": "live-transcription",
+      "impact": "product"
     }
   },
   {
@@ -250,18 +258,26 @@
       }
     ],
     "updated": "2026-06-20T02:27:45Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "77",
-      "threshold": "1"
+      "threshold": "1",
+      "summary": "Omi live transcription alert: Pusher - 5XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
       "instatus_component": "live-transcription",
-      "severity": "critical"
+      "severity": "critical",
+      "alert_identity": "aew926uoh6o00c",
+      "component": "live-transcription",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -392,7 +408,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "75",
-      "threshold": "10"
+      "threshold": "10",
+      "summary": "Omi live transcription alert: Pusher RPS is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -401,7 +422,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "dew91uem0dnggb",
+      "component": "live-transcription",
+      "impact": "infrastructure"
     }
   },
   {
@@ -506,7 +530,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "79",
-      "threshold": "40"
+      "threshold": "40",
+      "summary": "Omi live transcription alert: Pusher instance count is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -515,7 +544,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "dew92a2egu8sge",
+      "component": "live-transcription",
+      "impact": "infrastructure"
     }
   },
   {
@@ -641,7 +673,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "88",
-      "threshold": "30"
+      "threshold": "30",
+      "summary": "Omi live transcription alert: Pusher max concurrent requests are high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -650,7 +687,10 @@
     "record": null,
     "labels": {
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "few91zm7mujggb",
+      "component": "live-transcription",
+      "impact": "infrastructure"
     }
   },
   {
@@ -674,7 +714,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(pusher_sessions_degraded{job=\"pusher-metrics\"}) / clamp_min(sum(pusher_active_ws_connections{job=\"pusher-metrics\"}), 1)",
+          "expr": "sum(pusher_sessions_degraded{job=\"backend-listen-metrics\"}) / clamp_min(sum(backend_listen_active_ws_connections{job=\"backend-listen-metrics\"}), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -755,7 +795,12 @@
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "4",
       "runbook": "backend/docs/runbooks/pusher-degraded.md",
-      "threshold": "0.05 (5% degraded sessions)"
+      "threshold": "0.05 (5% degraded sessions)",
+      "summary": "Omi live transcription alert: Pusher - degraded session ratio high.",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "isPaused": false,
     "notification_settings": {
@@ -764,7 +809,10 @@
     "record": null,
     "labels": {
       "severity": "warning",
-      "instatus_component": "live-transcription"
+      "instatus_component": "live-transcription",
+      "alert_identity": "bfobs1pusherdeg01",
+      "component": "live-transcription",
+      "impact": "user-experience"
     }
   }
 ]

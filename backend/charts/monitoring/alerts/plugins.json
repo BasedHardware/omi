@@ -152,7 +152,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "38",
-      "threshold": "150 RPS"
+      "threshold": "150 RPS",
+      "summary": "Omi plugin integrations alert: Plugins RPS is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi plugin integrations production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -161,7 +166,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "plugins"
+      "instatus_component": "plugins",
+      "alert_identity": "bew99eq18r8jkf",
+      "component": "plugins",
+      "impact": "infrastructure"
     }
   },
   {
@@ -309,7 +317,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "40",
-      "threshold": "2"
+      "threshold": "2",
+      "summary": "Omi plugin integrations alert: Plugins instance count is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi plugin integrations production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -318,7 +331,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "plugins"
+      "instatus_component": "plugins",
+      "alert_identity": "few99rmi823uof",
+      "component": "plugins",
+      "impact": "infrastructure"
     }
   },
   {
@@ -474,11 +490,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "39",
-      "threshold": "14999ms (~15s)"
+      "threshold": "14999ms (~15s)",
+      "summary": "Omi plugin integrations alert: Plugins request latency is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi plugin integrations production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
       "instatus_component": "plugins",
-      "severity": "ticket"
+      "severity": "ticket",
+      "alert_identity": "eew99oe8y6qyod",
+      "component": "plugins",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {

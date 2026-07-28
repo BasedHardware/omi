@@ -50,7 +50,7 @@ package enum OmiColors {
 }
 
 // MARK: - Color Extension for Hex
-package extension Color {
+extension Color {
   package init(hex: UInt, alpha: Double = 1.0) {
     self.init(
       .sRGB,
@@ -62,7 +62,7 @@ package extension Color {
   }
 
   /// Initialize from a hex string like "#6B7280" or "6B7280"
-  init?(hex hexString: String) {
+  package init?(hex hexString: String) {
     var cleanedString = hexString.trimmingCharacters(in: .whitespacesAndNewlines)
     cleanedString = cleanedString.replacingOccurrences(of: "#", with: "")
 

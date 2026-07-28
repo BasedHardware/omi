@@ -1,3 +1,0 @@
-{
-  "change": "Fixed push-to-talk screen questions using stale visual context by grounding replies in a fresh, turn-specific screen capture."
-}

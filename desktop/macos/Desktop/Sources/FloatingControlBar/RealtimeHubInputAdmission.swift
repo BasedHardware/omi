@@ -1,4 +1,5 @@
 import Foundation
+import VoiceTurnDomain
 
 /// Physical PCM held while a replacement socket authenticates. Logical turn
 /// state remains in `VoiceTurnCoordinator`.
@@ -29,6 +30,7 @@ struct RealtimeReplacementAudioBuffer {
 /// a replaced response's input.
 struct RealtimeReconnectAudioBuffer {
   static let maxBufferedAudioBytes = 3_840_000  // 120 s @ 16 kHz s16le
+  static let maximumRebindAttempts = 1
 
   let turnID: VoiceTurnID
   let responseID: VoiceResponseID
@@ -39,6 +41,10 @@ struct RealtimeReconnectAudioBuffer {
   private(set) var requiredContextFreshnessIdentity: String? = nil
   private(set) var audioBuffer: [Data] = []
   private(set) var bufferedAudioBytes = 0
+  /// A captured turn gets one transparent physical-session rebind. The second
+  /// concrete transport failure takes the existing transcription fallback; it
+  /// must never make the user manually repeat the turn.
+  private(set) var rebindAttempts = 0
 
   @discardableResult
   mutating func appendAudio(_ pcm16k: Data) -> Bool {
@@ -58,6 +64,83 @@ struct RealtimeReconnectAudioBuffer {
     }
     requiredContextFreshnessIdentity = identity
     return true
+  }
+
+  /// A key-down snapshot can produce a newer canonical requirement before this
+  /// turn has replayed to a physical provider. Preserve the logical turn and
+  /// its PCM, while retargeting that one replay to the newest binding.
+  mutating func replaceRequiredContextFreshnessIdentity(_ identity: String) -> Bool {
+    guard !identity.isEmpty else { return false }
+    requiredContextFreshnessIdentity = identity
+    return true
+  }
+
+  @discardableResult
+  mutating func beginRebindAttempt() -> Bool {
+    guard rebindAttempts < Self.maximumRebindAttempts else { return false }
+    rebindAttempts += 1
+    return true
+  }
+}
+
+/// The physical realtime transport is intentionally narrower than logical PTT
+/// state. A connected socket is only an optimization; input may be admitted
+/// immediately only when its immutable context binding still matches the
+/// kernel's current requirement.
+enum RealtimePTTAdmission: Equatable {
+  case immediate
+  case captureAndBuffer
+}
+
+enum RealtimePTTAdmissionPolicy {
+  static func decide(
+    requirementIsResolved: Bool,
+    transportIsReady: Bool,
+    bindingMatchesRequirement: Bool
+  ) -> RealtimePTTAdmission {
+    requirementIsResolved && transportIsReady && bindingMatchesRequirement
+      ? .immediate
+      : .captureAndBuffer
+  }
+}
+
+/// Every ordinary maintenance cause shares this one handoff vocabulary. Keeping
+/// it typed prevents a key-down prefetch, a post-turn refresh, and a cancelled
+/// turn from independently deciding to tear down the physical session.
+enum RealtimeHubSessionHandoffReason: String, Equatable {
+  case voiceContextFreshness = "voice_context_freshness"
+  case directedProviderSchema = "directed_provider_schema"
+  case persistedVoiceContext = "voice_context_changed"
+  case cancelledTurnContinuity = "cancelled_turn_continuity"
+  case providerSettings = "provider_settings"
+  case systemWake = "system_wake"
+  case voiceLanguages = "voice_languages_changed"
+  case transportFailure = "transport_failure"
+}
+
+enum RealtimeHubSessionHandoffDecision: Equatable {
+  case keepActive
+  case deferUntilIdle
+  case replacePreservingBufferedTurn
+  case fallbackToTranscription
+}
+
+/// Pure lifecycle oracle for the controller's single physical-session handoff
+/// owner. The reducer remains the lifecycle owner of the logical voice turn.
+enum RealtimeHubSessionHandoffPolicy {
+  static func decide(
+    bindingMatchesRequirement: Bool,
+    canReplaceIdleSession: Bool,
+    hasBufferedTurn: Bool,
+    rebindAttempts: Int = 0
+  ) -> RealtimeHubSessionHandoffDecision {
+    if bindingMatchesRequirement { return .keepActive }
+    if hasBufferedTurn {
+      return rebindAttempts <= RealtimeReconnectAudioBuffer.maximumRebindAttempts
+        ? .replacePreservingBufferedTurn
+        : .fallbackToTranscription
+    }
+    return canReplaceIdleSession ? .replacePreservingBufferedTurn : .deferUntilIdle
   }
 }
 
@@ -93,10 +176,57 @@ enum RealtimeInputAdmissionPolicy {
 }
 
 enum RealtimeVoiceContextRefreshPolicy {
+  enum HandoffDecision: Equatable {
+    case keepCurrentSession
+    case debounceIdleHandoff
+    case replacePreservingBufferedTurn
+  }
+
+  /// A streaming text turn can update the voice context several times per
+  /// second. Replacing an otherwise-idle realtime socket for every update
+  /// makes the next PTT press race a chain of redundant reconnects. The
+  /// controller coalesces those idle updates, while a captured press still
+  /// replaces immediately and keeps its audio buffer.
+  static let idleHandoffDebounceNanoseconds: UInt64 = 600_000_000
+
   static func requiresRefresh(
     currentSnapshotIdentity: String,
     sessionSnapshotIdentity: String
   ) -> Bool {
     currentSnapshotIdentity != sessionSnapshotIdentity
+  }
+
+  static func handoffDecision(
+    currentSnapshotIdentity: String,
+    sessionSnapshotIdentity: String,
+    hasBufferedTurn: Bool
+  ) -> HandoffDecision {
+    guard
+      requiresRefresh(
+        currentSnapshotIdentity: currentSnapshotIdentity,
+        sessionSnapshotIdentity: sessionSnapshotIdentity
+      )
+    else {
+      return .keepCurrentSession
+    }
+    return hasBufferedTurn ? .replacePreservingBufferedTurn : .debounceIdleHandoff
+  }
+}
+
+/// A physical realtime socket is useful only after the kernel supplies the
+/// owner-bound context identity it must carry. Starting one earlier creates an
+/// empty session which has to be torn down just as the first PTT capture starts.
+enum RealtimeWarmSessionStartPolicy {
+  static func canStart(requirementIsResolved: Bool) -> Bool {
+    requirementIsResolved
+  }
+}
+
+/// Gemini's completed-turn boundary already schedules a persistence-fenced context refresh.
+/// Starting a second refresh from journal finalization tears down the newly warming session and
+/// makes the next PTT press buffer behind redundant reconnects.
+enum RealtimePersistedVoiceContextRefreshPolicy {
+  static func shouldHandoffImmediately(provider: RealtimeHubProvider?) -> Bool {
+    provider != .gemini
   }
 }

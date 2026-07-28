@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import CryptoKit
 import Foundation
+import VoiceTurnDomain
 
 /// The in-memory, single-turn source of truth for a PTT current-screen answer.
 ///
@@ -11,6 +12,13 @@ import Foundation
 enum RealtimeScreenEvidenceTarget: String, Equatable, Sendable {
   case frontmostDisplay = "frontmost_display"
   case unavailable
+}
+
+/// A physical capture failure that the realtime tool and local spoken fallback can explain
+/// without treating a missing image as visual evidence (for example, a black screen).
+enum RealtimeScreenEvidenceCaptureFailure: String, Equatable, Sendable {
+  case screenRecordingPermissionRequired = "screen_recording_permission_required"
+  case captureUnavailable = "capture_unavailable"
 }
 
 struct RealtimeScreenEvidenceDescriptor: Equatable, Sendable {
@@ -24,6 +32,35 @@ struct RealtimeScreenEvidenceDescriptor: Equatable, Sendable {
   let displayID: UInt32?
   let imageByteCount: Int
   let imageDigest: String?
+  /// Present only when the PTT-bound physical capture could not produce pixels.
+  /// This is bounded capability state, never a description of the user's screen.
+  let captureFailure: RealtimeScreenEvidenceCaptureFailure?
+
+  init(
+    evidenceID: String,
+    turnID: VoiceTurnID,
+    capturedAt: Date,
+    target: RealtimeScreenEvidenceTarget,
+    frontmostApp: String?,
+    frontmostBundleID: String?,
+    windowID: UInt32?,
+    displayID: UInt32?,
+    imageByteCount: Int,
+    imageDigest: String?,
+    captureFailure: RealtimeScreenEvidenceCaptureFailure? = nil
+  ) {
+    self.evidenceID = evidenceID
+    self.turnID = turnID
+    self.capturedAt = capturedAt
+    self.target = target
+    self.frontmostApp = frontmostApp
+    self.frontmostBundleID = frontmostBundleID
+    self.windowID = windowID
+    self.displayID = displayID
+    self.imageByteCount = imageByteCount
+    self.imageDigest = imageDigest
+    self.captureFailure = captureFailure
+  }
 
   var canVerifyCurrentScreen: Bool {
     target != .unavailable
@@ -74,9 +111,10 @@ struct RealtimeScreenEvidenceAttachment {
   let jpeg: Data
 }
 
-/// A PTT-down image is current-screen authority only for a short, bounded interval. Both
-/// receipt minting and native report admission use this same policy so a transport or provider
-/// stall cannot turn an old frozen image into a present-tense answer.
+/// A PTT-down image is current-screen authority only for a short, bounded interval. Freshness
+/// is checked at the physical-capture → provider-transport boundary: after the exact immutable
+/// JPEG is locally enqueued while fresh, provider reasoning latency cannot retroactively turn
+/// that already-authorized image into a different screen observation.
 enum RealtimeScreenEvidenceFreshnessPolicy {
   static let maximumAge: TimeInterval = 5
 
@@ -88,6 +126,13 @@ enum RealtimeScreenEvidenceFreshnessPolicy {
   static func remainingLifetime(_ descriptor: RealtimeScreenEvidenceDescriptor, now: Date) -> TimeInterval {
     max(0, descriptor.capturedAt.addingTimeInterval(maximumAge).timeIntervalSince(now))
   }
+}
+
+/// The report half of an already-admitted screen protocol has its own bounded deadline. This is
+/// intentionally separate from capture freshness: the provider must be given time to inspect the
+/// JPEG that was dispatched while fresh, but a missing report still cannot hold a PTT turn open.
+enum RealtimeScreenEvidenceProtocolPolicy {
+  static let maximumReportWait: TimeInterval = 8
 }
 
 /// Bridges the post-capture JPEG worker to an authorized tool call without blocking the
@@ -140,9 +185,13 @@ enum RealtimeScreenGroundingState: Equatable {
 
   var suppressesProviderOutput: Bool {
     switch self {
-    case .awaitingScreenshot, .awaitingReport, .accepted, .rejected:
+    // Before the provider proves it used the one current screenshot, any output can
+    // be speculative or stale. Once the report is accepted, however, the next model
+    // message is precisely the grounded answer we must surface; keeping the gate
+    // closed there turns a successful verification into a silent PTT turn.
+    case .awaitingScreenshot, .awaitingReport, .rejected:
       return true
-    case .inactive:
+    case .inactive, .accepted:
       return false
     }
   }
@@ -159,6 +208,31 @@ enum RealtimeScreenGroundingState: Equatable {
       return token
     }
   }
+
+  /// Safe, bounded state for the automation bridge. It deliberately excludes raw evidence IDs,
+  /// app names, captured pixels, and model text so a failed PTT turn can be diagnosed remotely.
+  var diagnosticsLabel: String {
+    switch self {
+    case .inactive: return "inactive"
+    case .awaitingScreenshot: return "awaiting_screenshot"
+    case .awaitingReport: return "awaiting_report"
+    case .accepted: return "accepted"
+    case .rejected: return "rejected"
+    }
+  }
+}
+
+/// Screen-evidence completion must never silently leave the reducer-owned screenshot tool
+/// pending. Keep each fail-closed reason typed so the live PTT probe can distinguish a provider
+/// stall from an ownership or reducer transition failure without exposing user content.
+enum RealtimeScreenEvidenceProtocolCompletion: String, Equatable, Sendable {
+  case notRun = "not_run"
+  case completed
+  case turnNotActive = "turn_not_active"
+  case protocolNotActive = "protocol_not_active"
+  case ownerNotCurrent = "owner_not_current"
+  case emptyAnswer = "empty_answer"
+  case reducerDidNotResolve = "reducer_did_not_resolve"
 }
 
 /// A screenshot request belongs to one provider response and one tool epoch. The model never
@@ -233,7 +307,6 @@ enum RealtimeScreenReportDecision: Equatable {
   case evidenceUnavailable
   case transportNotDispatched
   case staleReceipt
-  case evidenceExpired
   case contradictoryApplication
   case emptyAnswer
 }
@@ -267,8 +340,38 @@ enum RealtimeScreenEvidenceToolExecutionPolicy {
 
 /// Pure policy for locally enforcing current-screen provenance. The model may propose a
 /// screen observation, but it cannot make one user-visible until this policy validates it.
+enum RealtimeScreenEvidenceFailureDisposition: Equatable {
+  /// The provider received a recoverable tool error and should answer in its
+  /// normal native voice lane (for example, by offering Screen Recording or
+  /// explaining that the current screen was temporarily unavailable).
+  case providerContinuation
+  /// No provider continuation can safely explain the failure, so the local
+  /// deterministic result remains the terminal answer.
+  case authoritativeLocalResult
+}
+
 enum RealtimeScreenGroundingPolicy {
-  static let failureText = "I couldn't verify the current screen."
+  static func failureDisposition(
+    for evidence: RealtimeScreenEvidenceDescriptor?
+  ) -> RealtimeScreenEvidenceFailureDisposition {
+    switch evidence?.captureFailure {
+    case .screenRecordingPermissionRequired, .captureUnavailable:
+      // Screen Recording can be granted while the compositor is still
+      // initializing. That must degrade the visual tool result, never consume
+      // the user's PTT turn or replace native voice with a local terminal path.
+      return .providerContinuation
+    case nil:
+      return .authoritativeLocalResult
+    }
+  }
+
+  static func failureText(for evidence: RealtimeScreenEvidenceDescriptor?) -> String {
+    guard evidence?.captureFailure == .screenRecordingPermissionRequired else {
+      return "I couldn't verify the current screen."
+    }
+    return
+      "I need Screen Recording permission before I can view your screen. Say ‘grant it’ and I’ll open the permission request."
+  }
 
   /// Mints the local presentation receipt only after the session reports that it accepted the
   /// exact image/function-response wire. The caller owns waiting for that asynchronous transport
@@ -302,67 +405,58 @@ enum RealtimeScreenGroundingPolicy {
 
   static func reportDecision(
     state: RealtimeScreenGroundingState,
-    answer: String,
+    observation: String,
     sourceObjectID: ObjectIdentifier,
     activeTurnID: VoiceTurnID?,
     activeResponseID: VoiceResponseID?,
     currentTurnEpoch: Int,
-    knownApplicationNames: [String] = [],
-    now: Date = Date()
+    now _: Date = Date()
   ) -> RealtimeScreenReportDecision {
     guard case .awaitingReport(let receipt) = state else {
       return .evidenceUnavailable
     }
     let evidence = receipt.descriptor
     guard evidence.canVerifyCurrentScreen else { return .transportNotDispatched }
-    guard receipt.isCurrent(
-      sourceObjectID: sourceObjectID,
-      activeTurnID: activeTurnID,
-      activeResponseID: activeResponseID,
-      currentTurnEpoch: currentTurnEpoch)
+    guard
+      receipt.isCurrent(
+        sourceObjectID: sourceObjectID,
+        activeTurnID: activeTurnID,
+        activeResponseID: activeResponseID,
+        currentTurnEpoch: currentTurnEpoch)
     else { return .staleReceipt }
-    guard RealtimeScreenEvidenceFreshnessPolicy.isFresh(evidence, now: now) else {
-      return .evidenceExpired
-    }
-    guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
-    guard !answerClaimsDifferentApplication(
-      answer,
-      frontmostApp: evidence.frontmostApp ?? "",
-      knownApplicationNames: knownApplicationNames)
+    guard !observation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
+    guard
+      !observationClaimsDifferentApplication(
+        observation,
+        frontmostApp: evidence.frontmostApp ?? "")
     else { return .contradictoryApplication }
     return .accepted
   }
 
   /// The native descriptor—not model prose—owns application identity. The model can supply
-  /// detail from the image, but an answer that names a different active app fails closed.
-  static func presentedAnswer(
-    evidence: RealtimeScreenEvidenceDescriptor,
-    answer: String
-  ) -> String {
-    let app = evidence.frontmostApp?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let detail = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-    return detail.isEmpty ? "The frontmost app is \(app)." : "The frontmost app is \(app). \(detail)"
-  }
-
-  private static func answerClaimsDifferentApplication(
-    _ answer: String,
-    frontmostApp: String,
-    knownApplicationNames: [String]
+  /// a visual grounding observation, but one that directly claims a different active app fails
+  /// closed before the provider continues to its conversational answer.
+  private static func observationClaimsDifferentApplication(
+    _ observation: String,
+    frontmostApp: String
   ) -> Bool {
-    let normalizedAnswer = RealtimeScreenEvidenceDescriptor.normalizedAppName(answer)
+    let normalizedObservation = RealtimeScreenEvidenceDescriptor.normalizedAppName(observation)
     let normalizedFrontmost = RealtimeScreenEvidenceDescriptor.normalizedAppName(frontmostApp)
     let commonDesktopApps = [
       "cursor", "codex", "xcode", "finder", "terminal", "safari", "google chrome",
       "visual studio code", "vs code", "slack", "notion", "figma",
     ]
-    let candidates = Set((knownApplicationNames + commonDesktopApps)
-      .map(RealtimeScreenEvidenceDescriptor.normalizedAppName)
-      .filter { !$0.isEmpty && $0 != normalizedFrontmost })
+    // The frozen descriptor is the only app identity that belongs to this receipt.
+    // Sampling the current process list here made a valid capture depend on a later
+    // focus change, which is the same ambient-state leak this protocol exists to avoid.
+    let candidates = Set(
+      commonDesktopApps
+        .map(RealtimeScreenEvidenceDescriptor.normalizedAppName)
+        .filter { !$0.isEmpty && $0 != normalizedFrontmost })
     // Only reject a direct statement about which app is foreground. A screenshot description
     // naturally says things such as "application windows" or can mention an app visible inside
-    // content; neither statement contradicts the native frontmost-app fact. The app prepends the
-    // native identity itself in `presentedAnswer`, so this guard protects provenance without
-    // requiring a model to repeat it.
+    // content; neither statement contradicts the native frontmost-app fact. This guard protects
+    // the report's grounding role without constraining the provider's later conversational answer.
     let foregroundClaimPrefixes = [
       "you are in ", "you're in ", "currently in ",
       "frontmost app is ", "frontmost application is ",
@@ -370,7 +464,7 @@ enum RealtimeScreenGroundingPolicy {
     ]
     return candidates.contains { candidate in
       foregroundClaimPrefixes.contains { prefix in
-        normalizedAnswer.contains(prefix + candidate)
+        normalizedObservation.contains(prefix + candidate)
       }
     }
   }
@@ -393,7 +487,16 @@ enum RealtimeScreenEvidenceCapture {
     let displayID = displayContaining(windowID: frontmostWindowID) ?? onlyActiveDisplay()
     // A PTT evidence capture must never silently fall back to the mouse-selected display.
     // On an ambiguous multi-display desktop we fail closed instead of describing the wrong one.
-    let image = displayID.flatMap { ScreenCaptureManager.captureScreenImage(displayID: $0) }
+    let captureFailure: RealtimeScreenEvidenceCaptureFailure?
+    let image: CGImage?
+    if !CGPreflightScreenCaptureAccess() {
+      log("RealtimeScreenEvidenceCapture: Screen Recording permission not granted at PTT capture")
+      image = nil
+      captureFailure = .screenRecordingPermissionRequired
+    } else {
+      image = displayID.flatMap { ScreenCaptureManager.captureScreenImage(displayID: $0) }
+      captureFailure = image == nil ? .captureUnavailable : nil
+    }
     let target: RealtimeScreenEvidenceTarget = image == nil ? .unavailable : .frontmostDisplay
     let descriptor = RealtimeScreenEvidenceDescriptor(
       evidenceID: UUID().uuidString.lowercased(),
@@ -405,7 +508,8 @@ enum RealtimeScreenEvidenceCapture {
       windowID: frontmostWindowID.map { UInt32($0) },
       displayID: displayID.map { UInt32($0) },
       imageByteCount: 0,
-      imageDigest: nil
+      imageDigest: nil,
+      captureFailure: captureFailure
     )
     return RealtimeScreenEvidence(
       descriptor: descriptor,
@@ -434,7 +538,8 @@ enum RealtimeScreenEvidenceCapture {
       windowID: evidence.descriptor.windowID,
       displayID: evidence.descriptor.displayID,
       imageByteCount: jpeg.count,
-      imageDigest: sha256(jpeg)
+      imageDigest: sha256(jpeg),
+      captureFailure: evidence.descriptor.captureFailure
     )
     return RealtimeScreenEvidence(
       descriptor: descriptor,
@@ -447,8 +552,9 @@ enum RealtimeScreenEvidenceCapture {
   /// block the first turn. The compositor's front-to-back list is enough to identify the
   /// frontmost on-screen window for the already-known foreground process.
   private static func frontmostOnScreenWindowID(ownedBy pid: pid_t) -> CGWindowID? {
-    guard let windows = CGWindowListCopyWindowInfo(
-      [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+    guard
+      let windows = CGWindowListCopyWindowInfo(
+        [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
     else { return nil }
     for window in windows {
       guard let ownerPID = window[kCGWindowOwnerPID as String] as? NSNumber,

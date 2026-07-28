@@ -1,12 +1,12 @@
 import Cocoa
-import UserNotifications
+@preconcurrency import UserNotifications
 
 enum NotificationRegistrationRepair {
   static let repairedVersionKey = "notificationRegistrationRepairedAppVersion"
   static let startupRepairAttemptedVersionKey = "notificationStartupRepairAttemptedAppVersion"
 
-  private static var isRepairing = false
-  private static var pendingCompletions: [(Bool) -> Void] = []
+  private nonisolated(unsafe) static var isRepairing = false
+  private nonisolated(unsafe) static var pendingCompletions: [(Bool) -> Void] = []
 
   static func currentVersionIdentifier(bundle: Bundle = .main) -> String {
     let version =
@@ -63,35 +63,29 @@ enum NotificationRegistrationRepair {
   static func requestAuthorizationRepairingLaunchServices(
     reason: String,
     previousStatus: String,
-    completion: ((Bool) -> Void)? = nil
+    completion: (@Sendable (Bool) -> Void)? = nil
   ) {
     NSApp.activate()
-    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {
-      granted, error in
-      if let error {
-        let nsError = error as NSError
+    UserNotificationCallbackBridge.requestAuthorization { result in
+      if let errorDescription = result.errorDescription {
         log(
-          "Notification permission request error: \(error.localizedDescription) (domain=\(nsError.domain) code=\(nsError.code))"
+          "Notification permission request error: \(errorDescription) (domain=\(result.errorDomain ?? "unknown") code=\(result.errorCode ?? -1))"
         )
 
-        if isLaunchDisabledNotificationError(nsError) {
-          DispatchQueue.main.async {
-            AnalyticsManager.shared.notificationRepairTriggered(
-              reason: reason,
-              previousStatus: previousStatus,
-              currentStatus: "error_code_1"
-            )
-            repair(reason: reason, includeUnregister: true) { _ in
-              retryAuthorizationAfterRepair(completion: completion)
-            }
+        if result.errorDomain == "UNErrorDomain", result.errorCode == 1 {
+          AnalyticsManager.shared.notificationRepairTriggered(
+            reason: reason,
+            previousStatus: previousStatus,
+            currentStatus: "error_code_1"
+          )
+          repair(reason: reason, includeUnregister: true) { _ in
+            retryAuthorizationAfterRepair(completion: completion)
           }
           return
         }
       }
 
-      DispatchQueue.main.async {
-        completion?(granted)
-      }
+      completion?(result.granted)
     }
   }
 
@@ -134,8 +128,9 @@ enum NotificationRegistrationRepair {
 
       Thread.sleep(forTimeInterval: 1.5)
 
+      let capturedSuccess = success
       DispatchQueue.main.async {
-        var finalSuccess = success
+        var finalSuccess = capturedSuccess
         if let cfURL = bundleURL as CFURL? {
           let registerStatus = LSRegisterURL(cfURL, true)
           let registerSucceeded = registerStatus == noErr
@@ -160,20 +155,17 @@ enum NotificationRegistrationRepair {
     callbacks.forEach { $0(success) }
   }
 
-  private static func retryAuthorizationAfterRepair(completion: ((Bool) -> Void)?) {
+  private static func retryAuthorizationAfterRepair(completion: (@Sendable (Bool) -> Void)?) {
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
       NSApp.activate()
-      UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {
-        granted, error in
-        if let error {
-          log("Notification retry after registration repair failed: \(error.localizedDescription)")
-        } else if granted {
+      UserNotificationCallbackBridge.requestAuthorization { result in
+        if let errorDescription = result.errorDescription {
+          log("Notification retry after registration repair failed: \(errorDescription)")
+        } else if result.granted {
           log("Notification permission granted after registration repair")
         }
 
-        DispatchQueue.main.async {
-          completion?(granted)
-        }
+        completion?(result.granted)
       }
     }
   }

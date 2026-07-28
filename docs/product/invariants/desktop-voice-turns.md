@@ -9,6 +9,13 @@ The macOS push-to-talk and realtime paths have one logical lifecycle owner:
 Microphone, provider, tool, journal, and playback objects are physical drivers;
 SwiftUI and floating-bar state are projections.
 
+`VoiceTurnReducer`, `VoiceTurnEvent`, and the mutable `VoiceTurnModel` live inside
+the strict `VoiceTurnDomain` target. App code may publish only typed
+`VoiceTurnFact` values through the coordinator/domain facade and observe its
+read-only model snapshot. The compiler therefore prevents an app driver from
+constructing a lifecycle event or reducing state directly; behavior tests still
+verify that every required fact is published.
+
 ## MUST NOT
 
 - Reintroduce a parallel PTT/realtime lifecycle enum, current-turn boolean, or
@@ -43,6 +50,15 @@ SwiftUI and floating-bar state are projections.
   realtime provider only after the exact current kernel context identity is
   installed on that physical session; a missing, stale, or superseded identity
   fails closed into the existing fallback route.
+- A PTT press starts capture independently of session maintenance. It either
+  uses an exactly admitted binding immediately, retains its one logical turn
+  through one controller-owned rebind, or takes one typed transcription
+  fallback; a generic warm timeout, cancelled-turn fence, or background schema
+  refresh must never require the user to repeat the press.
+- `RealtimeHubController` is the sole owner of ordinary physical-session
+  handoffs. Context, schema, settings, and post-turn maintenance request its
+  typed handoff boundary; no asynchronous prefetch may tear down a session
+  directly.
 - A physical release is idempotent once the reducer has a pending hub commit.
   `PushToTalkManager` must not start batch transcription for that same audio; only
   a still-finalizing turn with no accepted/deferred hub commit may take the batch
@@ -65,13 +81,23 @@ SwiftUI and floating-bar state are projections.
   only a reducer-admitted screenshot call seals visual output. The provider may
   propose visual detail only after native code has locally enqueued the exact
   JPEG function-response wire for the same session/response/call/epoch receipt.
-  That frozen image must be less than five seconds old both when native code
-  mints the receipt and when it accepts the report; expiration fails closed into
-  the deterministic screen-verification failure. The paired screenshot/report is
-  one reducer-owned protocol: it retains the screenshot effect identity until a
-  verified report or deterministic failure closes it. Either local result is
-  authoritative and must close the provider-continuation fence rather than wait
-  for optional provider narration.
+  That frozen image must be less than five seconds old when native code mints
+  the transport receipt. Once that exact receipt exists, a separate bounded
+  report deadline—not the capture timestamp—limits provider reasoning latency;
+  expiry fails closed into the deterministic screen-verification failure. The
+  paired screenshot/report is one reducer-owned protocol: it retains the
+  screenshot effect identity until a verified report or deterministic failure
+  closes it, and a completion failure terminalizes the turn rather than leaving
+  a pending screenshot tool. A verified report is internal grounding only: it
+  clears the screen protocol while preserving the provider-continuation fence,
+  so native realtime audio answers the user's original question from the image.
+  Only deterministic screen-verification failure is a local terminal result.
+  A missing Screen Recording permission is instead a recoverable screenshot-tool
+  result: it never supplies visual evidence, but it clears the screen protocol
+  and preserves the provider continuation so the selected native voice can
+  explain the permission request naturally. All other missing, stale,
+  contradictory, or cross-turn evidence failures remain deterministic local
+  results.
   Model-supplied
   evidence IDs and app labels have no authority; native code supplies app identity
   and rejects stale, missing, contradictory, or cross-turn reports without using
@@ -88,6 +114,8 @@ SwiftUI and floating-bar state are projections.
   foreground/background tools before Swift performs an effect. Provider turn IDs
   are correlation, never bearer authority, and terminal voice state revokes the
   run capability.
+- App code must not import or construct `VoiceTurnEvent` or `VoiceTurnReducer`.
+  The target boundary, not a convention, owns that restriction.
 
 ## Guard surface
 
@@ -114,6 +142,7 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 ## Surfaces
 
 - `desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurn*.swift`
+- `desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift`
@@ -126,16 +155,18 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 
 ## Guard tests
 
-- `desktop/macos/Desktop/Tests/VoiceTurnReducerTests.swift`
+- `desktop/macos/Desktop/Tests/VoiceTurnDomainTests/VoiceTurnReducerTests.swift`
+- `desktop/macos/Desktop/Tests/VoiceTurnDomainTests/VoiceTurnDomainBoundaryTests.swift`
 - `desktop/macos/Desktop/Tests/VoiceTurnOutputOwnershipTests.swift`
 - `desktop/macos/Desktop/Tests/RealtimeHubBargeInContinuityTests.swift`
 - `desktop/macos/Desktop/Tests/RealtimeScreenEvidenceTests.swift`
-- `desktop/macos/Desktop/Tests/CrossSurfaceContractSmokeTests.swift`
+- `desktop/macos/Desktop/Tests/VoiceTurnDomainTests/CrossSurfaceContractSmokeTests.swift`
 - `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts`
 
 ## Path globs
 
 - `desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurn*.swift`
+- `desktop/macos/Desktop/Sources/VoiceTurnDomain/**`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift`

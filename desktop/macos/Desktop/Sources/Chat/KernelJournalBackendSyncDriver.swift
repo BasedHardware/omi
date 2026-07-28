@@ -295,7 +295,7 @@ actor KernelJournalBackendSyncDriver {
 
     private static func array(from json: String) -> [[String: Any]] {
       guard let data = json.data(using: .utf8),
-            let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
       else { return [] }
       return array
     }
@@ -312,8 +312,8 @@ actor KernelJournalBackendSyncDriver {
     if let authError = error as? AuthError, case .userChangedDuringRequest = authError {
       return "backend_sync_owner_changed"
     }
-    if case let APIError.httpError(statusCode, _) = error,
-       (400...499).contains(statusCode)
+    if case APIError.httpError(let statusCode, _) = error,
+      (400...499).contains(statusCode)
     {
       if [408, 425, 429].contains(statusCode) {
         return "backend_sync_http_retryable"
@@ -330,8 +330,8 @@ actor KernelJournalBackendSyncDriver {
     if let authError = error as? AuthError, case .userChangedDuringRequest = authError {
       return "backend_sync_owner_changed"
     }
-    if case let APIError.httpError(statusCode, _) = error,
-       (400...499).contains(statusCode)
+    if case APIError.httpError(let statusCode, _) = error,
+      (400...499).contains(statusCode)
     {
       if [408, 425, 429].contains(statusCode) {
         return "backend_sync_http_retryable"
@@ -348,9 +348,9 @@ actor KernelJournalBackendSyncDriver {
     if let authError = error as? AuthError, case .userChangedDuringRequest = authError {
       return "backend_sync_owner_changed"
     }
-    if case let APIError.httpError(statusCode, _) = error,
-       (400...499).contains(statusCode),
-       ![408, 425, 429].contains(statusCode)
+    if case APIError.httpError(let statusCode, _) = error,
+      (400...499).contains(statusCode),
+      ![408, 425, 429].contains(statusCode)
     {
       return "backend_reconcile_http_4xx"
     }
@@ -482,8 +482,8 @@ actor KernelJournalBackendSyncDriver {
     _ metadataJSON: String?
   ) -> (contentBlocksJSON: String, resourcesJSON: String) {
     guard let metadataJSON,
-          let data = metadataJSON.data(using: .utf8),
-          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      let data = metadataJSON.data(using: .utf8),
+      let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else { return ("[]", "[]") }
     return (
       jsonArrayString(root[ChatContentBlockCodec.messageMetadataKey]),
@@ -493,9 +493,9 @@ actor KernelJournalBackendSyncDriver {
 
   private nonisolated static func jsonArrayString(_ value: Any?) -> String {
     guard let array = value as? [[String: Any]],
-          JSONSerialization.isValidJSONObject(array),
-          let data = try? JSONSerialization.data(withJSONObject: array, options: [.sortedKeys]),
-          let json = String(data: data, encoding: .utf8)
+      JSONSerialization.isValidJSONObject(array),
+      let data = try? JSONSerialization.data(withJSONObject: array, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
     else { return "[]" }
     return json
   }

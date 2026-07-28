@@ -177,6 +177,7 @@ def test_llm_error_callback_uses_provider_context():
     structured_extraction_stub.StructuredExtraction = MagicMock()
     usage_tracker_stub = types.ModuleType('utils.llm.usage_tracker')
     usage_tracker_stub.get_usage_callback = MagicMock(return_value=object())
+    usage_tracker_stub.get_current_context = MagicMock(return_value=None)
 
     module_stubs = {
         'anthropic': anthropic_stub,
@@ -252,6 +253,7 @@ def test_openai_embeddings_proxy_notifies_on_sync_byok_failure():
     structured_extraction_stub.StructuredExtraction = MagicMock()
     usage_tracker_stub = types.ModuleType('utils.llm.usage_tracker')
     usage_tracker_stub.get_usage_callback = MagicMock(return_value=object())
+    usage_tracker_stub.get_current_context = MagicMock(return_value=None)
 
     module_stubs = {
         'anthropic': anthropic_stub,
@@ -322,6 +324,7 @@ def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
     structured_extraction_stub.StructuredExtraction = MagicMock()
     usage_tracker_stub = types.ModuleType('utils.llm.usage_tracker')
     usage_tracker_stub.get_usage_callback = MagicMock(return_value=object())
+    usage_tracker_stub.get_current_context = MagicMock(return_value=None)
 
     module_stubs = {
         'anthropic': anthropic_stub,

@@ -10,11 +10,14 @@ import 'package:omi/services/capture/capture_controller.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class CaptureModeChip extends StatelessWidget {
-  final DeviceType deviceType;
+  /// The connected device's type, or null for the phone-mic (no-device) context.
+  final DeviceType? deviceType;
 
   const CaptureModeChip({super.key, required this.deviceType});
 
-  static bool supportsDevice(DeviceType? type) => CaptureController.supportsTranscribeLater(type);
+  static bool supportsDevice(DeviceType? type) => type != null
+      ? CaptureController.supportsTranscribeLater(type)
+      : CaptureController.phoneMicSupportsTranscribeLater;
 
   @override
   Widget build(BuildContext context) {

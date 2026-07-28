@@ -279,17 +279,29 @@ void main() {
       expect(syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: true), SyncUploadLane.fresh);
     });
 
-    test('historical batches are bounded to three newest WALs', () {
+    test('a small historical backlog drains in one batch instead of a few files at a time', () {
       const now = 2000000000;
       final historical = List.generate(
-        5,
+        8,
         (index) => Wal(timerStart: now - 7 * 60 * 60 - index, codec: BleAudioCodec.opus, seconds: 60),
       );
 
       final batch = nextSyncUploadBatch(historical.reversed.toList(), now);
 
-      expect(batch.length, 3);
-      expect(batch.map((wal) => wal.timerStart), historical.take(3).map((wal) => wal.timerStart));
+      expect(batch.length, 8);
+    });
+
+    test('historical batches are bounded by the shared upload batch limit, newest first', () {
+      const now = 2000000000;
+      final historical = List.generate(
+        25,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index, codec: BleAudioCodec.opus, seconds: 60),
+      );
+
+      final batch = nextSyncUploadBatch(historical.reversed.toList(), now);
+
+      expect(batch.length, 20);
+      expect(batch.map((wal) => wal.timerStart), historical.take(20).map((wal) => wal.timerStart));
     });
 
     test('an oversized fresh conversation is downgraded as one unit', () {
@@ -310,7 +322,9 @@ void main() {
       expect(forcedBackfill, {'oversized-conversation'});
 
       final batch = nextSyncUploadBatch(oversized, now, forcedBackfillConversationIds: forcedBackfill);
-      expect(batch.length, 3);
+      // Downgraded to the backfill rate-limit domain, but still drained at the
+      // shared batch limit rather than a few files at a time.
+      expect(batch.length, 20);
       expect(batch.every((wal) => wal.conversationId == 'oversized-conversation'), isTrue);
     });
   });

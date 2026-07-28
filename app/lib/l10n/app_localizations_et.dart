@@ -1466,7 +1466,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get payYourSttProvider => 'Kasutage Omi-d vabalt. Maksite ainult oma STT pakkujale otse.';
 
   @override
-  String get freeMinutesMonth => '600 tasuta minutit kuus kaasa arvatud. Piiramatu koos ';
+  String get freeMinutesMonth => '300 tasuta minutit kuus kaasa arvatud. Piiramatu koos ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1788,20 +1788,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Meeldib Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Aidake meil jõuda rohkemate inimesteni, jättes arvustuse App Store\'i. Teie tagasiside on meile ülimalt oluline!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Aidake meil jõuda rohkemate inimesteni, jättes arvustuse Google Play poodi. Teie tagasiside on meile ülimalt oluline!';
-
-  @override
-  String get rateOnAppStore => 'Hinda App Store\'is';
-
-  @override
-  String get rateOnGooglePlay => 'Hinda Google Play\'s';
 
   @override
   String get maybeLater => 'Võib-olla hiljem';
@@ -2139,6 +2125,18 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Muuda mälestust';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Mulle meeldib süüa jäätist...';
@@ -4707,7 +4705,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Konkreetset andmetele juurdepääsu pole seadistatud.';
 
   @override
-  String get basicPlanDescription => '600 premium minutit + piiramatu seadmes';
+  String get basicPlanDescription => '300 premium minutit + piiramatu seadmes';
 
   @override
   String get minutes => 'minutit';
@@ -5999,7 +5997,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
+      '300 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
 
   @override
   String get viewUsage => 'Vaata kasutust';
@@ -6081,7 +6079,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
+      '300 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8986,7 +8984,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get billingYearly => 'Aastane';
 
   @override
-  String get savePercent => 'Säästa ~17%';
+  String savePercent(int percent) {
+    return 'Säästa ~$percent%';
+  }
 
   @override
   String get popular => 'Populaarne';
@@ -9340,7 +9340,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Praegu töötab Omi ja Limitless seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.';
+      'Töötab telefoni mikrofoni ning Omi ja Limitless seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9591,4 +9591,180 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Seade on peaaegu täis — sünkroonige ruumi vabastamiseks.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Ühendus puudub – salvestatakse lokaalselt. See transkribeeritakse, kui oled taas võrgus.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Sinu andmed on vaikimisi kaitstud tugeva krüptimisega ja sina kontrollid, kuidas neid salvestatakse ja kasutatakse.';
+
+  @override
+  String get sttModelAccuracy => 'Täpsus';
+
+  @override
+  String get whisperModelSizeBase => 'Baas';
+
+  @override
+  String get cloudTranscription => 'Pilves transkriptsioon';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Kustuta mudel';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Kas oled kindel, et soovid selle mudeli kustutada?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Alla laaditud';
+
+  @override
+  String get sttModelFaster => 'Kiirem';
+
+  @override
+  String get sttFilterAuto => 'Automaatne';
+
+  @override
+  String get sttModelHigher => 'Kõrgem';
+
+  @override
+  String get whisperModelSizeLarge => 'Suur';
+
+  @override
+  String get sttModelLower => 'Madalam';
+
+  @override
+  String get whisperModelSizeMedium => 'Keskmine';
+
+  @override
+  String get onDeviceModelDeleted => 'Mudel kustutatud';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Mudeli allalaadimine ebaõnnestus';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisperi mudeli allalaadimine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Mudel alla laaditud';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisperi mudel laaditi edukalt alla';
+
+  @override
+  String get onDeviceModelSize => 'Mudeli suurus';
+
+  @override
+  String get sttNone => 'Puudub';
+
+  @override
+  String get onDeviceTranscription => 'Seadmes transkriptsioon';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkriptsioon töödeldakse kohapeal sinu seadmes';
+
+  @override
+  String get sttModelSlower => 'Aeglasem';
+
+  @override
+  String get whisperModelSizeSmall => 'Väike';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Kõne tekstiks teisendaja';
+
+  @override
+  String get speechToTextProviderDesc => 'Vali transkriptsiooniks kasutatav teenus';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Kiirus';
+
+  @override
+  String get whisperModelSizeTiny => 'Pisike';
+
+  @override
+  String get transcriptionLanguage => 'Transkriptsiooni keel';
+
+  @override
+  String get transcriptionLanguageDesc => 'Vali kõne transkriptsiooni keel';
+
+  @override
+  String get whisperModel => 'Whisper mudel';
+
+  @override
+  String get whisperModelDesc => 'Vali seadmes transkriptsiooni mudel';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Kas minna üle tasuta plaanile?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Sind ootavad ees järgmised piirangud:';
+
+  @override
+  String get downgradeLimitBattery => '7x suurem akukulu';
+
+  @override
+  String get downgradeLimitQuality => '30% madalam transkriptsiooni kvaliteet';
+
+  @override
+  String get downgradeLimitDelay => '5–7 sekundi pikkune viivitus';
+
+  @override
+  String get downgradeLimitSpeakers => 'Kõnelejaid ei saa tuvastada';
+
+  @override
+  String get downgradeAnyway => 'Alanda siiski';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Kalender pole ühendatud';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Ühenda oma Google Kalender, et siduda vestlusi kalendrisündmustega.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Seotud sündmusega „$title“';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Kalendrisündmuse sidumine ebaõnnestus';
+
+  @override
+  String get thanksForYourFeedback => 'Täname tagasiside eest!';
+
+  @override
+  String get copyMessage => 'Kopeeri sõnum';
+
+  @override
+  String get searchSettings => 'Otsi seadetest…';
+
+  @override
+  String get errorLoadingAudio => 'Heli laadimine ebaõnnestus';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Valige Ray-Ban Meta mikrofon';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Valige prillide Bluetooth-mikrofon. Muusika peatub, kui Omi seda kasutab.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth-mikrofone ei leitud. Ühendage prillid iPhone\'i seadetes ja proovige uuesti.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth-mikrofone ei saanud laadida. Kontrollige, kas Bluetooth on sisse lülitatud, ja proovige uuesti.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Selle mikrofoniga ei saanud ühendust luua. Veenduge, et see oleks iPhone\'i seadetes ühendatud.';
 }

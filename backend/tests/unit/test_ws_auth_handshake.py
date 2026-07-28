@@ -461,7 +461,7 @@ class TestListenEndpointNotAffectWebListen(WebSocketAuthTestCase):
         import re
 
         listen_match = re.search(
-            r'@router\.websocket\("/v4/listen"\)\s*\nasync def listen_handler\([^)]+\)',
+            r"@router\.websocket\(['\"]/v4/listen['\"]\)\s*\nasync def listen_handler\([^)]+\)",
             source,
             re.DOTALL,
         )
@@ -477,7 +477,7 @@ class TestListenEndpointNotAffectWebListen(WebSocketAuthTestCase):
         import re
 
         web_match = re.search(
-            r'@router\.websocket\("/v4/web/listen"\)\s*\nasync def web_listen_handler\([^)]+\)',
+            r"@router\.websocket\(['\"]/v4/web/listen['\"]\)\s*\nasync def web_listen_handler\([^)]+\)",
             source,
             re.DOTALL,
         )

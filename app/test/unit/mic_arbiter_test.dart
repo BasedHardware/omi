@@ -6,8 +6,10 @@ import 'package:omi/services/services.dart';
 
 class FakeMic implements IMicRecorderService {
   int startCalls = 0;
+  int startBatchCalls = 0;
   int stopCalls = 0;
   bool failNextStart = false;
+  bool failNextStartBatch = false;
   Function()? capturedOnStop;
 
   @override
@@ -23,6 +25,21 @@ class FakeMic implements IMicRecorderService {
     if (failNextStart) {
       failNextStart = false;
       throw Exception('recorder failed to start');
+    }
+    capturedOnStop = onStop;
+  }
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    startBatchCalls++;
+    if (failNextStartBatch) {
+      failNextStartBatch = false;
+      throw Exception('batch recorder failed to start');
     }
     capturedOnStop = onStop;
   }
@@ -97,6 +114,35 @@ void main() {
       // Simulate the recorder retiring itself (e.g. watchdog kill).
       micA.capturedOnStop!.call();
       expect(stopped, isTrue);
+      await startMic(b);
+      expect(micB.startCalls, 1);
+    });
+
+    test('startBatch contends while the other stack holds the mic', () async {
+      await startMic(b);
+      expect(() => a.startBatch(), throwsStateError);
+      expect(micA.startBatchCalls, 0);
+    });
+
+    test('startBatch failure releases the arbiter and rethrows', () async {
+      micA.failNextStartBatch = true;
+      await expectLater(a.startBatch(), throwsException);
+      await startMic(b);
+      expect(micB.startCalls, 1);
+    });
+
+    test('stop after startBatch releases so the other stack can start', () async {
+      await a.startBatch();
+      expect(micA.startBatchCalls, 1);
+      a.stop();
+      await startMic(b);
+      expect(micB.startCalls, 1);
+    });
+
+    test('natural stop from batch onStop releases the arbiter', () async {
+      await a.startBatch();
+      // Native terminal stop wired through the wrapped onStop.
+      micA.capturedOnStop!.call();
       await startMic(b);
       expect(micB.startCalls, 1);
     });

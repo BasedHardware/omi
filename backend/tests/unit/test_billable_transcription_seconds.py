@@ -38,22 +38,24 @@ class TestBillableTranscriptionSeconds:
         assert billable_transcription_seconds(1060.0, 1000.0, 1050.0) == 0
 
 
-class TestTranscribeUsesClampedBilling:
-    """Structural guard: transcribe.py must not bill raw wall-clock time."""
+class TestListenRuntimeUsesClampedBilling:
+    """The shared listen usage flush must not bill raw wall-clock time."""
 
     @staticmethod
-    def _transcribe_source():
-        path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+    def _runtime_source():
+        path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'listen', 'runtime.py')
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
 
     def test_no_raw_wall_clock_billing(self):
-        source = self._transcribe_source()
+        source = self._runtime_source()
         raw = re.findall(r'transcription_seconds\s*=\s*int\(.*last_usage_record_timestamp\)', source)
         assert not raw, f'raw wall-clock billing reintroduced: {raw}'
 
     def test_both_billing_sites_use_helper(self):
-        source = self._transcribe_source()
-        calls = re.findall(r'transcription_seconds\s*=\s*billable_transcription_seconds\(', source)
-        # Periodic 60s tick + session-end flush.
-        assert len(calls) == 2, f'expected 2 clamped billing sites, found {len(calls)}'
+        source = self._runtime_source()
+        calls = re.findall(r'seconds\s*=\s*billable_transcription_seconds\(', source)
+        # Periodic and final writes share one tested flush boundary.
+        assert len(calls) == 1, f'expected one shared clamped billing site, found {len(calls)}'
+        assert '_flush_usage(final=False)' in source
+        assert '_flush_usage(final=True)' in source

@@ -127,13 +127,87 @@ def test_typesense_and_google_binding_classifications_are_explicit():
     assert {"TYPESENSE_API_KEY", "GOOGLE_CLIENT_SECRET"}.issubset(kinds["secret"])
 
 
+def test_standalone_pusher_reconciles_non_secret_config_before_preflight():
+    """Static workflow contract: reconciliation makes rendered references live before Helm."""
+    workflow = (SCRIPT.parents[2] / ".github/workflows/gcp_backend_pusher.yml").read_text(encoding="utf-8")
+    required_config = {
+        "CONVERSATION_SUMMARIZED_APP_IDS",
+        "GOOGLE_CLIENT_ID",
+        "MCP_AUTHORIZATION_SERVER_URL",
+        "MCP_OAUTH_CHATGPT_CLIENT_ID",
+        "MCP_OAUTH_CHATGPT_REDIRECT_URIS",
+        "MCP_OAUTH_PUBLIC_CLIENT_ID",
+        "MCP_OAUTH_PUBLIC_REDIRECT_URIS",
+        "MCP_RESOURCE_URL",
+        "RAPID_API_HOST",
+        "REDIS_DB_HOST",
+        "STT_PRERECORDED_MODEL",
+        "STT_SERVICE_MODELS",
+        "TYPESENSE_HOST",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_API_KEY_SID",
+        "TWILIO_TWIML_APP_SID",
+        "X_OAUTH_CLIENT_ID",
+        "X_OAUTH_REDIRECT_URI",
+    }
+    prod_only_config = {
+        "ACCOUNT_DELETION_HANDLER_URL",
+        "MCP_OAUTH_CLAUDE_CLIENT_ID",
+        "MCP_OAUTH_CLAUDE_CLIENT_NAME",
+        "MCP_OAUTH_CLAUDE_REDIRECT_URIS",
+        "SYNC_TASKS_HANDLER_URL",
+        "SYNC_TASKS_INVOKER_SA",
+    }
+
+    resolve_index = workflow.index("- name: Resolve production pusher runtime targets")
+    reconcile_index = workflow.index("- name: Apply non-secret pusher runtime config")
+    existing_preflight_index = workflow.index("- name: Preflight existing pusher ConfigMap and Secret references")
+    preflight_index = workflow.index("- name: Verify reconciled pusher ConfigMap and Secret references")
+    helm_index = workflow.index("helm -n ${{ vars.ENV }}-omi-backend upgrade --install")
+    reconcile = workflow[reconcile_index:preflight_index]
+
+    assert resolve_index < existing_preflight_index < reconcile_index < preflight_index < helm_index
+    assert all(f"          {name}:" in reconcile for name in required_config | prod_only_config)
+    assert "backend/scripts/deploy-backend-config.sh" in reconcile
+    assert "secrets." not in reconcile
+
+
 def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: SimpleNamespace):
     deployment = preflight.rendered_pusher_deployment("dev")
-    expected, clear_historical_secret = preflight.dev_pusher_binding_contract()
+    expected, literals, clear_historical_secret = preflight.dev_pusher_binding_contract()
 
     assert preflight.direct_pusher_bindings(deployment) == expected
+    assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
+    assert literals == {
+        "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
+        "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
+        "STT_SERVICE_MODELS": "modulate-velma-2,parakeet",
+    }
     assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []
+
+
+def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(preflight: SimpleNamespace):
+    deployment = preflight.rendered_pusher_deployment("prod")
+    bindings = preflight.direct_pusher_bindings(deployment)
+    literals = preflight.literal_pusher_values(deployment)
+
+    assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
+    assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
+    assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"
+    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,parakeet"
+
+
+def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: SimpleNamespace):
+    deployment = copy.deepcopy(preflight.rendered_pusher_deployment("dev"))
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    stt_models = next(item for item in env if item["name"] == "STT_SERVICE_MODELS")
+    stt_models["value"] = "dg-nova-3"
+
+    assert preflight.validate_dev_pusher_binding_contract(deployment) == [
+        "dev pusher literal contract mismatch for STT_SERVICE_MODELS: "
+        "expected 'modulate-velma-2,parakeet', got 'dg-nova-3'"
+    ]
 
 
 def test_dev_pusher_contract_requires_typesense_host_secret_clear(preflight: SimpleNamespace):
@@ -148,9 +222,17 @@ def test_dev_pusher_contract_requires_typesense_host_secret_clear(preflight: Sim
 
 
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="kubectl is required for the local strategic-merge fixture")
-@pytest.mark.parametrize("env_name", ["REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"])
+@pytest.mark.parametrize(
+    ("environment", "env_name"),
+    [
+        ("dev", "REDIS_DB_HOST"),
+        ("dev", "GOOGLE_CLIENT_ID"),
+        ("dev", "TYPESENSE_HOST"),
+        ("prod", "REDIS_DB_HOST"),
+    ],
+)
 def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
-    tmp_path: Path, preflight: SimpleNamespace, env_name: str
+    tmp_path: Path, preflight: SimpleNamespace, environment: str, env_name: str
 ):
     """Exercise Kubernetes' named-env strategic merge behavior without a cluster.
 
@@ -186,7 +268,7 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
                         - name: {env_name}
                           valueFrom:
                             secretKeyRef:
-                              name: dev-omi-backend-secrets
+                              name: {environment}-omi-backend-secrets
                               key: {env_name}
             """))
 
@@ -223,21 +305,23 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
 
     broken = render(f"""\
 configMapKeyRef:
-  name: dev-omi-backend-config
+  name: {environment}-omi-backend-config
   key: {env_name}
 """)
     broken_value_from = broken["spec"]["template"]["spec"]["containers"][0]["env"][0]["valueFrom"]
     assert broken_value_from == {
-        "configMapKeyRef": {"name": "dev-omi-backend-config", "key": env_name},
-        "secretKeyRef": {"name": "dev-omi-backend-secrets", "key": env_name},
+        "configMapKeyRef": {"name": f"{environment}-omi-backend-config", "key": env_name},
+        "secretKeyRef": {"name": f"{environment}-omi-backend-secrets", "key": env_name},
     }
 
-    rendered_deployment = next(document for document in preflight.render("dev") if document.get("kind") == "Deployment")
+    rendered_deployment = next(
+        document for document in preflight.render(environment) if document.get("kind") == "Deployment"
+    )
     rendered_env = rendered_deployment["spec"]["template"]["spec"]["containers"][0]["env"]
     rendered_item = next(item for item in rendered_env if item["name"] == env_name)
     fixed = render(yaml.safe_dump(rendered_item["valueFrom"], sort_keys=False))
     fixed_value_from = fixed["spec"]["template"]["spec"]["containers"][0]["env"][0]["valueFrom"]
-    assert fixed_value_from == {"configMapKeyRef": {"name": "dev-omi-backend-config", "key": env_name}}
+    assert fixed_value_from == {"configMapKeyRef": {"name": f"{environment}-omi-backend-config", "key": env_name}}
 
 
 @pytest.mark.parametrize("kind", ["configmap", "secret"])

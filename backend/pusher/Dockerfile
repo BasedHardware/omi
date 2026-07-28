@@ -68,6 +68,7 @@ COPY backend/config/ ./config/
 COPY backend/database/ ./database/
 COPY backend/models/ ./models/
 COPY backend/routers/ ./routers/
+COPY backend/services/ ./services/
 COPY backend/utils/ ./utils/
 COPY backend/pusher/ ./pusher/
 

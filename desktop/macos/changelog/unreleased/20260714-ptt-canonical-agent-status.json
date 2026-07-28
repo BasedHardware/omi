@@ -1,3 +1,0 @@
-{
-  "change": "Fixed push-to-talk occasionally reporting a background agent as finished before its task had actually completed"
-}

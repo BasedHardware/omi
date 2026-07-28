@@ -287,7 +287,9 @@ enum GeneratedToolCapabilities {
       "Creates a canonical kernel session/run; visible runs project into floating-bar pills.",
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
+      "The primary coordinator decides in its model loop whether to call spawn_agent. When the current user explicitly asks OpenClaw or Hermes to do work, call spawn_agent in that same turn with that provider; do not delegate that instruction to another agent, use a text-pattern handoff, or narrate that only another chat surface can do it.",
+      "Pass provider='openclaw' or provider='hermes' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
+      "Pass toolPolicy.allowedToolNames to restrict which Omi tools the child agent may call; it can only narrow, never widen, the child's tool set.",
       "Inspect progress with list_agent_sessions or get_agent_run."
     ]
     ),
@@ -354,6 +356,19 @@ enum GeneratedToolCapabilities {
       summary: "Load the full instructions for a named skill listed in available_skills.",
       bullets: [
       "Use the exact skill name from available_skills."
+    ]
+    ),
+    Capability(
+      toolName: "search_skills",
+      title: "Search Skills",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Search installed skill names and compact descriptions before loading a specialized workflow.",
+      bullets: [
+      "Use only when the user's request may benefit from a specialized workflow.",
+      "Load a returned skill only when it is relevant to the user's request.",
+      "Use only when the current user request plausibly needs a specialized workflow.",
+      "Do not browse skills merely to explore options or because a related term appears in conversation context."
     ]
     ),
     Capability(
@@ -449,12 +464,12 @@ enum GeneratedToolCapabilities {
       title: "Capture Screen",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Capture raw screenshot pixels after screen summary context is not enough.",
+      summary: "Capture a live current-screen image after the user asks about what is visible now.",
       bullets: [
-      "For screen-awareness questions, call get_work_context first.",
+      "For a direct current-screen question, use this live capture instead of treating screen history as current evidence.",
       "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
       "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them.",
-      "Call get_work_context first when the user asks about what's on their screen or what they're looking at.",
+      "For a direct current-screen question, capture a live image instead of using get_work_context as current visual evidence.",
       "After capture_screen returns, use Read to view the full-screen image.",
       "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
       "Keep every detail you cite (title, price, badge, position) bound to one on-screen item; if text is not legible even in a tile, say so instead of inferring.",
@@ -587,10 +602,10 @@ enum GeneratedToolCapabilities {
       title: "Report Screen Observation",
       latency: .fastLocal,
       surfaces: Set([.realtimeHub]),
-      summary: "Report a grounded current-screen answer.",
+      summary: "Verify grounding from the current-screen image.",
       bullets: [
       "Only call after screenshot returns the current image.",
-      "Put only visual detail in the answer; native evidence supplies application identity."
+      "Submit a concise visual observation, then answer the user's original request naturally."
     ]
     ),
     Capability(
@@ -633,9 +648,9 @@ enum GeneratedToolCapabilities {
       "Call this first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
       "Returns availability, a screenshot_id for follow-up, OCR preview, and recent timeline without raw image bytes.",
       "If raw pixels are needed after this, request get_screenshot/capture_screen approval.",
-      "Call get_work_context first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
-      "Use its screen_now and timeline fields to answer directly when possible.",
-      "Only request get_screenshot or capture_screen approval if raw image pixels are necessary after get_work_context."
+      "Use this for recent work/activity history, not for direct current-screen questions.",
+      "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
+      "For current visual detail, use capture_screen when approval is available rather than answering from this tool."
     ]
     )
   ]

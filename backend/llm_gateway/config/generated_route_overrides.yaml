@@ -6,7 +6,6 @@ generated_route_overrides:
     provider_options: {reasoning_effort: medium}
   - feature: chat_agent
     primary: {provider: anthropic, model: claude-sonnet-5}
-    provider_options: {effort: medium}
   - feature: chat_extraction
     primary: {provider: openai, model: gpt-5.4-nano}
     provider_options: {reasoning_effort: low}
@@ -80,7 +79,7 @@ generated_route_overrides:
     primary: {provider: openai, model: gpt-5.4-nano}
     provider_options: {reasoning_effort: low}
   - feature: persona_chat
-    primary: {provider: openai, model: gpt-5-nano}
+    primary: {provider: openai, model: gpt-5.4-nano}
     provider_options: {reasoning_effort: low}
   - feature: persona_chat_premium
     primary: {provider: openai, model: gpt-5.6-luna}

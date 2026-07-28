@@ -1795,20 +1795,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get lovingOmi => 'Ben je blij met Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Help ons meer mensen te bereiken door een review achter te laten in de App Store. Je feedback betekent enorm veel voor ons!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Help ons meer mensen te bereiken door een review achter te laten in de Google Play Store. Je feedback betekent enorm veel voor ons!';
-
-  @override
-  String get rateOnAppStore => 'Beoordelen in App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Beoordelen in Google Play';
-
-  @override
   String get maybeLater => 'Misschien later';
 
   @override
@@ -2145,6 +2131,18 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Geheugen bewerken';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Ik hou van ijs eten...';
@@ -9014,7 +9012,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get billingYearly => 'Jaarlijks';
 
   @override
-  String get savePercent => 'Bespaar ~17%';
+  String savePercent(int percent) {
+    return 'Bespaar ~$percent%';
+  }
 
   @override
   String get popular => 'Populair';
@@ -9369,7 +9369,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Werkt voorlopig met Omi- en Limitless-apparaten. Je audio blijft op je telefoon totdat je hem zelf uploadt.';
+      'Werkt met de telefoonmicrofoon en met Omi- en Limitless-apparaten. Je audio blijft op je telefoon totdat je hem zelf uploadt.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9622,4 +9622,180 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Apparaat bijna vol — synchroniseer om ruimte vrij te maken.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Geen verbinding — er wordt lokaal opgenomen. Het wordt getranscribeerd zodra je weer online bent.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Je gegevens zijn standaard beveiligd met sterke versleuteling, en jij bepaalt hoe ze worden opgeslagen en gebruikt.';
+
+  @override
+  String get sttModelAccuracy => 'Nauwkeurigheid';
+
+  @override
+  String get whisperModelSizeBase => 'Basis';
+
+  @override
+  String get cloudTranscription => 'Cloud transcriptie';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Model verwijderen';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Weet je zeker dat je dit model wilt verwijderen?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Gedownload';
+
+  @override
+  String get sttModelFaster => 'Sneller';
+
+  @override
+  String get sttFilterAuto => 'Automatisch';
+
+  @override
+  String get sttModelHigher => 'Hoger';
+
+  @override
+  String get whisperModelSizeLarge => 'Groot';
+
+  @override
+  String get sttModelLower => 'Lager';
+
+  @override
+  String get whisperModelSizeMedium => 'Gemiddeld';
+
+  @override
+  String get onDeviceModelDeleted => 'Model verwijderd';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Downloaden van model mislukt';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Het Whisper-model kon niet worden gedownload. Probeer het opnieuw.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model gedownload';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper-model succesvol gedownload';
+
+  @override
+  String get onDeviceModelSize => 'Modelgrootte';
+
+  @override
+  String get sttNone => 'Geen';
+
+  @override
+  String get onDeviceTranscription => 'On-device transcriptie';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transcriptie wordt lokaal op je apparaat verwerkt';
+
+  @override
+  String get sttModelSlower => 'Langzamer';
+
+  @override
+  String get whisperModelSizeSmall => 'Klein';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Spraak-naar-tekst provider';
+
+  @override
+  String get speechToTextProviderDesc => 'Selecteer de dienst voor transcriptie';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Snelheid';
+
+  @override
+  String get whisperModelSizeTiny => 'Heel klein';
+
+  @override
+  String get transcriptionLanguage => 'Transcriptietaal';
+
+  @override
+  String get transcriptionLanguageDesc => 'Selecteer de taal voor spraaktranscriptie';
+
+  @override
+  String get whisperModel => 'Whisper-model';
+
+  @override
+  String get whisperModelDesc => 'Selecteer het model voor on-device transcriptie';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Downgraden naar Freemium?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Je krijgt te maken met deze beperkingen:';
+
+  @override
+  String get downgradeLimitBattery => '7x meer batterijverbruik';
+
+  @override
+  String get downgradeLimitQuality => '30% lagere transcriptiekwaliteit';
+
+  @override
+  String get downgradeLimitDelay => '5-7 seconden vertraging';
+
+  @override
+  String get downgradeLimitSpeakers => 'Kan sprekers niet herkennen';
+
+  @override
+  String get downgradeAnyway => 'Toch downgraden';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Agenda niet verbonden';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Verbind je Google Agenda om gesprekken aan agenda-items te koppelen.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Gekoppeld aan “$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Koppelen van agenda-item mislukt';
+
+  @override
+  String get thanksForYourFeedback => 'Bedankt voor je feedback!';
+
+  @override
+  String get copyMessage => 'Bericht kopiëren';
+
+  @override
+  String get searchSettings => 'Instellingen zoeken…';
+
+  @override
+  String get errorLoadingAudio => 'Fout bij laden van audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Kies je Ray-Ban Meta-microfoon';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Selecteer de Bluetooth-microfoon van je bril. Muziek wordt gepauzeerd terwijl Omi deze gebruikt.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Geen Bluetooth-microfoons gevonden. Verbind je bril in de iPhone-instellingen en probeer het opnieuw.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth-microfoons konden niet worden geladen. Controleer of Bluetooth aanstaat en probeer het opnieuw.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Kan geen verbinding maken met die microfoon. Controleer of deze verbonden is in de iPhone-instellingen.';
 }

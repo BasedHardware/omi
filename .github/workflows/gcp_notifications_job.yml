@@ -54,13 +54,13 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.branch }}
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
@@ -68,7 +68,7 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Compute short SHA
         id: image-tag
@@ -94,21 +94,34 @@ jobs:
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows
 
-      - name: Build and Push Docker image
-        uses: docker/build-push-action@v6
+      - name: Build runtime image
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./backend/modal/Dockerfile.notifications_job
-          push: true
+          push: false
+          load: true
           tags: |
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
+      - name: Verify built runtime image before publish
+        run: |
+          image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/modal/Dockerfile.notifications_job \
+            --image "$image"
+
+      - name: Push verified runtime image
+        run: |
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+
       - name: Deploy to Cloud Run
         id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           job: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
@@ -116,10 +129,10 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           env_vars: ${{ steps.runtime-env.outputs.notifications_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.notifications_job_secrets }}
-          # Strip retired maintenance keys, plus any literal shadowing a
+          # Strip retired maintenance/Pusher keys, plus any literal shadowing a
           # Secret Manager binding (no-op on a clean target).
           flags: >-
-            --remove-env-vars=MEMORY_MODE,MEMORY_ENABLED_USERS,MEMORY_V3_GET_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,MEMORY_CANONICAL_CONSOLIDATION_ENABLED,MEMORY_TYPESENSE_COLLECTION,TYPESENSE_HOST,TYPESENSE_HOST_PORT,TYPESENSE_API_KEY,${{ steps.runtime-env.outputs.notifications_job_secret_names }}
+            --remove-env-vars=MEMORY_MODE,MEMORY_ENABLED_USERS,MEMORY_V3_GET_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,MEMORY_CANONICAL_CONSOLIDATION_ENABLED,MEMORY_TYPESENSE_COLLECTION,TYPESENSE_HOST,TYPESENSE_HOST_PORT,TYPESENSE_API_KEY,HOSTED_PUSHER_API_URL,${{ steps.runtime-env.outputs.notifications_job_secret_names }}
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

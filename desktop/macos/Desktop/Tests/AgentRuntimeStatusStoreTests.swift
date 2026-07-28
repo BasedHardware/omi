@@ -4,8 +4,7 @@ import XCTest
 
 @MainActor
 final class AgentRuntimeStatusStoreTests: XCTestCase {
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
     AgentRuntimeStatusStore.shared.reset()
     TaskAgentStatusRegistry.shared.reset()
   }

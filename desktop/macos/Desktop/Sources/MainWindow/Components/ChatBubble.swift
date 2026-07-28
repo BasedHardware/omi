@@ -1,13 +1,13 @@
 import AppKit
-import MarkdownUI
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - Chat Bubble
 
 struct ChatBubble: View {
   let message: ChatMessage
   let app: OmiApp?
+  let showsOmiMark: Bool
   let onRate: (Int?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
   var isDuplicate: Bool = false
@@ -19,14 +19,19 @@ struct ChatBubble: View {
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
 
   @State private var isTimestampHovering = false
+  @State private var isRowHovering = false
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
   @State private var showInfoPopover = false
   @State private var lastSubmittedRating: Int?
+  // Shared across every metadata control: true while any of them holds
+  // keyboard focus, so Tab / Full Keyboard Access never lands on an
+  // invisible button.
+  @FocusState private var isMetadataControlFocused: Bool
 
   init(
-    message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
+    message: ChatMessage, app: OmiApp?, showsOmiMark: Bool, onRate: @escaping (Int?) -> Void,
     onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
     onCancelTurn: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
@@ -34,6 +39,7 @@ struct ChatBubble: View {
   ) {
     self.message = message
     self.app = app
+    self.showsOmiMark = showsOmiMark
     self.onRate = onRate
     self.onCitationTap = onCitationTap
     self.isDuplicate = isDuplicate
@@ -89,8 +95,9 @@ struct ChatBubble: View {
     )
 
     HStack(alignment: .top, spacing: OmiSpacing.md) {
+      // App personas keep their own image. The Omi mark is mounted below as an
+      // overlay in the leading gutter so it never changes the reply's x origin.
       if message.sender == .ai {
-        // App avatar
         if let app = app {
           AsyncImage(url: URL(string: app.image)) { phase in
             switch phase {
@@ -105,192 +112,222 @@ struct ChatBubble: View {
           }
           .frame(width: 32, height: 32)
           .clipShape(Circle())
-        } else {
-          if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-            let logoImage = NSImage(contentsOf: logoURL)
-          {
-            Image(nsImage: logoImage)
-              .resizable()
-              .scaledToFit()
-              .frame(width: 20, height: 20)
-              .frame(width: 32, height: 32)
-              .background(OmiColors.backgroundTertiary)
-              .clipShape(Circle())
-          }
         }
       }
 
+      // Bubbles hug their content up to a readable cap — omi replies sit
+      // left, user messages sit right, neither spans the full column.
       VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
-        if message.isStreaming && message.text.isEmpty && message.contentBlocks.isEmpty {
-          // Show typing indicator for empty streaming message
-          TypingIndicator()
-        } else if message.sender == .ai && !message.contentBlocks.isEmpty {
-          // Render structured content blocks, grouping consecutive tool calls
-          ForEach(groupedBlocks) { group in
-            switch group {
-            case .text(_, let text):
-              if !text.isEmpty {
-                SelectableMarkdown(text: text, sender: .ai)
-                  .padding(.horizontal, OmiSpacing.md)
-                  .padding(.vertical, OmiSpacing.sm)
-                  .background(OmiColors.backgroundTertiary.opacity(0.92))
-                  .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
-                  .padding(.top, OmiSpacing.hairline)
-              }
-            case .toolCalls(_, let calls):
-              ToolCallsGroup(
-                calls: calls,
-                onCancel: onCancelTurn,
-                onOpenAgent: onOpenAgent,
-                onOpenAgentRef: onOpenAgentRef
-              )
-            case .thinking(_, let text):
-              ThinkingBlock(text: text)
-            case .discoveryCard(_, let title, let summary, let fullText):
-              DiscoveryCard(title: title, summary: summary, fullText: fullText)
-            case .agentSpawn(
-              _, let pillId, let sessionId, let runId, let title, let objective, let provider
-            ):
-              AgentSpawnCard(
-                title: title,
-                objective: objective,
-                provider: provider,
-                ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
-                onOpen: hasAgentOpenAction ? openAgent(ref:completion:) : nil
-              )
-            case .agentCompletion(
-              _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
-            ):
-              AgentCompletionCard(
-                title: title,
-                promptSnippet: promptSnippet,
-                output: output,
-                status: status,
-                ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
-                onOpen: hasAgentOpenAction ? openAgent(ref:completion:) : nil
-              )
-            }
-          }
-          // Show typing indicator at end if still streaming
-          // (skip only when last group is tool calls with an in-flight tool — it already has a spinner)
-          if message.isStreaming {
-            if case .toolCalls(_, let calls) = groupedBlocks.last,
-              calls.contains(where: { block in
-                if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
-                return false
-              })
-            {
-              // Tool group has a running tool — its card already shows a spinner
-            } else {
-              TypingIndicator()
-            }
-          }
-          if !message.displayResources.isEmpty {
-            ChatResourceStrip(resources: message.displayResources, density: .full, alignment: .leading)
-          }
-        } else if isDuplicate && !isExpanded {
-          // Collapsed duplicate message
-          Button(action: { isExpanded = true }) {
-            HStack(spacing: OmiSpacing.xs) {
-              Image(systemName: "doc.on.doc")
-                .scaledFont(size: OmiType.caption)
-              Text("Duplicate message")
-                .scaledFont(size: OmiType.caption)
-              Image(systemName: "chevron.down")
-                .scaledFont(size: OmiType.micro)
-            }
-            .foregroundColor(OmiColors.textTertiary)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(OmiColors.backgroundTertiary.opacity(0.72))
-            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
-          }
-          .buttonStyle(.plain)
-        } else {
-          // User messages or AI messages without content blocks (loaded from Firestore)
-          VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xs) {
-            // User attachments read as "here's what I'm sending" and belong
-            // above the text; AI-generated artifacts are the result of the
-            // reply and always sit below it.
-            let resourceStrip = message.displayResources.isEmpty
-              ? nil
-              : ChatResourceStrip(
-                resources: message.displayResources,
-                density: .full,
-                alignment: message.sender == .user ? .trailing : .leading
-              )
-
-            if message.sender == .user, let resourceStrip {
-              resourceStrip
-            }
-
-            if let backgroundAgentSummary {
-              BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
-            } else if !message.text.isEmpty {
-              SelectableMarkdown(text: displayText, sender: message.sender)
-                .padding(.horizontal, OmiSpacing.md)
-                .padding(.vertical, OmiSpacing.sm)
-                .background(
-                  message.sender == .user
-                    ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.95)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
-                .padding(.top, OmiSpacing.hairline)
-            }
-
-            // Show more / Show less toggle for long plain-text messages.
-            // BackgroundAgentSummaryCard owns its own expand state.
-            if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
-              Button(action: { isExpanded.toggle() }) {
-                Text(isExpanded ? "Show less" : "Show more")
-                  .scaledFont(size: OmiType.caption)
-                  .foregroundColor(.white)
-              }
-              .buttonStyle(.plain)
-            }
-
-            if message.sender != .user, let resourceStrip {
-              resourceStrip
-            }
-          }
-        }
-
-        // Citation cards for AI messages with citations
-        if message.sender == .ai && !message.citations.isEmpty && !message.isStreaming {
-          CitationCardsView(citations: message.citations) { citation in
-            onCitationTap?(citation)
-          }
-          .frame(maxWidth: 280)
-        }
-
-        // Rating buttons, copy button, and message metadata
-        if message.sender == .ai && !message.isStreaming && message.journalStatus == .failed {
-          Text("Couldn't save this reply")
-            .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(.orange.opacity(0.9))
-        }
-
-        if message.sender == .ai && !message.isStreaming && message.isSynced {
-          messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
-        } else if message.sender == .ai && !message.isStreaming && !message.copyableText.isEmpty {
-          messageMetadataRow(includeRatingButtons: false, includeCopyButton: true)
-        } else if !message.isStreaming || !message.text.isEmpty {
-          messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
-        }
+        messageContentView(groupedBlocks)
       }
-
-      if message.sender == .user {
-        // User avatar
-        Image(systemName: "person.fill")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
-          .frame(width: 32, height: 32)
-          .background(OmiColors.backgroundTertiary)
-          .clipShape(Circle())
+      .frame(
+        maxWidth: 640,
+        alignment: message.sender == .user ? .trailing : .leading
+      )
+    }
+    .frame(
+      maxWidth: .infinity,
+      minHeight: ChatOmiMarkPlacement.rowHeight(
+        showsMark: message.sender == .ai && app == nil && showsOmiMark),
+      alignment: message.sender == .user ? .trailing : .leading
+    )
+    .overlay(alignment: .topLeading) {
+      if message.sender == .ai, app == nil, showsOmiMark {
+        ChatOmiMark(
+          motion: message.isStreaming ? ChatWorkingStatus.motion(for: message) : nil,
+          size: 24
+        )
+        .frame(width: 32, height: 32)
+        .offset(x: -(32 + OmiSpacing.md))
       }
     }
-    .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
     .contentShape(Rectangle())
+    .onHover { isRowHovering = $0 }
+  }
+
+  @ViewBuilder
+  private func messageContentView(_ groupedBlocks: [ContentBlockGroup]) -> some View {
+    if message.isStreaming && message.text.isEmpty && message.contentBlocks.isEmpty {
+      // Omi's own reply shows the spinning Omi-mark avatar while thinking, so no
+      // extra typing dots are needed; only app personas (no spinning mark) do.
+      if app != nil {
+        TypingIndicator()
+      }
+    } else if message.sender == .ai && !message.contentBlocks.isEmpty {
+      ForEach(groupedBlocks) { group in
+        groupView(group)
+      }
+      if message.isStreaming, app != nil {
+        if case .toolCalls(_, let calls) = groupedBlocks.last,
+          calls.contains(where: { block in
+            if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
+            return false
+          })
+        {
+          // Tool group has a running tool — its card already shows a spinner
+        } else {
+          TypingIndicator()
+        }
+      }
+      if !message.displayResources.isEmpty {
+        ChatResourceStrip(resources: message.displayResources, density: .full, alignment: .leading)
+      }
+    } else if isDuplicate && !isExpanded {
+      Button(action: { isExpanded = true }) {
+        HStack(spacing: OmiSpacing.xs) {
+          Image(systemName: "doc.on.doc")
+            .scaledFont(size: OmiType.caption)
+          Text("Duplicate message")
+            .scaledFont(size: OmiType.caption)
+          Image(systemName: "chevron.down")
+            .scaledFont(size: OmiType.micro)
+        }
+        .foregroundColor(OmiColors.textTertiary)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.sm)
+        .background(OmiColors.backgroundTertiary.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
+      }
+      .buttonStyle(.plain)
+    } else {
+      VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xs) {
+        let resourceStrip =
+          message.displayResources.isEmpty
+          ? nil
+          : ChatResourceStrip(
+            resources: message.displayResources,
+            density: .full,
+            alignment: message.sender == .user ? .trailing : .leading
+          )
+
+        if message.sender == .user, let resourceStrip {
+          resourceStrip
+        }
+
+        if let backgroundAgentSummary {
+          BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
+        } else if !message.text.isEmpty {
+          OmiMarkdown(text: displayText, sender: message.sender)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
+            .background(
+              message.sender == .user
+                ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+            .overlay(
+              RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
+                .stroke(
+                  message.sender == .user ? Color.clear : OmiColors.border.opacity(0.4),
+                  lineWidth: 1
+                )
+            )
+            .padding(.top, OmiSpacing.hairline)
+        }
+
+        if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
+          Button(action: { isExpanded.toggle() }) {
+            Text(isExpanded ? "Show less" : "Show more")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(.white)
+          }
+          .buttonStyle(.plain)
+        }
+
+        if message.sender != .user, let resourceStrip {
+          resourceStrip
+        }
+      }
+    }
+
+    if message.sender == .ai && !message.citations.isEmpty && !message.isStreaming {
+      CitationCardsView(citations: message.citations) { citation in
+        onCitationTap?(citation)
+      }
+      .frame(maxWidth: 280)
+    }
+
+    if message.sender == .ai && !message.isStreaming && message.journalStatus == .failed {
+      Text("Couldn't save this reply")
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .foregroundColor(.orange.opacity(0.9))
+    }
+
+    if message.sender == .ai && !message.isStreaming && message.isSynced {
+      messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
+    } else if message.sender == .ai && !message.isStreaming && !message.copyableText.isEmpty {
+      messageMetadataRow(includeRatingButtons: false, includeCopyButton: true)
+    } else if !message.isStreaming || !message.text.isEmpty {
+      messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
+    }
+  }
+
+  private var agentOpenClosure: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? {
+    guard hasAgentOpenAction else { return nil }
+    return openAgent(ref:completion:)
+  }
+
+  private func groupView(_ group: ContentBlockGroup) -> AnyView {
+    switch group {
+    case .text(_, let text):
+      if text.isEmpty {
+        return AnyView(EmptyView())
+      }
+      return AnyView(
+        OmiMarkdown(text: text, sender: .ai)
+          .padding(.horizontal, OmiSpacing.md)
+          .padding(.vertical, OmiSpacing.sm)
+          .background(OmiColors.backgroundTertiary.opacity(0.42))
+          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+          .overlay(
+            RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
+              .stroke(OmiColors.border.opacity(0.4), lineWidth: 1)
+          )
+          .padding(.top, OmiSpacing.hairline)
+      )
+    case .toolCalls(_, let calls):
+      return AnyView(
+        ToolCallsGroup(
+          calls: calls,
+          compact: true,
+          onCancel: onCancelTurn,
+          onOpenAgent: onOpenAgent,
+          onOpenAgentRef: onOpenAgentRef
+        )
+      )
+    case .thinking:
+      // Omi replies like a person texting — no exposed "Thinking" reasoning
+      // disclosure. The streaming typing indicator (spinning mark) carries the
+      // wait on its own.
+      return AnyView(EmptyView())
+    case .discoveryCard(_, let title, let summary, let fullText):
+      return AnyView(DiscoveryCard(title: title, summary: summary, fullText: fullText))
+    case .agentSpawn(
+      _, let pillId, let sessionId, let runId, let title, let objective, let provider
+    ):
+      return AnyView(
+        AgentSpawnCard(
+          title: title,
+          objective: objective,
+          provider: provider,
+          ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+          onOpen: agentOpenClosure
+        )
+      )
+    case .agentCompletion(
+      _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
+    ):
+      return AnyView(
+        AgentCompletionCard(
+          title: title,
+          promptSnippet: promptSnippet,
+          output: output,
+          status: status,
+          ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+          onOpen: agentOpenClosure
+        )
+      )
+    }
   }
 
   @ViewBuilder
@@ -320,7 +357,19 @@ struct ChatBubble: View {
           .transition(.opacity)
       }
     }
+    // Quiet timeline: actions and timestamps only surface while the reader
+    // is on the message — by pointer hover or keyboard focus — or
+    // mid-interaction with them.
+    .opacity(
+      ChatBubbleMetadataReveal.isVisible(
+        hovering: isRowHovering,
+        controlFocused: isMetadataControlFocused,
+        transientFeedback: showRatingFeedback || showCopied || showInfoPopover
+      ) ? 1 : 0
+    )
     .omiAnimation(.easeInOut(duration: 0.12), value: isTimestampHovering)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataControlFocused)
   }
 
   @ViewBuilder
@@ -339,6 +388,7 @@ struct ChatBubble: View {
           .foregroundColor(message.rating == 1 ? OmiColors.accent : OmiColors.textTertiary)
       }
       .buttonStyle(.plain)
+      .focused($isMetadataControlFocused)
       .help("Helpful response")
 
       // Thumbs down
@@ -354,6 +404,7 @@ struct ChatBubble: View {
           .foregroundColor(message.rating == -1 ? .red : OmiColors.textTertiary)
       }
       .buttonStyle(.plain)
+      .focused($isMetadataControlFocused)
       .help("Not helpful")
 
       if showRatingFeedback {
@@ -364,6 +415,14 @@ struct ChatBubble: View {
       }
     }
     .omiAnimation(.easeInOut(duration: 0.2), value: showRatingFeedback)
+    // Keep the dedupe shadow in sync with the live rating. Without this, an
+    // external rating change (background sync/poll updates message.rating on a
+    // stable .id(message.id) view) leaves lastSubmittedRating stale, so a later
+    // un-rate tap computes newRating == nil == lastSubmittedRating and the guard
+    // swallows it — the rating can never be cleared.
+    .onChange(of: message.rating, initial: true) { _, newValue in
+      lastSubmittedRating = newValue
+    }
   }
 
   private func showRatingFeedbackBriefly() {
@@ -388,6 +447,7 @@ struct ChatBubble: View {
         .foregroundColor(showCopied ? .green : OmiColors.textTertiary)
     }
     .buttonStyle(.plain)
+    .focused($isMetadataControlFocused)
     .help("Copy message")
   }
 
@@ -402,12 +462,23 @@ struct ChatBubble: View {
         .foregroundColor(showInfoPopover ? OmiColors.textPrimary : OmiColors.textTertiary)
     }
     .buttonStyle(.plain)
+    .focused($isMetadataControlFocused)
     .help("View response context")
     .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
       if let metadata = message.metadata {
         MessageMetadataPopover(metadata: metadata)
       }
     }
+  }
+}
+
+/// Visibility rule for the quiet timeline's per-message metadata row
+/// (rating / copy / info / timestamp). Keyboard parity is part of the
+/// contract: focus on any metadata control must reveal the row, otherwise
+/// Tab / Full Keyboard Access ends up on an invisible button.
+enum ChatBubbleMetadataReveal {
+  static func isVisible(hovering: Bool, controlFocused: Bool, transientFeedback: Bool) -> Bool {
+    hovering || controlFocused || transientFeedback
   }
 }
 
@@ -525,7 +596,7 @@ private struct BackgroundAgentSummaryCard: View {
             .foregroundColor(OmiColors.textTertiary)
             .lineLimit(3)
             .textSelection(.disabled)
-          SelectableMarkdown(text: summary.output, sender: .ai)
+          OmiMarkdown(text: summary.output, sender: .ai)
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: OmiType.caption)
@@ -746,7 +817,7 @@ struct AgentCompletionCard: View {
               .lineLimit(3)
               .textSelection(.disabled)
           }
-          SelectableMarkdown(text: output, sender: .ai)
+          OmiMarkdown(text: output, sender: .ai)
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: OmiType.caption)
@@ -825,7 +896,7 @@ struct AgentCompletionCard: View {
   }
 }
 
-extension ChatBubble: Equatable {
+extension ChatBubble: @preconcurrency Equatable {
   static func == (lhs: ChatBubble, rhs: ChatBubble) -> Bool {
     // Streaming messages always re-render so SwiftUI sees live updates
     guard !lhs.message.isStreaming && !rhs.message.isStreaming else { return false }
@@ -834,6 +905,7 @@ extension ChatBubble: Equatable {
       && lhs.message.text == rhs.message.text
       && lhs.message.rating == rhs.message.rating
       && lhs.app?.id == rhs.app?.id
+      && lhs.showsOmiMark == rhs.showsOmiMark
       && lhs.isDuplicate == rhs.isDuplicate
   }
 }
@@ -939,14 +1011,8 @@ enum ContentBlockGroup: Identifiable {
     return groups
   }
 
-  /// Main chat renders the agent's final answer and sub-agent entrypoints, not
-  /// the implementation log of every completed tool. An in-flight tool remains
-  /// visible as progress feedback even if its surrounding text segment already
-  /// reached a terminal streaming state; the tool's own lifecycle is the
-  /// authority. Once that tool completes or fails, only spawned-agent links
-  /// survive. When a structured `.agentSpawn` exists
-  /// for the same pill/run, hide the spawn tool call so the card is the single
-  /// entrypoint (INV-6 structured identity).
+  /// Main chat keeps a durable tool trace, so streamed answers do not appear to lose completed work.
+  /// A structured `.agentSpawn` replaces only its duplicate raw spawn call (INV-6 structured identity).
   static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
     // The display projection turns a persisted spawn into its terminal card.
     // Both structured forms are therefore authoritative evidence that the
@@ -984,24 +1050,34 @@ enum ContentBlockGroup: Identifiable {
           guard let pillId = call.spawnedAgentID else { return false }
           if structuredSpawnKeys.contains("pill:\(pillId.uuidString)") { return false }
           if let runId = call.spawnedAgentRunID,
-             structuredSpawnKeys.contains("run:\(runId)")
+            structuredSpawnKeys.contains("run:\(runId)")
           {
             return false
           }
           return true
         }
-        // Keep unresolved agent links and live work together. A raw spawn can
-        // briefly precede its structured receipt while another tool (for
-        // example a web lookup) is still executing; returning early for the
-        // spawn would hide that truthful active-tool indication.
+        // Keep the complete tool trace together. A raw spawn can briefly
+        // precede its structured receipt; once that receipt arrives, hide only
+        // the duplicate raw spawn and retain every other completed, failed, or
+        // in-flight tool row as visible progress evidence.
         let unresolvedSpawnIDs = Set(spawnedAgentCalls.map(\.id))
         let visibleCalls = calls.filter { block in
           if unresolvedSpawnIDs.contains(block.id) { return true }
-          if case .toolCall(_, _, let status, _, _, _) = block {
-            return status.isInFlight
+          if let ref = block.agentOpenRef {
+            let hasStructuredSpawn =
+              ref.pillId.map { structuredSpawnKeys.contains("pill:\($0.uuidString)") }
+              ?? ref.runId.map { structuredSpawnKeys.contains("run:\($0)") }
+              ?? false
+            if hasStructuredSpawn { return false }
           }
+          if case .toolCall = block { return true }
           return false
         }
+        // Tool-call chips are live progress, not history: show them only while
+        // the reply is streaming (tools actively being called) and drop them
+        // once omi has finished replying, so the timeline reads like a clean
+        // text conversation.
+        if !isStreaming { return nil }
         return visibleCalls.isEmpty ? nil : .toolCalls(id: id, calls: visibleCalls)
       }
     }
@@ -1010,12 +1086,18 @@ enum ContentBlockGroup: Identifiable {
 
 // MARK: - Tool Calls Group
 
+/// Keeps streamed tool groups compact until the reader explicitly asks for the details.
+enum ToolCallsGroupExpansionPolicy {
+  static func initiallyExpanded() -> Bool {
+    false
+  }
+}
+
 /// Renders a group of consecutive tool calls as a single summary line with
 /// optional expanded per-step details.
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
   var compact: Bool = false
-  var expandRunning: Bool = true
   /// `ChatProvider` wires this to `agentBridge.interrupt()` via the
   /// parent message view. If no action is available, the banner is hidden
   /// so the UI never presents a no-op Cancel button.
@@ -1029,23 +1111,16 @@ struct ToolCallsGroup: View {
   init(
     calls: [ChatContentBlock],
     compact: Bool = false,
-    expandRunning: Bool = true,
     onCancel: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
     onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
   ) {
     self.calls = calls
     self.compact = compact
-    self.expandRunning = expandRunning
     self.onCancel = onCancel
     self.onOpenAgent = onOpenAgent
     self.onOpenAgentRef = onOpenAgentRef
-    self._isExpanded = State(initialValue: expandRunning && Self.hasRunningTool(in: calls))
-  }
-
-  /// Whether any tool in the group is still running.
-  private var hasRunningTool: Bool {
-    Self.hasRunningTool(in: calls)
+    self._isExpanded = State(initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded())
   }
 
   /// True iff at least one tool in the group is `.stalled` and is not a
@@ -1167,13 +1242,8 @@ struct ToolCallsGroup: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: compact ? 14 : 16)
-    .onChange(of: hasRunningTool) { _, isRunning in
-      guard expandRunning, isRunning else { return }
-      OmiMotion.withGated(.easeInOut(duration: 0.18)) {
-        isExpanded = true
-      }
-    }
+    .fixedSize(horizontal: false, vertical: true)
+    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.42), radius: compact ? 14 : 16)
   }
 
   private var header: some View {
@@ -1272,13 +1342,6 @@ struct ToolCallsGroup: View {
       }
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.vertical, OmiSpacing.xs)
-    }
-  }
-
-  private static func hasRunningTool(in calls: [ChatContentBlock]) -> Bool {
-    calls.contains { block in
-      if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
-      return false
     }
   }
 
@@ -1570,9 +1633,11 @@ extension ChatContentBlock {
     else { return nil }
 
     let firstAgent = (root["agents"] as? [[String: Any]])?.first
-    let session = (firstAgent?["session"] as? [String: Any])
+    let session =
+      (firstAgent?["session"] as? [String: Any])
       ?? (root["session"] as? [String: Any])
-    let run = (firstAgent?["run"] as? [String: Any])
+    let run =
+      (firstAgent?["run"] as? [String: Any])
       ?? (root["run"] as? [String: Any])
     let metadata = session?["metadata"] as? [String: Any]
 
@@ -1582,15 +1647,18 @@ extension ChatContentBlock {
       return trimmed.isEmpty ? nil : trimmed
     }
 
-    let pillRaw = string(session?["externalRefId"])
+    let pillRaw =
+      string(session?["externalRefId"])
       ?? string(metadata?["pillId"])
       ?? string(root["pillId"])
     let defaultAdapterId = string(session?["defaultAdapterId"])
-    let authoritativeProvider = ["hermes", "openclaw"].contains(defaultAdapterId ?? "")
+    let authoritativeProvider =
+      ["hermes", "openclaw"].contains(defaultAdapterId ?? "")
       ? defaultAdapterId
       : nil
     let legacyProvider = string(metadata?["provider"])
-    let provider = authoritativeProvider
+    let provider =
+      authoritativeProvider
       ?? (["hermes", "openclaw"].contains(legacyProvider ?? "") ? legacyProvider : nil)
     return (
       pillId: pillRaw.flatMap(UUID.init(uuidString:)),
@@ -1612,7 +1680,7 @@ extension ChatContentBlock {
 /// Single source of truth for how each `ToolCallStatus` value renders
 /// as a small inline icon. Used in both the group header and individual
 /// tool rows so the visual language is consistent.
-@ViewBuilder
+@MainActor @ViewBuilder
 private func statusIcon(for status: ToolCallStatus, size: CGFloat) -> some View {
   switch status {
   case .running:
@@ -1787,7 +1855,7 @@ struct DiscoveryCard: View {
           .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
-          SelectableMarkdown(text: fullText, sender: .ai)
+          OmiMarkdown(text: fullText, sender: .ai)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
         }
@@ -1797,119 +1865,5 @@ struct DiscoveryCard: View {
     .omiPanel(
       fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18),
       shadowOpacity: 0.08, shadowRadius: 10, shadowY: 6)
-  }
-}
-
-// MARK: - Markdown Themes
-
-extension Theme {
-  static func userMessage(scale: CGFloat = 1.0) -> Theme {
-    Theme()
-      .text {
-        ForegroundColor(.white)
-        FontSize(round(14 * scale))
-      }
-      .code {
-        FontFamilyVariant(.monospaced)
-        FontSize(round(13 * scale))
-        ForegroundColor(.white.opacity(0.9))
-        BackgroundColor(.white.opacity(0.15))
-      }
-      .strong {
-        FontWeight(.semibold)
-      }
-      .link {
-        ForegroundColor(.white.opacity(0.9))
-        UnderlineStyle(.single)
-      }
-      .table { configuration in
-        ScrollView(.horizontal, showsIndicators: false) {
-          configuration.label
-            .fixedSize(horizontal: true, vertical: true)
-            .markdownTableBorderStyle(.init(color: .white.opacity(0.18)))
-            .markdownTableBackgroundStyle(.alternatingRows(.white.opacity(0.06), .white.opacity(0.03)))
-        }
-        .markdownMargin(top: 0, bottom: 10)
-      }
-      .tableCell { configuration in
-        configuration.label
-          .markdownTextStyle {
-            if configuration.row == 0 {
-              FontWeight(.semibold)
-            }
-          }
-          .padding(.vertical, OmiSpacing.xxs)
-          .padding(.horizontal, OmiSpacing.sm)
-      }
-  }
-
-  static func aiMessage(scale: CGFloat = 1.0) -> Theme {
-    Theme()
-      .text {
-        ForegroundColor(OmiColors.textPrimary)
-        FontSize(round(14 * scale))
-      }
-      .code {
-        FontFamilyVariant(.monospaced)
-        FontSize(round(13 * scale))
-        ForegroundColor(OmiColors.textPrimary)
-        BackgroundColor(OmiColors.backgroundTertiary)
-      }
-      .codeBlock { configuration in
-        ScrollView(.horizontal, showsIndicators: false) {
-          configuration.label
-            .markdownTextStyle {
-              FontFamilyVariant(.monospaced)
-              FontSize(round(13 * scale))
-              ForegroundColor(OmiColors.textPrimary)
-            }
-        }
-        .padding(OmiSpacing.md)
-        .background(OmiColors.backgroundTertiary)
-        .cornerRadius(OmiChrome.elementRadius)
-      }
-      .strong {
-        FontWeight(.semibold)
-      }
-      .link {
-        ForegroundColor(OmiColors.accent)
-      }
-      .table { configuration in
-        ScrollView(.horizontal, showsIndicators: false) {
-          configuration.label
-            .fixedSize(horizontal: true, vertical: true)
-            .markdownTableBorderStyle(.init(color: Color.white.opacity(0.14)))
-            .markdownTableBackgroundStyle(
-              .alternatingRows(OmiColors.backgroundTertiary.opacity(0.92), Color.white.opacity(0.035))
-            )
-        }
-        .markdownMargin(top: 0, bottom: 10)
-      }
-      .tableCell { configuration in
-        configuration.label
-          .markdownTextStyle {
-            if configuration.row == 0 {
-              FontWeight(.semibold)
-            }
-          }
-          .padding(.vertical, OmiSpacing.xxs)
-          .padding(.horizontal, OmiSpacing.sm)
-      }
-  }
-}
-
-struct ScaledMarkdownTheme: ViewModifier {
-  @Environment(\.fontScale) private var fontScale
-  let sender: ChatSender
-
-  func body(content: Content) -> some View {
-    content.markdownTheme(
-      sender == .user ? .userMessage(scale: fontScale) : .aiMessage(scale: fontScale))
-  }
-}
-
-extension View {
-  func scaledMarkdownTheme(_ sender: ChatSender) -> some View {
-    modifier(ScaledMarkdownTheme(sender: sender))
   }
 }

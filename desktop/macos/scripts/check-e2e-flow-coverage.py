@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -14,7 +15,10 @@ from typing import Iterable
 
 DESKTOP_SWIFT_ROOT = Path("desktop/macos/Desktop/Sources")
 DEFAULT_FLOWS_DIR = Path("desktop/macos/e2e/flows")
+FORMATTER_WRAPPER = Path("desktop/macos/scripts/swift-format-wrapper.sh")
+FORMATTER_CONFIG = Path("desktop/macos/Desktop/.swift-format")
 GIT_ENV_DROP = {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"}
+IMPORT_DECLARATION = re.compile(r"^\s*(?:(?:@testable|@preconcurrency|@_exported)\s+)?import\s+[A-Za-z_][A-Za-z0-9_.]*\s*$")
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,12 @@ class FlowCoverage:
     flow_path: Path
     flow_name: str
     covered_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Formatter:
+    binary: Path
+    configuration: Path
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,6 +45,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base", default=None, help="Git base ref when no paths are provided.")
     parser.add_argument("--staged", action="store_true", help="Use staged changes when no paths are provided.")
     parser.add_argument("--flows-dir", default=str(DEFAULT_FLOWS_DIR), help="Flow directory.")
+    parser.add_argument(
+        "--formatter-binary",
+        default="auto",
+        help="Pinned swift-format binary path, 'auto' (default), or 'none' for portable fallback classification.",
+    )
     parser.add_argument("--strict", action="store_true", help="Fail when any changed Swift source file is uncovered.")
     return parser.parse_args()
 
@@ -75,6 +90,75 @@ def run_git(root: Path, args: list[str]) -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
+def git_file_contents(root: Path, ref: str, path: str) -> str | None:
+    result = subprocess.run(
+        ["git", "show", f"{ref}:{path}"],
+        cwd=root,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        env=git_env(),
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
+def resolve_formatter(root: Path, value: str) -> Formatter | None:
+    if value == "none":
+        return None
+    configuration = root / FORMATTER_CONFIG
+    if not configuration.is_file():
+        return None
+    if value == "auto":
+        wrapper = root / FORMATTER_WRAPPER
+        if not wrapper.is_file():
+            return None
+        bootstrap = subprocess.run(
+            [str(wrapper), "bootstrap"],
+            cwd=root,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            env=git_env(),
+        )
+        if bootstrap.returncode != 0:
+            return None
+        binary_result = subprocess.run(
+            [str(wrapper), "binary-path"],
+            cwd=root,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            env=git_env(),
+        )
+        binary = Path(binary_result.stdout.strip())
+    else:
+        binary = Path(value)
+    return Formatter(binary=binary, configuration=configuration) if binary.is_file() else None
+
+
+def formatted_swift_source(formatter: Formatter, source: str, path: str) -> str | None:
+    result = subprocess.run(
+        [
+            str(formatter.binary),
+            "format",
+            "--configuration",
+            str(formatter.configuration),
+            "--assume-filename",
+            path,
+            "-",
+        ],
+        check=False,
+        input=source,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
 def default_base(root: Path) -> str | None:
     best: tuple[int, str] | None = None
     for candidate in ("upstream/main", "origin/main", "main"):
@@ -110,9 +194,173 @@ def default_base(root: Path) -> str | None:
     return best[1] if best else None
 
 
-def changed_files_from_git(root: Path, base: str | None, staged: bool) -> list[str]:
+def merge_base(root: Path, base: str) -> str | None:
+    result = subprocess.run(
+        ["git", "merge-base", base, "HEAD"],
+        cwd=root,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        env=git_env(),
+    )
+    value = result.stdout.strip()
+    return value if result.returncode == 0 and value else None
+
+
+def is_identifier_character(character: str) -> bool:
+    return character == "_" or character.isalnum()
+
+
+def string_literal_end(source: str, start: int) -> int | None:
+    """Return the end offset of a Swift string literal that starts at start."""
+    index = start
+    hash_count = 0
+    while index < len(source) and source[index] == "#":
+        hash_count += 1
+        index += 1
+    if index >= len(source) or source[index] != '"':
+        return None
+
+    multiline = source.startswith('\"\"\"', index)
+    delimiter = '\"\"\"' if multiline else '"'
+    content_start = index + len(delimiter)
+    closing = delimiter + ("#" * hash_count)
+
+    if hash_count:
+        closing_index = source.find(closing, content_start)
+        return closing_index + len(closing) if closing_index >= 0 else len(source)
+
+    cursor = content_start
+    while cursor < len(source):
+        closing_index = source.find(delimiter, cursor)
+        if closing_index < 0:
+            return len(source)
+        backslashes = 0
+        probe = closing_index - 1
+        while probe >= content_start and source[probe] == "\\\\":
+            backslashes += 1
+            probe -= 1
+        if backslashes % 2 == 0:
+            return closing_index + len(delimiter)
+        cursor = closing_index + len(delimiter)
+    return len(source)
+
+
+def swift_semantic_fingerprint(source: str) -> str:
+    """Ignore formatter/comment changes without ignoring literal content.
+
+    Git's whitespace-only diff modes also ignore spaces inside string literals.
+    That would let a user-visible copy change evade the e2e coverage ratchet, so
+    this deliberately preserves every byte in string literals and only drops
+    whitespace and comments outside them. The comparison is conservative:
+    ambiguous constructs remain covered rather than being classified as
+    formatter-only.
+    """
+    imports = sorted(line.strip() for line in source.splitlines() if IMPORT_DECLARATION.match(line))
+    source_without_imports = "\n".join(line for line in source.splitlines() if not IMPORT_DECLARATION.match(line))
+    output: list[str] = ["\n".join(imports), "\0"]
+    literals: list[str] = []
+    index = 0
+    pending_whitespace = False
+
+    def append_code(character: str) -> None:
+        nonlocal pending_whitespace
+        if pending_whitespace and output and is_identifier_character(output[-1][-1]) and is_identifier_character(character):
+            output.append(" ")
+        output.append(character)
+        pending_whitespace = False
+
+    def append_literal(literal: str) -> None:
+        nonlocal pending_whitespace
+        output.append(f"\x1e{len(literals)}\x1f")
+        literals.append(literal)
+        pending_whitespace = False
+
+    while index < len(source_without_imports):
+        character = source_without_imports[index]
+        if character.isspace():
+            pending_whitespace = True
+            index += 1
+            continue
+
+        if source_without_imports.startswith("//", index):
+            newline = source_without_imports.find("\n", index + 2)
+            index = len(source_without_imports) if newline < 0 else newline
+            pending_whitespace = True
+            continue
+
+        if source_without_imports.startswith("/*", index):
+            depth = 1
+            index += 2
+            while index < len(source_without_imports) and depth:
+                if source_without_imports.startswith("/*", index):
+                    depth += 1
+                    index += 2
+                elif source_without_imports.startswith("*/", index):
+                    depth -= 1
+                    index += 2
+                else:
+                    index += 1
+            pending_whitespace = True
+            continue
+
+        literal_end = string_literal_end(source_without_imports, index) if character in {'#', '"'} else None
+        if literal_end is not None:
+            append_literal(source_without_imports[index:literal_end])
+            index = literal_end
+            continue
+
+        append_code(character)
+        index += 1
+
+    code = "".join(output)
+    # These are canonical formatter normalizations that preserve Swift's AST.
+    # Keep literals out of this pass so user-facing text remains exact.
+    code = re.sub(r"(?<=[0-9A-Fa-f])_(?=[0-9A-Fa-f])", "", code)
+    for closing in "]})":
+        code = code.replace("," + closing, closing)
+    return code + "\x1d" + "\x1d".join(literals)
+
+
+def semantic_changed_files(
+    root: Path, files: list[str], baseline: str, staged: bool, formatter: Formatter | None
+) -> list[str]:
+    """Exclude tracked Swift files whose only delta is formatting or comments."""
+    changed: list[str] = []
+    for path in files:
+        if not is_desktop_swift_source(path):
+            changed.append(path)
+            continue
+
+        baseline_contents = git_file_contents(root, baseline, path)
+        if baseline_contents is None:
+            changed.append(path)
+            continue
+
+        current_contents = git_file_contents(root, ":", path) if staged else None
+        if current_contents is None and not staged:
+            try:
+                current_contents = (root / path).read_text(encoding="utf-8")
+            except OSError:
+                current_contents = None
+        if current_contents is None:
+            changed.append(path)
+            continue
+        if formatter:
+            formatted_baseline = formatted_swift_source(formatter, baseline_contents, path)
+            if formatted_baseline != current_contents:
+                changed.append(path)
+            continue
+        if swift_semantic_fingerprint(baseline_contents) != swift_semantic_fingerprint(current_contents):
+            changed.append(path)
+    return changed
+
+
+def changed_files_from_git(root: Path, base: str | None, staged: bool, formatter: Formatter | None) -> list[str]:
     if staged:
-        return run_git(root, ["diff", "--cached", "--name-only", "--diff-filter=ACMR"])
+        files = run_git(root, ["diff", "--cached", "--name-only", "--diff-filter=ACMR"])
+        return semantic_changed_files(root, files, "HEAD", staged=True, formatter=formatter)
     files: list[str] = []
     resolved_base = base or default_base(root)
     if resolved_base:
@@ -121,7 +369,9 @@ def changed_files_from_git(root: Path, base: str | None, staged: bool) -> list[s
         files.extend(run_git(root, ["diff", "--name-only", "--diff-filter=ACMR", "HEAD"]))
     files.extend(run_git(root, ["diff", "--name-only", "--diff-filter=ACMR", "HEAD"]))
     files.extend(run_git(root, ["ls-files", "--others", "--exclude-standard", str(DESKTOP_SWIFT_ROOT)]))
-    return sorted(dict.fromkeys(files))
+    baseline = merge_base(root, resolved_base) if resolved_base else "HEAD"
+    unique_files = sorted(dict.fromkeys(files))
+    return semantic_changed_files(root, unique_files, baseline, staged=False, formatter=formatter) if baseline else unique_files
 
 
 def canonical_path(value: str | Path) -> str:
@@ -284,7 +534,8 @@ def print_report(root: Path, flows: list[FlowCoverage], changed: list[str], stri
 def main() -> int:
     args = parse_args()
     root = repo_root(args.root)
-    changed = args.changed_files or changed_files_from_git(root, args.base, args.staged)
+    formatter = resolve_formatter(root, args.formatter_binary)
+    changed = args.changed_files or changed_files_from_git(root, args.base, args.staged, formatter)
     flows = load_flows(root, Path(args.flows_dir))
     return print_report(root, flows, changed, args.strict)
 

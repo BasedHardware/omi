@@ -1,3 +1,4 @@
+progressDeadlineSeconds: 1800
 # Default values for backend-listen.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -42,7 +43,11 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  env: dev
+  # Reconnect and circuit-breaker aggregates are emitted by backend-listen.
+  # Keep those scrape targets in the same development-only evidence plane as
+  # the Pusher targets.
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -97,11 +102,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GEMINI_API_KEY
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -123,8 +123,10 @@ env:
     value: "dev"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+    value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
-    value: "true"
+    value: "false"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
     value: "false"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE
@@ -153,6 +155,8 @@ env:
     value: "false"
   - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
     value: "true"
+  - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
+    value: "900"
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
@@ -203,6 +207,10 @@ env:
         key: ADMIN_KEY
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
+  - name: STT_PRERECORDED_MODEL
+    value: "parakeet,modulate-velma-2"
+  - name: STT_SERVICE_MODELS
+    value: "modulate-velma-2,parakeet"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
@@ -270,10 +278,6 @@ env:
         key: TYPESENSE_API_KEY
   - name: MEMORY_TYPESENSE_COLLECTION
     value: "canonical_memory_atoms"
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omiapi.com"
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
@@ -308,6 +312,8 @@ env:
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware-dev"
+  - name: GCP_LOCATION
+    value: "us-central1"
   - name: TWILIO_AUTH_TOKEN
     valueFrom:
       secretKeyRef:

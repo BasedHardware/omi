@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import datetime, timezone
+from html import escape
 from typing import Any, List, Optional, cast
 from zoneinfo import ZoneInfo
 
@@ -20,6 +21,7 @@ from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 from utils.llm.usage_tracker import track_usage, Features
+from utils.llm.temporal import date_in_tz
 
 from .clients import get_llm
 import logging
@@ -290,14 +292,16 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return _content_str(get_llm('chat_responses').invoke(prompt))
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
 def answer_simple_message_stream(
     uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks: List[Any] = []
 ) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
@@ -426,6 +430,44 @@ def _get_qa_rag_prompt(
 # The system prompt references this placeholder so the datetime instructions still make sense.
 CURRENT_DATETIME_PLACEHOLDER = "(see <current_datetime> in the latest user message)"
 
+# Allowlist mapping of `X-App-Platform` header values to a platform-context line for the
+# agentic system prompt. Header values are client-controlled, so only these exact values
+# ever reach the prompt — anything unrecognized adds nothing (the allowlist is the
+# injection guard; raw header text is never interpolated into the prompt).
+_PLATFORM_CONTEXT_LINES = {
+    'windows': (
+        "The user is using Omi on a Windows PC — when giving instructions or troubleshooting, "
+        "give Windows-appropriate steps (not macOS)."
+    ),
+    'macos': (
+        "The user is using Omi on a Mac — when giving instructions or troubleshooting, " "give macOS-appropriate steps."
+    ),
+    'ios': (
+        "The user is using Omi on an iPhone (iOS app) — when giving instructions or troubleshooting, "
+        "give iOS-appropriate steps."
+    ),
+    'android': (
+        "The user is using Omi on an Android phone — when giving instructions or troubleshooting, "
+        "give Android-appropriate steps."
+    ),
+}
+
+
+def _get_platform_context_section(platform: Optional[str]) -> str:
+    """Return a <user_platform> section for a recognized client platform, else ''.
+
+    Unknown or missing platform values return the empty string so the system prompt
+    stays byte-identical to the pre-platform behavior. The section is appended at the
+    very end of the prompt; platform is stable per client, so the Anthropic
+    cache_control prefix stays stable across requests from the same client.
+    """
+    if not platform:
+        return ""
+    line = _PLATFORM_CONTEXT_LINES.get(platform.strip().lower())
+    if not line:
+        return ""
+    return f"\n\n<user_platform>\n{line}\n</user_platform>"
+
 
 def get_user_timezone(uid: str) -> str:
     """Resolve the user's timezone, falling back to UTC when missing/invalid."""
@@ -439,7 +481,7 @@ def get_user_timezone(uid: str) -> str:
         return "UTC"
 
 
-def get_current_datetime_block(uid: str, tz: Optional[str] = None) -> str:
+def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Optional[str] = None) -> str:
     """Build the current-datetime block injected into the user turn.
 
     Kept out of the cached system prefix so the cached bytes stay stable across requests
@@ -456,10 +498,12 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None) -> str:
         tz = "UTC"
     current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
     current_datetime_iso = current_datetime_user.isoformat()
+    location_line = f"Current city-level location: {escape(location, quote=False)}\n" if location else ""
     return (
         "<current_datetime>\n"
         f"Current date time in {tz}: {current_datetime_str}\n"
         f"Current date time ISO format: {current_datetime_iso}\n"
+        f"{location_line}"
         "</current_datetime>"
     )
 
@@ -470,6 +514,7 @@ def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by
     messages: Optional[List[Message]] = None,
     context: Optional[PageContext] = None,
     tz: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> str:
     """
     Build the system prompt for the agentic chat agent.
@@ -486,11 +531,15 @@ def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by
         app: Optional app/plugin for personalized behavior
         messages: Optional message history for file context
         context: Optional page context (type, id, title)
+        platform: Optional `X-App-Platform` header value; recognized values append a
+            platform-context section (see _get_platform_context_section), anything else
+            leaves the prompt unchanged
 
     Returns:
         System prompt string
     """
     user_name = get_user_name(uid)
+    platform_section = _get_platform_context_section(platform)
 
     # Resolve timezone only — the live datetime is injected into the user turn, not here,
     # so the cached system prefix stays byte-identical across requests. A caller that already
@@ -592,7 +641,7 @@ Keep this context in mind when answering their question.
             f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
         )
 
-        return base_prompt.strip()
+        return base_prompt.strip() + platform_section
 
     except Exception as e:
         logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
@@ -816,7 +865,7 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
 Remember: Use tools strategically to provide the best possible answers. For questions about specific EVENTS or INCIDENTS (e.g., "when did X happen?", "what happened at Y?"), use search_conversations_tool to find relevant conversations. For questions about static FACTS/PREFERENCES (e.g., "what's my favorite X?", "do I like Y?"), use get_memories_tool. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """
 
-    return base_prompt.strip()
+    return base_prompt.strip() + platform_section
 
 
 def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: ignore[reportUnusedFunction]  # offline/CI fallback when LangSmith prompt fetch fails
@@ -900,7 +949,8 @@ def qa_rag(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return _content_str(get_llm('chat_responses').invoke(prompt))
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
 def qa_rag_stream(
@@ -915,7 +965,8 @@ def qa_rag_stream(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 # **************************************************
@@ -949,8 +1000,9 @@ def retrieve_memory_context_params(
     '''.replace('    ', '').strip()
 
     try:
-        with_parser = get_llm('chat_extraction').with_structured_output(TopicsContext)
-        response = cast(TopicsContext, with_parser.invoke(prompt))
+        with track_usage(uid, Features.CHAT):
+            with_parser = get_llm('chat_extraction').with_structured_output(TopicsContext)
+            response = cast(TopicsContext, with_parser.invoke(prompt))
         return [e.value if hasattr(e, 'value') else str(e) for e in response.topics]
     except Exception as e:
         logger.error(f'Error determining memory discard: {e}')
@@ -1149,7 +1201,7 @@ def retrieve_metadata_fields_from_transcript(
 
     Make sure as a first step, you infer and fix any raw transcript errors and then proceed to extract the information from the entire content.
 
-    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). {tz} is the user's timezone, respond in user local timezone.
+    For context when extracting dates, today is {date_in_tz(created_at, tz)} in {tz} (user's local timezone). {tz} is the user's timezone, respond in user local timezone.
     If one says "today", it means the current day.
     If one says "tomorrow", it means the next day after today.
     If one says "yesterday", it means the day before today.
@@ -1216,7 +1268,7 @@ def retrieve_metadata_from_message(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). 
+    For context when extracting dates, today is {date_in_tz(created_at, tz)} in {tz} (user's local timezone). 
     {tz} is the user's timezone, respond in user local timezone.
     If the message mentions "today", it means the current day.
     If the message mentions "tomorrow", it means the next day after today.
@@ -1250,7 +1302,7 @@ def retrieve_metadata_from_text(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). 
+    For context when extracting dates, today is {date_in_tz(created_at, tz)} in {tz} (user's local timezone). 
     {tz} is the user's timezone, respond in user local timezone.
     If the text mentions "today", it means the current day.
     If the text mentions "tomorrow", it means the next day after today.
@@ -1270,10 +1322,11 @@ def retrieve_metadata_from_text(
 def _process_extracted_metadata(uid: str, prompt: str) -> dict[str, Any]:
     """Process the extracted metadata from any source"""
     try:
-        result = cast(
-            ExtractedInformation,
-            get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
-        )
+        with track_usage(uid, Features.CONVERSATION_PROCESSING):
+            result = cast(
+                ExtractedInformation,
+                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
+            )
     except Exception as e:
         logger.error(f'Error extracting metadata: {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}

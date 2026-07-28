@@ -2,11 +2,11 @@ import AppKit
 import Foundation
 
 private final class WeakMeetingDetector: @unchecked Sendable {
-    weak var value: MeetingDetector?
+  weak var value: MeetingDetector?
 
-    init(_ value: MeetingDetector) {
-        self.value = value
-    }
+  init(_ value: MeetingDetector) {
+    self.value = value
+  }
 }
 
 /// Detects whether a conferencing call ("meeting") is currently active by scanning on-screen
@@ -21,172 +21,172 @@ private final class WeakMeetingDetector: @unchecked Sendable {
 @MainActor
 final class MeetingDetector {
 
-    /// Current meeting state. Updated on the main actor by `applyDetected(_:)`.
-    private(set) var isMeetingActive: Bool = false
-    /// True after at least one async probe has reported. Until then, `isMeetingActive == false`
-    /// means "unknown", not "no meeting".
-    private(set) var hasObservedState: Bool = false
+  /// Current meeting state. Updated on the main actor by `applyDetected(_:)`.
+  private(set) var isMeetingActive: Bool = false
+  /// True after at least one async probe has reported. Until then, `isMeetingActive == false`
+  /// means "unknown", not "no meeting".
+  private(set) var hasObservedState: Bool = false
 
-    private let pollInterval: TimeInterval
-    private let offGracePeriod: TimeInterval
-    private let isMeetingNow: () -> Bool
-    private let now: () -> Date
-    private let onInitialStateObserved: () -> Void
-    private let onChange: (Bool) -> Void
+  private let pollInterval: TimeInterval
+  private let offGracePeriod: TimeInterval
+  private let isMeetingNow: @Sendable () -> Bool
+  private let now: () -> Date
+  private let onInitialStateObserved: () -> Void
+  private let onChange: (Bool) -> Void
 
-    private var timer: Timer?
-    private var workspaceObservers: [NSObjectProtocol] = []
-    /// When the call first goes undetected, the time at which we will actually flip to inactive.
-    /// `nil` whenever a meeting is detected or no pending-off is in progress.
-    private var pendingOffDeadline: Date?
-    private var started = false
-    private var probeGeneration: UInt64 = 0
-    private var probeTask: Task<Void, Never>?
+  private var timer: Timer?
+  private var workspaceObservers: [NSObjectProtocol] = []
+  /// When the call first goes undetected, the time at which we will actually flip to inactive.
+  /// `nil` whenever a meeting is detected or no pending-off is in progress.
+  private var pendingOffDeadline: Date?
+  private var started = false
+  private var probeGeneration: UInt64 = 0
+  private var probeTask: Task<Void, Never>?
 
-    /// - Parameters:
-    ///   - pollInterval: how often to re-probe (browser tab-title changes only surface via the poll).
-    ///   - offGracePeriod: sustained "no meeting" time required before flipping off.
-    ///   - isMeetingNow: conferencing-call probe (injectable for tests). Default: a native or browser
-    ///     app using the mic (macOS 14.4+), or a browser call window (window-title fallback).
-    ///   - now: clock (injectable for tests).
-    ///   - onInitialStateObserved: called on the main actor once the first async probe completes.
-    ///   - onChange: called on the main actor whenever `isMeetingActive` flips.
-    init(
-        pollInterval: TimeInterval = 4.0,
-        offGracePeriod: TimeInterval = 8.0,
-        isMeetingNow: @escaping () -> Bool = {
-            if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { return true }
-            return ConferencingApps.browserCallWindowPresent()
-        },
-        now: @escaping () -> Date = { Date() },
-        onInitialStateObserved: @escaping () -> Void = {},
-        onChange: @escaping (Bool) -> Void
-    ) {
-        self.pollInterval = pollInterval
-        self.offGracePeriod = offGracePeriod
-        self.isMeetingNow = isMeetingNow
-        self.now = now
-        self.onInitialStateObserved = onInitialStateObserved
-        self.onChange = onChange
+  /// - Parameters:
+  ///   - pollInterval: how often to re-probe (browser tab-title changes only surface via the poll).
+  ///   - offGracePeriod: sustained "no meeting" time required before flipping off.
+  ///   - isMeetingNow: conferencing-call probe (injectable for tests). Default: a native or browser
+  ///     app using the mic (macOS 14.4+), or a browser call window (window-title fallback).
+  ///   - now: clock (injectable for tests).
+  ///   - onInitialStateObserved: called on the main actor once the first async probe completes.
+  ///   - onChange: called on the main actor whenever `isMeetingActive` flips.
+  init(
+    pollInterval: TimeInterval = 4.0,
+    offGracePeriod: TimeInterval = 8.0,
+    isMeetingNow: @escaping @Sendable () -> Bool = {
+      if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { return true }
+      return ConferencingApps.browserCallWindowPresent()
+    },
+    now: @escaping () -> Date = { Date() },
+    onInitialStateObserved: @escaping () -> Void = {},
+    onChange: @escaping (Bool) -> Void
+  ) {
+    self.pollInterval = pollInterval
+    self.offGracePeriod = offGracePeriod
+    self.isMeetingNow = isMeetingNow
+    self.now = now
+    self.onInitialStateObserved = onInitialStateObserved
+    self.onChange = onChange
+  }
+
+  /// Begin observing app launch/terminate/activation and polling. Emits the initial state
+  /// synchronously so callers can read `isMeetingActive` immediately after `start()`.
+  func start() {
+    guard !started else { return }
+    started = true
+    probeGeneration &+= 1
+
+    let nc = NSWorkspace.shared.notificationCenter
+    for name in [
+      NSWorkspace.didActivateApplicationNotification,
+      NSWorkspace.didLaunchApplicationNotification,
+      NSWorkspace.didTerminateApplicationNotification,
+    ] {
+      let observer = nc.addObserver(forName: name, object: nil, queue: .main) {
+        [weak self] _ in
+        Task { @MainActor in self?.tick() }
+      }
+      workspaceObservers.append(observer)
     }
 
-    /// Begin observing app launch/terminate/activation and polling. Emits the initial state
-    /// synchronously so callers can read `isMeetingActive` immediately after `start()`.
-    func start() {
-        guard !started else { return }
-        started = true
-        probeGeneration &+= 1
-
-        let nc = NSWorkspace.shared.notificationCenter
-        for name in [
-            NSWorkspace.didActivateApplicationNotification,
-            NSWorkspace.didLaunchApplicationNotification,
-            NSWorkspace.didTerminateApplicationNotification,
-        ] {
-            let observer = nc.addObserver(forName: name, object: nil, queue: .main) {
-                [weak self] _ in
-                Task { @MainActor in self?.tick() }
-            }
-            workspaceObservers.append(observer)
-        }
-
-        timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) {
-            [weak self] _ in
-            Task { @MainActor in self?.tick() }
-        }
-
-        // Establish the initial state. The probe runs off the main actor and is applied
-        // asynchronously (and surfaced via onChange), so the caller's gate converges shortly after.
-        tick()
-        log("MeetingDetector: started (poll=\(pollInterval)s, offGrace=\(offGracePeriod)s)")
+    timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) {
+      [weak self] _ in
+      Task { @MainActor in self?.tick() }
     }
 
-    /// Stop all observation. Resets pending-off state; `isMeetingActive` is left as-is.
-    func stop() {
-        guard started else { return }
-        started = false
-        probeGeneration &+= 1
-        probeTask?.cancel()
-        probeTask = nil
+    // Establish the initial state. The probe runs off the main actor and is applied
+    // asynchronously (and surfaced via onChange), so the caller's gate converges shortly after.
+    tick()
+    log("MeetingDetector: started (poll=\(pollInterval)s, offGrace=\(offGracePeriod)s)")
+  }
 
-        timer?.invalidate()
-        timer = nil
+  /// Stop all observation. Resets pending-off state; `isMeetingActive` is left as-is.
+  func stop() {
+    guard started else { return }
+    started = false
+    probeGeneration &+= 1
+    probeTask?.cancel()
+    probeTask = nil
 
-        let nc = NSWorkspace.shared.notificationCenter
-        for observer in workspaceObservers {
-            nc.removeObserver(observer)
+    timer?.invalidate()
+    timer = nil
+
+    let nc = NSWorkspace.shared.notificationCenter
+    for observer in workspaceObservers {
+      nc.removeObserver(observer)
+    }
+    workspaceObservers.removeAll()
+    pendingOffDeadline = nil
+    log("MeetingDetector: stopped")
+  }
+
+  /// Probe for an active call off the main actor — the CoreAudio process scan / CGWindowList query
+  /// can block (notably right after wake) — then apply the result back on the main actor.
+  private func tick() {
+    let probe = isMeetingNow
+    probeGeneration &+= 1
+    let generation = probeGeneration
+    let weakSelf = WeakMeetingDetector(self)
+    probeTask?.cancel()
+    probeTask = Task.detached(priority: .utility) {
+      let detected = probe()
+      await MainActor.run {
+        guard let detector = weakSelf.value,
+          detector.started,
+          detector.probeGeneration == generation
+        else { return }
+        detector.applyDetected(detected)
+      }
+    }
+  }
+
+  /// Apply a boolean detection result, honoring the off-hysteresis. Exposed for tests; normally
+  /// driven by the poll timer and workspace notifications via `tick()`.
+  func applyDetected(_ detected: Bool) {
+    let hadObservedState = hasObservedState
+    hasObservedState = true
+
+    if detected {
+      // Meeting present: cancel any pending-off and ensure we're active.
+      pendingOffDeadline = nil
+      setActive(true)
+    } else if isMeetingActive {
+      // Meeting undetected while active: arm or honor the off grace period.
+      if let deadline = pendingOffDeadline {
+        if now() >= deadline {
+          pendingOffDeadline = nil
+          setActive(false)
         }
-        workspaceObservers.removeAll()
-        pendingOffDeadline = nil
-        log("MeetingDetector: stopped")
+      } else {
+        pendingOffDeadline = now().addingTimeInterval(offGracePeriod)
+      }
+    } else {
+      // Already inactive and still no meeting.
+      pendingOffDeadline = nil
     }
 
-    /// Probe for an active call off the main actor — the CoreAudio process scan / CGWindowList query
-    /// can block (notably right after wake) — then apply the result back on the main actor.
-    private func tick() {
-        let probe = isMeetingNow
-        probeGeneration &+= 1
-        let generation = probeGeneration
-        let weakSelf = WeakMeetingDetector(self)
-        probeTask?.cancel()
-        probeTask = Task.detached(priority: .utility) {
-            let detected = probe()
-            await MainActor.run {
-                guard let detector = weakSelf.value,
-                      detector.started,
-                      detector.probeGeneration == generation
-                else { return }
-                detector.applyDetected(detected)
-            }
-        }
+    if !hadObservedState {
+      onInitialStateObserved()
     }
+  }
 
-    /// Apply a boolean detection result, honoring the off-hysteresis. Exposed for tests; normally
-    /// driven by the poll timer and workspace notifications via `tick()`.
-    func applyDetected(_ detected: Bool) {
-        let hadObservedState = hasObservedState
-        hasObservedState = true
+  private func setActive(_ active: Bool) {
+    guard active != isMeetingActive else { return }
+    isMeetingActive = active
+    log("MeetingDetector: meeting \(active ? "STARTED" : "ENDED")")
+    onChange(active)
+  }
 
-        if detected {
-            // Meeting present: cancel any pending-off and ensure we're active.
-            pendingOffDeadline = nil
-            setActive(true)
-        } else if isMeetingActive {
-            // Meeting undetected while active: arm or honor the off grace period.
-            if let deadline = pendingOffDeadline {
-                if now() >= deadline {
-                    pendingOffDeadline = nil
-                    setActive(false)
-                }
-            } else {
-                pendingOffDeadline = now().addingTimeInterval(offGracePeriod)
-            }
-        } else {
-            // Already inactive and still no meeting.
-            pendingOffDeadline = nil
-        }
-
-        if !hadObservedState {
-            onInitialStateObserved()
-        }
-    }
-
-    private func setActive(_ active: Bool) {
-        guard active != isMeetingActive else { return }
-        isMeetingActive = active
-        log("MeetingDetector: meeting \(active ? "STARTED" : "ENDED")")
-        onChange(active)
-    }
-
-    #if DEBUG
+  #if DEBUG
     var currentProbeTaskForTesting: Task<Void, Never>? {
-        probeTask
+      probeTask
     }
 
     @discardableResult
     func triggerProbeForTesting() -> Task<Void, Never>? {
-        tick()
-        return probeTask
+      tick()
+      return probeTask
     }
-    #endif
+  #endif
 }

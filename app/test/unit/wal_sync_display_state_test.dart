@@ -7,12 +7,7 @@ import 'package:omi/services/wals/wal.dart';
 /// A not-yet-synced recording must never be visually identical to a failed
 /// one, and an `uploaded` (processing) recording must read distinctly.
 void main() {
-  Wal makeWal({
-    required WalStatus status,
-    bool isSyncing = false,
-    int retryCount = 0,
-    String? jobId,
-  }) {
+  Wal makeWal({required WalStatus status, bool isSyncing = false, int retryCount = 0, String? jobId}) {
     return Wal(
       timerStart: 1700000000,
       codec: BleAudioCodec.opus,
@@ -24,11 +19,15 @@ void main() {
   }
 
   group('Wal.syncDisplayState', () {
-    test('isSyncing wins over every status', () {
-      for (final s in WalStatus.values) {
+    test('isSyncing wins over every non-terminal status', () {
+      for (final s in WalStatus.values.where((status) => status != WalStatus.corrupted)) {
         final w = makeWal(status: s, isSyncing: true);
         expect(w.syncDisplayState, WalSyncDisplayState.syncing, reason: 'status=$s');
       }
+    });
+
+    test('corrupted wins over a stale syncing flag', () {
+      expect(makeWal(status: WalStatus.corrupted, isSyncing: true).syncDisplayState, WalSyncDisplayState.corrupted);
     });
 
     test('uploaded -> uploaded (processing on server)', () {
@@ -50,16 +49,23 @@ void main() {
 
     test('miss with 1..(max-1) retries -> retrying', () {
       for (var r = 1; r < walMaxAutoRetries; r++) {
-        expect(makeWal(status: WalStatus.miss, retryCount: r).syncDisplayState, WalSyncDisplayState.retrying,
-            reason: 'retryCount=$r');
+        expect(
+          makeWal(status: WalStatus.miss, retryCount: r).syncDisplayState,
+          WalSyncDisplayState.retrying,
+          reason: 'retryCount=$r',
+        );
       }
     });
 
     test('miss at/over max retries -> failed (needs manual retry)', () {
       expect(
-          makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries).syncDisplayState, WalSyncDisplayState.failed);
-      expect(makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries + 5).syncDisplayState,
-          WalSyncDisplayState.failed);
+        makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries).syncDisplayState,
+        WalSyncDisplayState.failed,
+      );
+      expect(
+        makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries + 5).syncDisplayState,
+        WalSyncDisplayState.failed,
+      );
     });
 
     test('inProgress -> waiting', () {

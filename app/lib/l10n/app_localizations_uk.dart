@@ -1469,7 +1469,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get payYourSttProvider => 'Вільно користуйтесь omi. Ви платите лише своєму STT-провайдеру безпосередньо.';
 
   @override
-  String get freeMinutesMonth => '600 безкоштовних хвилин/місяць включено. Необмежено з ';
+  String get freeMinutesMonth => '300 безкоштовних хвилин/місяць включено. Необмежено з ';
 
   @override
   String get omiUnlimited => 'Omi Безлімітний';
@@ -1791,20 +1791,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Подобається Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Допоможіть нам охопити більше людей, залишивши відгук в App Store. Ваші відгуки дуже важливі для нас!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Допоможіть нам охопити більше людей, залишивши відгук в Google Play Store. Ваші відгуки дуже важливі для нас!';
-
-  @override
-  String get rateOnAppStore => 'Оцінити в App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Оцінити в Google Play';
 
   @override
   String get maybeLater => 'Можливо пізніше';
@@ -2143,6 +2129,18 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Редагувати пам\'ять';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Мені подобається їсти морозиво...';
@@ -6007,7 +6005,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 преміум хвилин/місяць. Вкладка \"На пристрої\" пропонує необмежену транскрипцію.';
+      '300 преміум хвилин/місяць. Вкладка \"На пристрої\" пропонує необмежену транскрипцію.';
 
   @override
   String get viewUsage => 'Переглянути використання';
@@ -6088,7 +6086,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
+      '300 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9002,7 +9000,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get billingYearly => 'Щорічно';
 
   @override
-  String get savePercent => 'Заощаджуйте ~17%';
+  String savePercent(int percent) {
+    return 'Заощаджуйте ~$percent%';
+  }
 
   @override
   String get popular => 'Популярний';
@@ -9361,7 +9361,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Наразі працює з пристроями Omi та Limitless. Аудіо залишається на вашому телефоні, доки ви не вирішите його завантажити.';
+      'Працює з мікрофоном телефона, а також із пристроями Omi та Limitless. Аудіо залишається на вашому телефоні, доки ви не вирішите його завантажити.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9615,4 +9615,180 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Пристрій майже заповнений — синхронізуйте, щоб звільнити місце.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Немає з\'єднання — запис ведеться локально. Розшифрування виконається, коли ви знову будете онлайн.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Ваші дані за замовчуванням захищені надійним шифруванням, і ви контролюєте, як вони зберігаються та використовуються.';
+
+  @override
+  String get sttModelAccuracy => 'Точність';
+
+  @override
+  String get whisperModelSizeBase => 'Базова';
+
+  @override
+  String get cloudTranscription => 'Хмарна транскрипція';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Видалити модель';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Ви впевнені, що хочете видалити цю модель?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Завантажено';
+
+  @override
+  String get sttModelFaster => 'Швидше';
+
+  @override
+  String get sttFilterAuto => 'Автоматично';
+
+  @override
+  String get sttModelHigher => 'Вища';
+
+  @override
+  String get whisperModelSizeLarge => 'Велика';
+
+  @override
+  String get sttModelLower => 'Нижча';
+
+  @override
+  String get whisperModelSizeMedium => 'Середня';
+
+  @override
+  String get onDeviceModelDeleted => 'Модель видалено';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Не вдалося завантажити модель';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Не вдалося завантажити модель Whisper. Спробуйте ще раз.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Модель завантажено';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Модель Whisper успішно завантажено';
+
+  @override
+  String get onDeviceModelSize => 'Розмір моделі';
+
+  @override
+  String get sttNone => 'Немає';
+
+  @override
+  String get onDeviceTranscription => 'Транскрипція на пристрої';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Транскрипція обробляється локально на вашому пристрої';
+
+  @override
+  String get sttModelSlower => 'Повільніше';
+
+  @override
+  String get whisperModelSizeSmall => 'Мала';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Постачальник мовлення в текст';
+
+  @override
+  String get speechToTextProviderDesc => 'Виберіть сервіс для транскрипції';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Швидкість';
+
+  @override
+  String get whisperModelSizeTiny => 'Крихітна';
+
+  @override
+  String get transcriptionLanguage => 'Мова транскрипції';
+
+  @override
+  String get transcriptionLanguageDesc => 'Виберіть мову для транскрипції мовлення';
+
+  @override
+  String get whisperModel => 'Модель Whisper';
+
+  @override
+  String get whisperModelDesc => 'Виберіть модель для транскрипції на пристрої';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Перейти на безкоштовний план?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Ви зіткнетеся з такими обмеженнями:';
+
+  @override
+  String get downgradeLimitBattery => 'У 7 разів більша витрата заряду';
+
+  @override
+  String get downgradeLimitQuality => 'На 30% нижча якість розшифровки';
+
+  @override
+  String get downgradeLimitDelay => 'Затримка 5–7 секунд';
+
+  @override
+  String get downgradeLimitSpeakers => 'Неможливо розпізнати мовців';
+
+  @override
+  String get downgradeAnyway => 'Усе одно знизити';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Календар не підключено';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Підключіть Google Календар, щоб прив’язувати розмови до подій календаря.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Прив’язано до «$title»';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Не вдалося прив’язати подію календаря';
+
+  @override
+  String get thanksForYourFeedback => 'Дякуємо за ваш відгук!';
+
+  @override
+  String get copyMessage => 'Копіювати повідомлення';
+
+  @override
+  String get searchSettings => 'Пошук налаштувань…';
+
+  @override
+  String get errorLoadingAudio => 'Помилка завантаження аудіо';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Виберіть мікрофон Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Виберіть Bluetooth-мікрофон окулярів. Музика призупиняється, поки Omi використовує його.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth-мікрофони не знайдено. Підключіть окуляри в параметрах iPhone і повторіть спробу.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Не вдалося завантажити Bluetooth-мікрофони. Перевірте, чи ввімкнено Bluetooth, і повторіть спробу.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Не вдалося підключитися до цього мікрофона. Переконайтеся, що його підключено в параметрах iPhone.';
 }

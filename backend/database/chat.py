@@ -14,12 +14,20 @@ from models.chat import Message
 from utils import encryption
 from ._client import db
 from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
+from database.read_boundary import parse_snapshot_or_none
 
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
 DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write per deleted message.
 DELETE_MESSAGES_CONFLICT_RETRIES = 3
+CHAT_HISTORY_BASE_VISIBLE_MESSAGES = 10
+CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
+# Maximum number of reported (hidden) rows to over-fetch per raw Firestore
+# query when reading cache-aligned history. Keeps the raw read bounded even
+# when a user has thousands of lifetime reported messages; the newest page
+# rarely contains more reported rows than this cap.
+CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
 
 
 class ClientMessageIdPayloadConflict(ValueError):
@@ -94,6 +102,12 @@ def add_message(uid: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[str] = None) -> Message:
+    """Add a chat message an app posted for the user, linking it to that app's chat session so it
+    appears in the chat feed. get_messages filters by chat_session_id whenever a session exists, so
+    a message stored without one is never returned on that path."""
+    chat_session = get_chat_session(uid, app_id=app_id)
+    chat_session_id = chat_session['id'] if chat_session else None
+
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
@@ -103,8 +117,11 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         from_external_integration=False,
         type='text',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageType enum
         memories_id=[conversation_id] if conversation_id else [],
+        chat_session_id=chat_session_id,
     )
     add_message(uid, ai_message.model_dump())
+    if chat_session_id:
+        add_message_to_chat_session(uid, chat_session_id, ai_message.id)
     return ai_message
 
 
@@ -265,6 +282,66 @@ def get_messages(
     return messages
 
 
+def cache_aligned_history_limit(total_visible_messages: int) -> int:
+    """Return a bounded history size whose start moves only at epoch boundaries.
+
+    A fixed newest-N window changes at the front on every chat turn, invalidating
+    Anthropic's cumulative message-prefix cache. This policy keeps at least the
+    existing ten-message continuity window and lets it grow append-only for eight
+    messages before resetting to ten. The request therefore carries 10..17
+    messages, never less history than before and never an unbounded transcript.
+    """
+    if total_visible_messages < 0:
+        raise ValueError('total_visible_messages must be non-negative')
+    if total_visible_messages <= CHAT_HISTORY_BASE_VISIBLE_MESSAGES:
+        return total_visible_messages
+    return CHAT_HISTORY_BASE_VISIBLE_MESSAGES + (
+        (total_visible_messages - CHAT_HISTORY_BASE_VISIBLE_MESSAGES) % CHAT_HISTORY_APPEND_EPOCH_MESSAGES
+    )
+
+
+def get_cache_aligned_messages(
+    uid: str,
+    *,
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Read a cache-aligned, scope-safe chat history in newest-first order.
+
+    Reported messages are excluded from the visible count and read. Over-fetching
+    by the scoped reported count guarantees the target number of visible messages
+    even when hidden records fall inside the selected raw Firestore page.
+    """
+    user_ref = db.collection('users').document(uid)
+    scoped_ref = user_ref.collection('messages')
+    if chat_session_id:
+        scoped_ref = scoped_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+    else:
+        scoped_ref = scoped_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    total_result = scoped_ref.count().get()
+    total = int(total_result[0][0].value) if total_result and total_result[0] else 0
+    reported_result = scoped_ref.where(filter=FieldFilter('reported', '==', True)).count().get()
+    reported = int(reported_result[0][0].value) if reported_result and reported_result[0] else 0
+    visible_total = max(0, total - reported)
+    visible_limit = cache_aligned_history_limit(visible_total)
+    if visible_limit == 0:
+        return []
+
+    # Cap the raw Firestore read so a large lifetime reported count cannot
+    # cause unbounded document reads on every chat send. The over-fetch only
+    # needs to cover reported rows that fall inside the newest raw page, not
+    # the lifetime total.
+    reported_overfetch = min(reported, CHAT_HISTORY_REPORTED_RAW_SCAN_CAP)
+    raw_limit = min(total, visible_limit + reported_overfetch)
+    return get_messages(
+        uid,
+        limit=raw_limit,
+        app_id=app_id,
+        chat_session_id=chat_session_id,
+    )[:visible_limit]
+
+
 @prepare_for_read(decrypt_func=_prepare_message_for_read)
 def get_messages_reconcile_page(
     uid: str,
@@ -396,12 +473,13 @@ def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     if not message_doc:
         return None
 
-    message_data: Dict[str, Any] = _typed_doc(message_doc)
-    if not message_data:
+    message = parse_snapshot_or_none(
+        Message,
+        message_doc,
+        payload_from_snapshot=lambda snapshot: _prepare_message_for_read(_typed_doc(snapshot), uid),
+    )
+    if message is None:
         return None
-
-    decrypted_data: Dict[str, Any] = _prepare_message_for_read(message_data, uid)
-    message = Message(**decrypted_data)
 
     return message, message_doc.id
 

@@ -6,14 +6,33 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKIP_RATCHET="$SCRIPT_DIR/swift-test-skip-ratchet.py"
+MAIN_ACTOR_XCTEST_HOOK_GUARD="$SCRIPT_DIR/check-main-actor-xctest-hooks.py"
 TESTS_ROOT="${OMI_SWIFT_TEST_DISCOVERY_ROOT:-$MACOS_DIR/Desktop/Tests}"
 PACKAGE_PATH="${OMI_SWIFT_TEST_PACKAGE_PATH:-Desktop}"
-WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-1}}"
+# Each suite runs in an independent SwiftPM process because of process-global
+# test state. CI has proven four-way execution safe; make that the local
+# default too, while preserving an explicit one-worker escape hatch for a
+# diagnosis (`OMI_SWIFT_TEST_SUITE_WORKERS=1`).
+WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-4}}"
 PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
+SUITE_TIMEOUT_SECONDS="${OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS:-120}"
 
 fail() {
   echo "FAIL: $*" >&2
   exit 1
+}
+
+terminate_process_tree() {
+  local pid="$1"
+  local signal="$2"
+  local children child
+  children="$(pgrep -P "$pid" 2>/dev/null || true)"
+  for child in $children; do
+    terminate_process_tree "$child" "$signal"
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "-$signal" "$pid" 2>/dev/null || true
+  fi
 }
 
 run_suite() {
@@ -21,6 +40,7 @@ run_suite() {
   local suite="$2"
   local log_path="$log_dir/$suite.log"
   local status_path="$log_dir/$suite.status"
+  local timeout_path="$log_dir/$suite.timeout"
   local -a skip_args=()
 
   while IFS= read -r skip_arg; do
@@ -35,8 +55,45 @@ run_suite() {
     command+=("${skip_args[@]}")
   fi
   set +e
-  "${command[@]}" >"$log_path" 2>&1
+  "${command[@]}" >"$log_path" 2>&1 &
+  local command_pid=$!
+  (
+    # Parallel workers share one SwiftPM `.build` lock, so `swift test` can block
+    # on "Another instance of SwiftPM is already running ... waiting" before it
+    # executes anything. That queue time must not count against the per-suite run
+    # budget, or a merely-queued suite gets killed as if it hung. Spend the run
+    # budget only while the suite is NOT parked on the build lock (its log's last
+    # line is that wait message); a separate, generous cap still fails a suite
+    # that can never acquire the lock (e.g. a wedged holder).
+    local lock_wait_cap="${OMI_SWIFT_TEST_LOCK_WAIT_CAP_SECONDS:-1200}"
+    local remaining="$SUITE_TIMEOUT_SECONDS"
+    local lock_waited=0
+    while kill -0 "$command_pid" 2>/dev/null; do
+      sleep 1
+      if tail -n 1 "$log_path" 2>/dev/null | grep -q "Another instance of SwiftPM is already running"; then
+        lock_waited=$((lock_waited + 1))
+        [ "$lock_waited" -lt "$lock_wait_cap" ] && continue
+      else
+        lock_waited=0
+        remaining=$((remaining - 1))
+        [ "$remaining" -gt 0 ] && continue
+      fi
+      touch "$timeout_path"
+      terminate_process_tree "$command_pid" TERM
+      sleep 5
+      terminate_process_tree "$command_pid" KILL
+      exit 0
+    done
+  ) &
+  local watchdog_pid=$!
+  wait "$command_pid"
   local status=$?
+  kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+  if [ -f "$timeout_path" ]; then
+    echo "suite timed out after ${SUITE_TIMEOUT_SECONDS}s" >>"$log_path"
+    status=124
+  fi
   set -e
   echo "$status" >"$status_path"
   exit "$status"
@@ -53,6 +110,11 @@ fi
 if [ "$PREBUILD" != "0" ] && [ "$PREBUILD" != "1" ]; then
   fail "OMI_SWIFT_TEST_PREBUILD must be 0 or 1, got '$PREBUILD'"
 fi
+[[ "$SUITE_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS must be a positive integer, got '$SUITE_TIMEOUT_SECONDS'"
+if [ "$SUITE_TIMEOUT_SECONDS" -lt 1 ]; then
+  fail "OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS must be at least 1"
+fi
 
 # Static guardrails are part of the authoritative Swift component suite, not a
 # separate best-effort lint. Run their fixture tests first so a broken checker
@@ -62,6 +124,7 @@ fi
 if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then
   python3 "$SCRIPT_DIR/tests/test_check_desktop_test_quality.py"
   python3 "$SCRIPT_DIR/check_desktop_test_quality.py"
+  python3 "$MAIN_ACTOR_XCTEST_HOOK_GUARD"
 fi
 
 # Discover suites recursively so tests in subfolders of Desktop/Tests are not

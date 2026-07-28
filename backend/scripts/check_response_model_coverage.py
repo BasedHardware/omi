@@ -80,6 +80,10 @@ LEGIT_NON_JSON: dict[tuple[str, str], str] = {
     ("sync.py", "run_sync_job"): "Cloud Tasks job runner (OIDC-verified internal, JSONResponse acks)",
     ("sync.py", "run_audio_merge_job"): "Cloud Tasks job runner (OIDC-verified internal, JSONResponse acks)",
     ("users.py", "run_account_deletion_wipe"): "Cloud Tasks job runner (OIDC-verified internal, JSONResponse acks)",
+    (
+        "conversation_finalization.py",
+        "run_listen_finalization_job",
+    ): "Cloud Tasks job runner (OIDC-verified internal, JSONResponse acks)",
     ("sync.py", "sync_local_files"): "sync dispatch (JSONResponse, multi-mode dispatch)",
     ("omni_relay.py", "omni_relay"): "relay proxy (forwards to upstream, JSONResponse passthrough)",
 }

@@ -9,6 +9,7 @@ NAMESPACE="${NAMESPACE:-}"
 RELEASE_NAME="${RELEASE_NAME:-}"
 DRY_RUN="${DRY_RUN:-false}"
 SKIP_BACKEND_SECRETS="${SKIP_BACKEND_SECRETS:-false}"
+LLM_GATEWAY_GSA="${LLM_GATEWAY_GSA:-}"
 
 if [[ -z "$ENVIRONMENT" ]]; then
   echo "ERROR: ENVIRONMENT or ENV is required" >&2
@@ -20,6 +21,10 @@ if [[ "$ENVIRONMENT" != "dev" && "$ENVIRONMENT" != "prod" ]]; then
 fi
 if [[ -z "$IMAGE_TAG" ]]; then
   echo "ERROR: IMAGE_TAG is required" >&2
+  exit 2
+fi
+if [[ -z "$LLM_GATEWAY_GSA" ]]; then
+  echo "ERROR: LLM_GATEWAY_GSA is required for Vertex Workload Identity" >&2
   exit 2
 fi
 if [[ -z "$VALUES_FILE" ]]; then
@@ -49,7 +54,6 @@ if [[ "$SKIP_BACKEND_SECRETS" != "true" ]]; then
     GCP_PROJECT_ID="${GCP_PROJECT_ID:-}" \
     GKE_CLUSTER="${GKE_CLUSTER:-}" \
     REGION="${REGION:-}" \
-    BACKEND_SECRETS_GSA="${BACKEND_SECRETS_GSA:-}" \
     backend/scripts/deploy-backend-secrets.sh
   if [[ "$DRY_RUN" != "true" ]]; then
     sleep 10
@@ -89,6 +93,7 @@ HELM_ARGS=(
   "$CHART_DIR"
   -f "$VALUES_FILE"
   --set-string "image.tag=${IMAGE_TAG}"
+  --set-string "serviceAccount.annotations.iam\\.gke\\.io/gcp-service-account=${LLM_GATEWAY_GSA}"
 )
 
 helm template "${HELM_ARGS[@]}" >/dev/null

@@ -91,8 +91,7 @@ actor OnboardingWebResearchService {
         let snippetMatch = snippetMatches[index]
         if snippetMatch.numberOfRanges > 2, snippetMatch.range(at: 1).location != NSNotFound {
           rawSnippet = nsHTML.substring(with: snippetMatch.range(at: 1))
-        } else if snippetMatch.numberOfRanges > 2, snippetMatch.range(at: 2).location != NSNotFound
-        {
+        } else if snippetMatch.numberOfRanges > 2, snippetMatch.range(at: 2).location != NSNotFound {
           rawSnippet = nsHTML.substring(with: snippetMatch.range(at: 2))
         } else {
           rawSnippet = ""

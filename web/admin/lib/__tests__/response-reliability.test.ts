@@ -1,0 +1,481 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  buildChannelReliabilityPayloads,
+  buildResponseReliabilityPayload,
+  RELIABILITY_ROW_LIMIT,
+  responseReliabilityQueries,
+  trimDailyToCoverage,
+} from "../response-reliability";
+
+describe("response reliability", () => {
+  it("aggregates delivery rate, failures, exclusions, gaps, and full-answer speed", () => {
+    const payload = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      chatRows: [
+        [
+          "2026-07-20",
+          "chat_agent_query_started",
+          "main_chat",
+          "unknown",
+          12,
+          0,
+        ],
+        [
+          "2026-07-20",
+          "chat_agent_query_completed",
+          "main_chat",
+          "unknown",
+          8,
+          32_000,
+        ],
+        ["2026-07-20", "chat_agent_error", "main_chat", "timeout", 2, 0],
+        [
+          "2026-07-20",
+          "chat_agent_query_cancelled",
+          "main_chat",
+          "unknown",
+          1,
+          0,
+        ],
+      ],
+      voiceRows: [
+        [
+          "2026-07-20",
+          "voice_turn_started",
+          "unknown",
+          "unknown",
+          "unknown",
+          "hold",
+          6,
+          0,
+        ],
+        [
+          "2026-07-20",
+          "voice_turn_terminal",
+          "success",
+          "success",
+          "hub",
+          "hold",
+          4,
+          20_000,
+        ],
+        [
+          "2026-07-20",
+          "voice_turn_terminal",
+          "failure",
+          "playback_failed",
+          "hub",
+          "hold",
+          1,
+          0,
+        ],
+        [
+          "2026-07-20",
+          "voice_turn_terminal",
+          "excluded",
+          "cancelled",
+          "hub",
+          "hold",
+          1,
+          0,
+        ],
+      ],
+    });
+
+    expect(payload.summary.chat).toMatchObject({
+      attempts: 12,
+      success: 8,
+      failure: 2,
+      excluded: 1,
+      unresolved: 1,
+      successRate: 80,
+      averageFullAnswerSeconds: 4,
+    });
+    expect(payload.summary.voice).toMatchObject({
+      attempts: 6,
+      success: 4,
+      failure: 1,
+      excluded: 1,
+      unresolved: 0,
+      successRate: 80,
+      averageFullAnswerSeconds: 5,
+    });
+    expect(payload.summary.overall).toMatchObject({
+      success: 12,
+      failure: 3,
+      successRate: 80,
+    });
+    expect(payload.failureReasons).toEqual([
+      { source: "chat", reason: "timeout", count: 2 },
+      { source: "voice", reason: "playback_failed", count: 1 },
+    ]);
+    expect(payload.availability.voiceCoverageStart).toBe("2026-07-20");
+    expect(payload.daily.at(-1)).toMatchObject({
+      chatSuccessRate: 80,
+      voiceSuccessRate: 80,
+      chatAverageSeconds: 4,
+      voiceAverageSeconds: 5,
+    });
+  });
+
+  it("marks an unavailable source partial instead of fabricating zero reliability", () => {
+    const payload = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: false,
+      chatRows: [
+        [
+          "2026-07-20",
+          "chat_agent_query_completed",
+          "main_chat",
+          "unknown",
+          2,
+          4_000,
+        ],
+      ],
+      voiceRows: [],
+    });
+
+    expect(payload.partial).toBe(true);
+    expect(payload.summary.chat?.successRate).toBe(100);
+    expect(payload.summary.voice).toBeNull();
+    expect(payload.daily.at(-1)?.voiceSuccessRate).toBeNull();
+  });
+
+  it("shows historical floating voice reliability until physical shortcut telemetry exists", () => {
+    const legacy = [
+      [
+        "2026-07-20",
+        "voice_turn_started",
+        "unknown",
+        "unknown",
+        "floating_voice",
+        "legacy",
+        5,
+        0,
+        "floating_voice",
+      ],
+      [
+        "2026-07-20",
+        "voice_turn_terminal",
+        "success",
+        "unknown",
+        "floating_voice",
+        "legacy",
+        4,
+        8_000,
+        "floating_voice",
+      ],
+      [
+        "2026-07-20",
+        "voice_turn_terminal",
+        "failure",
+        "timeout",
+        "floating_voice",
+        "legacy",
+        1,
+        0,
+        "floating_voice",
+      ],
+    ];
+    const legacyPayload = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      chatRows: [],
+      voiceRows: legacy,
+    });
+
+    expect(legacyPayload.summary.voice).toMatchObject({
+      attempts: 5,
+      success: 4,
+      failure: 1,
+      successRate: 80,
+      averageFullAnswerSeconds: 2,
+    });
+
+    const physicalPayload = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      chatRows: [],
+      voiceRows: [
+        ...legacy,
+        [
+          "2026-07-20",
+          "voice_turn_started",
+          "unknown",
+          "unknown",
+          "hub",
+          "hold",
+          2,
+          0,
+          "physical_shortcut",
+        ],
+        [
+          "2026-07-20",
+          "voice_turn_terminal",
+          "success",
+          "success",
+          "hub",
+          "hold",
+          2,
+          6_000,
+          "physical_shortcut",
+        ],
+      ],
+    });
+
+    expect(physicalPayload.summary.voice).toMatchObject({
+      attempts: 2,
+      success: 2,
+      failure: 0,
+      successRate: 100,
+      averageFullAnswerSeconds: 3,
+    });
+  });
+
+  it("splits response reliability by the user's release channel", () => {
+    const chatRows = [
+      [
+        "2026-07-20",
+        "chat_agent_query_started",
+        "main_chat",
+        "unknown",
+        2,
+        0,
+        "prod-user",
+      ],
+      [
+        "2026-07-20",
+        "chat_agent_query_completed",
+        "main_chat",
+        "unknown",
+        2,
+        4_000,
+        "prod-user",
+      ],
+      [
+        "2026-07-20",
+        "chat_agent_query_started",
+        "main_chat",
+        "unknown",
+        1,
+        0,
+        "beta-user",
+      ],
+      [
+        "2026-07-20",
+        "chat_agent_error",
+        "main_chat",
+        "timeout",
+        1,
+        0,
+        "beta-user",
+      ],
+    ];
+    const channels = buildChannelReliabilityPayloads({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      chatRows,
+      voiceRows: [],
+      channelByActor: new Map([
+        ["prod-user", "production"],
+        ["beta-user", "beta"],
+      ]),
+    });
+
+    expect(channels.production.summary.chat).toMatchObject({
+      attempts: 2,
+      success: 2,
+      failure: 0,
+      successRate: 100,
+    });
+    expect(channels.beta.summary.chat).toMatchObject({
+      attempts: 1,
+      success: 0,
+      failure: 1,
+      successRate: 0,
+    });
+  });
+
+  it("clamps the query window before interpolating HogQL", () => {
+    const queries = responseReliabilityQueries(500);
+    expect(queries.chat).toContain("toStartOfDay(now()) - INTERVAL 89 DAY");
+    expect(queries.voice).toContain("toStartOfDay(now()) - INTERVAL 89 DAY");
+    expect(queries.voice).toContain(
+      "toString(properties.surface) = 'floating_voice'",
+    );
+    expect(queries.chat).toContain("distinct_id AS actor_id");
+    expect(queries.voice).toContain("distinct_id AS actor_id");
+  });
+
+  // Static query-contract check: PostHog's query API silently fills LIMIT 100
+  // into any HogQL (sub)query without one. These queries are ordered day ASC,
+  // so that default cut exactly the newest days off the dashboard (lines
+  // stopped days before today). A trailing LIMIT after UNION ALL binds to the
+  // last arm only, so the voice union must be wrapped in a subquery with one
+  // outer LIMIT.
+  it("carries an explicit LIMIT so PostHog's default 100-row cap cannot drop the newest days", () => {
+    const queries = responseReliabilityQueries(30);
+    expect(queries.chat).toContain(`LIMIT ${RELIABILITY_ROW_LIMIT}`);
+    expect(queries.voice).toContain("SELECT * FROM (");
+    expect(queries.voice.replace(/\s+/g, " ")).toContain(
+      `) ORDER BY day ASC LIMIT ${RELIABILITY_ROW_LIMIT}`,
+    );
+    // The route detects truncation via rows.length >= RELIABILITY_ROW_LIMIT,
+    // so the constant must equal PostHog's served maximum — verified live:
+    // LIMIT 100000 returns exactly 50000 rows. A larger constant would make
+    // the overflow check unreachable and truncation undetectable.
+    expect(RELIABILITY_ROW_LIMIT).toBe(50_000);
+  });
+
+  it("marks the payload partial when rows hit the query row limit", () => {
+    const truncatedPayload = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      truncated: true,
+      chatRows: [
+        [
+          "2026-07-20",
+          "chat_agent_query_completed",
+          "main_chat",
+          "unknown",
+          2,
+          4_000,
+        ],
+      ],
+      voiceRows: [],
+    });
+    expect(truncatedPayload.partial).toBe(true);
+
+    const channels = buildChannelReliabilityPayloads({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      truncated: true,
+      chatRows: [],
+      voiceRows: [],
+      channelByActor: new Map(),
+    });
+    expect(channels.production.partial).toBe(true);
+    expect(channels.beta.partial).toBe(true);
+  });
+
+  it("trims leading empty days to telemetry coverage but keeps interior gaps", () => {
+    const payload = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      chatRows: [
+        [
+          "2026-07-17",
+          "chat_agent_query_started",
+          "main_chat",
+          "unknown",
+          2,
+          0,
+        ],
+        [
+          "2026-07-17",
+          "chat_agent_query_completed",
+          "main_chat",
+          "unknown",
+          2,
+          9000,
+        ],
+        [
+          "2026-07-19",
+          "chat_agent_query_started",
+          "main_chat",
+          "unknown",
+          1,
+          0,
+        ],
+        ["2026-07-19", "chat_agent_error", "main_chat", "agent_error", 1, 0],
+      ],
+      voiceRows: [],
+    });
+
+    const trimmed = trimDailyToCoverage(payload.daily);
+    expect(payload.daily).toHaveLength(7);
+    expect(trimmed.map((point) => point.date)).toEqual([
+      "2026-07-17",
+      "2026-07-18",
+      "2026-07-19",
+      "2026-07-20",
+    ]);
+    expect(trimmed[0].chatSuccessRate).toBe(100);
+    expect(trimmed[1].chatSuccessRate).toBeNull();
+    expect(trimmed[2].chatSuccessRate).toBe(0);
+
+    expect(trimDailyToCoverage([])).toEqual([]);
+    const empty = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      chatRows: [],
+      voiceRows: [],
+    });
+    expect(trimDailyToCoverage(empty.daily)).toEqual([]);
+
+    // A first day with only cancellations is coverage (an all-cancelled
+    // rollout day is a signal), not a pre-coverage gap to trim away.
+    const excludedOnly = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      chatRows: [
+        [
+          "2026-07-18",
+          "chat_agent_query_started",
+          "main_chat",
+          "unknown",
+          3,
+          0,
+        ],
+        [
+          "2026-07-18",
+          "chat_agent_query_cancelled",
+          "main_chat",
+          "unknown",
+          3,
+          0,
+        ],
+        [
+          "2026-07-19",
+          "chat_agent_query_started",
+          "main_chat",
+          "unknown",
+          1,
+          0,
+        ],
+        [
+          "2026-07-19",
+          "chat_agent_query_completed",
+          "main_chat",
+          "unknown",
+          1,
+          5_000,
+        ],
+      ],
+      voiceRows: [],
+    });
+    expect(trimDailyToCoverage(excludedOnly.daily)[0]?.date).toBe("2026-07-18");
+  });
+});

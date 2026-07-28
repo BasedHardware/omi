@@ -52,10 +52,11 @@ from database.users import (
     resolve_legacy_deletion_wipe_uid,
     set_user_transcription_preferences,
 )
-from utils.stt.streaming import deepgram_nova3_multi_languages
+from config.stt_provider_policy import supports_live_multilingual_mode
+from utils.user_language import normalize_user_language
 from database.users import *
 from models.conversation import Conversation
-from models.geolocation import Geolocation
+from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
 from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
 from models.shared import StatusResponse
@@ -75,6 +76,8 @@ from models.users import (
     PricingOption,
     PhoneCallQuota,
     TrialMetadata,
+    LocationContextConsentResponse,
+    LocationContextConsentUpdate,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
@@ -92,6 +95,7 @@ from utils.subscription import (
     has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
+    wire_plan_for_client,
     legacy_plan_features,
     clear_trial_paywall_cache,
     get_trial_metadata,
@@ -117,7 +121,7 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
-from utils.byok import has_byok_keys, invalidate_byok_state_cache
+from utils.byok import has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
 import logging
 
 logger = logging.getLogger(__name__)
@@ -219,6 +223,13 @@ class MemorySummaryRatingResponse(BaseModel):
 class TrainingDataOptInResponse(BaseModel):
     opted_in: bool
     status: Optional[str] = None
+
+
+def _location_context_consent_response(consent) -> LocationContextConsentResponse:
+    return LocationContextConsentResponse(
+        enabled=bool(consent and consent.is_active()),
+        expires_at=consent.expires_at if consent and consent.is_active() else None,
+    )
 
 
 class DailySummaryTestResponse(UserStatusResponse):
@@ -416,7 +427,13 @@ async def run_account_deletion_wipe(
 
 
 @router.patch('/v1/users/geolocation', tags=['v1'], response_model=UserStatusResponse)
-def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
+def set_user_geolocation(geolocation: GeolocationInput, uid: str = Depends(auth.get_current_user_uid)):
+    validated_geolocation = validated_geolocation_or_none(geolocation)
+    if validated_geolocation is None:
+        # Preserve the released endpoint's success-shaped input contract while
+        # ensuring out-of-range coordinates cannot enter the cache or any provider path.
+        return {'status': 'ok', 'message': 'Location ignored because its coordinates are invalid.'}
+
     last_location_data = get_cached_user_geolocation(uid)
     if last_location_data:
         try:
@@ -424,20 +441,20 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
             last_lat = round(last_location.latitude, 4)
             last_lon = round(last_location.longitude, 4)
-            new_lat = round(geolocation.latitude, 4)
-            new_lon = round(geolocation.longitude, 4)
+            new_lat = round(validated_geolocation.latitude, 4)
+            new_lon = round(validated_geolocation.longitude, 4)
 
             # Only update if location has changed up to 4 decimal places
             if last_lat == new_lat and last_lon == new_lon:
                 return {'status': 'ok', 'message': 'Location not changed significantly.'}
 
-            cache_user_geolocation(uid, geolocation.model_dump())
+            cache_user_geolocation(uid, validated_geolocation.model_dump())
         except Exception as e:
             logger.error(f"Error processing geolocation update, caching new location anyway. Error: {e}")
-            cache_user_geolocation(uid, geolocation.model_dump())
+            cache_user_geolocation(uid, validated_geolocation.model_dump())
     else:
         # No previous location, so cache the new one
-        cache_user_geolocation(uid, geolocation.model_dump())
+        cache_user_geolocation(uid, validated_geolocation.model_dump())
 
     return {'status': 'ok'}
 
@@ -639,7 +656,8 @@ def update_person_name(
     value: str,  # = Field(min_length=2, max_length=40),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    update_person(uid, person_id, value)
+    if not update_person(uid, person_id, value):
+        raise HTTPException(status_code=404, detail="Person not found")
     return {'status': 'ok'}
 
 
@@ -807,9 +825,7 @@ def set_chat_message_analytics(
 def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's preferred language."""
     language = get_user_language_preference(uid)
-    if not language:
-        return {'language': None}
-    return {'language': language}
+    return {'language': language or None}
 
 
 class SetUserLanguageRequest(BaseModel):
@@ -819,11 +835,11 @@ class SetUserLanguageRequest(BaseModel):
 @router.patch('/v1/users/language', tags=['v1'], response_model=UserLanguageUpdateResponse)
 def set_user_language(data: SetUserLanguageRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
-    language = data.language
+    language = normalize_user_language(data.language)
     if not language:
-        raise HTTPException(status_code=400, detail="Language is required")
+        raise HTTPException(status_code=400, detail="A supported language code is required")
     set_user_language_preference(uid, language)
-    single_language_mode = language not in deepgram_nova3_multi_languages
+    single_language_mode = not supports_live_multilingual_mode(language)
     set_user_transcription_preferences(uid, single_language_mode=single_language_mode)
     return {'status': 'ok', 'single_language_mode': single_language_mode}
 
@@ -1029,6 +1045,21 @@ def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid
     return {'status': 'ok', 'message': 'Your request has been submitted for review. We will let you know soon.'}
 
 
+@router.get('/v1/users/location-context-consent', tags=['v1'], response_model=LocationContextConsentResponse)
+def get_location_context_consent(uid: str = Depends(auth.get_current_user_uid)):
+    """Return the current city-context disclosure and active server-side consent state."""
+    return _location_context_consent_response(users_db.get_user_location_context_consent(uid))
+
+
+@router.put('/v1/users/location-context-consent', tags=['v1'], response_model=LocationContextConsentResponse)
+def set_location_context_consent(update: LocationContextConsentUpdate, uid: str = Depends(auth.get_current_user_uid)):
+    """Grant, renew, or revoke city-only location context for interactive chat."""
+    if update.enabled and not update.disclosure_accepted:
+        raise HTTPException(status_code=422, detail='location context requires accepting the provider disclosure')
+    consent = users_db.set_user_location_context_consent(uid, enabled=update.enabled)
+    return _location_context_consent_response(consent)
+
+
 # **************************************
 # ************* Usage ******************
 # **************************************
@@ -1040,7 +1071,7 @@ def get_user_usage_stats_endpoint(
     period: UsagePeriod = UsagePeriod.TODAY,
 ):
     """Gets daily and monthly usage stats for the authenticated user."""
-    stats = user_usage_db.get_current_user_usage(uid, period.value)
+    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=notification_db.get_user_time_zone(uid))
     return stats
 
 
@@ -1077,7 +1108,7 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
             raise HTTPException(
                 status_code=400, detail=f"Invalid fingerprint for {provider}: expected lowercase hex SHA-256 (64 chars)"
             )
-    users_db.set_byok_active(uid, data.fingerprints)
+    users_db.set_byok_active(uid, {p: peppered_fingerprint(fp) for p, fp in data.fingerprints.items()})
     invalidate_byok_state_cache(uid)
     clear_trial_paywall_cache(uid)
     return {"active": True}
@@ -1294,6 +1325,11 @@ def get_user_subscription_endpoint(
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
     chat_allowed = chat_snapshot['allowed']
 
+    # Grandfather is read from the true plan before the label is remapped for
+    # clients whose enum predates `plus`/`unlimited_v2` (see wire_plan_for_client).
+    desktop_grandfather_until = neo_grandfather_until(subscription)
+    subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version)
+
     return UserSubscriptionResponse(
         subscription=subscription,
         transcription_seconds_used=transcription_seconds_used,
@@ -1310,7 +1346,7 @@ def get_user_subscription_endpoint(
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
-        desktop_grandfather_until=neo_grandfather_until(subscription),
+        desktop_grandfather_until=desktop_grandfather_until,
     )
 
 

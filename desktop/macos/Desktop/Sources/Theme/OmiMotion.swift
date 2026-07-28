@@ -23,9 +23,9 @@ package enum OmiMotion {
   }
 }
 
-package extension View {
+extension View {
   /// Drop-in replacement for `.animation(_:value:)` that respects Reduce Motion.
-  func omiAnimation<V: Equatable>(_ animation: Animation?, value: V) -> some View {
+  package func omiAnimation<V: Equatable>(_ animation: Animation?, value: V) -> some View {
     self.animation(OmiMotion.gated(animation), value: value)
   }
 }

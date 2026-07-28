@@ -112,9 +112,18 @@ finally:
 
 def test_state_without_uid_returns_invalid_state_not_500():
     sentinel = object()
+
+    # The state consume is offloaded via run_blocking; under the stub finder utils.executors is
+    # auto-mocked, so run_blocking would return a MagicMock that cannot be awaited. Pass through
+    # to the (patched) validate_and_consume_oauth_state so the handler sees the state record.
+    async def _run_blocking(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
     with patch.object(
         int_mod, 'validate_and_consume_oauth_state', return_value={'app_key': 'google_calendar'}
-    ), patch.object(int_mod, 'render_oauth_response', return_value=sentinel) as render:
+    ), patch.object(int_mod, 'render_oauth_response', return_value=sentinel) as render, patch.object(
+        int_mod, 'run_blocking', _run_blocking
+    ):
         result = asyncio.run(
             int_mod.handle_oauth_callback(
                 request=MagicMock(), app_key='google_calendar', code='abc', state='xyz', provider_config=MagicMock()

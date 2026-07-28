@@ -168,6 +168,11 @@ def _build_fakes() -> dict[str, ModuleType]:
     llm_kg = add("utils.llm.knowledge_graph")
     llm_kg.extract_knowledge_from_memory = MagicMock()
 
+    # process_conversation imports date_in_tz from here after the origin/main merge.
+    llm_temporal = add("utils.llm.temporal")
+    for attr in ["date_in_tz", "current_date_in_tz", "current_date_for_uid"]:
+        setattr(llm_temporal, attr, MagicMock())
+
     @contextmanager
     def _track_usage_stub(*_args, **_kwargs):
         yield
@@ -241,6 +246,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     for name in [
         "utils.conversations.factory",
         "utils.conversations.transcript_chunks",
+        "utils.conversations.memory_extraction_telemetry",
         "utils.memory.canonical_activation",
         "utils.memory.memory_service",
         "utils.memory.memory_system",

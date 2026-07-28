@@ -9,30 +9,6 @@ import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/logger.dart';
 
-/// Languages supported by Deepgram Nova-3 multi-language auto-detection.
-/// When a user picks one of these, multi-language mode is enabled (single_language_mode = false).
-const multiLanguageSupported = {
-  'en',
-  'en-US',
-  'en-AU',
-  'en-GB',
-  'en-IN',
-  'en-NZ',
-  'es',
-  'es-419',
-  'fr',
-  'fr-CA',
-  'de',
-  'hi',
-  'ru',
-  'pt',
-  'pt-BR',
-  'pt-PT',
-  'ja',
-  'it',
-  'nl',
-};
-
 class HomeProvider extends ChangeNotifier {
   int _sessionGeneration = 0;
   int selectedIndex = 0;
@@ -265,17 +241,17 @@ class HomeProvider extends ChangeNotifier {
 
   Future<bool> updateUserPrimaryLanguage(String languageCode, {UserProvider? userProvider}) async {
     try {
-      final success = await setUserPrimaryLanguage(languageCode);
-      if (success) {
+      final serverSingleLanguageMode = await setUserPrimaryLanguage(languageCode);
+      if (serverSingleLanguageMode != null) {
         userPrimaryLanguage = languageCode;
         hasSetPrimaryLanguage = true;
         SharedPreferencesUtil().userPrimaryLanguage = languageCode;
         SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         PlatformManager.instance.analytics.setUserAttribute('Primary Language', languageCode);
 
-        // Backend auto-sets single_language_mode — sync local state to match
-        final singleLanguageMode = !multiLanguageSupported.contains(languageCode);
-        userProvider?.updateSingleLanguageModeLocally(singleLanguageMode);
+        // The server decides single_language_mode from the live STT policy
+        // (#10022); local state mirrors its response, never a client-side list.
+        userProvider?.updateSingleLanguageModeLocally(serverSingleLanguageMode);
 
         notifyListeners();
         return true;

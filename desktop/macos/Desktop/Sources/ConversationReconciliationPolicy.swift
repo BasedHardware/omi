@@ -72,19 +72,22 @@ struct ConversationPendingMutation: Equatable {
   /// removed once every field has either resolved or expired.
   mutating func expireFields(now: Date, ttl: TimeInterval) {
     if title != nil, let recorded = titleRecordedAt,
-       now.timeIntervalSince(recorded) > ttl {
+      now.timeIntervalSince(recorded) > ttl
+    {
       title = nil
       titleRecordedAt = nil
       titleMutationId = nil
     }
     if starred != nil, let recorded = starredRecordedAt,
-       now.timeIntervalSince(recorded) > ttl {
+      now.timeIntervalSince(recorded) > ttl
+    {
       starred = nil
       starredRecordedAt = nil
       starredMutationId = nil
     }
     if hasFolderIdMutation, let recorded = folderIdRecordedAt,
-       now.timeIntervalSince(recorded) > ttl {
+      now.timeIntervalSince(recorded) > ttl
+    {
       folderId = nil
       hasFolderIdMutation = false
       folderIdRecordedAt = nil

@@ -4,16 +4,17 @@ import asyncio
 import json
 
 from fastapi.testclient import TestClient
+import httpx
 import pytest
 from starlette.requests import Request
 
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
-from llm_gateway.gateway.executor import ProviderRegistry
+from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
-from llm_gateway.gateway.schemas import FailureClass
+from llm_gateway.gateway.schemas import FailureClass, ProviderRef, ProviderRejection
 from llm_gateway.main import app
 from llm_gateway.routers import dependencies, openai_compatible
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
@@ -90,6 +91,216 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'metadata' not in provider.calls[0].request
 
 
+@pytest.mark.parametrize(
+    ('failure_class', 'provider_rejection', 'expected_code'),
+    [
+        (
+            FailureClass.CAPABILITY_MISMATCH,
+            ProviderRejection.UNSUPPORTED_REASONING_EFFORT,
+            'capability_not_supported',
+        ),
+        (
+            FailureClass.PROVIDER_INVALID_REQUEST,
+            ProviderRejection.CONTEXT_LENGTH_EXCEEDED,
+            'provider_request_rejected',
+        ),
+    ],
+)
+def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
+    monkeypatch,
+    failure_class,
+    provider_rejection,
+    expected_code,
+):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    recorded: list[dict] = []
+    provider = FakeChatCompletionProvider([ProviderFailure(failure_class, provider_rejection=provider_rejection)])
+    monkeypatch.setattr(openai_compatible, 'observe_error', lambda *_args, **kwargs: recorded.append(kwargs))
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers=auth_headers(),
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()['error']['code'] == expected_code
+    assert len(recorded) == 1
+    error = recorded[0]['error']
+    assert error.failure_class == failure_class
+    assert error.provider == 'openai'
+    assert error.model == 'gpt-5.4-nano'
+    assert error.provider_rejection == provider_rejection
+
+
+@pytest.mark.parametrize(
+    'failure_class',
+    [FailureClass.BYOK_RATE_LIMIT, FailureClass.BYOK_QUOTA],
+)
+def test_byok_throttling_is_not_reported_as_a_credential_rejection(monkeypatch, failure_class):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider([ProviderFailure(failure_class)])
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 429
+    assert response.json()['error']['type'] == 'rate_limit_error'
+    assert response.json()['error']['message'] == f'provider request failed: {failure_class.value}'
+
+
+def test_byok_auth_failure_still_reports_a_credential_rejection(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider([ProviderFailure(FailureClass.BYOK_AUTH)])
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert response.json()['error']['type'] == 'authentication_error'
+    assert response.json()['error']['code'] == 'credential_failure'
+
+
+def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attribution(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    persisted = []
+
+    def capture_persist(context, trace):
+        persisted.append((context, trace))
+
+    provider = FakeChatCompletionProvider(
+        [
+            {
+                'id': 'chatcmpl-accounted',
+                'object': 'chat.completion',
+                'created': 1,
+                'model': 'gpt-5.4-nano',
+                'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': '{}'}, 'finish_reason': 'stop'}],
+                'usage': {
+                    'prompt_tokens': 100,
+                    'completion_tokens': 20,
+                    'prompt_tokens_details': {'cached_tokens': 40},
+                },
+            }
+        ]
+    )
+    monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', capture_persist)
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(prompt_cache_key='conversation-123'),
+            headers={**auth_headers(), 'x-omi-llm-feature': 'conversation_processing'},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert len(persisted) == 1
+    context, trace = persisted[0]
+    assert context.user_uid == 'user-123'
+    assert context.feature == 'conversation_processing'
+    assert trace.attempts[0].usage is not None
+    assert trace.attempts[0].usage.cached_input_tokens == 40
+    assert trace.attempts[0].usage.cache_status.value == 'partial_hit'
+
+
+def test_gateway_provider_body_forwards_validated_gpt56_cache_fields_unchanged():
+    request = valid_request(
+        prompt_cache_key='omi-extract-actions-v1-b0',
+        prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'explicit'},
+                    }
+                ],
+            },
+            {'role': 'user', 'content': 'Dynamic content.'},
+        ],
+    )
+    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.6-luna'))
+
+    assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
+    assert forwarded['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+    assert forwarded['messages'] == request['messages']
+
+
+def test_gateway_provider_body_strips_gpt56_cache_fields_for_legacy_route():
+    request = valid_request(
+        prompt_cache_key='omi-extract-actions-v1-b0',
+        prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'explicit'},
+                    }
+                ],
+            },
+            {'role': 'user', 'content': 'Dynamic content.'},
+        ],
+    )
+    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.4-nano'))
+
+    assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
+    assert 'prompt_cache_options' not in forwarded
+    assert forwarded['messages'][0]['content'] == [{'type': 'text', 'text': 'Stable instructions.'}]
+
+
+def test_metadata_feature_never_enters_the_accounting_context(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    persisted = []
+
+    def capture_persist(context, trace):
+        persisted.append((context, trace))
+
+    monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', capture_persist)
+    provider = FakeChatCompletionProvider()
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(metadata={'omi_feature': 'private user supplied metadata'}),
+            headers=auth_headers(),
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert persisted[0][0].feature == LANE_ID
+
+
 def test_chat_completions_uses_forwarded_byok_credentials(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     provider = FakeChatCompletionProvider()
@@ -108,6 +319,69 @@ def test_chat_completions_uses_forwarded_byok_credentials(monkeypatch):
 
     assert response.status_code == 200
     assert provider.calls[0].credential_mode == 'byok'
+
+
+def test_image_generation_records_gateway_attempt(monkeypatch):
+    class FakeImageClient:
+        async def post(self, *_args, **_kwargs):
+            return httpx.Response(200, json={'created': 1, 'data': [{'url': 'https://example.invalid/image'}]})
+
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OPENAI_API_KEY', 'omi-openai-key')
+    persisted = []
+
+    def capture_persist(context, trace):
+        persisted.append((context, trace))
+
+    monkeypatch.setattr(openai_compatible, '_get_image_generation_client', lambda: FakeImageClient())
+    monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', capture_persist)
+    response = TestClient(app).post(
+        '/v1/images/generations',
+        json={'model': 'gpt-image-1', 'prompt': 'private prompt', 'size': '1024x1024', 'quality': 'high', 'n': 2},
+        headers={**auth_headers(), 'x-omi-llm-feature': 'app_generator'},
+    )
+
+    assert response.status_code == 200
+    assert len(persisted) == 1
+    context, trace = persisted[0]
+    assert context.api_surface == 'openai_images_generations'
+    assert context.feature == 'app_generator'
+    assert trace.attempts[0].usage is not None
+    assert trace.attempts[0].usage.unit_type == 'images'
+    assert trace.attempts[0].usage.image_count == 2
+
+
+def test_image_generation_normalizes_auto_defaults_for_estimated_accounting(monkeypatch):
+    class FakeImageClient:
+        def __init__(self):
+            self.calls = []
+
+        async def post(self, *_args, **kwargs):
+            self.calls.append(kwargs)
+            return httpx.Response(200, json={'created': 1, 'data': [{'url': 'https://example.invalid/image'}]})
+
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OPENAI_API_KEY', 'omi-openai-key')
+    persisted = []
+    client = FakeImageClient()
+    monkeypatch.setattr(openai_compatible, '_get_image_generation_client', lambda: client)
+    monkeypatch.setattr(
+        openai_compatible, 'schedule_attempt_trace', lambda context, trace: persisted.append((context, trace))
+    )
+
+    response = TestClient(app).post(
+        '/v1/images/generations',
+        json={'model': 'gpt-image-1', 'prompt': 'private prompt'},
+        headers=auth_headers(),
+    )
+
+    usage = persisted[0][1].attempts[0].usage
+    assert response.status_code == 200
+    assert client.calls[0]['json']['size'] == 'auto'
+    assert client.calls[0]['json']['quality'] == 'auto'
+    assert usage is not None
+    assert usage.image_size == 'auto'
+    assert usage.image_quality == 'auto'
 
 
 def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypatch):
@@ -311,8 +585,10 @@ class TerminalStreamProvider(FakeChatCompletionProvider):
     def __init__(self, chunks: list[bytes]):
         super().__init__()
         self.chunks = chunks
+        self.stream_requests: list[dict] = []
 
-    async def stream_chat_completion(self, *_args, **_kwargs):
+    async def stream_chat_completion(self, request, *_args, **_kwargs):
+        self.stream_requests.append(request)
         for chunk in self.chunks:
             yield chunk
 
@@ -320,14 +596,21 @@ class TerminalStreamProvider(FakeChatCompletionProvider):
 def test_streaming_success_requires_done_marker_and_records_byok_source(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     recorded: list[dict] = []
+    persisted = []
     request_id = 'f6720df5-245e-4fd7-b10b-ec869888e1de'
     provider = TerminalStreamProvider(
         [
             b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n',
+            b'data: {"usage":{"prompt_tokens":10,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":0}}}\n\n',
             b'data: [DONE]\n\n',
         ]
     )
     monkeypatch.setattr(openai_compatible, 'observe_route_result', lambda *_args, **kwargs: recorded.append(kwargs))
+
+    def capture_persist(context, trace):
+        persisted.append((context, trace))
+
+    monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', capture_persist)
     app.dependency_overrides[dependencies.get_gateway_config] = _streaming_enabled_gateway_config
     app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
     try:
@@ -352,6 +635,16 @@ def test_streaming_success_requires_done_marker_and_records_byok_source(monkeypa
     assert recorded[0]['credential_source'] == 'service_forwarded_byok'
     assert recorded[0]['streaming'] is True
     assert recorded[0]['ttfb_seconds'] is not None
+    assert recorded[0]['budget_source'] == 'none'
+    assert recorded[0]['output_budget'] == 'none'
+    assert recorded[0]['completion_size'] == 'le_64'
+    assert recorded[0]['finish_reason'] == 'unknown'
+    assert len(persisted) == 1
+    context, trace = persisted[0]
+    assert context.payer == 'byok'
+    assert trace.attempts[-1].usage is not None
+    assert trace.attempts[-1].usage.cache_status.value == 'no_cache_read_observed'
+    assert provider.stream_requests[0]['stream_options']['include_usage'] is True
 
 
 def test_streaming_payload_text_cannot_fake_done_marker(monkeypatch):

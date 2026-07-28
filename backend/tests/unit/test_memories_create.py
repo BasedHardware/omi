@@ -97,20 +97,24 @@ class TestMemoriesRateLimitWiring:
         matches = _grep_router(r"with_rate_limit.*memories:delete_all")
         assert len(matches) == 1, f"DELETE /v3/memories must have memories:delete_all, found: {matches}"
 
+    def test_delete_batch_endpoint_has_rate_limit(self):
+        matches = _grep_router(r"with_rate_limit.*memories:delete_batch")
+        assert len(matches) == 1, f"DELETE /v3/memories/batch must have memories:delete_batch, found: {matches}"
+
     def test_review_endpoint_has_rate_limit(self):
         matches = _grep_router(r"with_rate_limit.*memories:review")
         assert len(matches) == 3, f"Review queue endpoints must have memories:review, found: {matches}"
 
     def test_modify_endpoints_have_rate_limit(self):
         matches = _grep_router(r"with_rate_limit.*memories:modify")
-        assert len(matches) >= 1, f"Edit/visibility must have memories:modify, found: {matches}"
+        assert len(matches) == 4, f"Edit/visibility/review/baseline must have memories:modify, found: {matches}"
 
     def test_all_write_endpoints_rate_limited(self):
         """Every write endpoint in memories.py must use with_rate_limit."""
         matches = _grep_router(r"with_rate_limit.*memories:")
-        # create, batch, review queue list/get/resolve, delete, delete_all,
-        # modify(review), modify(edit), modify(visibility) = 10
-        assert len(matches) == 10, f"Expected 10 rate-limited endpoints, got {len(matches)}: {matches}"
+        # create, batch, review queue list/get/resolve, delete, delete_all, delete_batch,
+        # modify(review), modify(edit), modify(visibility), modify(baseline) = 12
+        assert len(matches) == 12, f"Expected 12 rate-limited endpoints, got {len(matches)}: {matches}"
 
 
 # ---------------------------------------------------------------------------

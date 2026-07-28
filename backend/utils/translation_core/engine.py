@@ -92,9 +92,14 @@ class TranslationEngine:
             if cached is not None:
                 segment_values[segment.fingerprint] = cached
             elif self.cache.is_negative(segment.fingerprint, target_language):
+                # A negative-cache hit marks "this segment needs no translation", which is not a
+                # language detection. It must not vote in the unit's dominant language, or a unit
+                # mixing cached target-language text with foreign speech reports the target
+                # language. The whole-unit negative hit above is different: there the no-op does
+                # describe the entire unit.
                 segment_values[segment.fingerprint] = CachedTranslation(
                     text=segment.text,
-                    detected_language=_base_language(target_language),
+                    detected_language='',
                 )
             else:
                 missing.append((segment.fingerprint, segment.text))

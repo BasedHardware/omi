@@ -1,7 +1,7 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 extension AppState {
@@ -82,16 +82,21 @@ extension AppState {
       Self.relaunchCommand(
         appPath: relaunchURL.path,
         isNonProduction: AppBuild.isNonProduction,
-        automationPort: DesktopAutomationLaunchOptions.port),
+        automationPort: DesktopAutomationLaunchOptions.port,
+        terminatingProcessIdentifier: ProcessInfo.processInfo.processIdentifier),
     ]
 
     do {
       try task.run()
       log("Restart scheduled, terminating current instance...")
 
-      // Terminate the current app
+      // Terminate on AppKit's main queue.  Keep an explicit before/after marker:
+      // a restart helper intentionally waits on this PID, so a cancelled AppKit
+      // quit must be distinguishable from a failed helper launch in local logs.
       DispatchQueue.main.async {
+        log("Restart: requesting AppKit termination for pid=\(ProcessInfo.processInfo.processIdentifier)")
         NSApplication.shared.terminate(nil)
+        log("Restart: AppKit termination request returned")
       }
     } catch {
       log("Failed to schedule restart: \(error)")
@@ -106,25 +111,34 @@ extension AppState {
   /// the reopened app would fall back to a launchd-session-inherited
   /// `OMI_AUTOMATION_PORT` (or the default port), and the automation harness, still
   /// polling the pre-quit port, would find nothing after Quit & Reopen (PERM-06). argv
-  /// is the highest-precedence port source, so it wins over any inherited env. The
-  /// production relaunch stays a plain `open` and is unchanged.
+  /// is the highest-precedence port source, so it wins over any inherited env.
+  ///
+  /// The command also waits for the terminating process to exit before asking Launch
+  /// Services to open the bundle.  A fixed delay alone races app termination: if
+  /// `open` reaches Launch Services while the old process is still alive, macOS
+  /// treats it as a reopen of that process rather than a relaunch.  Waiting on the
+  /// original PID gives the single-instance guard and the automation listener an
+  /// unambiguous handoff.  Non-production uses `open -n` after that handoff so the
+  /// harness gets a distinct replacement process even if Launch Services retains an
+  /// activation record for the old test instance.
   nonisolated static func relaunchCommand(
     appPath: String,
     isNonProduction: Bool,
-    automationPort: UInt16
+    automationPort: UInt16,
+    terminatingProcessIdentifier: Int32
   ) -> String {
     var openCommand = "open \"\(appPath)\""
     if isNonProduction {
-      openCommand += " --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)"
+      openCommand = "open -n \"\(appPath)\" --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)"
     }
-    return "sleep 0.5 && \(openCommand)"
+    return
+      "sleep 0.5 && while kill -0 \(terminatingProcessIdentifier) 2>/dev/null; do sleep 0.1; done && \(openCommand)"
   }
 
   /// Reset onboarding state for the current app only, then restart.
   /// This clears onboarding state without touching production data or system permissions.
   nonisolated func resetOnboardingAndRestart() {
     log("Resetting onboarding state for current app...")
-    let graphAuthorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
     // Update live @AppStorage-backed state on the main thread *before* clearing
     // UserDefaults. DesktopHomeView handles .resetOnboardingRequested by setting
@@ -138,23 +152,14 @@ extension AppState {
       DispatchQueue.main.sync(execute: postResetNotification)
     }
 
-    // Clear onboarding-related UserDefaults keys (thread-safe, after live state)
-    let onboardingKeys = [
-      "hasCompletedOnboarding",
-      "onboardingStep",
-      "hasSeenRewindIntro",
-      "hasTriggeredNotification",
-      "hasTriggeredAutomation",
-      "hasTriggeredScreenRecording",
-      "hasTriggeredMicrophone",
-      "hasTriggeredSystemAudio",
-      "hasTriggeredAccessibility",
-      "hasTriggeredBluetooth",
-      "onboardingJustCompleted",
-    ]
-    for key in onboardingKeys {
-      UserDefaults.standard.removeObject(forKey: key)
-    }
+    // Clear onboarding-related UserDefaults keys (thread-safe, after live state).
+    // Shared list with AuthService.signOut so a new onboarding key can't be
+    // forgotten at one site.
+    OnboardingFlow.clearPersistedState()
+    // hasCompletedOnboarding lives on AppState (@AppStorage on an
+    // ObservableObject); the .resetOnboardingRequested handler above set it to
+    // false, this drops the persisted key before the restart.
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.hasCompletedOnboarding)
     UserDefaults.standard.synchronize()
     log("Cleared onboarding UserDefaults keys")
 
@@ -163,40 +168,16 @@ extension AppState {
     log("Cleared onboarding chat persistence")
 
     Task { @MainActor [self] in
-      // Clear knowledge graph (local + server) so the onboarding chart starts fresh
-      if let graphAuthorizationSnapshot {
-        let authorization = LocalMutationAuthorization {
-          RuntimeOwnerIdentity.isAuthorizationCurrent(graphAuthorizationSnapshot)
-        }
-        do {
-          try await KnowledgeGraphStorage.shared.clearAll(authorization: authorization)
-          log("Cleared local knowledge graph storage")
-        } catch LocalMutationAuthorizationError.revoked {
-          log("Skipped stale-owner local knowledge graph reset")
-        } catch {
-          logError("Failed to clear local knowledge graph during onboarding reset", error: error)
-        }
-      } else {
-        log("Skipped local knowledge graph reset without an authenticated owner")
-      }
-      do {
-        try await APIClient.shared.deleteKnowledgeGraph()
-        log("Cleared server knowledge graph")
-      } catch {
-        logError("Failed to clear server knowledge graph during onboarding reset", error: error)
-      }
-
-      // Clear the default stream through the kernel journal's durable,
-      // generation-fenced delete outbox. No UI surface may write or delete
-      // backend chat state directly.
+      // Clear only setup-owned local conversation state. A re-walkthrough must
+      // never mutate the user's normal local or backend chat history.
       if let chatProvider = ChatProvider.mainInstance {
-        if await chatProvider.clearDefaultJournalForOnboardingReset() {
-          log("Queued default chat reset through kernel journal")
+        if await chatProvider.clearOnboardingJournal() {
+          log("Cleared onboarding journal")
         } else {
-          log("Failed to queue default chat reset through kernel journal")
+          log("Failed to clear onboarding journal")
         }
       } else {
-        log("Default chat reset deferred: main chat provider unavailable")
+        log("Onboarding journal reset deferred: main chat provider unavailable")
       }
 
       try? await Task.sleep(nanoseconds: 150_000_000)
@@ -228,8 +209,7 @@ extension AppState {
     // Clean DMG staging directories
     let tmpDir = "/private/tmp"
     if let contents = try? fileManager.contentsOfDirectory(atPath: tmpDir) {
-      for item in contents where item.hasPrefix("omi-dmg-staging") || item.hasPrefix("omi-dmg-test")
-      {
+      for item in contents where item.hasPrefix("omi-dmg-staging") || item.hasPrefix("omi-dmg-test") {
         let itemPath = "\(tmpDir)/\(item)"
         do {
           try fileManager.removeItem(atPath: itemPath)
@@ -389,12 +369,36 @@ extension AppState {
     hasSystemAudioPermission = status == .granted
   }
 
-  /// Check system audio permission support and keep the last observed tap result fresh.
+  /// Prime the same Core Audio tap used by real capture and reconcile its
+  /// observed outcome into the shared permission state.
+  func primeSystemAudioPermission() async -> Bool {
+    guard #available(macOS 14.4, *) else {
+      recordSystemAudioCaptureOutcome(.unsupported)
+      return false
+    }
+
+    return await reconcileSystemAudioPermission {
+      await SystemAudioCaptureService.primePermission()
+    }
+  }
+
+  /// Injectable production seam for reconciling a real tap attempt. Keeping
+  /// this at AppState makes onboarding and normal capture share one owner.
+  func reconcileSystemAudioPermission(
+    testPermission: @escaping @Sendable () async -> Bool
+  ) async -> Bool {
+    let granted = await testPermission()
+    recordSystemAudioCaptureOutcome(granted ? .granted : .denied)
+    return granted
+  }
+
+  /// Check system audio support and retain the last observed tap result.
   ///
   /// Core Audio process taps (macOS 14.4+) do not provide a preflight API. Unlike
   /// Screen Recording, the truthful product state comes from a real tap outcome.
-  /// If no tap is currently running, a previously granted outcome is no longer a
-  /// fresh assertion, so refreshes return to unknown until the next tap succeeds.
+  /// An idle refresh cannot produce newer evidence, so it must not erase the
+  /// successful prime performed during onboarding. A later real tap failure
+  /// replaces this state through `recordSystemAudioCaptureOutcome`.
   func checkSystemAudioPermission() {
     guard #available(macOS 14.4, *) else {
       recordSystemAudioCaptureOutcome(.unsupported)
@@ -403,8 +407,6 @@ extension AppState {
 
     if let service = systemAudioCaptureService as? SystemAudioCaptureService, service.capturing {
       recordSystemAudioCaptureOutcome(.granted)
-    } else if systemAudioPermissionStatus == .granted {
-      recordSystemAudioCaptureOutcome(.unknown)
     }
   }
 

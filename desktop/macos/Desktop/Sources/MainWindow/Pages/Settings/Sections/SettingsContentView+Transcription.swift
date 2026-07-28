@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   var transcriptionSection: some View {
@@ -67,6 +67,7 @@ extension SettingsContentView {
                       lineWidth: 1)
                 )
             )
+            .contentShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
           }
           .buttonStyle(.plain)
 
@@ -109,10 +110,7 @@ extension SettingsContentView {
                     ) { option in
                       transcriptionLanguage = option.id
                       AssistantSettings.shared.transcriptionLanguage = option.id
-                      let supportsMulti = AssistantSettings.supportsAutoDetect(option.id)
-                      transcriptionAutoDetect = supportsMulti
-                      AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
-                      updateTranscriptionPreferences(singleLanguageMode: !supportsMulti)
+                      updateTranscriptionPreferences(singleLanguageMode: true)
                       updateLanguage(option.id)
                       restartTranscriptionIfNeeded()
                     }
@@ -135,6 +133,7 @@ extension SettingsContentView {
                       lineWidth: 1)
                 )
             )
+            .contentShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
           }
           .buttonStyle(.plain)
 
@@ -219,7 +218,7 @@ extension SettingsContentView {
           // Add new word input
           HStack(spacing: OmiSpacing.sm) {
             TextField("Add a word...", text: $newVocabularyWord)
-              .textFieldStyle(.roundedBorder)
+              .settingsTextInputStyle()
               .onSubmit {
                 addVocabularyWord()
               }
@@ -370,10 +369,12 @@ private struct VoiceAssistantLanguagesCard: View {
             .scaledFont(size: OmiType.subheading, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
 
-          Text("Languages you speak to Omi over push-to-talk — the first is your primary. Omi identifies which one you're speaking each turn.")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
-            .fixedSize(horizontal: false, vertical: true)
+          Text(
+            "Languages you speak to Omi over push-to-talk — the first is your primary. Omi identifies which one you're speaking each turn."
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
         }
 
         Spacer()

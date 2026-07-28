@@ -3,8 +3,8 @@
  * Generate Swift tool surfaces and test fixtures from omi-tool-manifest.ts.
  * Run: node --experimental-strip-types scripts/generate-tool-surfaces.mjs [--check]
  */
-import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -317,7 +317,8 @@ function openAIToolDefinition({ exposedName, tool }, { includeSpawnProvider = fa
       properties.provider = {
         type: "string",
         enum: directedProviders,
-        description: "Optional available local provider to run this background agent through.",
+        description:
+          "Optional local provider only when the current user explicitly names it; omit for a regular Omi agent.",
       };
     }
     return {
@@ -640,15 +641,33 @@ function generateFixture() {
   return `${JSON.stringify(omiToolManifest, null, 2)}\n`;
 }
 
+function writeAtomically(path, content) {
+  const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporaryPath, content, { encoding: "utf8", flag: "wx" });
+    renameSync(temporaryPath, path);
+  } catch (error) {
+    try {
+      unlinkSync(temporaryPath);
+    } catch {
+      // The temporary file either was never created or was already renamed.
+    }
+    throw error;
+  }
+}
+
 function writeOrCheck(path, content) {
   if (CHECK_MODE) {
     const existing = readFileSync(path, "utf8");
     if (existing !== content) {
       throw new Error(`Generated output drift: ${path}`);
     }
-    return;
+    return false;
   }
-  writeFileSync(path, content, "utf8");
+
+  if (existsSync(path) && readFileSync(path, "utf8") === content) return false;
+  writeAtomically(path, content);
+  return true;
 }
 
 function main() {
@@ -668,15 +687,14 @@ function main() {
     [FIXTURE_PATH]: generateFixture(),
   };
 
-  for (const [path, content] of Object.entries(files)) {
-    writeOrCheck(path, content);
-  }
+  const changedOutputCount = Object.entries(files).filter(([path, content]) => writeOrCheck(path, content)).length;
 
   if (CHECK_MODE) {
     console.log("generate-tool-surfaces: all outputs match (--check)");
   } else {
     const hash = createHash("sha256").update(JSON.stringify(omiToolManifest)).digest("hex").slice(0, 12);
-    console.log(`generate-tool-surfaces: wrote ${Object.keys(files).length} files (manifest ${hash})`);
+    const outcome = changedOutputCount === 0 ? "outputs already current" : `wrote ${changedOutputCount} file(s)`;
+    console.log(`generate-tool-surfaces: ${outcome} (manifest ${hash})`);
   }
 }
 

@@ -1,0 +1,14 @@
+---
+title: Desktop Beta incident rollback
+---
+
+Two manual workflows are deliberately limited to the macOS Beta pointer:
+
+- `desktop_rollback_beta.yml` contains a broken Beta by repointing to an exact retained T2-qualified manifest.
+- `desktop_breakglass_rollout_beta.yml` derives the exact build and merged source from the immutable higher target tag, then verifies its `Omi.zip` and `omi.dmg` digests, Sparkle signature, and signed-artifact smoke evidence. It records normal qualification as failed, never passed.
+
+Both reuse the existing protected `prod` environment, its approvers, its Google identity, and the existing `ADMIN_KEY`. They add no environment, secret, variable, token, permission, allowlist, IAM grant, or setup step.
+
+Each dispatch supplies the exact current release and generation, exact target, incident URL, and reason. The workflow adds the GitHub actor and immutable Actions-attempt URL as request identity. One Firestore transaction creates the immutable audit, pauses normal Beta admission, and compare-and-swaps the hard-coded `macos-beta` pointer. Any evidence, identity, audit, or CAS failure leaves the pointer unchanged. The endpoint accepts no platform or channel, so Stable is unreachable.
+
+Rollback changes the feed only for clients that have not already upgraded. Follow containment with a higher-build repair.

@@ -215,7 +215,7 @@ enum RealtimeProviderFailureContinuity {
     }
   }
 
-  static func persistCapturedTurn(
+  @MainActor static func persistCapturedTurn(
     resolve: () async -> InterruptedTurnPayload?,
     record: (InterruptedTurnPayload) async -> Bool
   ) async -> Bool {

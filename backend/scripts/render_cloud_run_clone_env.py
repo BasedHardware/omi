@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+_DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029'})
+
 
 def _pairs(value: str) -> dict[str, str]:
     result: dict[str, str] = {}
@@ -23,9 +25,16 @@ def _pairs(value: str) -> dict[str, str]:
     return result
 
 
-def clone_environment(service: dict[str, Any], env_overlay: str, secret_overlay: str) -> tuple[str, str]:
+def _names(value: str) -> set[str]:
+    return {name for part in value.split(',') if (name := part.strip())}
+
+
+def clone_environment(
+    service: dict[str, Any], env_overlay: str, secret_overlay: str, remove_env_vars: str = ''
+) -> tuple[str, str]:
     literals: dict[str, str] = {}
     secrets: dict[str, str] = {}
+    remove_names = _names(remove_env_vars)
     containers = service.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
     if not containers:
         raise ValueError('source Cloud Run service has no container')
@@ -33,8 +42,10 @@ def clone_environment(service: dict[str, Any], env_overlay: str, secret_overlay:
         name = entry.get('name')
         if not name:
             continue
+        if name in remove_names:
+            continue
         if 'value' in entry:
-            literals[name] = str(entry['value'])
+            literals[name] = _escape_deploy_cloud_run_env_value(str(entry['value']))
             continue
         secret_ref = entry.get('valueFrom', {}).get('secretKeyRef', {})
         secret_name = secret_ref.get('name')
@@ -47,10 +58,21 @@ def clone_environment(service: dict[str, Any], env_overlay: str, secret_overlay:
     for name, value in _pairs(secret_overlay).items():
         secrets[name] = value
         literals.pop(name, None)
+    for name in remove_names:
+        literals.pop(name, None)
+        secrets.pop(name, None)
 
     return (
         '\n'.join(f'{name}={value}' for name, value in sorted(literals.items())),
         '\n'.join(f'{name}={value}' for name, value in sorted(secrets.items())),
+    )
+
+
+def _escape_deploy_cloud_run_env_value(value: str) -> str:
+    """Encode raw live Cloud Run literals for deploy-cloudrun's input grammar."""
+    return ''.join(
+        f'\\{character}' if character == '\\' or character in _DEPLOY_CLOUD_RUN_ENV_SEPARATORS else character
+        for character in value
     )
 
 
@@ -70,6 +92,7 @@ def main() -> int:
         service,
         os.getenv('ENV_OVERLAY', ''),
         os.getenv('SECRET_OVERLAY', ''),
+        os.getenv('REMOVE_ENV_VARS', ''),
     )
     _emit('env_vars', env_vars)
     _emit('secrets', secrets)

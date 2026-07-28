@@ -28,6 +28,7 @@ yarn.lock
 # General
 .idea/
 .next/
+.worktrees/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -246,3 +247,7 @@ builds-snapshot.md
 .hermes/
 backend/.venv
 backend/.harness/
+
+# Local Python venvs used for backend verification (never commit)
+.venv311/
+.venv-be/

@@ -45,7 +45,6 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   fi
   echo "USE_WEB_AUTH=true" >> .dev.env
   echo "USE_AUTH_CUSTOM_TOKEN=true" >> .dev.env
-  echo "STAGING_API_URL=" >> .dev.env
 
   flutter pub get
   flutter pub run build_runner build --delete-conflicting-outputs

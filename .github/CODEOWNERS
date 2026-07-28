@@ -1,0 +1,3 @@
+# Broad production authority remains protected after the retired release-ring deletion.
+/.github/workflows/** @Git-on-my-level
+/backend/charts/backend-secrets/** @Git-on-my-level

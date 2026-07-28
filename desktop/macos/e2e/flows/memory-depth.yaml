@@ -1,7 +1,7 @@
 version: 2
 name: memory-depth
 tier: 2
-description: Memory search, tag filter, and visibility toggle after create
+description: Memory search, tag filter, and visibility toggle after an immediate post-navigation create
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
@@ -11,7 +11,7 @@ preconditions:
 
 steps:
   - id: S1
-    name: Navigate to Memories
+    name: Navigate to Memories and begin its initial projection
     bridge.navigate:
       target: memories
       activateApp: false
@@ -19,7 +19,7 @@ steps:
       state.selectedTabIndex: 3
 
   - id: S2
-    name: Create hermetic test memory
+    name: Create hermetic test memory while the initial projection may still be loading
     bridge.action:
       name: create_test_memory
       params:
@@ -29,7 +29,7 @@ steps:
       result.detail.created: "true"
 
   - id: S3
-    name: Search for harness memory
+    name: Search for the marker after the initial-load/create interleave
     bridge.action:
       name: memories_search
       params:

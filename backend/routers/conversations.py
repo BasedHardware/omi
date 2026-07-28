@@ -17,6 +17,8 @@ from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
+    ConversationAnalytics,
+    ConversationFinalizationStatusResponse,
     ConversationMutationResponse,
     CreateConversationResponse,
     DeleteActionItemRequest,
@@ -31,6 +33,7 @@ from models.conversation import (
     UpdateSummaryRequest,
 )
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.render import conversation_to_dict
 from models.conversation_enums import ConversationStatus, ConversationVisibility
@@ -47,6 +50,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
+from utils import byok
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -85,21 +89,27 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
     the conversation immediately: the client gets an instant open (transcript already present) and
-    polls until `status` flips to `completed`. The `deferred` flag is cleared first so the poll's
-    repeated GETs don't each kick off another enrichment. On enrichment failure the flag is
-    re-armed and status reset to completed so the next open retries cleanly instead of spinning."""
+    polls until `status` flips to `completed`. The `deferred` flag is cleared atomically with the
+    admission-lease renewal so the stale-processing sweep cannot terminalize the row between clear
+    and first heartbeat. On enrichment failure the flag is re-armed and status reset to completed
+    so the next open retries cleanly instead of spinning."""
     conversation_id = conversation.get('id')
     try:
-        conversations_db.update_conversation(uid, conversation_id, {'deferred': False})
+        reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
     except Exception as e:
-        logger.error(f"lazy enrich claim failed uid={uid} conv={conversation_id}: {e}")
+        logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
+        return conversation
+    if not reacquired:
+        # The row was terminalized or discarded before reacquisition. A stale
+        # processor must not persist derived side effects after ownership loss.
         return conversation
 
     def _run_enrichment():
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
-            process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
+            with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
+                process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
@@ -192,13 +202,18 @@ def process_in_progress_conversation(
         nonlocal persisted
         persisted = current
 
-    conversation = process_conversation(
-        uid,
-        conversation.language,
-        conversation,
-        force_process=True,
-        persistence_observer=record_persistence,
-    )
+    # This synchronous path has no durable job for the reconciler to replay, so
+    # a processing failure must return the admission to in_progress — otherwise
+    # the conversation is stranded on "processing" forever and the client shows
+    # a stuck Processing card it can never resolve.
+    with lifecycle_service.processing_admission_guard(uid, conversation.id):
+        conversation = process_conversation(
+            uid,
+            conversation.language,
+            conversation,
+            force_process=True,
+            persistence_observer=record_persistence,
+        )
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
@@ -227,21 +242,46 @@ def finalize_conversation(
     if conversation.status != ConversationStatus.in_progress:
         return CreateConversationResponse(conversation=conversation, messages=[])
 
-    claim_updates = {}
+    extra_updates = {}
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
-        claim_updates['external_data'] = conversation.external_data
+        extra_updates['external_data'] = conversation.external_data
 
-    if not lifecycle_service.admit_processing(
-        uid,
-        conversation.id,
-        extra_updates=claim_updates or None,
-    ):
+    # The durable Cloud Tasks worker cannot inherit this request's BYOK
+    # context: the task payload is the opaque {job_id, dispatch_generation}
+    # schema, so the worker runs without the X-BYOK-* keys the middleware
+    # validated for this request. Admitting a BYOK request here would silently
+    # process the conversation with platform credentials. Reject before any
+    # mutation so BYOK clients fail fast instead of being processed as Omi keys.
+    if byok.has_byok_keys():
+        raise HTTPException(
+            status_code=409,
+            detail='BYOK finalization is not supported on this route; use the live listen session',
+        )
+
+    try:
+        finalization = lifecycle_service.request_finalization(
+            uid,
+            conversation.id,
+            has_byok_keys=False,
+            force_process=True,
+            extra_updates=extra_updates or None,
+            require_cloud_tasks=True,
+        )
+    except lifecycle_service.FinalizationDispatchUnavailable as error:
+        raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error
+
+    if finalization['route'] == 'noop':
         latest = _get_valid_conversation_by_id(uid, conversation_id)
-        latest = deserialize_conversation(latest)
-        return CreateConversationResponse(conversation=latest, messages=[])
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+
+    # Requiring Cloud Tasks keeps REST finalization off the pusher-only route.
+    # The only accepted outcomes are an enqueued task or an outbox row retained
+    # for reconciler retry after an uncertain task-create acknowledgement.
+    if finalization['route'] not in {'cloud_tasks', 'queued'}:
+        raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable')
 
     conversation.status = ConversationStatus.processing
 
@@ -249,30 +289,26 @@ def finalize_conversation(
     if current_in_progress_id == conversation_id:
         redis_db.remove_in_progress_conversation_id(uid)
 
-    geolocation = redis_db.get_cached_user_geolocation(uid)
-    if geolocation:
-        geolocation = Geolocation(**geolocation)
-        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+    # The Cloud Tasks worker owns expensive processing, memory extraction, and
+    # integration fanout under the persisted job lease. Returning this snapshot
+    # is intentionally prompt; clients may poll the status projection below.
+    return CreateConversationResponse(conversation=conversation, messages=[])
 
-    persisted = False
 
-    def record_persistence(current: bool) -> None:
-        nonlocal persisted
-        persisted = current
-
-    conversation = process_conversation(
-        uid,
-        conversation.language,
-        conversation,
-        force_process=True,
-        persistence_observer=record_persistence,
-    )
-    if not persisted:
-        latest = _get_valid_conversation_by_id(uid, conversation_id)
-        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
-    messages = asyncio.run(trigger_external_integrations(uid, conversation))
-
-    return CreateConversationResponse(conversation=conversation, messages=messages)
+@router.get(
+    '/v1/conversations/{conversation_id}/finalization',
+    response_model=ConversationFinalizationStatusResponse,
+    tags=['conversations'],
+)
+def get_conversation_finalization_status(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    _get_valid_conversation_by_id(uid, conversation_id)
+    status = lifecycle_service.get_finalization_status(uid, conversation_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail='Conversation finalization job not found')
+    return status
 
 
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
@@ -290,6 +326,14 @@ def reprocess_conversation(
     :return: The updated conversation after reprocessing.
     """
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    # Reprocess force-processes a *discarded* conversation to revive it, but a
+    # soft-deleted tombstone is invisible to the user and must not be reprocessed:
+    # process_conversation would regenerate structured data, action items, memories
+    # and embeddings from content the user deleted, resurrecting it. Same
+    # tombstone-eligibility contract as sync (#10119) and merge (#10262). Checked
+    # on the raw doc because the Conversation model does not carry `deleted`.
+    if conversations_db.is_soft_deleted(conversation):
+        raise HTTPException(status_code=404, detail="Conversation not found")
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -306,6 +350,18 @@ def _ensure_aware(value: datetime) -> datetime:
     # included a UTC offset. Normalize to timezone-aware (UTC) so comparing the two ends of a date
     # range never raises TypeError on mixed awareness (which would surface as a 500).
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+# Firestore 'in' filters accept at most 30 values (see database/apps.py, database/chat.py). Reject
+# an oversized status/source filter before it reaches the query so a caller cannot turn a
+# comma-separated filter into an unhandled 500. ConversationStatus and the source set are both
+# tiny, so a cap of 20 can never reject a request a real client would send.
+MAX_IN_FILTER_VALUES = 20
+
+
+def _reject_oversized_filter(values: List[str], field_name: str) -> None:
+    if len(values) > MAX_IN_FILTER_VALUES:
+        raise HTTPException(status_code=400, detail=f"{field_name} accepts at most {MAX_IN_FILTER_VALUES} values")
 
 
 @router.get(
@@ -335,12 +391,15 @@ def get_conversations(
     if len(statuses) == 0:
         statuses = "processing,completed"
 
+    status_filter = statuses.split(",") if len(statuses) > 0 else []
+    _reject_oversized_filter(status_filter, "statuses")
+
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
         offset,
         include_discarded=include_discarded,
-        statuses=statuses.split(",") if len(statuses) > 0 else [],
+        statuses=status_filter,
         start_date=start_date,
         end_date=end_date,
         folder_id=folder_id,
@@ -366,6 +425,8 @@ def get_conversations_count(
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
     source_list = [s.strip() for s in sources.split(',') if s.strip()] if sources else []
+    _reject_oversized_filter(status_list, "statuses")
+    _reject_oversized_filter(source_list, "sources")
     if status_list and source_list:
         # Combining status+source `in` filters would need a composite index; keep them exclusive.
         raise HTTPException(status_code=400, detail="statuses and sources filters cannot be combined")
@@ -1073,7 +1134,14 @@ def get_shared_conversation_by_id(conversation_id: str):
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
     conversation = deserialize_conversation(conversation)
+    # This endpoint is public and unauthenticated. Strip fields that are internal
+    # to the owner and never part of the shared transcript/summary the user chose
+    # to publish: precise geolocation, the server-side encryption tier, and
+    # external_data (which carries merge provenance — other conversation ids — and
+    # integration metadata).
     conversation.geolocation = None
+    conversation.data_protection_level = None
+    conversation.external_data = None
 
     # Fetch people data for speaker names
     person_ids = conversation.get_person_ids()
@@ -1180,6 +1248,24 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
             suggested_apps.append(app)
 
     return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
+
+
+@router.get(
+    "/v1/conversations/{conversation_id}/analytics", response_model=ConversationAnalytics, tags=['conversations']
+)
+def get_conversation_analytics(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Per-speaker analytics for a conversation (issue #4481).
+
+    Returns each speaker's talk time, word count, and words per minute, plus the
+    conversation totals. Speakers are the account owner ("You"), identified people
+    (resolved to their name), and any remaining diarization speakers.
+    """
+    conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation_data)
+    person_ids = conversation.get_person_ids()
+    people = users_db.get_people_by_ids(uid, person_ids) if person_ids else []
+    names = {p['id']: p.get('name', '') for p in people}
+    return build_conversation_analytics(conversation, names)
 
 
 @router.post(

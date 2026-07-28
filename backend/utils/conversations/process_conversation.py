@@ -61,8 +61,8 @@ from models.structured import Structured
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, update_persona_prompt
-from utils.executors import db_executor, llm_executor, postprocess_executor, submit_with_context
+from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
+from utils.executors import llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_transcript_structure,
     get_app_result,
@@ -75,6 +75,14 @@ from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
+from utils.conversations.memory_extraction_telemetry import (
+    PATH_CANONICAL,
+    PATH_LEGACY,
+    ConversationMemoryExtractionResult,
+    emit_conversation_memories_extracted,
+    source_for_conversation,
+)
+from utils.llm.temporal import date_in_tz
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.goals import extract_and_update_goal_progress
 from utils.llm.knowledge_graph import extract_knowledge_from_memory
@@ -417,8 +425,26 @@ def _trigger_apps(
         if preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = cast(App, all_apps_dict.get(preferred_app_id))
             logger.info(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
-        else:
-            # Only run suggestion LLM call when no preferred app is set
+        elif preferred_app_id:
+            # The set-preferred route admits any app `get_available_app_by_id`
+            # can see (routers/users.py); it never requires the enabled-installed
+            # slice this dict is built from. A default whose enablement never
+            # landed (e.g. the template create flow's enable call failed) was
+            # therefore accepted by the setter and silently ignored here (#10074).
+            # Resolve through the setter's own authority instead of re-deciding.
+            candidate = get_available_app_model_by_id(preferred_app_id, uid)
+            if candidate and candidate.works_with_memories():
+                app_to_run = candidate
+                logger.info(
+                    f"Using user's preferred app outside the installed slice: {candidate.name} (id: {preferred_app_id})"
+                )
+            else:
+                logger.warning(
+                    f"Preferred app {preferred_app_id} is set but unusable "
+                    f"(missing={candidate is None}); falling back to suggestions {uid}"
+                )
+        if app_to_run is None:
+            # Only run suggestion LLM call when no usable preferred app is set
             if not conversation.suggested_summarization_apps:
                 with track_usage(uid, Features.CONVERSATION_APPS):
                     suggested_apps, _reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
@@ -490,15 +516,24 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     lease. Keep the private helper below for existing in-module async callers.
     """
     with track_usage(uid, Features.MEMORIES):
-        _extract_memories_inner(uid, conversation)
+        result = _extract_memories_inner(uid, conversation)
+    # Product-analytics telemetry (Conversation Memories Extracted): at most one
+    # analytics success per (uid, conversation) across retries — zero-extraction
+    # (count == 0) and persistence exceptions emit nothing; the durable
+    # per-conversation dedup (Redis SET NX EX) is inside emit_*_memories_extracted.
+    if result is not None and result.count > 0:
+        emit_conversation_memories_extracted(uid, conversation.id, result)
 
 
 def _extract_memories(uid: str, conversation: Conversation) -> None:
     extract_memories(uid, conversation)
 
 
-def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_client: Any) -> None:
+def _extract_memories_canonical(
+    uid: str, conversation: Conversation, *, db_client: Any
+) -> ConversationMemoryExtractionResult:
     """Canonical-cohort extraction: extract first, then retract-and-write (Q1/Q7)."""
+    source = source_for_conversation(conversation)
     memory_service = MemoryService(db_client=db_client)
 
     language = users_db.get_user_language_preference(uid)
@@ -545,7 +580,7 @@ def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_clie
 
     if len(parsed_memories) == 0:
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
-        return
+        return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
 
     memory_service.retract_conversation_memories(uid, conversation.id)
 
@@ -592,22 +627,32 @@ def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_clie
             )
 
     record_usage(uid, memories_created=len(parsed_memories))
+    return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_CANONICAL)
 
 
-def _extract_memories_inner(uid: str, conversation: Conversation) -> None:
+def _extract_memories_inner(uid: str, conversation: Conversation) -> ConversationMemoryExtractionResult:
     with memory_system_request_scope(uid) as memory_system:
         db_client = getattr(db_client_module, 'db', None)
         if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
-            _extract_memories_canonical(uid, conversation, db_client=db_client)
-            return
+            return _extract_memories_canonical(uid, conversation, db_client=db_client)
 
-        _extract_memories_legacy(uid, conversation)
+        return _extract_memories_legacy(uid, conversation)
 
 
-def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
+def _extract_memories_legacy(uid: str, conversation: Conversation) -> ConversationMemoryExtractionResult:
+    source = source_for_conversation(conversation)
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
+
+    # Ground extraction in the date the content was captured, not the processing time, so
+    # relative dates in delayed or backfilled content resolve correctly (cubic on #8501).
+    content_date = None
+    if getattr(conversation, 'started_at', None):
+        try:
+            content_date = date_in_tz(conversation.started_at, notification_db.get_user_time_zone(uid))
+        except Exception as e:
+            logger.warning(f"_extract_memories_inner content_date_failed uid={uid}: {e}")
 
     # Extract memories based on conversation source
     if conversation.source == ConversationSource.external_integration:
@@ -615,10 +660,14 @@ def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
         text_content = ext_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = ext_data.get('text_source', 'other')
-            new_memories = extract_memories_from_text(uid, text_content, text_source, language=language)
+            new_memories = extract_memories_from_text(
+                uid, text_content, text_source, language=language, content_date=content_date
+            )
     else:
         # For regular conversations with transcript segments
-        new_memories = new_memories_extractor(uid, conversation.transcript_segments, language=language)
+        new_memories = new_memories_extractor(
+            uid, conversation.transcript_segments, language=language, content_date=content_date
+        )
 
     is_locked = conversation.is_locked
     parsed_memories: List[MemoryDB] = []
@@ -712,7 +761,7 @@ def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
 
     if len(parsed_memories) == 0:
         logger.info(f"No memories extracted for conversation {conversation.id}")
-        return
+        return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_LEGACY)
 
     # Replace conversation-scoped memories only after extraction succeeds.
     deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
@@ -758,6 +807,7 @@ def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
                     logging.exception(f"Error extracting knowledge graph from memory_id: {memory_db_obj.id}")
         except Exception:
             logging.exception("Error extracting knowledge graph from memory.")
+    return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_LEGACY)
 
 
 def _transcript_artifact_ref(conversation: Conversation) -> Dict[str, Any]:
@@ -870,7 +920,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         def _run_auto_sync():
             asyncio.run(auto_sync_action_items_batch(uid, created_items))
 
-        submit_with_context(db_executor, _run_auto_sync)
+        submit_with_context(postprocess_executor, _run_auto_sync)
 
         upsert_action_item_vectors_batch(
             uid,
@@ -1002,6 +1052,8 @@ def process_conversation(
     app_id: Optional[str] = None,
     persistence_observer: Callable[[bool], None] | None = None,
     defer_memory_extraction: bool = False,
+    defer_derived_effects: bool = False,
+    derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
 ) -> Conversation:
     def report_persistence(current: bool) -> None:
         if persistence_observer is not None:
@@ -1097,152 +1149,162 @@ def process_conversation(
         )
         return conversation
 
-    # Calendar auto-linking calls and mutates a user's Google Calendar during generic
-    # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
-    # fan out provider traffic for every connected user.
-    if (
-        _calendar_auto_link_enabled()
-        and not discarded
-        and conversation.started_at
-        and conversation.finished_at
-        and conversation.calendar_event is None
-    ):
-        try:
-            calendar_event = asyncio.run(
-                get_overlapping_calendar_event(
-                    uid,
-                    conversation.started_at,
-                    conversation.finished_at,
-                )
-            )
-            if calendar_event:
-                conversation.calendar_event = calendar_event
-                asyncio.run(write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation.id))
-                conversations_db.update_conversation(
-                    uid,
-                    conversation.id,
-                    {'calendar_event': calendar_event.model_dump(mode='json')},
-                )
-        except Exception as e:
-            logger.error(f"Error during calendar event linking: {e}")
-            pass
-
-    # AI-based folder assignment
-    assigned_folder_id = None
-    if not discarded and not is_reprocess and not conversation.folder_id:
-        try:
-            # Get user's folders
-            user_folders = folders_db.get_folders(uid)
-            if not user_folders:
-                user_folders = folders_db.initialize_system_folders(uid)
-
-            if user_folders and conversation.structured:
-                with track_usage(uid, Features.CONVERSATION_FOLDER):
-                    folder_id, confidence, reasoning = assign_conversation_to_folder(
-                        title=conversation.structured.title or '',
-                        overview=conversation.structured.overview or '',
-                        category=(
-                            conversation.structured.category.value if conversation.structured.category else 'other'
-                        ),
-                        user_folders=user_folders,
+    # Wrap every post-persistence derived effect so the durable finalizer can
+    # defer the bundle until it transactionally claims ownership (#10468 r5).
+    def _emit_derived_effects() -> None:
+        # Calendar auto-linking calls and mutates a user's Google Calendar during generic
+        # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
+        # fan out provider traffic for every connected user.
+        if (
+            _calendar_auto_link_enabled()
+            and not discarded
+            and conversation.started_at
+            and conversation.finished_at
+            and conversation.calendar_event is None
+        ):
+            try:
+                calendar_event = asyncio.run(
+                    get_overlapping_calendar_event(
+                        uid,
+                        conversation.started_at,
+                        conversation.finished_at,
                     )
-                if folder_id:
-                    conversation.folder_id = folder_id
-                    assigned_folder_id = folder_id
-                    conversations_db.update_conversation(uid, conversation.id, {'folder_id': folder_id})
-                    logger.info(
-                        f"AI assigned conversation {conversation.id} to folder {folder_id} (confidence: {confidence:.2f}): {reasoning}"
+                )
+                if calendar_event:
+                    conversation.calendar_event = calendar_event
+                    asyncio.run(
+                        write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation.id)
                     )
-        except Exception as e:
-            logger.error(f"Error during folder assignment for conversation {conversation.id}: {e}")
+                    conversations_db.update_conversation(
+                        uid,
+                        conversation.id,
+                        {'calendar_event': calendar_event.model_dump(mode='json')},
+                    )
+            except Exception as e:
+                logger.error(f"Error during calendar event linking: {e}")
+                pass
 
-    if not discarded:
-        # Analytics tracking
-        insights_gained = 0
-        if conversation.structured:
-            # Count sentences with more than 5 words from title and overview
-            for text in [conversation.structured.title, conversation.structured.overview]:
-                if text:
-                    sentences = re.split(r'[.!?]+', text)
+        # AI-based folder assignment
+        assigned_folder_id = None
+        if not discarded and not is_reprocess and not conversation.folder_id:
+            try:
+                # Get user's folders
+                user_folders = folders_db.get_folders(uid)
+                if not user_folders:
+                    user_folders = folders_db.initialize_system_folders(uid)
+
+                if user_folders and conversation.structured:
+                    cat = conversation.structured.category.value if conversation.structured.category else 'other'
+                    with track_usage(uid, Features.CONVERSATION_FOLDER):
+                        folder_id, confidence, reasoning = assign_conversation_to_folder(
+                            title=conversation.structured.title or '',
+                            overview=conversation.structured.overview or '',
+                            category=cat,
+                            user_folders=user_folders,
+                            category_folder_id=folders_db.resolve_category_folder_id(cat, user_folders),
+                        )
+                    if folder_id:
+                        conversation.folder_id = folder_id
+                        assigned_folder_id = folder_id
+                        conversations_db.update_conversation(uid, conversation.id, {'folder_id': folder_id})
+                        logger.info(
+                            f"AI assigned conversation {conversation.id} to folder {folder_id} (confidence: {confidence:.2f}): {reasoning}"
+                        )
+            except Exception as e:
+                logger.error(f"Error during folder assignment for conversation {conversation.id}: {e}")
+
+        if not discarded:
+            # Analytics tracking
+            insights_gained = 0
+            if conversation.structured:
+                # Count sentences with more than 5 words from title and overview
+                for text in [conversation.structured.title, conversation.structured.overview]:
+                    if text:
+                        sentences = re.split(r'[.!?]+', text)
+                        for sentence in sentences:
+                            if len(sentence.split()) > 5:
+                                insights_gained += 1
+
+                # Count number of action items and events
+                insights_gained += len(conversation.structured.action_items)
+                insights_gained += len(conversation.structured.events)
+
+            # Count sentences with more than 5 words from app results
+            for app_result in conversation.apps_results:
+                if app_result.content:
+                    sentences = re.split(r'[.!?]+', app_result.content)
                     for sentence in sentences:
                         if len(sentence.split()) > 5:
                             insights_gained += 1
 
-            # Count number of action items and events
-            insights_gained += len(conversation.structured.action_items)
-            insights_gained += len(conversation.structured.events)
+            if insights_gained > 0:
+                record_usage(uid, insights_gained=insights_gained)
 
-        # Count sentences with more than 5 words from app results
-        for app_result in conversation.apps_results:
-            if app_result.content:
-                sentences = re.split(r'[.!?]+', app_result.content)
-                for sentence in sentences:
-                    if len(sentence.split()) > 5:
-                        insights_gained += 1
+            _trigger_apps(
+                uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
+            )
+            # _trigger_apps only mutates the in-memory conversation and the durable write above already
+            # happened, so persist its output the same way the calendar_event/folder_id/audio_files
+            # write-backs do. Otherwise the app summary the LLM just produced is discarded.
+            if conversation.apps_results or conversation.suggested_summarization_apps:
+                app_updates = {
+                    'apps_results': [result.dict() for result in conversation.apps_results],
+                    'suggested_summarization_apps': conversation.suggested_summarization_apps,
+                }
+                conversations_db.update_conversation(uid, conversation.id, app_updates)
+            if not is_reprocess:
+                submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
+                if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
+                    submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
+            if not defer_memory_extraction:
+                with memory_system_request_scope(uid) as memory_system:
+                    if memory_system == MemorySystem.CANONICAL:
+                        # Canonical writes intentionally fail closed. Do not hide a
+                        # retryable gate/store failure in an unobserved future and
+                        # report this conversation as successfully processed.
+                        _extract_memories(uid, conversation)
+                    else:
+                        submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
+            submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
+            submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 
-        if insights_gained > 0:
-            record_usage(uid, insights_gained=insights_gained)
+        # Create audio files from chunks if private cloud sync was enabled
+        if not is_reprocess and conversation.private_cloud_sync_enabled:
+            try:
+                audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
+                if audio_files:
+                    conversation.audio_files = audio_files
+                    files_payload = [af.dict() for af in audio_files]
+                    conversations_db.update_conversation(uid, conversation.id, {'audio_files': files_payload})
+                    # Pre-cache audio files in background
+                    precache_conversation_audio(uid, conversation.id, files_payload)
+                    # Build the conversation-level playback artifact (dense MP3 + spans)
+                    if is_audio_merge_dispatch_enabled():
+                        enqueue_conversation_artifact_build(
+                            uid,
+                            conversation.id,
+                            compute_audio_files_fingerprint(files_payload),
+                            caller='process_conversation',
+                        )
+            except Exception as e:
+                logger.error(f"Error creating audio files: {e}")
 
-        _trigger_apps(
-            uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
-        )
+        # Update folder conversation count after conversation is saved
+        if assigned_folder_id:
+            folders_db.update_folder_conversation_count(uid, assigned_folder_id)
+
         if not is_reprocess:
-            submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
-            if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
-                submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
-        if not defer_memory_extraction:
-            with memory_system_request_scope(uid) as memory_system:
-                if memory_system == MemorySystem.CANONICAL:
-                    # Canonical writes intentionally fail closed. Do not hide a
-                    # retryable gate/store failure in an unobserved future and
-                    # report this conversation as successfully processed.
-                    _extract_memories(uid, conversation)
-                else:
-                    submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
-        submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
-        submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 
-    # Create audio files from chunks if private cloud sync was enabled
-    if not is_reprocess and conversation.private_cloud_sync_enabled:
-        try:
-            audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
-            if audio_files:
-                conversation.audio_files = audio_files
-                files_payload = [af.dict() for af in audio_files]
-                conversations_db.update_conversation(uid, conversation.id, {'audio_files': files_payload})
-                # Pre-cache audio files in background
-                precache_conversation_audio(uid, conversation.id, files_payload)
-                # Build the conversation-level playback artifact (dense MP3 + spans)
-                if is_audio_merge_dispatch_enabled():
-                    enqueue_conversation_artifact_build(
-                        uid,
-                        conversation.id,
-                        compute_audio_files_fingerprint(files_payload),
-                        caller='process_conversation',
-                    )
-        except Exception as e:
-            logger.error(f"Error creating audio files: {e}")
+            def _run_webhook():
+                asyncio.run(conversation_created_webhook(uid, conversation))
 
-    # Update folder conversation count after conversation is saved
-    if assigned_folder_id:
-        folders_db.update_folder_conversation_count(uid, assigned_folder_id)
+            submit_with_context(postprocess_executor, _run_webhook)
 
-    if not is_reprocess:
-
-        def _run_webhook():
-            asyncio.run(conversation_created_webhook(uid, conversation))
-
-        submit_with_context(postprocess_executor, _run_webhook)
-
-        # Disable important conversation for now
-        # Send important conversation notification for long conversations (>30 minutes)
-        # threading.Thread(
-        #     target=_send_important_conversation_notification_if_needed,
-        #     args=(uid, conversation),
-        # ).start()
-
-    # TODO: trigger external integrations here too
-
+    if defer_derived_effects:
+        if derived_effects_observer is not None:
+            derived_effects_observer(_emit_derived_effects)
+        return conversation
+    _emit_derived_effects()
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
 

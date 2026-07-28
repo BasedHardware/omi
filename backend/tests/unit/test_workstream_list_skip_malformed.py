@@ -19,7 +19,7 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -118,3 +118,17 @@ def test_task_responses_unexpected_error_propagates(monkeypatch):
     monkeypatch.setattr(ws.ActionItemResponse, 'model_validate', staticmethod(boom))
     with pytest.raises(RuntimeError):
         ws._task_responses_from_snapshots([_snapshot({'id': 't1'})], context='goal_detail')
+
+
+def test_workstream_presentation_read_skips_malformed_snapshot(monkeypatch):
+    _stub_validate(monkeypatch, 'Workstream')
+    snapshot = _snapshot({'id': 'bad', '_bad': True})
+    snapshot.exists = True
+    client = _fake_client([])
+    client.get.return_value = snapshot
+
+    with patch('database.read_boundary.record_fallback') as fallback:
+        result = ws.get_workstream('u1', 'bad', firestore_client=client)
+
+    assert result is None
+    fallback.assert_called_once()

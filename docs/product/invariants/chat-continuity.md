@@ -76,6 +76,19 @@ rollback window; this is migration input, not a second store.
   session/run/attempt lifecycle plus a matching semantic digest for the provider.
   A parent journal receipt without that child is failure; legacy raw
   session/run/attempt payload aliases are never provider-visible.
+- A local Hermes or OpenClaw override is selected only when the current user
+  explicitly names that exact provider. A provider value proposed by a model,
+  stale context, or a generic delegation request is not authority and is
+  stripped before child-session admission, leaving the child on regular Omi
+  managed routing.
+- Each terminal canonical child run converges into exactly one visible pill
+  status and one `agentCompletion` block on its producing journal turn. A
+  continuation reuses its child session but has a new run identity, so its own
+  completion is a distinct block on that same producing receipt. A one-shot
+  local poll may accelerate that projection but cannot be its only delivery
+  path: owner-scoped reconciliation repairs interrupted, replaced, or restarted
+  PTT projections from the canonical run. The next PTT request can retrieve the
+  same bounded terminal result from the canonical child lifecycle.
 
 ## Surfaces
 
@@ -105,8 +118,22 @@ rollback window; this is migration input, not a second store.
   typed-chat/PTT identity, replay, permission, provider, and lifecycle contract
 - `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts` — no Swift
   transcript writer, voice outbox, or timestamp cursor can return
+- `desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift` and the named
+  continuity gauntlet — terminal run, rendered pill, and producing
+  `agentCompletion` converge for the same run identity
+- `desktop/macos/Desktop/Tests/ChatJournalWritePathTests.swift` — terminalization
+  supersedes only streaming coalesces (durable content writes stay journalable),
+  and journal replay preserves local-only row fields (`metadata`, `rating`,
+  `notificationScreenshot`) across a wholesale projection replace
 - Continuity gauntlet (manual / harness): typed → PTT → typed follow-up → spawn →
   status (`desktop/macos/scripts/agent-continuity-gauntlet.sh` when present)
+- `desktop/windows/src/main/ipc/voiceHub.test.ts` — Windows voice path: a hub turn
+  records into the one main_chat conversation (typed-tail visible), and a hub record
+  + a cascade `mainChat:send` sharing one turnId record the human turn EXACTLY ONCE
+  (the Windows equivalent of the pi-mono `saveSpy=2` double-record assertion).
+- `desktop/windows/src/renderer/src/hooks/useChat.test.tsx` — recordVoiceTurn writes
+  the one kernel conversation + the shared/mobile echo, once, and never for an empty
+  turn.
 
 ## Path globs
 
@@ -120,6 +147,12 @@ rollback window; this is migration input, not a second store.
 - `desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift`
 - `desktop/macos/Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift`
 - `desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/**`
+- `desktop/windows/src/main/agentKernel/**`
+- `desktop/windows/src/main/ipc/voiceHub*`
+- `desktop/windows/src/main/ipc/mainChat.ts`
+- `desktop/windows/src/renderer/src/hooks/useChat.ts`
+- `desktop/windows/src/renderer/src/lib/voice/**`
+- `desktop/windows/src/renderer/src/components/chat/VoiceHubDriverHost.tsx`
 
 ## PR rule
 

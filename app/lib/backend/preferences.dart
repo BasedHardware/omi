@@ -49,16 +49,62 @@ class SharedPreferencesUtil {
 
   set btDevice(BtDevice value) {
     saveString('btDevice', jsonEncode(value.toJson()));
+    if (value.id.isNotEmpty) {
+      final devices = _upsertBtDevice(value);
+      saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
+    }
   }
 
   Future<void> btDeviceSet(BtDevice value) async {
     await saveString('btDevice', jsonEncode(value.toJson()));
+    await btDeviceAdd(value);
   }
 
   BtDevice get btDevice {
     final String device = getString('btDevice');
     if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
     return BtDevice.fromJson(jsonDecode(device));
+  }
+
+  List<BtDevice> get btDevices {
+    final devices = <BtDevice>[];
+    for (final encodedDevice in getStringList('btDevices')) {
+      try {
+        final decoded = jsonDecode(encodedDevice);
+        if (decoded is Map<String, dynamic>) {
+          final device = BtDevice.fromJson(decoded);
+          if (device.id.isNotEmpty && !devices.any((savedDevice) => savedDevice.id == device.id)) {
+            devices.add(device);
+          }
+        }
+      } catch (e) {
+        Logger.debug('Error decoding saved device: $e');
+      }
+    }
+
+    final legacyDevice = btDevice;
+    if (devices.isEmpty && legacyDevice.id.isNotEmpty) {
+      devices.add(legacyDevice);
+    }
+    return devices;
+  }
+
+  Future<void> btDeviceAdd(BtDevice value) async {
+    if (value.id.isEmpty) return;
+    final devices = _upsertBtDevice(value);
+    await saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
+    await saveString('btDevice', jsonEncode(value.toJson()));
+  }
+
+  List<BtDevice> _upsertBtDevice(BtDevice value) {
+    final devices = btDevices;
+    final index = devices.indexWhere((device) => device.id == value.id);
+    if (index >= 0) {
+      devices[index] = value;
+    } else {
+      devices.add(value);
+    }
+    return devices;
   }
 
   set deviceName(String value) => saveString('deviceName', value);
@@ -83,6 +129,13 @@ class SharedPreferencesUtil {
   bool get batchModeEnabled => getBool('batchModeEnabled');
 
   set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
+
+  // Phone-mic batch capture marker. false = explicit Transcribe Later (files
+  // named audio_omibatchphone_...), true = automatic offline fallback (files
+  // named audio_omibatchphoneauto_...). Read natively as flutter.phoneBatchAuto.
+  bool get phoneBatchAuto => getBool('phoneBatchAuto');
+
+  set phoneBatchAuto(bool value) => saveBool('phoneBatchAuto', value);
 
   // Transcribe Later: pause capture (native writer drops packets, keeps the file
   // open) so the user can mute a sensitive moment and resume the same recording.
@@ -727,16 +780,6 @@ class SharedPreferencesUtil {
   set companionAssociationPrompted(bool value) => saveBool('companionAssociationPrompted', value);
 
   bool get companionAssociationPrompted => getBool('companionAssociationPrompted');
-
-  //------------------------ TestFlight API Environment ----------------------//
-
-  /// Which API environment the TestFlight user prefers: 'staging' or 'production'.
-  /// Default is 'production' so new TestFlight installs hit prod by default.
-  String get testFlightApiEnvironment => getString('testFlightApiEnvironment', defaultValue: 'production');
-
-  set testFlightApiEnvironment(String value) => saveString('testFlightApiEnvironment', value);
-
-  bool get testFlightUseStagingApi => testFlightApiEnvironment == 'staging';
 
   //--------------------------- Announcements ---------------------------------//
 

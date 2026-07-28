@@ -53,6 +53,7 @@ import {
   type ChartItem,
 } from "@/components/dashboard/resizable-chart-grid";
 import { AgentPromptWidget } from "@/components/dashboard/agent-prompt-widget";
+import { useResponseReliabilityItems } from "@/components/dashboard/response-reliability-summary";
 import { Sparkles } from "lucide-react";
 
 // --- Types ---
@@ -1668,6 +1669,7 @@ export default function AnalyticsPage() {
   // ─────────────────────────────────────────────────────────────────────
 
   const chatRatingsItems = useChatRatingsItems({ token });
+  const responseReliabilityItems = useResponseReliabilityItems({ token });
 
   const cpuMobile = profitability?.summary.avgCostPerUserMobile ?? null;
   const cpuDesktop = profitability?.summary.avgCostPerUserDesktop ?? null;
@@ -2208,6 +2210,7 @@ export default function AnalyticsPage() {
   // can drag any item anywhere; this is just the default layout.
   const unifiedItems = useMemo<ChartItem[]>(() => {
     return [
+      ...responseReliabilityItems,
       ...topKpiAndNewWidgets,
 
       profitabilityHeader,
@@ -2240,7 +2243,8 @@ export default function AnalyticsPage() {
       ...chatRatingsItems,
     ];
   }, [
-    topKpiAndNewWidgets, profitCharts, revenueCharts, macosKpis, macosGrowthCharts,
+    responseReliabilityItems, topKpiAndNewWidgets, profitCharts, revenueCharts,
+    macosKpis, macosGrowthCharts,
     notificationKpis, notificationCharts, ratingsAndUsageCharts, viralCharts,
     retentionView, retentionCharts, chatRatingsItems,
     // Inline header/control items capture state via closures; React's

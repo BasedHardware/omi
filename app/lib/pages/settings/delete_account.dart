@@ -48,13 +48,13 @@ class _DeleteAccountState extends State<DeleteAccount> {
   }
 
   static final _reasons = [
-    _Reason('privacy_concerns', FontAwesomeIcons.shield),
-    _Reason('not_using_enough', FontAwesomeIcons.clock),
-    _Reason('missing_features', FontAwesomeIcons.puzzlePiece),
-    _Reason('technical_issues', FontAwesomeIcons.triangleExclamation),
-    _Reason('found_alternative', FontAwesomeIcons.arrowRightArrowLeft),
-    _Reason('taking_break', FontAwesomeIcons.mugHot),
-    _Reason('other', FontAwesomeIcons.ellipsis),
+    const _Reason('privacy_concerns', FontAwesomeIcons.shield),
+    const _Reason('not_using_enough', FontAwesomeIcons.clock),
+    const _Reason('missing_features', FontAwesomeIcons.puzzlePiece),
+    const _Reason('technical_issues', FontAwesomeIcons.triangleExclamation),
+    const _Reason('found_alternative', FontAwesomeIcons.arrowRightArrowLeft),
+    const _Reason('taking_break', FontAwesomeIcons.mugHot),
+    const _Reason('other', FontAwesomeIcons.ellipsis),
   ];
 
   String _label(String key) => switch (key) {

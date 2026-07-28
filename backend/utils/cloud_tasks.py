@@ -121,6 +121,19 @@ def is_listen_finalization_dispatch_enabled() -> bool:
     return os.getenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
 
+def is_listen_finalization_dispatch_configured() -> bool:
+    """Whether the durable finalizer can be admitted without an inline fallback."""
+    return is_listen_finalization_dispatch_enabled() and all(
+        (
+            os.getenv('SYNC_TASKS_PROJECT', ''),
+            os.getenv('SYNC_TASKS_LOCATION', ''),
+            os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
+            _listen_finalization_handler_url(),
+            _listen_finalization_invoker_sa(),
+        )
+    )
+
+
 def get_account_deletion_tasks_max_attempts() -> int:
     return int(os.getenv('ACCOUNT_DELETION_TASKS_MAX_ATTEMPTS', get_sync_tasks_max_attempts()))
 
@@ -175,17 +188,16 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     Duplicate names are success. Callers retry the same name a bounded number
     of times, then retain staged retry material if acknowledgement remains
     uncertain; they never fall back inline after submitting this task.
+
+    Every sync job goes to the main queue. Offline recordings can never carry
+    server capture proof — the server was not in the loop when they were
+    captured — so they all classify as backfill, which sent the entire offline
+    workload to a lane provisioned for occasional historical recovery. That
+    lane's worker admitted only a few jobs at once, so Cloud Tasks retried the
+    surplus with exponential backoff until recordings sat unprocessed for many
+    hours. The lane label is still carried on the payload for metering and
+    reporting; it no longer selects the queue.
     """
-    if payload.get('lane') == 'backfill':
-        handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '')
-        _enqueue_named_task(
-            os.getenv('SYNC_BACKFILL_TASKS_QUEUE', ''),
-            handler_url,
-            str(payload['job_id']),
-            payload,
-            audience=os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler_url,
-        )
-        return
     _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), str(payload['job_id']), payload)
 
 

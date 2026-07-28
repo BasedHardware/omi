@@ -19,8 +19,7 @@ private final class MigrationAuthorizationFlag: @unchecked Sendable {
 private actor DelayedLegacyAliasImporter {
   private var entries: [LegacyMainChatSessionAliasEntry]?
   private var startedWaiter: CheckedContinuation<Void, Never>?
-  private var importContinuation:
-    CheckedContinuation<LegacyMainChatSessionImportReceipt, Error>?
+  private var importContinuation: CheckedContinuation<LegacyMainChatSessionImportReceipt, Error>?
 
   func importEntries(
     _ entries: [LegacyMainChatSessionAliasEntry]
@@ -43,10 +42,11 @@ private actor DelayedLegacyAliasImporter {
   func complete(ownerID: String) -> Bool {
     guard let entries, let importContinuation else { return false }
     self.importContinuation = nil
-    importContinuation.resume(returning: LegacyMainChatSessionImportReceipt(
-      ownerId: ownerID,
-      acceptedEntries: entries,
-      importedCount: entries.count))
+    importContinuation.resume(
+      returning: LegacyMainChatSessionImportReceipt(
+        ownerId: ownerID,
+        acceptedEntries: entries,
+        importedCount: entries.count))
     return true
   }
 }
@@ -80,16 +80,23 @@ private actor HeldAliasOwnerTransition {
   }
 }
 
+/// UserDefaults is documented thread-safe; boxing it lets it cross into a
+/// `@Sendable` `Task` closure (mirrors production's RuntimeOwnerDefaultsReference).
+private struct SendableUserDefaults: @unchecked Sendable {
+  let value: UserDefaults
+}
+
 final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
   private let defaultsKey = LegacyMainChatSessionAliasMigration.defaultsKey
 
   func testDeletesOnlyAcknowledgedOwnerAliasesAfterExactKernelReceipt() async throws {
     let (defaults, suiteName) = makeDefaults()
     defer { defaults.removePersistentDomain(forName: suiteName) }
-    defaults.set([
-      "owner-a|default": "ses-a",
-      "owner-b|default": "ses-b",
-    ], forKey: defaultsKey)
+    defaults.set(
+      [
+        "owner-a|default": "ses-a",
+        "owner-b|default": "ses-b",
+      ], forKey: defaultsKey)
 
     let outcome = await LegacyMainChatSessionAliasMigration.migrate(
       ownerId: "owner-a",
@@ -216,10 +223,11 @@ final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
     let authorization = MigrationAuthorizationFlag()
     let importer = DelayedLegacyAliasImporter()
 
+    let sendableDefaults = SendableUserDefaults(value: defaults)
     let migration = Task {
       await LegacyMainChatSessionAliasMigration.migrate(
         ownerId: "owner-a",
-        defaults: defaults,
+        defaults: sendableDefaults.value,
         isAuthorizationCurrent: { authorization.isCurrent() }
       ) { entries in
         try await importer.importEntries(entries)
@@ -247,10 +255,11 @@ final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
     let importer = DelayedLegacyAliasImporter()
     let transitionGate = HeldAliasOwnerTransition()
 
+    let sendableDefaults = SendableUserDefaults(value: defaults)
     let migration = Task {
       await LegacyMainChatSessionAliasMigration.migrate(
         ownerId: "owner-a",
-        defaults: defaults,
+        defaults: sendableDefaults.value,
         isAuthorizationCurrent: { authorization.isCurrent() }
       ) { entries in
         try await importer.importEntries(entries)
@@ -259,7 +268,7 @@ final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
     await importer.waitUntilStarted()
 
     let transition = Task {
-      await EffectiveOwnerTransitionFence.shared.performEffectiveOwnerTransition(
+      try await EffectiveOwnerTransitionFence.shared.performEffectiveOwnerTransition(
         currentOwner: { authorization.isCurrent() ? "owner-a" : "owner-b" },
         plannedNextOwner: { _ in "owner-b" },
         beginAuthorizationRevocation: { _ in authorization.revoke() },
@@ -278,7 +287,7 @@ final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
     XCTAssertEqual(defaults.dictionary(forKey: defaultsKey) as? [String: String], original)
     let transitionReleased = await transitionGate.release()
     XCTAssertTrue(transitionReleased)
-    await transition.value
+    try await transition.value
 
     let outcome = await migration.value
     XCTAssertEqual(outcome, .retained(reason: "owner_authorization_revoked"))

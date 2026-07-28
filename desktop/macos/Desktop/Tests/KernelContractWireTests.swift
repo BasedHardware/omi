@@ -122,13 +122,15 @@ final class KernelContractWireTests: XCTestCase {
         capabilityVersion: "capability-v2")
     )
 
-    XCTAssertEqual(Set(message.keys), Set([
-      "type", "protocolVersion", "requestId", "clientId", "ownerId",
-      "sessionId", "prompt", "mode", "imageBase64", "attachments",
-      "producingTurnId",
-      "expectedContextSnapshotVersion", "expectedContextSnapshotGeneration",
-      "expectedContextRendererFingerprint", "expectedCapabilityVersion",
-    ]))
+    XCTAssertEqual(
+      Set(message.keys),
+      Set([
+        "type", "protocolVersion", "requestId", "clientId", "ownerId",
+        "sessionId", "prompt", "mode", "imageBase64", "attachments",
+        "producingTurnId",
+        "expectedContextSnapshotVersion", "expectedContextSnapshotGeneration",
+        "expectedContextRendererFingerprint", "expectedCapabilityVersion",
+      ]))
     XCTAssertEqual(message["type"] as? String, "query")
     XCTAssertEqual(message["sessionId"] as? String, "session-1")
     XCTAssertEqual(message["producingTurnId"] as? String, "turn-assistant")
@@ -197,10 +199,12 @@ final class KernelContractWireTests: XCTestCase {
       profileGeneration: 4
     )
 
-    XCTAssertEqual(Set(message.keys), Set([
-      "type", "protocolVersion", "requestId", "clientId", "ownerId",
-      "sessionId", "profileGeneration",
-    ]))
+    XCTAssertEqual(
+      Set(message.keys),
+      Set([
+        "type", "protocolVersion", "requestId", "clientId", "ownerId",
+        "sessionId", "profileGeneration",
+      ]))
     XCTAssertEqual(message["type"] as? String, "warmup")
     XCTAssertNil(message["model"])
     XCTAssertNil(message["systemPrompt"])
@@ -330,11 +334,13 @@ final class KernelContractWireTests: XCTestCase {
       ],
     ]
     let snapshot = try XCTUnwrap(AgentContextSnapshot(dictionary: snapshotDictionary))
-    XCTAssertEqual(snapshot.freshness, AgentContextFreshness(
-      version: "version-a",
-      generation: 11,
-      rendererFingerprint: "renderer-2",
-      capabilityVersion: "1:digest"))
+    XCTAssertEqual(
+      snapshot.freshness,
+      AgentContextFreshness(
+        version: "version-a",
+        generation: 11,
+        rendererFingerprint: "renderer-2",
+        capabilityVersion: "1:digest"))
     XCTAssertEqual(snapshot.sourceRevision(for: .screen), "sha256:abc")
     XCTAssertEqual(snapshot.renderedContext, "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[]}")
     XCTAssertEqual(snapshot.contextPlan.planId, "sha256:plan")
@@ -459,33 +465,36 @@ final class KernelContractWireTests: XCTestCase {
     generation: Int = 11,
     renderedContext: String = "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[]}"
   ) throws -> AgentContextSnapshot {
-    try XCTUnwrap(AgentContextSnapshot(dictionary: [
-      "snapshotId": "snapshot-id",
-      "version": version,
-      "snapshotGeneration": generation,
-      "rendererPolicyVersion": "kernel-context-renderer@1",
-      "rendererFingerprint": "renderer-2",
-      "capabilityVersion": "1:digest",
-      "renderedContext": renderedContext,
-      "contextPlan": contextPlan(retainedTurnCount: recentTurns.count),
-      "ownerId": "owner",
-      "sessionId": "session",
-      "conversationId": "conversation",
-      "recentTurns": recentTurns,
-      "sourceOutcomes": [[
-        "source": "screen",
-        "sourceRevision": "revision",
-        "outcome": "available",
-        "payload": ["policy": "SOURCE_POLICY_MUST_NOT_RENDER"],
-      ]],
-      "activeRuns": [],
-      "capabilities": [
-        "executionRole": "coordinator",
-        "manifestVersion": 1,
-        "manifestDigest": "sha256:digest",
-        "allowedToolNames": ["dangerous_capability_name"],
-      ],
-    ]))
+    try XCTUnwrap(
+      AgentContextSnapshot(dictionary: [
+        "snapshotId": "snapshot-id",
+        "version": version,
+        "snapshotGeneration": generation,
+        "rendererPolicyVersion": "kernel-context-renderer@1",
+        "rendererFingerprint": "renderer-2",
+        "capabilityVersion": "1:digest",
+        "renderedContext": renderedContext,
+        "contextPlan": contextPlan(retainedTurnCount: recentTurns.count),
+        "ownerId": "owner",
+        "sessionId": "session",
+        "conversationId": "conversation",
+        "recentTurns": recentTurns,
+        "sourceOutcomes": [
+          [
+            "source": "screen",
+            "sourceRevision": "revision",
+            "outcome": "available",
+            "payload": ["policy": "SOURCE_POLICY_MUST_NOT_RENDER"],
+          ]
+        ],
+        "activeRuns": [],
+        "capabilities": [
+          "executionRole": "coordinator",
+          "manifestVersion": 1,
+          "manifestDigest": "sha256:digest",
+          "allowedToolNames": ["dangerous_capability_name"],
+        ],
+      ]))
   }
 
   private func contextPlan(retainedTurnCount: Int = 0) -> [String: Any] {

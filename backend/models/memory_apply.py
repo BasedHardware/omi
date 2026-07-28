@@ -296,7 +296,7 @@ def _apply_update_memory_item(
     promotion_audit: Optional[Dict[str, Any]] = None,
     extra_updates: Optional[Dict[str, Any]] = None,
 ) -> MemoryItem:
-    now = datetime.now(timezone.utc)
+    now = max(datetime.now(timezone.utc), existing.captured_at, existing.updated_at)
     if patch.target_tier is not None:
         tier = patch.target_tier
     else:
@@ -465,7 +465,7 @@ def apply_long_term_patch_transaction(
             source_version="unknown",
             artifact_preservation=ArtifactPreservationState.preserved,
         )
-        for evidence_id in raw.get("evidence_ids", [])
+        for evidence_id in (raw.get("evidence_ids") or [])
     ]
     try:
         patch = DurableMemoryPatch(**raw)

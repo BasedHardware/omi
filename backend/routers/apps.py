@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import asyncio
 import time
 from html import escape
 from datetime import datetime, timezone
@@ -11,12 +10,19 @@ from typing import List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError
 from ulid import ULID
-from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
+from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPException, Header, Query
 from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import fetch_app_chat_tools_from_manifest
-from utils.executors import db_executor, llm_executor, storage_executor, run_blocking
+from utils.executors import (
+    critical_executor,
+    db_executor,
+    llm_executor,
+    storage_executor,
+    run_blocking,
+    start_background_task,
+)
 from utils.http_client import get_webhook_client
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
@@ -433,7 +439,7 @@ def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> 
     fetched_tools = manifest_result.get('tools')
     if fetched_tools:
         # Resolve relative endpoints to absolute URLs
-        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        base_url = (external_integration.get('app_home_url') or '').rstrip('/')
         if base_url:
             for tool in fetched_tools:
                 endpoint = tool.get('endpoint', '')
@@ -1120,7 +1126,7 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
 
     fetched_tools = manifest_result.get('tools')
     if fetched_tools:
-        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        base_url = (external_integration.get('app_home_url') or '').rstrip('/')
         if base_url:
             for tool in fetched_tools:
                 endpoint = tool.get('endpoint', '')
@@ -1681,12 +1687,44 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
 
 
 @router.post('/v1/apps/migrate-owner', tags=['v1'], response_model=AppMigrationResponse)
-async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
+async def migrate_app_owner(
+    old_id,
+    source_token: Optional[str] = Body(default=None, embed=True),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    # The client captures this token while it still owns the anonymous Firebase
+    # session, then calls this route after signing into the destination account.
+    # A providerless UserRecord is not affirmative proof of anonymity (for example,
+    # custom-token accounts can be providerless), so a bare ``old_id`` never grants
+    # access.  The source token must be a currently valid Firebase credential for
+    # that exact uid and attest to the anonymous sign-in provider.
+    if old_id == uid:
+        raise HTTPException(status_code=400, detail='Source identity must differ from the authenticated identity')
+    if not source_token:
+        raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
+
+    try:
+        source_claims = await run_blocking(
+            critical_executor, auth.auth.verify_id_token, source_token, check_revoked=True
+        )
+        source_user = await run_blocking(critical_executor, auth.get_user, old_id)
+    except Exception:
+        # Invalid/revoked tokens, missing/deleted users, and Admin lookup failures
+        # are deliberately indistinguishable to callers. Neither may mutate state.
+        raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
+
+    source_uid = source_claims.get('uid')
+    firebase_claims = source_claims.get('firebase')
+    source_provider = firebase_claims.get('sign_in_provider') if isinstance(firebase_claims, dict) else None
+    if source_uid != old_id or source_provider != 'anonymous' or source_user.disabled or source_user.provider_data:
+        raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
+
     await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
 
-    # Start async tasks to migrate memories and update persona connected accounts
-    asyncio.create_task(run_blocking(db_executor, migrate_memories, old_id, uid))
-    asyncio.create_task(update_omi_persona_connected_accounts(uid))
+    # Tracked background tasks (not bare asyncio.create_task): keeps a live reference
+    # and logs a failed migration instead of silently dropping it.
+    start_background_task(run_blocking(db_executor, migrate_memories, old_id, uid), name=f"migrate_memories:{uid}")
+    start_background_task(update_omi_persona_connected_accounts(uid), name=f"migrate_persona_accounts:{uid}")
 
     return {"status": "ok", "message": "Migration started"}
 
@@ -2193,7 +2231,6 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppThumbnailUploadResponse)
 @router.post('/v1/app/thumbnails', tags=['v1'], response_model=AppThumbnailUploadResponse)
 @max_part_size(APP_IMAGE_MAX_PART_SIZE)
 async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
@@ -2227,6 +2264,7 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
             os.remove(temp_path)
 
 
+@router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppMutationResponse)
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')

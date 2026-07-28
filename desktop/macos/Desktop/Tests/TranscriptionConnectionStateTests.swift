@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @testable import Omi_Computer
 
 final class TranscriptionConnectionStateTests: XCTestCase {

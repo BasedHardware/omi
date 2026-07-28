@@ -89,6 +89,11 @@ def test_llm_gateway_is_a_bounded_fallback_component():
     assert fallback_mod.bucket_component('llm_gateway') == 'llm_gateway'
 
 
+def test_firestore_malformed_document_labels_are_bounded():
+    assert fallback_mod.bucket_component('firestore_read') == 'firestore_read'
+    assert fallback_mod.bucket_reason('malformed_doc') == 'malformed_doc'
+
+
 def test_record_fallback_never_raises_on_metric_or_log_failure(monkeypatch):
     class BoomCounter:
         def labels(self, **_labels):
@@ -118,15 +123,65 @@ def test_stt_selection_fallback_records_on_capability_mismatch(monkeypatch):
 
     service, lang, model = streaming_mod.get_stt_service_for_language('xx-unsupported')
 
-    assert service == streaming_mod.STTService.deepgram
-    assert lang == 'en'
-    assert model == 'nova-3'
+    assert (service, lang, model) == (None, None, None)
     assert counter.increments == [
         (
             {
                 'component': 'stt_selection',
                 'from_mode': 'requested_non_en',
-                'to_mode': 'deepgram_en',
+                'to_mode': 'unavailable',
+                'reason': 'capability_mismatch',
+                'outcome': 'exhausted',
+            },
+            1.0,
+        )
+    ]
+
+
+def test_explicit_parakeet_preference_fallback_records_when_live_mode_is_incapable(monkeypatch):
+    from utils.stt import streaming as streaming_mod
+
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.test')
+    monkeypatch.setattr(streaming_mod, 'stt_service_models', ['parakeet', 'modulate-velma-2'])
+
+    service, lang, model = streaming_mod.get_stt_service_for_language(
+        'es', multi_lang_enabled=True, preferred_service='parakeet'
+    )
+
+    assert (service, lang, model) == (streaming_mod.STTService.modulate, 'multi', 'velma-2')
+    assert counter.increments == [
+        (
+            {
+                'component': 'stt_selection',
+                'from_mode': 'parakeet',
+                'to_mode': 'modulate',
+                'reason': 'capability_mismatch',
+                'outcome': 'degraded',
+            },
+            1.0,
+        )
+    ]
+
+
+def test_automatic_parakeet_capability_fallback_records_when_live_mode_is_incapable(monkeypatch):
+    from utils.stt import streaming as streaming_mod
+
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.test')
+    monkeypatch.setattr(streaming_mod, 'stt_service_models', ['parakeet', 'modulate-velma-2'])
+
+    service, lang, model = streaming_mod.get_stt_service_for_language('es', multi_lang_enabled=True)
+
+    assert (service, lang, model) == (streaming_mod.STTService.modulate, 'multi', 'velma-2')
+    assert counter.increments == [
+        (
+            {
+                'component': 'stt_selection',
+                'from_mode': 'parakeet',
+                'to_mode': 'modulate',
                 'reason': 'capability_mismatch',
                 'outcome': 'degraded',
             },

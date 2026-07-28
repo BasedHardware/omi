@@ -240,6 +240,7 @@ def _generated_feature_route_items(
                 'primary': primary,
                 'fallbacks': [],
                 'provider_options': provider_options,
+                'output_budget': _output_budget_for_feature(feature, provider),
                 'timeouts': {'request_ms': 120000 if capabilities['streaming'] else 30000},
                 'retry': {'max_attempts': 1},
                 'capabilities': capabilities,
@@ -260,6 +261,7 @@ def _generated_feature_route_items(
                         'byok_unsupported_provider',
                         'missing_byok_key',
                         'capability_mismatch',
+                        'provider_invalid_request',
                         'invalid_config',
                     ],
                 },
@@ -276,6 +278,16 @@ def _generated_feature_route_items(
             }
         )
     return lanes, artifacts, bundles
+
+
+def _output_budget_for_feature(feature: str, provider: str) -> dict[str, Any] | None:
+    """Keep pilot caps explicit and disabled until an operator enables the experiment."""
+    if feature == 'session_titles' and provider == 'gemini':
+        return {
+            'experiment': 'session_titles',
+            'max_completion_tokens': 128,
+        }
+    return None
 
 
 def _surface_for_feature(feature: str, provider: str) -> str:
@@ -311,6 +323,7 @@ def _credential_policy() -> dict[str, Any]:
             'byok_unsupported_provider',
             'missing_byok_key',
             'capability_mismatch',
+            'provider_invalid_request',
             'invalid_config',
         ],
     }

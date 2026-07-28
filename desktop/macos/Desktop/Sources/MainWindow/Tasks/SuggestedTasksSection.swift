@@ -1,22 +1,46 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
+
+/// Keeps the suggested-task fetch visible without adding or removing a row
+/// above the task list while the result is pending.
+enum SuggestedTasksPresentationPolicy {
+  static func showsSection(candidateCount: Int) -> Bool {
+    candidateCount > 0
+  }
+
+  static func showsFloatingLoadingIndicator(isLoading: Bool, candidateCount: Int) -> Bool {
+    isLoading && candidateCount == 0
+  }
+}
+
+struct SuggestedTasksLoadingIndicator: View {
+  var body: some View {
+    HStack(spacing: 8) {
+      ProgressView().controlSize(.small)
+      Text("Checking Suggested")
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(
+      Capsule()
+        .fill(OmiColors.backgroundSecondary.opacity(0.92))
+    )
+    .overlay(
+      Capsule()
+        .stroke(OmiColors.border.opacity(0.8), lineWidth: 1)
+    )
+    .accessibilityIdentifier("suggested-loading")
+  }
+}
 
 struct SuggestedTasksSection: View {
   @ObservedObject var store: SuggestedTasksStore
   let onCanonicalChange: () async -> Void
 
   var body: some View {
-    if store.isLoading && store.candidates.isEmpty {
-      HStack(spacing: 8) {
-        ProgressView().controlSize(.small)
-        Text("Checking Suggested")
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.vertical, 8)
-      .accessibilityIdentifier("suggested-loading")
-    } else if !store.candidates.isEmpty {
+    if SuggestedTasksPresentationPolicy.showsSection(candidateCount: store.candidates.count) {
       VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 8) {
           Image(systemName: "tray")
@@ -137,6 +161,9 @@ private struct SuggestedCandidateCard: View {
         .buttonStyle(.borderedProminent)
         .tint(OmiColors.textPrimary)
         .foregroundColor(.black)
+        // Empty-title gate applies only to task creation — Later/Dismiss must stay
+        // usable even when the editable title is cleared.
+        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         .accessibilityIdentifier("suggested-do-now-\(candidate.id)")
 
         Button("Later") {
@@ -158,7 +185,7 @@ private struct SuggestedCandidateCard: View {
         Spacer()
         if isBusy { ProgressView().controlSize(.small) }
       }
-      .disabled(isBusy || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      .disabled(isBusy)
     }
     .padding(12)
     .background(
@@ -190,7 +217,10 @@ private struct SuggestedCandidateCard: View {
       ForEach(dismissReasonChoices, id: \.label) { choice in
         Button(choice.label) {
           selectedDismissReason = true
-          Task { await onDismiss(choice.reason) }
+          let reasonRaw = choice.reason.rawValue
+          Task {
+            await onDismiss(OmiAPI.TaskIntelligenceFeedbackReason(rawValue: reasonRaw))
+          }
           showDismissReasons = false
         }
         .buttonStyle(.bordered)

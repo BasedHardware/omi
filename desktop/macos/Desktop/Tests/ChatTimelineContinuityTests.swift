@@ -39,49 +39,100 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(messages[3].contentBlocks.spawnedAgentIDs, [subagentID])
   }
 
-  func testMainChatHidesCompletedNonAgentToolLogsButKeepsAgentLinks() {
+  func testCompletedToolLogsAndAgentLinksAreLiveOnlyKeepingAssistantText() {
     let subagentID = UUID()
-    let groups = ContentBlockGroup.visibleChatGroups(
-      [
-        .text(id: "text_1", text: "I started a background agent for that."),
-        .toolCall(
-          id: "tool_1",
-          name: "search_conversations",
-          status: .completed,
-          input: ToolCallInput(summary: "designer", details: "query=designer"),
-          output: "raw search output"
-        ),
-        .toolCall(
-          id: "tool_2",
-          name: "spawn_agent",
-          status: .completed,
-          input: ToolCallInput(summary: "Sleep Agent", details: "sleep five seconds"),
-          output: "Started agent\nID: \(subagentID.uuidString)"
-        ),
-        .thinking(id: "thinking_1", text: "hidden after completion"),
-      ],
-      isStreaming: false
-    )
+    let blocks: [ChatContentBlock] = [
+      .text(id: "text_1", text: "I started a background agent for that."),
+      .toolCall(
+        id: "tool_1",
+        name: "search_conversations",
+        status: .completed,
+        input: ToolCallInput(summary: "designer", details: "query=designer"),
+        output: "raw search output"
+      ),
+      .toolCall(
+        id: "tool_2",
+        name: "spawn_agent",
+        status: .completed,
+        input: ToolCallInput(summary: "Sleep Agent", details: "sleep five seconds"),
+        output: "Started agent\nID: \(subagentID.uuidString)"
+      ),
+      .thinking(id: "thinking_1", text: "hidden after completion"),
+    ]
 
-    XCTAssertEqual(groups.count, 2)
-    guard case .text(_, let text) = groups[0] else {
-      return XCTFail("expected final assistant text to remain visible")
+    // While streaming, the tool logs + spawned-agent link are live progress.
+    let streaming = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: true)
+    guard let toolGroup = streaming.first(where: isToolCalls),
+      case .toolCalls(_, let calls) = toolGroup
+    else {
+      return XCTFail("expected the tool-progress group while streaming")
+    }
+    XCTAssertEqual(calls.map(\.id), ["tool_1", "tool_2"])
+    XCTAssertEqual(calls.spawnedAgentIDs, [subagentID])
+
+    // Tool chips are live-only: once the reply settles they are dropped and only
+    // the assistant text remains.
+    let settled = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false)
+    XCTAssertEqual(settled.count, 1)
+    guard case .text(_, let text) = settled[0] else {
+      return XCTFail("expected only the final assistant text to remain")
     }
     XCTAssertEqual(text, "I started a background agent for that.")
-    guard case .toolCalls(_, let calls) = groups[1] else {
-      return XCTFail("expected a spawned-agent link group")
-    }
-    XCTAssertEqual(calls.count, 1)
-    XCTAssertEqual(calls.spawnedAgentIDs, [subagentID])
+    XCTAssertFalse(settled.contains(where: isToolCalls))
+  }
+
+  func testCopyableTextIncludesOnlyFinalAssistantOutput() {
+    let message = ChatMessage(
+      text: "Fallback answer",
+      sender: .ai,
+      contentBlocks: [
+        .thinking(id: "thinking_1", text: "Internal reasoning"),
+        .toolCall(id: "tool_1", name: "search", status: .completed, output: "Raw tool result"),
+        .text(id: "answer_1", text: "Visible final answer"),
+        .agentCompletion(
+          id: "agent_1",
+          pillId: nil,
+          sessionId: nil,
+          runId: nil,
+          title: "Background agent",
+          promptSnippet: "Internal agent prompt",
+          output: "Agent-only result",
+          status: "completed"
+        ),
+      ]
+    )
+
+    XCTAssertEqual(message.copyableText, "Visible final answer")
+  }
+
+  func testFloatingResponseCopiesTheSharedFinalOutputProjection() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    // omi-test-quality: source-inspection -- static contract: floating copy controls use ChatMessage.copyableText.
+    let source = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/AIResponseView.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(source.contains("let finalOutput = message.copyableText"))
+    XCTAssertTrue(source.contains("A: \\(finalOutput)"))
+    XCTAssertTrue(source.contains("Button(action: { [finalOutput] in copyText(finalOutput) })"))
+    XCTAssertFalse(source.contains("setString(message.text, forType: .string)"))
+  }
+
+  private func isToolCalls(_ group: ContentBlockGroup) -> Bool {
+    if case .toolCalls = group { return true }
+    return false
   }
 
   func testLifecycleProjectionHidesDuplicateSpawnProseAndRetainsCanonicalRunIdentity() {
     let pillID = UUID()
     let runID = "run_5f35b43bf8a646f29b548a1306cf663f"
     let spawnProse = """
-    Subagent spawned! It's running as a floating pill titled \"Sleep 5 seconds\" (\(runID)).
-    It'll execute sleep 5 and report back once complete.
-    """
+      Subagent spawned! It's running as a floating pill titled \"Sleep 5 seconds\" (\(runID)).
+      It'll execute sleep 5 and report back once complete.
+      """
     let canonical = ChatMessage(
       id: "spawn-message",
       text: spawnProse,
@@ -105,8 +156,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
     // notch-pill linking.
     XCTAssertEqual(canonical.text, spawnProse)
     guard case .text(_, let canonicalProse) = canonical.contentBlocks[0],
-          case .agentSpawn(_, let canonicalPillID, let canonicalSessionID, let canonicalRunID, _, _, _) =
-            canonical.contentBlocks[1]
+      case .agentSpawn(_, let canonicalPillID, let canonicalSessionID, let canonicalRunID, _, _, _) =
+        canonical.contentBlocks[1]
     else {
       return XCTFail("expected canonical spawn prose and structured receipt")
     }
@@ -148,7 +199,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           promptSnippet: "",
           output: "Done.",
           status: "completed"
-        ),
+        )
       ]
     )
 
@@ -233,7 +284,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           promptSnippet: "",
           output: "Done.",
           status: "completed"
-        ),
+        )
       ]
     )
 
@@ -242,60 +293,68 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertFalse(projected[0].text.localizedCaseInsensitiveContains(lowercasedPillID))
   }
 
-  func testMainChatKeepsOnlyInFlightNonAgentToolsAfterAssistantTextSettles() {
-    let groups = ContentBlockGroup.visibleChatGroups(
-      [
-        .toolCall(id: "tool_1", name: "search_conversations", status: .completed, output: "done"),
-        .toolCall(id: "tool_2", name: "execute_sql", status: .running, output: nil),
-      ],
-      // A tool can still be executing after an assistant's explanatory text
-      // has settled. Both chat surfaces must keep the truthful active row.
-      isStreaming: false
-    )
+  func testCompletedAndInFlightToolsAreLiveOnlyAfterAssistantTextSettles() {
+    let blocks: [ChatContentBlock] = [
+      .toolCall(id: "tool_1", name: "search_conversations", status: .completed, output: "done"),
+      .toolCall(id: "tool_2", name: "execute_sql", status: .running, output: nil),
+    ]
 
-    XCTAssertEqual(groups.count, 1)
-    guard case .toolCalls(_, let calls) = groups[0],
-          case .toolCall(_, let name, let status, _, _, _) = calls[0]
+    // While streaming, the full tool-progress trace (completed + in-flight) shows.
+    let streaming = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: true)
+    XCTAssertEqual(streaming.count, 1)
+    guard case .toolCalls(_, let calls) = streaming[0],
+      case .toolCall(_, let name, let status, _, _, _) = calls[0]
     else {
-      return XCTFail("expected only the active progress tool")
+      return XCTFail("expected the complete tool-progress trace while streaming")
     }
-    XCTAssertEqual(calls.count, 1)
-    XCTAssertEqual(name, "execute_sql")
-    XCTAssertEqual(status, .running)
+    XCTAssertEqual(calls.map(\.id), ["tool_1", "tool_2"])
+    XCTAssertEqual(name, "search_conversations")
+    XCTAssertEqual(status, .completed)
+
+    // Tool chips are live-only: they are dropped once the reply settles.
+    XCTAssertTrue(ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false).isEmpty)
   }
 
-  func testMainChatKeepsActiveToolProgressAlongsideUnmaterializedSpawnLink() {
+  func testActiveToolProgressAndUnmaterializedSpawnAreLiveOnly() {
     let subagentID = UUID()
-    let groups = ContentBlockGroup.visibleChatGroups(
-      [
-        .toolCall(
-          id: "spawn_1",
-          name: "spawn_agent",
-          status: .completed,
-          output: "Started agent\nID: \(subagentID.uuidString)"
-        ),
-        .toolCall(id: "web_1", name: "WebSearch", status: .running, output: nil),
-      ],
-      isStreaming: false
-    )
+    let blocks: [ChatContentBlock] = [
+      .toolCall(
+        id: "spawn_1",
+        name: "spawn_agent",
+        status: .completed,
+        output: "Started agent\nID: \(subagentID.uuidString)"
+      ),
+      .toolCall(id: "web_1", name: "WebSearch", status: .running, output: nil),
+    ]
 
-    XCTAssertEqual(groups.count, 1)
-    guard case .toolCalls(_, let calls) = groups[0] else {
-      return XCTFail("expected one mixed lifecycle tool group")
+    // While streaming, the mixed lifecycle tool group shows both rows.
+    let streaming = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: true)
+    XCTAssertEqual(streaming.count, 1)
+    guard case .toolCalls(_, let calls) = streaming[0] else {
+      return XCTFail("expected one mixed lifecycle tool group while streaming")
     }
     XCTAssertEqual(calls.map(\.id), ["spawn_1", "web_1"])
+
+    // Tool chips are live-only: dropped once the reply settles.
+    XCTAssertTrue(ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false).isEmpty)
   }
 
-  func testMainChatHidesToolProgressWhenItsLifecycleBecomesTerminal() {
-    let groups = ContentBlockGroup.visibleChatGroups(
-      [
-        .toolCall(id: "tool_1", name: "WebSearch", status: .completed, output: "done"),
-        .toolCall(id: "tool_2", name: "WebFetch", status: .failed, output: nil),
-      ],
-      isStreaming: false
-    )
+  func testTerminalToolProgressIsLiveOnly() {
+    let blocks: [ChatContentBlock] = [
+      .toolCall(id: "tool_1", name: "WebSearch", status: .completed, output: "done"),
+      .toolCall(id: "tool_2", name: "WebFetch", status: .failed, output: nil),
+    ]
 
-    XCTAssertTrue(groups.isEmpty)
+    // Terminal (completed + failed) tool progress shows while streaming…
+    let streaming = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: true)
+    XCTAssertEqual(streaming.count, 1)
+    guard case .toolCalls(_, let calls) = streaming[0] else {
+      return XCTFail("expected terminal tool progress while streaming")
+    }
+    XCTAssertEqual(calls.map(\.id), ["tool_1", "tool_2"])
+
+    // …and is dropped once the reply settles (live-only).
+    XCTAssertTrue(ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false).isEmpty)
   }
 
   func testBackgroundAgentSummaryParsesLinkedAndLegacyCompletionText() {
@@ -354,8 +413,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
     let record = TaskChatMessageRecord.from(message, taskId: "task-roundtrip")
     let restored = record.toChatMessage()
     XCTAssertEqual(restored.contentBlocks.count, 1)
-    guard case .agentCompletion(_, let restoredPill, let restoredSession, let restoredRun, _, _, let restoredOutput, _) =
-      restored.contentBlocks.first
+    guard
+      case .agentCompletion(_, let restoredPill, let restoredSession, let restoredRun, _, _, let restoredOutput, _) =
+        restored.contentBlocks.first
     else {
       return XCTFail("agentCompletion must round-trip through contentBlocksJson")
     }
@@ -379,7 +439,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "run-1",
           title: "Research Notes",
           objective: "Research the release notes"
-        ),
+        )
       ]
     )
     let artifact = ChatResource.localGeneratedFile(
@@ -403,7 +463,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           promptSnippet: "Research the release notes",
           output: "Done.",
           status: "completed"
-        ),
+        )
       ],
       resources: [artifact]
     )
@@ -417,15 +477,16 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertTrue(canonical[0].resources.isEmpty)
     XCTAssertEqual(canonical[1].resources.map(\.id), ["artifact-1"])
     guard case .agentSpawn = canonical[0].contentBlocks.first,
-          case .agentCompletion = canonical[1].contentBlocks.first
+      case .agentCompletion = canonical[1].contentBlocks.first
     else {
       return XCTFail("the projection must not mutate canonical lifecycle blocks")
     }
     XCTAssertEqual(projected.count, 1)
     XCTAssertEqual(projected[0].id, "spawn-message")
     XCTAssertEqual(projected[0].resources.map(\.id), ["artifact-1"])
-    guard case .agentCompletion(_, let renderedPill, _, let renderedRun, _, _, let output, _) =
-      projected[0].contentBlocks.first
+    guard
+      case .agentCompletion(_, let renderedPill, _, let renderedRun, _, _, let output, _) =
+        projected[0].contentBlocks.first
     else {
       return XCTFail("matched lifecycle must render its terminal completion in the spawn row")
     }
@@ -467,15 +528,16 @@ final class ChatTimelineContinuityTests: XCTestCase {
     // The structured canonical event still records both lifecycle facts.
     XCTAssertEqual(sameRowLifecycle.contentBlocks.count, 2)
     guard case .agentSpawn = sameRowLifecycle.contentBlocks[0],
-          case .agentCompletion = sameRowLifecycle.contentBlocks[1]
+      case .agentCompletion = sameRowLifecycle.contentBlocks[1]
     else {
       return XCTFail("same-row canonical lifecycle facts must remain intact")
     }
 
     XCTAssertEqual(projected.count, 1)
     XCTAssertEqual(projected[0].contentBlocks.count, 1)
-    guard case .agentCompletion(_, let renderedPill, _, let renderedRun, _, _, let output, _) =
-      projected[0].contentBlocks[0]
+    guard
+      case .agentCompletion(_, let renderedPill, _, let renderedRun, _, _, let output, _) =
+        projected[0].contentBlocks[0]
     else {
       return XCTFail("same-row lifecycle must render the terminal card")
     }
@@ -496,9 +558,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
           name: "spawn_agent",
           status: .completed,
           output: """
-          id: \(pillID.uuidString)
-          runId: run-1
-          """
+            id: \(pillID.uuidString)
+            runId: run-1
+            """
         ),
         .agentSpawn(
           id: "spawn-block",
@@ -552,7 +614,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "run-1",
           title: "First Agent",
           objective: "First objective"
-        ),
+        )
       ]
     )
     let conflictingCompletion = ChatMessage(
@@ -569,7 +631,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           promptSnippet: "Second objective",
           output: "Done.",
           status: "completed"
-        ),
+        )
       ]
     )
     XCTAssertEqual(
@@ -590,7 +652,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "",
           title: "Legacy Agent",
           objective: "Legacy objective"
-        ),
+        )
       ]
     )
     let legacyCompletion = ChatMessage(
@@ -607,7 +669,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           promptSnippet: "Legacy objective",
           output: "Done.",
           status: "completed"
-        ),
+        )
       ]
     )
     XCTAssertEqual(
@@ -631,7 +693,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "run-1",
           title: "Agent",
           objective: "Objective"
-        ),
+        )
       ]
     )
     func completion(id: String, output: String, resourceID: String) -> ChatMessage {
@@ -649,7 +711,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
             promptSnippet: "Objective",
             output: output,
             status: "completed"
-          ),
+          )
         ],
         resources: [
           .localGeneratedFile(
@@ -658,7 +720,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
             subtitle: "text/plain",
             mimeType: "text/plain",
             uri: "file:///tmp/\(resourceID).txt"
-          ),
+          )
         ]
       )
     }
@@ -691,7 +753,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "run-1",
           title: "Agent",
           objective: "Objective"
-        ),
+        )
       ]
     )
     let artifact = ChatResource.localGeneratedFile(
@@ -767,7 +829,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "run-1",
           title: "First Agent",
           objective: "First objective"
-        ),
+        )
       ]
     )
     let mixedCompletions = ChatMessage(
@@ -802,16 +864,18 @@ final class ChatTimelineContinuityTests: XCTestCase {
     let projected = AgentLifecycleDisplayProjection.project([spawn, mixedCompletions])
 
     XCTAssertEqual(projected.count, 2)
-    guard case .agentCompletion(_, _, _, let renderedRun, _, _, let renderedOutput, _) =
-      projected[0].contentBlocks.first
+    guard
+      case .agentCompletion(_, _, _, let renderedRun, _, _, let renderedOutput, _) =
+        projected[0].contentBlocks.first
     else {
       return XCTFail("the matching completion must replace the spawn row")
     }
     XCTAssertEqual(renderedRun, "run-1")
     XCTAssertEqual(renderedOutput, "First result")
     XCTAssertEqual(projected[1].contentBlocks.count, 2)
-    guard case .agentCompletion(_, _, _, let retainedRun, _, _, let retainedOutput, _) =
-      projected[1].contentBlocks[0]
+    guard
+      case .agentCompletion(_, _, _, let retainedRun, _, _, let retainedOutput, _) =
+        projected[1].contentBlocks[0]
     else {
       return XCTFail("an unmatched completion must remain in its source row")
     }
@@ -858,8 +922,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
 
     let restored = ChatContentBlockCodec.decodeFromMessageMetadata(metadata)
     XCTAssertEqual(restored.count, 2)
-    guard case .agentSpawn(_, let spawnPill, let spawnSession, let spawnRun, let title, let objective, let provider) =
-      restored[0]
+    guard
+      case .agentSpawn(_, let spawnPill, let spawnSession, let spawnRun, let title, let objective, let provider) =
+        restored[0]
     else {
       return XCTFail("expected agentSpawn in metadata round-trip")
     }
@@ -899,20 +964,20 @@ final class ChatTimelineContinuityTests: XCTestCase {
         toolUseId: "tu-1",
         input: ToolCallInput(summary: "Sleep Agent", details: "sleep five seconds"),
         output: """
-        Agent started as a floating agent pill.
-        id: \(pillId.uuidString)
-        sessionId: sess-abc
-        runId: run-xyz
-        title: Sleep Agent
-        status: running
-        """
+          Agent started as a floating agent pill.
+          id: \(pillId.uuidString)
+          sessionId: sess-abc
+          runId: run-xyz
+          title: Sleep Agent
+          status: running
+          """
       )
     ]
 
     let projection = ChatProvider.materializeAgentSpawnBlockIfNeeded(
-        in: &blocks,
-        toolUseId: "tu-1",
-        toolName: "spawn_agent"
+      in: &blocks,
+      toolUseId: "tu-1",
+      toolName: "spawn_agent"
     )
     XCTAssertEqual(
       projection,
@@ -926,8 +991,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
       )
     )
     XCTAssertEqual(blocks.count, 2)
-    guard case .agentSpawn(_, let spawnPill, let sessionId, let runId, let title, let objective, let provider) =
-      blocks[1]
+    guard
+      case .agentSpawn(_, let spawnPill, let sessionId, let runId, let title, let objective, let provider) =
+        blocks[1]
     else {
       return XCTFail("spawn_agent tool result must emit .agentSpawn")
     }
@@ -959,7 +1025,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
   func testMaterializeAgentSpawnBlockFromCanonicalProductionJSONResult() throws {
     let pillId = UUID(uuidString: "C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48")!
     // Exact compact response shape returned by control-tools.ts stringifyToolResult.
-    let output = #"{"ok":true,"routeDecision":{"effect":"spawn_background_agent"},"requestedAgentCount":1,"agents":[{"kind":"background","delegation":null,"session":{"sessionId":"sess-prod","ownerId":"owner-1","title":"Memory Insight","surfaceKind":"floating_agent","externalRefKind":"pill","externalRefId":"C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48","defaultAdapterId":"hermes","metadata":{}},"run":{"runId":"run-prod","sessionId":"sess-prod"},"attempt":null}],"delegation":null,"session":{"sessionId":"sess-prod","ownerId":"owner-1","title":"Memory Insight","surfaceKind":"floating_agent","externalRefKind":"pill","externalRefId":"C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48","defaultAdapterId":"hermes","metadata":{}},"run":{"runId":"run-prod","sessionId":"sess-prod"},"attempt":null}"#
+    let output =
+      #"{"ok":true,"routeDecision":{"effect":"spawn_background_agent"},"requestedAgentCount":1,"agents":[{"kind":"background","delegation":null,"session":{"sessionId":"sess-prod","ownerId":"owner-1","title":"Memory Insight","surfaceKind":"floating_agent","externalRefKind":"pill","externalRefId":"C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48","defaultAdapterId":"hermes","metadata":{}},"run":{"runId":"run-prod","sessionId":"sess-prod"},"attempt":null}],"delegation":null,"session":{"sessionId":"sess-prod","ownerId":"owner-1","title":"Memory Insight","surfaceKind":"floating_agent","externalRefKind":"pill","externalRefId":"C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48","defaultAdapterId":"hermes","metadata":{}},"run":{"runId":"run-prod","sessionId":"sess-prod"},"attempt":null}"#
     var blocks: [ChatContentBlock] = [
       .toolCall(
         id: "tool-prod",
@@ -980,7 +1047,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(blocks[0].spawnedAgentProvider, "hermes")
 
     XCTAssertEqual(blocks.count, 2)
-    guard case .agentSpawn(let blockId, let actualPill, let sessionId, let runId, let title, let objective, let provider) = blocks[1]
+    guard
+      case .agentSpawn(let blockId, let actualPill, let sessionId, let runId, let title, let objective, let provider) =
+        blocks[1]
     else { return XCTFail("canonical production result must materialize agentSpawn") }
     XCTAssertEqual(blockId, "agent_spawn_run-prod")
     XCTAssertEqual(actualPill, pillId)
@@ -1005,13 +1074,13 @@ final class ChatTimelineContinuityTests: XCTestCase {
       name: "spawn_agent",
       status: .completed,
       output: """
-      Agent started as a floating agent pill.
-      id: \(pillId.uuidString)
-      sessionId: sess-abc
-      runId: run-xyz
-      title: Sleep Agent
-      status: running
-      """
+        Agent started as a floating agent pill.
+        id: \(pillId.uuidString)
+        sessionId: sess-abc
+        runId: run-xyz
+        title: Sleep Agent
+        status: running
+        """
     )
 
     XCTAssertEqual(block.spawnedAgentID, pillId)
@@ -1030,11 +1099,13 @@ final class ChatTimelineContinuityTests: XCTestCase {
       sessionId: " sess-1 ",
       runId: "run-1"
     )
-    XCTAssertEqual(preference.keys, [
-      .runId("run-1"),
-      .sessionId("sess-1"),
-      .pillId(pillId),
-    ])
+    XCTAssertEqual(
+      preference.keys,
+      [
+        .runId("run-1"),
+        .sessionId("sess-1"),
+        .pillId(pillId),
+      ])
 
     let pillOnly = AgentTimelineHydratePreference.make(
       pillId: pillId,
@@ -1047,8 +1118,14 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(
       preference.firstMatchingKey(
         runIdMatches: { $0 == "run-1" },
-        sessionIdMatches: { _ in XCTFail("session should not be checked after run match"); return false },
-        pillIdMatches: { _ in XCTFail("pill should not be checked after run match"); return false }
+        sessionIdMatches: { _ in
+          XCTFail("session should not be checked after run match")
+          return false
+        },
+        pillIdMatches: { _ in
+          XCTFail("pill should not be checked after run match")
+          return false
+        }
       ),
       .runId("run-1")
     )
@@ -1056,7 +1133,10 @@ final class ChatTimelineContinuityTests: XCTestCase {
       preference.firstMatchingKey(
         runIdMatches: { _ in false },
         sessionIdMatches: { $0 == "sess-1" },
-        pillIdMatches: { _ in XCTFail("pill should not be checked after session match"); return false }
+        pillIdMatches: { _ in
+          XCTFail("pill should not be checked after session match")
+          return false
+        }
       ),
       .sessionId("sess-1")
     )
@@ -1183,11 +1263,11 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
 
     XCTAssertTrue(
-      chatBubbleSource.contains("SelectableMarkdown(text: summary.output, sender: .ai)"),
+      chatBubbleSource.contains("OmiMarkdown(text: summary.output, sender: .ai)"),
       "background agent summary body must render markdown"
     )
     XCTAssertTrue(
-      chatBubbleSource.contains("SelectableMarkdown(text: output, sender: .ai)"),
+      chatBubbleSource.contains("OmiMarkdown(text: output, sender: .ai)"),
       "agent completion body must render markdown"
     )
     XCTAssertTrue(chatBubbleSource.contains("Text(\"Collapse\")"))
@@ -1229,7 +1309,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
       encoding: .utf8
     )
     let markdownSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/SelectableMarkdown.swift"),
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/OmiMarkdown.swift"),
       encoding: .utf8
     )
     let bubbleSource = try String(
@@ -1241,9 +1321,13 @@ final class ChatTimelineContinuityTests: XCTestCase {
       messagesSource.contains(".textSelection(.enabled)"),
       "chat message stack must not enable selection on chrome Text views"
     )
-    XCTAssertTrue(
+    XCTAssertFalse(
       markdownSource.contains(".textSelection(.enabled)"),
-      "SelectableMarkdown must opt message bodies into selection"
+      "chat Markdown must not create SelectionOverlay views that can loop while scrolling"
+    )
+    XCTAssertTrue(
+      markdownSource.contains(".textSelection(.disabled)"),
+      "the OmiMarkdown boundary must explicitly suppress inherited text selection"
     )
     XCTAssertTrue(
       bubbleSource.contains(".textSelection(.disabled)"),
@@ -1308,7 +1392,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
       "currentAIMessage must prefer provider-bound answerMessageId over localAnswerOverride"
     )
     let answerIdPreferIndex = floatingState.range(of: "if let answerId = chatViewport.answerMessageId,")?.lowerBound
-    let overrideFallbackIndex = floatingState.range(of: "if let localAnswerOverride { return localAnswerOverride }")?.lowerBound
+    let overrideFallbackIndex = floatingState.range(of: "if let localAnswerOverride { return localAnswerOverride }")?
+      .lowerBound
     XCTAssertNotNil(answerIdPreferIndex)
     XCTAssertNotNil(overrideFallbackIndex)
     if let answerIdPreferIndex, let overrideFallbackIndex {
@@ -1435,10 +1520,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
 
-    let hub = try String(
-      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift"),
-      encoding: .utf8
-    )
+    let hub = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let runtime = try String(
       contentsOf: root.appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift"),
       encoding: .utf8
@@ -1561,8 +1643,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
   }
 }
 
-private extension Array where Element == ChatContentBlock {
-  var spawnedAgentIDs: [UUID] {
+extension Array where Element == ChatContentBlock {
+  fileprivate var spawnedAgentIDs: [UUID] {
     compactMap { block in
       block.spawnedAgentID
     }

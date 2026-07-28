@@ -1,5 +1,5 @@
-import XCTest
 import GRDB
+import XCTest
 
 @testable import Omi_Computer
 
@@ -150,11 +150,13 @@ final class LocalMutationAuthorizationTests: XCTestCase {
 
     await assertRevoked {
       try await ActionItemStorage.shared.syncTaskActionItems(
-        [TaskActionItem(
-          id: "incoming-owner-a",
-          description: "must not insert",
-          completed: false,
-          createdAt: Date())],
+        [
+          TaskActionItem(
+            id: "incoming-owner-a",
+            description: "must not insert",
+            completed: false,
+            createdAt: Date())
+        ],
         authorization: MutationAuthorizationGate().authorization())
     }
     let incoming = try await ActionItemStorage.shared.getLocalActionItem(
@@ -238,7 +240,7 @@ final class LocalMutationAuthorizationTests: XCTestCase {
     let allowQuiescenceToFinish = OwnerTransitionTestGate()
 
     let transition = Task {
-      await fence.performEffectiveOwnerTransition(
+      try await fence.performEffectiveOwnerTransition(
         currentOwner: { probe.owner() },
         plannedNextOwner: { _ in "owner-b" },
         quiescePreviousOwner: { previousOwner, plannedOwner in
@@ -272,7 +274,7 @@ final class LocalMutationAuthorizationTests: XCTestCase {
     XCTAssertEqual(snapshot.events, ["quiesce_started"])
 
     await allowQuiescenceToFinish.open()
-    await transition.value
+    try await transition.value
     try await ownerBMutation.value
 
     snapshot = probe.snapshot()
