@@ -96,11 +96,16 @@ class PersonaChatRequest(BaseModel):
         default=None,
         description=(
             "Free-form platform context (sender name, sender username, chat type, "
-            "platform). Forwarded to the persona prompt as a SystemMessage so the "
-            "persona knows who they're talking to. Recognized keys: sender_name "
+            "platform). Only recognized keys influence the prompt — sender_name "
             "(str), sender_username (str), chat_type ('private'|'group'), "
-            "platform ('telegram'|'whatsapp'|'imessage'). Unknown keys are "
-            "preserved verbatim — the renderer ignores them."
+            "platform ('telegram'|'whatsapp'|'imessage'); unknown keys are "
+            "silently ignored (allowlisted). Values are sanitized (control "
+            "characters stripped, whitespace collapsed, length capped) because "
+            "sender names/usernames are untrusted chat-platform profile fields "
+            "that may carry prompt-injection text. The context is framed as "
+            "untrusted conversation metadata (DATA) and passed to the persona "
+            "prompt as a lower-priority HumanMessage / extra user message — NOT "
+            "as a SystemMessage — so it cannot override the persona prompt."
         ),
         max_length=_PERSONA_CONTEXT_MAX_KEYS,
     )

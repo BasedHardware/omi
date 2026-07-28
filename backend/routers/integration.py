@@ -973,8 +973,8 @@ _CONTEXT_MESSAGE_HEADER = (
 def _render_persona_context_message(context):
     """Turn a `context` dict from PersonaChatRequest into a prompt fragment.
 
-    Returns "" if the dict is empty or all keys are unrecognized — the
-    route then skips emitting an empty SystemMessage. Recognized keys:
+    Returns None if the dict is empty or all keys are unrecognized — the
+    route then skips emitting the extra user message. Recognized keys:
         sender_name, sender_username, chat_type, platform. Unknown keys
         are silently ignored; the plugin is allowed to send extras for
     forward-compat but they don't influence the prompt.
@@ -982,7 +982,7 @@ def _render_persona_context_message(context):
     The fragment is rendered as plain prose, not JSON, so it reads
     naturally to the model: "You are talking to Alice (@alice_t) on
     telegram in a private chat." The persona handler doesn't parse this
-    — it just sees a SystemMessage string.
+    — it just sees a DATA-framed HumanMessage (extra user message), never a SystemMessage.
     """
     if not context or not isinstance(context, dict):
         return None
