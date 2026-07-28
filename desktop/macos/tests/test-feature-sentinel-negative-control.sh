@@ -53,7 +53,10 @@ fi
 # derived output-file map: SwiftPM owns that map and can otherwise reuse stale
 # build-plan metadata pointing at a file we just deleted.
 touch "$SENTINEL"
-if BUILD_OUTPUT=$(xcrun swift build --package-path "$MACOS_DIR/Desktop" --target SemanticFeatureSentinels 2>&1); then
+# `SemanticFeatureSentinels` is a SwiftPM test target; `swift build --target`
+# accepts only regular targets. `--build-tests` compiles all test targets without
+# running their framework-dependent bundles, including this sentinel.
+if BUILD_OUTPUT=$(xcrun swift build --package-path "$MACOS_DIR/Desktop" --build-tests 2>&1); then
   BUILD_STATUS=0
 else
   BUILD_STATUS=$?
