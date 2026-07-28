@@ -20,9 +20,13 @@ struct EarshotApp: App {
         MenuBarExtra {
             StatusView()
         } label: {
-            // The mark pulses only while capture is live, so the menu bar answers "is it listening?"
-            // without a click. That is the whole point of an ambient app having an icon at all.
-            OmiMark(size: 18, pulsing: engine.isCapturing)
+            // The Earshot mark, drawn as a template image. Not the eight-dot omi mark: at 18 pt a
+            // ring of dots is indistinguishable from a loading spinner, so it stays in onboarding
+            // where it has room to read as a mark.
+            //
+            // The menu bar answers "is it listening?" without a click — the mark is struck through
+            // when it is not.
+            Image(nsImage: engine.isCapturing ? EarshotMark.menuBar : EarshotMark.menuBarPaused)
         }
         .menuBarExtraStyle(.window)
     }
