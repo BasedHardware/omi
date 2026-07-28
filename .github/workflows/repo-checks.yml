@@ -56,8 +56,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          # The PR event payload's base-branch SHA field is frozen at whatever PR
+          # event last delivered it; a metadata-only edited/labeled/unlabeled event
+          # days later can carry a value main has long since moved past. actions/checkout
+          # already fetched origin/${{ github.base_ref }} live (fetch-depth: 0
+          # above), so diff against that instead of the stale payload field.
           scripts/pr-preflight \
-            --base "${{ github.event.pull_request.base.sha }}" \
+            --base "origin/${{ github.base_ref }}" \
             --repository "${{ github.repository }}" \
             --pr-number "${{ github.event.pull_request.number }}"
 

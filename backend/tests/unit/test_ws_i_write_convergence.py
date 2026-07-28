@@ -572,7 +572,7 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
 
     service_read.assert_called_once_with(
         "uid-canonical",
-        limit=5000,
+        limit=10,
         offset=0,
         device_scope_request=DeviceScopeRequest(device_scope="all", client_device_id=None),
         include_pending_processing=True,

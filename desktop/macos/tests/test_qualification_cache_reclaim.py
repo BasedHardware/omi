@@ -197,6 +197,58 @@ class QualificationCacheReclaimTests(unittest.TestCase):
         self.assertEqual(report["status"], "passed")
         self.assertFalse(entry.exists())
 
+    def test_dead_cache_lease_is_removed_even_when_capacity_already_passes(self) -> None:
+        source_sha, entry = self._entry("dead-lease", age_seconds=60)
+        lease = reclaim.acquire_cache_lease(
+            self.cache_root,
+            source_sha=source_sha,
+            lease_id="cache-dead",
+            owner_pid=os.getpid(),
+            now=self.now,
+        )
+        lease_path = entry / ".leases/cache-dead.json"
+        payload = json.loads(lease_path.read_text(encoding="utf-8"))
+        payload["owner_pid"] = 999999
+        lease_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+        lease_path.chmod(0o600)
+
+        report = self._run(
+            minimum_free_kib=1,
+            capacity_probe=self._capacity_probe({source_sha}),
+        )
+
+        self.assertEqual(report["status"], "passed")
+        self.assertTrue(entry.exists())
+        self.assertFalse(lease_path.exists())
+        self.assertEqual(
+            report["reclaim"]["dead_leases_removed"],
+            [{"source_sha": source_sha, "lease_id": "cache-dead", "owner_pid": 999999}],
+        )
+        self.assertTrue(lease["token"])
+
+    def test_capacity_pressure_reclaims_a_young_idle_exact_sha_cache(self) -> None:
+        source_sha, entry = self._entry("young-pressure", age_seconds=60)
+
+        report = self._run(
+            minimum_free_kib=100,
+            capacity_probe=self._capacity_probe({source_sha}),
+        )
+
+        self.assertEqual(report["status"], "passed")
+        self.assertFalse(entry.exists())
+        self.assertEqual(report["reclaim"]["deleted_entries"][0]["reason"], "capacity-pressure")
+
+    def test_reclaim_tightens_an_owned_cache_root_before_inventory(self) -> None:
+        self.cache_root.chmod(0o755)
+
+        report = self._run(
+            minimum_free_kib=1,
+            capacity_probe=self._capacity_probe(set()),
+        )
+
+        self.assertEqual(report["status"], "passed")
+        self.assertEqual(self.cache_root.stat().st_mode & 0o777, 0o700)
+
     def test_malformed_provenance_refuses_before_deleting_any_valid_entry(self) -> None:
         valid_sha, valid = self._entry("valid", age_seconds=24 * 60 * 60)
         bad_sha, bad = self._entry("bad", age_seconds=48 * 60 * 60)
@@ -271,7 +323,7 @@ class QualificationCacheReclaimTests(unittest.TestCase):
         self.assertEqual(evidence.read_text(encoding="utf-8"), '{"immutable":true}\n')
         self.assertEqual(len(report["reclaim"]["deleted_entries"]), 2)
 
-    def test_young_entry_and_symlinked_entry_are_never_reclaimed(self) -> None:
+    def test_symlinked_entry_refuses_before_any_young_entry_is_reclaimed(self) -> None:
         young_sha, young = self._entry("young", age_seconds=60)
         target = self.root / "foreign-target"
         target.mkdir()

@@ -7,6 +7,8 @@ CORE_HARNESS="$SCRIPT_DIR/../scripts/desktop-core-harness.sh"
 PROFILE_PREP="$SCRIPT_DIR/../scripts/prepare-qualification-profile.sh"
 SWIFT_CACHE="$SCRIPT_DIR/../scripts/qualification-swift-cache.sh"
 LEASE_COMMAND="$SCRIPT_DIR/../scripts/qualification-lease-command.sh"
+SELF_CLEAN="$SCRIPT_DIR/../scripts/qualification-runner-self-clean.py"
+WATCHDOG="$SCRIPT_DIR/../scripts/qualification-watchdog.py"
 APP_CONFIG="$SCRIPT_DIR/../scripts/app-config.sh"
 RUN_SH="$SCRIPT_DIR/../run.sh"
 WORKFLOW="$SCRIPT_DIR/../../../.github/workflows/desktop_qualify_beta.yml"
@@ -64,7 +66,8 @@ require_text 'lsof -nP -iTCP:"$AUTOMATION_PORT" -sTCP:LISTEN'
 require_text 'qualification automation port remains bound after owned app cleanup'
 require_text 'kill -KILL "$pid"'
 require_text 'refusing unproven qualification app cleanup'
-require_text 'cleanup failed; preserving qualification lease and preventing success evidence'
+require_text 'cleanup failed (non-gating after behavioral pass); continuing to evidence registration'
+require_text 'cleanup failed (non-gating on EXIT); preserving residual lease for later reclaim'
 if grep -Eq 'osascript|pkill|kill_process_tree|quit app id' "$QUALIFIER"; then
   echo "FAIL: qualification cleanup must not use broad app-name or bundle-id termination" >&2
   exit 1
@@ -81,6 +84,14 @@ require_text 'QUALIFICATION_CACHE_LEASE_ID'
 require_text 'QUALIFICATION_CACHE_LEASE_TOKEN'
 require_text '"$SCRIPT_DIR/qualification-swift-cache.sh" release'
 require_text 'qualification-cache-reclaim.py' "$SWIFT_CACHE"
+require_text 'qualification-runner-self-clean.py' "$WORKFLOW"
+require_text 'qualification-watchdog.py' "$WORKFLOW"
+require_text '--current-run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' "$WORKFLOW"
+require_text '--max-reclaim-kib 134217728' "$WORKFLOW"
+require_text 'runner-hygiene.json' "$WORKFLOW"
+require_text '--label m1-desktop-qualification' "$WORKFLOW"
+require_text '--heartbeat-seconds 45' "$WORKFLOW"
+require_text '--timeout-seconds 14400' "$WORKFLOW"
 require_text 'qualification-lease "$action"' "$LEASE_COMMAND"
 require_text 'acquire)' "$LEASE_COMMAND"
 require_text 'preflight-fault-cleanup)' "$LEASE_COMMAND"
@@ -98,6 +109,9 @@ require_text "--format='%(refname:strip=2)' 'refs/tags/v*-macos'"
 
 # Acceleration changes bootstrap only. The signed-artifact, static self-check,
 # Tier-2, fault-suite, evidence, and newest-candidate gates remain mandatory.
+# Runner-hygiene final-cleanup is best-effort after those behavioral gates
+# (must not fence a green T2+fault solely on lease-lineage cleanup).
+require_text 'non-gating after behavioral pass'
 require_text 'python3 "$KEYVALUE_PY" preflight-release'
 require_text './scripts/desktop-core-harness.sh --self-check --skip-backend-contracts'
 require_text './scripts/desktop-core-harness.sh --tier 2 --bundle "$BUNDLE" --port "$AUTOMATION_PORT" --keep-stack'
@@ -183,6 +197,10 @@ if [[ ! -x "$SWIFT_CACHE" ]]; then
 fi
 if [[ ! -x "$LEASE_COMMAND" ]]; then
   echo "FAIL: missing executable qualification lease command helper" >&2
+  exit 1
+fi
+if [[ ! -x "$SELF_CLEAN" || ! -x "$WATCHDOG" ]]; then
+  echo "FAIL: missing executable qualification self-clean/watchdog helper" >&2
   exit 1
 fi
 

@@ -18,6 +18,7 @@ concurrency:
 jobs:
   qualify-m1-studio:
     runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]
+    timeout-minutes: 250
     permissions:
       contents: write
     outputs:
@@ -51,7 +52,11 @@ jobs:
           git init --quiet "$source_dir"
           git -C "$source_dir" remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
           git -C "$source_dir" sparse-checkout init --no-cone
-          git -C "$source_dir" sparse-checkout set desktop/macos/scripts/qualification-cache-reclaim.py
+          git -C "$source_dir" sparse-checkout set \
+            desktop/macos/scripts/qualification-cache-reclaim.py \
+            desktop/macos/scripts/qualification-runner-self-clean.py \
+            desktop/macos/scripts/qualification-watchdog.py \
+            scripts/dev-harness/dev_harness
           GIT_TERMINAL_PROMPT=0 git -C "$source_dir" fetch --force --depth=1 --filter=blob:none origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"
           test -x "$source_dir/desktop/macos/scripts/qualification-cache-reclaim.py"
@@ -68,16 +73,24 @@ jobs:
           test -d "$QUALIFICATION_STAGE/source"
           cache_root="${OMI_QUALIFICATION_SWIFT_CACHE_ROOT:-$HOME/Library/Caches/OmiDesktop/qualification-swiftpm-v2}"
           lease_root="${OMI_QUALIFICATION_LEASE_ROOT:-${TMPDIR:-/tmp}/omi-desktop-qualification}"
-          python3 "$QUALIFICATION_STAGE/source/desktop/macos/scripts/qualification-cache-reclaim.py" reclaim \
+          python3 "$QUALIFICATION_STAGE/source/desktop/macos/scripts/qualification-watchdog.py" \
+            --label runner-self-clean \
+            --heartbeat-seconds 45 \
+            --timeout-seconds 1200 \
+            -- python3 "$QUALIFICATION_STAGE/source/desktop/macos/scripts/qualification-runner-self-clean.py" \
+            --repo-root "$QUALIFICATION_STAGE/source" \
             --cache-root "$cache_root" \
             --qualification-lease-root "$lease_root" \
+            --stage-root "$RUNNER_TEMP/desktop-beta-qualification" \
+            --fault-temp-root "${TMPDIR:-$RUNNER_TEMP}" \
             --capacity-path "$RUNNER_TEMP" \
+            --current-run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --minimum-free-kib "${OMI_QUALIFICATION_MINIMUM_FREE_KIB:-33554432}" \
             --minimum-free-inodes "${OMI_QUALIFICATION_MINIMUM_FREE_INODES:-65536}" \
-            --minimum-age-seconds 21600 \
-            --max-entries 8 \
-            --max-reclaim-kib 67108864 \
-            --report "$QUALIFICATION_STAGE/runner-capacity.json"
+            --minimum-age-seconds 3600 \
+            --max-entries 16 \
+            --max-reclaim-kib 134217728 \
+            --report "$QUALIFICATION_STAGE/runner-hygiene.json"
       - name: Expand exact candidate checkout
         working-directory: ${{ runner.temp }}
         env:
@@ -157,6 +170,7 @@ jobs:
           python3 .github/scripts/check-desktop-auto-beta-candidate.py --release-json "$QUALIFICATION_STAGE/release.json" --smoke-result "$QUALIFICATION_STAGE/desktop-smoke-result.json" --beta-smoke-result "$QUALIFICATION_STAGE/desktop-smoke-result-beta.json" --release-tag "$RELEASE_TAG" --latest-tag "$LATEST_TAG" --tag-sha "$TARGET_SHA" --checkout-sha "$TARGET_SHA" --output "$QUALIFICATION_STAGE/candidate-gate.json"
       - name: Qualify exact candidate on the M1 Studio hermetic stack
         id: qualify
+        timeout-minutes: 245
         working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -167,7 +181,16 @@ jobs:
           OMI_QUALIFICATION_FAULT_PREFLIGHT_REPORT: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/fault-listener-preflight.json
         run: |
           set -euo pipefail
-          desktop/macos/scripts/qualify-desktop-beta.sh --automatic --github-actions-artifact --signed-smoke-result "$QUALIFICATION_STAGE/desktop-smoke-result.json" --candidate-gate-result "$QUALIFICATION_STAGE/candidate-gate.json" "$RELEASE_TAG"
+          python3 desktop/macos/scripts/qualification-watchdog.py \
+            --label m1-desktop-qualification \
+            --heartbeat-seconds 45 \
+            --timeout-seconds 14400 \
+            -- desktop/macos/scripts/qualify-desktop-beta.sh \
+              --automatic \
+              --github-actions-artifact \
+              --signed-smoke-result "$QUALIFICATION_STAGE/desktop-smoke-result.json" \
+              --candidate-gate-result "$QUALIFICATION_STAGE/candidate-gate.json" \
+              "$RELEASE_TAG"
       - name: Create immutable qualification evidence
         id: evidence
         working-directory: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/source
@@ -209,6 +232,7 @@ jobs:
           echo "qualified=true" >> "$GITHUB_OUTPUT"
       - name: Finalize only this authenticated qualification lease
         if: always()
+        continue-on-error: true
         working-directory: ${{ runner.temp }}
         env:
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
@@ -228,9 +252,24 @@ jobs:
             cache_owner_pid=$(jq -r .cache_owner_pid "$context"); cache_token=$(jq -r .cache_token "$context")
             echo "::add-mask::$token"
             echo "::add-mask::$cache_token"
-            OMI_HARNESS_OWNERSHIP_TOKEN="$token" "$worktree/desktop/macos/scripts/qualification-lease-command.sh" release "$worktree" "$lease_id" "$token" "$retained" "$age"
-            "$worktree/desktop/macos/scripts/qualification-swift-cache.sh" release "$cache_sha" "$cache_lease_id" "$cache_owner_pid" "$cache_token"
-            jq -n --arg lease_id "$lease_id" '{lease_id: $lease_id, cleanup_status: "released"}' > "$cleanup"
+            # Best-effort: authenticated release now skips unproven listeners rather
+            # than failing the job after green behavioral qualification (#10779).
+            if OMI_HARNESS_OWNERSHIP_TOKEN="$token" "$worktree/desktop/macos/scripts/qualification-lease-command.sh" release "$worktree" "$lease_id" "$token" "$retained" "$age"; then
+              release_status=released
+            else
+              release_status=release-failed
+              echo "lease finalize release failed (non-gating): status=$release_status" >&2
+            fi
+            if "$worktree/desktop/macos/scripts/qualification-swift-cache.sh" release "$cache_sha" "$cache_lease_id" "$cache_owner_pid" "$cache_token"; then
+              :
+            else
+              echo "cache finalize release failed (non-gating)" >&2
+              if [ "$release_status" = released ]; then
+                release_status=cache-release-failed
+              fi
+            fi
+            jq -n --arg lease_id "$lease_id" --arg cleanup_status "$release_status" \
+              '{lease_id: $lease_id, cleanup_status: $cleanup_status}' > "$cleanup"
           else
             printf '%s\n' '{"cleanup_status":"no-lease-acquired"}' > "$cleanup"
           fi
@@ -239,7 +278,7 @@ jobs:
         with:
           name: desktop-qualification-cleanup-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/runner-capacity.json
+            ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/runner-hygiene.json
             ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/cleanup-evidence.json
             ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/fault-listener-preflight.json
             ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}/phase-timings.json

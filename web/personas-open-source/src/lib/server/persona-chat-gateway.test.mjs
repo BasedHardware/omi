@@ -105,3 +105,26 @@ test('gateway failure never invokes a provider fallback', async () => {
   );
   assert.equal(calls, 1);
 });
+
+test('missing gateway URL or service token fails closed before a request is sent', async () => {
+  for (const { gatewayUrl, gatewayToken } of [
+    { gatewayUrl: '', gatewayToken: 'service-token' },
+    { gatewayUrl: 'http://gateway.internal', gatewayToken: '  ' },
+  ]) {
+    let calls = 0;
+    await assert.rejects(
+      requestPersonaChatStream({
+        identity: null,
+        messages: [{ role: 'user', content: 'hello' }],
+        gatewayUrl,
+        gatewayToken,
+        fetchImpl: async () => {
+          calls += 1;
+          return okStreamResponse();
+        },
+      }),
+      PersonaGatewayUnavailableError,
+    );
+    assert.equal(calls, 0);
+  }
+});

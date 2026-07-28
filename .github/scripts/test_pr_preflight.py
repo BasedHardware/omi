@@ -179,6 +179,72 @@ class SelectionTests(unittest.TestCase):
             "base...head",
         )
 
+    def test_stale_event_payload_base_widens_diff_scope_past_the_live_base(self) -> None:
+        """Behavioral regression for FC-stale-event-payload-diff-base (#10758).
+
+        Exercises the real changed_files() git seam end to end: a base SHA
+        captured once (standing in for github.event.pull_request.base.sha) and
+        never refreshed goes stale as the target branch keeps advancing, so a
+        downstream merge-ref diff against it silently picks up unrelated
+        commits. A live-resolved base ref does not.
+        """
+        # Disposable repo must not inherit the caller's git context: under a
+        # pre-commit/pre-push hook, GIT_DIR points at the real checkout and its
+        # commit-msg hook would reject these throwaway messages.
+        git_isolation = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+
+        def run(*args: str, cwd: Path) -> None:
+            subprocess.run(["git", *git_isolation, *args], cwd=cwd, check=True, capture_output=True, text=True)
+
+        def rev_parse(cwd: Path, ref: str = "HEAD") -> str:
+            result = subprocess.run(
+                ["git", *git_isolation, "rev-parse", ref], cwd=cwd, check=True, capture_output=True, text=True
+            )
+            return result.stdout.strip()
+
+        def commit(cwd: Path, path: str, content: str, message: str) -> str:
+            (cwd / path).write_text(content, encoding="utf-8")
+            run("add", path, cwd=cwd)
+            run("commit", "-q", "-m", message, cwd=cwd)
+            return rev_parse(cwd)
+
+        with patch.dict(os.environ):
+            for key in list(os.environ):
+                if key.startswith("GIT_"):
+                    del os.environ[key]
+
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                run("init", "-q", "-b", "main", cwd=root)
+                run("config", "user.email", "test@example.com", cwd=root)
+                run("config", "user.name", "Test", cwd=root)
+
+                # The SHA a PR event payload would have captured at PR-open time.
+                stale_base_sha = commit(root, "root.txt", "root", "root commit")
+
+                run("checkout", "-q", "-b", "pr", cwd=root)
+                commit(root, "pr_file.txt", "pr change", "touch pr_file.txt")
+                run("checkout", "-q", "main", cwd=root)
+
+                # main keeps moving after the PR branched. This is what makes
+                # stale_base_sha stale: no event ever refreshes it past here.
+                commit(root, "unrelated_file.txt", "v1", "unrelated main commit 1")
+                commit(root, "unrelated_file.txt", "v2", "unrelated main commit 2")
+
+                # GitHub's refs/pull/N/merge: the PR branch merged onto main's
+                # *current* tip, on its own ref — main itself does not move.
+                run("checkout", "-q", "-b", "merge_ref", "main", cwd=root)
+                run("merge", "--no-ff", "-q", "-m", "merge pr into main", "pr", cwd=root)
+                merge_sha = rev_parse(root)
+
+                stale_diff = changed_files(root, stale_base_sha, merge_sha)
+                # "main" stands in for a freshly fetched origin/<base_ref>: a
+                # live ref, not a value captured once and carried across events.
+                live_diff = changed_files(root, "main", merge_sha)
+
+                self.assertEqual(sorted(live_diff), ["pr_file.txt"])
+                self.assertEqual(sorted(stale_diff), ["pr_file.txt", "unrelated_file.txt"])
+
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
         result = subprocess.run(
             ["make", "-n", "preflight"],
@@ -353,7 +419,13 @@ class SelectionTests(unittest.TestCase):
             self.assertIn(event, changes_job)
             self.assertIn(event, hygiene_job)
         self.assertIn("scripts/pr-preflight", metadata_job)
-        self.assertIn("github.event.pull_request.base.sha", metadata_job)
+        # Static tripwire only: confirms the workflow text wires --base to the
+        # live ref rather than the stale event-payload SHA. It does not exercise
+        # changed_files() itself — see
+        # test_stale_event_payload_base_widens_diff_scope_past_the_live_base for
+        # the behavioral regression backing FC-stale-event-payload-diff-base.
+        self.assertNotIn("github.event.pull_request.base.sha", metadata_job)
+        self.assertIn('--base "origin/${{ github.base_ref }}"', metadata_job)
         self.assertIn("astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84", metadata_job)
         self.assertLess(metadata_job.index("Set up uv"), metadata_job.index("Run current PR metadata preflight"))
         self.assertIn("github.event_name != 'pull_request'", changes_job)

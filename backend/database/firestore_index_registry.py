@@ -180,6 +180,12 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('status'), _asc('account_generation'), _desc('created_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'action_items_completed_due',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _asc('due_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'candidate_integration_outbox_generation_status',
         'candidate_integration_outbox',
         'COLLECTION',

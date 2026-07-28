@@ -1,24 +1,29 @@
 import { describe, it, expect } from 'vitest'
-import { betaOptInToAllowPrerelease, resolveBetaChannelChange } from './updaterChannel'
+import { betaOptInToUpdateChannel, resolveBetaChannelChange } from './updaterChannel'
 
 describe('updaterChannel', () => {
-  it('maps the beta opt-in straight onto allowPrerelease', () => {
-    expect(betaOptInToAllowPrerelease(true)).toBe(true)
-    expect(betaOptInToAllowPrerelease(false)).toBe(false)
-    // Only an explicit true opts in — a junk/undefined value stays stable.
-    expect(betaOptInToAllowPrerelease(undefined as never)).toBe(false)
+  it('maps only an explicit beta opt-in to the beta channel', () => {
+    expect(betaOptInToUpdateChannel(true)).toBe('beta')
+    expect(betaOptInToUpdateChannel(false)).toBe('stable')
+    expect(betaOptInToUpdateChannel(undefined as never)).toBe('stable')
   })
 
-  it('flags a real opt-in change and no-ops when the lever is unchanged', () => {
-    // Off → On: apply prerelease and re-check.
-    expect(resolveBetaChannelChange(false, true)).toEqual({ allowPrerelease: true, changed: true })
-    // On → Off: back to stable, re-check.
-    expect(resolveBetaChannelChange(true, false)).toEqual({ allowPrerelease: false, changed: true })
-    // Unchanged (an unrelated settings write): don't touch the updater or re-check.
-    expect(resolveBetaChannelChange(false, false)).toEqual({
-      allowPrerelease: false,
+  it('flags a real channel move and ignores unrelated settings writes', () => {
+    expect(resolveBetaChannelChange('stable', true)).toEqual({
+      channel: 'beta',
+      changed: true
+    })
+    expect(resolveBetaChannelChange('beta', false)).toEqual({
+      channel: 'stable',
+      changed: true
+    })
+    expect(resolveBetaChannelChange('stable', false)).toEqual({
+      channel: 'stable',
       changed: false
     })
-    expect(resolveBetaChannelChange(true, true)).toEqual({ allowPrerelease: true, changed: false })
+    expect(resolveBetaChannelChange('beta', true)).toEqual({
+      channel: 'beta',
+      changed: false
+    })
   })
 })
