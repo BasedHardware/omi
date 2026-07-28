@@ -1,0 +1,40 @@
+integrations/omi-even/bridge/server.py
+  s_e939211e79c9f1::t_47545fdf7288a4 36
+  s_e939211e79c9f1::t_3db0ab1f42e691 62-63
+  s_e939211e79c9f1::t_b0d9dd24595d32 84-89,93-96,102
+  s_e939211e79c9f1::t_471869eaede03c 97-101
+integrations/omi-even/bridge/tests/conftest.py
+  s_e939211e79c9f1::t_242d1ecdf22515 33-36
+integrations/omi-even/bridge/local_llm.py
+  s_e939211e79c9f1::t_8a9fb4ae70e3b2 77
+  s_e939211e79c9f1::t_8da5f42cbc5d6e 53-60
+  s_e939211e79c9f1::t_836339d200a8f8 124-126
+  s_e939211e79c9f1::t_21b3617e17f6b3 50-52
+  s_e939211e79c9f1::t_464ea2666a1850 61-63,74-76
+  s_e939211e79c9f1::t_f80406615f6106 78-80,121-123
+  s_e939211e79c9f1::t_3b308f7297c734 127-129
+  s_e939211e79c9f1::t_a4564814db965d 1-49,64-73,81-120,130-145
+integrations/omi-even/bridge/tests/test_compose.py
+  s_e939211e79c9f1::t_4a3f49701357a8 179-259
+  s_e939211e79c9f1::t_d634c65a4dcaf5 1,5-14,28,40,44-50
+integrations/omi-even/bridge/tests/test_server.py
+  s_e939211e79c9f1::t_2db726c5212dd3 1027-1055
+integrations/omi-even/bridge/compose.py
+  s_e939211e79c9f1::t_6f2ea9f0356bcc 1,8-9,11-13,15-21,23-24,26-28,35,40-41,53-57,59,73-79,85-116,137,152,156,170,174-183,185,187,189,191-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "7b9e01e6405a834afdfa125c3b1c4757ed44eda4",
+  "prompts": {},
+  "sessions": {
+    "s_e939211e79c9f1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7063973-7aff-42e3-a630-daf5ea69dbc0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
