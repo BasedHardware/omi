@@ -187,6 +187,25 @@ final class StallDetectorTests: XCTestCase {
     XCTAssertEqual(eventuallyOverdue, ["t1"])
   }
 
+  func testAWaitingQuestionKeepsItsToolOffTheOverdueList() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "ask_user"), atMs: 0)
+
+    // ask_user blocks by design: it emits nothing while the user reads the
+    // question and decides, which by elapsed time alone looks exactly like a
+    // hung tool. Left alone the guard interrupts the bridge under an open card.
+    await detector.noteAllToolsProgressing(atMs: 85_000)
+    let atNinety = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 90_000)
+    XCTAssertFalse(atNinety.contains("ask_user"))
+
+    // Once the user answers, the clock runs again from the last progress mark
+    // rather than firing instantly on the accumulated wait.
+    let shortlyAfterAnswer = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 170_000)
+    XCTAssertFalse(shortlyAfterAnswer.contains("ask_user"))
+    let longAfterAnswer = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 175_001)
+    XCTAssertEqual(longAfterAnswer, ["ask_user"])
+  }
+
   func testActiveToolDefersTheGenericWatchdog() async {
     let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
     _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: 0)

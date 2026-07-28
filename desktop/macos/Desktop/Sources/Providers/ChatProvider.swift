@@ -4338,7 +4338,16 @@ class ChatProvider: ObservableObject {
               self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
             }
           }
-          if !issuedToolStallAbort {
+          // A question on screen is not a stalled tool. ask_user blocks by
+          // design until the user answers, so the tool emits nothing while they
+          // read and decide; without this the guard interrupted the bridge
+          // under an open card and the answer landed on a revoked turn.
+          let awaitingUserAnswer = await MainActor.run { [weak self] in
+            (self?.elicitations.waitingCount ?? 0) > 0
+          }
+          if awaitingUserAnswer {
+            await stallDetector.noteAllToolsProgressing(atMs: nowMs)
+          } else if !issuedToolStallAbort {
             let overdueToolIds = await stallDetector.toolIdsWithoutProgress(
               durationMs: Self.perToolStallAbortMs,
               atMs: nowMs
