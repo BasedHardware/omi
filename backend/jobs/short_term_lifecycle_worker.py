@@ -6,6 +6,8 @@ Legacy ``short_term_lifecycle_worker`` remains an importable alias.
 
 from __future__ import annotations
 
+from database import document_store
+
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -128,7 +130,7 @@ class FirestoreShortTermLifecycleTransitionStore:
     def persist_short_term_lifecycle_transition(
         self, record: ShortTermLifecycleTransitionRecord
     ) -> ShortTermLifecyclePersistResult:
-        transaction = self._db_client.transaction()
+        transaction = document_store.new_transaction(self._db_client)
         return _run_short_term_lifecycle_transaction(
             transaction,
             _persist_short_term_lifecycle_transition_transaction,
@@ -146,8 +148,8 @@ def _persist_short_term_lifecycle_transition_transaction(
 ) -> ShortTermLifecyclePersistResult:
     transition_id = _stable_transition_id(record.uid, record.idempotency_key)
     collections = MemoryCollections(uid=record.uid)
-    transition_ref = db_client.document(f'{collections.short_term_lifecycle_transitions}/{transition_id}')
-    snapshot = transition_ref.get(transaction=transaction)
+    transition_path = f'{collections.short_term_lifecycle_transitions}/{transition_id}'
+    snapshot = document_store.tx_get(transaction, db_client, transition_path)
 
     if snapshot.exists:
         data = cast(JsonDict, snapshot.to_dict() or {})
@@ -156,7 +158,7 @@ def _persist_short_term_lifecycle_transition_transaction(
         return ShortTermLifecyclePersistResult(record=_record_from_firestore_data(data), created=False)
 
     payload = _firestore_transition_payload(record, transition_id=transition_id, now=now)
-    transaction.set(transition_ref, payload)
+    document_store.tx_set(transaction, db_client, transition_path, payload)
     return ShortTermLifecyclePersistResult(record=record, created=True)
 
 
@@ -209,10 +211,9 @@ def fetch_short_term_memory_items_firestore(
     if limit is not None and limit <= 0:
         raise ValueError('short-term lifecycle firestore fetch limit must be positive')
 
-    query = db_client.collection(MemoryCollections(uid=uid).memory_items).where(
-        'tier', '==', MemoryTier.short_term.value
+    snapshots = document_store.stream_collection_where(
+        db_client, MemoryCollections(uid=uid).memory_items, 'tier', '==', MemoryTier.short_term.value
     )
-    snapshots = query.stream()
     items: List[MemoryItem] = []
     for snapshot in snapshots:
         item = MemoryItem(**cast(JsonDict, snapshot.to_dict() or {}))
