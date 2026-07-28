@@ -31,6 +31,7 @@ custom_rules:
     regex: '(?<!removeValue\()forKey:\s*"'
     excluded:
       - "Sources/DefaultsKey.swift"
+      - "Tests"
     message: "Use DefaultsKey.swift for typed UserDefaults keys"
     severity: warning
 

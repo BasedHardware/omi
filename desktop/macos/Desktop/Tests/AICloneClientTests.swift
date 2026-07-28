@@ -3,6 +3,8 @@ import XCTest
 
 @testable import Omi_Computer
 
+// swiftlint:disable force_unwrapping XCTest assertions force-unwrap known-valid utf8 bodies and URLProtocol request/response objects
+
 /// Tests for the desktop-side `AICloneClient` (the HTTP client used by the
 /// AI Clone screen to talk to the self-hosted plugin service).
 ///

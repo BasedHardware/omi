@@ -21,6 +21,7 @@ enum TelegramTokenValidator {
     let pattern = #"^\d+:[A-Za-z0-9_-]{30,}$"#
     // Force-try is fine here: the pattern is a compile-time constant
     // and any failure is a programmer error (typo in the pattern).
+    // swiftlint:disable:next force_try pattern is a compile-time constant; a parse failure is a programmer error
     return try! NSRegularExpression(pattern: pattern)
   }()
 

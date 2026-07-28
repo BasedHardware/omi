@@ -831,7 +831,7 @@ struct ConnectSheet: View {
   private func currentUid() -> String {
     // Reuse the existing user-id source (Firebase UID) from APIClient.
     // Falls back to "" if not authenticated; the plugin will reject.
-    UserDefaults.standard.string(forKey: "auth_userId") ?? ""
+    UserDefaults.standard.string(forKey: .authUserId) ?? ""
   }
 
   private func currentPersonaId() async throws -> String {

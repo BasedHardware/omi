@@ -2,6 +2,8 @@ import XCTest
 
 @testable import Omi_Computer
 
+// swiftlint:disable force_unwrapping implicitly_unwrapped_optional XCTest fixtures force-unwrap known-valid values (UserDefaults suite, known utf8 strings); standard setUp pattern
+
 /// Tests for `AICloneConfig` (the Swift class backing the AI Clone
 /// settings screen) and its interaction with `AICloneKeychain`.
 ///
