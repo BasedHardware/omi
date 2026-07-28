@@ -201,6 +201,17 @@ if [[ -d "$FONTS_DIR" ]]; then
     # the bundle with no faces at all and every role falling back to the system font.
     done < <(find "$FONTS_DIR" -maxdepth 1 -type f \( -name '*.otf' -o -name '*.ttf' \) | sort)
     log "copied $FONT_COUNT font(s)"
+
+# The app icon. Without it macOS shows a blank generic tile wherever the app is named — Finder,
+# Login Items, and the Screen Recording pane the user grants permission in, which is the first
+# place they ever see this app identified.
+ICON_SRC="$PKG_DIR/Resources/ContextForClaude.icns"
+if [[ -f "$ICON_SRC" ]]; then
+  cp -f "$ICON_SRC" "$APP_BUNDLE/Contents/Resources/ContextForClaude.icns"
+  log "copied app icon"
+else
+  warn "no app icon at $ICON_SRC — the app will show a blank tile"
+fi
 else
     warn "no Fonts directory at $FONTS_DIR — the app will fall back to system fonts"
 fi

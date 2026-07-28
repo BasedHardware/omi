@@ -153,46 +153,18 @@ struct OnboardingView: View {
                 .inkStyle(.firstTitle)
                 .foregroundStyle(Ink.ink)
 
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(Self.valueLines, id: \.self) { line in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        // A dot rather than a glyph: three SF Symbols across three lines start
-                        // competing with the sentences they are meant to introduce.
-                        Circle()
-                            .fill(Ink.faint)
-                            .frame(width: 4, height: 4)
-                            .offset(y: -3)
-                        Text(line)
-                            .inkStyle(.rowCopy)
-                            .foregroundStyle(Ink.mid)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-
-            Text("It all lands in your Omi account. Nothing goes anywhere else, and I never send a recording of your screen or your voice — only what was said and what was on it.")
+            Text("I watch and listen. It stays in your Omi account.")
                 .inkStyle(.prose)
                 .foregroundStyle(Ink.mid)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 12) {
-                InkButton("Go on") { go(to: firstAsk) }
-                InkButton("Skip", kind: .secondary) { go(to: firstAsk) }
-            }
-            .padding(.top, 2)
+            InkButton("Go on") { go(to: firstAsk) }
+                .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(settled ? 1 : 0)
         .animation(stepAnimation, value: settled)
     }
-
-    /// Ordered to match the capability sequence the setup step asks for, so the permission prompts
-    /// arrive in the order they were just described.
-    private static let valueLines = [
-        "I hear you through your microphone, and the other side of your calls through the system audio.",
-        "I glance at your screen every few seconds and read what is on it.",
-        "Claude asks me what you have been doing, and I answer — so you never have to re-explain yourself.",
-    ]
 
     // MARK: - 3. Sign in — before anything is recorded, not after
 
@@ -204,7 +176,7 @@ struct OnboardingView: View {
                 .inkStyle(.stepHeadline)
                 .foregroundStyle(Ink.ink)
 
-            Text("Everything I hear and see goes into your Omi account — nowhere else.")
+            Text("It all lands in your Omi account.")
                 .inkStyle(.prose)
                 .foregroundStyle(Ink.mid)
                 .fixedSize(horizontal: false, vertical: true)
@@ -304,7 +276,7 @@ struct OnboardingView: View {
         // "First…" only survives for a run that never signed in; once the account is known, the
         // permissions are no longer the first thing being asked for.
         if !granting { return auth.isSignedIn ? "Now the permissions." : "First…" }
-        return "Say yes and I\u{2019}m yours."
+        return "Say yes."
     }
 
     // MARK: - 5. Done
@@ -317,7 +289,7 @@ struct OnboardingView: View {
 
             Text(isGranted(.screen)
                  ? homeLine
-                 : "Switch me on under Screen Recording — I just opened it for you. I’ll take it from there.")
+                 : "Switch me on in Settings. I’ll do the rest.")
                 .inkStyle(.prose)
                 .foregroundStyle(Ink.mid)
                 .fixedSize(horizontal: false, vertical: true)
@@ -336,7 +308,7 @@ struct OnboardingView: View {
     /// Where I live, and — once there is an account — where the recordings go. Said once, here,
     /// because it is the last thing on screen and the only place it is still news.
     private var homeLine: String {
-        auth.isSignedIn ? "I live up here, and everything lands in your Omi account." : "I live up here."
+        auth.isSignedIn ? "I live up here." : "I live up here."
     }
 
     /// The window sits inside `visibleFrame`, so its top-trailing corner is directly beneath the
