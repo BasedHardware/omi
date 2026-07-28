@@ -34,6 +34,23 @@ DEPLOY_ACTION_PATH = ".github/actions/deploy-public-build/action.yml"
 PREPARE_ACTION_PATH = ".github/actions/prepare-public-build/action.yml"
 PROMOTION_ACTION_PATH = ".github/actions/public-build-candidate-promotion/action.yml"
 JIT_PREFLIGHT_WORKFLOW_PATH = ".github/workflows/public-build-config-preflight.yml"
+MANUAL_ENVIRONMENT_INPUT = """workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'prod'
+        type: choice
+        options: [development, prod]"""
+DEPLOY_ENVIRONMENT_EXPRESSION = (
+    "github.event_name == 'workflow_dispatch' && github.event.inputs.environment || "
+    "(github.ref == 'refs/heads/development' && 'development') || 'prod'"
+)
+CONCURRENCY_ENVIRONMENT_EXPRESSION = (
+    "github.event_name == 'workflow_dispatch' && github.event.inputs.environment || "
+    "github.ref == 'refs/heads/development' && 'development' || "
+    "github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id)"
+)
 
 
 @dataclass(frozen=True)
@@ -58,6 +75,7 @@ class Deployment:
     flags: tuple[str, ...]
     runtime_secrets: dict[str, str]
     preserve_runtime_secrets: tuple[str, ...]
+    fallback_runtime_secrets: dict[str, str]
     runtime_env_vars: dict[str, str]
     remove_runtime_secrets: tuple[str, ...]
 
@@ -68,6 +86,7 @@ class Target:
     service: str
     dockerfile: str
     workflow: str
+    gateway_required: bool
     deployment: Deployment
     canary_component: str
     inputs: tuple[PublicInput, ...]
@@ -148,6 +167,22 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
     if len(set(raw_preserve_runtime_secrets)) != len(raw_preserve_runtime_secrets):
         raise ValueError(f"target {target_name} deployment preserve_runtime_secrets must be unique")
 
+    raw_fallback_runtime_secrets = raw_deployment.get("fallback_runtime_secrets", {})
+    if not isinstance(raw_fallback_runtime_secrets, Mapping) or not all(
+        isinstance(name, str)
+        and NAME.fullmatch(name)
+        and isinstance(reference, str)
+        and SECRET_REFERENCE.fullmatch(reference)
+        for name, reference in raw_fallback_runtime_secrets.items()
+    ):
+        raise ValueError(
+            f"target {target_name} deployment fallback_runtime_secrets must map environment names to secret:version"
+        )
+    if set(raw_fallback_runtime_secrets) != set(raw_preserve_runtime_secrets):
+        raise ValueError(
+            f"target {target_name} deployment fallback_runtime_secrets must declare exactly the preserved runtime secrets"
+        )
+
     raw_runtime_env_vars = raw_deployment.get("runtime_env_vars", {})
     if not isinstance(raw_runtime_env_vars, Mapping) or not all(
         isinstance(name, str)
@@ -176,6 +211,15 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
         "runtime_env_vars": set(raw_runtime_env_vars),
         "remove_runtime_secrets": set(raw_remove_runtime_secrets),
     }
+    fallback_overlaps = set(raw_fallback_runtime_secrets) & (
+        set(raw_runtime_secrets) | set(raw_runtime_env_vars) | set(raw_remove_runtime_secrets)
+    )
+    if fallback_overlaps:
+        raise ValueError(
+            f"target {target_name} deployment runtime binding groups cannot overlap: fallback_runtime_secrets and other "
+            f"runtime bindings: "
+            f"{', '.join(sorted(fallback_overlaps))}"
+        )
     group_names = tuple(binding_groups)
     overlaps = [
         f"{left} and {right}: {', '.join(sorted(binding_groups[left] & binding_groups[right]))}"
@@ -194,6 +238,7 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
         flags=tuple(raw_flags),
         runtime_secrets=dict(raw_runtime_secrets),
         preserve_runtime_secrets=tuple(raw_preserve_runtime_secrets),
+        fallback_runtime_secrets=dict(raw_fallback_runtime_secrets),
         runtime_env_vars=dict(raw_runtime_env_vars),
         remove_runtime_secrets=tuple(raw_remove_runtime_secrets),
     )
@@ -240,11 +285,15 @@ def load_contract(path: Path) -> Contract:
             raise ValueError(f"{path}: target {target_name} candidate command is invalid")
         if "{base_url}" not in command:
             raise ValueError(f"{path}: target {target_name} candidate command must use {{base_url}}")
+        gateway_required = raw_target.get("gateway_required", False)
+        if not isinstance(gateway_required, bool):
+            raise ValueError(f"target {target_name} gateway_required must be boolean")
         targets[target_name] = Target(
             name=target_name,
             service=_require_string(raw_target.get("service"), field=f"target {target_name} service"),
             dockerfile=_require_string(raw_target.get("dockerfile"), field=f"target {target_name} dockerfile"),
             workflow=_require_string(raw_target.get("workflow"), field=f"target {target_name} workflow"),
+            gateway_required=gateway_required,
             deployment=_parse_deployment(raw_target.get("deployment"), target_name=target_name),
             canary_component=_require_string(
                 raw_target.get("canary_component"), field=f"target {target_name} canary_component"
@@ -347,6 +396,30 @@ def _guarded_names(text: str) -> set[str]:
     return set() if match is None else set(match.group(1).split())
 
 
+def resolved_deploy_environment(*, event_name: str, ref: str, requested_environment: str | None = None) -> str:
+    """Model the workflow expression used by every browser-build deploy target."""
+    if event_name == "workflow_dispatch":
+        if requested_environment not in {"development", "prod"}:
+            raise ValueError("workflow_dispatch must select development or prod")
+        return requested_environment
+    return "development" if ref == "refs/heads/development" else "prod"
+
+
+def validate_manual_environment_dispatch(workflow_path: str, workflow: str) -> list[str]:
+    """Keep exact-head manual deployments bound to their selected environment."""
+    errors: list[str] = []
+    if MANUAL_ENVIRONMENT_INPUT not in workflow:
+        errors.append(f"{workflow_path}: must expose the shared environment workflow_dispatch choice")
+    expected_environment = f"environment: ${{{{ {DEPLOY_ENVIRONMENT_EXPRESSION} }}}}"
+    if workflow.count(expected_environment) < 2:
+        errors.append(
+            f"{workflow_path}: job and deploy action must select environment from workflow_dispatch before ref"
+        )
+    if CONCURRENCY_ENVIRONMENT_EXPRESSION not in workflow:
+        errors.append(f"{workflow_path}: concurrency must select environment from workflow_dispatch before ref")
+    return errors
+
+
 def validate_target(
     root: Path,
     target: Target,
@@ -397,8 +470,16 @@ def validate_target(
     if not workflow_path.is_file():
         return errors + [f"{target.name}: workflow is missing: {target.workflow}"]
     workflow = workflow_path.read_text(encoding="utf-8")
+    errors.extend(validate_manual_environment_dispatch(target.workflow, workflow))
     if DEPLOY_ACTION not in workflow:
         errors.append(f"{target.workflow}: missing centralized public-build deployment {DEPLOY_ACTION!r}")
+    if target.gateway_required:
+        if "runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}" not in workflow:
+            errors.append(
+                f"{target.workflow}: gateway-required target must source OMI_LLM_GATEWAY_URL from GitHub environment vars"
+            )
+        if "require_gateway_url: true" not in workflow:
+            errors.append(f"{target.workflow}: gateway-required target must reject an empty OMI_LLM_GATEWAY_URL")
     for name in sorted(names):
         if f"vars.{name}" in workflow:
             errors.append(f"{target.workflow}: input {name} bypasses repository_config via GitHub vars")
@@ -446,17 +527,22 @@ def validate_shared_actions(root: Path) -> list[str]:
         required_markers = (
             "config/public-build-contract.json",
             ".deployment.runtime_secrets",
+            "fallback_runtime_secrets",
             ".deployment.runtime_env_vars",
             ".deployment.remove_runtime_secrets",
             PREPARE_ACTION,
             "google-github-actions/auth@",
             "preflight_public_build_runtime.py",
+            "--github-output",
+            "steps.runtime-preflight.outputs.fallback_runtime_secrets",
             "docker/build-push-action@",
             "google-github-actions/deploy-cloudrun@",
             "no_traffic: true",
             "--revision-suffix=",
             "--tag=",
             "--remove-secrets=",
+            "require_gateway_url",
+            "OMI_LLM_GATEWAY_URL must be a non-empty HTTP(S) URL",
             "env_vars_update_strategy: merge",
             "secrets_update_strategy: merge",
             PROMOTION_ACTION,
