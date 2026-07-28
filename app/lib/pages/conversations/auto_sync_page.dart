@@ -56,7 +56,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return Consumer3<SyncProvider, UserProvider, DeviceProvider>(
       builder: (context, syncProvider, userProvider, deviceProvider, _) {
         final syncState = syncProvider.syncState;
-        final hasAnyRecording = syncProvider.allWals.isNotEmpty;
+        final hasAnyRecording = syncProvider.userVisibleWals.isNotEmpty;
         // Compute the filtered list once per build and pass it down — the
         // SliverList.builder uses it via index, so calling it again inside
         // itemBuilder would re-sort+re-filter on every visible row.
@@ -141,7 +141,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying,
         )
         .length;
-    final hasAnyRecording = p.allWals.isNotEmpty;
+    final hasAnyRecording = p.userVisibleWals.isNotEmpty;
 
     final isActive = s.isSyncing || s.isFetchingConversations;
     final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimited;

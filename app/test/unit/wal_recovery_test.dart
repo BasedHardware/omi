@@ -169,7 +169,11 @@ void main() {
         ),
       ];
 
-      await sync.stampConversationId(now - 150, 'conv-xyz');
+      await sync.stampConversationId(
+        now - 150,
+        'conv-xyz',
+        hasServerSpeechProof: true,
+      );
 
       expect(sync.testWals[0].conversationId, 'conv-xyz');
       expect(sync.testWals[1].conversationId, 'conv-xyz');
@@ -190,7 +194,11 @@ void main() {
         ),
       ];
 
-      await sync.stampConversationId(now - 100, 'new-conv');
+      await sync.stampConversationId(
+        now - 100,
+        'new-conv',
+        hasServerSpeechProof: true,
+      );
 
       expect(sync.testWals[0].conversationId, 'old-conv');
     });
@@ -471,7 +479,11 @@ void main() {
       ];
 
       // Session started at now - 100, so only wal at now - 50 qualifies
-      await sync.stampConversationId(now - 100, 'conv-boundary');
+      await sync.stampConversationId(
+        now - 100,
+        'conv-boundary',
+        hasServerSpeechProof: true,
+      );
 
       expect(sync.testWals[0].conversationId, isNull); // timerStart < sessionStart
       expect(sync.testWals[1].conversationId, 'conv-boundary');
@@ -489,7 +501,11 @@ void main() {
         ),
       ];
 
-      await sync.stampConversationId(now - 100, 'conv-exact');
+      await sync.stampConversationId(
+        now - 100,
+        'conv-exact',
+        hasServerSpeechProof: true,
+      );
 
       expect(sync.testWals[0].conversationId, 'conv-exact');
     });

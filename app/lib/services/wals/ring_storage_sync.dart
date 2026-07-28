@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/services/capture/live_audio_frame_pacer.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
@@ -38,7 +39,9 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 /// previously advanced ranges never need to be downloaded again.
 typedef RingConnectionResolver = Future<DeviceConnection?> Function(String deviceId);
 typedef RingDocumentsDirectoryProvider = Future<Directory> Function();
-typedef RingLiveFramesHandler = bool Function(List<List<int>> frames);
+typedef RingLiveFramesHandler = LiveAudioFrameDelivery Function(
+  List<List<int>> frames,
+);
 typedef RingDeepBacklogPolicy = bool Function();
 
 bool ringShouldDrainDeepBacklog({
@@ -47,21 +50,43 @@ bool ringShouldDrainDeepBacklog({
 }) =>
     autoSyncEnabled || isCharging;
 
-@visibleForTesting
-int ringRecentRecoveryFloor({
+/// Chooses the first sequence that must be replayed into a replacement live
+/// transcription socket.
+///
+/// A pendant can have hours of unread history behind its durable read cursor.
+/// Reconnecting at that cursor starves the active conversation behind old
+/// backlog. Recent live-continuity WALs describe the correct boundary: replay
+/// from the earliest recent range that never completed socket delivery, or
+/// continue after the newest recently delivered range when none are pending.
+int? ringLiveResumeSequence({
+  required Iterable<Wal> wals,
+  required String deviceId,
   required int readSeq,
   required int writeSeq,
-  required int framesPerRecord,
-  required int framesPerSecond,
-  int recoverySeconds = 120,
+  required int nowSeconds,
+  int recentSeconds = 120,
 }) {
-  if (writeSeq <= readSeq || framesPerRecord <= 0 || framesPerSecond <= 0 || recoverySeconds <= 0) {
-    return readSeq;
+  int? earliestPending;
+  int? newestDeliveredEnd;
+  final cutoff = nowSeconds - recentSeconds;
+  for (final wal in wals) {
+    if (wal.device != deviceId ||
+        wal.uploadIntent != WalUploadIntent.liveContinuity ||
+        wal.timerStart + wal.seconds < cutoff) {
+      continue;
+    }
+    final range = RingProtocol.parseSourceRange(wal.sourceId);
+    if (range == null || range.end < readSeq || range.start >= writeSeq) continue;
+    if (wal.status == WalStatus.miss) {
+      final start = range.start.clamp(readSeq, writeSeq).toInt();
+      if (earliestPending == null || start < earliestPending) earliestPending = start;
+    }
+    final end = range.end.clamp(readSeq, writeSeq).toInt();
+    if (newestDeliveredEnd == null || end > newestDeliveredEnd) {
+      newestDeliveredEnd = end;
+    }
   }
-  final recentFrames = recoverySeconds * framesPerSecond;
-  final recentRecords = (recentFrames + framesPerRecord - 1) ~/ framesPerRecord;
-  final candidate = writeSeq - recentRecords;
-  return candidate > readSeq ? candidate : readSeq;
+  return earliestPending ?? newestDeliveredEnd;
 }
 
 class RingAudioTailSession {
@@ -410,6 +435,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   /// cumulative device ADVANCE.
   Future<RingAudioTailSession?> startAudioTail({
     required RingLiveFramesHandler onLiveFrames,
+    bool resumeLiveContinuity = false,
   }) async {
     final device = _device;
     if (device == null) return null;
@@ -431,6 +457,15 @@ class RingStorageSyncImpl implements RingStorageSync {
       initialInfo,
     );
     final coverage = await _loadDurableCoverage(device.id);
+    final resumeLiveSeq = resumeLiveContinuity
+        ? ringLiveResumeSequence(
+            wals: await _localSync?.getAllWals() ?? const <Wal>[],
+            deviceId: device.id,
+            readSeq: initialInfo.readSeq,
+            writeSeq: initialInfo.writeSeq,
+            nowSeconds: _nowSeconds(),
+          )
+        : null;
 
     final future = _runAudioTail(
       generation: generation,
@@ -441,6 +476,8 @@ class RingStorageSyncImpl implements RingStorageSync {
       initialInfo: initialInfo,
       coverage: coverage,
       onLiveFrames: onLiveFrames,
+      resumeLiveContinuity: resumeLiveContinuity,
+      resumeLiveSeq: resumeLiveSeq,
     );
     _tailFuture = future;
     unawaited(
@@ -560,6 +597,8 @@ class RingStorageSyncImpl implements RingStorageSync {
     required RingInfo initialInfo,
     required RingSequenceCoverage coverage,
     required RingLiveFramesHandler onLiveFrames,
+    required bool resumeLiveContinuity,
+    required int? resumeLiveSeq,
   }) async {
     _isSyncing = true;
     _downloadStartTime = DateTime.now();
@@ -567,7 +606,9 @@ class RingStorageSyncImpl implements RingStorageSync {
     var info = initialInfo;
     final sourceReadSeq = initialInfo.readSeq;
     final sourceFramesPerRecord = _framesPerRecord(codec);
-    int? liveCursor;
+    int? liveCursor = resumeLiveSeq;
+    int? recentCursor;
+    var recentRecoveryExhausted = resumeLiveContinuity;
     DateTime? partialLiveSince;
     var lastSnapshotAt = DateTime.now();
 
@@ -602,8 +643,16 @@ class RingStorageSyncImpl implements RingStorageSync {
         // cloud jobs. A growing read catches up in one bounded transaction;
         // it must never manufacture a new hole merely to shave latency.
         var liveStart = liveCursor ?? desiredLiveStart;
-        liveStart = coverage.firstUncovered(liveStart, info.writeSeq);
-        final liveCount = info.writeSeq - liveStart;
+        // A reconnect deliberately re-reads recent `miss` ranges so they can
+        // enter the replacement STT socket. They are already durable and
+        // therefore present in [coverage], but not yet delivered.
+        if (!resumeLiveContinuity) {
+          liveStart = coverage.firstUncovered(liveStart, info.writeSeq);
+        }
+        final availableLiveCount = info.writeSeq - liveStart;
+        final liveCount = resumeLiveContinuity && availableLiveCount > _backlogPacketsPerSlice
+            ? _backlogPacketsPerSlice
+            : availableLiveCount;
 
         if (liveCount > 0) {
           partialLiveSince ??= DateTime.now();
@@ -622,6 +671,7 @@ class RingStorageSyncImpl implements RingStorageSync {
               completedRecords: 0,
               totalRecords: info.unreadPackets,
               onLiveFrames: onLiveFrames,
+              forceLiveDelivery: resumeLiveContinuity,
               advanceAfterCommit: false,
             );
             if (result == null) {
@@ -638,47 +688,40 @@ class RingStorageSyncImpl implements RingStorageSync {
         }
 
         /*
-         * Recover the most recent two minutes before spending bandwidth on an
-         * hours-old prefix. These ranges keep their original timestamps and
-         * use the WAL/backfill path; only the newest five seconds can feed the
-         * live socket.
+         * Recover backward from the live head until embedded capture
+         * timestamps cross the conversation boundary. "Two minutes of audio
+         * frames" can span hours under VAD and must not be treated as recent.
          */
-        final recentFloor = ringRecentRecoveryFloor(
-          readSeq: info.readSeq,
-          writeSeq: info.writeSeq,
-          framesPerRecord: sourceFramesPerRecord,
-          framesPerSecond: codec.getFramesPerSecond(),
-          recoverySeconds: _recentRecoverySeconds,
-        );
-        final recentStart = coverage.firstUncovered(
-          recentFloor,
-          info.writeSeq,
-        );
+        recentCursor ??= desiredLiveStart;
         var recoveredRecentSlice = false;
-        if (recentStart < info.writeSeq) {
-          final nextRecentCovered = coverage.firstRangeAtOrAfter(recentStart);
-          final recentEnd = nextRecentCovered?.start ?? info.writeSeq;
-          if (recentEnd > recentStart) {
-            final available = recentEnd - recentStart;
-            final count = available > _backlogPacketsPerSlice ? _backlogPacketsPerSlice : available;
+        if (!recentRecoveryExhausted) {
+          final recentRange = coverage.lastUncoveredBefore(
+            info.readSeq,
+            recentCursor,
+            maxCount: _backlogPacketsPerSlice,
+          );
+          if (recentRange != null) {
             final result = await _syncRange(
               connection,
               wal,
               uploadIntent: WalUploadIntent.liveContinuity,
-              startSeq: recentStart,
-              packetCount: count,
+              startSeq: recentRange.start,
+              packetCount: recentRange.end - recentRange.start,
               fallbackAnchor: wal.timerStart,
-              fallbackFramesBefore: (recentStart - sourceReadSeq) * sourceFramesPerRecord,
+              fallbackFramesBefore: (recentRange.start - sourceReadSeq) * sourceFramesPerRecord,
               completedRecords: 0,
               totalRecords: info.unreadPackets,
               advanceAfterCommit: false,
+              scheduleHistoricalUpload: false,
             );
             if (result == null) {
               throw const RingStorageException(
                 'Recent ring recovery did not complete',
               );
             }
-            coverage.add(recentStart, result.nextSeq);
+            coverage.add(recentRange.start, result.nextSeq);
+            recentCursor = recentRange.start;
+            recentRecoveryExhausted = result.oldestTimestamp < _nowSeconds() - _recentRecoverySeconds;
             recoveredRecentSlice = true;
           }
         }
@@ -706,7 +749,8 @@ class RingStorageSyncImpl implements RingStorageSync {
         final backlogEnd = nextCovered?.start ?? info.writeSeq;
         // One recovery transfer per live poll. A slow BLE link must not queue a
         // recent repair and an old-history drain ahead of newly captured audio.
-        if (!recoveredRecentSlice && _deepBacklogPolicy() && backlogEnd > info.readSeq) {
+        final liveRecoveryCaughtUp = liveCursor == null || liveCursor >= info.writeSeq;
+        if (liveRecoveryCaughtUp && !recoveredRecentSlice && _deepBacklogPolicy() && backlogEnd > info.readSeq) {
           final available = backlogEnd - info.readSeq;
           final count = available > _backlogPacketsPerSlice ? _backlogPacketsPerSlice : available;
           final result = await _syncRange(
@@ -971,7 +1015,9 @@ class RingStorageSyncImpl implements RingStorageSync {
     required int totalRecords,
     IWalSyncProgressListener? progress,
     RingLiveFramesHandler? onLiveFrames,
+    bool forceLiveDelivery = false,
     bool advanceAfterCommit = true,
+    bool scheduleHistoricalUpload = true,
   }) async {
     final completer = Completer<bool>();
     final reassembler = RingRecordReassembler();
@@ -979,6 +1025,8 @@ class RingStorageSyncImpl implements RingStorageSync {
     int recordsConsumed = 0;
     int segment = 0;
     int? previousRecordTimestamp;
+    int? oldestTimestamp;
+    int? newestTimestamp;
     int fallbackFrames = 0;
     final fps = wal.codec.getFramesPerSecond();
     final chunkFrames = sdcardChunkSizeSecs * fps;
@@ -1014,9 +1062,15 @@ class RingStorageSyncImpl implements RingStorageSync {
         final sourceEndSeq = chunkRecords.last.sequence + 1;
         final sourceId = 'ring_${sourceStartSeq}_$sourceEndSeq';
         final now = _nowSeconds();
-        final isLiveRange = onLiveFrames != null &&
-            chunkRecords.first.timestamp >= now - _liveFreshnessSeconds &&
-            chunkRecords.last.timestamp <= now + _liveFreshnessSeconds;
+        final effectiveUploadIntent =
+            uploadIntent == WalUploadIntent.liveContinuity && chunkRecords.last.timestamp < now - _recentRecoverySeconds
+                ? WalUploadIntent.historicalBackfill
+                : uploadIntent;
+        final isLiveRange = effectiveUploadIntent == WalUploadIntent.liveContinuity &&
+            onLiveFrames != null &&
+            (forceLiveDelivery ||
+                (chunkRecords.first.timestamp >= now - _liveFreshnessSeconds &&
+                    chunkRecords.last.timestamp <= now + _liveFreshnessSeconds));
         try {
           final file = await _flushToDisk(wal, frames, timerStart, sourceId);
           final registered = await _registerWithLocalSync(
@@ -1025,26 +1079,34 @@ class RingStorageSyncImpl implements RingStorageSync {
             timerStart,
             frames.length,
             sourceId,
-            uploadIntent: uploadIntent,
-            scheduleUpload: !isLiveRange,
+            uploadIntent: effectiveUploadIntent,
+            scheduleUpload: !isLiveRange &&
+                (effectiveUploadIntent != WalUploadIntent.historicalBackfill || scheduleHistoricalUpload),
           );
-          if (isLiveRange && registered.registration == ExternalWalRegistration.added) {
-            var delivered = false;
+          if (isLiveRange &&
+              (registered.registration == ExternalWalRegistration.added || registered.wal.status == WalStatus.miss)) {
+            LiveAudioFrameDelivery delivery = LiveAudioFrameDelivery.rejected();
             try {
-              delivered = onLiveFrames(frames);
+              delivery = onLiveFrames(frames);
             } catch (error) {
               Logger.debug(
                 'RingStorageSync: live frame delivery failed for $sourceId: $error',
               );
             }
-            if (delivered) {
-              await _localSync!.markExternalWalSynced(registered.wal);
+            if (delivery.accepted) {
+              unawaited(
+                delivery.completed.then((sent) async {
+                  if (sent) {
+                    await _localSync!.markExternalWalSynced(registered.wal);
+                  }
+                }),
+              );
             } else {
-              // No live socket ownership: leave the durable WAL retryable and
-              // wake the normal uploader instead of discarding the sequence.
+              // A raw ring range is never an independent cloud upload. Leave
+              // it durable and retryable for live replay/canonical assembly.
               await _localSync!.addExternalWal(
                 registered.wal,
-                scheduleUpload: true,
+                scheduleUpload: false,
               );
             }
           }
@@ -1170,6 +1232,8 @@ class RingStorageSyncImpl implements RingStorageSync {
           final effectiveTimestamp = RingProtocol.isPlausibleRecordTimestamp(ts, nowSeconds: now)
               ? ts
               : fallbackAnchor + (fallbackFramesBefore + fallbackFrames) ~/ (fps == 0 ? 1 : fps);
+          oldestTimestamp ??= effectiveTimestamp;
+          newestTimestamp = effectiveTimestamp;
 
           if (previousRecordTimestamp != null &&
               (effectiveTimestamp < previousRecordTimestamp! || effectiveTimestamp > previousRecordTimestamp! + 2)) {
@@ -1296,6 +1360,8 @@ class RingStorageSyncImpl implements RingStorageSync {
       return _RingRangeResult(
         nextSeq: doneNextSeq!,
         frameCount: fallbackFrames,
+        oldestTimestamp: oldestTimestamp!,
+        newestTimestamp: newestTimestamp!,
       );
     } else {
       Logger.debug(
@@ -1400,11 +1466,12 @@ class RingStorageSyncImpl implements RingStorageSync {
       localWal,
       scheduleUpload: scheduleUpload,
     );
+    final durableWal = await _localSync!.getWalById(localWal.id) ?? localWal;
     Logger.debug(
       'RingStorageSync: registered chunk (source=$sourceId, ts=$timerStart, ${seconds}s, '
       '$frameCount frames, result=${registration.name})',
     );
-    return (registration: registration, wal: localWal);
+    return (registration: registration, wal: durableWal);
   }
 }
 
@@ -1425,6 +1492,13 @@ class _RecoveredRingRecord {
 class _RingRangeResult {
   final int nextSeq;
   final int frameCount;
+  final int oldestTimestamp;
+  final int newestTimestamp;
 
-  const _RingRangeResult({required this.nextSeq, required this.frameCount});
+  const _RingRangeResult({
+    required this.nextSeq,
+    required this.frameCount,
+    required this.oldestTimestamp,
+    required this.newestTimestamp,
+  });
 }

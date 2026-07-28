@@ -905,7 +905,7 @@ class _SyncPageState extends State<SyncPage> {
                 // Recordings list
                 Consumer<SyncProvider>(
                   builder: (context, syncProvider, child) {
-                    if (syncProvider.isLoadingWals && syncProvider.allWals.isEmpty) {
+                    if (syncProvider.isLoadingWals && syncProvider.userVisibleWals.isEmpty) {
                       return const SliverToBoxAdapter(
                         child: Center(
                           child: Padding(
@@ -916,7 +916,7 @@ class _SyncPageState extends State<SyncPage> {
                       );
                     }
 
-                    if (syncProvider.allWals.isEmpty) {
+                    if (syncProvider.userVisibleWals.isEmpty) {
                       return SliverToBoxAdapter(child: _buildEmptyState(context));
                     }
 

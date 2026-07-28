@@ -68,11 +68,15 @@ class WalSyncs implements IWalSync {
 
   Future<RingAudioTailSession?> startStorageAuthoritativeAudioTail({
     required RingLiveFramesHandler onLiveFrames,
+    bool resumeLiveContinuity = false,
   }) {
     if (!usesStorageAuthoritativeAudio || _deviceStorageRouter.protocol != DeviceStorageProtocol.ringBuffer) {
       return Future.value(null);
     }
-    return _ringSync.startAudioTail(onLiveFrames: onLiveFrames);
+    return _ringSync.startAudioTail(
+      onLiveFrames: onLiveFrames,
+      resumeLiveContinuity: resumeLiveContinuity,
+    );
   }
 
   WalSyncs(this.listener) {

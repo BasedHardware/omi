@@ -135,11 +135,43 @@ void main() {
       expect(coverage.covers(100, 160), isTrue);
     });
 
+    test('recent recovery selects newest missing ranges backward from the live head', () {
+      final coverage = RingSequenceCoverage([
+        (start: 980, end: 1000),
+        (start: 850, end: 900),
+      ]);
+
+      expect(
+        coverage.lastUncoveredBefore(0, 980, maxCount: 96),
+        (start: 900, end: 980),
+      );
+      coverage.add(900, 980);
+      expect(
+        coverage.lastUncoveredBefore(0, 900, maxCount: 96),
+        (start: 754, end: 850),
+      );
+    });
+
     test('parses only valid immutable ring source identities', () {
       expect(RingProtocol.parseSourceRange('ring_42_84'), (start: 42, end: 84));
       expect(RingProtocol.parseSourceRange('ring_84_42'), isNull);
       expect(RingProtocol.parseSourceRange('legacy_42_84'), isNull);
       expect(RingProtocol.parseSourceRange(null), isNull);
+    });
+
+    test('retains sequence identity after local historical compaction', () {
+      expect(
+        RingProtocol.parseRecoverySourceRange('archive_ring_42_84_1700000000'),
+        (start: 42, end: 84),
+      );
+      expect(
+        RingProtocol.parseRecoverySourceRange('ring_42_84'),
+        (start: 42, end: 84),
+      );
+      expect(
+        RingProtocol.parseRecoverySourceRange('archive_ring_84_42_1700000000'),
+        isNull,
+      );
     });
   });
 

@@ -60,42 +60,40 @@ void main() {
     ]);
   });
 
-  test('refuses to compact across a missing pendant sequence', () async {
+  test('marks a missing pendant sequence as a repair instead of fragmenting the upload', () async {
     final firstFile = File('${directory.path}/first.bin');
     final secondFile = File('${directory.path}/second.bin');
     await firstFile.writeAsBytes(_frame([1]), flush: true);
     await secondFile.writeAsBytes(_frame([2]), flush: true);
     final destination = File('${directory.path}/canonical.bin');
 
-    await expectLater(
-      assembleConversationAudio(
-        parts: [
-          ConversationAudioPart(
-            wal: _wal(
-              timerStart: 1000,
-              sourceId: 'ring_10_11',
-              filePath: firstFile.path,
-              status: WalStatus.synced,
-            ),
-            file: firstFile,
+    final result = await assembleConversationAudio(
+      parts: [
+        ConversationAudioPart(
+          wal: _wal(
+            timerStart: 1000,
+            sourceId: 'ring_10_11',
+            filePath: firstFile.path,
+            status: WalStatus.synced,
           ),
-          ConversationAudioPart(
-            wal: _wal(
-              timerStart: 1001,
-              sourceId: 'ring_12_13',
-              filePath: secondFile.path,
-              status: WalStatus.miss,
-            ),
-            file: secondFile,
+          file: firstFile,
+        ),
+        ConversationAudioPart(
+          wal: _wal(
+            timerStart: 1001,
+            sourceId: 'ring_12_13',
+            filePath: secondFile.path,
+            status: WalStatus.miss,
           ),
-        ],
-        destination: destination,
-        silenceFrameFactory: (_) => [0],
-      ),
-      throwsA(isA<StateError>()),
+          file: secondFile,
+        ),
+      ],
+      destination: destination,
+      silenceFrameFactory: (_) => [0],
     );
 
-    expect(await destination.exists(), isFalse);
+    expect(result.hadLiveGap, isTrue);
+    expect(await destination.exists(), isTrue);
     expect(await firstFile.exists(), isTrue);
     expect(await secondFile.exists(), isTrue);
   });

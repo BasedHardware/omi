@@ -207,4 +207,44 @@ void main() {
 
     expect(syncProvider.allWals, isEmpty, reason: 'Clear All must still be able to remove it');
   });
+
+  test('raw pendant transfer ranges stay hidden until assembled', () async {
+    final rawRange = Wal(
+      timerStart: 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 1,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      originalStorage: WalStorage.sdcard,
+      device: 'cv1',
+      filePath: 'raw.bin',
+      sourceId: 'ring_10_11',
+    );
+    final assembledArchive = Wal(
+      timerStart: 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      originalStorage: WalStorage.sdcard,
+      device: 'cv1',
+      filePath: 'archive.bin',
+      sourceId: 'archive_ring_10_40_1000',
+    );
+    localSync.testWals = [rawRange, assembledArchive];
+
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    expect(syncProvider.allWals, [rawRange, assembledArchive]);
+    expect(syncProvider.userVisibleWals, [assembledArchive]);
+    expect(syncProvider.pendingWals, [assembledArchive]);
+    expect(syncProvider.displaySortedWals, [assembledArchive]);
+    expect(syncProvider.walsForDisplayFilter(WalDisplayFilter.all), [assembledArchive]);
+  });
 }

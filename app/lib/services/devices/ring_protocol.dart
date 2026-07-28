@@ -214,6 +214,22 @@ class RingProtocol {
     if (end <= start) return null;
     return (start: start, end: end);
   }
+
+  /// Sequence identity retained by both immutable ring fragments and a local
+  /// archive assembled from those fragments.
+  ///
+  /// Archives remain eligible for a later exact conversation repair when the
+  /// server completion arrives after the two-minute local close boundary.
+  static ({int start, int end})? parseRecoverySourceRange(String? sourceId) {
+    final raw = parseSourceRange(sourceId);
+    if (raw != null || sourceId == null) return raw;
+    final match = RegExp(r'^archive_ring_(\d+)_(\d+)_\d+$').firstMatch(sourceId);
+    if (match == null) return null;
+    final start = int.parse(match.group(1)!);
+    final end = int.parse(match.group(2)!);
+    if (end <= start) return null;
+    return (start: start, end: end);
+  }
 }
 
 /// In-memory index of ring ranges already durably represented on the phone.
@@ -276,6 +292,33 @@ class RingSequenceCoverage {
       if (cursor >= end) return end;
     }
     return cursor;
+  }
+
+  /// Newest uncovered range ending at or before [end], bounded to [maxCount].
+  ///
+  /// VAD makes record count an audio-duration measure rather than a wall
+  /// clock. Recent recovery therefore walks backward from the live head and
+  /// stops based on the timestamps found in the records.
+  ({int start, int end})? lastUncoveredBefore(
+    int lowerBound,
+    int end, {
+    required int maxCount,
+  }) {
+    if (maxCount <= 0 || end <= lowerBound) return null;
+    var cursor = end;
+    for (var index = _ranges.length - 1; index >= 0; index--) {
+      final range = _ranges[index];
+      if (range.start >= cursor) continue;
+      if (range.end < cursor) {
+        final gapLowerBound = lowerBound > range.end ? lowerBound : range.end;
+        final start = (cursor - maxCount).clamp(gapLowerBound, cursor);
+        return start < cursor ? (start: start, end: cursor) : null;
+      }
+      if (range.start < cursor) cursor = range.start;
+      if (cursor <= lowerBound) return null;
+    }
+    final start = (cursor - maxCount).clamp(lowerBound, cursor);
+    return start < cursor ? (start: start, end: cursor) : null;
   }
 
   bool covers(int start, int end) => end <= contiguousEndFrom(start);

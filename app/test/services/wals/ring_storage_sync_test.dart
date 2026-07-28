@@ -6,12 +6,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/capture/live_audio_frame_pacer.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+
+LiveAudioFrameDelivery _delivered() => LiveAudioFrameDelivery.accepted(Future<bool>.value(true));
 
 void main() {
   late Directory directory;
@@ -87,27 +90,6 @@ void main() {
     expect(wal.status, WalStatus.synced);
   });
 
-  test('recent recovery floor covers two minutes without forcing the deep prefix', () {
-    expect(
-      ringRecentRecoveryFloor(
-        readSeq: 100,
-        writeSeq: 1000,
-        framesPerRecord: 20,
-        framesPerSecond: 50,
-      ),
-      700,
-    );
-    expect(
-      ringRecentRecoveryFloor(
-        readSeq: 800,
-        writeSeq: 1000,
-        framesPerRecord: 20,
-        framesPerSecond: 50,
-      ),
-      800,
-    );
-  });
-
   test('deep backlog runs only by opt-in or while charging', () {
     expect(
       ringShouldDrainDeepBacklog(
@@ -152,7 +134,7 @@ void main() {
     final session = await sync.startAudioTail(
       onLiveFrames: (frames) {
         if (!liveDelivered.isCompleted) liveDelivered.complete();
-        return true;
+        return _delivered();
       },
     );
 
@@ -162,18 +144,10 @@ void main() {
     expect(connection.advanceAttempts, isEmpty);
 
     await connection.secondRead.future.timeout(const Duration(seconds: 3));
-    final framesPerRecord = RingProtocol.audioPayloadBytes ~/ (BleAudioCodec.opus.getFramesLengthInBytes() + 1);
-    final recentFloor = ringRecentRecoveryFloor(
-      readSeq: 0,
-      writeSeq: 10000,
-      framesPerRecord: framesPerRecord,
-      framesPerSecond: BleAudioCodec.opus.getFramesPerSecond(),
-    );
-    expect(connection.reads[1], (start: recentFloor, count: 96));
+    expect(connection.reads[1], (start: 9884, count: 96));
 
     await connection.thirdRead.future.timeout(const Duration(seconds: 3));
-    expect(connection.reads[2], (start: recentFloor + 96, count: 96));
-    expect(connection.reads.where((read) => read.start < recentFloor), isEmpty);
+    expect(connection.reads[2], (start: 9788, count: 96));
     expect(connection.advanceAttempts, isEmpty);
 
     await session!.cancel();
@@ -209,24 +183,49 @@ void main() {
     final session = await sync.startAudioTail(
       onLiveFrames: (_) {
         if (!liveDelivered.isCompleted) liveDelivered.complete();
-        return true;
+        return _delivered();
       },
     );
 
     await liveDelivered.future.timeout(const Duration(seconds: 1));
     await connection.secondRead.future.timeout(const Duration(seconds: 3));
-    final framesPerRecord = RingProtocol.audioPayloadBytes ~/ (BleAudioCodec.opus.getFramesLengthInBytes() + 1);
-    final recentFloor = ringRecentRecoveryFloor(
-      readSeq: 0,
-      writeSeq: 10000,
-      framesPerRecord: framesPerRecord,
-      framesPerSecond: BleAudioCodec.opus.getFramesPerSecond(),
-    );
     expect(connection.reads.first, (start: 9980, count: 20));
-    expect(connection.reads[1], (start: recentFloor, count: 96));
-    expect(connection.reads.where((read) => read.start < recentFloor), isEmpty);
+    expect(connection.reads[1], (start: 9884, count: 96));
 
     await session!.cancel();
+  });
+
+  test('sparse old VAD records stop recent recovery after one timestamp probe', () async {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final timestamps = {
+      for (var seq = 0; seq < 9980; seq++) seq: now - 1000,
+      for (var seq = 9980; seq < 10000; seq++) seq: now,
+    };
+    final connection = _FakeRingConnection(
+      readSeq: 0,
+      writeSeq: 10000,
+      timestamps: timestamps,
+    );
+    final local = localSync();
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: now,
+      deepBacklogEnabled: false,
+    );
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    await connection.secondRead.future.timeout(const Duration(seconds: 3));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await session!.cancel();
+
+    expect(connection.reads, [
+      (start: 9980, count: 20),
+      (start: 9884, count: 96),
+    ]);
+    final probeWal = local.testWals.singleWhere((wal) => wal.sourceId == 'ring_9884_9980');
+    expect(probeWal.uploadIntent, WalUploadIntent.historicalBackfill);
+    expect(probeWal.status, WalStatus.miss);
   });
 
   test('live cursor catches up sequentially instead of skipping records produced during a read', () async {
@@ -242,12 +241,161 @@ void main() {
       deepBacklogEnabled: false,
     );
 
-    final session = await sync.startAudioTail(onLiveFrames: (_) => true);
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
 
     await connection.secondRead.future.timeout(const Duration(seconds: 3));
     expect(connection.reads[0], (start: 100, count: 20));
     expect(connection.reads[1], (start: 120, count: 30));
     expect(connection.reads[1].start, connection.reads[0].start + connection.reads[0].count);
+
+    await session!.cancel();
+  });
+
+  test('reconnect without recent delivery history prioritizes the live head over old backlog', () async {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final connection = _FakeRingConnection(
+      readSeq: 100,
+      writeSeq: 250,
+      timestamps: {
+        for (var seq = 230; seq < 250; seq++) seq: now,
+      },
+    );
+    final local = localSync();
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: now,
+      deepBacklogEnabled: false,
+    );
+
+    final liveDelivered = Completer<void>();
+    final session = await sync.startAudioTail(
+      onLiveFrames: (_) {
+        if (!liveDelivered.isCompleted) liveDelivered.complete();
+        return _delivered();
+      },
+      resumeLiveContinuity: true,
+    );
+
+    await liveDelivered.future.timeout(const Duration(seconds: 1));
+    expect(connection.reads[0], (start: 230, count: 20));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(connection.reads, hasLength(1));
+
+    await session!.cancel();
+  });
+
+  test('live reconnect resumes at earliest recent undelivered range', () {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final wals = [
+      Wal(
+        timerStart: now - 8,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        device: 'cv1-test',
+        sourceId: 'ring_9900_9920',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 2,
+      ),
+      Wal(
+        timerStart: now - 6,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        device: 'cv1-test',
+        sourceId: 'ring_9920_9940',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 2,
+      ),
+      Wal(
+        timerStart: now - 4,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        device: 'cv1-test',
+        sourceId: 'ring_9940_9960',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 2,
+      ),
+      Wal(
+        timerStart: now - 1000,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        device: 'cv1-test',
+        sourceId: 'ring_100_200',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 10,
+      ),
+    ];
+
+    expect(
+      ringLiveResumeSequence(
+        wals: wals,
+        deviceId: 'cv1-test',
+        readSeq: 0,
+        writeSeq: 10000,
+        nowSeconds: now,
+      ),
+      9920,
+    );
+  });
+
+  test('recent delivery ending at the device cursor resumes that cursor instead of the head', () {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final delivered = Wal(
+      timerStart: now - 10,
+      codec: BleAudioCodec.opus,
+      status: WalStatus.synced,
+      storage: WalStorage.disk,
+      device: 'cv1-test',
+      sourceId: 'ring_980_1000',
+      uploadIntent: WalUploadIntent.liveContinuity,
+      seconds: 2,
+    );
+
+    expect(
+      ringLiveResumeSequence(
+        wals: [delivered],
+        deviceId: 'cv1-test',
+        readSeq: 1000,
+        writeSeq: 1200,
+        nowSeconds: now,
+      ),
+      1000,
+    );
+  });
+
+  test('live WAL stays retryable until every accepted preview frame is sent', () async {
+    final connection = _FakeRingConnection(
+      readSeq: 100,
+      writeSeq: 120,
+      timestamps: {
+        for (var seq = 100; seq < 120; seq++) seq: _FakeRingConnection.baseTimestamp + 10000,
+      },
+    );
+    final local = localSync();
+    final sync = ringSync(connection, local, deepBacklogEnabled: false);
+    final previewCompleted = Completer<bool>();
+    final previewAccepted = Completer<void>();
+
+    final session = await sync.startAudioTail(
+      onLiveFrames: (_) {
+        if (!previewAccepted.isCompleted) previewAccepted.complete();
+        return LiveAudioFrameDelivery.accepted(previewCompleted.future);
+      },
+    );
+
+    await previewAccepted.future.timeout(const Duration(seconds: 1));
+    final liveWal = local.testWals.singleWhere(
+      (wal) => wal.sourceId == 'ring_100_120',
+    );
+    expect(liveWal.status, WalStatus.miss);
+
+    previewCompleted.complete(true);
+    await Future<void>.delayed(Duration.zero);
+    expect(liveWal.status, WalStatus.synced);
 
     await session!.cancel();
   });
@@ -267,7 +415,7 @@ void main() {
       nowSeconds: _FakeRingConnection.baseTimestamp + 1000,
     );
 
-    final session = await sync.startAudioTail(onLiveFrames: (_) => true);
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
 
     expect(session, isNotNull);
     await expectLater(session!.done, throwsA(isA<RingStorageException>()));
@@ -288,7 +436,7 @@ void main() {
     final local = localSync();
     final sync = ringSync(connection, local);
 
-    final session = await sync.startAudioTail(onLiveFrames: (_) => true);
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
 
     expect(session, isNotNull);
     await expectLater(session!.done, completes);
@@ -306,7 +454,7 @@ void main() {
     final local = localSync();
     final sync = ringSync(connection, local);
 
-    final session = await sync.startAudioTail(onLiveFrames: (_) => true);
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
 
     expect(session, isNotNull);
     await expectLater(
@@ -342,17 +490,18 @@ void main() {
     final session = await sync.startAudioTail(
       onLiveFrames: (_) {
         if (!liveDelivered.isCompleted) liveDelivered.complete();
-        return true;
+        return _delivered();
       },
     );
 
     await liveDelivered.future.timeout(const Duration(seconds: 1));
-    await connection.firstAdvance.future.timeout(const Duration(seconds: 3));
+    await connection.secondRead.future.timeout(const Duration(seconds: 3));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
     await session!.cancel();
 
     final liveWal = local.testWals.singleWhere((wal) => wal.sourceId == 'ring_980_1000');
-    final firstBacklogWal = local.testWals.singleWhere((wal) => wal.sourceId == 'ring_0_96');
-    expect(firstBacklogWal.timerStart, _FakeRingConnection.baseTimestamp + 950);
+    final recentWal = local.testWals.singleWhere((wal) => wal.sourceId == 'ring_884_980');
+    expect(recentWal.timerStart, _FakeRingConnection.baseTimestamp + 994);
     expect(liveWal.timerStart, _FakeRingConnection.baseTimestamp + 999);
   });
 

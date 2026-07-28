@@ -53,8 +53,8 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
 
   final ordered = List<ConversationAudioPart>.from(parts)
     ..sort((left, right) {
-      final leftRange = RingProtocol.parseSourceRange(left.wal.sourceId);
-      final rightRange = RingProtocol.parseSourceRange(right.wal.sourceId);
+      final leftRange = RingProtocol.parseRecoverySourceRange(left.wal.sourceId);
+      final rightRange = RingProtocol.parseRecoverySourceRange(right.wal.sourceId);
       if (leftRange == null || rightRange == null) {
         throw StateError('Canonical assembly requires pendant sequence identity');
       }
@@ -70,13 +70,15 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
     throw StateError('Canonical assembly requires a positive frame rate');
   }
 
-  var expectedSequence = RingProtocol.parseSourceRange(first.sourceId)!.start;
+  var expectedSequence = RingProtocol.parseRecoverySourceRange(first.sourceId)!.start;
+  var hadLiveGap = false;
   for (final part in ordered) {
     final wal = part.wal;
-    final range = RingProtocol.parseSourceRange(wal.sourceId);
-    if (range == null || range.start != expectedSequence) {
-      throw StateError('Canonical assembly found a missing pendant sequence');
+    final range = RingProtocol.parseRecoverySourceRange(wal.sourceId);
+    if (range == null || range.start < expectedSequence) {
+      throw StateError('Canonical assembly found overlapping pendant sequence');
     }
+    hadLiveGap = hadLiveGap || range.start > expectedSequence;
     if (wal.device != first.device ||
         wal.codec != first.codec ||
         wal.sampleRate != first.sampleRate ||
@@ -94,7 +96,6 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
   final sink = partial.openWrite();
   var sinkClosed = false;
   var totalFrames = 0;
-  var hadLiveGap = false;
   List<int>? silenceFrame;
 
   try {

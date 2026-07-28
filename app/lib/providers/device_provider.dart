@@ -635,7 +635,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // deliberately silent legacy audio characteristic.
     final syncs = ServiceManager.instance().wal.getSyncs();
     syncs.setDevice(pairedDevice ?? device, firmwareVersion: currentFirmwareVersion);
-    await captureProvider?.streamDeviceRecording(device: device);
+    await _startOrResumeCapture(device);
 
     final audioReady = captureProvider == null || captureProvider!.hasActiveDeviceAudioStream;
     setIsConnected(audioReady);
@@ -670,6 +670,19 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Notify interactive device onboarding of reconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceReconnected();
   }
+
+  Future<void> _startOrResumeCapture(BtDevice device) async {
+    final capture = captureProvider;
+    if (capture == null) return;
+    if (capture.shouldResumeDeviceRecordingAfterReconnect) {
+      await capture.resumeDeviceRecordingAfterReconnect(device: device);
+      return;
+    }
+    await capture.streamDeviceRecording(device: device);
+  }
+
+  @visibleForTesting
+  Future<void> startOrResumeCaptureForTesting(BtDevice device) => _startOrResumeCapture(device);
 
   /// Check firmware version to determine multi-file sync support.
   Future<void> _checkAndStartAutoSync(BtDevice device) async {

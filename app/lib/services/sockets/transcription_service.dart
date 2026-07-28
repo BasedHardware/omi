@@ -55,12 +55,18 @@ class ConversationTranscriptSegmentSocketService extends TranscriptSegmentSocket
     super.language, {
     super.source,
     super.customSttMode,
+    super.clientConversationId,
   }) : super.create(includeSpeechProfile: true);
 }
 
 class CustomSttTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  CustomSttTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language, {super.source})
-      : super.create(includeSpeechProfile: true, customSttMode: true);
+  CustomSttTranscriptSegmentSocketService.create(
+    super.sampleRate,
+    super.codec,
+    super.language, {
+    super.source,
+    super.clientConversationId,
+  }) : super.create(includeSpeechProfile: true, customSttMode: true);
 }
 
 enum SocketServiceState { connected, disconnected }
@@ -68,12 +74,22 @@ enum SocketServiceState { connected, disconnected }
 class TranscriptSegmentSocketService implements IPureSocketListener {
   late IPureSocket _socket;
   final Map<Object, ITransctiptSegmentSocketServiceListener> _listeners = {};
+  ConversationSessionEvent? _lastConversationSessionEvent;
+  MessageServiceStatusEvent? _lastServiceStatusEvent;
+  final Completer<bool> _serverReadyCompleter = Completer<bool>();
+  bool _serverReady = false;
 
   /// Access to the underlying socket (for composite service creation)
   IPureSocket get socket => _socket;
 
   SocketServiceState get state =>
       _socket.status == PureSocketStatus.connected ? SocketServiceState.connected : SocketServiceState.disconnected;
+
+  /// True only after the backend has accepted the session and emitted its
+  /// `service_status=ready` event. A connected WebSocket transport alone is
+  /// not sufficient: audio sent while the STT provider is still initiating
+  /// may be discarded before it reaches the live transcript.
+  bool get serverReady => state == SocketServiceState.connected && _serverReady;
 
   int sampleRate;
   BleAudioCodec codec;
@@ -82,6 +98,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   String? source;
   bool customSttMode;
   String? sttConfigId;
+  String? clientConversationId;
 
   bool onboardingMode;
 
@@ -93,6 +110,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.source,
     this.customSttMode = false,
     this.sttConfigId,
+    this.clientConversationId,
     this.onboardingMode = false,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
@@ -101,6 +119,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (source != null && source!.isNotEmpty) {
       params += '&source=${Uri.encodeComponent(source!)}';
+    }
+
+    if (clientConversationId != null && clientConversationId!.isNotEmpty) {
+      params += '&client_conversation_id=${Uri.encodeComponent(clientConversationId!)}';
     }
 
     if (customSttMode) {
@@ -123,8 +145,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       params += '&vad_gate=enabled';
     }
 
-    String url =
-        Env.apiBaseUrl!.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://') + 'v4/listen$params';
+    final socketBaseUrl = Env.apiBaseUrl!.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://');
+    final url = '${socketBaseUrl}v4/listen$params';
 
     _socket = PureSocket(url);
     _socket.setListener(this);
@@ -139,6 +161,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.source,
     this.customSttMode = false,
     this.sttConfigId,
+    this.clientConversationId,
     this.onboardingMode = false,
   }) {
     _socket = socket;
@@ -148,6 +171,14 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   void subscribe(Object context, ITransctiptSegmentSocketServiceListener listener) {
     _listeners.remove(context.hashCode);
     _listeners.putIfAbsent(context.hashCode, () => listener);
+    final sessionEvent = _lastConversationSessionEvent;
+    if (sessionEvent != null) {
+      listener.onMessageEventReceived(sessionEvent);
+    }
+    final serviceStatusEvent = _lastServiceStatusEvent;
+    if (serviceStatusEvent != null) {
+      listener.onMessageEventReceived(serviceStatusEvent);
+    }
   }
 
   void unsubscribe(Object context) {
@@ -167,9 +198,26 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     }
   }
 
+  Future<bool> waitUntilServerReady({
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    if (serverReady) return true;
+    if (state != SocketServiceState.connected) return false;
+    if (_serverReadyCompleter.isCompleted) return _serverReady;
+    try {
+      return await _serverReadyCompleter.future.timeout(timeout);
+    } on TimeoutException {
+      return false;
+    }
+  }
+
   Future stop({String? reason}) async {
+    _completeServerReady(false);
     await _socket.stop();
     _listeners.clear();
+    _lastConversationSessionEvent = null;
+    _lastServiceStatusEvent = null;
+    _serverReady = false;
 
     if (reason != null) {
       Logger.debug(reason);
@@ -189,6 +237,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   @override
   void onClosed([int? closeCode]) {
+    _completeServerReady(false);
     _listeners.forEach((k, v) {
       v.onClosed(closeCode);
     });
@@ -197,6 +246,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
   @override
   void onError(Object err, StackTrace trace) {
+    _completeServerReady(false);
     _listeners.forEach((k, v) {
       v.onError(err);
     });
@@ -233,6 +283,19 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     // Message event
     if (jsonEvent.containsKey("type")) {
       var event = MessageEvent.fromJson(jsonEvent);
+      if (event is ConversationSessionEvent) {
+        _lastConversationSessionEvent = event;
+      }
+      if (event is MessageServiceStatusEvent) {
+        _lastServiceStatusEvent = event;
+        if (event.status == 'ready') {
+          _serverReady = true;
+          _completeServerReady(true);
+        } else if (event.status == 'stt_failed') {
+          _serverReady = false;
+          _completeServerReady(false);
+        }
+      }
       _listeners.forEach((k, v) {
         v.onMessageEventReceived(event);
       });
@@ -282,6 +345,13 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       'include_speech_profile': includeSpeechProfile,
     });
   }
+
+  void _completeServerReady(bool ready) {
+    _serverReady = ready;
+    if (!_serverReadyCompleter.isCompleted) {
+      _serverReadyCompleter.complete(ready);
+    }
+  }
 }
 
 class TranscriptSocketServiceFactory {
@@ -308,6 +378,7 @@ class TranscriptSocketServiceFactory {
     bool includeSpeechProfile = true,
     String? source,
     String? sttConfigId,
+    String? clientConversationId,
   }) {
     return TranscriptSegmentSocketService.create(
       sampleRate,
@@ -315,6 +386,7 @@ class TranscriptSocketServiceFactory {
       language,
       includeSpeechProfile: includeSpeechProfile,
       source: source,
+      clientConversationId: clientConversationId,
       sttConfigId: sttConfigId ?? 'omi:default',
     );
   }
@@ -337,6 +409,7 @@ class TranscriptSocketServiceFactory {
     String language,
     CustomSttConfig config, {
     String? source,
+    String? clientConversationId,
   }) {
     if (!config.isEnabled) {
       return createDefault(sampleRate, codec, language, source: source);
@@ -361,6 +434,7 @@ class TranscriptSocketServiceFactory {
       effectiveLang,
       primarySocket: primarySocket,
       source: source,
+      clientConversationId: clientConversationId,
       sttConfigId: sttConfigId,
       sttProvider: config.provider.name,
     );
@@ -487,6 +561,7 @@ class TranscriptSocketServiceFactory {
     String language, {
     required IPureSocket primarySocket,
     String? source,
+    String? clientConversationId,
     String? sttConfigId,
     String? sttProvider,
   }) {
@@ -495,6 +570,7 @@ class TranscriptSocketServiceFactory {
       codec,
       language,
       source: source,
+      clientConversationId: clientConversationId,
     );
     final compositeSocket = CompositeTranscriptionSocket(
       primarySocket: primarySocket,
@@ -507,6 +583,7 @@ class TranscriptSocketServiceFactory {
       language,
       compositeSocket,
       source: source,
+      clientConversationId: clientConversationId,
       customSttMode: true,
       sttConfigId: sttConfigId,
     );

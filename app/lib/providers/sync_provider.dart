@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -48,6 +49,28 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // WAL management
   List<Wal> _allWals = [];
   List<Wal> get allWals => _allWals;
+  List<Wal>? _userVisibleWalsCache;
+  int _userVisibleWalsCacheStamp = 0;
+
+  /// User-facing recordings exclude the pendant's immutable transfer ranges.
+  ///
+  /// Those ranges are internal assembly inputs, not independently meaningful
+  /// recordings. They become visible only after LocalWalSync has compacted
+  /// them into one historical archive or canonical conversation artifact.
+  List<Wal> get userVisibleWals {
+    final stamp = identityHashCode(_allWals) ^ _allWals.length;
+    final cached = _userVisibleWalsCache;
+    if (cached != null && _userVisibleWalsCacheStamp == stamp) return cached;
+    final visible = _allWals
+        .where(
+          (wal) => wal.originalStorage != WalStorage.sdcard || RingProtocol.parseSourceRange(wal.sourceId) == null,
+        )
+        .toList(growable: false);
+    _userVisibleWalsCache = visible;
+    _userVisibleWalsCacheStamp = stamp;
+    return visible;
+  }
+
   bool _isLoadingWals = false;
   bool get isLoadingWals => _isLoadingWals;
 
@@ -105,7 +128,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     final pending = <Wal>[];
     final synced = <Wal>[];
     final corrupted = <Wal>[];
-    for (final w in _allWals) {
+    for (final w in userVisibleWals) {
       if (w.status == WalStatus.synced) {
         synced.add(w);
       } else if (w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow) {
@@ -139,7 +162,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   List<Wal> get uploadedWals => _allWals.where((w) => w.status == WalStatus.uploaded).toList();
 
-  List<Wal> get pendingDeletableWals => _allWals.where((w) => !w.isSyncing && w.status == WalStatus.miss).toList();
+  List<Wal> get pendingDeletableWals =>
+      userVisibleWals.where((w) => !w.isSyncing && w.status == WalStatus.miss).toList();
 
   // Count-only accessors for status-chip badges. Read length from the
   // shared cached partitions so the chips don't trigger an extra iteration
@@ -197,14 +221,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     final stamp = identityHashCode(_allWals) ^ _allWals.length;
     final cached = _sortedCache;
     if (cached != null && _sortedCacheStamp == stamp) return cached;
-    final list = List<Wal>.from(_allWals);
+    final list = List<Wal>.from(userVisibleWals);
     list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
     _sortedCache = list;
     _sortedCacheStamp = stamp;
     return list;
   }
 
-  int _countWhere(bool Function(WalSyncDisplayState) test) => _allWals.where((w) => test(w.syncDisplayState)).length;
+  int _countWhere(bool Function(WalSyncDisplayState) test) =>
+      userVisibleWals.where((w) => test(w.syncDisplayState)).length;
 
   int get syncingWalsCount => _countWhere((s) => s == WalSyncDisplayState.syncing);
   int get syncedWalsCount => _countWhere((s) => s == WalSyncDisplayState.synced);
@@ -241,26 +266,26 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   List<Wal> get filteredWals {
     if (_storageFilter == null) {
-      return _allWals;
+      return userVisibleWals;
     }
 
     // SD Card filter: show WALs on SD card OR transferred from SD card
     if (_storageFilter == WalStorage.sdcard) {
-      return _allWals
+      return userVisibleWals
           .where((wal) => wal.storage == WalStorage.sdcard || wal.originalStorage == WalStorage.sdcard)
           .toList();
     }
 
     // Flash Page filter: show WALs on flash page OR transferred from flash page
     if (_storageFilter == WalStorage.flashPage) {
-      return _allWals
+      return userVisibleWals
           .where((wal) => wal.storage == WalStorage.flashPage || wal.originalStorage == WalStorage.flashPage)
           .toList();
     }
 
     // Phone filter: show WALs on phone that are NOT originally from SD card or flash page
     if (_storageFilter == WalStorage.disk || _storageFilter == WalStorage.mem) {
-      return _allWals
+      return userVisibleWals
           .where(
             (wal) =>
                 (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
@@ -271,7 +296,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
 
     // Other filters
-    return _allWals.where((wal) => wal.storage == _storageFilter).toList();
+    return userVisibleWals.where((wal) => wal.storage == _storageFilter).toList();
   }
 
   // Sync state

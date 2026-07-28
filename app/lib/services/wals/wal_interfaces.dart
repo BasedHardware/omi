@@ -74,6 +74,7 @@ abstract class LocalWalSync implements IWalSync {
     bool scheduleUpload = true,
   });
   Future<List<Wal>> getAllWals();
+  Future<Wal?> getWalById(String id);
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   Future<void> deleteAllCorruptedWals();

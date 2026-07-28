@@ -6,13 +6,35 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/enums.dart';
+
+class _CaptureReconnectSpy extends CaptureProvider {
+  final List<String> events = [];
+
+  @override
+  bool get hasActiveDeviceAudioStream => true;
+
+  @override
+  Future streamDeviceRecording({BtDevice? device}) async {
+    events.add('start:${device?.id}');
+  }
+
+  @override
+  Future<void> resumeDeviceRecordingAfterReconnect({
+    required BtDevice device,
+  }) async {
+    events.add('resume:${device.id}');
+  }
+}
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
   @override
@@ -272,6 +294,47 @@ void main() {
 
       expect(result, true);
       expect(notifyCount, 2);
+    });
+  });
+
+  group('capture ownership after BLE reconnect', () {
+    late DeviceProvider provider;
+    late _CaptureReconnectSpy capture;
+    late BtDevice device;
+
+    setUp(() {
+      capture = _CaptureReconnectSpy();
+      provider = DeviceProvider()..captureProvider = capture;
+      device = BtDevice(
+        name: 'Omi',
+        id: 'device-123',
+        type: DeviceType.omi,
+        rssi: -40,
+      );
+    });
+
+    tearDown(() {
+      provider.dispose();
+      capture.dispose();
+    });
+
+    test('cold connection starts a new capture session', () async {
+      capture.updateRecordingState(RecordingState.stop);
+
+      await provider.startOrResumeCaptureForTesting(device);
+
+      expect(capture.events, ['start:device-123']);
+    });
+
+    test('transient BLE reconnect resumes the existing live preview', () async {
+      capture
+        ..segments = [_testSegment()]
+        ..updateRecordingState(RecordingState.deviceRecord);
+
+      await provider.startOrResumeCaptureForTesting(device);
+
+      expect(capture.events, ['resume:device-123']);
+      expect(capture.segments.single.text, 'existing preview');
     });
   });
 
@@ -597,6 +660,17 @@ void main() {
     });
   });
 }
+
+TranscriptSegment _testSegment() => TranscriptSegment(
+      id: 'segment-1',
+      text: 'existing preview',
+      speaker: 'SPEAKER_00',
+      isUser: false,
+      personId: null,
+      start: 0,
+      end: 1,
+      translations: const [],
+    );
 
 class _DfuTestDeviceService extends DeviceService {
   _DfuTestDeviceService({
