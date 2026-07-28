@@ -140,6 +140,15 @@ final class ElicitationStore: ObservableObject {
     answer(focused, with: pending)
   }
 
+  /// Finish the batch: every choice that was made is sent, and every question
+  /// the user moved past without choosing is cancelled rather than left
+  /// pending, since a question nobody answers blocks its agent forever.
+  func submitAll() {
+    for pending in queue {
+      answer(pending, with: staged[pending.id] ?? .cancel)
+    }
+  }
+
   private let submit: (PendingElicitation, ElicitationAnswer) -> Void
 
   init(submit: @escaping (PendingElicitation, ElicitationAnswer) -> Void) {

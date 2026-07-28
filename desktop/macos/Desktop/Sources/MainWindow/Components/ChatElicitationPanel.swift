@@ -28,7 +28,15 @@ struct ChatElicitationPanel: View {
     return nil
   }
 
-  private var canSend: Bool { staged != nil }
+  /// The last question in the queue is where the batch is sent; before that
+  /// the primary action moves on, so a user can walk the whole set once.
+  private var isLastQuestion: Bool {
+    elicitations.focusedIndex >= elicitations.waitingCount - 1
+  }
+
+  /// Always available. Skipping a question is a legitimate answer — the agent
+  /// is told the user declined — so there is nothing to disable.
+  private var primaryTitle: String { isLastQuestion ? "Send" : "Next" }
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -239,7 +247,7 @@ struct ChatElicitationPanel: View {
       .foregroundColor(OmiColors.textPrimary)
       .focused($freeTextFocused)
       .onChange(of: freeText) { _, value in stageFreeText(value) }
-      .onSubmit(send)
+      .onSubmit(advance)
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xs)
       .background(OmiColors.backgroundTertiary)
@@ -250,15 +258,16 @@ struct ChatElicitationPanel: View {
   /// prompt -> options -> what to do about them without crossing the card.
   private var footer: some View {
     HStack(spacing: OmiSpacing.sm) {
-      Button(action: send) {
+      Button(action: advance) {
         actionLabel(
-          "Send", key: "\u{21A9}", enabled: canSend,
-          fill: canSend ? OmiColors.backgroundQuaternary : OmiColors.backgroundTertiary.opacity(0.5))
+          primaryTitle, key: "\u{21A9}", enabled: true,
+          fill: OmiColors.backgroundQuaternary)
       }
       .buttonStyle(.plain)
-      .disabled(!canSend)
       .keyboardShortcut(.return, modifiers: [])
-      .help(canSend ? "Send this answer" : "Choose an option first")
+      .help(
+        isLastQuestion
+          ? "Send every answer you have chosen" : "Move to the next question")
 
       Button(action: dismiss) {
         actionLabel(
@@ -321,9 +330,14 @@ struct ChatElicitationPanel: View {
     if case .text(let text) = staged { freeText = text } else { freeText = "" }
   }
 
-  private func send() {
-    guard canSend else { return }
-    elicitations.submitFocused()
+  /// Move through the batch, then send it. A question the user passes over
+  /// without choosing is carried as a skip and cancelled when the batch goes.
+  private func advance() {
+    if isLastQuestion {
+      elicitations.submitAll()
+    } else {
+      elicitations.focusNext()
+    }
   }
 
   private func dismiss() {

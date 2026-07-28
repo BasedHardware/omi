@@ -277,3 +277,62 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     XCTAssertEqual(store.focused?.id, "a")
   }
 }
+
+@MainActor
+final class ElicitationBatchTests: XCTestCase {
+  private func pending(_ id: String) -> PendingElicitation {
+    PendingElicitation(payload: [
+      "dispatchId": id, "ownerId": "o1", "sessionId": "s1", "mode": "question",
+      "title": "Omi is asking", "prompt": "Q \(id)",
+      "options": [["optionId": "yes", "label": "Yes", "effect": "choice"]],
+      "allowsFreeText": true,
+    ])!
+  }
+
+  private func makeStore() -> (ElicitationStore, () -> [(PendingElicitation, ElicitationAnswer)]) {
+    var sent: [(PendingElicitation, ElicitationAnswer)] = []
+    return (ElicitationStore { sent.append(($0, $1)) }, { sent })
+  }
+
+  func testSendingTheBatchDeliversEveryChoiceAtOnce() {
+    let (store, sent) = makeStore()
+    let a = pending("a")
+    let b = pending("b")
+    store.enqueue(a)
+    store.enqueue(b)
+    store.stage(.option("yes"), for: a)
+    store.stage(.text("later"), for: b)
+
+    store.submitAll()
+
+    XCTAssertEqual(sent().count, 2)
+    XCTAssertEqual(sent().first(where: { $0.0.id == "a" })?.1, .option("yes"))
+    XCTAssertEqual(sent().first(where: { $0.0.id == "b" })?.1, .text("later"))
+    XCTAssertEqual(store.waitingCount, 0)
+  }
+
+  func testAQuestionPassedOverIsCancelledRatherThanLeftPending() {
+    // A question nobody answers would block its agent forever.
+    let (store, sent) = makeStore()
+    let a = pending("a")
+    store.enqueue(a)
+    store.enqueue(pending("b"))
+    store.stage(.option("yes"), for: a)
+
+    store.submitAll()
+
+    XCTAssertEqual(sent().first(where: { $0.0.id == "b" })?.1, .cancel)
+    XCTAssertEqual(store.waitingCount, 0, "the batch drains completely")
+  }
+
+  func testSendingWithNothingChosenCancelsTheWholeBatch() {
+    let (store, sent) = makeStore()
+    store.enqueue(pending("a"))
+    store.enqueue(pending("b"))
+
+    store.submitAll()
+
+    XCTAssertEqual(sent().count, 2)
+    XCTAssertTrue(sent().allSatisfy { $0.1 == .cancel })
+  }
+}
