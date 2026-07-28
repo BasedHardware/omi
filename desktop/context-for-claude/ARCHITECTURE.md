@@ -94,7 +94,7 @@ Sources/ContextApp/      ContextApp  Engine  Permissions
                          Support/    Log
 ```
 
-`CONTRACTS.md` holds the interface each file must satisfy; `docs/context-for-claude-design-system.md` holds the
+`CONTRACTS.md` holds the interface each file must satisfy; `docs/design-system.md` holds the
 exact visual values. Both are load-bearing — this package was built by many hands at once, and those
 two documents are what made the pieces fit.
 

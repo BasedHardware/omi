@@ -271,7 +271,7 @@ enum Permissions {
 
     // MARK: - Status words
 
-    /// The four words the permission row can show, per `docs/ambient-design-system.md`.
+    /// The four words the permission row can show, per `docs/design-system.md`.
     private enum Word {
         static let granted = "Granted"
         static let open = "Open"

@@ -35,7 +35,7 @@ struct StatusView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(width: 320)
-        .background(Ink.ink)
+        .background(Ink.paper)
         .onAppear(perform: refresh)
         .onReceive(tick) { _ in engine.refreshCapabilities() }
     }
@@ -46,12 +46,12 @@ struct StatusView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(engine.isCapturing ? Ink.listeningGreen : Ink.creamDim)
+                    .fill(engine.isCapturing ? Ink.listeningGreen : Ink.faint)
                     .frame(width: 7, height: 7)
 
                 Text(engine.isCapturing ? "Listening · \(todayLabel)" : "Paused")
                     .inkStyle(.rowCopy)
-                    .foregroundStyle(Ink.cream)
+                    .foregroundStyle(Ink.ink)
             }
 
             // Shown even while capturing: sources fail independently, so "Listening" plus "System
@@ -60,7 +60,7 @@ struct StatusView: View {
             if let reason = engine.pausedReason, !reason.isEmpty {
                 Text(reason)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(Ink.creamHint)
+                    .foregroundStyle(Ink.mid)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -74,7 +74,7 @@ struct StatusView: View {
         Text(engine.lastLine ?? idlePlaceholder)
             .inkStyle(.statusLabel)
             .italic()
-            .foregroundStyle(Ink.creamDim)
+            .foregroundStyle(Ink.mid)
             .lineLimit(2)
             // The newest words are at the end of a transcript line, so keep the tail.
             .truncationMode(.head)
@@ -160,7 +160,9 @@ struct StatusView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(claudeSummary)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(isConnected ? Ink.creamHint : Ink.creamDim)
+                    // Not connected is the state with something to do about it, so it is the
+                    // state that gets full ink. Settled recedes to `mid`.
+                    .foregroundStyle(isConnected ? Ink.mid : Ink.ink)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: 0)
@@ -169,14 +171,14 @@ struct StatusView: View {
                     Button("Connect", action: connect)
                         .buttonStyle(.plain)
                         .inkStyle(.statusLabel)
-                        .foregroundStyle(Ink.cursorBlue)
+                        .foregroundStyle(Ink.bronze)
                 }
             }
 
             if let claudeNote, !claudeNote.isEmpty {
                 Text(claudeNote)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(Ink.creamDim)
+                    .foregroundStyle(Ink.mid)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -190,13 +192,13 @@ struct StatusView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(accountSummary)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(auth.isSignedIn ? Ink.creamHint : Ink.creamDim)
+                    .foregroundStyle(auth.isSignedIn ? Ink.mid : Ink.ink)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let note = uploadNote {
                     Text(note)
                         .inkStyle(.statusLabel)
-                        .foregroundStyle(uploads.lastError == nil ? Ink.creamDim : Ink.errorRed)
+                        .foregroundStyle(uploads.lastError == nil ? Ink.mid : Ink.errorRed)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -207,7 +209,7 @@ struct StatusView: View {
                 Button("Sign out") { auth.signOut() }
                     .buttonStyle(.plain)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(Ink.creamDim)
+                    .foregroundStyle(Ink.faint)
             }
         }
     }
@@ -259,7 +261,7 @@ struct StatusView: View {
             Button("Quit") { NSApp.terminate(nil) }
                 .buttonStyle(.plain)
                 .inkStyle(.statusLabel)
-                .foregroundStyle(Ink.creamDim)
+                .foregroundStyle(Ink.faint)
                 .keyboardShortcut("q")
         }
     }
@@ -268,7 +270,7 @@ struct StatusView: View {
 
     private var hairline: some View {
         Rectangle()
-            .fill(Ink.creamHairline)
+            .fill(Ink.line)
             .frame(height: 1)
     }
 

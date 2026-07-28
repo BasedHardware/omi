@@ -1,13 +1,17 @@
 //
 //  Ink.swift — the shared visual vocabulary for the onboarding window and the menu bar popover.
 //
-//  Every value here comes from docs/ambient-design-system.md and is exact. Roles are exposed as
-//  whole styles rather than loose numbers because the character of the type lives in the tracking
-//  and the leading, not the point size — a caller that hand-assembles `.font(.literata(46, .medium))`
-//  and forgets `.tracking(-2.07)` has quietly shipped a different product. `Text.inkStyle(_:)` makes
-//  that mistake unavailable.
+//  Every value here comes from docs/design-system.md, which in turn is the product site
+//  (archit-lal.github.io/Periphery) read as CSS custom properties. The app and the site are one
+//  product, so they are one palette: warm paper, warm near-black ink, a bronze accent, and Open
+//  Runde at 400/500/600 for every run of text.
 //
-//  Brand: white and neutral accents only (INV-UI-1) — nothing off-brand anywhere in this file.
+//  Roles are exposed as whole styles rather than loose numbers because the character of the type
+//  lives in the tracking as much as the point size — a caller that hand-assembles
+//  `.font(.openRunde(32, .semiBold))` and forgets `.tracking(-1.12)` has quietly shipped a
+//  different product. `Text.inkStyle(_:)` makes that mistake unavailable.
+//
+//  Brand: warm neutrals and bronze only (INV-UI-1) — nothing off-brand anywhere in this file.
 //
 
 import AppKit
@@ -16,7 +20,7 @@ import SwiftUI
 // MARK: - Hex literals
 
 extension Color {
-    /// `Color(hex: 0xFFFCEC)` — sRGB, the space the design values were picked in.
+    /// `Color(hex: 0xFBF8F4)` — sRGB, the space the design values were picked in.
     init(hex: UInt32, opacity: Double = 1) {
         self.init(
             .sRGB,
@@ -30,7 +34,7 @@ extension Color {
 
 extension NSColor {
     /// AppKit twin of `Color(hex:)`, for the layers SwiftUI cannot reach: the window's root
-    /// `contentView.layer.backgroundColor`, the visual-effect mask, the status item.
+    /// `contentView.layer.backgroundColor`, the menu bar spotlight ring, the status item.
     convenience init(hex: UInt32, alpha: CGFloat = 1) {
         self.init(
             srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
@@ -44,41 +48,47 @@ extension NSColor {
 // MARK: - Colour
 
 enum Ink {
-    // Base palette.
-    static let cream = Color(hex: 0xFFFCEC)
-    static let ink = Color(hex: 0x171716)
+    // The site's seven variables, spelled the same way they are spelled in its `:root`.
+
+    /// `--paper`. Every surface in the app: the onboarding oval, the popover.
+    static let paper = Color(hex: 0xFBF8F4)
+    /// `--ink`. Primary type, the primary button's fill, the granted checkbox.
+    static let ink = Color(hex: 0x171412)
+    /// `--mid`. Secondary type: prose under a headline, the popover's status lines.
+    static let mid = Color(hex: 0x6B625B)
+    /// `--faint`. Tertiary type: a status word, a count, "Quit". Never a whole sentence someone
+    /// has to read — at 2.6:1 on paper this is a colour for glancing at.
+    static let faint = Color(hex: 0xA39A92)
+    /// `--line`. Rules and card hairlines. Barely there on purpose.
+    static let line = Color(hex: 0xE6DFD6)
+    /// `--bronze`. The one accent: an actionable link, and nothing else.
+    static let bronze = Color(hex: 0x8F6420)
+    /// `--red`. The site draws its card outline in this; here it is the error colour, which is the
+    /// only place the app ever needs to raise its voice.
+    static let errorRed = Color(hex: 0xC9352B)
+
+    /// The live indicator. The one hue outside the site palette, because "on" has to read as on at
+    /// 7 pt and the site never had to say it. Muted enough to sit on paper without shouting.
     static let listeningGreen = Color(hex: 0x2E8B57)
-    static let cursorBlue = Color(hex: 0x96C4FF)
-    static let errorRed = Color(hex: 0xFFB4AB)
 
-    // The cream alpha ladder. Named because unnamed alphas drift: someone writes 0.6 where the
-    // system says 0.55 and the whole surface loses its evenness.
-    /// Idle keycap fill / warm glass tint.
-    static let creamGlass = Color(hex: 0xFFFCEC, opacity: 0.08)
-    /// Borders and hairlines.
-    static let creamHairline = Color(hex: 0xFFFCEC, opacity: 0.35)
-    /// Dimmed secondary text.
-    static let creamDim = Color(hex: 0xFFFCEC, opacity: 0.50)
-    /// Secondary button outline.
-    static let creamOutline = Color(hex: 0xFFFCEC, opacity: 0.55)
-    /// Hint and prompt text.
-    static let creamHint = Color(hex: 0xFFFCEC, opacity: 0.70)
+    // Paper on paper. The site has no card fill, so these are derived: two steps of warm shading
+    // between `paper` and `line`, which is what lets a permission row read as a card without a
+    // border heavy enough to box it in.
+    /// Permission-row fill.
+    static let surface = Color(hex: 0xF3EEE5)
+    /// The same row under the pointer. A tappable row has to say so, and macOS has no other
+    /// affordance for it.
+    static let surfaceHover = Color(hex: 0xECE5D9)
 
-    // Permission rows use plain white, not cream — the row is a surface, not a piece of type.
-    static let rowSurface = Color.white.opacity(0.05)
-    static let rowBorder = Color.white.opacity(0.45)
-    static let rowCopy = Color.white.opacity(0.82)
-    /// Same value as `rowBorder`; the doc names both uses, so both have a name.
-    static let rowStatus = Color.white.opacity(0.45)
-    /// Not in the design doc. A row that is tappable has to say so under the pointer, and macOS has
-    /// no other affordance for it.
-    static let rowSurfaceHover = Color.white.opacity(0.09)
+    /// A drawn hairline: the secondary button's outline, the empty checkbox. `line` is right for a
+    /// rule between blocks and too faint for the edge of something you are meant to press.
+    static let inkHairline = Color(hex: 0x171412, opacity: 0.28)
+    /// The pressed state of anything with no fill of its own.
+    static let inkWash = Color(hex: 0x171412, opacity: 0.06)
 
     // AppKit twins for the layers below SwiftUI.
-    static let nsCream = NSColor(hex: 0xFFFCEC)
-    /// The window root layer is painted with this and never left clear — a clear root shows grey
-    /// bands at the screen edges.
-    static let nsInk = NSColor(hex: 0x171716)
+    static let nsPaper = NSColor(hex: 0xFBF8F4)
+    static let nsInk = NSColor(hex: 0x171412)
 }
 
 /// One backdrop blob: a unit position relative to the frame, and its colour.
@@ -91,18 +101,20 @@ struct InkBlob: Equatable {
 }
 
 extension Ink {
-    /// The nine backdrop blobs, in paint order. Owned here because they are colour; the atmosphere
-    /// agent owns how they are blurred, masked, risen, and drifted.
+    /// The nine backdrop blobs, in paint order. Geometry is unchanged from the dark system; the
+    /// colour is not. Every tone here is a warm neutral a step or two below `paper`, so blurred and
+    /// composited over the paper scrim the field reads as shading on a sheet — a faint warm wash —
+    /// rather than as nine coloured lights. Saturated colour on paper reads as a bug.
     static let backdropBlobs: [InkBlob] = [
-        InkBlob(x: -1.25, y: -1.20, color: Color(hex: 0xA85E46)),
-        InkBlob(x: -0.25, y: -1.25, color: Color(hex: 0xC78067)),
-        InkBlob(x: 0.35, y: -1.25, color: Color(hex: 0xD4AE87)),
-        InkBlob(x: 1.20, y: -1.05, color: Color(hex: 0x4E687C)),
-        InkBlob(x: 1.25, y: 0.05, color: Color(hex: 0x8EAFA9)),
-        InkBlob(x: 1.20, y: 1.15, color: Color(hex: 0xA6AA79)),
-        InkBlob(x: 0.05, y: 1.25, color: Color(hex: 0xC6A760)),
-        InkBlob(x: -0.75, y: 1.20, color: Color(hex: 0xB86958)),
-        InkBlob(x: -1.25, y: 0.45, color: Color(hex: 0x9B6174)),
+        InkBlob(x: -1.25, y: -1.20, color: Color(hex: 0xE8D9C6)),
+        InkBlob(x: -0.25, y: -1.25, color: Color(hex: 0xF0E2D2)),
+        InkBlob(x: 0.35, y: -1.25, color: Color(hex: 0xEFE4D3)),
+        InkBlob(x: 1.20, y: -1.05, color: Color(hex: 0xE2DFD6)),
+        InkBlob(x: 1.25, y: 0.05, color: Color(hex: 0xE6E3D8)),
+        InkBlob(x: 1.20, y: 1.15, color: Color(hex: 0xEBE5D4)),
+        InkBlob(x: 0.05, y: 1.25, color: Color(hex: 0xF1E6D0)),
+        InkBlob(x: -0.75, y: 1.20, color: Color(hex: 0xEEDDCB)),
+        InkBlob(x: -1.25, y: 0.45, color: Color(hex: 0xE9DCCC)),
     ]
 }
 
@@ -169,18 +181,20 @@ enum InkReduceMotion {
 
 // MARK: - Font resolution
 
-enum InterWeight {
+/// The four bundled Open Runde faces. One family carries display, body and label — the site's
+/// `--sans`, `--disp` and `--mono` all resolve to it, and so does everything here.
+enum RundeWeight {
     case regular, medium, semiBold, bold
 
-    /// PostScript names of the bundled faces. Inter-Medium and Inter-SemiBold each ship as their own
-    /// family ("Inter Medium", "Inter SemiBold"), so asking for family "Inter" at a weight would
-    /// never find them — the PostScript name is the only reliable handle.
+    /// PostScript names of the bundled faces. Note the lowercase `b` in `Semibold`: it is the name
+    /// inside the `.otf`, and the family/weight route would not find it — the PostScript name is
+    /// the only reliable handle.
     var fontName: String {
         switch self {
-        case .regular: return "Inter-Regular"
-        case .medium: return "Inter-Medium"
-        case .semiBold: return "Inter-SemiBold"
-        case .bold: return "Inter-Bold"
+        case .regular: return "OpenRunde-Regular"
+        case .medium: return "OpenRunde-Medium"
+        case .semiBold: return "OpenRunde-Semibold"
+        case .bold: return "OpenRunde-Bold"
         }
     }
 
@@ -199,39 +213,6 @@ enum InterWeight {
         case .medium: return .medium
         case .semiBold: return .semibold
         case .bold: return .bold
-        }
-    }
-}
-
-enum LiterataWeight {
-    case regular
-    /// The headline weight the design doc names. Only Regular (400) and SemiBold (600) are bundled,
-    /// so this resolves to Regular — the same face a browser picks for `font-weight: 500` given
-    /// those two, and the one that keeps 46 pt display type from going heavy under −2.07 tracking.
-    /// The system-serif fallback still uses a true 500.
-    case medium
-    case semiBold
-
-    var fontName: String {
-        switch self {
-        case .regular, .medium: return "Literata-Regular"
-        case .semiBold: return "Literata-SemiBold"
-        }
-    }
-
-    var swiftUIWeight: Font.Weight {
-        switch self {
-        case .regular: return .regular
-        case .medium: return .medium
-        case .semiBold: return .semibold
-        }
-    }
-
-    var appKitWeight: NSFont.Weight {
-        switch self {
-        case .regular: return .regular
-        case .medium: return .medium
-        case .semiBold: return .semibold
         }
     }
 }
@@ -243,7 +224,7 @@ enum InkFonts {
         let font: Font
         let metrics: NSFont
         /// False when the bundled face was missing and a system font stood in. A missing font file
-        /// must degrade, never crash — the app is still usable in Times and San Francisco.
+        /// must degrade, never crash — the app is still usable in San Francisco.
         let isCustom: Bool
     }
 
@@ -266,8 +247,7 @@ enum InkFonts {
 
     /// True when every bundled face resolved. Useful in a diagnostic line; never gate UI on it.
     static var bundledFacesAvailable: Bool {
-        let names = [InterWeight.regular, .medium, .semiBold, .bold].map(\.fontName)
-            + [LiterataWeight.regular, .semiBold].map(\.fontName)
+        let names = [RundeWeight.regular, .medium, .semiBold, .bold].map(\.fontName)
         return names.allSatisfy { NSFont(name: $0, size: 12) != nil }
     }
 
@@ -275,8 +255,7 @@ enum InkFonts {
         _ name: String,
         size: CGFloat,
         weight: Font.Weight,
-        appKitWeight: NSFont.Weight,
-        design: Font.Design
+        appKitWeight: NSFont.Weight
     ) -> Resolved {
         let key = Key(name: name, size: size)
         lock.lock()
@@ -290,8 +269,8 @@ enum InkFonts {
             resolved = Resolved(font: .custom(name, fixedSize: size), metrics: custom, isCustom: true)
         } else {
             resolved = Resolved(
-                font: .system(size: size, weight: weight, design: design),
-                metrics: systemFont(size: size, weight: appKitWeight, design: design),
+                font: .system(size: size, weight: weight),
+                metrics: NSFont.systemFont(ofSize: size, weight: appKitWeight),
                 isCustom: false
             )
         }
@@ -306,66 +285,38 @@ enum InkFonts {
     static func naturalLineHeight(_ font: NSFont) -> CGFloat {
         font.ascender - font.descender + font.leading
     }
-
-    private static func systemFont(size: CGFloat, weight: NSFont.Weight, design: Font.Design) -> NSFont {
-        let base = NSFont.systemFont(ofSize: size, weight: weight)
-        guard design == .serif else { return base }
-        guard let descriptor = base.fontDescriptor.withDesign(.serif) else { return base }
-        return NSFont(descriptor: descriptor, size: size) ?? base
-    }
 }
 
 extension Font {
-    static func inter(_ size: CGFloat, _ weight: InterWeight = .regular) -> Font {
+    static func openRunde(_ size: CGFloat, _ weight: RundeWeight = .regular) -> Font {
         InkFonts.resolve(
             weight.fontName,
             size: size,
             weight: weight.swiftUIWeight,
-            appKitWeight: weight.appKitWeight,
-            design: .default
-        ).font
-    }
-
-    static func literata(_ size: CGFloat, _ weight: LiterataWeight = .regular) -> Font {
-        InkFonts.resolve(
-            weight.fontName,
-            size: size,
-            weight: weight.swiftUIWeight,
-            appKitWeight: weight.appKitWeight,
-            design: .serif
+            appKitWeight: weight.appKitWeight
         ).font
     }
 }
 
 // MARK: - Type roles
 
-struct InkTextShadow: Equatable {
-    let color: Color
-    let radius: CGFloat
-    let x: CGFloat
-    let y: CGFloat
-
-    /// The only shadow in the system: black at 50 %, blur 18, offset (0, 1).
-    static let introHero = InkTextShadow(color: Color.black.opacity(0.45), radius: 12, x: 0, y: 1)
-}
-
-/// A complete type role: face, size, tracking, leading, and shadow travelling together so none of
-/// them can be dropped at a call site.
+/// A complete type role: face, size, tracking and leading travelling together so none of them can
+/// be dropped at a call site.
 struct InkTextStyle {
     /// Point size, before tracking or leading.
     let size: CGFloat
     let font: Font
-    /// `.tracking` in points; 0 when the role has none.
+    /// `.tracking` in points; 0 when the role has none. The site states tracking in `em`, so each
+    /// role below carries the em value it was converted from.
     let tracking: CGFloat
     /// Target line box as a multiple of `size`; nil when the role uses the face's natural leading.
     let lineHeightMultiple: CGFloat?
     /// Extra leading that lands the line box on `lineHeightMultiple`.
     ///
     /// Clamped at zero: `NSParagraphStyle.lineSpacing` is defined as non-negative, so a multiple
-    /// *tighter* than the face's own leading (the 1.08 hero, the 1.2 step headline) cannot be
+    /// *tighter* than the face's own leading (the 1.10 hero, the 1.18 step headline) cannot be
     /// expressed with `.lineSpacing` and renders at the face's natural leading instead.
     let lineSpacing: CGFloat
-    let shadow: InkTextShadow?
     /// False when the bundled face was missing for this role.
     let usesBundledFace: Bool
     /// The line box the face draws by default.
@@ -389,14 +340,12 @@ struct InkTextStyle {
         size: CGFloat,
         resolved: InkFonts.Resolved,
         tracking: CGFloat = 0,
-        lineHeightMultiple: CGFloat? = nil,
-        shadow: InkTextShadow? = nil
+        lineHeightMultiple: CGFloat? = nil
     ) {
         self.size = size
         self.font = resolved.font
         self.tracking = tracking
         self.lineHeightMultiple = lineHeightMultiple
-        self.shadow = shadow
         self.usesBundledFace = resolved.isCustom
         let natural = InkFonts.naturalLineHeight(resolved.metrics)
         self.naturalLineHeight = natural
@@ -409,40 +358,46 @@ struct InkTextStyle {
 }
 
 enum InkType {
-    /// Literata 46 / medium / −2.07 / 1.08, with the one shadow in the system.
-    /// The tracking is the signature of the whole product; it is never optional.
+    /// Open Runde 32 / semibold / −1.12 / 1.10 — the site's `h1` (600, −0.035 em, 1.08), at the
+    /// scale a 720 pt card can hold. The largest thing on screen, and the only reason the tracking
+    /// is this tight: at display size a geometric sans falls apart if the words do not lock up.
     static var introHero: InkTextStyle {
-        literata(30, .medium, tracking: -1.05, lineHeight: 1.16, shadow: .introHero)
+        runde(32, .semiBold, tracking: -1.12, lineHeight: 1.10)
     }
 
-    /// Literata 38 / medium / −1.2 / 1.2.
+    /// Open Runde 25 / semibold / −0.75 (−0.03 em) / 1.18.
     static var stepHeadline: InkTextStyle {
-        literata(26, .medium, tracking: -0.8, lineHeight: 1.2)
+        runde(25, .semiBold, tracking: -0.75, lineHeight: 1.18)
     }
 
-    /// Inter 38 / medium / −1.5. The "First…" line — sans, where the step headline is serif.
+    /// The "First…" line. Same face, size and tracking as `stepHeadline` — one headline size, as on
+    /// the site — and no leading multiple, because it is always a single line over a list.
     static var firstTitle: InkTextStyle {
-        inter(26, .medium, tracking: -0.9)
+        runde(25, .semiBold, tracking: -0.75)
     }
 
-    /// Inter 20 / medium / −0.3 / 1.5.
+    /// Open Runde 15 / regular / −0.15 (−0.01 em) / 1.55 — the site's body (400 at 1.6). Pair with
+    /// `Ink.mid`.
     static var prose: InkTextStyle {
-        inter(14, .medium, tracking: -0.1, lineHeight: 1.45)
+        runde(15, .regular, tracking: -0.15, lineHeight: 1.55)
     }
 
-    /// Inter 15 / regular / 1.35. Pair with `Ink.rowCopy`.
+    /// Open Runde 13 / medium / −0.13 / 1.40. Row copy and the popover's headline state. Medium,
+    /// not regular: at 13 pt on a paper card, regular goes weedy. Pair with `Ink.ink`.
     static var rowCopy: InkTextStyle {
-        inter(13, .regular, lineHeight: 1.32)
+        runde(13, .medium, tracking: -0.13, lineHeight: 1.40)
     }
 
-    /// Inter 12 / regular. Pair with `Ink.rowStatus` in a permission row.
+    /// Open Runde 11 / regular. Every small line in the popover and the status word in a permission
+    /// row. No tracking: below 12 pt, tightening a geometric sans only closes the counters. Pair
+    /// with `Ink.mid`, or `Ink.faint` for a single glanceable word.
     static var statusLabel: InkTextStyle {
-        inter(11, .regular)
+        runde(11, .regular)
     }
 
-    /// Inter 16 / semibold.
+    /// Open Runde 14 / semibold / −0.14 (−0.01 em).
     static var buttonLabel: InkTextStyle {
-        inter(14, .semiBold)
+        runde(14, .semiBold, tracking: -0.14)
     }
 
     /// The roles, in the order they appear in the design doc. Used by previews and by the
@@ -451,12 +406,11 @@ enum InkType {
         introHero, stepHeadline, firstTitle, prose, rowCopy, statusLabel, buttonLabel,
     ]
 
-    private static func inter(
+    private static func runde(
         _ size: CGFloat,
-        _ weight: InterWeight,
+        _ weight: RundeWeight,
         tracking: CGFloat = 0,
-        lineHeight: CGFloat? = nil,
-        shadow: InkTextShadow? = nil
+        lineHeight: CGFloat? = nil
     ) -> InkTextStyle {
         InkTextStyle(
             size: size,
@@ -464,34 +418,10 @@ enum InkType {
                 weight.fontName,
                 size: size,
                 weight: weight.swiftUIWeight,
-                appKitWeight: weight.appKitWeight,
-                design: .default
+                appKitWeight: weight.appKitWeight
             ),
             tracking: tracking,
-            lineHeightMultiple: lineHeight,
-            shadow: shadow
-        )
-    }
-
-    private static func literata(
-        _ size: CGFloat,
-        _ weight: LiterataWeight,
-        tracking: CGFloat = 0,
-        lineHeight: CGFloat? = nil,
-        shadow: InkTextShadow? = nil
-    ) -> InkTextStyle {
-        InkTextStyle(
-            size: size,
-            resolved: InkFonts.resolve(
-                weight.fontName,
-                size: size,
-                weight: weight.swiftUIWeight,
-                appKitWeight: weight.appKitWeight,
-                design: .serif
-            ),
-            tracking: tracking,
-            lineHeightMultiple: lineHeight,
-            shadow: shadow
+            lineHeightMultiple: lineHeight
         )
     }
 }
@@ -512,7 +442,7 @@ extension InkTextStyle {
 extension View {
     /// The role applied to a view whose text it cannot reach directly — a `Button` label, a `Label`,
     /// a stack of runs. Carries the face and the tracking, which propagate to descendant text; the
-    /// leading and the shadow are `Text`-level and stay with the `Text` overload below.
+    /// leading is `Text`-level and stays with the `Text` overload below.
     @ViewBuilder
     func inkStyle(_ style: InkTextStyle, color: Color? = nil) -> some View {
         let styled = font(style.font).tracking(style.tracking)
@@ -525,7 +455,7 @@ extension View {
 }
 
 extension Text {
-    /// The whole role: face, size, tracking, leading, shadow, and optionally the colour.
+    /// The whole role: face, size, tracking, leading, and optionally the colour.
     /// `Text("…").inkStyle(.introHero)` — there is no supported way to get the face without the
     /// tracking, which is the point.
     ///
@@ -541,24 +471,12 @@ extension Text {
             }
         }
         .lineSpacing(style.lineSpacing)
-        .inkShadow(style.shadow)
     }
 
     /// Face + size + tracking only, still a `Text`, for the rare case that needs to concatenate or
-    /// feed a `Label`. Loses the leading and the shadow — prefer `inkStyle(_:)`.
+    /// feed a `Label`. Loses the leading — prefer `inkStyle(_:)`.
     func inkFont(_ style: InkTextStyle) -> Text {
         font(style.font).tracking(style.tracking)
-    }
-}
-
-extension View {
-    @ViewBuilder
-    fileprivate func inkShadow(_ shadow: InkTextShadow?) -> some View {
-        if let shadow {
-            self.shadow(color: shadow.color, radius: shadow.radius, x: shadow.x, y: shadow.y)
-        } else {
-            self
-        }
     }
 }
 
@@ -567,9 +485,9 @@ extension View {
 /// The only action shape in the app: a full stadium, never a rounded rectangle.
 struct InkButton: View {
     enum Kind {
-        /// Cream fill, ink label.
+        /// Ink fill, paper label.
         case primary
-        /// Clear fill, cream label, 1 pt cream-55 % border.
+        /// Clear fill, ink label, 1 pt ink hairline.
         case secondary
     }
 
@@ -612,13 +530,15 @@ struct InkButtonStyle: ButtonStyle {
 
         private var fill: Color {
             switch kind {
-            case .primary: return pressed ? Ink.cream.opacity(0.82) : Ink.cream
-            case .secondary: return pressed ? Ink.creamGlass : Color.clear
+            // Pressed lightens rather than darkens: on paper, letting the surface through is the
+            // only direction that reads as give.
+            case .primary: return pressed ? Ink.ink.opacity(0.82) : Ink.ink
+            case .secondary: return pressed ? Ink.inkWash : Color.clear
             }
         }
 
         private var label: Color {
-            kind == .primary ? Ink.ink : Ink.cream
+            kind == .primary ? Ink.paper : Ink.ink
         }
 
         var body: some View {
@@ -631,7 +551,7 @@ struct InkButtonStyle: ButtonStyle {
                 .background(Capsule(style: .continuous).fill(fill))
                 .overlay {
                     if kind == .secondary {
-                        Capsule(style: .continuous).strokeBorder(Ink.creamOutline, lineWidth: 1)
+                        Capsule(style: .continuous).strokeBorder(Ink.inkHairline, lineWidth: 1)
                     }
                 }
                 .contentShape(Capsule(style: .continuous))
@@ -674,17 +594,20 @@ struct InkPermissionRow: View {
             HStack(spacing: 11) {
                 InkCheckbox(granted: granted)
                 Text(title)
-                    .inkStyle(InkType.rowCopy, color: Ink.rowCopy)
+                    .inkStyle(InkType.rowCopy, color: Ink.ink)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(status)
-                    .inkStyle(InkType.statusLabel, color: Ink.rowStatus)
+                    .inkStyle(InkType.statusLabel, color: Ink.faint)
                     .fixedSize()
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(shape.fill(isHovering ? Ink.rowSurfaceHover : Ink.rowSurface))
+            // Paper on paper: a half-step of warm shading plus a hairline. A fill strong enough to
+            // read on its own would box three sentences into three grey slabs.
+            .background(shape.fill(isHovering ? Ink.surfaceHover : Ink.surface))
+            .overlay(shape.strokeBorder(Ink.line, lineWidth: 1))
             .contentShape(shape)
         }
         .buttonStyle(.plain)
@@ -694,7 +617,7 @@ struct InkPermissionRow: View {
     }
 }
 
-/// 20 × 20, corner radius 6, white-45 % border; fills cream with an ink checkmark when granted.
+/// 18 × 18, corner radius 6, ink hairline; fills ink with a paper checkmark when granted.
 struct InkCheckbox: View {
     let granted: Bool
 
@@ -704,12 +627,12 @@ struct InkCheckbox: View {
 
     var body: some View {
         shape
-            .fill(granted ? Ink.cream : Color.clear)
-            .overlay(shape.strokeBorder(Ink.rowBorder, lineWidth: 1))
+            .fill(granted ? Ink.ink : Color.clear)
+            .overlay(shape.strokeBorder(granted ? Color.clear : Ink.inkHairline, lineWidth: 1))
             .overlay(
                 Image(systemName: "checkmark")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Ink.ink)
+                    .foregroundStyle(Ink.paper)
                     .opacity(granted ? 1 : 0)
             )
             .frame(width: 18, height: 18)
@@ -742,9 +665,9 @@ struct OmiMark: View {
     var size: CGFloat
     /// Dots brighten in sequence while true. Stops dead when false, and under Reduce Motion.
     var pulsing: Bool = false
-    var color: Color = Ink.cream
+    var color: Color = Ink.ink
 
-    init(size: CGFloat, pulsing: Bool = false, color: Color = Ink.cream) {
+    init(size: CGFloat, pulsing: Bool = false, color: Color = Ink.ink) {
         self.size = size
         self.pulsing = pulsing
         self.color = color
@@ -848,13 +771,13 @@ struct OmiMark: View {
 #if DEBUG
 #Preview("Type") {
     VStack(alignment: .leading, spacing: 26) {
-        Text("i notice things").inkStyle(InkType.introHero, color: Ink.cream)
-        Text("First, a few permissions").inkStyle(InkType.firstTitle, color: Ink.cream)
+        Text("i notice things").inkStyle(InkType.introHero, color: Ink.ink)
+        Text("First, a few permissions").inkStyle(InkType.firstTitle, color: Ink.ink)
         Text("I listen, I watch, and I remember — all of it stays on this Mac.")
-            .inkStyle(InkType.prose, color: Ink.creamHint)
+            .inkStyle(InkType.prose, color: Ink.mid)
     }
     .padding(45)
-    .background(Ink.ink)
+    .background(Ink.paper)
 }
 
 #Preview("Components") {
@@ -869,6 +792,6 @@ struct OmiMark: View {
     }
     .frame(width: InkLayout.permissionsMaxWidth)
     .padding(45)
-    .background(Ink.ink)
+    .background(Ink.paper)
 }
 #endif

@@ -450,11 +450,11 @@ lists, no settings page. That is the entire non-onboarding UI.
 ### Onboarding — owner: **onboarding agents (three of them)**
 
 - `Sources/ContextApp/Onboarding/Ink.swift` — **design system agent.** Colours, fonts, the stadium
-  button, the permission row, the eight-dot mark. Exact values in `docs/context-for-claude-design-system.md`.
+  button, the permission row, the eight-dot mark. Exact values in `docs/design-system.md`.
 - `Sources/ContextApp/Onboarding/Backdrop.swift` + `RandomizedText.swift` — **atmosphere agent.**
   The nine-blob gradient and the word-by-word reveal.
 - `Sources/ContextApp/Onboarding/OnboardingWindow.swift` + `OnboardingView.swift` — **flow agent.**
-  The borderless floating window, the `NSVisualEffectView` backing, and the four steps.
+  The borderless floating window, the elliptical paper surface it paints, and the four steps.
 
 ### `scripts/build.sh` — owner: **build agent**
 

@@ -45,6 +45,12 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         // every launch — the single most visible way this product could stop being ambient.
         NSApp.setActivationPolicy(.accessory)
 
+        // The product is paper. Every surface it draws is `Ink.paper` with `Ink.ink` on it, in both
+        // system appearances — so the AppKit chrome the app does not draw itself (the menu bar
+        // popover's window background and its corner rounding, focus rings, scrollers) has to be
+        // told the same thing, or a dark-mode Mac frames a light popover in a dark shell.
+        NSApp.appearance = NSAppearance(named: .aqua)
+
         registerBundledFonts()
 
         MainActor.assumeIsolated {
@@ -65,21 +71,26 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated { Engine.shared.pause() }
     }
 
-    /// The typefaces ship as loose `.ttf` files in `Contents/Resources/Fonts` (assembled by
+    /// The typefaces ship as loose font files in `Contents/Resources/Fonts` (assembled by
     /// `scripts/build.sh`), not in a SwiftPM resource bundle — an executable target has no
     /// `Bundle.module` to reach for, and the generated accessor bakes in a build-machine path that
     /// does not survive installation.
+    ///
+    /// Both `.otf` and `.ttf`: Open Runde ships as OpenType/CFF, and an extension filter that knew
+    /// only about the previous family's `.ttf` would silently drop every face in the product.
+    private static let fontExtensions: Set<String> = ["otf", "ttf"]
+
     private func registerBundledFonts() {
         guard let directory = Bundle.main.resourceURL?.appendingPathComponent("Fonts", isDirectory: true),
             let contents = try? FileManager.default.contentsOfDirectory(
                 at: directory, includingPropertiesForKeys: nil)
         else {
-            ContextLog.error("no bundled Fonts directory; Inter and Literata fall back to the system font", "shell")
+            ContextLog.error("no bundled Fonts directory; Open Runde falls back to the system font", "shell")
             return
         }
 
         var registered = 0
-        for url in contents where url.pathExtension.lowercased() == "ttf" {
+        for url in contents where Self.fontExtensions.contains(url.pathExtension.lowercased()) {
             var error: Unmanaged<CFError>?
             if CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error) {
                 registered += 1

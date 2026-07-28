@@ -112,17 +112,18 @@ struct OnboardingView: View {
         VStack(spacing: 24) {
             RandomizedText(
                 segments: [
-                    ("Hi, I’m Context for Claude. I keep ", .plain),
+                    ("I keep ", .plain),
                     ("Claude", .bold),
                     (" caught up on what you ", .plain),
                     ("see and say", .bold),
                     (".", .plain),
                 ],
-                style: .introHero
+                style: .introHero,
+                // Colour is a parameter here, not the environment — `RandomizedText` builds one
+                // concatenated `Text` and per-word opacity has to ride on each run's colour.
+                color: Ink.ink
             )
             .multilineTextAlignment(.center)
-            .foregroundStyle(Ink.cream)
-            .shadow(color: .black.opacity(0.45), radius: 12, y: 1)
 
             // The button arrives after the last word does; offering it mid-sentence invites a
             // click before the sentence has been read.
@@ -140,18 +141,18 @@ struct OnboardingView: View {
         VStack(spacing: 14) {
             Text("Which account is this?")
                 .inkStyle(.stepHeadline)
-                .foregroundStyle(Ink.cream)
+                .foregroundStyle(Ink.ink)
 
             Text("Everything I hear and see goes into your Omi account — nowhere else.")
                 .inkStyle(.prose)
-                .foregroundStyle(Ink.creamHint)
+                .foregroundStyle(Ink.mid)
                 .fixedSize(horizontal: false, vertical: true)
 
             if isWaitingForBrowser {
                 VStack(spacing: 12) {
                     Text("Waiting for your browser…")
                         .inkStyle(.statusLabel)
-                        .foregroundStyle(Ink.creamDim)
+                        .foregroundStyle(Ink.faint)
 
                     InkButton("Cancel", kind: .secondary) { abandonedWait = true }
                 }
@@ -207,7 +208,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text(setupTitle)
                 .inkStyle(.firstTitle)
-                .foregroundStyle(Ink.cream)
+                .foregroundStyle(Ink.ink)
 
             VStack(spacing: 8) {
                 ForEach(capabilities, id: \.self) { capability in
@@ -225,7 +226,7 @@ struct OnboardingView: View {
             if let registration {
                 Text(registration)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(Ink.creamDim)
+                    .foregroundStyle(Ink.faint)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -251,13 +252,13 @@ struct OnboardingView: View {
         VStack(spacing: 14) {
             Text(isGranted(.screen) ? "I’m listening." : "One more thing.")
                 .inkStyle(.stepHeadline)
-                .foregroundStyle(Ink.cream)
+                .foregroundStyle(Ink.ink)
 
             Text(isGranted(.screen)
                  ? homeLine
                  : "Switch me on under Screen Recording — I just opened it for you. I’ll take it from there.")
                 .inkStyle(.prose)
-                .foregroundStyle(Ink.creamHint)
+                .foregroundStyle(Ink.mid)
                 .fixedSize(horizontal: false, vertical: true)
 
             if !isGranted(.screen) {
@@ -282,7 +283,7 @@ struct OnboardingView: View {
     private var menuBarCue: some View {
         Image(systemName: "chevron.up")
             .font(.system(size: 17, weight: .medium))
-            .foregroundStyle(Ink.creamHint)
+            .foregroundStyle(Ink.mid)
             .offset(y: cueDrift ? -12 : 0)
             .opacity(cueDrift ? 0 : 1)
             .padding(.trailing, 18)
@@ -296,12 +297,15 @@ struct OnboardingView: View {
             }
     }
 
+    /// The finale: the sheet burns out from its edges. `plusLighter` over paper drives the outer
+    /// ring to white, so the card reads as overexposing on its way out rather than fading — which
+    /// on a light surface is the only exit that is visible at all.
     private func edgeGlow(in size: CGSize) -> some View {
         RadialGradient(
             gradient: Gradient(stops: [
-                .init(color: Ink.cream.opacity(0), location: 0.3),
-                .init(color: Ink.cream.opacity(0.14), location: 0.7),
-                .init(color: Ink.cream.opacity(0.6), location: 1),
+                .init(color: Ink.paper.opacity(0), location: 0.3),
+                .init(color: Ink.paper.opacity(0.14), location: 0.7),
+                .init(color: Ink.paper.opacity(0.6), location: 1),
             ]),
             center: .center,
             startRadius: 0,
