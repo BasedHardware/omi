@@ -35,30 +35,14 @@ enum MenuBarSpotlight {
 
     // MARK: - Finding the item
 
-    /// The status item's frame in global, top-left-origin coordinates.
+    /// The status item's frame, straight from the item that owns it.
     ///
-    /// Asked of the window server rather than of SwiftUI: `MenuBarExtra` exposes no frame, and the
-    /// item's position depends on how many other apps are in the menu bar, so it can only be known
-    /// at runtime. Status items live on `kCGStatusWindowLevel`; ours is the only window this
-    /// process owns there.
+    /// This used to search `CGWindowListCopyWindowInfo` for a window on the status layer belonging
+    /// to this process. It found nothing — a `MenuBarExtra` button is not in that list — so the
+    /// ring never appeared and the cursor never moved. Owning an `NSStatusItem` makes the frame a
+    /// property rather than a search.
     private static func statusItemFrame() -> CGRect? {
-        let statusLevel = CGWindowLevelForKey(.statusWindow)
-        let pid = ProcessInfo.processInfo.processIdentifier
-
-        guard let windows = CGWindowListCopyWindowInfo(
-            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
-        ) as? [[String: Any]] else { return nil }
-
-        for window in windows {
-            guard let owner = window[kCGWindowOwnerPID as String] as? pid_t, owner == pid,
-                  let level = window[kCGWindowLayer as String] as? Int, level == Int(statusLevel),
-                  let bounds = window[kCGWindowBounds as String] as? [String: Any],
-                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary),
-                  rect.width > 0, rect.height > 0
-            else { continue }
-            return rect
-        }
-        return nil
+        StatusItemController.shared.iconFrame
     }
 
     // MARK: - The ring
