@@ -1,0 +1,23 @@
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusItemController.swift
+  s_030a94a2f319d8::t_1a8b4237eba61c 1-75
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_030a94a2f319d8::t_dc04339385f47b 20-28,54-56
+desktop/context-for-claude/Sources/ContextApp/Onboarding/MenuBarSpotlight.swift
+  s_030a94a2f319d8::t_c089bb7338e7de 38,40-43,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ca8c7b1f866a7b4d5ed515c7965b3cad443277c2",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
