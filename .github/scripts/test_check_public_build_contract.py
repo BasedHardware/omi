@@ -113,8 +113,24 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
         )
         self.write(
             ".github/workflows/gcp_fake.yml",
-            """steps:
-  - uses: ./.github/actions/deploy-public-build
+            """on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'prod'
+        type: choice
+        options: [development, prod]
+concurrency:
+  group: fake-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
+jobs:
+  deploy:
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
+    steps:
+      - uses: ./.github/actions/deploy-public-build
+        with:
+          environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
 """,
         )
         self.write(
@@ -148,6 +164,33 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
 
     def test_accepts_centralized_public_build_deployment(self) -> None:
         self.assertEqual(self.errors(), [])
+
+    def test_manual_development_dispatch_on_an_exact_pr_head_uses_development(self) -> None:
+        self.assertEqual(
+            STATIC.resolved_deploy_environment(
+                event_name="workflow_dispatch",
+                ref="refs/pull/10751/merge",
+                requested_environment="development",
+            ),
+            "development",
+        )
+        for workflow_name in ("gcp_admin.yml", "gcp_app.yml"):
+            with self.subTest(workflow=workflow_name):
+                workflow_path = ROOT / ".github" / "workflows" / workflow_name
+                self.assertEqual(
+                    STATIC.validate_manual_environment_dispatch(
+                        f".github/workflows/{workflow_name}", workflow_path.read_text(encoding="utf-8")
+                    ),
+                    [],
+                )
+
+    def test_manual_development_dispatch_rejects_an_unrecognized_environment(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must select development or prod"):
+            STATIC.resolved_deploy_environment(
+                event_name="workflow_dispatch",
+                ref="refs/pull/10751/merge",
+                requested_environment="preview",
+            )
 
     def test_rejects_direct_build_or_deploy_wiring(self) -> None:
         self.write(
