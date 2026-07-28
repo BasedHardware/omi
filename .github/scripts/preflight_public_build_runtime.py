@@ -166,6 +166,8 @@ def _gcloud_json(arguments: Sequence[str]) -> Mapping[str, Any]:
         if (
             "not found" in raw_message
             or "could not be found" in raw_message
+            # gcloud run services describe: "Cannot find service [name]"
+            or "cannot find" in raw_message
             or "does not exist" in raw_message
             or "not_found" in raw_message
         ):
