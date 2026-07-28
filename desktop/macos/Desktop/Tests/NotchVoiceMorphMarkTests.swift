@@ -127,6 +127,43 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
     }
   }
 
+  func testLevelSmootherAttacksFasterThanItReleases() {
+    let smoother = VoiceLevelSmoother()
+    smoother.step(target: 0, at: 0)
+    let afterAttack = smoother.step(target: 1, at: 0.1)
+    XCTAssertGreaterThan(afterAttack, 0.7, "Speech onset must register within ~100ms")
+
+    let peak = smoother.displayed
+    let afterRelease = smoother.step(target: 0, at: 0.2)
+    XCTAssertGreaterThan(
+      afterRelease, peak * 0.4,
+      "A pause must decay gently, not snap the waveform flat")
+    XCTAssertLessThan(afterRelease, peak)
+  }
+
+  func testLevelSmootherClampsInputAndSurvivesTimeGaps() {
+    let smoother = VoiceLevelSmoother()
+    XCTAssertEqual(smoother.step(target: 7, at: 0), 1, accuracy: 0.001)
+    // A paused TimelineView resuming (huge dt) converges without overshoot.
+    let resumed = smoother.step(target: 0.5, at: 100)
+    XCTAssertGreaterThan(resumed, 0.4)
+    XCTAssertLessThanOrEqual(resumed, 1)
+    // Non-advancing time snaps rather than dividing by zero.
+    XCTAssertEqual(smoother.step(target: 0.25, at: 100), 0.25, accuracy: 0.001)
+  }
+
+  func testSpeakingLevelModulationKeepsFloorAndCeiling() {
+    XCTAssertEqual(
+      NotchVoiceMorphGeometry.speakingLevelModulation(0),
+      NotchVoiceMorphGeometry.speakingLevelFloor,
+      accuracy: 0.001,
+      "Silent stretches of a reply must keep a visible breath")
+    XCTAssertEqual(NotchVoiceMorphGeometry.speakingLevelModulation(1), 1, accuracy: 0.001)
+    XCTAssertEqual(NotchVoiceMorphGeometry.speakingLevelModulation(5), 1, accuracy: 0.001)
+    XCTAssertEqual(NotchVoiceMorphGeometry.normalizedVoiceLevel(0), 0, accuracy: 0.001)
+    XCTAssertEqual(NotchVoiceMorphGeometry.normalizedVoiceLevel(1), 1, accuracy: 0.001)
+  }
+
   func testQuietListeningStillProducesAVisibleWave() {
     XCTAssertEqual(
       NotchVoiceMorphGeometry.normalizedLevel(0),

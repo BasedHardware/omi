@@ -72,6 +72,18 @@ final class StreamingPCMPlayer: @unchecked Sendable {
       commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
     engine.attach(player)
     engine.connect(player, to: engine.mainMixerNode, format: format)
+    // Output-level tap for the notch speaking animation. Tapping the mixer
+    // (not enqueue-time RMS) keeps the visual in sync with what is audibly
+    // playing rather than leading it by the scheduled-queue depth. The tap
+    // callback runs on an audio thread; only the cheap RMS math happens there.
+    engine.mainMixerNode.installTap(
+      onBus: 0, bufferSize: 1024, format: engine.mainMixerNode.outputFormat(forBus: 0)
+    ) { buffer, _ in
+      let level = Self.rmsLevel(of: buffer)
+      DispatchQueue.main.async {
+        AudioLevelMonitor.shared.updateVoicePlaybackLevel(level)
+      }
+    }
     // An audio configuration change (another process grabbing the audio device, a
     // device/sample-rate change, a Bluetooth A2DP↔HFP flip, etc.) STOPS the engine
     // mid-stream — that's what cuts the reply off and can leave the engine in a
@@ -170,5 +182,24 @@ final class StreamingPCMPlayer: @unchecked Sendable {
     playbackQueue.clearForExplicitStop()
     player.stop()
     engine.stop()
+    DispatchQueue.main.async {
+      AudioLevelMonitor.shared.updateVoicePlaybackLevel(0)
+    }
+  }
+
+  /// Root-mean-square level of a float PCM buffer across all channels, 0…1.
+  static func rmsLevel(of buffer: AVAudioPCMBuffer) -> Float {
+    guard let channels = buffer.floatChannelData, buffer.frameLength > 0 else { return 0 }
+    let channelCount = Int(buffer.format.channelCount)
+    let frames = Int(buffer.frameLength)
+    var sum: Float = 0
+    for channel in 0..<channelCount {
+      let samples = channels[channel]
+      for frame in 0..<frames {
+        let sample = samples[frame]
+        sum += sample * sample
+      }
+    }
+    return min(1, sqrt(sum / Float(frames * channelCount)))
   }
 }

@@ -100,6 +100,21 @@ enum NotchVoiceMorphGeometry {
     1 + speakingDotScaleMax * clamp(pulse)
   }
 
+  /// Post-mixer speech RMS is quiet in absolute terms (~0.02–0.3); display
+  /// gain only, mirroring `normalizedLevel` for the mic side.
+  static func normalizedVoiceLevel(_ playbackLevel: CGFloat) -> CGFloat {
+    clamp(playbackLevel * 3.5)
+  }
+
+  /// Even silent stretches of a reply keep a visible breath (floor), while
+  /// louder speech drives the pulse toward full amplitude — so the ring reads
+  /// as reacting to the assistant's voice, not to a metronome.
+  static let speakingLevelFloor: CGFloat = 0.3
+
+  static func speakingLevelModulation(_ normalizedVoiceLevel: CGFloat) -> CGFloat {
+    speakingLevelFloor + (1 - speakingLevelFloor) * clamp(normalizedVoiceLevel)
+  }
+
   // MARK: - Listening waveform
 
   /// Center-weighted amplitude envelope so the live waveform reads like a
@@ -127,6 +142,39 @@ enum NotchVoiceMorphGeometry {
   }
 }
 
+/// Frame-rate exponential smoother with asymmetric attack/release, so the
+/// waveform and speaking pulse jump quickly on onset but fall away gently.
+/// A class so a Canvas draw pass can advance it without SwiftUI state churn.
+final class VoiceLevelSmoother {
+  private(set) var displayed: CGFloat
+  private var lastTime: TimeInterval?
+  private let attackTau: TimeInterval
+  private let releaseTau: TimeInterval
+
+  init(initial: CGFloat = 0, attackTau: TimeInterval = 0.05, releaseTau: TimeInterval = 0.22) {
+    displayed = initial
+    self.attackTau = attackTau
+    self.releaseTau = releaseTau
+  }
+
+  @discardableResult
+  func step(target rawTarget: CGFloat, at time: TimeInterval) -> CGFloat {
+    let target = min(max(rawTarget, 0), 1)
+    guard let last = lastTime, time > last else {
+      lastTime = time
+      displayed = target
+      return displayed
+    }
+    // Cap dt so a paused TimelineView resuming doesn't teleport the level.
+    let dt = min(time - last, 0.25)
+    lastTime = time
+    let tau = target > displayed ? attackTau : releaseTau
+    let alpha = 1 - exp(-dt / tau)
+    displayed += (target - displayed) * alpha
+    return displayed
+  }
+}
+
 struct NotchVoiceMorphMark: View {
   let dotColors: [Color]
   let isListening: Bool
@@ -135,6 +183,8 @@ struct NotchVoiceMorphMark: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var morphProgress: CGFloat = 0
+  @State private var micLevelSmoother = VoiceLevelSmoother()
+  @State private var voiceLevelSmoother = VoiceLevelSmoother()
 
   var body: some View {
     TimelineView(.animation(paused: !isListening && !isThinking && !isSpeaking)) { timeline in
@@ -169,20 +219,31 @@ struct NotchVoiceMorphMark: View {
       morphProgress,
       reduceMotion: reduceMotion
     )
-    let level = CGFloat(AudioLevelMonitor.shared.microphoneLevel)
+    let time = date.timeIntervalSinceReferenceDate
+    // Live (un-throttled) mic level, smoothed at frame rate so the waveform
+    // visibly tracks the user's voice: fast attack on speech onset, gentle
+    // release in pauses.
+    let level = micLevelSmoother.step(
+      target: CGFloat(AudioLevelMonitor.shared.liveMicrophoneLevel), at: time)
     let amplitude =
       base * 0.28 * waveProgress
       * NotchVoiceMorphGeometry.normalizedLevel(level)
-    let time = date.timeIntervalSinceReferenceDate
     let thinkingRotation =
       isThinking && !reduceMotion && morphProgress < 0.001
       ? time * 2 * .pi / 0.9
       : 0
-    // Response playback pulses the resting ring like a speaker cone. Listening
-    // owns the waveform, so the pulse applies only in ring formation.
+    // Response playback pulses the resting ring like a speaker cone, scaled by
+    // the assistant's actual output level (mixer tap) so the ring moves with
+    // the voice. Listening owns the waveform, so the pulse applies only in
+    // ring formation.
+    let voiceLevel = voiceLevelSmoother.step(
+      target: NotchVoiceMorphGeometry.normalizedVoiceLevel(
+        CGFloat(AudioLevelMonitor.shared.liveVoicePlaybackLevel)),
+      at: time)
     let speakingPulse =
       isSpeaking && !isListening && morphProgress < 0.001
       ? NotchVoiceMorphGeometry.speakerPulse(time: time, reduceMotion: reduceMotion)
+        * NotchVoiceMorphGeometry.speakingLevelModulation(voiceLevel)
       : 0
     if speakingPulse > 0 {
       dotDiameter *= NotchVoiceMorphGeometry.speakingDotScale(pulse: speakingPulse)
