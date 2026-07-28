@@ -1244,6 +1244,139 @@ void main() {
       expect(await secondFile.exists(), isFalse);
     });
 
+    test('quarantines a missing archive once and accepts truthful pendant recovery', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'omi_ring_archive_missing_',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final adjacentFile = File('${directory.path}/adjacent.bin');
+      await adjacentFile.writeAsBytes([1, 0, 0, 0, 2], flush: true);
+      final persistedSnapshots = <List<WalStatus>>[];
+      final archiveSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (wals) async {
+          persistedSnapshots.add(
+            wals.map((wal) => wal.status).toList(growable: false),
+          );
+          return true;
+        },
+        walPathResolver: (path) async {
+          return path == null ? null : '${directory.path}/$path';
+        },
+        silenceFrameFactory: (_) => [0],
+      )..testWals = [
+          _historicalRingWal(
+            timerStart: 1000,
+            sourceId: 'archive2_ring_10_11_1000',
+            filePath: 'missing.bin',
+          ),
+          _historicalRingWal(
+            timerStart: 1002,
+            sourceId: 'ring_11_12',
+            filePath: 'adjacent.bin',
+          ),
+        ];
+
+      await archiveSync.prepareHistoricalRingFragments(nowSeconds: 2000);
+
+      expect(persistedSnapshots, hasLength(2));
+      expect(
+        archiveSync.testWals
+            .singleWhere(
+              (wal) => wal.sourceId == 'archive2_ring_10_11_1000',
+            )
+            .status,
+        WalStatus.corrupted,
+      );
+      expect(
+        archiveSync.testWals.any(
+          (wal) => wal.sourceId == 'archive2_ring_11_12_1002',
+        ),
+        isTrue,
+      );
+
+      await archiveSync.prepareHistoricalRingFragments(nowSeconds: 2000);
+      expect(
+        persistedSnapshots,
+        hasLength(2),
+        reason: 'a quarantined source must not retry every compaction timer',
+      );
+
+      final recoveredFile = File('${directory.path}/recovered.bin');
+      await recoveredFile.writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      expect(
+        await archiveSync.addExternalWal(
+          _historicalRingWal(
+            timerStart: 1000,
+            sourceId: 'ring_10_11',
+            filePath: 'recovered.bin',
+          ),
+          scheduleUpload: false,
+        ),
+        ExternalWalRegistration.added,
+      );
+      await archiveSync.prepareHistoricalRingFragments(nowSeconds: 2000);
+
+      expect(archiveSync.testWals, hasLength(1));
+      expect(
+        archiveSync.testWals.single.sourceId,
+        'archive2_ring_10_12_1000',
+      );
+      expect(archiveSync.testWals.single.status, WalStatus.miss);
+      expect(
+        archiveSync.testWals.any(
+          (wal) => wal.status == WalStatus.corrupted,
+        ),
+        isFalse,
+      );
+    });
+
+    test('replaces a quarantined raw range with the exact pendant reread', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'omi_ring_raw_reread_',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      final archiveSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async => true,
+        walPathResolver: (path) async {
+          return path == null ? null : '${directory.path}/$path';
+        },
+      )..testWals = [
+          _historicalRingWal(
+            timerStart: 1000,
+            sourceId: 'ring_10_11',
+            filePath: 'missing.bin',
+          ),
+        ];
+
+      await archiveSync.prepareHistoricalRingFragments(nowSeconds: 2000);
+      expect(archiveSync.testWals.single.status, WalStatus.corrupted);
+
+      final recoveredFile = File('${directory.path}/recovered.bin');
+      await recoveredFile.writeAsBytes([1, 0, 0, 0, 7], flush: true);
+      final recovered = _historicalRingWal(
+        timerStart: 1000,
+        sourceId: 'ring_10_11',
+        filePath: 'recovered.bin',
+      );
+      expect(
+        await archiveSync.addExternalWal(
+          recovered,
+          scheduleUpload: false,
+        ),
+        ExternalWalRegistration.added,
+      );
+
+      expect(archiveSync.testWals, [recovered]);
+      expect(archiveSync.testWals.single.status, WalStatus.miss);
+      expect(await recoveredFile.exists(), isTrue);
+    });
+
     test('serializes historical compaction with canonical conversation stamping', () async {
       final directory = await Directory.systemTemp.createTemp(
         'omi_ring_archive_stamp_race_',
@@ -2034,6 +2167,86 @@ void main() {
       expect(externalSync.testWals, hasLength(1));
       expect(externalSync.testWals.single.canonicalReplacement, isTrue);
       expect(externalSync.testWals.single.captureEndSeconds, now - 0.25);
+    });
+
+    test('conversation stamping claims the complete configured ring window', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'omi_ring_conversation_window_',
+      );
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      for (final entry in {
+        'before.bin': 1,
+        'session.bin': 2,
+        'after.bin': 3,
+        'boundary.bin': 4,
+      }.entries) {
+        await File('${directory.path}/${entry.key}').writeAsBytes(
+          [1, 0, 0, 0, entry.value],
+          flush: true,
+        );
+      }
+      final sources = [
+        _historicalRingWal(
+          timerStart: 1000,
+          sourceId: 'ring_10_11',
+          filePath: 'before.bin',
+          captureEndSeconds: 1001,
+        ),
+        _historicalRingWal(
+          timerStart: 1110,
+          sourceId: 'ring_11_12',
+          filePath: 'session.bin',
+          captureEndSeconds: 1111,
+        ),
+        _historicalRingWal(
+          timerStart: 1220,
+          sourceId: 'ring_12_13',
+          filePath: 'after.bin',
+          captureEndSeconds: 1221,
+        ),
+        _historicalRingWal(
+          timerStart: 1341,
+          sourceId: 'ring_13_14',
+          filePath: 'boundary.bin',
+          captureEndSeconds: 1342,
+        ),
+      ];
+      for (final source in sources) {
+        source
+          ..status = WalStatus.synced
+          ..uploadIntent = WalUploadIntent.liveContinuity;
+      }
+      final externalSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async => true,
+        walPathResolver: (path) async {
+          return path == null ? null : '${directory.path}/$path';
+        },
+        silenceFrameFactory: (_) => [0],
+        conversationBoundarySecondsProvider: () => 120,
+      )..testWals = sources;
+
+      await externalSync.stampConversationId(
+        1110,
+        'complete-window',
+        hasServerSpeechProof: true,
+        sessionEndSeconds: 1111,
+      );
+
+      expect(externalSync.testWals, hasLength(2));
+      final canonical = externalSync.testWals.singleWhere(
+        (wal) => wal.sourceId?.startsWith('canonical_complete-window_') == true,
+      );
+      expect(canonical.conversationId, 'complete-window');
+      expect(canonical.timerStart, 1000);
+      expect(canonical.captureEndSeconds, 1221);
+      expect(canonical.status, WalStatus.synced);
+      final outside = externalSync.testWals.singleWhere(
+        (wal) => wal.sourceId == 'ring_13_14',
+      );
+      expect(outside.conversationId, isNull);
     });
 
     test('conversation ownership without speech proof cannot create an upload job', () async {

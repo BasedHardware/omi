@@ -745,6 +745,26 @@ class LocalWalSyncImpl implements LocalWalSync {
     final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
     if (existingIndex >= 0) {
       final existing = _wals[existingIndex];
+      if (existing.status == WalStatus.corrupted &&
+          _isDurableRingCoverageArtifact(existing) &&
+          _isDurableRingCoverageArtifact(wal) &&
+          _sameRingEncoding(existing, wal)) {
+        _wals[existingIndex] = wal;
+        try {
+          await _saveWalsToFile();
+        } catch (_) {
+          _wals[existingIndex] = existing;
+          rethrow;
+        }
+        listener.onWalUpdated();
+        Logger.debug(
+          "LocalWalSync: Replaced unavailable ring WAL ${wal.id} from device storage",
+        );
+        if (scheduleUpload && wal.status == WalStatus.miss && _mayAutoUploadExternalWal(wal)) {
+          _scheduleFreshUpload(wal);
+        }
+        return ExternalWalRegistration.added;
+      }
       if (!await _hasIdenticalFile(existing, wal)) {
         throw StateError('External WAL identity collision for ${wal.id}');
       }
@@ -1136,7 +1156,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     required int? recoverySequenceBoundary,
     required int conversationBoundarySeconds,
   }) async {
-    final candidates = _wals
+    final candidateSnapshot = _wals
         .where(
           (wal) =>
               wal.conversationId == null &&
@@ -1145,6 +1165,44 @@ class LocalWalSyncImpl implements LocalWalSync {
               (wal.status == WalStatus.miss || wal.status == WalStatus.synced),
         )
         .toList();
+    final candidates = <Wal>[];
+    final unavailable = <Wal>[];
+    final unavailableStatuses = <Wal, WalStatus>{};
+    for (final wal in candidateSnapshot) {
+      try {
+        final path = await _walPathResolver(wal.filePath);
+        if (path != null) {
+          final file = File(path);
+          if (await file.exists() && await file.length() > 0) {
+            candidates.add(wal);
+            continue;
+          }
+        }
+      } catch (_) {
+        // A local source that cannot be opened is not retryable compaction
+        // work. The pendant's immutable sequence remains the recovery owner.
+      }
+      unavailableStatuses[wal] = wal.status;
+      unavailable.add(wal);
+    }
+    if (unavailable.isNotEmpty) {
+      for (final wal in unavailable) {
+        wal.markCorrupted();
+      }
+      try {
+        await _saveWalsToFile();
+      } catch (_) {
+        for (final wal in unavailable) {
+          wal.status = unavailableStatuses[wal]!;
+        }
+        rethrow;
+      }
+      DebugLogManager.logWarning(
+        'Historical ring sources unavailable; waiting for pendant recovery',
+        {'count': unavailable.length},
+      );
+      listener.onWalUpdated();
+    }
     final buckets = <String, List<Wal>>{};
     for (final wal in candidates) {
       final key = [
@@ -1232,9 +1290,20 @@ class LocalWalSyncImpl implements LocalWalSync {
       final range = RingProtocol.parseRecoverySourceRange(wal.sourceId)!;
       return producedCoverage[_ringEncodingBucket(wal)]?.covers(range.start, range.end) == true;
     }).toSet();
+    final supersededCorruptedArtifacts = _wals.where((wal) {
+      if (wal.conversationId != null ||
+          wal.storage != WalStorage.disk ||
+          wal.status != WalStatus.corrupted ||
+          !_isDurableRingCoverageArtifact(wal)) {
+        return false;
+      }
+      final range = RingProtocol.parseDurableCoverageSourceRange(wal.sourceId)!;
+      return producedCoverage[_ringEncodingBucket(wal)]?.covers(range.start, range.end) == true;
+    }).toSet();
     final compactedSources = {
       ...archives.expand((archive) => archive.sources),
       ...supersededLegacyArchives,
+      ...supersededCorruptedArtifacts,
     };
     _wals = [
       ..._wals.where((wal) => !compactedSources.contains(wal)),
@@ -1284,6 +1353,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       'source_fragment_count': compactedSources.length,
       'archive_artifact_count': archives.length,
       'legacy_archive_retired_count': supersededLegacyArchives.length,
+      'corrupted_artifact_recovered_count': supersededCorruptedArtifacts.length,
     });
     listener.onWalUpdated();
   }
@@ -1766,6 +1836,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       return;
     }
     final sessionEnd = sessionEndSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final conversationBoundarySeconds = _conversationBoundarySeconds();
     var stamped = 0;
     await _serializeWalAssembly(() async {
       await _waitForExternalWalRegistrations();
@@ -1790,12 +1861,14 @@ class LocalWalSyncImpl implements LocalWalSync {
           sessionEndSeconds: sessionEnd,
           conversationId: conversationId,
           ringDeviceScope: ringDeviceScope,
+          conversationBoundarySeconds: conversationBoundarySeconds,
         );
         final ringSources = _boundedRingSourcesForConversation(
           sessionStartSeconds: sessionStartSeconds,
           sessionEndSeconds: sessionEnd,
           conversationId: conversationId,
           ringDeviceScope: ringDeviceScope,
+          conversationBoundarySeconds: conversationBoundarySeconds,
         );
         if (ringSources.isEmpty) {
           if (stamped > 0) await _saveWalsToFile();
@@ -1824,7 +1897,9 @@ class LocalWalSyncImpl implements LocalWalSync {
                 !_hasUnownedWalInBoundedSession(
                   sessionStartSeconds: sessionStartSeconds,
                   sessionEndSeconds: sessionEnd,
+                  conversationId: conversationId,
                   ringDeviceScope: ringDeviceScope,
+                  conversationBoundarySeconds: conversationBoundarySeconds,
                 ) &&
                 _sameIdentityWalSet(
                   sourceSnapshot,
@@ -1833,6 +1908,7 @@ class LocalWalSyncImpl implements LocalWalSync {
                     sessionEndSeconds: sessionEnd,
                     conversationId: conversationId,
                     ringDeviceScope: ringDeviceScope,
+                    conversationBoundarySeconds: conversationBoundarySeconds,
                   ),
                 ),
           );
@@ -1883,22 +1959,63 @@ class LocalWalSyncImpl implements LocalWalSync {
     return wal.status == WalStatus.miss || (ringContinuity && wal.status == WalStatus.synced);
   }
 
+  Set<Wal> _ringConversationWindowSources({
+    required int sessionStartSeconds,
+    required int sessionEndSeconds,
+    required String conversationId,
+    required Set<String> ringDeviceScope,
+    required int conversationBoundarySeconds,
+  }) {
+    final selected = Set<Wal>.identity();
+    final eligible = _wals.where(
+      (wal) =>
+          _isRingRecoveryArtifact(wal) &&
+          ringDeviceScope.contains(wal.device) &&
+          (wal.conversationId == null || wal.conversationId == conversationId) &&
+          _isStampableSessionWal(wal),
+    );
+    for (final group in _continuousRingRecoveryGroups(
+      eligible,
+      conversationBoundarySeconds: conversationBoundarySeconds,
+    )) {
+      final belongsToSession = group.any(
+        (wal) =>
+            wal.conversationId == conversationId ||
+            _isInBoundedSession(
+              wal,
+              sessionStartSeconds: sessionStartSeconds,
+              sessionEndSeconds: sessionEndSeconds,
+            ),
+      );
+      if (belongsToSession) selected.addAll(group);
+    }
+    return selected;
+  }
+
   int _stampBoundedSessionWals({
     required int sessionStartSeconds,
     required int sessionEndSeconds,
     required String conversationId,
     required Set<String> ringDeviceScope,
+    required int conversationBoundarySeconds,
   }) {
+    final ringSessionSources = _ringConversationWindowSources(
+      sessionStartSeconds: sessionStartSeconds,
+      sessionEndSeconds: sessionEndSeconds,
+      conversationId: conversationId,
+      ringDeviceScope: ringDeviceScope,
+      conversationBoundarySeconds: conversationBoundarySeconds,
+    );
     var stamped = 0;
     for (final wal in _wals) {
-      if (wal.conversationId == null &&
-          _isStampableSessionWal(wal) &&
-          (!_isRingRecoveryArtifact(wal) || ringDeviceScope.contains(wal.device)) &&
-          _isInBoundedSession(
-            wal,
-            sessionStartSeconds: sessionStartSeconds,
-            sessionEndSeconds: sessionEndSeconds,
-          )) {
+      final belongsToSession = _isRingRecoveryArtifact(wal)
+          ? ringSessionSources.contains(wal)
+          : _isInBoundedSession(
+              wal,
+              sessionStartSeconds: sessionStartSeconds,
+              sessionEndSeconds: sessionEndSeconds,
+            );
+      if (wal.conversationId == null && _isStampableSessionWal(wal) && belongsToSession) {
         wal.conversationId = conversationId;
         stamped++;
       }
@@ -1909,40 +2026,48 @@ class LocalWalSyncImpl implements LocalWalSync {
   bool _hasUnownedWalInBoundedSession({
     required int sessionStartSeconds,
     required int sessionEndSeconds,
+    required String conversationId,
     required Set<String> ringDeviceScope,
-  }) =>
-      _wals.any(
-        (wal) =>
-            wal.conversationId == null &&
-            _isStampableSessionWal(wal) &&
-            (!_isRingRecoveryArtifact(wal) || ringDeviceScope.contains(wal.device)) &&
-            _isInBoundedSession(
-              wal,
-              sessionStartSeconds: sessionStartSeconds,
-              sessionEndSeconds: sessionEndSeconds,
-            ),
+    required int conversationBoundarySeconds,
+  }) {
+    final ringSessionSources = _ringConversationWindowSources(
+      sessionStartSeconds: sessionStartSeconds,
+      sessionEndSeconds: sessionEndSeconds,
+      conversationId: conversationId,
+      ringDeviceScope: ringDeviceScope,
+      conversationBoundarySeconds: conversationBoundarySeconds,
+    );
+    return _wals.any((wal) {
+      if (wal.conversationId != null || !_isStampableSessionWal(wal)) {
+        return false;
+      }
+      if (_isRingRecoveryArtifact(wal)) {
+        return ringSessionSources.contains(wal);
+      }
+      return _isInBoundedSession(
+        wal,
+        sessionStartSeconds: sessionStartSeconds,
+        sessionEndSeconds: sessionEndSeconds,
       );
+    });
+  }
 
   List<Wal> _boundedRingSourcesForConversation({
     required int sessionStartSeconds,
     required int sessionEndSeconds,
     required String conversationId,
     required Set<String> ringDeviceScope,
-  }) =>
-      _wals
-          .where(
-            (wal) =>
-                wal.conversationId == conversationId &&
-                _isRingRecoveryArtifact(wal) &&
-                ringDeviceScope.contains(wal.device) &&
-                (wal.status == WalStatus.miss || wal.status == WalStatus.synced) &&
-                _isInBoundedSession(
-                  wal,
-                  sessionStartSeconds: sessionStartSeconds,
-                  sessionEndSeconds: sessionEndSeconds,
-                ),
-          )
-          .toList();
+    required int conversationBoundarySeconds,
+  }) {
+    final ringSessionSources = _ringConversationWindowSources(
+      sessionStartSeconds: sessionStartSeconds,
+      sessionEndSeconds: sessionEndSeconds,
+      conversationId: conversationId,
+      ringDeviceScope: ringDeviceScope,
+      conversationBoundarySeconds: conversationBoundarySeconds,
+    );
+    return ringSessionSources.where((wal) => wal.conversationId == conversationId).toList();
+  }
 
   List<Wal> _canonicalWalsForConversation(String conversationId) => _wals
       .where(
