@@ -14,7 +14,9 @@ class RewriteLaunchDescriptor:
     available: bool
 
 
-def rewrite_launch_descriptor(input_manifest: Path, output_manifest: Path, binary: str = "omi-replay-rewrite") -> RewriteLaunchDescriptor:
+def rewrite_launch_descriptor(
+    input_manifest: Path, output_manifest: Path, binary: str = "omi-replay-rewrite"
+) -> RewriteLaunchDescriptor:
     """Describe, but never silently invoke, the optional rewrite integration."""
     return RewriteLaunchDescriptor(
         command=(binary, "--manifest", str(input_manifest), "--output", str(output_manifest)),
