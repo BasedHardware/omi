@@ -181,7 +181,7 @@ def ask(prompt: str) -> dict:
 
 # --------------------------------------------------------------------------- http
 
-PAGE = """<!doctype html><meta charset=utf-8><title>Context for Claude — testing window</title>
+PAGE = r"""<!doctype html><meta charset=utf-8><title>Context for Claude — testing window</title>
 <style>
 :root{--paper:#FBF8F4;--ink:#171412;--line:#E6DFD6;--mid:#6B625B;--faint:#A39A92;--bronze:#8F6420;--red:#C9352B}
 *{box-sizing:border-box}
@@ -203,7 +203,19 @@ input[type=text]{border:1px solid var(--line);border-radius:7px;padding:5px 9px;
 #chat{flex:1;overflow:auto;padding:14px}
 .msg-you,.msg-claude{margin-bottom:14px}
 .who{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);margin-bottom:3px}
-.body{white-space:pre-wrap;word-break:break-word}
+.body{word-break:break-word}
+.body p{margin:0 0 9px}
+.body h3,.body h4,.body h5,.body h6{margin:14px 0 6px;font-size:13px;font-weight:600}
+.body ul,.body ol{margin:0 0 9px;padding-left:20px}
+.body li{margin:2px 0}
+.body code{background:#EFE9DE;border:1px solid var(--line);border-radius:4px;padding:0 4px;font:11.5px ui-monospace,Menlo,monospace}
+.body pre{background:#EFE9DE;border:1px solid var(--line);border-radius:7px;padding:9px 11px;overflow-x:auto;margin:0 0 9px}
+.body pre code{background:none;border:0;padding:0}
+.body table{border-collapse:collapse;margin:0 0 10px;font-size:12px;display:block;overflow-x:auto}
+.body th,.body td{border:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}
+.body th{background:#EFE9DE;font-weight:600}
+.body a{color:var(--bronze)}
+.msg-you .body{white-space:pre-wrap}
 .tools{margin-top:6px;font-size:11.5px;color:var(--mid)}
 .tag{display:inline-block;background:#EFE9DE;border:1px solid var(--line);border-radius:20px;padding:1px 8px;margin-right:4px}
 .none{color:var(--red)}
@@ -224,6 +236,61 @@ button:disabled{opacity:.45;cursor:default}
   <form id=f><input type=text id=q placeholder="Ask something that should need your context…" autocomplete=off><button id=send>Send</button></form>
 </div>
 <script>
+// Markdown, rendered locally. Every reply is markdown — the tools deliberately return it — so
+// showing it as plain text put ## and ** in front of the reader. Escaping happens FIRST and
+// unconditionally: these replies quote the user's own OCR'd screen text, which routinely contains
+// angle brackets and markup, and none of it may reach the DOM as HTML.
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function inline(s){
+  return s
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function md(src){
+  const lines = esc(src).split('\n');
+  const out = []; let i = 0, list = null;
+  const closeList = () => { if(list){ out.push(`</${list}>`); list = null; } };
+  while(i < lines.length){
+    const line = lines[i];
+    if(/^```/.test(line)){                       // fenced code
+      closeList(); const body = [];
+      for(i++; i < lines.length && !/^```/.test(lines[i]); i++) body.push(lines[i]);
+      i++; out.push(`<pre><code>${body.join('\n')}</code></pre>`); continue;
+    }
+    if(/^\s*\|.*\|\s*$/.test(line) && /^\s*\|[-: |]+\|\s*$/.test(lines[i+1]||'')){
+      closeList();                                // table
+      const cells = r => r.trim().replace(/^\||\|$/g,'').split('|').map(c=>inline(c.trim()));
+      const head = cells(line); i += 2;
+      const rows = [];
+      while(i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(cells(lines[i++]));
+      out.push(`<table><thead><tr>${head.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${
+        rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+      continue;
+    }
+    let m;
+    if((m = line.match(/^(#{1,4})\s+(.*)$/))){    // heading
+      closeList(); out.push(`<h${m[1].length+2}>${inline(m[2])}</h${m[1].length+2}>`); i++; continue;
+    }
+    if((m = line.match(/^\s*[-*]\s+(.*)$/))){     // bullet
+      if(list !== 'ul'){ closeList(); out.push('<ul>'); list = 'ul'; }
+      out.push(`<li>${inline(m[1])}</li>`); i++; continue;
+    }
+    if((m = line.match(/^\s*\d+\.\s+(.*)$/))){    // numbered
+      if(list !== 'ol'){ closeList(); out.push('<ol>'); list = 'ol'; }
+      out.push(`<li>${inline(m[1])}</li>`); i++; continue;
+    }
+    if(!line.trim()){ closeList(); i++; continue; }
+    closeList();
+    const para = [];
+    while(i < lines.length && lines[i].trim() && !/^(#{1,4}\s|```|\s*[-*]\s|\s*\d+\.\s|\s*\|)/.test(lines[i]))
+      para.push(lines[i++]);
+    out.push(`<p>${inline(para.join('<br>'))}</p>`);
+  }
+  closeList();
+  return out.join('');
+}
 const logEl=document.getElementById('log'),chat=document.getElementById('chat'),
       statusEl=document.getElementById('status'),filter=document.getElementById('filter');
 let rows=[];
@@ -261,7 +328,8 @@ document.getElementById('f').onsubmit=async e=>{
     : `<span class=none>no tool was called — Claude answered without your context</span>`;
   chat.insertAdjacentHTML('beforeend',
     `<div class=msg-claude><div class=who>Claude · ${r.seconds}s</div><div class=body></div><div class=tools>${tools}</div></div>`);
-  chat.querySelectorAll('.msg-claude .body')[chat.querySelectorAll('.msg-claude .body').length-1].textContent=r.reply;
+  const bodies=chat.querySelectorAll('.msg-claude .body');
+  bodies[bodies.length-1].innerHTML=md(r.reply);
   chat.scrollTop=chat.scrollHeight; send.disabled=false; q.focus();
 };
 </script>
