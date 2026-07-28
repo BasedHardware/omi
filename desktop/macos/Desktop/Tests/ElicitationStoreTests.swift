@@ -53,6 +53,38 @@ final class ElicitationStoreTests: XCTestCase {
     XCTAssertEqual(elicitation.options.map(\.label), ["Allow once", "Allow always", "Deny"])
   }
 
+  func testAPermissionIsNeverMultiSelectHoweverThePayloadArrives() throws {
+    // An ACP response names exactly one option, so a pick-many control there
+    // would build an answer the protocol cannot send.
+    var claimsMultiple = payload(mode: "permission")
+    claimsMultiple["allowsMultiple"] = true
+    XCTAssertFalse(try XCTUnwrap(PendingElicitation(payload: claimsMultiple)).allowsMultiple)
+  }
+
+  func testMultiSelectNeedsOptionsToPickFrom() throws {
+    var noOptions = payload(mode: "question", options: [])
+    noOptions["allowsMultiple"] = true
+    // Pick-many with nothing to pick is just a free-text question.
+    XCTAssertFalse(try XCTUnwrap(PendingElicitation(payload: noOptions)).allowsMultiple)
+
+    var withOptions = payload(mode: "question")
+    withOptions["allowsMultiple"] = true
+    XCTAssertTrue(try XCTUnwrap(PendingElicitation(payload: withOptions)).allowsMultiple)
+  }
+
+  func testAnswerCarriesEveryChosenOptionToTheKernel() throws {
+    let elicitation = try XCTUnwrap(PendingElicitation(payload: payload(mode: "question")))
+    let wire = try XCTUnwrap(
+      ElicitationWire.resolvePayload(
+        dispatchID: elicitation.id,
+        ownerID: elicitation.ownerID,
+        currentOwnerID: elicitation.ownerID,
+        answer: .options(["once", "no"])))
+
+    XCTAssertEqual(wire["decision"] as? String, "answer")
+    XCTAssertEqual(wire["optionIds"] as? [String], ["once", "no"])
+  }
+
   func testCarriesTheAgentsRecommendationWithoutActingOnIt() throws {
     var body = payload()
     body["recommendedDefault"] = "once"
@@ -125,7 +157,7 @@ final class ElicitationStoreTests: XCTestCase {
     XCTAssertEqual(store.focused?.id, "a")
     XCTAssertEqual(store.waitingCount, 2)
 
-    store.stage(.option("once"), for: first)
+    store.stage(.options(["once"]), for: first)
     store.submitFocused()
     XCTAssertEqual(store.focused?.id, "b")
     XCTAssertEqual(store.waitingCount, 1)
@@ -146,11 +178,11 @@ final class ElicitationStoreTests: XCTestCase {
     let elicitation = try XCTUnwrap(PendingElicitation(payload: payload()))
     store.enqueue(elicitation)
 
-    store.answer(elicitation, with: .option("no"))
-    store.answer(elicitation, with: .option("once"))
+    store.answer(elicitation, with: .options(["no"]))
+    store.answer(elicitation, with: .options(["once"]))
 
     XCTAssertEqual(submitted().count, 1)
-    XCTAssertEqual(submitted().first?.1, .option("no"))
+    XCTAssertEqual(submitted().first?.1, .options(["no"]))
   }
 
   func testTheKernelRetiringAQuestionRemovesItsCard() throws {
@@ -210,7 +242,7 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     let one = try pending("a")
     store.enqueue(one)
 
-    store.stage(.option("yes"), for: one)
+    store.stage(.options(["yes"]), for: one)
     XCTAssertTrue(sent().isEmpty, "choosing must not send")
     XCTAssertEqual(store.waitingCount, 1, "the card stays until sent")
 
@@ -255,17 +287,17 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     store.enqueue(a)
     store.enqueue(b)
 
-    store.stage(.option("yes"), for: a)
+    store.stage(.options(["yes"]), for: a)
     store.focus(b)
     store.stage(.text("later"), for: b)
     store.focus(a)
 
-    XCTAssertEqual(store.staged[a.id], .option("yes"), "returning shows the earlier choice")
+    XCTAssertEqual(store.staged[a.id], .options(["yes"]), "returning shows the earlier choice")
     XCTAssertEqual(store.staged[b.id], .text("later"))
 
     store.submitFocused()
     XCTAssertEqual(sent().count, 1)
-    XCTAssertEqual(sent().first?.1, .option("yes"))
+    XCTAssertEqual(sent().first?.1, .options(["yes"]))
     XCTAssertEqual(store.staged[b.id], .text("later"), "sending one keeps the other's choice")
   }
 
@@ -275,7 +307,7 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     store.enqueue(a)
     store.enqueue(try pending("b"))
 
-    store.stage(.option("yes"), for: a)
+    store.stage(.options(["yes"]), for: a)
     store.submitFocused()
 
     XCTAssertEqual(store.focused?.id, "b")
@@ -285,7 +317,7 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     let (store, _) = makeStore()
     let a = try pending("a")
     store.enqueue(a)
-    store.stage(.option("yes"), for: a)
+    store.stage(.options(["yes"]), for: a)
 
     store.remove(id: "a")
 
@@ -327,13 +359,13 @@ final class ElicitationBatchTests: XCTestCase {
     let b = try pending("b")
     store.enqueue(a)
     store.enqueue(b)
-    store.stage(.option("yes"), for: a)
+    store.stage(.options(["yes"]), for: a)
     store.stage(.text("later"), for: b)
 
     store.submitAll()
 
     XCTAssertEqual(sent().count, 2)
-    XCTAssertEqual(sent().first(where: { $0.0.id == "a" })?.1, .option("yes"))
+    XCTAssertEqual(sent().first(where: { $0.0.id == "a" })?.1, .options(["yes"]))
     XCTAssertEqual(sent().first(where: { $0.0.id == "b" })?.1, .text("later"))
     XCTAssertEqual(store.waitingCount, 0)
   }
@@ -344,7 +376,7 @@ final class ElicitationBatchTests: XCTestCase {
     let a = try pending("a")
     store.enqueue(a)
     store.enqueue(try pending("b"))
-    store.stage(.option("yes"), for: a)
+    store.stage(.options(["yes"]), for: a)
 
     store.submitAll()
 

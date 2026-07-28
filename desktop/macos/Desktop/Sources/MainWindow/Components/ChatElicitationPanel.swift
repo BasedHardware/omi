@@ -22,13 +22,26 @@ struct ChatElicitationPanel: View {
   @Environment(\.fontScale) private var fontScale
   @State private var freeText: String = ""
   @State private var hoveredOptionID: String?
+  @State private var windowHeight: CGFloat?
   @FocusState private var freeTextFocused: Bool
 
   private var staged: ElicitationAnswer? { elicitations.staged[elicitation.id] }
 
-  private var stagedOptionID: String? {
-    if case .option(let id) = staged { return id }
-    return nil
+  /// Every option currently chosen. A single-select question holds at most one.
+  private var stagedOptionIDs: [String] {
+    if case .options(let ids) = staged { return ids }
+    return []
+  }
+
+  private func isChosen(_ option: ElicitationOption) -> Bool {
+    stagedOptionIDs.contains(option.id)
+  }
+
+  /// Numbers are what make an option list scannable and directly reachable:
+  /// row 3 is "3", not "the one under the second one".
+  private func optionNumber(_ option: ElicitationOption) -> Int? {
+    guard let index = elicitation.options.firstIndex(where: { $0.id == option.id }) else { return nil }
+    return index < 9 ? index + 1 : nil
   }
 
   /// The last question in the queue is where the batch is sent; before that
@@ -69,7 +82,7 @@ struct ChatElicitationPanel: View {
     // different prompt length, a different option count — are what the user
     // sees move. Animating on the id keeps that a glide rather than a snap.
     .omiAnimation(SBMotion.standard, value: elicitation.id)
-    .omiAnimation(SBMotion.standard, value: stagedOptionID)
+    .omiAnimation(SBMotion.standard, value: stagedOptionIDs)
     .onAppear { restoreStagedText() }
     .onChange(of: elicitation.id) { _, _ in
       // Hover belongs to the row the pointer was over, not to the question that
@@ -79,6 +92,43 @@ struct ChatElicitationPanel: View {
     }
     .accessibilityElement(children: .contain)
     .accessibilityLabel("\(elicitation.title). \(elicitation.prompt)")
+    // Measured rather than assumed: the cap is a share of the window the card
+    // sits in, and that window is resizable.
+    .background(
+      GeometryReader { proxy in
+        Color.clear
+          .onAppear { windowHeight = proxy.size.height }
+          .onChange(of: proxy.size.height) { _, height in windowHeight = height }
+      }
+      .ignoresSafeArea()
+    )
+    .background(keyboardShortcuts)
+  }
+
+  /// Keyboard reach for everything the pointer can do.
+  ///
+  /// Left/right move between questions and 1-9 pick an option, but only while
+  /// the free-text field is not focused — inside a text field those keys belong
+  /// to the caret, and stealing them would make typing an answer impossible.
+  @ViewBuilder
+  private var keyboardShortcuts: some View {
+    if !freeTextFocused {
+      ZStack {
+        Button("") { elicitations.focusPrevious() }
+          .keyboardShortcut(.leftArrow, modifiers: [])
+          .disabled(elicitations.waitingCount < 2)
+        Button("") { elicitations.focusNext() }
+          .keyboardShortcut(.rightArrow, modifiers: [])
+          .disabled(elicitations.waitingCount < 2)
+        ForEach(Array(elicitation.options.indices.prefix(9)), id: \.self) { index in
+          Button("") { selectOption(number: index + 1) }
+            .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
+        }
+      }
+      .opacity(0)
+      .accessibilityHidden(true)
+      .frame(width: 0, height: 0)
+    }
   }
 
   private var header: some View {
@@ -185,7 +235,7 @@ struct ChatElicitationPanel: View {
       // options past the cap with no way to reach them, and how many options a
       // question offers is the model's call, not a number the card can assume.
       ScrollView(.vertical) {
-        VStack(spacing: OmiSpacing.xxs) {
+        VStack(spacing: OmiSpacing.xs) {
           ForEach(elicitation.options) { option in
             Button {
               stage(option)
@@ -217,11 +267,11 @@ struct ChatElicitationPanel: View {
 
   private func optionChipLabel(_ option: ElicitationOption) -> some View {
     HStack(spacing: OmiSpacing.xxs) {
-      if stagedOptionID == option.id {
+      if isChosen(option) {
         Image(systemName: "checkmark").scaledFont(size: OmiType.micro, weight: .bold)
       }
       Text(option.label).scaledFont(size: OmiType.caption, weight: .medium)
-      if isRecommended(option) && stagedOptionID != option.id {
+      if isRecommended(option) && !isChosen(option) {
         Text("suggested")
           .scaledFont(size: OmiType.micro, weight: .medium)
           .foregroundColor(OmiColors.textTertiary)
@@ -236,24 +286,43 @@ struct ChatElicitationPanel: View {
     )
     .overlay {
       RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-        .stroke(optionStroke(option), lineWidth: stagedOptionID == option.id ? 1.5 : 1)
+        .stroke(optionStroke(option), lineWidth: isChosen(option) ? 1.5 : 1)
     }
   }
 
   private func optionRowLabel(_ option: ElicitationOption) -> some View {
     HStack(spacing: OmiSpacing.sm) {
+      // The number is the option's address: it labels the row and is the key
+      // that picks it, so the two can never disagree.
+      if let number = optionNumber(option) {
+        Text("\(number)")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .monospacedDigit()
+          .foregroundColor(isChosen(option) ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .frame(width: numberColumnWidth, alignment: .center)
+          .accessibilityHidden(true)
+      }
+
       Text(option.label)
         .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textPrimary)
+        .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
-      if stagedOptionID == option.id {
+
+      // A pick-many question shows a box that can hold several marks; a
+      // pick-one shows the single answer it is committing to.
+      if elicitation.allowsMultiple {
+        Image(systemName: isChosen(option) ? "checkmark.square.fill" : "square")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(isChosen(option) ? OmiColors.accent : OmiColors.textQuaternary)
+      } else if isChosen(option) {
         Image(systemName: "checkmark")
           .scaledFont(size: OmiType.caption, weight: .bold)
           .foregroundColor(OmiColors.accent)
       }
     }
     .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.sm)
+    .padding(.vertical, OmiSpacing.md)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
@@ -261,19 +330,25 @@ struct ChatElicitationPanel: View {
     )
     .overlay {
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-        .stroke(optionStroke(option), lineWidth: stagedOptionID == option.id ? 1.5 : 1)
+        .stroke(optionStroke(option), lineWidth: isChosen(option) ? 1.5 : 1)
     }
     .contentShape(Rectangle())
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(optionNumber(option).map { "Option \($0), \(option.label)" } ?? option.label)
+    .accessibilityAddTraits(isChosen(option) ? [.isButton, .isSelected] : .isButton)
   }
 
+  /// Wide enough for a two-digit number so the labels stay on one left edge.
+  private var numberColumnWidth: CGFloat { round(OmiType.body * fontScale) }
+
   private func optionFill(_ option: ElicitationOption) -> Color {
-    if stagedOptionID == option.id { return OmiColors.backgroundQuaternary }
+    if isChosen(option) { return OmiColors.backgroundQuaternary }
     if hoveredOptionID == option.id { return OmiColors.backgroundTertiary }
     return OmiColors.backgroundTertiary.opacity(0.55)
   }
 
   private func optionStroke(_ option: ElicitationOption) -> Color {
-    if stagedOptionID == option.id { return OmiColors.accent.opacity(0.55) }
+    if isChosen(option) { return OmiColors.accent.opacity(0.55) }
     if hoveredOptionID == option.id { return OmiColors.border.opacity(0.28) }
     return OmiColors.border.opacity(option.isPermanent ? 0.4 : 0.12)
   }
@@ -375,7 +450,7 @@ struct ChatElicitationPanel: View {
   /// One option row: a line of body text plus its vertical padding. Scales with
   /// the user's font size so the cap stays honest at larger text.
   private var optionRowHeight: CGFloat {
-    round(OmiType.body * fontScale) + OmiSpacing.sm * 2
+    round(OmiType.body * fontScale) + OmiSpacing.md * 2
   }
 
   /// Height for the option list: its natural size until it would crowd the
@@ -387,13 +462,57 @@ struct ChatElicitationPanel: View {
   /// clipped instead, which put options permanently out of reach.
   private var optionListMaxHeight: CGFloat {
     let rows = CGFloat(elicitation.options.count)
-    let natural = rows * optionRowHeight + max(0, rows - 1) * OmiSpacing.xxs
-    return min(natural, 260)
+    let natural = rows * optionRowHeight + max(0, rows - 1) * OmiSpacing.xs
+    return min(natural, halfTheWindow)
   }
 
+  /// Half the window, and never more.
+  ///
+  /// The card lives in the composer at the bottom, so every point it takes is a
+  /// point of transcript the user loses. Past half the window the question
+  /// stops being a control and becomes the screen, so the list scrolls from
+  /// there. Falls back to a fixed cap when there is no window to measure.
+  private var halfTheWindow: CGFloat {
+    let height = windowHeight ?? 0
+    return height > 0 ? height * 0.5 : 320
+  }
+
+  /// Choose an option.
+  ///
+  /// A pick-many question toggles and stays put, because the user is still
+  /// building one answer. A pick-one question is finished the moment it is
+  /// answered, so it moves to the next question the way Next would — but never
+  /// sends, because sending the batch stays a deliberate act.
   private func stage(_ option: ElicitationOption) {
-    elicitations.stage(.option(option.id), for: elicitation)
+    if elicitation.allowsMultiple {
+      var chosen = stagedOptionIDs
+      if let existing = chosen.firstIndex(of: option.id) {
+        chosen.remove(at: existing)
+      } else {
+        chosen.append(option.id)
+      }
+      // Keep card order so the answer reads the way the question was asked.
+      let ordered = elicitation.options.map(\.id).filter { chosen.contains($0) }
+      if ordered.isEmpty {
+        elicitations.clearStaged(for: elicitation)
+      } else {
+        elicitations.stage(.options(ordered), for: elicitation)
+      }
+      freeText = ""
+      return
+    }
+
+    elicitations.stage(.options([option.id]), for: elicitation)
     freeText = ""
+    if !isLastQuestion { elicitations.focusNext() }
+  }
+
+  /// Pick an option by its number. Bound to 1-9 while the user is not typing.
+  private func selectOption(number: Int) {
+    guard !freeTextFocused else { return }
+    let index = number - 1
+    guard elicitation.options.indices.contains(index) else { return }
+    stage(elicitation.options[index])
   }
 
   private func stageFreeText(_ value: String) {

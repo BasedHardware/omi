@@ -120,7 +120,7 @@ extension DesktopAutomationActionRegistry {
         if let text = params["text"] {
           store.stage(.text(text), for: current)
         } else if let optionID = params["option_id"] {
-          store.stage(.option(optionID), for: current)
+          store.stage(.options([optionID]), for: current)
         }
         return [
           "staged": store.stagedForFocused == nil ? "false" : "true",
@@ -151,7 +151,7 @@ extension DesktopAutomationActionRegistry {
           ?? current.options.first(where: { !$0.isPermanent })
           ?? current.options.first
         let optionID = params["option_id"] ?? fallback?.id ?? ""
-        store.stage(.option(optionID), for: current)
+        store.stage(.options([optionID]), for: current)
         store.submitFocused()
         return [
           "answered": "true",

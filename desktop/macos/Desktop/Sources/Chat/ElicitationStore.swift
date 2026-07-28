@@ -37,6 +37,10 @@ struct PendingElicitation: Identifiable, Equatable, Sendable {
   let context: String?
   let options: [ElicitationOption]
   let allowsFreeText: Bool
+  /// Whether several options may be chosen. Never true for a permission: an ACP
+  /// response names exactly one option, so a pick-many control there would build
+  /// an answer the protocol cannot send.
+  let allowsMultiple: Bool
   /// The option the source protocol marked as its recommended answer, when it
   /// named one. Advisory only: it is never staged or sent on the user's behalf,
   /// because a default that answers itself is not consent.
@@ -74,6 +78,10 @@ struct PendingElicitation: Identifiable, Equatable, Sendable {
     // payload claims, so the protocol constraint is re-asserted here rather
     // than trusted from the wire.
     self.allowsFreeText = mode == .question && (payload["allowsFreeText"] as? Bool ?? false)
+    // Re-asserted here rather than trusted from the wire, for the same reason
+    // as free text: the protocol constraint is ours to keep, not the sender's.
+    self.allowsMultiple =
+      mode == .question && (payload["allowsMultiple"] as? Bool ?? false) && !self.options.isEmpty
     // Only honoured when it names an option that was actually offered, so a
     // stale or malformed recommendation cannot mark a row the user cannot pick.
     let recommended = payload["recommendedDefault"] as? String
@@ -84,7 +92,9 @@ struct PendingElicitation: Identifiable, Equatable, Sendable {
 
 /// The user's answer, on its way back to the kernel.
 enum ElicitationAnswer: Equatable, Sendable {
-  case option(String)
+  /// The options the user chose, in the order the card offers them. A
+  /// single-select question and every permission carry exactly one.
+  case options([String])
   case text(String)
   case cancel
 }
@@ -295,9 +305,9 @@ enum ElicitationWire {
       "dispatchId": dispatchID,
     ]
     switch answer {
-    case .option(let optionID):
+    case .options(let optionIDs):
       payload["decision"] = "answer"
-      payload["optionId"] = optionID
+      payload["optionIds"] = optionIDs
     case .text(let text):
       payload["decision"] = "answer"
       payload["text"] = text
