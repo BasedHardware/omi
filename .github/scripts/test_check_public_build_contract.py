@@ -736,6 +736,21 @@ jobs:
         finally:
             RUNTIME_PREFLIGHT.subprocess.run = original_run
 
+    def test_runtime_preflight_classifies_cloud_run_cannot_find_service_as_first_create(self) -> None:
+        # Live gcloud run wording (2026-07): "Cannot find service [omi-web]"
+        original_run = RUNTIME_PREFLIGHT.subprocess.run
+        RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RUNTIME_PREFLIGHT.subprocess.CalledProcessError(
+                1,
+                "gcloud",
+                stderr="ERROR: (gcloud.run.services.describe) Cannot find service [omi-web]",
+            )
+        )
+        try:
+            self.assertIsNone(RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project"))
+        finally:
+            RUNTIME_PREFLIGHT.subprocess.run = original_run
+
     def test_runtime_preflight_rejects_secret_where_reviewed_runtime_config_will_be_applied(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "reviewed.example"}
@@ -770,7 +785,9 @@ jobs:
         self.assertEqual(personas.deployment.runtime_secrets["LINKEDIN_API_KEY"], "NEXT_PUBLIC_LINKEDIN_API_KEY:latest")
         self.assertEqual(
             personas.deployment.runtime_env_vars,
-            {"LINKEDIN_RAPIDAPI_HOST": "linkedin-api8.p.rapidapi.com"},
+            {
+                "LINKEDIN_RAPIDAPI_HOST": "linkedin-api8.p.rapidapi.com",
+            },
         )
         self.assertEqual(
             personas.deployment.preserve_runtime_secrets,
@@ -862,6 +879,15 @@ jobs:
         readme = (ROOT / "web/personas-open-source/README.md").read_text(encoding="utf-8")
         self.assertIn("/rockapis-rockapis-default/api/linkedin-api8", readme)
         self.assertIn("LINKEDIN_RAPIDAPI_HOST=linkedin-api8.p.rapidapi.com", readme)
+
+        personas_workflow = (ROOT / ".github/workflows/gcp_personas.yml").read_text(encoding="utf-8")
+        self.assertIn("network: ${{ vars.CLOUD_RUN_VPC_NETWORK }}", personas_workflow)
+        self.assertIn("subnet: ${{ vars.CLOUD_RUN_VPC_SUBNET }}", personas_workflow)
+        self.assertIn(
+            "runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}",
+            personas_workflow,
+        )
+        self.assertIn("require_gateway_url: true", personas_workflow)
 
     def test_rejects_a_required_value_missing_from_reviewed_source(self) -> None:
         contract = STATIC.load_contract(self.root / "config/public-build-contract.json")

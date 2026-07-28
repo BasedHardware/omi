@@ -57,3 +57,5 @@ gcp_auth = "0.12"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+# test-util enables tokio::time::pause/advance for deterministic deadline tests.
+tokio = { version = "1", features = ["full", "test-util"] }

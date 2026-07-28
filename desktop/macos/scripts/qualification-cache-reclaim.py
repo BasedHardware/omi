@@ -124,7 +124,15 @@ def _validate_cache_root(cache_root: Path, *, create: bool) -> Path:
         current /= component
         if stat.S_ISLNK(_lstat(current).st_mode):
             raise CacheSafetyError(f"cache path has a symlinked component: {current.name}")
-    _require_owned_directory(root, private=True)
+    root_info = _require_owned_directory(root, private=False)
+    if stat.S_IMODE(root_info.st_mode) & 0o077:
+        if not create:
+            raise CacheSafetyError("cache root is not owner-only")
+        try:
+            root.chmod(0o700)
+        except OSError as error:
+            raise CacheSafetyError("cannot tighten cache root permissions") from error
+        _require_owned_directory(root, private=True)
     return root
 
 
@@ -203,13 +211,12 @@ def _git_head(source: Path) -> str:
     return result.stdout.strip()
 
 
-def _cache_lease_records(entry: Path, source_sha: str) -> tuple[frozenset[int], set[int]]:
+def _cache_lease_payloads(entry: Path, source_sha: str) -> list[tuple[Path, dict[str, object]]]:
     lease_root = entry / ".leases"
     if not lease_root.exists():
-        return frozenset(), set()
+        return []
     _require_owned_directory(lease_root, private=True)
-    owner_pids: set[int] = set()
-    live_pids: set[int] = set()
+    payloads: list[tuple[Path, dict[str, object]]] = []
     for lease_path in sorted(lease_root.iterdir(), key=lambda path: path.name):
         if lease_path.suffix != ".json" or not LEASE_ID_RE.fullmatch(lease_path.stem):
             raise CacheSafetyError(f"unrecognized cache lease record in {source_sha}")
@@ -230,10 +237,37 @@ def _cache_lease_records(entry: Path, source_sha: str) -> tuple[frozenset[int], 
         token = payload.get("token")
         if owner_pid <= 0 or created_at <= 0 or not isinstance(token, str) or len(token) < 32:
             raise CacheSafetyError(f"cache lease is incomplete in {source_sha}")
+        payloads.append((lease_path, payload))
+    return payloads
+
+
+def _cache_lease_records(entry: Path, source_sha: str) -> tuple[frozenset[int], set[int]]:
+    owner_pids: set[int] = set()
+    live_pids: set[int] = set()
+    for _lease_path, payload in _cache_lease_payloads(entry, source_sha):
+        owner_pid = int(payload["owner_pid"])
         owner_pids.add(owner_pid)
         if _process_exists(owner_pid):
             live_pids.add(owner_pid)
     return frozenset(owner_pids), live_pids
+
+
+def _remove_dead_cache_leases(entries: Iterable[CacheEntry]) -> list[dict[str, object]]:
+    removed: list[dict[str, object]] = []
+    for entry in entries:
+        for lease_path, payload in _cache_lease_payloads(entry.path, entry.source_sha):
+            owner_pid = int(payload["owner_pid"])
+            if _process_exists(owner_pid):
+                continue
+            lease_path.unlink()
+            removed.append(
+                {
+                    "source_sha": entry.source_sha,
+                    "lease_id": str(payload["lease_id"]),
+                    "owner_pid": owner_pid,
+                }
+            )
+    return removed
 
 
 def _validate_entry(
@@ -520,6 +554,7 @@ def reclaim(
     observed_at = int(time.time() if now is None else now)
     before = capacity_probe(capacity_path)
     deleted: list[dict[str, object]] = []
+    removed_dead_leases: list[dict[str, object]] = []
     with _ReclaimLock(root):
         entries = _inventory(root)
         harness_shas, harness_owner_pids = _protected_harness_worktree(root, qualification_lease_root)
@@ -530,15 +565,15 @@ def reclaim(
             if entry.live_lease_owner_pids:
                 protected.add(entry.source_sha)
         protected.update(_process_protection(root, entries, represented, process_probe()))
+        removed_dead_leases = _remove_dead_cache_leases(entries)
 
-        eligible = sorted(
-            (
-                entry
-                for entry in entries
-                if entry.source_sha not in protected and observed_at - entry.last_used_at >= minimum_age_seconds
-            ),
+        idle = sorted(
+            (entry for entry in entries if entry.source_sha not in protected),
             key=lambda entry: (entry.last_used_at, entry.source_sha),
         )
+        aged = [entry for entry in idle if observed_at - entry.last_used_at >= minimum_age_seconds]
+        capacity_pressure = [entry for entry in idle if entry not in aged]
+        eligible = [*aged, *capacity_pressure]
         after = before
         reclaimed_kib = 0
         for entry in eligible:
@@ -553,6 +588,11 @@ def reclaim(
                     "source_sha": entry.source_sha,
                     "age_seconds": observed_at - entry.last_used_at,
                     "size_kib": entry.size_kib,
+                    "reason": (
+                        "retention-age"
+                        if observed_at - entry.last_used_at >= minimum_age_seconds
+                        else "capacity-pressure"
+                    ),
                 }
             )
             after = capacity_probe(capacity_path)
@@ -574,11 +614,12 @@ def reclaim(
         "before_reclaim_available_kib": before.available_kib,
         "before_reclaim_available_inodes": before.available_inodes,
         "reclaim": {
-            "policy": "oldest-idle-exact-sha-v1",
+            "policy": "oldest-idle-capacity-first-v2",
             "minimum_age_seconds": minimum_age_seconds,
             "max_entries": max_entries,
             "max_reclaim_kib": max_reclaim_kib,
             "deleted_entries": deleted,
+            "dead_leases_removed": removed_dead_leases,
             "reclaimed_kib": sum(int(item["size_kib"]) for item in deleted),
         },
     }
@@ -687,10 +728,11 @@ def main() -> int:
                 "minimum_free_kib": args.minimum_free_kib,
                 "minimum_free_inodes": args.minimum_free_inodes,
                 "reclaim": {
-                    "policy": "oldest-idle-exact-sha-v1",
+                    "policy": "oldest-idle-capacity-first-v2",
                     "status": "refused",
                     "reason": str(error)[:300],
                     "deleted_entries": [],
+                    "dead_leases_removed": [],
                     "reclaimed_kib": 0,
                 },
             }

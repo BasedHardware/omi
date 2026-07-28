@@ -5490,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "१,२०० प्रीमियम मिनिटे + डिव्हाइसवर अनलिमिटेड",
+    "basicPlanDescription": "३०० प्रीमियम मिनिटे + डिव्हाइसवर अनलिमिटेड",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
