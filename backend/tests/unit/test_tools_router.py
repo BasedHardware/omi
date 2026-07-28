@@ -93,6 +93,7 @@ _SYS_MODULE_NAMES = [
     "sentry_sdk",
     "database",
     "database._client",
+    "database.persistence",
     "database.redis_db",
     "database.auth",
     "database.conversations",
@@ -159,6 +160,11 @@ for mod_name in [
 # Stub database packages
 _stub_package("database")
 sys.modules["database._client"].db = MagicMock()
+
+# database.persistence re-exports db (WP1 DI handle); routers import it.
+_persistence = _stub_module("database.persistence")
+_persistence.db = sys.modules["database._client"].db
+setattr(sys.modules["database"], "persistence", _persistence)
 
 # Stub database.conversations
 conversations_db = _stub_module("database.conversations")

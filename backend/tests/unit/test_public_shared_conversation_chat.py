@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 import database.conversations as conversations_db
+from tests.store_fakes import FakeDocumentStore
 from models.conversation import SharedConversationChatRequest
 from routers import public_shared_conversation_chat as shared_chat_router
 from llm_gateway.gateway.auth import ServiceCaller
@@ -287,36 +288,19 @@ def test_public_transcript_decoder_bounds_then_decrypts_enhanced_storage(monkeyp
     assert segments == [{'text': 'bounded encrypted text', 'is_user': False}]
 
 
-class _PublicConversationSnapshot:
-    exists = True
+class _FieldMaskStore(FakeDocumentStore):
+    """A store that records the field mask (``fields=``) each get() is asked for."""
 
-    def __init__(self, data: dict[str, object]) -> None:
-        self._data = data
+    def __init__(self):
+        super().__init__()
+        self.get_calls = []
 
-    def to_dict(self):
-        return self._data
-
-
-class _PublicConversationFirestore:
-    def __init__(self, data: dict[str, object]) -> None:
-        self.snapshot = _PublicConversationSnapshot(data)
-        self.path: list[str] = []
-        self.field_paths: list[str] | None = None
-
-    def collection(self, name: str):
-        self.path.append(name)
-        return self
-
-    def document(self, name: str):
-        self.path.append(name)
-        return self
-
-    def get(self, *, field_paths: list[str]):
-        self.field_paths = field_paths
-        return self.snapshot
+    def get(self, path, *, fields=None):
+        self.get_calls.append((path, list(fields) if fields is not None else None))
+        return super().get(path, fields=fields)
 
 
-def test_public_conversation_read_uses_a_field_mask_and_returns_only_bounded_safe_segments():
+def test_public_conversation_read_uses_a_field_mask_and_returns_only_bounded_safe_segments(monkeypatch):
     raw_segments = zlib.compress(
         json.dumps(
             [
@@ -329,28 +313,27 @@ def test_public_conversation_read_uses_a_field_mask_and_returns_only_bounded_saf
             ]
         ).encode('utf-8')
     )
-    firestore = _PublicConversationFirestore(
+    store = _FieldMaskStore()
+    monkeypatch.setattr(conversations_db, '_store', lambda: store)
+    store.set(
+        'users/owner-1/conversations/conversation-1',
         {
             'visibility': 'shared',
             'is_locked': False,
             'transcript_segments_compressed': True,
             'transcript_segments': raw_segments,
             'structured': {'overview': 'must not be loaded by the field mask'},
-        }
+        },
     )
 
-    conversation = conversations_db.get_public_shared_conversation_bounded(
-        'owner-1',
-        'conversation-1',
-        firestore_client=firestore,
-    )
+    conversation = conversations_db.get_public_shared_conversation_bounded('owner-1', 'conversation-1')
 
-    assert firestore.path == ['users', 'owner-1', 'conversations', 'conversation-1']
-    assert firestore.field_paths == [
-        'visibility',
-        'is_locked',
-        'transcript_segments_compressed',
-        'transcript_segments',
+    # The read is field-masked to only the bounded-safe fields (structured is never fetched).
+    assert store.get_calls == [
+        (
+            'users/owner-1/conversations/conversation-1',
+            ['visibility', 'is_locked', 'transcript_segments_compressed', 'transcript_segments'],
+        )
     ]
     assert conversation == {
         'visibility': 'shared',

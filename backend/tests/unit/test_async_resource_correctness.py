@@ -52,6 +52,11 @@ def gmail_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "database", database)
     monkeypatch.setitem(sys.modules, "database.users", users_db)
 
+    # WP1 boundary module: google_utils imports DELETE_FIELD from database.sentinels.
+    sentinels_db = types.ModuleType("database.sentinels")
+    sentinels_db.DELETE_FIELD = object()
+    monkeypatch.setitem(sys.modules, "database.sentinels", sentinels_db)
+
     tools_mod = types.ModuleType("langchain_core.tools")
     tools_mod.tool = _ToolWrapper
     runnables_mod = types.ModuleType("langchain_core.runnables")

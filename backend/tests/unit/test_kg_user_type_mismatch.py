@@ -57,6 +57,10 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod.db = MagicMock()
     client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
     fakes["database._client"] = client_mod
+    # database.persistence re-exports db (WP1 DI handle); code under test imports it.
+    persistence_mod = ModuleType("database.persistence")
+    persistence_mod.db = client_mod.db
+    fakes["database.persistence"] = persistence_mod
 
     # database.auth — stub with the canonical user-name function under test.
     auth = add("database.auth")

@@ -45,6 +45,13 @@ def _pkg(name):
     return mod
 
 
+def _persistence_mod(db):
+    """A ``database.persistence`` stub exposing ``db`` (the WP1 DI handle the routers import)."""
+    mod = ModuleType("database.persistence")
+    mod.db = db
+    return mod
+
+
 @pytest.fixture(scope="module")
 def router():
     """Load ``routers.conversations`` fresh against stubbed heavy dependencies.
@@ -114,6 +121,8 @@ def router():
         # database (parent package faked; _client is the rich stub)
         "database": _pkg("database"),
         "database._client": client_mod,
+        # database.persistence re-exports db (WP1 DI handle); the router imports it.
+        "database.persistence": _persistence_mod(client_mod.db),
         "database.conversations": _pkg("database.conversations"),
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),

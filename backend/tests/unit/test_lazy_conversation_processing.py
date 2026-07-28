@@ -120,23 +120,17 @@ class TestDeferredNotRequeuedBySweeper:
     get_processing_conversations (the listen-session sweeper re-sends those to pusher, which would
     background-process deferred rows and defeat the cost saving)."""
 
-    def test_get_processing_conversations_excludes_deferred(self):
+    def test_get_processing_conversations_excludes_deferred(self, monkeypatch):
         import database.conversations as cdb
+        from tests.store_fakes import FakeDocumentStore
 
-        def _doc(d):
-            m = MagicMock()
-            m.to_dict.return_value = d
-            return m
+        store = FakeDocumentStore()
+        monkeypatch.setattr(cdb, '_store', lambda: store)
+        store.set('users/uid-x/conversations/a', {'id': 'a', 'status': 'processing', 'deferred': True})
+        store.set('users/uid-x/conversations/b', {'id': 'b', 'status': 'processing', 'deferred': False})
+        store.set('users/uid-x/conversations/c', {'id': 'c', 'status': 'processing'})  # no deferred field
 
-        docs = [
-            _doc({'id': 'a', 'deferred': True}),  # deferred -> excluded
-            _doc({'id': 'b', 'deferred': False}),  # not deferred -> kept
-            _doc({'id': 'c'}),  # no deferred field (normal processing) -> kept
-        ]
-        chain = MagicMock()
-        chain.stream.return_value = docs
-        mock_db = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value.where.return_value = chain
-        with __import__('unittest.mock', fromlist=['patch']).patch.object(cdb, 'db', mock_db):
-            result = cdb.get_processing_conversations('uid-x')
-        assert [c['id'] for c in result] == ['b', 'c']
+        result = cdb.get_processing_conversations('uid-x')
+
+        # Deferred rows are excluded; the query is scoped to status=processing.
+        assert sorted(c['id'] for c in result) == ['b', 'c']
