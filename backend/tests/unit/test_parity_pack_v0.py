@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 
 import pytest
 
 from testing.parity_pack_v0.manifest import PackCase, build_manifest
+from testing.parity_pack_v0.capture import CaptureTap
+from testing.parity_pack_v0.players import (
+    CassetteTopologyError,
+    InvocationTopology,
+    LLMCassettePlayer,
+    STTCassettePlayer,
+)
 from testing.parity_pack_v0.redaction import redact_value
 from testing.parity_pack_v0.runner import UnexpectedEgress, hermetic_run
 from testing.parity_pack_v0.schema import CassetteIdentity, RequestFingerprint
@@ -105,3 +113,49 @@ def test_hermetic_runner_denies_dns_resolution() -> None:
     """The egress-deny guard must block DNS resolution."""
     with pytest.raises(UnexpectedEgress), hermetic_run():
         socket.getaddrinfo("example.com", 443)
+
+
+def test_capture_tap_gates_before_persistence_and_records_wire_events(tmp_path: Path) -> None:
+    identity = CassetteIdentity("anon-capture", "stt", "parakeet", 0, 0, "anon-event")
+    denied = CaptureTap(tmp_path, CaptureWhitelist.from_environ({}))
+    assert denied.start("u1", identity, {"audio": "not-written"}) is None
+    assert not (tmp_path / "cassettes").exists()
+    assert denied.denied_metadata == [{"provider_lane": "stt", "reason": "whitelist_miss"}]
+
+    ticks = iter((1.0, 1.025, 1.070, 1.100))
+    allowed = CaptureWhitelist.from_environ(
+        {"OMI_ENV_STAGE": "dev", "OMI_PARITY_PACK_CAPTURE": "1", "OMI_PARITY_PACK_ALLOWED_PRINCIPALS": "u1"}
+    )
+    tap = CaptureTap(tmp_path, allowed, clock=lambda: next(ticks))
+    invocation = tap.start("u1", identity, {"token": "secret", "audio": "synthetic"})
+    assert invocation is not None
+    invocation.observe("client", {"type": "audio", "bytes": 4})
+    invocation.observe("outbound", {"type": "stt_send"})
+    invocation.observe("inbound", {"type": "transcript", "text": "synthetic"})
+    cassette = invocation.persist()
+    topology = InvocationTopology((cassette,))
+    seen = []
+    STTCassettePlayer(topology).play(identity, {"audio": "synthetic", "token": "different"}, seen.append)
+    assert [(event.direction, event.dt_ms) for event in seen] == [("client", 25), ("outbound", 70), ("inbound", 100)]
+    topology.assert_complete()
+
+
+def test_players_fail_on_extra_out_of_order_and_unused_cassettes(tmp_path: Path) -> None:
+    whitelist = CaptureWhitelist.from_environ(
+        {"OMI_ENV_STAGE": "dev", "OMI_PARITY_PACK_CAPTURE": "1", "OMI_PARITY_PACK_ALLOWED_PRINCIPALS": "u1"}
+    )
+    stt = CassetteIdentity("s", "stt", "model", 0, 0, "e")
+    llm = CassetteIdentity("s", "llm", "model", 1, 0, "e")
+    tap = CaptureTap(tmp_path, whitelist)
+    stt_invocation = tap.start("u1", stt, {"x": 1})
+    llm_invocation = tap.start("u1", llm, {"x": 2})
+    assert stt_invocation is not None and llm_invocation is not None
+    topology = InvocationTopology((stt_invocation.persist(), llm_invocation.persist()))
+    with pytest.raises(CassetteTopologyError, match="out-of-order"):
+        LLMCassettePlayer(topology).play(llm, {"x": 2}, lambda _: None)
+    with pytest.raises(CassetteTopologyError, match="unused"):
+        topology.assert_complete()
+    STTCassettePlayer(topology).play(stt, {"x": 1}, lambda _: None)
+    LLMCassettePlayer(topology).play(llm, {"x": 2}, lambda _: None)
+    with pytest.raises(CassetteTopologyError, match="extra"):
+        STTCassettePlayer(topology).play(stt, {"x": 1}, lambda _: None)
