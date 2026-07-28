@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Set, cast
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
-from database._client import db as default_db_client
+from database import firestore_paths
 from database.memory_apply_store import MissingMemoryDocument, apply_long_term_patch_firestore
 from database.memory_collections import MemoryCollections
 from database.review_queue import (
@@ -84,18 +84,20 @@ def _coerce_aware_utc(value: datetime) -> datetime:
 
 def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
-    ref = db_client.document(collections.memory_apply_control_state)
-    snapshot = ref.get()
+    path = collections.memory_apply_control_state
+    snapshot = firestore_paths.get_document(db_client, path)
     payload = _snapshot_payload(snapshot)
     if payload:
         return MemoryControlState(**payload)
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    ref.set(control.model_dump(mode="json"))
+    firestore_paths.set_document(db_client, path, control.model_dump(mode="json"))
     return control
 
 
 def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
-    db_client.document(MemoryCollections(uid=control.uid).memory_apply_control_state).set(
+    firestore_paths.set_document(
+        db_client,
+        MemoryCollections(uid=control.uid).memory_apply_control_state,
         {
             "last_consolidation_run_at": (
                 control.last_consolidation_run_at.isoformat() if control.last_consolidation_run_at is not None else None
@@ -174,9 +176,8 @@ def list_pending_consolidation_items(
     now: Optional[datetime] = None,
 ) -> List[MemoryItem]:
     """Active processed short_term items eligible for batched consolidation."""
-    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
-    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=client)
+    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=db_client)
     pending = [
         item
         for item in items
@@ -238,7 +239,7 @@ def _hydrate_memory_item(
     if memory_id in cache:
         return cache[memory_id]
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    payload = _snapshot_payload(db_client.document(path).get())
+    payload = _snapshot_payload(firestore_paths.get_document(db_client, path))
     if not payload:
         cache[memory_id] = None
         return None
@@ -258,7 +259,6 @@ def gather_consolidation_candidates(
     candidate_limit: Optional[int] = None,
 ) -> ConsolidationContext:
     """Vector-search similar memories and hydrate active items (deterministic only)."""
-    client: Any = db_client if db_client is not None else default_db_client
     per_item = candidate_limit if candidate_limit is not None else candidates_per_item_limit()
     context = ConsolidationContext(uid=uid, pending_items=list(pending_items))
     cache: Dict[str, Optional[MemoryItem]] = {item.memory_id: item for item in pending_items}
@@ -274,7 +274,7 @@ def gather_consolidation_candidates(
         for hit in query_result.hits:
             if hit.memory_id == anchor.memory_id or hit.memory_id in seen:
                 continue
-            item = _hydrate_memory_item(uid, hit.memory_id, db_client=client, cache=cache)
+            item = _hydrate_memory_item(uid, hit.memory_id, db_client=db_client, cache=cache)
             if item is None:
                 continue
             seen.add(hit.memory_id)
@@ -546,9 +546,8 @@ def _ensure_consolidation_operation(
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    op_ref = db_client.document(op_path)
-    if not op_ref.get().exists:
-        op_ref.set(operation.model_dump(mode="json"))
+    if not firestore_paths.document_exists(db_client, op_path):
+        firestore_paths.set_document(db_client, op_path, operation.model_dump(mode="json"))
     return operation
 
 
@@ -582,9 +581,8 @@ def _apply_superseded_item(
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    op_ref = db_client.document(op_path)
-    if not op_ref.get().exists:
-        op_ref.set(operation.model_dump(mode="json"))
+    if not firestore_paths.document_exists(db_client, op_path):
+        firestore_paths.set_document(db_client, op_path, operation.model_dump(mode="json"))
 
     patch_payload: Payload = {
         "patch_id": f"patch_sup_{idempotency_key[:24]}",
@@ -613,7 +611,7 @@ def _apply_superseded_item(
 
     item = result.memory_items[0] if result.memory_items else None
     if item is None:
-        payload = _snapshot_payload(db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get())
+        payload = _snapshot_payload(firestore_paths.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"))
         if payload:
             item = MemoryItem(**payload)
     if item is not None and item.tier == MemoryLayer.long_term:
@@ -664,7 +662,7 @@ def _load_survivor_item(
     if memory_id in pending_by_id:
         return pending_by_id[memory_id]
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    payload = _snapshot_payload(db_client.document(path).get())
+    payload = _snapshot_payload(firestore_paths.get_document(db_client, path))
     if not payload:
         return None
     return MemoryItem(**payload)
@@ -854,16 +852,15 @@ def run_canonical_consolidation(
     recurrence_signal_sink: Optional[Callable[..., int]] = None,
 ) -> ConsolidationReport:
     """Batched consolidation entry point for one canonical user."""
-    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return ConsolidationReport(uid=uid, skipped_reason="not_canonical_cohort")
     if not consolidation_enabled():
         return ConsolidationReport(uid=uid, skipped_reason="consolidation_disabled")
 
-    pending = list_pending_consolidation_items(uid, db_client=client, now=current_time)
-    control = _read_control_state(uid, db_client=client)
+    pending = list_pending_consolidation_items(uid, db_client=db_client, now=current_time)
+    control = _read_control_state(uid, db_client=db_client)
     trigger = consolidation_trigger_reason(
         pending_count=len(pending),
         last_consolidation_run_at=control.last_consolidation_run_at,
@@ -901,7 +898,7 @@ def run_canonical_consolidation(
         if not pending_batch:
             break
 
-        context = gather_consolidation_candidates(uid, pending_batch, db_client=client)
+        context = gather_consolidation_candidates(uid, pending_batch, db_client=db_client)
         agent_batch = invoke_consolidation_agent(context, llm_invoke=llm_invoke)
         last_agent_batch = agent_batch
         pending_by_id = {item.memory_id: item for item in pending_batch}
@@ -917,7 +914,7 @@ def run_canonical_consolidation(
                 recurrence_signal_sink(
                     uid,
                     agent_batch.recurrence_signals,
-                    firestore_client=client,
+                    firestore_client=db_client,
                 )
             except Exception as exc:
                 watermark_blocked = True
@@ -932,10 +929,10 @@ def run_canonical_consolidation(
             if decision.decision == "review" or decision.review_required:
                 survivor = pending_by_id.get(decision.survivor_memory_id)
                 if survivor is not None:
-                    _escalate_to_review_queue(uid, decision=decision, survivor=survivor, db_client=client)
+                    _escalate_to_review_queue(uid, decision=decision, survivor=survivor, db_client=db_client)
                     report.review_escalations += 1
                 continue
-            control = _read_control_state(uid, db_client=client)
+            control = _read_control_state(uid, db_client=db_client)
             try:
                 applied_ids = apply_consolidation_decision(
                     uid,
@@ -944,7 +941,7 @@ def run_canonical_consolidation(
                     control=control,
                     run_id=run_id,
                     now=current_time,
-                    db_client=client,
+                    db_client=db_client,
                 )
             except ConsolidationPartialApply as exc:
                 report.decisions_partial += 1
@@ -987,10 +984,10 @@ def run_canonical_consolidation(
     if last_agent_batch is not None and _should_advance_consolidation_watermark(
         last_agent_batch, watermark_blocked=watermark_blocked
     ):
-        updated_control = _read_control_state(uid, db_client=client).model_copy(
+        updated_control = _read_control_state(uid, db_client=db_client).model_copy(
             update={"last_consolidation_run_at": current_time, "updated_at": current_time}
         )
-        _persist_control_state(updated_control, db_client=client)
+        _persist_control_state(updated_control, db_client=db_client)
         report.last_consolidation_run_at = current_time
     else:
         report.last_consolidation_run_at = control.last_consolidation_run_at
