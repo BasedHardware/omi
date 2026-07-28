@@ -220,7 +220,7 @@ check_pr_preflight() {
     fi
     echo "Skipping shared PR preflight because PRE_PUSH_SKIP_PR_PREFLIGHT=1."
     echo "==> failure-class guard-artifact ratchet (mandatory under preflight hatch)"
-    python3 .github/scripts/check_failure_class_guard_ratchet.py \
+    "$PYTHON_EXECUTABLE" .github/scripts/check_failure_class_guard_ratchet.py \
       --pr-body-file "$OMI_PR_BODY_FILE"
     ci_prediction_note_verified "failure-class guard-artifact ratchet (mandatory under PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
     ci_prediction_note_skipped "shared PR contract and hygiene (PRE_PUSH_SKIP_PR_PREFLIGHT=1)"

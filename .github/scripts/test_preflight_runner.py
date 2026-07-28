@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import importlib.util
 import os
 from pathlib import Path
@@ -11,7 +12,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import time
 import types
 import unittest
 from unittest import mock
@@ -50,6 +50,35 @@ def windows_path_without_python(bash: str, git: str) -> str:
             str(Path(os.environ["SystemRoot"]) / "System32"),
         ]
     )
+
+
+def wait_for_windows_process_exit(pid: int, timeout_ms: int = 10_000) -> bool:
+    """Wait on a process handle instead of polling wall-clock time."""
+    if os.name != "nt":
+        raise RuntimeError("Windows process waits are only available on Windows")
+
+    from ctypes import wintypes
+
+    synchronize = 0x00100000
+    wait_object_0 = 0
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    open_process = kernel32.OpenProcess
+    open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    open_process.restype = wintypes.HANDLE
+    wait_for_single_object = kernel32.WaitForSingleObject
+    wait_for_single_object.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    wait_for_single_object.restype = wintypes.DWORD
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+
+    handle = open_process(synchronize, False, pid)
+    if not handle:
+        return not runner.process_exists(pid)
+    try:
+        return wait_for_single_object(handle, timeout_ms) == wait_object_0
+    finally:
+        close_handle(handle)
 
 
 class FakeChild:
@@ -181,54 +210,63 @@ class ProcessExistsTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "native Windows liveness contract")
     def test_windows_liveness_probe_does_not_terminate_the_target(self) -> None:
-        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import sys; sys.stdin.buffer.read()"],
+            stdin=subprocess.PIPE,
+        )
         try:
             self.assertTrue(runner.process_exists(child.pid))
             self.assertIsNone(child.poll())
         finally:
             child.terminate()
             child.wait(timeout=10)
+            if child.stdin is not None:
+                child.stdin.close()
 
     @unittest.skipUnless(os.name == "nt", "native Windows process-tree contract")
     def test_windows_job_terminates_descendants(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            go_path = root / "go"
-            child_pid_path = root / "child.pid"
-            parent_code = (
-                "import pathlib, subprocess, sys, time;"
-                f"go=pathlib.Path({str(go_path)!r});"
-                f"child_pid=pathlib.Path({str(child_pid_path)!r});"
-                "\nwhile not go.exists(): time.sleep(0.02)"
-                "\nchild=subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])"
-                "\nchild_pid.write_text(str(child.pid), encoding='utf-8')"
-                "\ntime.sleep(30)"
-            )
-            parent = subprocess.Popen([sys.executable, "-c", parent_code])
-            job = runner.WindowsJob()
-            descendant_pid = 0
-            try:
-                job.assign(parent.pid)
-                go_path.touch()
-                deadline = time.monotonic() + 5
-                while not child_pid_path.exists() and time.monotonic() < deadline:
-                    time.sleep(0.02)
-                self.assertTrue(child_pid_path.exists(), "descendant did not start")
-                descendant_pid = int(child_pid_path.read_text(encoding="utf-8"))
-                self.assertTrue(runner.process_exists(descendant_pid))
+        parent_code = (
+            "import subprocess, sys;"
+            "sys.stdin.buffer.read(1);"
+            "child=subprocess.Popen("
+            "[sys.executable, '-c', 'import sys; sys.stdin.buffer.read()'],"
+            "stdin=subprocess.PIPE"
+            ");"
+            "print(child.pid, flush=True);"
+            "sys.stdin.buffer.read()"
+        )
+        parent = subprocess.Popen(
+            [sys.executable, "-c", parent_code],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+        )
+        job = runner.WindowsJob()
+        descendant_pid = 0
+        try:
+            job.assign(parent.pid)
+            assert parent.stdin is not None
+            assert parent.stdout is not None
+            parent.stdin.write("g")
+            parent.stdin.flush()
+            descendant_pid = int(parent.stdout.readline())
+            self.assertTrue(runner.process_exists(descendant_pid))
 
-                self.assertTrue(job.terminate())
+            self.assertTrue(job.terminate())
+            parent.wait(timeout=10)
+            self.assertTrue(wait_for_windows_process_exit(descendant_pid))
+            self.assertFalse(runner.process_exists(descendant_pid))
+        finally:
+            job.terminate()
+            job.close()
+            if parent.poll() is None:
+                parent.terminate()
                 parent.wait(timeout=10)
-                deadline = time.monotonic() + 5
-                while runner.process_exists(descendant_pid) and time.monotonic() < deadline:
-                    time.sleep(0.02)
-                self.assertFalse(runner.process_exists(descendant_pid))
-            finally:
-                job.terminate()
-                job.close()
-                if parent.poll() is None:
-                    parent.terminate()
-                    parent.wait(timeout=10)
+            if parent.stdin is not None:
+                parent.stdin.close()
+            if parent.stdout is not None:
+                parent.stdout.close()
 
 
 class LaunchContractTests(unittest.TestCase):
@@ -255,6 +293,10 @@ class LaunchContractTests(unittest.TestCase):
         self.assertIn('PYTHON_EXECUTABLE="${OMI_PYTHON_EXECUTABLE:-}"', pre_push)
         self.assertIn(
             'CI_PREDICTION_SELECTION=$("$PYTHON_EXECUTABLE" scripts/pre_push_ci_prediction.py',
+            pre_push,
+        )
+        self.assertIn(
+            '"$PYTHON_EXECUTABLE" .github/scripts/check_failure_class_guard_ratchet.py',
             pre_push,
         )
         self.assertIn('"$PWD/backend/.venv/Scripts/python.exe"', pre_push)
