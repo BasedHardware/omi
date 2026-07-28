@@ -152,25 +152,41 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
     XCTAssertEqual(smoother.step(target: 0.25, at: 100), 0.25, accuracy: 0.001)
   }
 
-  func testSpeakingLevelModulationKeepsFloorAndCeiling() {
-    XCTAssertEqual(
-      NotchVoiceMorphGeometry.speakingLevelModulation(0),
-      NotchVoiceMorphGeometry.speakingLevelFloor,
-      accuracy: 0.001,
-      "Silent stretches of a reply must keep a visible breath")
-    XCTAssertEqual(NotchVoiceMorphGeometry.speakingLevelModulation(1), 1, accuracy: 0.001)
-    XCTAssertEqual(NotchVoiceMorphGeometry.speakingLevelModulation(5), 1, accuracy: 0.001)
-    XCTAssertEqual(NotchVoiceMorphGeometry.normalizedVoiceLevel(0), 0, accuracy: 0.001)
-    XCTAssertEqual(NotchVoiceMorphGeometry.normalizedVoiceLevel(1), 1, accuracy: 0.001)
+  func testSpeakingPulseIsZeroInSilenceAndTracksOutputLevel() {
+    // A pause in the reply must leave the ring completely still, regardless
+    // of where the time wobble happens to be.
+    for wobble in [0.0, 0.5, 1.0] {
+      XCTAssertEqual(
+        NotchVoiceMorphGeometry.speakingPulse(outputLevel: 0, wobble: wobble),
+        0,
+        accuracy: 0.001
+      )
+    }
+    let quiet = NotchVoiceMorphGeometry.speakingPulse(outputLevel: 0.3, wobble: 0.5)
+    let loud = NotchVoiceMorphGeometry.speakingPulse(outputLevel: 1, wobble: 0.5)
+    XCTAssertGreaterThan(loud, quiet, "Louder speech must pulse harder")
+    XCTAssertLessThanOrEqual(
+      NotchVoiceMorphGeometry.speakingPulse(outputLevel: 1, wobble: 1), 1)
+    // The wobble may only modulate a bounded share of a level-driven pulse.
+    let floorAtFullLevel = NotchVoiceMorphGeometry.speakingPulse(outputLevel: 1, wobble: 0)
+    XCTAssertGreaterThanOrEqual(
+      floorAtFullLevel, 1 - NotchVoiceMorphGeometry.speakingWobbleShare - 0.001)
   }
 
-  func testQuietListeningStillProducesAVisibleWave() {
-    XCTAssertEqual(
-      NotchVoiceMorphGeometry.normalizedLevel(0),
-      NotchVoiceMorphGeometry.quietLevelFloor,
-      accuracy: 0.001
-    )
-    XCTAssertGreaterThan(NotchVoiceMorphGeometry.normalizedLevel(0), 0.25)
-    XCTAssertEqual(NotchVoiceMorphGeometry.normalizedLevel(1), 1, accuracy: 0.001)
+  func testSilenceMapsToAFlatLineAndSpeechScalesWithVolume() {
+    // Silence must render a genuinely flat line — no display floor — and
+    // ambient room noise (~0.01 on real hardware) is gated to flat too.
+    XCTAssertEqual(NotchVoiceMorphGeometry.inputDisplayLevel(0), 0, accuracy: 0.0001)
+    XCTAssertEqual(NotchVoiceMorphGeometry.inputDisplayLevel(0.012), 0, accuracy: 0.0001)
+    XCTAssertEqual(NotchVoiceMorphGeometry.outputDisplayLevel(0), 0, accuracy: 0.0001)
+    // Quiet speech is perceptually lifted, loud speech saturates, and the
+    // mapping is monotonic so the wave visibly follows volume.
+    let whisper = NotchVoiceMorphGeometry.inputDisplayLevel(0.05)
+    let normal = NotchVoiceMorphGeometry.inputDisplayLevel(0.15)
+    let loud = NotchVoiceMorphGeometry.inputDisplayLevel(0.5)
+    XCTAssertGreaterThan(whisper, 0.1)
+    XCTAssertGreaterThan(normal, whisper)
+    XCTAssertGreaterThan(loud, normal)
+    XCTAssertEqual(NotchVoiceMorphGeometry.inputDisplayLevel(1), 1, accuracy: 0.001)
   }
 }
