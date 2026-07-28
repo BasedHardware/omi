@@ -29,7 +29,12 @@ struct SBOnboardingView: View {
     onComplete: (() -> Void)?
   ) {
     _model = StateObject(
-      wrappedValue: SBOnboardingModel(appState: appState, chatProvider: chatProvider, onComplete: onComplete))
+      wrappedValue: SBOnboardingModel(
+        appState: appState,
+        chatProvider: chatProvider,
+        importConnectorStatusStore: importConnectorStatusStore,
+        onComplete: onComplete
+      ))
     _importConnectorStatusStore = ObservedObject(wrappedValue: importConnectorStatusStore)
   }
 
@@ -55,18 +60,35 @@ struct SBOnboardingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .overlay(alignment: .topTrailing) {
-      Button(action: { model.skip() }) {
-        Text("Skip")
-          .geist(size: 13).foregroundStyle(sb.ink(.w45))
-          .padding(.horizontal, 14).padding(.vertical, 7)
-          .background(
-            Capsule().fill(Color.white.opacity(0.06))
-              .background(.ultraThinMaterial, in: Capsule())
-          )
-          .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+      HStack(spacing: 8) {
+        if model.canGoBack {
+          Button(action: { model.goBack() }) {
+            Text("← Back")
+              .geist(size: 13).foregroundStyle(sb.ink(.w75))
+              .padding(.horizontal, 14).padding(.vertical, 7)
+              .background(
+                Capsule().fill(Color.white.opacity(0.06))
+                  .background(.ultraThinMaterial, in: Capsule())
+              )
+              .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+          }
+          .buttonStyle(.plain)
+          .help("Go back and change an earlier answer")
+        }
+
+        Button(action: { model.skip() }) {
+          Text("Skip")
+            .geist(size: 13).foregroundStyle(sb.ink(.w45))
+            .padding(.horizontal, 14).padding(.vertical, 7)
+            .background(
+              Capsule().fill(Color.white.opacity(0.06))
+                .background(.ultraThinMaterial, in: Capsule())
+            )
+            .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help("Skip onboarding and go to your second brain")
       }
-      .buttonStyle(.plain)
-      .help("Skip onboarding and go to your second brain")
       .padding(.top, 20).padding(.trailing, 24)
     }
     .onAppear { model.begin() }
@@ -77,7 +99,7 @@ struct SBOnboardingView: View {
       if step == .context { refreshContextStates() }
     }
     .onReceive(importConnectorStatusStore.connectorDidSync) { connectorID in
-      model.markContextImportConnected(connectorID)
+      model.markPersistedContextConnectorConnected(connectorID)
     }
     .dismissableSheet(item: $selectedImportConnector) { connector in
       ImportConnectorSheet(
@@ -247,7 +269,7 @@ struct SBOnboardingView: View {
   }
 
   private var howHeardWidget: some View {
-    FlowChips(items: SBOnboardingModel.howHeardSources) { source in
+    FlowChips(items: SBOnboardingModel.howHeardSources, selectedItem: model.howHeard) { source in
       model.pickHowHeard(source)
     }
   }
@@ -316,7 +338,10 @@ struct SBOnboardingView: View {
 
   private var roleWidget: some View {
     VStack(alignment: .leading, spacing: 10) {
-      FlowChips(items: ["Student", "Sales", "Consultant", "Founder", "Engineer", "Analyst", "Creator", "Other"]) { r in
+      FlowChips(
+        items: ["Student", "Sales", "Consultant", "Founder", "Engineer", "Analyst", "Creator", "Other"],
+        selectedItem: model.role
+      ) { r in
         model.pickRole(r)
       }
       HStack(spacing: 8) {
@@ -482,15 +507,24 @@ struct SBOnboardingView: View {
 
   private var screenDemoWidget: some View {
     VStack(alignment: .leading, spacing: 12) {
-      VStack(alignment: .leading, spacing: 6) {
-        HStack(spacing: 5) {
-          Text("Hold").geist(size: 14).foregroundStyle(sb.ink(.w85))
-          ForEach(model.voiceChordTokens, id: \.self) { tok in keycap(tok) }
-          Text("and ask me about it, out loud.").geist(size: 14).foregroundStyle(sb.ink(.w85))
-        }
-        Text("Try \u{201c}what's on my screen right now?\u{201d} I can see it, and I answer at the top of your screen.")
+      if model.screenDemoPTTReady {
+        VStack(alignment: .leading, spacing: 6) {
+          HStack(spacing: 5) {
+            Text("Hold").geist(size: 14).foregroundStyle(sb.ink(.w85))
+            ForEach(model.voiceChordTokens, id: \.self) { tok in keycap(tok) }
+            Text("and ask me about it, out loud.").geist(size: 14).foregroundStyle(sb.ink(.w85))
+          }
+          Text(
+            "Try \u{201c}what's on my screen right now?\u{201d} I can see it, and I answer at the top of your screen."
+          )
           .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
           .fixedSize(horizontal: false, vertical: true)
+        }
+      } else {
+        HStack(spacing: 8) {
+          ProgressView().controlSize(.small)
+          Text("Preparing voice…").geist(size: 14).foregroundStyle(sb.ink(.w6))
+        }
       }
       // Continue appears once Omi has actually answered — before that, an always-
       // tappable, clearly-visible "Skip for now" so the user is never stuck if the
@@ -668,16 +702,19 @@ struct SBOnboardingView: View {
 private struct FlowChips: View {
   @Environment(\.sbTheme) private var sb
   let items: [String]
+  var selectedItem: String? = nil
   let onPick: (String) -> Void
   var body: some View {
     ChipFlowLayout(spacing: 8, lineSpacing: 8) {
       ForEach(items, id: \.self) { item in
+        let isSelected = selectedItem == item
         Button {
           onPick(item)
         } label: {
-          Text(item).geist(size: 14).foregroundStyle(sb.ink(.w85))
+          Text(item).geist(size: 14).foregroundStyle(isSelected ? sb.inkInverted : sb.ink(.w85))
             .padding(.horizontal, 15).padding(.vertical, 8)
-            .overlay(Capsule().stroke(sb.ink(.w14), lineWidth: 1))
+            .background(Capsule().fill(isSelected ? sb.ink : Color.clear))
+            .overlay(Capsule().stroke(isSelected ? sb.ink : sb.ink(.w14), lineWidth: 1))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)

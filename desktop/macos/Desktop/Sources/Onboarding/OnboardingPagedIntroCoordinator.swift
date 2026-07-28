@@ -4,6 +4,31 @@ import Foundation
 @preconcurrency import GRDB
 import SwiftUI
 
+/// Serializes the two Google browser-cookie imports during legacy onboarding.
+/// Calendar and Gmail share the same Chromium Safe Storage grant, so launching
+/// both readers at once can produce duplicate Chrome Keychain consent sheets.
+/// This gate releases Gmail after Calendar reaches *any* terminal result — a
+/// Calendar failure must never prevent Gmail from making progress.
+actor OnboardingGoogleInsightGate {
+  private var calendarFinished = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func waitForCalendar() async {
+    if calendarFinished { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func markCalendarFinished() {
+    guard !calendarFinished else { return }
+    calendarFinished = true
+    let pending = waiters
+    waiters.removeAll()
+    for waiter in pending {
+      waiter.resume()
+    }
+  }
+}
+
 @MainActor
 final class OnboardingPagedIntroCoordinator: ObservableObject {
   struct ScanSnapshot: Equatable {
@@ -810,7 +835,15 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     appleNotesInsightsFailed = false
     webResearchSummary = ""
 
+    // Calendar and Gmail read the same browser Safe Storage item. Keep the
+    // first consent/request singular; BrowserKeychainCache still coalesces
+    // profile-level reads, while this onboarding gate prevents two import
+    // processes from racing the one user-visible authorization prompt.
+    let googleInsightGate = OnboardingGoogleInsightGate()
+
     gmailTask = Task {
+      await googleInsightGate.waitForCalendar()
+      guard !Task.isCancelled else { return }
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
           maxResults: 300,
@@ -868,6 +901,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
 
     calendarTask = Task {
+      defer {
+        Task { await googleInsightGate.markCalendarFinished() }
+      }
       do {
         let events = try await CalendarReaderService.shared.readEvents(
           daysBack: 365,
