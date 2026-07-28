@@ -49,9 +49,9 @@ fastapi_stub.Request = type("Request", (), {})
 auth_stub = types.ModuleType("utils.other.endpoints")
 auth_stub.get_current_user_uid = lambda: "u1"
 
-import pytest
+import pytest  # noqa: E402
 
-from tests.unit.memory_import_isolation import (
+from tests.unit.memory_import_isolation import (  # noqa: E402
     install_memory_product_router_stubs,
     restore_sys_modules,
     snapshot_sys_modules,
@@ -69,31 +69,25 @@ _ROUTER_STUB_NAMES = (
 @pytest.fixture(scope="module", autouse=True)
 def _memory_product_router_import_isolation():
     saved = snapshot_sys_modules(_ROUTER_STUB_NAMES)
-    for name in ("routers.memory_product", "routers.memory_product"):
-        sys.modules.pop(name, None)
+    sys.modules.pop("routers.memory_product", None)
     existing_fastapi = sys.modules.get("fastapi")
     if existing_fastapi is not None and getattr(existing_fastapi, "APIRouter", None) is not fastapi_stub.APIRouter:
         sys.modules.pop("fastapi", None)
     install_memory_product_router_stubs(fastapi_stub, auth_stub)
     import routers.memory_product as memory_product
-    import routers.memory_product as memory_product
 
-    globals()["memory_product"] = memory_product
     globals()["memory_product"] = memory_product
     yield
     restore_sys_modules(saved)
-    for name in ("routers.memory_product", "routers.memory_product"):
-        sys.modules.pop(name, None)
-    globals()["memory_product"] = None
+    sys.modules.pop("routers.memory_product", None)
     globals()["memory_product"] = None
 
 
-from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
-from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
+from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState  # noqa: E402
+from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState  # noqa: E402
+from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS  # noqa: E402
 
 memory_product = None  # populated by _memory_product_router_import_isolation
-memory_product = None  # canonical implementation module for monkeypatch targets
 
 
 class _Snapshot:
@@ -614,7 +608,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
         return SearchVectorHit(
             memory_id=item.memory_id,
             score=score,
-            projection_commit_id='projection-1',
+            projection_commit_id=item.ledger_commit_id or 'projection-1',
             vector_updated_at=item.updated_at + timedelta(minutes=1),
             uid=item.uid,
             account_generation=item.account_generation,

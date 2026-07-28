@@ -19,6 +19,7 @@ rules stay in [`AGENTS.md`](../../../AGENTS.md). Product north star:
 | INV-MEM-1 | Exactly three product memory tiers | locked | [memory-tiers.md](./memory-tiers.md) |
 | INV-MEM-2 | Vector hydration fail-closed | locked | [memory-vector-hydration.md](./memory-vector-hydration.md) |
 | INV-MEM-3 | No legacy fallback after canonical selection | locked | [memory-canonical-fail-closed.md](./memory-canonical-fail-closed.md) |
+| INV-MEM-4 | Canonical promotion is the sole Long-term authority | proposed | [memory-promotion-authority.md](./memory-promotion-authority.md) |
 | INV-AGENT-* | Agent control-plane contracts | locked | [agent-control-plane.md](./agent-control-plane.md) |
 | INV-INT-1 | Integrations harness over heuristics | locked | [integrations.md](./integrations.md) |
 | INV-UI-1 | No purple; neutral accents | locked | [brand-ui.md](./brand-ui.md) |

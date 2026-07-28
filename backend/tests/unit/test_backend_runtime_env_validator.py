@@ -56,8 +56,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "MEMORY_MODE", "value": "read"},
         {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "MEMORY_V3_GET_ENABLED", "value": "true"},
-        {"name": "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "value": "false"},
-        {"name": "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED", "value": "true"},'''
+        {"name": "MEMORY_CANONICAL_MAINTENANCE_ENABLED", "value": "false"},
+'''
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
@@ -152,11 +152,7 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false', user
             'MEMORY_MODE': {'value': mode, 'category': 'memory_rollout'},
             'MEMORY_ENABLED_USERS': {'value': users, 'category': 'memory_rollout'},
             'MEMORY_V3_GET_ENABLED': {'value': 'false' if mode == 'off' else 'true', 'category': 'memory_rollout'},
-            'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED': {'value': cron, 'category': 'memory_rollout'},
-            'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED': {
-                'value': 'false',
-                'category': 'memory_rollout',
-            },
+            'MEMORY_CANONICAL_MAINTENANCE_ENABLED': {'value': cron, 'category': 'memory_rollout'},
             'MEMORY_CANONICAL_CONSOLIDATION_ENABLED': {'value': 'true', 'category': 'memory_rollout'},
         },
         'secrets': {
@@ -1134,8 +1130,7 @@ def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
                                     'MEMORY_MODE=off\n'
                                     'MEMORY_ENABLED_USERS=\n'
                                     'MEMORY_V3_GET_ENABLED=false\n'
-                                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false\n'
-                                    'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=false\n'
+                                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false\n'
                                     'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true\n'
                                 ),
                                 'secrets': (
@@ -1749,8 +1744,7 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
         'MEMORY_V3_GET_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
@@ -1793,7 +1787,7 @@ def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_
         'category': 'memory_rollout',
     }
     job['env']['MEMORY_MODE'] = {'value': 'off', 'category': 'memory_rollout'}
-    job['env']['MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
 
     path = tmp_path / 'runtime_env.yaml'
     write_yaml(path, manifest)
@@ -1816,7 +1810,7 @@ def test_memory_maintenance_job_contract_rejects_request_path_cron(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     backend_env = manifest['environments']['dev']['cloud_run']['services']['backend']['env']
-    backend_env['MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'] = {'value': 'true', 'category': 'memory_rollout'}
+    backend_env['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'true', 'category': 'memory_rollout'}
     path = tmp_path / 'runtime_env.yaml'
     write_yaml(path, manifest)
     errors = validator.validate_runtime_env(env='dev', manifest_path=path)
@@ -1832,20 +1826,6 @@ def test_memory_maintenance_job_contract_rejects_empty_surface_allowlist(tmp_pat
     write_yaml(path, manifest)
     errors = validator.validate_runtime_env(env='dev', manifest_path=path)
     assert any('must match memory-maintenance-job allowlist' in error.message for error in errors)
-
-
-def test_memory_maintenance_job_contract_rejects_fast_track_mismatch(tmp_path):
-    validator = load_validator()
-    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
-    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
-    job['env']['MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'] = {
-        'value': 'false',
-        'category': 'memory_rollout',
-    }
-    path = tmp_path / 'runtime_env.yaml'
-    write_yaml(path, manifest)
-    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
-    assert any('FAST_TRACK_ENABLED' in error.message for error in errors)
 
 
 def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():

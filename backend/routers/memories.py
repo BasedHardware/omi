@@ -75,6 +75,10 @@ class ReviewResolutionResponse(BaseModel):
 # Hard cap on memories per batch request. Keep aligned with the corresponding
 # Pydantic max_length validator below and with the Swift client chunker.
 MEMORIES_BATCH_MAX = 100
+# The released API contract accepts 100 IDs. Canonical deletion atomically
+# fences each item and journals durable projection deletes; derived graph
+# assertions are removed by the retryable outbox after reads fail closed.
+MEMORIES_BATCH_DELETE_MAX = 100
 
 V3GetSourceDecision = Literal['disabled', 'legacy_primary', 'memory_read']
 
@@ -148,7 +152,7 @@ class BatchMemoriesResponse(BaseModel):
 class BatchDeleteMemoriesRequest(BaseModel):
     memory_ids: List[str] = Field(
         description="Memory IDs to delete in a single batch request",
-        max_length=MEMORIES_BATCH_MAX,
+        max_length=MEMORIES_BATCH_DELETE_MAX,
     )
 
 
@@ -907,6 +911,8 @@ def delete_memory(
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         try:
             MemoryService(db_client=db_client).delete(uid, memory_id)
+        except CanonicalBatchMutationLimitError:
+            raise HTTPException(status_code=413, detail='Memory lineage is too large to delete atomically')
         except ValueError:
             raise HTTPException(status_code=404, detail='Memory not found')
         _mirror_delete_into_legacy(uid, [memory_id], db_client=db_client)

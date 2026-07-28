@@ -3,11 +3,14 @@ from pathlib import Path
 MEMORY_PROTECTED_COLLECTIONS = [
     "memory_items",
     "memory_operations",
+    "memory_source_replacements",
     "memory_outbox",
     "memory_control",
     "memory_state",
     "memory_commits",
     "memory_evidence",
+    "memory_graph_assertions",
+    "memory_review_queue",
     "short_term_lifecycle_transitions",
 ]
 
