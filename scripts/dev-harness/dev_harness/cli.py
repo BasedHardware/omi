@@ -290,8 +290,6 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
         missing.append("backend/main.py")
     if not _python_importable("uvicorn"):
         missing.append("Python package uvicorn (install backend requirements before starting backend)")
-    if not _which("cargo"):
-        missing.append("cargo (required to build the Rust desktop backend)")
     provider_report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
     missing.extend(provider_report.missing)
     warnings.extend(provider_report.warnings)

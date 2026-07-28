@@ -24,7 +24,7 @@
         {
             "name": "desktop-backend",
             "dockerfile": "backend/Dockerfile.desktop_backend",
-            "deployment_workflows": [".github/workflows/desktop_backend_auto_dev.yml"],
+            "deployment_workflows": [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml"],
             "build_context": ".",
             "source_root": "backend",
             "workdir": "/app",
@@ -39,7 +39,7 @@
         {
             "name": "agent-vm",
             "dockerfile": "backend/agent_vm/Dockerfile",
-            "deployment_workflows": [".github/workflows/desktop_backend_auto_dev.yml"],
+            "deployment_workflows": [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml"],
             "build_context": ".",
             "source_root": "backend/agent_vm",
             "workdir": "/app",

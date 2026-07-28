@@ -140,6 +140,18 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
                 }
             )
 
+
+    def test_accepts_a_retired_shard_from_the_merge_base(self) -> None:
+        retired_shard = f"{RATCHET.BASELINE_DIRECTORY_RELATIVE}/desktop-rust.json"
+        retired_source = "desktop/macos/Retired/Large.rs"
+        retired_baseline = baseline({retired_source: 1600})
+
+        self.assertIsNone(RATCHET._expected_shard(retired_shard))
+        self.assertEqual(
+            RATCHET.aggregate_baseline_shards({retired_shard: retired_baseline}),
+            retired_baseline,
+        )
+
     def test_downward_update_writes_only_the_owning_shard(self) -> None:
         router = "backend/routers/large.py"
         desktop_root = "desktop/macos/Desktop/Sources/Large.swift"

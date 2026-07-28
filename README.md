@@ -106,7 +106,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 │                                                         │
 │  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
 │  │ Omi      │  │ macOS App    │  │ Mobile App        │  │
-│  │ Wearable │  │ (Swift/Rust) │  │ (Flutter)         │  │
+│  │ Wearable │  │ (Swift/Python) │  │ (Flutter)         │  │
 │  └────┬─────┘  └──────┬───────┘  └────────┬──────────┘  │
 │       │    BLE         │   HTTPS/WS        │             │
 └───────┼────────────────┼───────────────────┼─────────────┘
@@ -129,7 +129,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 | Component | Path | Stack |
 |-----------|------|-------|
-| **macOS app** | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Rust backend |
+| **macOS app** | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Python desktop backend |
 | Mobile app | [`app/`](app/) | Flutter (iOS & Android) |
 | Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
 | Firmware | [`omi/`](omi/) | nRF, Zephyr, C |
