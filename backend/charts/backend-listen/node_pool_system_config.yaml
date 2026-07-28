@@ -1,4 +1,0 @@
-kubeletConfig: {}
-linuxConfig:
-  sysctl:
-    net.core.somaxconn: '1048576'

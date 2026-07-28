@@ -1,6 +1,0 @@
-*.DS_Store
-.vscode
-**/build
-**/sdkconfig
-**/sdkconfig.old
-**/dependencies.lock

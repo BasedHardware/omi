@@ -1,6 +1,0 @@
-{
-  "version": 1,
-  "_comment": "This file is optional. Uncomment and configure hooks as needed.",
-  "_comment2": "See https://cursor.com/docs/agent/hooks for documentation.",
-  "hooks": {}
-}

@@ -808,6 +808,30 @@ jobs:
         self.assertIn("access_token=[REDACTED]", str(raised.exception))
         self.assertNotIn("should-not-appear", str(raised.exception))
 
+    def test_runtime_preflight_redacts_bearer_and_quoted_credentials(self) -> None:
+        original_run = RUNTIME_PREFLIGHT.subprocess.run
+        diagnostics = (
+            ("Authorization: Bearer ya29.bearer-secret-token", "bearer-secret-token"),
+            ('{"access_token": "ya29.quoted-secret"}', "ya29.quoted-secret"),
+            ('{"authorization": "Bearer ya29.quoted-bearer"}', "ya29.quoted-bearer"),
+        )
+        try:
+            for stderr, secret_fragment in diagnostics:
+                with self.subTest(stderr=stderr):
+                    RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: (
+                        _ for _ in ()
+                    ).throw(
+                        RUNTIME_PREFLIGHT.subprocess.CalledProcessError(1, "gcloud", stderr=stderr)
+                    )
+                    with self.assertRaises(RUNTIME_PREFLIGHT.RuntimePreflightError) as raised:
+                        RUNTIME_PREFLIGHT.load_current_service(
+                            target=self.target(), project_id="fake-project"
+                        )
+                    self.assertNotIn(secret_fragment, str(raised.exception))
+                    self.assertIn("[REDACTED]", str(raised.exception))
+        finally:
+            RUNTIME_PREFLIGHT.subprocess.run = original_run
+
     def test_runtime_preflight_rejects_secret_where_reviewed_runtime_config_will_be_applied(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "reviewed.example"}

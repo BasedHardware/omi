@@ -38,7 +38,12 @@ def _sanitized_gcloud_diagnostic(error: subprocess.CalledProcessError) -> str:
     # from a proxy or wrapper.  Do not turn a deployment error into a leak.
     for marker in ("access_token", "authorization", "password", "secret", "token"):
         compact = re.sub(
-            rf"(?i)({marker}\s*[=:]\s*)[^\s,;]+", r"\1[REDACTED]", compact
+            rf'(?i)({marker}["\']?\s*[=:]\s*["\']?)'
+            rf'(?:bearer\s+)?'
+            rf'[^\s,;"\']+'
+            rf'(["\']?)',
+            r"\1[REDACTED]\2",
+            compact,
         )
     return compact[:500] or "no diagnostic returned"
 

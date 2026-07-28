@@ -1,1 +1,0 @@
-# IQ Rating Plugin

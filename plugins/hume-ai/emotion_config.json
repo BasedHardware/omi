@@ -1,6 +1,0 @@
-{
-  "notification_enabled": true,
-  "emotion_thresholds": {},
-  "notification_message_template": "🎭 Emotion Alert: Detected {emotions}",
-  "description": "Empty thresholds = notify for ALL top 3 detected emotions"
-}

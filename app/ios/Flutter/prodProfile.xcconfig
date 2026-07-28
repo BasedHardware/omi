@@ -1,9 +1,0 @@
-#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
-#include "Generated.xcconfig"
-#include "Base.xcconfig"
-#include "Custom.xcconfig"
-
-ASSET_PREFIX=prod
-BUNDLE_NAME=Omi
-BUNDLE_DISPLAY_NAME=Omi
-GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as

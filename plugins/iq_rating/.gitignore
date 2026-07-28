@@ -1,9 +1,0 @@
-# Database (local only)
-*.db
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-venv/
-.env
