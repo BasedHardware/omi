@@ -72,6 +72,20 @@ struct OnboardingView: View {
         // presented, so a reinstall arrives here knowing whose account it is. Nothing restores it a
         // second time here — observing `auth` covers a session that lands late anyway.
         .onAppear { beginStep() }
+        // The card floats over everything, so any moment the user has to click something *else* —
+        // the Google account chooser, a TCC prompt, the Screen Recording pane — it takes itself off
+        // screen rather than being an obstacle to work around.
+        .onChange(of: yieldsScreen) { _, yields in OnboardingWindow.setHidden(yields) }
+    }
+
+    /// True whenever the next thing the user must click belongs to another app.
+    private var yieldsScreen: Bool {
+        if auth.isSigningIn { return true }
+        if !requesting.isEmpty { return true }
+        // The Screen Recording grant happens entirely in System Settings, and the app relaunches
+        // itself the moment it lands — there is nothing here worth covering it for.
+        if step == .done, !isGranted(.screen), openedScreenSettings { return true }
+        return false
     }
 
     private var column: some View {
@@ -500,11 +514,19 @@ struct OnboardingView: View {
             return
         }
 
+        // "I live up here" is only useful if the user can find "here". Ring the real status item
+        // and walk the pointer to it while the line is still on screen.
+        MenuBarSpotlight.show()
+
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_600_000_000)
             guard step == .done, isGranted(.screen) else { return }
             withAnimation(.easeOut(duration: InkReduceMotion.isEnabled ? 0 : 0.55)) { finale = true }
             OnboardingWindow.dismiss()
+            // Outlive the card briefly: the ring is the last thing left pointing at the icon, and
+            // clearing it with the window would take the answer away with the question.
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            MenuBarSpotlight.hide()
         }
     }
 

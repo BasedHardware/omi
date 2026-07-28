@@ -87,6 +87,27 @@ final class OnboardingWindow {
         return NSRect(x: x.rounded(), y: y.rounded(), width: cardSize.width, height: cardSize.height)
     }
 
+    /// Gets out of the way while the user is dealing with something else on screen — the browser
+    /// during sign-in, a TCC prompt, the Screen Recording pane in System Settings.
+    ///
+    /// The card floats above everything, which is right when it is the thing being read and wrong
+    /// the moment it is not: an always-on-top window over the account chooser is something to click
+    /// around. Hiding is `orderOut`, not a close, so the step machine underneath keeps running and
+    /// the same window comes back with its state intact.
+    static func setHidden(_ hidden: Bool) {
+        guard let window = current else { return }
+        if hidden {
+            guard window.isVisible else { return }
+            window.orderOut(nil)
+        } else {
+            guard !window.isVisible else { return }
+            // `orderFrontRegardless`, not `makeKeyAndOrderFront` + activate: coming back should not
+            // yank focus off whatever the user just finished doing.
+            window.alphaValue = 1
+            window.orderFrontRegardless()
+        }
+    }
+
     /// Dissolves the surface. The finale's glow is drawn by `OnboardingView`; this is the fade it
     /// burns out through.
     static func dismiss() {
