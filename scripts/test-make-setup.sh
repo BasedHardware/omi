@@ -159,3 +159,19 @@ if [ "$(git -C "$MISBARE_ROOT" rev-parse --is-inside-work-tree)" != "true" ]; th
   exit 1
 fi
 echo "repair-git-primary-worktree test passed."
+
+# Regression: git accepts many true spellings (yes, on, 1, TRUE …). The repair
+# must canonicalise via --bool, not compare the raw value to "true".
+for spelling in yes on 1 TRUE; do
+  git -C "$MISBARE_ROOT" config core.bare "$spelling"
+  if [ "$(git -C "$MISBARE_ROOT" rev-parse --is-inside-work-tree)" = "true" ]; then
+    echo "FAIL: misbare fixture should not report inside-work-tree for spelling '$spelling'." >&2
+    exit 1
+  fi
+  bash "$ROOT/scripts/repair-git-primary-worktree.sh" "$MISBARE_ROOT"
+  if [ "$(git -C "$MISBARE_ROOT" config --get core.bare)" != "false" ]; then
+    echo "FAIL: repair did not clear core.bare spelling '$spelling'." >&2
+    exit 1
+  fi
+done
+echo "repair-git-primary-worktree boolean-spelling test passed."
