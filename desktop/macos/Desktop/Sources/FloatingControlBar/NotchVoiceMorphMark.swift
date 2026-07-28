@@ -98,21 +98,22 @@ enum NotchVoiceMorphGeometry {
   /// inside the 21pt identity slot: 6.93×1.24 + 3.78/2 ≈ 10.48 ≤ 10.5.
   static let speakingPushMax: CGFloat = 0.24
 
-  /// Temporal period of the speaking wave at any fixed dot. The crest
-  /// pattern advances exactly one dot every quarter period, always in the
-  /// same direction around the ring.
-  static let speakingWavePeriod: TimeInterval = 1.2
+  /// Temporal period of the speaking wave at any fixed dot. The three-crest
+  /// pattern advances exactly one dot every 3/8 period, always in the same
+  /// direction around the ring.
+  static let speakingWavePeriod: TimeInterval = 0.6
 
-  /// Circular sound-wave displacement for one speaking-ring dot: two
-  /// opposite crests orbiting the ring in one fixed direction, scaled by the
-  /// live output level. Squaring sharpens the crests and calms the troughs
-  /// so it reads as a wave front sweeping the ring, not a chaotic wobble.
-  /// Always outward (0…level) so the ring is pushed by the voice.
+  /// Circular sound-wave displacement for one speaking-ring dot: three
+  /// crests orbiting the ring in one fixed direction, scaled by the live
+  /// output level. Three lobes at a brisk period read as a ripple sweeping
+  /// the ring; two slow opposite lobes read as jaws chewing. Squaring
+  /// sharpens the crests and calms the troughs. Always outward (0…level) so
+  /// the ring is pushed by the voice.
   static func speakingRadialPush(index: Int, time: TimeInterval, level: CGFloat) -> CGFloat {
     let bounded = clamp(level)
     guard bounded > 0 else { return 0 }
     let angle = Double(index) / Double(dotCount) * 2 * .pi
-    let phase = angle * 2 - time * 2 * .pi / speakingWavePeriod
+    let phase = angle * 3 - time * 2 * .pi / speakingWavePeriod
     let crest = (sin(phase) + 1) / 2
     return bounded * CGFloat(crest * crest)
   }
@@ -127,12 +128,17 @@ enum NotchVoiceMorphGeometry {
     return 0.45 + 0.55 * sin(.pi * t)
   }
 
-  /// Vertical displacement for one waveform dot: a travelling primary wave
-  /// plus a faster low-amplitude overtone, normalized so |offset| ≤ amplitude.
-  static func waveOffset(time: TimeInterval, index: Int, amplitude: CGFloat) -> CGFloat {
-    let primary = sin(time * 9 - Double(index) * 0.82)
-    let overtone = sin(time * 14.6 + Double(index) * 1.27) * 0.35
-    return CGFloat((primary + overtone) / 1.35) * amplitude * waveEnvelope(index: index)
+  /// Vertical displacement for one waveform dot. Each dot bounces on its
+  /// own blend of incommensurate frequencies — like adjacent frequency
+  /// bands on an equalizer — so the line spikes up and down with the voice
+  /// instead of rolling like a rope wave. Deterministic in (time, index)
+  /// and normalized so |offset| ≤ amplitude.
+  static func spikeOffset(time: TimeInterval, index: Int, amplitude: CGFloat) -> CGFloat {
+    let seed = Double(index)
+    let a = sin(time * (12.7 + seed * 1.9) + seed * 2.4)
+    let b = sin(time * (19.3 - seed * 1.3) + seed * 5.1)
+    let c = sin(time * (7.9 + seed * 0.7) + seed * 1.7) * 0.6
+    return CGFloat((a + b + c) / 2.6) * amplitude * waveEnvelope(index: index)
   }
 
   private static func smoothStep(_ value: CGFloat) -> CGFloat {
@@ -317,7 +323,7 @@ struct NotchVoiceMorphMark: View {
         index: index,
         size: size,
         progress: progress,
-        waveOffset: NotchVoiceMorphGeometry.waveOffset(
+        waveOffset: NotchVoiceMorphGeometry.spikeOffset(
           time: time, index: index, amplitude: amplitude)
       )
       if thinkingRotation != 0 || speakingPresentation {
