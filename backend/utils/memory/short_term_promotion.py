@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, cast
 
-from database._client import db as default_db_client
+from database import firestore_paths
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import apply_long_term_patch_firestore
 from jobs.short_term_lifecycle_worker import (
@@ -143,9 +143,8 @@ def list_promotable_short_term_items(
     db_client: Any = None,
     now: Optional[datetime] = None,
 ) -> List[MemoryItem]:
-    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
-    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=client)
+    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=db_client)
     promotable = [item for item in items if is_promotable_short_term_item(item, now=current_time)]
     return sorted(promotable, key=lambda item: item.memory_id)
 
@@ -182,10 +181,8 @@ def _exact_long_term_duplicate(uid: str, item: MemoryItem, *, db_client: Any) ->
     normalized_content = _normalized_text(item.content)
     if not normalized_content:
         return None
-    snapshots = (
-        db_client.collection(MemoryCollections(uid=uid).memory_items)
-        .where("tier", "==", MemoryLayer.long_term.value)
-        .stream()
+    snapshots = firestore_paths.stream_collection_where(
+        db_client, MemoryCollections(uid=uid).memory_items, "tier", "==", MemoryLayer.long_term.value
     )
     for snapshot in snapshots:
         payload = _snapshot_payload(snapshot)
@@ -352,14 +349,13 @@ def _ensure_required_promotion_update_operation(
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    op_ref = db_client.document(op_path)
-    if not op_ref.get().exists:
-        op_ref.set(operation.model_dump(mode="json"))
+    if not firestore_paths.document_exists(db_client, op_path):
+        firestore_paths.set_document(db_client, op_path, operation.model_dump(mode="json"))
     return operation
 
 
 def _read_memory_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
-    payload = _snapshot_payload(db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get())
+    payload = _snapshot_payload(firestore_paths.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"))
     if not payload:
         return None
     return MemoryItem(**payload)
@@ -371,11 +367,10 @@ def list_fast_track_promotable_items(
     db_client: Any = None,
     now: Optional[datetime] = None,
 ) -> List[MemoryItem]:
-    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     return [
         item
-        for item in list_promotable_short_term_items(uid, db_client=client, now=current_time)
+        for item in list_promotable_short_term_items(uid, db_client=db_client, now=current_time)
         if is_fast_track_promotable(item)
     ]
 
@@ -410,12 +405,12 @@ def promotion_trigger_reason(
 
 def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
-    ref = db_client.document(collections.memory_apply_control_state)
-    payload = _snapshot_payload(ref.get())
+    path = collections.memory_apply_control_state
+    payload = _snapshot_payload(firestore_paths.get_document(db_client, path))
     if payload:
         return MemoryControlState(**payload)
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    ref.set(control.model_dump(mode="json"))
+    firestore_paths.set_document(db_client, path, control.model_dump(mode="json"))
     return control
 
 
@@ -426,7 +421,9 @@ def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> No
     # read and this write had its head_commit_id / commit_sequence / projection &
     # vector watermarks silently reverted (lost update). Mirrors the consolidation
     # writer (canonical_consolidation._persist_control_state).
-    db_client.document(MemoryCollections(uid=control.uid).memory_apply_control_state).set(
+    firestore_paths.set_document(
+        db_client,
+        MemoryCollections(uid=control.uid).memory_apply_control_state,
         {
             "last_promotion_run_at": (
                 control.last_promotion_run_at.isoformat() if control.last_promotion_run_at is not None else None
@@ -463,9 +460,8 @@ def _ensure_promotion_operation(
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    op_ref = db_client.document(op_path)
-    if not op_ref.get().exists:
-        op_ref.set(operation.model_dump(mode="json"))
+    if not firestore_paths.document_exists(db_client, op_path):
+        firestore_paths.set_document(db_client, op_path, operation.model_dump(mode="json"))
     return operation
 
 
@@ -490,12 +486,11 @@ def promote_short_term_item_via_apply(
     if not is_promotable_short_term_item(item, now=now):
         raise ValueError(f"memory item {item.memory_id} is not promotable")
 
-    client: Any = db_client if db_client is not None else default_db_client
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         raise ValueError(f"promotion refused for non-canonical cohort uid={uid}")
     current_time = _coerce_aware_utc(now)
     if is_required_promotion_item(item):
-        existing_duplicate = _exact_long_term_duplicate(uid, item, db_client=client)
+        existing_duplicate = _exact_long_term_duplicate(uid, item, db_client=db_client)
         if existing_duplicate is not None:
             merged_item, keyword_sync_succeeded = _merge_required_promotion_duplicate(
                 uid,
@@ -505,7 +500,7 @@ def promote_short_term_item_via_apply(
                 run_id=run_id,
                 trigger_reason=trigger_reason,
                 now=current_time,
-                db_client=client,
+                db_client=db_client,
             )
             return (
                 merged_item,
@@ -513,7 +508,7 @@ def promote_short_term_item_via_apply(
                 CanonicalKgPromotionResult(skipped_reason="merged_into_existing"),
                 keyword_sync_succeeded,
             )
-    operation = _ensure_promotion_operation(uid=uid, item=item, control=control, run_id=run_id, db_client=client)
+    operation = _ensure_promotion_operation(uid=uid, item=item, control=control, run_id=run_id, db_client=db_client)
     idempotency_key = deterministic_contract_id(
         "canonical-short-term-promotion",
         {"uid": uid, "memory_id": item.memory_id, "from_layer": MemoryLayer.short_term.value},
@@ -552,7 +547,7 @@ def promote_short_term_item_via_apply(
         uid=uid,
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
-        db_client=client,
+        db_client=db_client,
     )
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         raise RuntimeError(f"promotion apply failed for {item.memory_id}: {result.status} ({result.reason})")
@@ -560,7 +555,7 @@ def promote_short_term_item_via_apply(
     promoted = result.memory_items[0] if result.memory_items else item
     if result.status == ApplyStatus.idempotent_skip:
         payload = _snapshot_payload(
-            client.document(f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}").get()
+            firestore_paths.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}")
         )
         if payload:
             promoted = MemoryItem(**payload)
@@ -572,7 +567,7 @@ def promote_short_term_item_via_apply(
     )
     if promoted.tier != MemoryLayer.long_term:
         raise RuntimeError(f"promotion did not land long_term for {item.memory_id}")
-    keyword_sync_succeeded = sync_atom_keyword_index_for_item(promoted, db_client=client)
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(promoted, db_client=db_client)
     vector_sync_failed = False
 
     def _record_vector_sync_failure() -> None:
@@ -580,7 +575,7 @@ def promote_short_term_item_via_apply(
         vector_sync_failed = True
 
     sync_canonical_memory_vector(promoted, on_hard_failure=_record_vector_sync_failure)
-    kg_result = extract_kg_for_promoted_memory(uid, promoted, db_client=client)
+    kg_result = extract_kg_for_promoted_memory(uid, promoted, db_client=db_client)
     return promoted, vector_sync_failed, kg_result, keyword_sync_succeeded
 
 
@@ -657,13 +652,12 @@ def run_canonical_short_term_promotion(
     - empty set: consolidation fired but failed or was watermark-blocked — defer all promotion.
     - non-empty set: consolidation completed cleanly — only batched survivors may promote.
     """
-    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return ShortTermPromotionReport(uid=uid, skipped_reason="not_canonical_cohort")
 
-    promotable = list_promotable_short_term_items(uid, db_client=client, now=current_time)
+    promotable = list_promotable_short_term_items(uid, db_client=db_client, now=current_time)
     allowed: Optional[Set[str]] = None
     if consolidation_batched_ids is not None:
         if not consolidation_batched_ids:
@@ -671,13 +665,13 @@ def run_canonical_short_term_promotion(
                 uid=uid,
                 skipped_reason="consolidation_watermark_blocked",
                 promotable_count=len(promotable),
-                last_promotion_run_at=_read_control_state(uid, db_client=client).last_promotion_run_at,
+                last_promotion_run_at=_read_control_state(uid, db_client=db_client).last_promotion_run_at,
             )
         allowed = set(consolidation_batched_ids)
         promotable = [item for item in promotable if item.memory_id in allowed]
-    fast_track = list_fast_track_promotable_items(uid, db_client=client, now=current_time)
+    fast_track = list_fast_track_promotable_items(uid, db_client=db_client, now=current_time)
     required_promotion = list_required_promotion_items(promotable)
-    control = _read_control_state(uid, db_client=client)
+    control = _read_control_state(uid, db_client=db_client)
     trigger = promotion_trigger_reason(
         promotable_count=len(promotable),
         last_promotion_run_at=control.last_promotion_run_at,
@@ -707,10 +701,10 @@ def run_canonical_short_term_promotion(
         promotable_count=len(promotable),
         last_promotion_run_at=control.last_promotion_run_at,
     )
-    transition_store = FirestoreShortTermLifecycleTransitionStore(db_client=client, now=current_time)
+    transition_store = FirestoreShortTermLifecycleTransitionStore(db_client=db_client, now=current_time)
 
     for item in promotable:
-        control = _read_control_state(uid, db_client=client)
+        control = _read_control_state(uid, db_client=db_client)
         promoted, vector_sync_failed, kg_result, keyword_sync_succeeded = promote_short_term_item_via_apply(
             uid,
             item,
@@ -718,7 +712,7 @@ def run_canonical_short_term_promotion(
             run_id=run_id,
             trigger_reason=trigger,
             now=current_time,
-            db_client=client,
+            db_client=db_client,
         )
         if vector_sync_failed:
             report.vector_sync_failures += 1
@@ -735,10 +729,10 @@ def run_canonical_short_term_promotion(
             _audit_promotion_transition(item, store=transition_store, run_id=run_id, now=current_time)
         )
 
-    updated_control = _read_control_state(uid, db_client=client).model_copy(
+    updated_control = _read_control_state(uid, db_client=db_client).model_copy(
         update={"last_promotion_run_at": current_time, "updated_at": current_time}
     )
-    _persist_control_state(updated_control, db_client=client)
+    _persist_control_state(updated_control, db_client=db_client)
     report.last_promotion_run_at = current_time
     return report
 
@@ -752,14 +746,13 @@ def run_canonical_short_term_ttl_lifecycle(
     limit: Optional[int] = None,
 ) -> CanonicalShortTermLifecycleReport:
     """TTL/decay audit for canonical short_term via the existing lifecycle worker."""
-    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return CanonicalShortTermLifecycleReport(uid=uid, skipped_reason="not_canonical_cohort")
 
-    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=client, limit=limit)
-    store = FirestoreShortTermLifecycleTransitionStore(db_client=client, now=current_time)
+    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=db_client, limit=limit)
+    store = FirestoreShortTermLifecycleTransitionStore(db_client=db_client, now=current_time)
     created = 0
     existing = 0
     for item in items:
@@ -798,21 +791,20 @@ def run_canonical_short_term_maintenance(
     required_processor: Optional[RequiredMemoryProcessor] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Canonical-only wrapper: required processing → TTL → consolidation → promotion."""
-    client: Any = db_client if db_client is not None else default_db_client
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return CanonicalShortTermMaintenanceReport(uid=uid, skipped_reason="not_canonical_cohort")
 
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     required_processing = run_required_memory_processing(
         uid,
-        db_client=client,
+        db_client=db_client,
         processor=required_processor,
         now=current_time,
     )
-    lifecycle = run_canonical_short_term_ttl_lifecycle(uid, db_client=client, now=current_time, run_id=run_id)
+    lifecycle = run_canonical_short_term_ttl_lifecycle(uid, db_client=db_client, now=current_time, run_id=run_id)
     consolidation = run_canonical_consolidation(
         uid,
-        db_client=client,
+        db_client=db_client,
         now=current_time,
         run_id=run_id,
         llm_invoke=llm_invoke,
@@ -829,7 +821,7 @@ def run_canonical_short_term_maintenance(
 
     promotion = run_canonical_short_term_promotion(
         uid,
-        db_client=client,
+        db_client=db_client,
         now=current_time,
         run_id=run_id,
         consolidation_batched_ids=promotion_batched_ids,
