@@ -382,7 +382,7 @@ extension Tools {
         guard !merged.isEmpty || !memories.isEmpty else {
             return emptyMessage(
                 store,
-                "Nothing in the Omi account or Earshot's local capture matches \"\(query)\"\(rangeSuffix(since, until))."
+                "Nothing in \(scopeSearched(omi.failures)) matches \"\(query)\"\(rangeSuffix(since, until))."
             ) + footerBlock(omi.failures, notes)
         }
 
@@ -403,15 +403,37 @@ extension Tools {
         since: Double?,
         until: Double?
     ) -> String {
+        // Local hits are a literal full-text match; Omi's are not. `conversations/search` and
+        // `memories/search` are semantic — they return nearest neighbours with no relevance floor,
+        // so a word the user has never said still comes back with a page of confident-looking
+        // results ("chinchilla" returns a conversation about jewellery). Calling those "matches"
+        // is how Claude ends up asserting something happened that never did, which is the exact
+        // failure `status` exists to prevent. The two kinds are counted and named separately, and
+        // only the local ones are ever called matches.
         var parts: [String] = []
         let live = hits.filter { $0.origin == .live }.count
         let omi = hits.count - live
         if live > 0 { parts.append("\(number(live)) captured live on this Mac") }
-        if omi > 0 { parts.append("\(number(omi)) from Omi's conversation history") }
-        if !memories.isEmpty { parts.append(plural(memories.count, "fact") + " Omi remembers") }
-        let total = plural(hits.count + memories.count, "match", "matches")
+        if omi > 0 { parts.append("\(number(omi)) related from Omi's history") }
+        if !memories.isEmpty { parts.append(plural(memories.count, "related fact") + " Omi remembers") }
+
+        let headline: String
+        if live > 0 {
+            headline = "**\(plural(live, "match", "matches")) for \"\(query)\"\(rangeSuffix(since, until))**"
+        } else if omi > 0 || !memories.isEmpty {
+            headline = "**Nothing on this Mac matched \"\(query)\"\(rangeSuffix(since, until)) — "
+                + "here is what Omi found related to it**"
+        } else {
+            headline = "**No results for \"\(query)\"\(rangeSuffix(since, until))**"
+        }
+
         let breakdown = parts.isEmpty ? "" : " — " + parts.joined(separator: ", ")
-        return "**\(total) for \"\(query)\"\(rangeSuffix(since, until))**\(breakdown)"
+        let caveat = (omi > 0 || !memories.isEmpty)
+            ? "\n\n_Omi's half of this is a semantic search: it returns the closest things it has, "
+                + "even when nothing genuinely matches. Treat those as leads to confirm, not as "
+                + "evidence the words were said._"
+            : ""
+        return headline + breakdown + caveat
     }
 
     private static func runRecent(_ args: JSONValue?, _ store: EarshotStore?) throws -> String {
@@ -461,7 +483,7 @@ extension Tools {
         guard !entries.isEmpty else {
             return emptyMessage(
                 store,
-                "No conversations found in the Omi account or Earshot's local capture\(rangeSuffix(since, until))."
+                "No conversations\(rangeSuffix(since, until)) were found in \(scopeSearched(failures))."
             ) + footerBlock(failures, notes)
         }
         return renderConversations(entries, since: since, until: until) + footerBlock(failures, notes)
@@ -531,16 +553,23 @@ extension Tools {
             return renderOmiTranscript(full)
         case let .unavailable(error):
             if let fallbackLocal, let text = try? localTranscript(fallbackLocal, store) { return text }
-            var out = """
-            The Omi conversation `\(id)` could not be read: \(error.reason).
-            """
+            // "The account does not have it" and "the account could not be read" are opposite
+            // conclusions for a reader, so they never share wording.
+            if error == .notFound {
+                return """
+                The Omi account holds no conversation with the id `\(id)`. The id may be mistyped, or \
+                it may be a local Earshot conversation number rather than an Omi id — those are plain \
+                numbers, not UUIDs. Call `conversations` to list the ids that exist on both sides.
+                """
+            }
+            var out = "The Omi conversation `\(id)` could not be read: \(error.reason)."
             if error == .notConfigured {
                 out += "\n\n" + OmiBackend.notConfiguredSentence
             }
             out += "\n\n"
             out += """
-            Treat this as "could not be reached", not as "the conversation does not exist". Call \
-            `conversations` to see which ids are readable right now.
+            That is "could not be reached", not "the conversation does not exist" — do not tell the \
+            user it is missing. Call `status` to see whether the Omi account is reachable at all.
             """
             return out
         }
@@ -569,7 +598,7 @@ extension Tools {
         guard !merged.isEmpty else {
             return emptyMessage(
                 store,
-                "Nothing was recorded on screen\(appSuffix)\(rangeSuffix(since, until))."
+                "Nothing on screen\(appSuffix)\(rangeSuffix(since, until)) was found in \(scopeSearched(failures))."
             ) + footerBlock(failures, notes)
         }
         let header = "**\(plural(merged.count, "screen observation"))\(appSuffix)\(rangeSuffix(since, until))**"
@@ -1251,6 +1280,16 @@ extension Tools {
         did not happen.
         """
         return out
+    }
+
+    /// Names what was actually searched, so an empty answer never claims to have looked somewhere it
+    /// could not reach. This is the difference between "your Omi history has nothing on that" and
+    /// "your Omi history was not read".
+    private static func scopeSearched(_ backendFailures: [String]) -> String {
+        guard OmiBackend.shared.isConfigured, backendFailures.isEmpty else {
+            return "Earshot's local capture on this Mac (the Omi account could not be searched)"
+        }
+        return "the Omi account or Earshot's local capture on this Mac"
     }
 
     /// The one place a degraded answer is explained. Everything above it is real; this says exactly

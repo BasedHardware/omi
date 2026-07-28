@@ -35,7 +35,23 @@ enum OmiKeyResolver {
         EarshotPaths.supportDirectory.appendingPathComponent("mcp-key")
     }
 
+    /// True when running inside XCTest.
+    ///
+    /// Ambient credential discovery and a test suite are a bad combination: without this, running
+    /// `swift test` silently picked up the developer's own key and every tool assertion started
+    /// making live calls against a real person's Omi account — non-hermetic, rate-limited, and
+    /// dependent on what happened to be in someone's history that day. Tests that want the backend
+    /// must opt in explicitly by constructing `OmiBackend(credential:)` themselves.
+    /// `XCTestConfigurationFilePath` is set by Xcode but **not** by `swift test`, which is how this
+    /// leaked in the first place. Asking whether XCTest is loaded into the process works for both.
+    private static let isRunningTests: Bool = {
+        if NSClassFromString("XCTestCase") != nil { return true }
+        let env = ProcessInfo.processInfo.environment
+        return env["XCTestConfigurationFilePath"] != nil || env["XCTestBundlePath"] != nil
+    }()
+
     static func resolve() -> (key: String, source: OmiKeySource)? {
+        guard !isRunningTests else { return nil }
         if let key = fromEnvironment() { return (key, .environment) }
         if let key = fromKeyFile() { return (key, .appSupportFile) }
         if let key = fromClaudeConfig() { return (key, .claudeConfig) }
@@ -114,6 +130,7 @@ public enum OmiBackendError: Error, Sendable, Equatable {
     case notConfigured
     case unauthorized
     case forbidden
+    case notFound
     case rateLimited
     case timedOut
     case offline(String)
@@ -131,6 +148,8 @@ public enum OmiBackendError: Error, Sendable, Equatable {
             return "the Omi MCP API key was rejected (HTTP 401) — it has expired or been revoked"
         case .forbidden:
             return "the Omi MCP API key does not carry read access to this data (HTTP 403)"
+        case .notFound:
+            return "the Omi account holds no such record (HTTP 404)"
         case .rateLimited:
             return """
             the account hit Omi's read rate limit (HTTP 429; 300 requests an hour) — it will \
@@ -151,7 +170,8 @@ public enum OmiBackendError: Error, Sendable, Equatable {
     /// life of the process instead of burning the hourly budget on a call that cannot succeed.
     var isTerminal: Bool {
         switch self {
-        case .notConfigured, .unauthorized, .forbidden: return true
+        // 404 included: an id the account does not hold will not start existing mid-session.
+        case .notConfigured, .unauthorized, .forbidden, .notFound: return true
         default: return false
         }
     }
@@ -389,7 +409,7 @@ public final class OmiBackend: @unchecked Sendable {
     Omi account history is unavailable: no Omi MCP API key is configured. Earshot looked at the \
     \(OmiKeyResolver.environmentVariable) environment variable, \
     ~/Library/Application Support/Earshot/mcp-key, and the omi-memory entry in ~/.claude.json. \
-    Everything below is only what Earshot captured locally on this Mac.
+    Only what Earshot captured locally on this Mac was searched.
     """
 
     // MARK: Reads
@@ -582,12 +602,17 @@ public final class OmiBackend: @unchecked Sendable {
 
         let task = session.dataTask(with: request) { data, response, error in
             defer { semaphore.signal() }
-            if let error = error as? URLError {
-                box.value = .failure(error.code == .timedOut ? .timedOut : .offline(error.code.humanReason))
-                return
-            }
             if let error {
-                box.value = .failure(.offline(String(describing: type(of: error))))
+                // Read it as an NSError rather than casting to URLError: a few transport failures
+                // (a sandboxed process, some VPN clients) arrive as a plain NSError in the URL
+                // domain and would otherwise degrade to a reason that tells the reader nothing.
+                let ns = error as NSError
+                guard ns.domain == NSURLErrorDomain else {
+                    box.value = .failure(.offline("\(ns.domain) \(ns.code)"))
+                    return
+                }
+                let code = URLError.Code(rawValue: ns.code)
+                box.value = .failure(code == .timedOut ? .timedOut : .offline(code.humanReason))
                 return
             }
             guard let http = response as? HTTPURLResponse else {
@@ -601,6 +626,8 @@ public final class OmiBackend: @unchecked Sendable {
                 box.value = .failure(.unauthorized)
             case 402, 403:
                 box.value = .failure(.forbidden)
+            case 404:
+                box.value = .failure(.notFound)
             case 429:
                 box.value = .failure(.rateLimited)
             default:
