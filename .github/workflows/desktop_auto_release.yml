@@ -55,6 +55,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # Never recurse submodules: an orphan gitlink (no .gitmodules map)
+          # hangs/fails actions/checkout post-cleanup on the M1 shared workspace.
+          submodules: false
 
       - name: Generate Omi Bot token
         id: app-token
@@ -103,6 +106,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
+          submodules: false
 
       - name: Recheck desktop release queue before tagging
         id: recheck
@@ -126,6 +130,7 @@ jobs:
           ref: ${{ steps.recheck.outputs.source_sha }}
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
+          submodules: false
 
       - name: Compute next version and consolidate changelog
         if: steps.recheck.outputs.should_release == 'true'

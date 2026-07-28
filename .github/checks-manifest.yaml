@@ -532,6 +532,16 @@ checks:
     triggers: ["desktop/macos/agent/src/runtime/agent-spawn-journal.ts", "desktop/macos/agent/fixtures/spawn-receipt/**", "desktop/macos/agent/tests/spawn-receipt-fixtures.test.ts", "desktop/macos/scripts/check-spawn-receipt-fixtures.sh", "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift", "desktop/macos/Desktop/Tests/RealtimeHubSpawnAgentTests.swift"]
     lanes: ["local", "ci"]
     reason: "cross-language realtime spawn receipt producer/consumer contract"
+  - id: orphan-gitlinks
+    command: ["python3", ".github/scripts/check_orphan_gitlinks.py"]
+    triggers: ["omiGlass/**", ".github/scripts/check_orphan_gitlinks.py", ".github/scripts/test_check_orphan_gitlinks.py", ".github/checks-manifest.yaml", ".github/workflows/desktop_auto_release.yml"]
+    lanes: ["local", "ci"]
+    reason: "orphan mode-160000 gitlinks without .gitmodules hang/fail M1 actions/checkout during desktop tag-release"
+  - id: orphan-gitlinks-fixtures
+    command: ["python3", ".github/scripts/test_check_orphan_gitlinks.py"]
+    triggers: [".github/scripts/check_orphan_gitlinks.py", ".github/scripts/test_check_orphan_gitlinks.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "fixture coverage for clean trees and unmapped gitlinks"
   - id: release-eligibility-contract
     command: ["python3", ".github/scripts/check_release_eligibility.py"]
     triggers: [".github/workflows/release-eligibility.yml", ".github/actions/release-eligibility/**", ".github/scripts/verify_release_eligibility.py", ".github/scripts/check_release_eligibility.py", ".github/scripts/test_check_release_eligibility.py", ".github/checks-manifest.yaml"]
