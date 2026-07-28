@@ -647,7 +647,18 @@ export function mcpServersForBinding(
       const name = (entry as Record<string, unknown>).name;
       return typeof name !== "string" || !VOLATILE_MCP_ENV_KEYS.has(name) || name === "OMI_CONTEXT_FILE";
     });
-    const bindingEnv = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    let bindingEnv = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    // OMI_BRIDGE_PIPE is stripped above as volatile, and that part is right: a
+    // persisted binding must never hand a child the socket path of a runtime
+    // process that has since died. But stripping without restoring leaves the
+    // child with no path at all, and every tool it hosts then fails closed on
+    // `!pipeConnection` with "Error: not connected to bridge" — the whole
+    // omi-tools surface, not one tool. Put the current path back, the same way
+    // OMI_CONTEXT_FILE is re-derived rather than inherited.
+    const bridgePipePath = process.env.OMI_BRIDGE_PIPE;
+    if (bridgePipePath) {
+      bindingEnv = upsertEnv(bindingEnv, "OMI_BRIDGE_PIPE", bridgePipePath);
+    }
     normalized.env = workingDirectory
       ? upsertEnv(bindingEnv, "OMI_WORKSPACE", workingDirectory)
       : bindingEnv;
