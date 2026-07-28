@@ -11,6 +11,38 @@ private struct TranscriptLine: Sendable {
     let source: SegmentSource
 }
 
+/// What the app says about itself between launch and the first live sensor.
+///
+/// Silence would be the wrong answer here: a nil `pausedReason` next to `capturing: false` reads as
+/// "nothing is wrong", which is exactly the lie this window used to tell.
+private let startingUpReason = "Starting up"
+
+/// The last state the main actor published, so the heartbeat timer can re-stamp and rewrite it
+/// without ever touching the main actor.
+///
+/// Freshness of the heartbeat file means "this process is alive"; the fields mean "and this is the
+/// last thing it knew about itself". Keeping those two separable is the whole point — the main
+/// thread can be taken away for minutes by a system authorization prompt, and a reader must still be
+/// able to tell a wedged app from an absent one.
+private final class HeartbeatSnapshot: @unchecked Sendable {
+    private let lock = NSLock()
+    private var state = CaptureState(capturing: false, pausedReason: startingUpReason)
+
+    func set(_ new: CaptureState) {
+        lock.lock()
+        state = new
+        lock.unlock()
+    }
+
+    func restamped() -> CaptureState {
+        lock.lock()
+        defer { lock.unlock() }
+        var copy = state
+        copy.updatedAt = ContextTime.now
+        return copy
+    }
+}
+
 /// The parts of the pipeline that fail independently. Storage is one of them: it is the single
 /// shared dependency, and a database that will not open makes capture pointless rather than partial.
 private enum CaptureComponent: CaseIterable {
@@ -71,6 +103,14 @@ final class Engine: ObservableObject {
     /// The heartbeat is a tiny atomic file write, but it happens on a timer while audio is running;
     /// keep it off both the main thread and the store's queue.
     private let heartbeatQueue = DispatchQueue(label: "com.omi.context-for-claude.heartbeat", qos: .utility)
+    private let heartbeat = HeartbeatSnapshot()
+
+    /// Retention runs this long after the store opens. Long enough that the first frames, the first
+    /// transcript lines and the first session of a launch are all already written.
+    private static let retentionDelaySeconds: TimeInterval = 120
+    /// How long the account work waits for a sensor to come up before going ahead anyway. A Mac with
+    /// nothing granted has nothing to wait for, and sign-in still has to be possible there.
+    private static let accountGraceSeconds: Double = 5
 
     private var hasStarted = false
     private var isPaused = false
@@ -89,7 +129,11 @@ final class Engine: ObservableObject {
 
     private var lineFeed: AsyncStream<TranscriptLine>.Continuation?
     private var lineTask: Task<Void, Never>?
-    private var heartbeatTask: Task<Void, Never>?
+    /// A dispatch timer rather than a `Task`, because a main-actor task stops beating exactly when
+    /// the main thread is stuck — see `startHeartbeatTimer()`.
+    private var heartbeatTimer: DispatchSourceTimer?
+    private var maintenanceTask: Task<Void, Never>?
+    private var accountTask: Task<Void, Never>?
     private var todayTask: Task<Void, Never>?
 
     private init() {}
@@ -98,48 +142,103 @@ final class Engine: ObservableObject {
 
     /// Idempotent: the app delegate calls this on launch, and onboarding may call it again once
     /// permissions land.
+    ///
+    /// The order below is the fix for a defect that cost 10–24 minutes of capture on every relaunch,
+    /// and it is load-bearing. Launch used to run, in this order: a synchronous Keychain read, then
+    /// the database open, then capture, then the first heartbeat. Each step could stall the one
+    /// behind it, and one of them stalls for minutes at a time — `OmiAuth.restore()` reads this
+    /// app's Keychain item with `SecItemCopyMatching` on the main actor, and a bundle whose
+    /// signature has changed (every rebuild, every update a user installs) makes macOS put an
+    /// authorization prompt in front of that read. An `.accessory` app has no window to bring that
+    /// prompt forward with, so it sat unanswered: measured 2026-07-28, 22 minutes on one launch and
+    /// 5–9 seconds on three others, during which the app held no database handle, wrote no frames
+    /// and emitted no heartbeat — so it truthfully reported itself as not running, for 22 minutes,
+    /// while its own process was alive.
+    ///
+    /// So: the heartbeat first, then the sensors, then storage, and everything that can block the
+    /// main actor dead last, behind all of it.
     func start() {
         guard !hasStarted else { return }
         hasStarted = true
+
+        // 1. Say something about ourselves before doing anything that can stall. The write lands on
+        //    `heartbeatQueue`, so it does not depend on the main thread staying free.
+        publishState()
+        startHeartbeatTimer()
+
+        // 2. Permissions and the transcript consumer: what the sensors need in order to start.
         capabilities = Permissions.report()
         startLineConsumer()
 
-        // Restore any Omi session from a previous launch, then start the two uploaders. Both are
-        // no-ops while signed out — captures queue locally and go up once an account is attached.
-        OmiAuth.shared.restore()
-        // Re-register on every launch, not only during onboarding. Registration is idempotent and
-        // writes only when something actually differs — but without this, an install that has
-        // already onboarded can never pick up a changed binary path or a renamed connector, so a
-        // rename reaches new users and silently strands existing ones.
+        // 3. Sensors, before storage and before the account. Nothing they produce is lost while the
+        //    database opens — `EngineStore` holds it, bounded, until there is somewhere to put it.
+        startPermittedSources()
+        publishState()
+
+        // 4. Storage. Nothing above waits on this.
+        Task { [weak self] in
+            guard let self else { return }
+            await self.ensureStorage()
+            self.publishState()
+            await self.refreshTodaySeconds()
+        }
+
+        startMaintenanceLoop()
+        startTodaySecondsLoop()
+        observeTermination()
+
+        // 5. Re-register on every launch, not only during onboarding. Registration is idempotent and
+        //    writes only when something actually differs — but without this, an install that has
+        //    already onboarded can never pick up a changed binary path or a renamed connector, so a
+        //    rename reaches new users and silently strands existing ones. Detached: it never touches
+        //    the main actor, so it does not belong on it.
         Task.detached(priority: .utility) {
             let result = ClaudeRegistrar.register()
             ContextLog.info("Claude registration on launch: \(result.message)", "claude")
         }
 
-        // The MCP server needs its own Omi credential rather than borrowing one out of another
-        // server's entry in ~/.claude.json. A fresh install is still signed out here, so this is a
-        // no-op until the sign-in below fires it again.
-        Task { await MCPKeyProvisioner.shared.ensureKey() }
-        OmiAuth.shared.$isSignedIn
-            .removeDuplicates()
-            .filter { $0 }
-            .sink { _ in Task { await MCPKeyProvisioner.shared.ensureKey() } }
-            .store(in: &keyProvisioning)
-        ScreenActivityUploader.shared.start()
-        Task { await ConversationUploader.shared.drain() }
+        // 6. The account, last of all.
+        startAccountServices()
 
-        Task { [weak self] in
-            guard let self else { return }
-            await self.ensureStorage()
-            self.startPermittedSources()
-            self.publishState()
-            await self.refreshTodaySeconds()
-        }
-
-        startHeartbeatLoop()
-        startTodaySecondsLoop()
-        observeTermination()
         ContextLog.info("Engine started", "engine")
+    }
+
+    /// Everything that touches the user's Omi account: the stored session, the MCP credential, and
+    /// the two uploaders. All of it is a no-op while signed out — captures queue locally and go up
+    /// once an account is attached — which is exactly why none of it belongs in front of capture.
+    ///
+    /// `OmiAuth.restore()` is the specific hazard: it reads the Keychain synchronously on the main
+    /// actor, and macOS can hold that read behind an authorization prompt for as long as the user
+    /// takes to notice it. That is survivable now — the heartbeat beats on its own dispatch timer
+    /// and the audio devices are already running on their CoreAudio threads — but only if it happens
+    /// after the pipeline is up rather than before it.
+    private func startAccountServices() {
+        accountTask = Task { [weak self] in
+            // Let the sensors take their main-actor turns first. Bounded, because a Mac with nothing
+            // granted has no sensor to wait for and must still be able to sign in.
+            let deadline = ContextTime.now + Self.accountGraceSeconds
+            while true {
+                guard let self else { return }
+                if !self.running.isEmpty || ContextTime.now >= deadline { break }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard let self else { return }
+
+            OmiAuth.shared.restore()
+
+            // The MCP server needs its own Omi credential rather than borrowing one out of another
+            // server's entry in ~/.claude.json. A fresh install is still signed out here, so this is
+            // a no-op until the sign-in below fires it again.
+            Task { await MCPKeyProvisioner.shared.ensureKey() }
+            OmiAuth.shared.$isSignedIn
+                .removeDuplicates()
+                .filter { $0 }
+                .sink { _ in Task { await MCPKeyProvisioner.shared.ensureKey() } }
+                .store(in: &self.keyProvisioning)
+
+            ScreenActivityUploader.shared.start()
+            Task { await ConversationUploader.shared.drain() }
+        }
     }
 
     func pause() {
@@ -175,8 +274,9 @@ final class Engine: ObservableObject {
 
     // MARK: - Sources
 
-    /// Opens the database if it is not open yet. Idempotent, so launch and the heartbeat's retry can
-    /// both call it: a volume that was busy for a minute should not cost the rest of the session.
+    /// Opens the database if it is not open yet. Idempotent, so launch and the maintenance loop's
+    /// retry can both call it: a volume that was busy for a minute should not cost the rest of the
+    /// session. Nothing that captures waits on it.
     private func ensureStorage() async {
         guard !isStorageReady else { return }
         if let failure = await store.open() {
@@ -185,13 +285,19 @@ final class Engine: ObservableObject {
         }
         isStorageReady = true
         clear(.storage)
-        // Retention is a one-off sweep on the store's queue: thousands of file removals must never
-        // sit in front of the first transcript line.
-        store.pruneFrames(olderThanDays: 30)
+        // Retention is housekeeping, and housekeeping is not allowed on the startup path: this only
+        // *schedules* the sweep, minutes out, on a queue of its own. It used to be enqueued here on
+        // the store's own serial queue, which put thousands of file unlinks in front of the frames
+        // and transcript lines of the session that had just started.
+        store.scheduleRetentionSweep(olderThanDays: 30, after: Self.retentionDelaySeconds)
     }
 
+    /// Deliberately not gated on `isStorageReady`. Screen and audio capture depend on permissions
+    /// and on the devices, not on SQLite: a store that is slow to open must cost the user latency in
+    /// search, never minutes of their life going unrecorded. What the sensors produce meanwhile is
+    /// held by `EngineStore` until there is a database to put it in.
     private func startPermittedSources() {
-        guard isStorageReady, !isPaused else { return }
+        guard !isPaused else { return }
         startAudio(.microphone)
         startAudio(.systemAudio)
         startScreen()
@@ -370,15 +476,28 @@ final class Engine: ObservableObject {
 
     /// `synchronously` for pause and quit: an async write can lose the race with process teardown,
     /// and the heartbeat is the only thing telling `context-for-claude-mcp` what happened.
+    ///
+    /// Truthfulness rules, in the order they are applied:
+    /// - Paused is paused.
+    /// - A store that has *failed* to open means nothing is being recorded, whatever the sensors are
+    ///   doing, so `capturing` is false. A store that is merely still opening does not: the sensors
+    ///   are genuinely capturing and `EngineStore` is holding the result.
+    /// - No sensor live and nothing yet gone wrong is the launch window, and it says so rather than
+    ///   presenting an empty reason, which reads as "everything is fine".
     private func publishState(synchronously: Bool = false) {
-        let capturing = !isPaused && isStorageReady && !running.isEmpty
+        let storageFailed = reasons[.storage] != nil
+        let capturing = !isPaused && !running.isEmpty && !storageFailed
         let reason: String?
         if isPaused {
             reason = "Paused"
         } else {
             // Fixed order so the popover string does not shuffle between renders.
             let notes = CaptureComponent.allCases.compactMap { reasons[$0] }
-            reason = notes.isEmpty ? nil : notes.joined(separator: " · ")
+            if notes.isEmpty {
+                reason = running.isEmpty ? startingUpReason : nil
+            } else {
+                reason = notes.joined(separator: " · ")
+            }
         }
 
         if isCapturing != capturing { isCapturing = capturing }
@@ -386,8 +505,11 @@ final class Engine: ObservableObject {
 
         let state = CaptureState(
             capturing: capturing, pausedReason: reason, capabilities: capabilities)
+        // Before the write, so a timer tick that fires in between re-stamps the new state, not the
+        // one it replaced.
+        heartbeat.set(state)
         if synchronously {
-            Self.writeHeartbeat(state)
+            heartbeatQueue.sync { Self.writeHeartbeat(state) }
         } else {
             heartbeatQueue.async { Self.writeHeartbeat(state) }
         }
@@ -405,10 +527,29 @@ final class Engine: ObservableObject {
     }
 
     /// The heartbeat has to beat faster than `CaptureState.stalenessSeconds` or `status()` reports a
-    /// running app as gone. Re-reading permissions on the same tick also retries anything that is
-    /// permitted but not running — an unplugged mic recovers without the user doing anything.
-    private func startHeartbeatLoop() {
-        heartbeatTask = Task { [weak self] in
+    /// running app as gone.
+    ///
+    /// A `DispatchSourceTimer` on `heartbeatQueue`, not a `Task`, and that is the point. Every task
+    /// on this class runs on the main actor, and the main thread can be taken away for minutes at a
+    /// time by a synchronous system dialog — a Keychain authorization prompt is the one that
+    /// actually did it here. A heartbeat that stops when the main thread stops makes the product
+    /// claim it is not running at the exact moment a reader needs to know that it is, so this one
+    /// beats independently. It re-stamps the last state the main actor published: freshness says the
+    /// process is alive, the fields say what it last knew about itself.
+    private func startHeartbeatTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: heartbeatQueue)
+        timer.schedule(deadline: .now() + .seconds(30), repeating: .seconds(30), leeway: .seconds(1))
+        let snapshot = heartbeat
+        timer.setEventHandler { Self.writeHeartbeat(snapshot.restamped()) }
+        timer.resume()
+        heartbeatTimer = timer
+    }
+
+    /// Retries what launch could not finish: a store on a volume that was busy, a permission granted
+    /// after launch, a source that died. Separate from the heartbeat on purpose — recovery needs the
+    /// main actor, and the heartbeat must not be hostage to it.
+    private func startMaintenanceLoop() {
+        maintenanceTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
                 guard let self else { return }
@@ -455,7 +596,10 @@ final class Engine: ObservableObject {
     /// starts tearing the process down never resumes, and a session left open looks — forever — like
     /// one that is still running.
     private func handleTermination() {
-        heartbeatTask?.cancel()
+        heartbeatTimer?.cancel()
+        heartbeatTimer = nil
+        maintenanceTask?.cancel()
+        accountTask?.cancel()
         todayTask?.cancel()
         stopAllSources()
         store.closeOpenSession()
@@ -465,8 +609,13 @@ final class Engine: ObservableObject {
         isCapturing = false
         // The same sentence `Queries.status` uses for a stale heartbeat, so Claude reads one story.
         pausedReason = "Context for Claude is not running"
-        Self.writeHeartbeat(
-            CaptureState(capturing: false, pausedReason: pausedReason, capabilities: capabilities))
+        let final = CaptureState(
+            capturing: false, pausedReason: pausedReason, capabilities: capabilities)
+        // Snapshot first, then write on the heartbeat queue: a timer tick already in flight runs
+        // ahead of this write and re-stamps `final` rather than resurrecting a "capturing" state on
+        // top of it.
+        heartbeat.set(final)
+        heartbeatQueue.sync { Self.writeHeartbeat(final) }
         ContextLog.info("Engine stopped", "engine")
     }
 }
@@ -481,6 +630,11 @@ final class Engine: ObservableObject {
 /// ever splitting a session in half.
 private final class EngineStore: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.omi.context-for-claude.store", qos: .utility)
+    /// Retention runs here and never on `queue`. Age-based pruning unlinks one file per deleted
+    /// frame — thousands of them on a Mac that has been capturing for a month — and the queue that
+    /// does that must not be the queue a transcript line is waiting in.
+    private let retentionQueue = DispatchQueue(
+        label: "com.omi.context-for-claude.retention", qos: .background)
     private let policy = SessionPolicy()
 
     private var store: ContextStore?
@@ -488,6 +642,24 @@ private final class EngineStore: @unchecked Sendable {
     /// The latest segment end across *both* transcribers. Session boundaries are a property of the
     /// conversation, not of one microphone.
     private var lastSegmentEndedAt: Double?
+
+    /// One write the sensors produced before there was a database to put it in.
+    private enum PendingWrite {
+        case line(TranscriptLine, appHint: String?)
+        case frame(Frame)
+    }
+
+    /// Capture now starts before the store opens, so everything produced in that window has to go
+    /// somewhere. Bounded and oldest-dropped: an open that is never going to succeed must cost a
+    /// bounded amount of memory, and if something has to go it is the oldest, not the newest.
+    ///
+    /// A screen frame every 3 s plus a transcript line every 10 s from each of two sources is about
+    /// 32 writes a minute, so this holds roughly half an hour — comfortably longer than any store
+    /// open that is going to succeed at all.
+    private static let pendingLimit = 1_000
+    private var pending: [PendingWrite] = []
+    private var droppedWhileOpening = 0
+    private var hasLoggedDrop = false
 
     /// Opens the database. Returns a human-readable reason on failure, nil on success. Idempotent:
     /// a retry after a transient failure must never end up with two writers on one file.
@@ -500,6 +672,10 @@ private final class EngineStore: @unchecked Sendable {
                     self.store = opened
                     self.closeSessionsLeftOpen(opened)
                     ContextLog.info("Store opened at \(opened.databaseURL.path)", "store")
+                    // Inside the same queue block, before the continuation resumes: the queue is
+                    // serial, so nothing captured after the open can be written ahead of what was
+                    // captured before it — which is what keeps session boundaries in order.
+                    self.flushPending(into: opened)
                     continuation.resume(returning: nil)
                 } catch {
                     continuation.resume(
@@ -511,63 +687,134 @@ private final class EngineStore: @unchecked Sendable {
 
     func record(_ line: TranscriptLine, appHint: String?) {
         queue.async {
-            guard let store = self.store else { return }
-            do {
-                if self.openSessionId == nil
-                    || self.policy.shouldOpenNewSession(
-                        lastSegmentEndedAt: self.lastSegmentEndedAt,
-                        nextSegmentStartedAt: line.startedAt)
-                {
-                    if let previous = self.openSessionId {
-                        try store.closeSession(previous, at: self.lastSegmentEndedAt ?? line.startedAt)
-                        // A closed session is a finished conversation; the uploader turns it into a
-                        // real one in the user's Omi account. Enqueued, not sent — it survives being
-                        // signed out, offline, or rate limited.
-                        Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: previous) }
-                    }
-                    self.openSessionId = try store.openSession(at: line.startedAt, appHint: appHint)
-                }
-                guard let sessionId = self.openSessionId else { return }
-
-                try store.insertSegment(
-                    Segment(
-                        sessionId: sessionId,
-                        startedAt: line.startedAt,
-                        endedAt: line.endedAt,
-                        source: line.source,
-                        text: line.text))
-                // `max`, because a 10 s window from the other transcriber can land out of order and
-                // must not drag the session's end backwards.
-                self.lastSegmentEndedAt = max(self.lastSegmentEndedAt ?? line.endedAt, line.endedAt)
-            } catch {
-                ContextLog.error("Dropped a transcript line: \(error.localizedDescription)", "store")
+            guard let store = self.store else {
+                return self.hold(.line(line, appHint: appHint))
             }
+            self.append(line, appHint: appHint, to: store)
         }
     }
 
     func record(_ frame: Frame) {
         queue.async {
-            guard let store = self.store else { return }
-            do {
-                try store.insertFrame(frame)
-            } catch {
-                ContextLog.error("Dropped a screen frame: \(error.localizedDescription)", "store")
-            }
+            guard let store = self.store else { return self.hold(.frame(frame)) }
+            self.insert(frame, into: store)
         }
     }
 
-    func pruneFrames(olderThanDays days: Int) {
-        queue.async {
-            guard let store = self.store else { return }
+    /// Retention, deferred: `delay` after the store opens, on a background queue, off the writer
+    /// queue entirely. `ContextStore` serialises its own writer, so a sweep waits behind a live
+    /// insert rather than the other way round — which is the correct direction for housekeeping.
+    /// At most one sweep an hour. Worst-case overshoot is one active hour of frames — well under
+    /// 1% of the cap — while the sweep itself stats every frame on disk, which is not something to
+    /// do beside live capture more often than that.
+    private static let retentionIntervalSeconds: TimeInterval = 3600
+
+    func scheduleRetentionSweep(olderThanDays days: Int, after delay: TimeInterval) {
+        retentionQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self else { return }
+            // `store` is `queue`'s property — that is what makes `@unchecked Sendable` honest here.
+            // Read it there, then do the sweep off it.
+            let store: ContextStore? = self.queue.sync { self.store }
+            guard let store else { return }
             do {
-                let removed = try store.pruneFrames(olderThanDays: days)
+                // Both bounds, tighter one wins. Age alone is not enough on a machine that
+                // captures heavily: 30 days of dense capture outgrows any disk long before the
+                // oldest frame is old enough to delete.
+                let removed = try store.enforceRetention(olderThanDays: days)
                 if removed > 0 {
-                    ContextLog.info("Pruned \(removed) frames older than \(days) days", "store")
+                    ContextLog.info("Retention removed \(removed) frames", "store")
                 }
             } catch {
                 ContextLog.error("Frame retention sweep failed: \(error.localizedDescription)", "store")
             }
+            // Re-arm. This app is meant to run for weeks at login, so a sweep that happens once per
+            // launch is a sweep that happens once a fortnight — which is how an unbounded store
+            // gets there in the first place.
+            self.scheduleRetentionSweep(olderThanDays: days, after: Self.retentionIntervalSeconds)
         }
+    }
+
+    // MARK: - Writes (queue only)
+
+    private func append(_ line: TranscriptLine, appHint: String?, to store: ContextStore) {
+        do {
+            if openSessionId == nil
+                || policy.shouldOpenNewSession(
+                    lastSegmentEndedAt: lastSegmentEndedAt,
+                    nextSegmentStartedAt: line.startedAt)
+            {
+                if let previous = openSessionId {
+                    try store.closeSession(previous, at: lastSegmentEndedAt ?? line.startedAt)
+                    // A closed session is a finished conversation; the uploader turns it into a
+                    // real one in the user's Omi account. Enqueued, not sent — it survives being
+                    // signed out, offline, or rate limited.
+                    Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: previous) }
+                }
+                openSessionId = try store.openSession(at: line.startedAt, appHint: appHint)
+            }
+            guard let sessionId = openSessionId else { return }
+
+            try store.insertSegment(
+                Segment(
+                    sessionId: sessionId,
+                    startedAt: line.startedAt,
+                    endedAt: line.endedAt,
+                    source: line.source,
+                    text: line.text))
+            // `max`, because a 10 s window from the other transcriber can land out of order and
+            // must not drag the session's end backwards.
+            lastSegmentEndedAt = max(lastSegmentEndedAt ?? line.endedAt, line.endedAt)
+        } catch {
+            ContextLog.error("Dropped a transcript line: \(error.localizedDescription)", "store")
+        }
+    }
+
+    private func insert(_ frame: Frame, into store: ContextStore) {
+        do {
+            try store.insertFrame(frame)
+        } catch {
+            ContextLog.error("Dropped a screen frame: \(error.localizedDescription)", "store")
+        }
+    }
+
+    // MARK: - Holding pen (queue only)
+
+    /// Queues one write until the store opens, dropping the oldest on overflow — and saying so.
+    /// Silence here is precisely how capture disappears without anyone noticing.
+    private func hold(_ write: PendingWrite) {
+        pending.append(write)
+        guard pending.count > Self.pendingLimit else { return }
+        let overflow = pending.count - Self.pendingLimit
+        pending.removeFirst(overflow)
+        droppedWhileOpening += overflow
+        guard !hasLoggedDrop else { return }  // once per opening, not once per dropped frame
+        hasLoggedDrop = true
+        ContextLog.error(
+            "The store is still opening and the \(Self.pendingLimit)-write hold is full; "
+                + "dropping the oldest capture from here on",
+            "store")
+    }
+
+    private func flushPending(into store: ContextStore) {
+        guard !pending.isEmpty else { return }
+        let held = pending
+        pending.removeAll()
+        for write in held {
+            switch write {
+            case .line(let line, let appHint): append(line, appHint: appHint, to: store)
+            case .frame(let frame): insert(frame, into: store)
+            }
+        }
+        if droppedWhileOpening > 0 {
+            ContextLog.error(
+                "Wrote \(held.count) captures held while the store opened; "
+                    + "\(droppedWhileOpening) older ones were dropped",
+                "store")
+        } else {
+            ContextLog.info("Wrote \(held.count) captures held while the store opened", "store")
+        }
+        droppedWhileOpening = 0
+        hasLoggedDrop = false
     }
 
     /// Wall-clock seconds of today covered by a session. Sessions never overlap, so summing their

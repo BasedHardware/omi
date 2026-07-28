@@ -24,6 +24,13 @@ import Vision
 ///   Claude Code are skipped, so the assistant's output cannot be recycled into its own memory.
 /// - **Nothing empty is stored.** Recent screens are remembered as a ring, and a frame with almost
 ///   no text in a window that is already the newest row is dropped rather than written.
+///
+/// Against those three sits one rule pushing the other way, because a gate with no ceiling starves:
+/// **nothing is silently forgotten.** The hash gate answers "is this a screen we have seen", and for
+/// a window nobody is touching the answer is yes for as long as the user keeps looking at it — so
+/// reading one document for an hour produced no rows at all, and sitting still in front of a
+/// document is what reading looks like. A capture suppressed for
+/// ``ScreenPipeline/forceCaptureInterval`` is stored regardless of how similar it looks.
 @MainActor
 final class ScreenWatcher {
 
@@ -65,6 +72,7 @@ final class ScreenWatcher {
         recentHashes.removeAll()
         lastAppName = nil
         lastWindowTitle = nil
+        lastFullPassAt = nil
         lastSkipReason = nil
         cachedContent = nil
         cachedContentAt = nil
@@ -97,6 +105,15 @@ final class ScreenWatcher {
     /// What the last *emitted* frame said, so a title-only change is still recorded.
     private var lastAppName: String?
     private var lastWindowTitle: String?
+
+    /// When the OCR pipeline last ran, forced or not — the clock behind
+    /// ``ScreenPipeline/forceCaptureInterval``. Nil until the first pass of a run.
+    ///
+    /// Deliberately "last full pass" rather than "last row written". The only pass that writes
+    /// nothing is one the low-signal drop refused, and that only happens when the window already
+    /// owns the newest row, so nothing is lost by counting it — whereas measuring from the last
+    /// *row* would let a text-free window re-run OCR on every single tick forever.
+    private var lastFullPassAt: Double?
 
     private var cachedContent: SCShareableContent?
     private var cachedContentAt: Date?
@@ -161,8 +178,13 @@ final class ScreenWatcher {
         let capturedAt = ContextTime.now
         let hash = ScreenPipeline.dHash(of: image)
         let seenRecently = recentHashes.contains { ScreenPipeline.isSameScreen(hash, $0) }
+        // The gate has no ceiling of its own: a screen that stays inside `dedupeDistance` of one
+        // already in the ring is suppressed for as long as it stays there, which for a document
+        // being read is forever. This is that ceiling.
+        let forced = seenRecently
+            && ScreenPipeline.isForceDue(lastFullPassAt: lastFullPassAt, now: capturedAt)
 
-        guard !seenRecently else {
+        if seenRecently && !forced {
             // Idle or oscillating screen: no OCR, no JPEG, and no row at all unless the user moved
             // to a different window — a duplicate row every 3 seconds would bury the timeline it is
             // meant to be.
@@ -171,7 +193,13 @@ final class ScreenWatcher {
             }
             return
         }
-        remember(hash)
+        // Only genuinely new screens enter the ring — it is a memory of *distinct* screens, and a
+        // forced capture is by definition one already in it. Re-adding it would evict a real
+        // oscillation phase and hand the idle OCR cost straight back.
+        if !seenRecently { remember(hash) }
+        // Stamped before the pipeline runs rather than after it decides: the attempt is what costs,
+        // so the next force is due a full interval from here whatever this one concludes.
+        lastFullPassAt = capturedAt
 
         // Whether this window is already the newest row on the timeline. Computed here because the
         // decision it feeds — is there enough new text to be worth a row — has to be made before
@@ -260,19 +288,32 @@ final class ScreenWatcher {
     }
 
     private func capture(_ window: SCWindow) async -> CGImage? {
-        guard let size = ScreenPipeline.captureSize(for: window.frame) else {
+        // The filter, not `window.frame`, is the authority on what will actually be captured and at
+        // what backing scale — the frame knows neither. Both properties are macOS 14.0+ and the
+        // deployment floor here is 14.4.
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        guard
+            let size = ScreenPipeline.captureSize(
+                for: filter.contentRect,
+                pointPixelScale: CGFloat(filter.pointPixelScale)
+            )
+        else {
             noteSkip("window has no area")
             return nil
         }
+
         let config = SCStreamConfiguration()
         config.width = size.width
         config.height = size.height
         config.scalesToFit = true
         config.showsCursor = false
+        // Asking for more pixels than the nominal size is pointless if the source is downsampled
+        // first, so take the native backing store.
+        config.captureResolution = .best
 
         do {
             return try await SCScreenshotManager.captureImage(
-                contentFilter: SCContentFilter(desktopIndependentWindow: window),
+                contentFilter: filter,
                 configuration: config
             )
         } catch {
@@ -324,8 +365,25 @@ private enum ScreenPipeline {
 
     // MARK: Tunables
 
-    /// Longest side of both the OCR input and the stored JPEG.
+    /// Longest side of the stored JPEG. Storage only — it must never decide what Vision sees.
     static let maxPixelSize = 1600
+
+    /// Longest side of the image handed to Vision.
+    ///
+    /// Split from ``maxPixelSize`` because one constant governing both meant OCR resolution could
+    /// not be tuned without changing storage, and the storage bound won.
+    ///
+    /// Measured, not chosen: `.accurate` recognition of a screenful of UI text is non-monotonic in
+    /// input size and peaks near 2400 px on the longest side. On this machine's built-in display,
+    /// identifier recall was 88% at the 1512 px that shipped, 96% at 2400 px, and **75% at the
+    /// native 3024 px** — so "just OCR the native image" is worse than the defect it would be
+    /// fixing, and both sides of the band are bad. Latency is flat across the whole range
+    /// (0.67–0.96 s) because Vision's cost tracks the number of text regions rather than the pixel
+    /// count, so this is an accuracy decision and not a battery one. It is an empirical optimum
+    /// from one fixture family on one machine: re-run the sweep in `docs/ocr-quality.md` §3 before
+    /// moving it, and re-run it whenever the pinned Vision revision changes.
+    static let ocrMaxPixelSize = 2400
+
     static let jpegQuality: CGFloat = 0.5
     /// Titles can therefore lag reality by up to this long; the OCR text on the same row is always
     /// current, and the next tick corrects the title.
@@ -334,6 +392,12 @@ private enum ScreenPipeline {
     /// useless: a blinking caret or a ticking menu-bar clock flips a bit or two every tick and
     /// would force a full OCR pass on a screen nobody is touching. Empirically a spinner differs by
     /// 1 bit, a moved text cursor by ~4, and a real content change by 20+.
+    ///
+    /// That calibration was taken at the old capture size. `dHash` still renders to a fixed 9x8
+    /// grid, but each cell now averages ~2.5x more source pixels, which should if anything make the
+    /// hash steadier rather than noisier. `docs/ocr-quality.md` §4.3 asks for the two populations to
+    /// be re-confirmed against logged hamming distances; ``forceCaptureInterval`` is what keeps a
+    /// mis-calibration from being silent in the meantime, since no window can be suppressed forever.
     static let dedupeDistance = 5
 
     /// How many distinct recent screens a new capture is compared against.
@@ -345,6 +409,24 @@ private enum ScreenPipeline {
     /// skipped, and coming back to an unchanged window is not new information anyway. Only novel
     /// hashes enter the ring, so a spinner cannot flush the real screens out of it.
     static let recentScreenMemory = 8
+
+    /// The longest a window may stay on screen without earning a row, however unchanged it looks.
+    ///
+    /// The ring answers "have we seen this screen" and nothing else, so it has no ceiling: a screen
+    /// that never leaves the ``dedupeDistance`` ball around one of its entries is suppressed
+    /// forever. That silently deleted the activity most worth remembering — measured against a
+    /// rival recorder over the same two hours, Finder was missed *entirely* (1.8% of their capture,
+    /// 0.0% of ours), Messages 11.7% vs 5.2%, Claude 10.7% vs 6.8%. Apps that sit still got
+    /// suppressed, and sitting still in front of a document is what reading looks like.
+    ///
+    /// Sixty seconds, chosen against the consumer rather than picked round: `Queries.activity`
+    /// closes an activity block when consecutive frames are more than 120 s apart. Forcing at half
+    /// that keeps a continuously-viewed static window inside one unbroken block even when a tick is
+    /// lost to a slow OCR pass or a missed window lookup, so "read one document for an hour" reads
+    /// back as an hour rather than as absence. It also bounds the cost exactly: at most one extra
+    /// OCR pass and one JPEG per minute, a twentieth of what the 3 s tick could produce, and only
+    /// while a window is otherwise being suppressed.
+    static let forceCaptureInterval: Double = 60
 
     /// Letters and digits below which a frame is not worth a row of its own.
     ///
@@ -494,18 +576,35 @@ private enum ScreenPipeline {
         return candidates.first { $0.frame.width * $0.frame.height == largest }
     }
 
-    /// Capture dimensions that preserve aspect ratio and stay within `maxPixelSize`.
+    /// Pixel dimensions to capture, preserving aspect ratio.
+    ///
+    /// `SCContentFilter.contentRect` is in **points** while `SCStreamConfiguration.width`/`.height`
+    /// are in **pixels** ("output width as measured in pixels"), so passing the point size straight
+    /// through captured a Retina window at 1x and halved every glyph before Vision ever saw it. The
+    /// old `min(1, …)` clamp made it worse, because it could only ever shrink: a 1920 pt window
+    /// went out at 1600 px — 0.83x of the points, 0.42x of the pixels actually on screen — and
+    /// measured 19.6% CER with 32% identifier recall, two thirds of the searchable terms destroyed.
+    ///
+    /// So: scale *up* towards the backing store, cap at ``ocrMaxPixelSize``, and never go below 1x.
+    /// Below 1x throws away text that was on the screen; above the cap accuracy falls again (see
+    /// ``ocrMaxPixelSize``). The stored JPEG is brought back down separately in ``writeJPEG``.
+    ///
     /// A zero-area window makes the ratio NaN, and `Int(NaN)` traps rather than throwing — so a
     /// degenerate frame is refused here instead of crashing the app.
-    static func captureSize(for frame: CGRect) -> (width: Int, height: Int)? {
-        guard frame.width > 0, frame.height > 0,
-            frame.width.isFinite, frame.height.isFinite
+    static func captureSize(for rect: CGRect, pointPixelScale: CGFloat) -> (width: Int, height: Int)? {
+        guard rect.width > 0, rect.height > 0,
+            rect.width.isFinite, rect.height.isFinite
         else { return nil }
 
-        let scale = min(1, CGFloat(maxPixelSize) / max(frame.width, frame.height))
+        // A missing, non-finite or sub-1 scale would shrink the capture below the point size, which
+        // is the bug being fixed — fall back to 1x rather than trusting it.
+        let backing = (pointPixelScale.isFinite && pointPixelScale >= 1) ? pointPixelScale : 1
+        let longestPoints = max(rect.width, rect.height)
+        let target = min(longestPoints * backing, CGFloat(ocrMaxPixelSize))
+        let factor = max(1, target / longestPoints)
         return (
-            max(1, Int((frame.width * scale).rounded())),
-            max(1, Int((frame.height * scale).rounded()))
+            max(1, Int((rect.width * factor).rounded())),
+            max(1, Int((rect.height * factor).rounded()))
         )
     }
 
@@ -548,6 +647,18 @@ private enum ScreenPipeline {
 
     static func isSameScreen(_ lhs: UInt64, _ rhs: UInt64) -> Bool {
         (lhs ^ rhs).nonzeroBitCount <= dedupeDistance
+    }
+
+    /// Whether the dedup gate has suppressed everything for long enough that the next frame must be
+    /// stored regardless of how similar it looks. See ``forceCaptureInterval``.
+    ///
+    /// No prior pass means due: the first capture of a run is always worth storing.
+    static func isForceDue(lastFullPassAt: Double?, now: Double) -> Bool {
+        guard let lastFullPassAt else { return true }
+        let elapsed = now - lastFullPassAt
+        // Wall-clock, so an NTP correction or a wake from sleep can put `now` behind the last pass.
+        // A backwards jump counts as due rather than wedging capture until real time catches up.
+        return elapsed < 0 || elapsed >= forceCaptureInterval
     }
 
     // MARK: Off-main work
@@ -617,6 +728,27 @@ private enum ScreenPipeline {
         request.usesLanguageCorrection = true
         request.recognitionLanguages = recognitionLanguages
 
+        // Pinned rather than left on whatever `currentRevision` the running OS ships. `frames_fts`
+        // is durable and never re-OCR'd, so an OS update that changed the recogniser would split
+        // the index down the middle: text stored last month stops matching text stored tomorrow,
+        // unreproducibly, and nothing in the product could explain why. Revision 3 is the newest
+        // this SDK defines and 1 and 2 are deprecated as of macOS 15, so this is a behavioural
+        // no-op today — its entire job is to make a future revision 4 a decision with a
+        // re-measurement attached rather than a silent corpus change.
+        request.revision = VNRecognizeTextRequestRevision3
+
+        // Explicitly the most permissive setting, and pinned for the same reason as the revision.
+        //
+        // Worth stating because the obvious value is wrong here: 1/32 (0.03125) is the default for
+        // `VNDetectTextRectanglesRequest`, *not* for this request, whose documented and
+        // probe-confirmed default is 0.0. The SDK is unambiguous — "if the minimum height is set to
+        // 0.0 the image gets processed at the highest possible resolution with no downscaling …
+        // the smallest technically readable text will be recognized". So there is no recall to buy
+        // by lowering this: any non-zero value, 0.015 included, is a *raise* that makes Vision
+        // downscale and loses exactly the dense IDE and terminal text such a change is meant to
+        // win. The only lever on glyph height is the image handed in, which is `captureSize`.
+        request.minimumTextHeight = 0
+
         do {
             try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
         } catch {
@@ -659,8 +791,12 @@ private enum ScreenPipeline {
         return formatter
     }()
 
-    /// Belt and braces: the capture is already requested at `maxPixelSize`, but the stored JPEG must
-    /// honour the bound whatever ScreenCaptureKit hands back.
+    /// Brings the stored JPEG back to `maxPixelSize`.
+    ///
+    /// This used to be a no-op, because the capture itself was clamped to 1600 — which is precisely
+    /// why the OCR input size could not be raised without inflating storage. Now the capture is
+    /// sized for Vision (up to `ocrMaxPixelSize`) and this is the only thing holding the stored
+    /// image where it has always been.
     static func downscaled(_ image: CGImage, longestSide: Int) -> CGImage? {
         let longest = max(image.width, image.height)
         guard longest > longestSide else { return nil }

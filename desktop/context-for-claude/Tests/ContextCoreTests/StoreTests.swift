@@ -177,8 +177,17 @@ final class StoreTests: XCTestCase {
         XCTAssertThrowsError(try reader.pruneFrames(olderThanDays: 30)) { error in
             XCTAssertStoreError(error, .readOnly)
         }
+        // The byte cap refuses before it scans, not after: a reader that is under the cap must not
+        // report a successful sweep it never performed.
+        XCTAssertThrowsError(try reader.pruneFrames(toFitBytes: 0)) { error in
+            XCTAssertStoreError(error, .readOnly)
+        }
+        XCTAssertThrowsError(try reader.enforceRetention()) { error in
+            XCTAssertStoreError(error, .readOnly)
+        }
         // Reading is exactly what this connection exists for.
         XCTAssertNoThrow(try Queries.status(reader))
+        XCTAssertNoThrow(try reader.framesBytesOnDisk())
     }
 
     func testReadOnlyOpenOfAMissingDatabaseThrowsNotInitialized() throws {
@@ -247,7 +256,183 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(segments, 1)
     }
 
+    // MARK: - Pruning to a byte cap
+
+    func testByteCapDeletesTheOldestFramesFirstAndStopsAtTheCap() throws {
+        let store = fixture.store
+        let ocr = ["ancient vorpal", "old brillig", "middling mimsy", "recent slithy", "newest borogove"]
+        var ids = [Int64](repeating: 0, count: 5)
+        var paths = [String](repeating: "", count: 5)
+
+        // Inserted out of chronological order on purpose: "oldest" has to mean `capturedAt`, never
+        // insertion order — a cap that deletes by rowid would pass a same-order corpus and still
+        // throw away the wrong week on a real machine.
+        for index in [4, 2, 0, 3, 1] {
+            paths[index] = try writeImage(named: "frame-\(index).jpg", bytes: 1_000)
+            ids[index] = try fixture.addFrame(
+                at: Fixture.base + Double(index) * 60, app: "Xcode", window: "frame \(index)",
+                ocr: ocr[index], imagePath: paths[index])
+        }
+        XCTAssertEqual(try store.framesBytesOnDisk(), 5_000)
+
+        // Room for exactly three frames: the two oldest go, and not one frame more.
+        let deleted = try store.pruneFrames(toFitBytes: 3_000)
+
+        XCTAssertEqual(deleted, 2, "the cap over- or under-deleted")
+        XCTAssertEqual(try store.framesBytesOnDisk(), 3_000)
+
+        let remaining: [Int64] = try store.read { db in
+            try Int64.fetchAll(db, sql: "SELECT id FROM frames ORDER BY capturedAt")
+        }
+        XCTAssertEqual(remaining, [ids[2], ids[3], ids[4]], "what survived is not the newest stretch")
+
+        for index in [0, 1] {
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: paths[index]),
+                "frame \(index)'s JPEG outlived its row")
+        }
+        for index in [2, 3, 4] {
+            XCTAssertTrue(
+                FileManager.default.fileExists(atPath: paths[index]),
+                "a surviving frame's JPEG was unlinked")
+        }
+
+        // This sweep deletes by id list rather than by cutoff, so it needs its own proof that the FTS
+        // `ad` trigger ran: an index still answering with deleted rows is corrupt, not merely stale.
+        XCTAssertEqual(try frameMatches("vorpal"), 0)
+        XCTAssertEqual(try frameMatches("brillig"), 0)
+        XCTAssertEqual(try frameMatches("mimsy"), 1)
+        XCTAssertEqual(try frameMatches("borogove"), 1)
+    }
+
+    func testByteCapIsANoOpWhenAlreadyUnderTheCap() throws {
+        let store = fixture.store
+        // Nothing captured yet: the tightest possible cap still has nothing to do.
+        XCTAssertEqual(try store.pruneFrames(toFitBytes: 0), 0)
+
+        var paths: [String] = []
+        for index in 0..<3 {
+            let path = try writeImage(named: "frame-\(index).jpg", bytes: 1_000)
+            paths.append(path)
+            try fixture.addFrame(
+                at: Fixture.base + Double(index) * 60, app: "Xcode", window: "frame \(index)",
+                ocr: "note \(index)", imagePath: path)
+        }
+
+        XCTAssertEqual(try store.pruneFrames(toFitBytes: 10_000), 0, "deleted while under the cap")
+        // "At or under": a total sitting exactly on the cap is not over it.
+        XCTAssertEqual(try store.pruneFrames(toFitBytes: 3_000), 0, "deleted while exactly at the cap")
+
+        XCTAssertEqual(try count(of: "frames"), 3)
+        for path in paths {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: path), "a JPEG was unlinked for nothing")
+        }
+        XCTAssertEqual(try store.framesBytesOnDisk(), 3_000)
+    }
+
+    func testByteCapNeverTouchesTranscripts() throws {
+        let store = fixture.store
+        let sessionId = try store.openSession(at: Fixture.base, appHint: "zoom.us")
+        try fixture.addSegment(
+            session: sessionId, at: Fixture.base + 10, source: .mic,
+            "the words are the half that cannot be recaptured")
+        let path = try writeImage(named: "frame.jpg", bytes: 4_096)
+        try fixture.addFrame(
+            at: Fixture.base + 20, app: "Xcode", window: "frame", ocr: "vorpal", imagePath: path)
+
+        // A cap of zero is the harshest sweep there is; the transcript still has to survive it.
+        XCTAssertEqual(try store.pruneFrames(toFitBytes: 0), 1)
+
+        XCTAssertEqual(try count(of: "frames"), 0)
+        XCTAssertEqual(try count(of: "segments"), 1, "retention ate a transcript line")
+        XCTAssertEqual(try count(of: "sessions"), 1, "retention ate a session")
+        XCTAssertEqual(try segmentMatches("recaptured"), 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+    }
+
+    func testByteCapSweepsFramesWhoseJPEGWasNeverWritten() throws {
+        let store = fixture.store
+        // A frame whose OCR was captured but whose JPEG was skipped costs no disk. It is still
+        // deleted when it is older than something that has to go, so what survives stays one
+        // contiguous recent stretch rather than a corpus with holes in it.
+        try fixture.addFrame(at: Fixture.base, app: "Xcode", window: "no image", ocr: "ancient vorpal")
+        let olderPath = try writeImage(named: "older.jpg", bytes: 1_000)
+        try fixture.addFrame(
+            at: Fixture.base + 60, app: "Xcode", window: "older", ocr: "old brillig",
+            imagePath: olderPath)
+        let newestPath = try writeImage(named: "newest.jpg", bytes: 1_000)
+        let newest = try fixture.addFrame(
+            at: Fixture.base + 120, app: "Xcode", window: "newest", ocr: "newest slithy",
+            imagePath: newestPath)
+
+        XCTAssertEqual(try store.framesBytesOnDisk(), 2_000, "a row with no JPEG must count as zero")
+
+        let deleted = try store.pruneFrames(toFitBytes: 1_000)
+
+        XCTAssertEqual(deleted, 2)
+        let remaining: [Int64] = try store.read { db in
+            try Int64.fetchAll(db, sql: "SELECT id FROM frames ORDER BY capturedAt")
+        }
+        XCTAssertEqual(remaining, [newest])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: olderPath))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newestPath))
+    }
+
+    func testEnforceRetentionAppliesWhicheverBoundIsTighter() throws {
+        let store = fixture.store
+        // The age half reads the wall clock, so this corpus is anchored to it — sampled once, so
+        // every row shares one reading.
+        let now = ContextTime.now
+        let ancientPath = try writeImage(named: "ancient.jpg", bytes: 1_000)
+        try fixture.addFrame(
+            at: now - 40 * 86_400, app: "Xcode", window: "ancient", ocr: "ancient vorpal",
+            imagePath: ancientPath)
+
+        var recentIds: [Int64] = []
+        var recentPaths: [String] = []
+        for index in 0..<3 {
+            let path = try writeImage(named: "recent-\(index).jpg", bytes: 1_000)
+            recentPaths.append(path)
+            let id = try fixture.addFrame(
+                at: now - Double(3 - index) * 60, app: "Xcode", window: "recent \(index)",
+                ocr: "recent note \(index)", imagePath: path)
+            recentIds.append(id)
+        }
+
+        // Age takes the 40-day-old frame; the 2 KiB cap then takes one more that age would have kept.
+        let removed = try store.enforceRetention(olderThanDays: 30, toFitBytes: 2_000)
+
+        XCTAssertEqual(removed, 2)
+        let remaining: [Int64] = try store.read { db in
+            try Int64.fetchAll(db, sql: "SELECT id FROM frames ORDER BY capturedAt")
+        }
+        XCTAssertEqual(remaining, [recentIds[1], recentIds[2]])
+        XCTAssertEqual(try store.framesBytesOnDisk(), 2_000)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: ancientPath))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: recentPaths[0]))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recentPaths[1]))
+    }
+
     // MARK: - Helpers
+
+    /// A stand-in screenshot of an exact size, so a byte cap can be expressed in whole frames.
+    /// `Fixture.writeImage` writes a fixed four bytes, which cannot express "over the cap".
+    private func writeImage(named name: String, bytes: Int) throws -> String {
+        let directory = fixture.root.appendingPathComponent("Frames", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(name)
+        // A minimal JPEG SOI/EOI pair padded out, so anything that sniffs the file still sees an image.
+        var data = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        data.append(Data(repeating: 0, count: max(0, bytes - data.count)))
+        try data.write(to: url)
+        return url.path
+    }
+
+    private func count(of table: String) throws -> Int {
+        try fixture.store.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? -1
+        }
+    }
 
     private func segmentMatches(_ term: String) throws -> Int {
         try fixture.store.read { db in

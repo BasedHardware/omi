@@ -23,15 +23,33 @@ actor Transcriber {
     /// The wire format every capture source produces. Not configurable — the model wants 16 kHz.
     private static let sampleRate = 16_000
 
-    /// How much audio is decoded at a time.
+    /// How much audio is decoded at a time: exactly one encoder input.
     ///
-    /// Ten seconds is a deliberate trade against streaming. It costs a ~10 s lag before a line
-    /// appears, which nothing in Context for Claude cares about (there is no live caption UI — the transcript
-    /// is read minutes to months later). In exchange the decoder sees whole clauses instead of
-    /// fragments, so the text is punctuated and cased like written English rather than like a live
-    /// caption. It also stays under `ASRConstants.maxModelSamples` (240 000 = 15 s), so one window
-    /// is exactly one encoder pass with no internal chunking of its own.
-    private static let windowSeconds = 10.0
+    /// Deliberately *equal* to `ASRConstants.maxModelSamples` (240 000 samples — 15 s, since
+    /// `ASRConstants.sampleRate` is 16 kHz too) rather than merely under it, because the Parakeet
+    /// encoder is a fixed-shape CoreML graph: `Encoder.mlmodelc` declares `mel [1, 128, 1501]` with
+    /// `hasShapeFlexibility = 0` and always emits 188 frames, and on v3 even the preprocessor is
+    /// pinned to `audio_signal [1, 240000]`. FluidAudio zero-pads whatever it is handed up to that
+    /// length before inference (`AsrManager+Transcription`), so a 10 s window and a 15 s window are
+    /// the *same* encoder pass at the same cost — the short one merely discards a third of it, and
+    /// discards it unread, since `TdtFrameNavigation` clamps the decode to `min(encoderSequenceLength,
+    /// actualAudioFrames)` precisely "to avoid processing padding".
+    ///
+    /// Filling the window is therefore free coverage rather than extra work: 50 % more audio per
+    /// pass, and at full duty 240 passes an hour per source instead of 360.
+    ///
+    /// Sitting *at* the limit and never over it is what keeps it one pass. One sample more and
+    /// `transcribeWithState` routes to `ChunkProcessor`, which splits the window and pays two passes
+    /// for it; at exactly 240 000 both `frameAlignedAudio` and `padAudioIfNeeded` are no-ops, so the
+    /// tensor handed to the ANE is all real audio and nothing else.
+    ///
+    /// What it costs is latency — a line lands ~15 s after it was spoken, plus a pump tick. Nothing
+    /// in Context for Claude cares (there is no live caption UI; the transcript is read minutes to
+    /// months later), and the decoder seeing whole clauses instead of fragments is exactly why the
+    /// text comes out punctuated and cased like written English rather than like a live caption.
+    /// Fewer, longer windows also mean fewer seams, and every seam costs the words that straddle it
+    /// — see the fresh-decoder-state note in ``drain(force:)``.
+    private static let windowSamples = ASRConstants.maxModelSamples
 
     /// The pump interval. Shorter than a window on purpose: a window becomes complete at an
     /// arbitrary moment, and polling at 1 s means it waits at most a second to be decoded.
@@ -39,9 +57,15 @@ actor Transcriber {
 
     /// How far the sample clock may disagree with the wall clock before it is re-anchored.
     ///
-    /// One window. Capture latency is milliseconds, so anything approaching this is a real stall
+    /// Ten seconds. Capture latency is milliseconds, so anything approaching this is a real stall
     /// (device rebuild, system sleep, a tap that stopped delivering), not jitter.
-    private static let driftTolerance = windowSeconds
+    ///
+    /// Held at ten deliberately, rather than following the window length as it once did. The two
+    /// were equal by coincidence, not by construction: this measures how late audio *arrived*, which
+    /// `reanchorClockIfDrifted` reads from the total samples ever received and is therefore
+    /// independent of how much audio is decoded per pass. Letting it grow with the window would only
+    /// widen the band in which a stalled tap goes unnoticed and timestamps stay wrong.
+    private static let driftTolerance = 10.0
 
     /// Ceiling on undecoded audio.
     ///
@@ -50,7 +74,7 @@ actor Transcriber {
     /// that will run for weeks grow a buffer nobody bounded.
     private static let maxBufferedSeconds = 300.0
 
-    private static var windowBytes: Int { Int(windowSeconds * Double(sampleRate)) * 2 }
+    private static var windowBytes: Int { windowSamples * 2 }
     private static var maxBufferedBytes: Int { Int(maxBufferedSeconds * Double(sampleRate)) * 2 }
 
     // MARK: - Model selection
@@ -295,6 +319,12 @@ actor Transcriber {
 
         // FluidAudio rejects anything under 0.3 s outright. A tail that short holds no word worth
         // storing, so it is dropped here rather than thrown from inside the model.
+        //
+        // Dropped rather than held back to be batched with the next window: this is only reachable
+        // on the forced final drain, because the pump takes nothing but whole windows, so it is a
+        // once-per-`finish()` event and not a per-hour cost. There is nothing to batch it with
+        // either — the model takes one buffer per call, and the only other buffer in flight belongs
+        // to the other channel, which is a different speaker and a different `AsrManager`.
         guard take / 2 >= ASRConstants.minimumRequiredSamples(forSampleRate: Self.sampleRate) else {
             dropLeadingBytes(take)
             samplesConsumed += take / 2
@@ -332,7 +362,7 @@ actor Transcriber {
         do {
             // A fresh decoder state for EVERY window. This is the least obvious line in the file
             // and the most expensive one to get wrong. `TdtDecoderState` is designed to carry
-            // context across *contiguous* streaming chunks; carried across arbitrary 10 s windows —
+            // context across *contiguous* streaming chunks; carried across arbitrary 15 s windows —
             // which are not contiguous here, because silent and music windows are skipped — the
             // transducer drifts, starts looping on its own last token ("AND AND AND AND"),
             // Title-Cases every word, and eventually emits nothing but gibberish. Independent
