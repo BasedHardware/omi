@@ -83,38 +83,24 @@ enum NotchVoiceMorphGeometry {
 
   // MARK: - Speaking (response playback) pulse
 
-  /// Pulse geometry at full level. Dot swell carries most of the visible
-  /// motion (a radius-only pulse is sub-pixel at 21pt); the ring breathes a
-  /// little on top. Bounded so the outermost dot edge stays inside the 21pt
-  /// identity slot: 6.93×1.08 + (3.78×1.45)/2 ≈ 10.2 ≤ 10.5.
-  static let speakingRingScaleMax: CGFloat = 0.08
-  static let speakingDotScaleMax: CGFloat = 0.45
+  /// Maximum outward radial displacement of a speaking-ring dot, as a
+  /// fraction of the ring radius. Bounded so the outermost dot edge stays
+  /// inside the 21pt identity slot: 6.93×1.24 + 3.78/2 ≈ 10.48 ≤ 10.5.
+  static let speakingPushMax: CGFloat = 0.24
 
-  /// Speaker-cone pulse for the responding state — a primary beat with a
-  /// quieter overtone so the ring breathes organically instead of ticking
-  /// like a metronome. Returns 0…1.
-  static func speakerPulse(time: TimeInterval, reduceMotion: Bool) -> CGFloat {
-    guard !reduceMotion else { return 0 }
-    let primary = sin(time * 2 * .pi / 0.72)
-    let overtone = sin(time * 2 * .pi / 0.31 + 1.1) * 0.35
-    return clamp(CGFloat((primary + overtone) / 1.35) * 0.5 + 0.5)
-  }
-
-  static func speakingRingRadiusScale(pulse: CGFloat) -> CGFloat {
-    1 + speakingRingScaleMax * clamp(pulse)
-  }
-
-  static func speakingDotScale(pulse: CGFloat) -> CGFloat {
-    1 + speakingDotScaleMax * clamp(pulse)
-  }
-
-  /// Fraction of the speaking pulse allowed to wobble with time. The pulse
-  /// magnitude itself comes from the live output level; the wobble only keeps
-  /// sustained speech from freezing at one scale.
-  static let speakingWobbleShare: CGFloat = 0.25
-
-  static func speakingPulse(outputLevel: CGFloat, wobble: CGFloat) -> CGFloat {
-    clamp(outputLevel) * ((1 - speakingWobbleShare) + speakingWobbleShare * clamp(wobble))
+  /// Circular sound-wave displacement for one speaking-ring dot: two angular
+  /// harmonics travelling around the ring in opposite directions, scaled by
+  /// the live output level. Always outward (0…level) so the ring reads as
+  /// pushed by the voice — like a circular audio visualizer, not a uniform
+  /// swell.
+  static func speakingRadialPush(index: Int, time: TimeInterval, level: CGFloat) -> CGFloat {
+    let bounded = clamp(level)
+    guard bounded > 0 else { return 0 }
+    let angle = Double(index) / Double(dotCount) * 2 * .pi
+    let travelling = sin(angle * 2 + time * 2 * .pi / 0.85)
+    let counterWave = sin(angle * 3 - time * 2 * .pi / 0.5 + 1.3) * 0.6
+    let wave = (travelling + counterWave + 1.6) / 3.2
+    return bounded * clamp(CGFloat(wave))
   }
 
   // MARK: - Listening waveform
@@ -160,11 +146,16 @@ final class VoiceLevelDisplay {
   private var peak: CGFloat
   private var lastTime: TimeInterval?
 
-  init(minPeak: CGFloat, peakHalfLife: TimeInterval = 4) {
+  init(
+    minPeak: CGFloat,
+    peakHalfLife: TimeInterval = 4,
+    attackTau: TimeInterval = 0.05,
+    releaseTau: TimeInterval = 0.22
+  ) {
     self.minPeak = minPeak
     self.peakHalfLife = peakHalfLife
     peak = minPeak
-    smoother = VoiceLevelSmoother()
+    smoother = VoiceLevelSmoother(attackTau: attackTau, releaseTau: releaseTau)
   }
 
   func step(rawLevel: CGFloat, at time: TimeInterval) -> CGFloat {
@@ -223,8 +214,11 @@ struct NotchVoiceMorphMark: View {
   @State private var morphProgress: CGFloat = 0
   /// Reference peaks measured on real hardware: close-mic speech ~0.03–0.2
   /// RMS after the capture noise floor; post-mixer reply speech ~0.1–0.25.
-  @State private var micLevelDisplay = VoiceLevelDisplay(minPeak: 0.035)
-  @State private var voiceLevelDisplay = VoiceLevelDisplay(minPeak: 0.1)
+  /// The mic side smooths tighter so the wave snaps to syllables.
+  @State private var micLevelDisplay = VoiceLevelDisplay(
+    minPeak: 0.035, attackTau: 0.02, releaseTau: 0.11)
+  @State private var voiceLevelDisplay = VoiceLevelDisplay(
+    minPeak: 0.1, attackTau: 0.03, releaseTau: 0.14)
 
   var body: some View {
     TimelineView(.animation(paused: !isListening && !isThinking && !isSpeaking)) { timeline in
@@ -254,7 +248,7 @@ struct NotchVoiceMorphMark: View {
   private func draw(into context: inout GraphicsContext, size: CGSize, date: Date) {
     let base = min(size.width, size.height)
     let center = NotchVoiceMorphGeometry.center(in: size)
-    var dotDiameter = base * NotchVoiceMorphGeometry.dotDiameterRatio
+    let dotDiameter = base * NotchVoiceMorphGeometry.dotDiameterRatio
     let waveProgress = NotchVoiceMorphGeometry.waveProgress(
       morphProgress,
       reduceMotion: reduceMotion
@@ -271,23 +265,18 @@ struct NotchVoiceMorphMark: View {
       isThinking && !reduceMotion && morphProgress < 0.001
       ? time * 2 * .pi / 0.9
       : 0
-    // Response playback pulses the resting ring like a speaker cone whose
-    // magnitude IS the assistant's live output level (mixer tap): pauses in
-    // the reply leave the ring still, speech drives it. A small time wobble
-    // keeps sustained speech from freezing at one scale. Listening owns the
-    // waveform, so the pulse applies only in ring formation.
+    // Response playback renders the ring as a circular sound wave: each dot
+    // is pushed outward by a travelling angular wave whose magnitude IS the
+    // assistant's live output level (mixer tap). Pauses in the reply leave a
+    // clean still ring; speech ripples around it. Dot size stays constant —
+    // the voice displaces the ring, it doesn't inflate it. Listening owns
+    // the waveform, so this applies only in ring formation.
     let speakingPresentation = isSpeaking && !isListening && morphProgress < 0.001
-    let voiceLevel = voiceLevelDisplay.step(
-      rawLevel: CGFloat(AudioLevelMonitor.shared.liveVoicePlaybackLevel), at: time)
-    let speakingPulse =
+    let speakingLevel =
       speakingPresentation && !reduceMotion
-      ? NotchVoiceMorphGeometry.speakingPulse(
-        outputLevel: voiceLevel,
-        wobble: NotchVoiceMorphGeometry.speakerPulse(time: time, reduceMotion: reduceMotion))
+      ? voiceLevelDisplay.step(
+        rawLevel: CGFloat(AudioLevelMonitor.shared.liveVoicePlaybackLevel), at: time)
       : 0
-    if speakingPulse > 0 {
-      dotDiameter *= NotchVoiceMorphGeometry.speakingDotScale(pulse: speakingPulse)
-    }
 
     for index in 0..<NotchVoiceMorphGeometry.dotCount {
       let progress =
@@ -305,9 +294,11 @@ struct NotchVoiceMorphMark: View {
         let angle =
           Double(index) / Double(NotchVoiceMorphGeometry.dotCount) * Double.pi * 2
           - Double.pi + thinkingRotation
+        let push = NotchVoiceMorphGeometry.speakingRadialPush(
+          index: index, time: time, level: speakingLevel)
         let ringRadius =
           base * NotchVoiceMorphGeometry.ringRadiusRatio
-          * NotchVoiceMorphGeometry.speakingRingRadiusScale(pulse: speakingPulse)
+          * (1 + NotchVoiceMorphGeometry.speakingPushMax * push)
         position = CGPoint(
           x: center.x + CGFloat(cos(angle)) * ringRadius,
           y: center.y + CGFloat(sin(angle)) * ringRadius
