@@ -33,7 +33,8 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 
 `test.sh` writes unit-test-only placeholder auth inputs. Before installing an
 authenticated Android hardware build, follow `e2e/BLE_RELIABILITY_ACCEPTANCE.md`
-→ “Authenticated Android physical-device builds” and require
+→ “Authenticated Android physical-device builds” plus its verified maintainer
+toolchain, and require
 `scripts/verify_android_physical_test_auth_config.sh` to pass. Physical iPhone
 testing uses the prod inputs in `e2e/IOS_DEVICE_TESTING.md`.
 

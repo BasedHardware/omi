@@ -62,6 +62,41 @@ ignored configuration.
 An auth failure from an APK that did not pass this preflight is a build-fixture
 failure, not BLE evidence.
 
+#### Verified maintainer workstation toolchain
+
+On the maintainer Mac used for CV1 acceptance, establish the toolchain before
+regenerating or building. Do not replace `PATH` with a reduced list: Node lives
+under `$HOME/.local/bin` on this machine and repository gates require it.
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+export PATH="/opt/homebrew/bin:$HOME/.local/bin:$PATH"
+
+java -version
+flutter --version  # verified with Flutter 3.44.8
+node --version     # verified with Node 22.23.1
+```
+
+If the local network blocks the debug Crashlytics mapping upload, exclude only
+that upload task. Gradle still compiles and packages the complete dev APK:
+
+```bash
+cd android
+./gradlew app:assembleDevDebug \
+  -x app:uploadCrashlyticsMappingFileDevDebug \
+  -Ptarget-platform=android-arm64 \
+  -Ptarget=lib/main.dart
+cd ..
+
+shasum -a 256 build/app/outputs/flutter-apk/app-dev-debug.apk
+```
+
+Git hooks export the Omi worktree's `GIT_DIR`. Raw Flutter commands inside a
+hook can then inspect Omi instead of the Flutter SDK and report
+`0.0.0-unknown`. Hook-owned Flutter commands must use the checked-in
+`scripts/flutter-with-clean-git-env` wrapper. Its behavioral regression is part
+of the existing `setup-pre-push-prerequisites` gate.
+
 If native Android BLE code changed, also run its focused Gradle test target
 named in `app/AGENTS.md`. These tests must pass without a phone, network, sleep,
 or plugin callbacks.
