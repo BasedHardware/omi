@@ -238,6 +238,9 @@ jobs:
                         deployment[name] = {} if name in {"runtime_secrets", "runtime_env_vars"} else []
                     deployment[left] = binding_groups[left]
                     deployment[right] = binding_groups[right]
+                    deployment["fallback_runtime_secrets"] = {
+                        name: f"fallback-{name.lower()}:latest" for name in deployment["preserve_runtime_secrets"]
+                    }
                     self.write_json("config/public-build-contract.json", contract)
 
                     with self.assertRaisesRegex(ValueError, "runtime binding groups cannot overlap"):
@@ -525,6 +528,9 @@ jobs:
     def test_runtime_preflight_preserves_the_live_secret_reference_without_guessing_it(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        contract["targets"]["fake"]["deployment"]["fallback_runtime_secrets"] = {
+            "PRESERVED_RUNTIME_SECRET": "fallback-secret:latest"
+        }
         self.write_json("config/public-build-contract.json", contract)
         service = {
             "template": {
@@ -564,6 +570,9 @@ jobs:
     def test_runtime_preflight_rejects_a_disabled_preserved_secret_version(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        contract["targets"]["fake"]["deployment"]["fallback_runtime_secrets"] = {
+            "PRESERVED_RUNTIME_SECRET": "fallback-secret:latest"
+        }
         self.write_json("config/public-build-contract.json", contract)
         service = {
             "template": {
@@ -599,6 +608,9 @@ jobs:
     def test_runtime_preflight_rejects_missing_or_literal_preserved_secret(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        contract["targets"]["fake"]["deployment"]["fallback_runtime_secrets"] = {
+            "PRESERVED_RUNTIME_SECRET": "fallback-secret:latest"
+        }
         self.write_json("config/public-build-contract.json", contract)
         literal_service = {
             "template": {"containers": [{"env": [{"name": "PRESERVED_RUNTIME_SECRET", "value": "not-a-secret"}]}]}
@@ -620,6 +632,9 @@ jobs:
     def test_runtime_preflight_rejects_a_literal_secret_union_for_a_preserved_binding(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        contract["targets"]["fake"]["deployment"]["fallback_runtime_secrets"] = {
+            "PRESERVED_RUNTIME_SECRET": "fallback-secret:latest"
+        }
         self.write_json("config/public-build-contract.json", contract)
         service = {
             "template": {
@@ -646,24 +661,80 @@ jobs:
             ["fake-service: runtime binding PRESERVED_RUNTIME_SECRET has an ambiguous or malformed value source"],
         )
 
-    def test_runtime_preflight_requires_a_live_service_to_preserve_secret_bindings(self) -> None:
+    def test_runtime_preflight_uses_declared_fallback_bindings_for_a_first_create(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        contract["targets"]["fake"]["deployment"]["fallback_runtime_secrets"] = {
+            "PRESERVED_RUNTIME_SECRET": "fallback-secret:latest"
+        }
         self.write_json("config/public-build-contract.json", contract)
         original_validate = RUNTIME_PREFLIGHT.validate_secret_versions
         original_load = RUNTIME_PREFLIGHT.load_current_service
+        original_fallback = RUNTIME_PREFLIGHT.validate_fallback_secret_versions
         RUNTIME_PREFLIGHT.validate_secret_versions = lambda **_kwargs: []
         RUNTIME_PREFLIGHT.load_current_service = lambda **_kwargs: None
+        RUNTIME_PREFLIGHT.validate_fallback_secret_versions = lambda **_kwargs: []
         try:
-            errors = RUNTIME_PREFLIGHT.preflight(target=self.target(), project_id="fake-project")
+            errors, fallbacks = RUNTIME_PREFLIGHT.preflight_result(target=self.target(), project_id="fake-project")
         finally:
             RUNTIME_PREFLIGHT.validate_secret_versions = original_validate
             RUNTIME_PREFLIGHT.load_current_service = original_load
+            RUNTIME_PREFLIGHT.validate_fallback_secret_versions = original_fallback
 
-        self.assertEqual(
-            errors,
-            ["fake: cannot preserve runtime secrets because current Cloud Run service fake-service is absent"],
+        self.assertEqual(errors, [])
+        self.assertEqual(fallbacks, {"PRESERVED_RUNTIME_SECRET": "fallback-secret:latest"})
+
+    def test_runtime_preflight_never_outputs_fallback_bindings_for_a_live_service(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        contract["targets"]["fake"]["deployment"]["fallback_runtime_secrets"] = {
+            "PRESERVED_RUNTIME_SECRET": "fallback-secret:latest"
+        }
+        self.write_json("config/public-build-contract.json", contract)
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "PRESERVED_RUNTIME_SECRET",
+                                "valueSource": {"secretKeyRef": {"secret": "live-secret", "version": "7"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        original_validate = RUNTIME_PREFLIGHT.validate_secret_versions
+        original_load = RUNTIME_PREFLIGHT.load_current_service
+        original_validate_current = RUNTIME_PREFLIGHT.validate_current_bindings
+        original_validate_preserved = RUNTIME_PREFLIGHT.validate_preserved_secret_versions
+        RUNTIME_PREFLIGHT.validate_secret_versions = lambda **_kwargs: []
+        RUNTIME_PREFLIGHT.load_current_service = lambda **_kwargs: service
+        RUNTIME_PREFLIGHT.validate_current_bindings = lambda *_args: []
+        RUNTIME_PREFLIGHT.validate_preserved_secret_versions = lambda **_kwargs: []
+        try:
+            errors, fallbacks = RUNTIME_PREFLIGHT.preflight_result(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT.validate_secret_versions = original_validate
+            RUNTIME_PREFLIGHT.load_current_service = original_load
+            RUNTIME_PREFLIGHT.validate_current_bindings = original_validate_current
+            RUNTIME_PREFLIGHT.validate_preserved_secret_versions = original_validate_preserved
+
+        self.assertEqual(errors, [])
+        self.assertEqual(fallbacks, {})
+
+    def test_runtime_preflight_classifies_cloud_run_could_not_be_found_as_first_create(self) -> None:
+        original_run = RUNTIME_PREFLIGHT.subprocess.run
+        RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RUNTIME_PREFLIGHT.subprocess.CalledProcessError(
+                1, "gcloud", stderr="ERROR: Service [fake-service] could not be found"
+            )
         )
+        try:
+            self.assertIsNone(RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project"))
+        finally:
+            RUNTIME_PREFLIGHT.subprocess.run = original_run
 
     def test_runtime_preflight_rejects_secret_where_reviewed_runtime_config_will_be_applied(self) -> None:
         contract = fixture_contract()
@@ -704,6 +775,15 @@ jobs:
         self.assertEqual(
             personas.deployment.preserve_runtime_secrets,
             ("REDIS_HOST", "REDIS_PASSWORD", "NEXT_PUBLIC_OMI_APP_ID", "NEXT_PUBLIC_OMI_API_KEY"),
+        )
+        self.assertEqual(
+            personas.deployment.fallback_runtime_secrets,
+            {
+                "REDIS_HOST": "REDIS_HOST:latest",
+                "REDIS_PASSWORD": "REDIS_PASSWORD:latest",
+                "NEXT_PUBLIC_OMI_APP_ID": "NEXT_PUBLIC_OMI_APP_ID:latest",
+                "NEXT_PUBLIC_OMI_API_KEY": "NEXT_PUBLIC_OMI_API_KEY:latest",
+            },
         )
         self.assertEqual(
             personas.deployment.remove_runtime_secrets,

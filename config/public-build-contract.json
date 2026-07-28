@@ -141,6 +141,12 @@
           "NEXT_PUBLIC_OMI_APP_ID",
           "NEXT_PUBLIC_OMI_API_KEY"
         ],
+        "fallback_runtime_secrets": {
+          "REDIS_HOST": "REDIS_HOST:latest",
+          "REDIS_PASSWORD": "REDIS_PASSWORD:latest",
+          "NEXT_PUBLIC_OMI_APP_ID": "NEXT_PUBLIC_OMI_APP_ID:latest",
+          "NEXT_PUBLIC_OMI_API_KEY": "NEXT_PUBLIC_OMI_API_KEY:latest"
+        },
         "runtime_env_vars": {
           "LINKEDIN_RAPIDAPI_HOST": "linkedin-api8.p.rapidapi.com"
         },

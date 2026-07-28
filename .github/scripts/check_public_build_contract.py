@@ -75,6 +75,7 @@ class Deployment:
     flags: tuple[str, ...]
     runtime_secrets: dict[str, str]
     preserve_runtime_secrets: tuple[str, ...]
+    fallback_runtime_secrets: dict[str, str]
     runtime_env_vars: dict[str, str]
     remove_runtime_secrets: tuple[str, ...]
 
@@ -166,6 +167,22 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
     if len(set(raw_preserve_runtime_secrets)) != len(raw_preserve_runtime_secrets):
         raise ValueError(f"target {target_name} deployment preserve_runtime_secrets must be unique")
 
+    raw_fallback_runtime_secrets = raw_deployment.get("fallback_runtime_secrets", {})
+    if not isinstance(raw_fallback_runtime_secrets, Mapping) or not all(
+        isinstance(name, str)
+        and NAME.fullmatch(name)
+        and isinstance(reference, str)
+        and SECRET_REFERENCE.fullmatch(reference)
+        for name, reference in raw_fallback_runtime_secrets.items()
+    ):
+        raise ValueError(
+            f"target {target_name} deployment fallback_runtime_secrets must map environment names to secret:version"
+        )
+    if set(raw_fallback_runtime_secrets) != set(raw_preserve_runtime_secrets):
+        raise ValueError(
+            f"target {target_name} deployment fallback_runtime_secrets must declare exactly the preserved runtime secrets"
+        )
+
     raw_runtime_env_vars = raw_deployment.get("runtime_env_vars", {})
     if not isinstance(raw_runtime_env_vars, Mapping) or not all(
         isinstance(name, str)
@@ -194,6 +211,15 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
         "runtime_env_vars": set(raw_runtime_env_vars),
         "remove_runtime_secrets": set(raw_remove_runtime_secrets),
     }
+    fallback_overlaps = set(raw_fallback_runtime_secrets) & (
+        set(raw_runtime_secrets) | set(raw_runtime_env_vars) | set(raw_remove_runtime_secrets)
+    )
+    if fallback_overlaps:
+        raise ValueError(
+            f"target {target_name} deployment runtime binding groups cannot overlap: fallback_runtime_secrets and other "
+            f"runtime bindings: "
+            f"{', '.join(sorted(fallback_overlaps))}"
+        )
     group_names = tuple(binding_groups)
     overlaps = [
         f"{left} and {right}: {', '.join(sorted(binding_groups[left] & binding_groups[right]))}"
@@ -212,6 +238,7 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
         flags=tuple(raw_flags),
         runtime_secrets=dict(raw_runtime_secrets),
         preserve_runtime_secrets=tuple(raw_preserve_runtime_secrets),
+        fallback_runtime_secrets=dict(raw_fallback_runtime_secrets),
         runtime_env_vars=dict(raw_runtime_env_vars),
         remove_runtime_secrets=tuple(raw_remove_runtime_secrets),
     )
@@ -500,11 +527,14 @@ def validate_shared_actions(root: Path) -> list[str]:
         required_markers = (
             "config/public-build-contract.json",
             ".deployment.runtime_secrets",
+            "fallback_runtime_secrets",
             ".deployment.runtime_env_vars",
             ".deployment.remove_runtime_secrets",
             PREPARE_ACTION,
             "google-github-actions/auth@",
             "preflight_public_build_runtime.py",
+            "--github-output",
+            "steps.runtime-preflight.outputs.fallback_runtime_secrets",
             "docker/build-push-action@",
             "google-github-actions/deploy-cloudrun@",
             "no_traffic: true",
