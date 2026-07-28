@@ -21,6 +21,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
   - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
+  - desktop/macos/Desktop/Sources/Chat/StallDetector.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
   - desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
