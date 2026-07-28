@@ -123,8 +123,11 @@ class ListenParityCapture:
     def _observe(self, direction: str, payload: Mapping[str, Any], audio_bytes: int = 0) -> None:
         if not self._can_observe(audio_bytes):
             return
+        invocation = self._invocation
+        if invocation is None:
+            return
         try:
-            self._invocation.observe(direction, payload)
+            invocation.observe(direction, payload)
             self._event_count += 1
             self._audio_bytes += audio_bytes
         except Exception as error:
