@@ -87,11 +87,15 @@ enum PeopleGraphBuilder {
 
   /// UserDefaults-backed check-and-mark for a throttle `key`. Returns `true` (and records `now` as
   /// the new run time) when a run should proceed; returns `false` to skip. Combining the check and
-  /// the write here means a burst of near-simultaneous triggers only admits the first.
-  static func claimRun(_ key: DefaultsKey, force: Bool = false, now: Date = Date()) -> Bool {
+  /// the write here means a burst of near-simultaneous triggers only admits the first. `minInterval`
+  /// defaults to the graph-sync cadence but callers with tighter external budgets (e.g. the
+  /// rate-limited thread ingest) pass a longer one so they self-throttle more conservatively.
+  static func claimRun(
+    _ key: DefaultsKey, force: Bool = false, now: Date = Date(), minInterval: TimeInterval = minSyncInterval
+  ) -> Bool {
     let stored = UserDefaults.standard.double(forKey: key)  // 0.0 when never set
     let last = stored > 0 ? Date(timeIntervalSince1970: stored) : nil
-    guard shouldRun(lastRun: last, now: now, force: force) else { return false }
+    guard shouldRun(lastRun: last, now: now, force: force, minInterval: minInterval) else { return false }
     UserDefaults.standard.set(now.timeIntervalSince1970, forKey: key)
     return true
   }

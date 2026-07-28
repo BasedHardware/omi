@@ -143,4 +143,31 @@ final class PeopleGraphBuilderTests: XCTestCase {
       PeopleGraphBuilder.shouldRun(lastRun: now, now: now, force: true),
       "force must bypass the throttle window")
   }
+
+  /// The thread ingest reuses `claimRun`/`shouldRun` but with a much longer `minInterval` than the
+  /// graph sync, so its from-segments submissions stay within the endpoint's rate budget. A run that
+  /// clears the short graph-sync cadence must still be throttled under the ingest's own interval —
+  /// otherwise the ingest would fire every graph sync and burst past the rate limit.
+  func testIngestThrottleIsMoreConservativeThanGraphSync() {
+    let now = Date()
+    XCTAssertGreaterThan(
+      PeopleThreadIngest.minIngestInterval, PeopleGraphBuilder.minSyncInterval,
+      "the ingest must self-throttle more conservatively than the graph sync")
+
+    let justPastGraphSync = now.addingTimeInterval(-(PeopleGraphBuilder.minSyncInterval + 60))
+    XCTAssertTrue(
+      PeopleGraphBuilder.shouldRun(lastRun: justPastGraphSync, now: now, force: false),
+      "a run older than the graph-sync interval clears the default cadence")
+    XCTAssertFalse(
+      PeopleGraphBuilder.shouldRun(
+        lastRun: justPastGraphSync, now: now, force: false,
+        minInterval: PeopleThreadIngest.minIngestInterval),
+      "the same run is still throttled under the ingest's longer interval, keeping submissions within budget")
+
+    XCTAssertTrue(
+      PeopleGraphBuilder.shouldRun(
+        lastRun: now.addingTimeInterval(-PeopleThreadIngest.minIngestInterval), now: now, force: false,
+        minInterval: PeopleThreadIngest.minIngestInterval),
+      "a run older than the ingest interval proceeds")
+  }
 }

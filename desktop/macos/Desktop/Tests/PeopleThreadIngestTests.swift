@@ -164,6 +164,26 @@ final class PeopleThreadIngestTests: XCTestCase {
     XCTAssertEqual(capped.count, 1, "the per-run cap bounds how many threads are submitted at once")
   }
 
+  /// Regression guard for the ingest "burst" bug. `/v1/conversations/from-segments` is rate-limited
+  /// (a budget shared with voice capture) and indexes each conversation via best-effort background
+  /// work. A wide per-run batch trips the limiter — most POSTs 429 and are silently dropped, never
+  /// created — and floods the indexing so the conversations that *are* created never vectorize and
+  /// stay invisible to search and chat. Verified live: an isolated upload indexes reliably; a 40-wide
+  /// burst indexed none. The per-run batch must therefore stay small, and `newCandidates` must
+  /// actually enforce that cap over a large qualifying set.
+  func testPerRunBatchIsBoundedSoTheRateLimitedEndpointIsNotFlooded() {
+    XCTAssertLessThanOrEqual(
+      PeopleThreadIngest.maxPeoplePerRun, 10,
+      "a run must submit only a small batch; a wide burst is 429-dropped by the rate limiter and floods indexing")
+
+    let many = (0..<100).map { candidate("p\($0)", name: "Person \($0)", count: 100 - ($0 % 5)) }
+    let selected = PeopleThreadIngest.newCandidates(
+      many, ledger: [], cap: PeopleThreadIngest.maxPeoplePerRun)
+    XCTAssertEqual(
+      selected.count, PeopleThreadIngest.maxPeoplePerRun,
+      "newCandidates must cap the batch at maxPeoplePerRun even when far more threads qualify")
+  }
+
   // MARK: - Ledger IO
 
   func testLedgerRoundTripMergesKeys() throws {

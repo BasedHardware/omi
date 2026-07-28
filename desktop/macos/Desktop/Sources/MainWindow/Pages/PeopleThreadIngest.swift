@@ -43,7 +43,27 @@ enum PeopleThreadIngest {
   /// Max people (threads) submitted per run, so a first pass over a large message history trickles
   /// out rather than flooding the conversation list / backend. Remaining threads are picked up on
   /// subsequent throttled runs.
-  static let maxPeoplePerRun = 40
+  ///
+  /// Kept small on purpose: `/v1/conversations/from-segments` is rate-limited (a budget shared with
+  /// voice capture) and indexes each conversation via best-effort background work. A large burst both
+  /// trips the rate limiter — those POSTs 429 and are silently dropped, never created — and floods the
+  /// backend's post-processing so the conversations that *are* created never get vectorized, leaving
+  /// them invisible to search and chat. `maxPeoplePerRun` × runs-per-hour must stay well under the
+  /// endpoint budget; combined with `minIngestInterval` this holds the sustained rate there.
+  static let maxPeoplePerRun = 6
+
+  /// Minimum spacing between the ingest's *own* runs. The graph sync runs on a short (`minSyncInterval`,
+  /// 5 min) cadence, but ingesting `maxPeoplePerRun` threads that often would exceed the from-segments
+  /// rate budget, so the ingest self-throttles far more conservatively — its sustained submission rate
+  /// stays well under the limit while a large backlog still trickles out across runs.
+  static let minIngestInterval: TimeInterval = 30 * 60
+
+  /// Gap between successive uploads within a single run. from-segments indexes each conversation with
+  /// best-effort background work; submitting a batch back-to-back floods that work and the vectors are
+  /// dropped (the conversation is created but never becomes searchable). Spacing the uploads keeps each
+  /// one isolated enough to be accepted by the rate limiter and fully indexed — verified live: isolated
+  /// uploads index reliably, a 40-wide burst indexed none.
+  static let interSubmitDelayNanoseconds: UInt64 = 4_000_000_000
 
   /// Only the most-recent messages of a thread are turned into a transcript (bounds token cost and
   /// stays well under the backend's 500-segment ceiling).
@@ -128,17 +148,23 @@ enum PeopleThreadIngest {
   /// Access, not signed in, offline — is a no-op.
   static func ingestIfNeeded(uid: String?, force: Bool = false) async {
     guard UserDefaults.standard.bool(forKey: .peopleIMessageExport) else { return }
-    guard PeopleGraphBuilder.claimRun(.peopleThreadIngestLastRun, force: force) else { return }
+    guard PeopleGraphBuilder.claimRun(.peopleThreadIngestLastRun, force: force, minInterval: minIngestInterval)
+    else { return }
 
     let plan: SubmissionPlan? = await Task.detached(priority: .utility) {
       buildPlan(uid: uid)
     }.value
     guard let plan, !plan.submissions.isEmpty else { return }
 
-    // Submit sequentially. Only successfully-submitted window keys are recorded, so a transient
-    // failure is simply retried on the next run.
+    // Submit sequentially and *paced*. Only successfully-submitted window keys are recorded, so any
+    // un-submitted thread is retried on a later throttled run. Pacing matters: a back-to-back burst
+    // both trips the from-segments rate limiter and floods the backend's best-effort indexing, which
+    // silently drops the conversations' vectors (created but unsearchable).
     var submitted: Set<String> = []
-    for submission in plan.submissions {
+    for (index, submission) in plan.submissions.enumerated() {
+      if index > 0 {
+        try? await Task.sleep(nanoseconds: interSubmitDelayNanoseconds)
+      }
       do {
         let request = APIClient.CreateConversationFromSegmentsRequest(
           transcript_segments: submission.segments,
@@ -151,7 +177,12 @@ enum PeopleThreadIngest {
         _ = try await APIClient.shared.createConversationFromSegments(request)
         submitted.insert(submission.windowKey)
       } catch {
-        // Silent: not-signed-in / offline / rate-limited / server error. Retried next run.
+        // Stop the run on the first failure — typically a 429 once the shared from-segments budget is
+        // spent, or offline/auth. Un-submitted windows are NOT ledgered, so they retry on a later
+        // throttled run once budget has freed, instead of hammering the rate limiter every run (which
+        // previously produced a silent 429 storm and left threads permanently un-ingested).
+        log("PeopleThreadIngest: stopped after \(submitted.count) submitted — \(error)")
+        break
       }
     }
     guard !submitted.isEmpty else { return }
