@@ -1,0 +1,138 @@
+import Foundation
+
+/// Every on-disk location the app and the MCP server agree on.
+///
+/// Deliberately independent of the Omi desktop app's own support directory — Context for Claude never reads or
+/// writes Omi's data, and Omi never sees Context for Claude's.
+public enum ContextPaths {
+    public static let bundleIdentifier = "com.omi.context-for-claude"
+
+    /// `~/Library/Application Support/ContextForClaude`
+    public static var supportDirectory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir = base.appendingPathComponent("ContextForClaude", isDirectory: true)
+        // Runs here rather than in `ensureSupportDirectory`: the store opens the database by path
+        // and creates the directory itself, so anything gated on "the destination does not exist
+        // yet" had already lost the race by the time that ran.
+        migrateLegacyDirectoryIfNeeded(into: dir)
+        migrateLegacyDatabaseIfNeeded(in: dir)
+        return dir
+    }
+
+    /// `~/Library/Application Support/ContextForClaude/context.db`
+    public static var databaseURL: URL {
+        supportDirectory.appendingPathComponent("context.db")
+    }
+
+    /// Where screen JPEGs live, one directory per day.
+    public static var framesDirectory: URL {
+        supportDirectory.appendingPathComponent("Frames", isDirectory: true)
+    }
+
+    public static func framesDirectory(for epoch: Double) -> URL {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return framesDirectory.appendingPathComponent(f.string(from: Date(timeIntervalSince1970: epoch)), isDirectory: true)
+    }
+
+    /// Written by the app so the MCP server can report live capture state without an IPC channel.
+    public static var heartbeatURL: URL {
+        supportDirectory.appendingPathComponent("capture-state.json")
+    }
+
+    @discardableResult
+    public static func ensureSupportDirectory() throws -> URL {
+        let dir = supportDirectory
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Directory names this app has shipped under, oldest first.
+    private static let legacyDirectoryNames = ["Earshot", "OmiAmbient"]
+    /// Database filenames this app has shipped under, oldest first.
+    private static let legacyDatabaseNames = ["earshot.db", "ambient.db"]
+
+    /// Moving the directory is not enough — the database inside it is named too, and a renamed
+    /// folder holding a database nobody looks for is data loss that reports success. Carries the
+    /// WAL and shared-memory sidecars with it; leaving those behind orphans uncheckpointed writes.
+    private static func migrateLegacyDatabaseIfNeeded(in directory: URL) {
+        let fm = FileManager.default
+        let destination = directory.appendingPathComponent("context.db")
+        guard !fm.fileExists(atPath: destination.path) else { return }
+
+        for name in legacyDatabaseNames {
+            let legacy = directory.appendingPathComponent(name)
+            guard fm.fileExists(atPath: legacy.path) else { continue }
+            for suffix in ["", "-wal", "-shm"] {
+                let from = directory.appendingPathComponent(name + suffix)
+                let to = directory.appendingPathComponent("context.db" + suffix)
+                guard fm.fileExists(atPath: from.path) else { continue }
+                try? fm.moveItem(at: from, to: to)
+            }
+            return
+        }
+    }
+
+    /// Carries the database, the frames and the upload queue across a rename.
+    ///
+    /// A renamed product that silently abandons everything it recorded is a data-loss bug wearing a
+    /// cosmetic change's clothing — the pending upload queue in particular, which is the only record
+    /// of conversations owed to the account. Runs once: after the move the old directory is gone, so
+    /// the guard below is false forever after.
+    private static func migrateLegacyDirectoryIfNeeded(into destination: URL) {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: destination.path) else { return }
+
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        for name in legacyDirectoryNames {
+            let legacy = base.appendingPathComponent(name, isDirectory: true)
+            guard fm.fileExists(atPath: legacy.path) else { continue }
+            do {
+                try fm.moveItem(at: legacy, to: destination)
+                return
+            } catch {
+                // A failed move must not stop a launch: worst case the app starts empty, which is
+                // recoverable, where refusing to start is not.
+                continue
+            }
+        }
+    }
+}
+
+/// The app writes this; `context-for-claude-mcp` reads it. A file rather than a socket because the MCP server
+/// is spawned per Claude session and must work whether or not the app happens to be running.
+public struct CaptureState: Codable, Sendable, Equatable {
+    public var capturing: Bool
+    public var pausedReason: String?
+    public var capabilities: [CapabilityReport]
+    public var updatedAt: Double
+
+    public init(
+        capturing: Bool,
+        pausedReason: String? = nil,
+        capabilities: [CapabilityReport] = [],
+        updatedAt: Double = ContextTime.now
+    ) {
+        self.capturing = capturing
+        self.pausedReason = pausedReason
+        self.capabilities = capabilities
+        self.updatedAt = updatedAt
+    }
+
+    /// Considered live only if the app touched it recently; otherwise the app is not running.
+    public static let stalenessSeconds: Double = 90
+
+    public var isStale: Bool { ContextTime.now - updatedAt > Self.stalenessSeconds }
+
+    public func write(to url: URL = ContextPaths.heartbeatURL) throws {
+        try ContextPaths.ensureSupportDirectory()
+        let data = try JSONEncoder().encode(self)
+        try data.write(to: url, options: .atomic)
+    }
+
+    public static func read(from url: URL = ContextPaths.heartbeatURL) -> CaptureState? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(CaptureState.self, from: data)
+    }
+}
