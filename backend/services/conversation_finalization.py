@@ -14,7 +14,7 @@ from typing import Any
 from google.api_core.exceptions import InvalidArgument
 
 from database import conversation_finalization_jobs as jobs_db
-from database._client import is_document_size_limit_error
+from database.firestore_errors import is_document_size_limit_error
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
