@@ -118,11 +118,8 @@ AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS = _positive_timeout_from_env('AGENT_STRE
 AGENT_STREAM_MAX_DURATION_SECONDS = _positive_timeout_from_env('AGENT_STREAM_MAX_DURATION_SECONDS', 150.0)
 AGENT_STREAM_CANCEL_GRACE_SECONDS = _positive_timeout_from_env('AGENT_STREAM_CANCEL_GRACE_SECONDS', 2.0)
 
-# Per-attempt idle bound on the provider call. A healthy stream emits deltas and pings
-# continuously, so silence is a stall rather than a long generation, and this is a gap timeout
-# rather than a cap on how long an answer may take. The shared client default (120s) is more
-# than the whole turn deadline below, which is what left a stalled attempt with no room for a
-# second one; keeping an attempt well under the total budget is what makes a retry possible.
+# Idle gap between stream events, not a cap on answer length. Must stay well under the total
+# duration above or a stalled attempt leaves no room to retry.
 AGENT_STREAM_PROVIDER_IDLE_TIMEOUT_SECONDS = _positive_timeout_from_env(
     'AGENT_STREAM_PROVIDER_IDLE_TIMEOUT_SECONDS', 45.0
 )
@@ -487,12 +484,11 @@ async def get_mobile_city(uid: str, platform: Optional[str]) -> Optional[str]:
 
 
 async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list, text: str) -> None:
-    """Stream text to the client *and* record it as part of the answer.
+    """Stream text to the client and record it as part of the answer.
 
-    ``callback.put_data`` alone only reaches the live SSE stream. The answer the caller persists
-    and sends in the terminal ``done:`` frame is built from ``full_response``, so text that skips
-    it is overwritten by the router's canned error the moment the turn ends — the user watches a
-    real explanation arrive and then get replaced by "something went wrong".
+    ``put_data`` alone reaches only the live stream; the persisted reply and the terminal
+    ``done:`` frame are built from ``full_response``, so text that skips it is overwritten by
+    the router's canned error when the turn ends.
     """
     full_response.append(text)
     await callback.put_data(text)
@@ -515,9 +511,7 @@ async def _run_anthropic_agent_stream(
     and feeds results back until the model stops requesting tools.
 
     Returns ``None`` when the loop finished on its own terms, or a short failure reason when it
-    gave up on the provider. The caller records that reason: a turn that ends with no answer
-    because the provider failed is otherwise indistinguishable in logs and metrics from a model
-    that legitimately produced nothing.
+    gave up on the provider.
     """
     # System prompt with cache_control for Anthropic prompt caching
     # TTL=1h: Anthropic changed default from 1h→5m on 2026-03-06; interactive chat
@@ -530,9 +524,6 @@ async def _run_anthropic_agent_stream(
     while True:
         loop_iteration += 1
 
-        # A transport-class failure loses the attempt, not the turn: nothing has been streamed
-        # to the user yet and tool calls run only after the stream closes cleanly, so the same
-        # request can simply be sent again.
         attempts_made = 0
         retried_reason: Optional[str] = None
 
@@ -999,9 +990,8 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         # Store results in callback_data
         if callback_data is not None:
             callback_data['answer'] = ''.join(full_response)
-            # A provider failure the loop could not recover from is reported even though the
-            # stream itself ended cleanly. Without it the router logs and the fallback metric
-            # cannot tell a failed turn apart from one the model ended empty on its own.
+            # Reported even though the stream ended cleanly, so the router can tell a failed
+            # turn from one the model ended empty on its own.
             if producer_failure:
                 callback_data['error'] = producer_failure
             callback_data['memories_found'] = conversations_collected if conversations_collected else []
