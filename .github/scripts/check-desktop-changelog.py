@@ -19,6 +19,11 @@ EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/scripts/qualify-desktop-beta.sh",
     # Capacity/lease authority for the same internal qualification runner.
     "desktop/macos/scripts/qualification-cache-reclaim.py",
+    # M1 self-clean / lost-communication recovery for the qualification runner
+    # (#10759). Internal release infrastructure; post-merge push must not demand
+    # a user-facing changelog fragment (FC-push-gate-internal-path-scope).
+    "desktop/macos/scripts/qualification-runner-self-clean.py",
+    "desktop/macos/scripts/qualification-watchdog.py",
     # Sibling qualification-runner helper to qualify-desktop-beta.sh: internal
     # release infrastructure with no user-facing app surface.
     "desktop/macos/scripts/qualification-swift-cache.sh",

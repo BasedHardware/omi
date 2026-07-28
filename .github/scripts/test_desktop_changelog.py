@@ -72,6 +72,9 @@ class ChangelogRequirementTests(unittest.TestCase):
             "desktop/macos/docs/qualification-environment.md",
             "desktop/macos/scripts/qualify-desktop-beta.sh",
             "desktop/macos/scripts/qualification-cache-reclaim.py",
+            # #10759 M1 self-clean/watchdog helpers (EXEMPT_DESKTOP_PATHS).
+            "desktop/macos/scripts/qualification-runner-self-clean.py",
+            "desktop/macos/scripts/qualification-watchdog.py",
             # Sibling qualification-runner helper (EXEMPT_DESKTOP_PATHS).
             "desktop/macos/scripts/qualification-swift-cache.sh",
             "desktop/macos/scripts/qualification-lease-command.sh",
