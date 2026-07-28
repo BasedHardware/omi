@@ -74,6 +74,54 @@ def merge_subject_re(version: str) -> re.Pattern[str]:
     )
 
 
+def changelog_inputs_changed_since(
+    repository_root: Path,
+    *,
+    base_sha: str,
+    planned_source_sha: str,
+) -> bool:
+    """True when planned source carries newer changelog inputs than base.
+
+    Parent-mismatch already-on-main recovery is only safe when tip-bumps (or
+    other non-changelog commits) advanced the planned source. New unreleased
+    fragments or release notes after the consolidate must force a fresh
+    consolidation so they are not silently attributed to a later version.
+    """
+
+    base_sha = require_sha("base_sha", base_sha)
+    planned_source_sha = require_sha("planned_source_sha", planned_source_sha)
+    changed = git(
+        repository_root,
+        [
+            "diff",
+            "--name-only",
+            "--diff-filter=ACDMR",
+            f"{base_sha}..{planned_source_sha}",
+            "--",
+            "desktop/macos/changelog/unreleased",
+            "desktop/macos/changelog/releases",
+            "desktop/macos/CHANGELOG.json",
+        ],
+    )
+    if changed.strip():
+        return True
+    # Also treat any unreleased fragment present on the planned tree as pending
+    # input even if the path was unchanged (empty tree edge cases).
+    unreleased = git(
+        repository_root,
+        [
+            "ls-tree",
+            "-r",
+            "--name-only",
+            planned_source_sha,
+            "--",
+            "desktop/macos/changelog/unreleased",
+        ],
+        check=False,
+    )
+    return any(path.endswith(".json") for path in unreleased.splitlines())
+
+
 def find_main_reachable_consolidate(
     repository_root: Path,
     *,
@@ -83,8 +131,9 @@ def find_main_reachable_consolidate(
 ) -> str | None:
     """Return consolidate commit on main for this version.
 
-    Prefer parent == planned source. Fall back to any main-reachable consolidate
-    with the exact version subject (tip-bump / partial tag recovery).
+    Prefer parent == planned source. Fall back to a main-reachable consolidate
+    with the exact version subject only when changelog inputs did not advance
+    after that consolidate (tip-bump / partial tag recovery).
     """
     planned_source_sha = require_sha("planned_source_sha", planned_source_sha)
     want = consolidate_subject(version)
@@ -110,7 +159,17 @@ def find_main_reachable_consolidate(
             break
         if version_match is None:
             version_match = sha
-    return parent_match or version_match
+    if parent_match is not None:
+        return parent_match
+    if version_match is None:
+        return None
+    if changelog_inputs_changed_since(
+        repository_root,
+        base_sha=version_match,
+        planned_source_sha=planned_source_sha,
+    ):
+        return None
+    return version_match
 
 
 def find_changelog_merge_on_main(
