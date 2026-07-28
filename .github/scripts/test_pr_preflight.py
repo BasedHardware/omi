@@ -353,7 +353,13 @@ class SelectionTests(unittest.TestCase):
             self.assertIn(event, changes_job)
             self.assertIn(event, hygiene_job)
         self.assertIn("scripts/pr-preflight", metadata_job)
-        self.assertIn("github.event.pull_request.base.sha", metadata_job)
+        # base.sha is frozen at whatever PR event last delivered it, so a
+        # metadata-only edited/labeled/unlabeled event days after the last push
+        # can diff against a base main has long since moved past (false invariant
+        # hits on files the PR never touched). origin/<base_ref> is resolved live
+        # against the fetch-depth:0 checkout instead, matching the `changes` job.
+        self.assertNotIn("github.event.pull_request.base.sha", metadata_job)
+        self.assertIn('--base "origin/${{ github.base_ref }}"', metadata_job)
         self.assertIn("astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84", metadata_job)
         self.assertLess(metadata_job.index("Set up uv"), metadata_job.index("Run current PR metadata preflight"))
         self.assertIn("github.event_name != 'pull_request'", changes_job)
