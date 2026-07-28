@@ -1,10 +1,10 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6292,
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6275,
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2912
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "The elicitation queue and its subscription live in ElicitationProjection; the provider keeps the reference plus the hook that records an answer as an ordinary user turn through the kernel journal.",
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "The elicitation queue, its staged answers, and its runtime subscription live in ElicitationProjection and ElicitationStore; the provider keeps only the reference and one start call.",
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "update_action_item accepts the realtime `id` alias and backend task writes refresh TasksStore so agent-created tasks appear immediately; already-granted permissions still gate their Settings/drag-card opens behind the granted result."
   },
   "threshold": 1500
