@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -26,6 +27,20 @@ class RuntimePreflightError(Exception):
     def __init__(self, message: str, *, category: str = "unknown") -> None:
         super().__init__(message)
         self.category = category
+
+
+def _sanitized_gcloud_diagnostic(error: subprocess.CalledProcessError) -> str:
+    """Keep an actionable command failure without exposing credential-shaped text."""
+
+    raw = "\n".join(part for part in (error.stderr, error.stdout) if part)
+    compact = " ".join(raw.split())
+    # gcloud normally omits credentials, but failures can include echoed input
+    # from a proxy or wrapper.  Do not turn a deployment error into a leak.
+    for marker in ("access_token", "authorization", "password", "secret", "token"):
+        compact = re.sub(
+            rf"(?i)({marker}\s*[=:]\s*)[^\s,;]+", r"\1[REDACTED]", compact
+        )
+    return compact[:500] or "no diagnostic returned"
 
 
 def split_secret_reference(reference: str) -> tuple[str, str]:
@@ -153,7 +168,7 @@ def validate_current_bindings(target: Target, service: Mapping[str, Any]) -> lis
     return errors
 
 
-def _gcloud_json(arguments: Sequence[str]) -> Mapping[str, Any]:
+def _gcloud_json_document(arguments: Sequence[str]) -> Any:
     try:
         completed = subprocess.run(
             ["gcloud", *arguments, "--format=json"],
@@ -163,35 +178,55 @@ def _gcloud_json(arguments: Sequence[str]) -> Mapping[str, Any]:
         )
     except subprocess.CalledProcessError as exc:
         raw_message = f"{exc.stderr}\n{exc.stdout}".lower()
-        if (
-            "not found" in raw_message
-            or "could not be found" in raw_message
-            or "does not exist" in raw_message
-            or "not_found" in raw_message
-        ):
-            message, category = "resource not found", "not_found"
-        elif "permission denied" in raw_message or "permissiondenied" in raw_message:
+        if "permission denied" in raw_message or "permissiondenied" in raw_message:
             message, category = "permission denied", "permission_denied"
         elif "unauthenticated" in raw_message or "authentication" in raw_message:
             message, category = "authentication failed", "unauthenticated"
         else:
-            message, category = "gcloud command failed", "unknown"
+            message = f"gcloud command failed: {_sanitized_gcloud_diagnostic(exc)}"
+            category = "unknown"
         raise RuntimePreflightError(message, category=category) from exc
     try:
         result = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimePreflightError("gcloud returned invalid JSON") from exc
+    return result
+
+
+def _gcloud_json(arguments: Sequence[str]) -> Mapping[str, Any]:
+    result = _gcloud_json_document(arguments)
     if not isinstance(result, Mapping):
         raise RuntimePreflightError("gcloud returned an unexpected JSON document")
     return result
 
 
-def _is_missing_service(error: RuntimePreflightError) -> bool:
-    return error.category == "not_found"
+def _cloud_run_service_exists(*, target: Target, project_id: str) -> bool:
+    """Read the service collection before treating a deployment as a first create.
+
+    A failed ``describe`` is ambiguous: it can mean a missing service, expired
+    credentials, a malformed request, or an API failure.  A successfully
+    authenticated, name-filtered list has an unambiguous empty-result contract.
+    """
+
+    result = _gcloud_json_document(
+        [
+            "run",
+            "services",
+            "list",
+            f"--project={project_id}",
+            f"--region={target.deployment.region}",
+            f"--filter=metadata.name={target.service}",
+        ]
+    )
+    if not isinstance(result, list) or not all(isinstance(item, Mapping) for item in result):
+        raise RuntimePreflightError("gcloud returned an unexpected Cloud Run service list")
+    return bool(result)
 
 
 def load_current_service(*, target: Target, project_id: str) -> Mapping[str, Any] | None:
     try:
+        if not _cloud_run_service_exists(target=target, project_id=project_id):
+            return None
         return _gcloud_json(
             [
                 "run",
@@ -203,10 +238,8 @@ def load_current_service(*, target: Target, project_id: str) -> Mapping[str, Any
             ]
         )
     except RuntimePreflightError as exc:
-        if _is_missing_service(exc):
-            return None
         raise RuntimePreflightError(
-            f"{target.name}: cannot read current Cloud Run service {target.service}: {exc}"
+            f"{target.name}: cannot inspect current Cloud Run service {target.service}: {exc}", category=exc.category
         ) from exc
 
 

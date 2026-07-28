@@ -724,17 +724,51 @@ jobs:
         self.assertEqual(errors, [])
         self.assertEqual(fallbacks, {})
 
-    def test_runtime_preflight_classifies_cloud_run_could_not_be_found_as_first_create(self) -> None:
+    def test_runtime_preflight_treats_an_authenticated_empty_service_list_as_first_create(self) -> None:
         original_run = RUNTIME_PREFLIGHT.subprocess.run
-        RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            RUNTIME_PREFLIGHT.subprocess.CalledProcessError(
-                1, "gcloud", stderr="ERROR: Service [fake-service] could not be found"
-            )
-        )
+        RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: type("Result", (), {"stdout": "[]"})()
         try:
             self.assertIsNone(RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project"))
         finally:
             RUNTIME_PREFLIGHT.subprocess.run = original_run
+
+    def test_runtime_preflight_does_not_infer_first_create_from_describe_text(self) -> None:
+        original_run = RUNTIME_PREFLIGHT.subprocess.run
+        calls: list[list[str]] = []
+
+        def run(command, **_kwargs):
+            calls.append(command)
+            if "list" in command:
+                return type("Result", (), {"stdout": '[{"metadata": {"name": "fake-service"}}]'})()
+            raise RUNTIME_PREFLIGHT.subprocess.CalledProcessError(
+                1, command, stderr="ERROR: Service [fake-service] could not be found"
+            )
+
+        RUNTIME_PREFLIGHT.subprocess.run = run
+        try:
+            with self.assertRaisesRegex(
+                RUNTIME_PREFLIGHT.RuntimePreflightError,
+                "cannot inspect current Cloud Run service fake-service: gcloud command failed: ERROR: Service",
+            ):
+                RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT.subprocess.run = original_run
+        self.assertEqual(2, len(calls))
+
+    def test_runtime_preflight_redacts_unknown_gcloud_diagnostic(self) -> None:
+        original_run = RUNTIME_PREFLIGHT.subprocess.run
+        RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RUNTIME_PREFLIGHT.subprocess.CalledProcessError(
+                1, "gcloud", stderr="backend rejected access_token=should-not-appear"
+            )
+        )
+        try:
+            with self.assertRaises(RUNTIME_PREFLIGHT.RuntimePreflightError) as raised:
+                RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT.subprocess.run = original_run
+        self.assertIn("access_token=[REDACTED]", str(raised.exception))
+        self.assertNotIn("should-not-appear", str(raised.exception))
 
     def test_runtime_preflight_rejects_secret_where_reviewed_runtime_config_will_be_applied(self) -> None:
         contract = fixture_contract()
