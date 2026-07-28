@@ -86,6 +86,7 @@ import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapter
 import {
   askUser,
   createKernelElicitationResolver,
+  elicitationPendingFields,
   elicitationResolution,
   humanIsBeingAsked,
 } from "./runtime/desktop-elicitation-resolver.js";
@@ -1330,16 +1331,7 @@ async function main(): Promise<void> {
         dispatchId,
         sessionId,
         runId,
-        channel: request.channel,
-        mode: request.mode,
-        adapterId: request.adapterId,
-        title: request.title,
-        prompt: request.prompt,
-        subject: request.subject,
-        context: request.context,
-        options: request.options.map((option) => ({ ...option })),
-        allowsFreeText: request.allowsFreeText,
-        recommendedDefault: request.recommendedDefault,
+        ...elicitationPendingFields(request),
         createdAtMs,
       }),
       resolved: ({ dispatchId, ownerId, outcome }) => send({

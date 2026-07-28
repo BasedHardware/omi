@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   askUser,
   createKernelElicitationResolver,
+  elicitationPendingFields,
   outcomeFromResolution,
 } from "../src/runtime/desktop-elicitation-resolver.js";
 import { normalizeAcpPermission, normalizeAskUser } from "../src/runtime/desktop-elicitation.js";
@@ -309,6 +310,59 @@ describe("the surface and the runtime agree on the answer's shape", () => {
     const cancelled = elicitationResolution({});
     expect(outcomeFromResolution(question, "resolved", cancelled))
       .toMatchObject({ kind: "cancelled" });
+  });
+});
+
+describe("the surface and the runtime agree on the question's shape", () => {
+  it("carries the pick-many constraint out to the card", () => {
+    const [multi, single] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [
+          { question: "Any constraints?", options: ["offline", "realtime"], allow_multiple: true },
+          { question: "Which branch?", options: ["main", "release"] },
+        ],
+      },
+    });
+
+    // The card decides between checkboxes and radios from this field alone.
+    // It was honoured on both ends and carried by neither, so every pick-many
+    // question arrived as pick-one and a second choice replaced the first.
+    expect(elicitationPendingFields(multi!).allowsMultiple).toBe(true);
+    expect(elicitationPendingFields(single!).allowsMultiple).toBe(false);
+    expect(elicitationPendingFields(permissionRequest).allowsMultiple).toBe(false);
+  });
+
+  it("records the constraint on the dispatch row that outlives the process", async () => {
+    const stub = kernelStub();
+    const [multi] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [{ question: "Any constraints?", options: ["a", "b"], allow_multiple: true }],
+      },
+    });
+    const pending: Array<Record<string, unknown>> = [];
+    const promise = askUser(
+      {
+        kernel: stub.kernel as any,
+        log: () => {},
+        notifier: { pending: (input: any) => pending.push(input), resolved: () => {} },
+      },
+      multi!,
+      { sessionId: "sess-1", ownerId: "owner-1", runId: "run-1" },
+    );
+    await Promise.resolve();
+
+    expect(JSON.parse(stub.created[0]!.payloadJson as string)).toMatchObject({
+      allowsFreeText: true,
+      allowsMultiple: true,
+    });
+    expect((pending[0] as any).request.allowsMultiple).toBe(true);
+
+    stub.emitResolution({ dispatchId: "disp-1", status: "resolved", resolution: { optionIds: ["a", "b"] } });
+    await expect(promise).resolves.toEqual({ kind: "selected", optionIds: ["a", "b"] });
   });
 });
 

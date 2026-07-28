@@ -953,6 +953,12 @@ export interface ElicitationPendingMessage extends OutboundEnvelope {
   context: string | null;
   options: Array<{ optionId: string; label: string; effect: string }>;
   allowsFreeText: boolean;
+  /**
+   * Whether the card may offer several options at once. Required, not optional:
+   * a field the surface honours but the wire may omit is a field that silently
+   * defaults, which is how every pick-many question once rendered as pick-one.
+   */
+  allowsMultiple: boolean;
   recommendedDefault: string | null;
   createdAtMs: number;
 }

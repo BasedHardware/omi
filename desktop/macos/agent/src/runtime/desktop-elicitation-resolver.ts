@@ -27,6 +27,43 @@ export interface ElicitationResolutionPayload {
   text?: unknown;
 }
 
+/**
+ * Project a request into the fields the pending message carries to the surface.
+ *
+ * The card reads only what travels here, so a constraint that exists on the
+ * request and is honoured by the card but is missing from this projection is
+ * silently dropped. `allowsMultiple` was: both ends had it, nothing carried it,
+ * and every pick-many question rendered as pick-one. Both sides go through here
+ * now, the way an answer goes through `elicitationResolution`.
+ */
+export function elicitationPendingFields(request: ElicitationRequest): {
+  channel: ElicitationRequest["channel"];
+  mode: ElicitationRequest["mode"];
+  adapterId: string;
+  title: string;
+  prompt: string;
+  subject: string | null;
+  context: string | null;
+  options: Array<{ optionId: string; label: string; effect: string }>;
+  allowsFreeText: boolean;
+  allowsMultiple: boolean;
+  recommendedDefault: string | null;
+} {
+  return {
+    channel: request.channel,
+    mode: request.mode,
+    adapterId: request.adapterId,
+    title: request.title,
+    prompt: request.prompt,
+    subject: request.subject,
+    context: request.context,
+    options: request.options.map((option) => ({ ...option })),
+    allowsFreeText: request.allowsFreeText,
+    allowsMultiple: request.allowsMultiple,
+    recommendedDefault: request.recommendedDefault,
+  };
+}
+
 /** Notifies the desktop surface that a question is waiting, or no longer is. */
 export interface ElicitationNotifier {
   pending(input: {
@@ -217,6 +254,7 @@ export async function askUser(
         context: request.context,
         options: request.options,
         allowsFreeText: request.allowsFreeText,
+        allowsMultiple: request.allowsMultiple,
       }),
       // No expiry: the run waits in `waiting_approval` until the user acts or
       // the turn is cancelled. Startup reconciliation, not a clock, is what
