@@ -68,6 +68,7 @@ from utils.transcribe_decisions import USER_SELF_PERSON_ID, person_id_for_client
 from .contracts import ListenLimits, ListenRequest, ListenSessionState
 from .conversations import LiveConversationController
 from .persistence import ListenPersistence
+from .parity_capture import ListenParityCapture
 from .receiver import ListenReceiver
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
@@ -133,6 +134,7 @@ class ListenSessionRuntime:
         self.speakers: Any = None
         self.transcripts: Any = None
         self.conversations: Any = None
+        self.parity_capture = ListenParityCapture(None)
 
     def _build_components(self) -> None:
         channels = build_channel_config(self.request.source or 'phone_call') if self.is_multi_channel else []
@@ -192,6 +194,15 @@ class ListenSessionRuntime:
                 platform=self.client_device_context.platform,
             )
 
+    def capture_client_audio(self, audio: bytes) -> None:
+        self.parity_capture.observe_client_audio(audio)
+
+    def capture_outbound_stt(self, audio: bytes) -> None:
+        self.parity_capture.observe_outbound_stt(audio)
+
+    def capture_inbound_stt(self, segments: List[Dict[str, Any]]) -> None:
+        self.parity_capture.observe_inbound_stt(segments)
+
     def complete_live_transcription(self) -> None:
         """Record the first nonempty transcript successfully delivered to the client."""
         if self.state.live_transcription_attempt is not None:
@@ -243,6 +254,20 @@ class ListenSessionRuntime:
             self.language,
             multi_lang_enabled=not single_language_mode,
             preferred_service=request.stt_service,
+        )
+        self.parity_capture = ListenParityCapture.from_environ(
+            principal_id=request.uid,
+            session_id=getattr(self, 'session_id', ''),
+            provider=getattr(self.stt_service, 'value', self.stt_service),
+            model=self.stt_model or '',
+            request={
+                'codec': request.codec,
+                'sample_rate': request.sample_rate,
+                'channels': request.channels,
+                'language': self.stt_language,
+                'provider': getattr(self.stt_service, 'value', self.stt_service),
+                'model': self.stt_model,
+            },
         )
         if not self.stt_service or not self.stt_language:
             await request.websocket.close(code=1008, reason=f'The language is not supported, {self.language}')
@@ -646,6 +671,7 @@ class ListenSessionRuntime:
         if self.onboarding_handler:
             self.onboarding_handler.cleanup()
         await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
+        self.parity_capture.persist()
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()
