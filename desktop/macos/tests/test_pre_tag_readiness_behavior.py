@@ -11,7 +11,6 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 REAL_READINESS = REPO_ROOT / "desktop/macos/scripts/pre-tag-readiness.sh"
 INHERITED_GIT_CONTEXT = (
@@ -32,18 +31,22 @@ class PreTagReadinessBehaviorTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         return completed.stdout.strip()
 
-    def run_process(self, args: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    def run_process(
+        self, args: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         process_env = dict(os.environ if env is None else env)
         for key in INHERITED_GIT_CONTEXT:
             process_env.pop(key, None)
         for key in tuple(process_env):
             if key.startswith("GIT_CONFIG_"):
                 process_env.pop(key)
-        process_env.update({
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_CONFIG_GLOBAL": "/dev/null",
-            "GIT_TERMINAL_PROMPT": "0",
-        })
+        process_env.update(
+            {
+                "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_CONFIG_GLOBAL": "/dev/null",
+                "GIT_TERMINAL_PROMPT": "0",
+            }
+        )
         return subprocess.run(args, cwd=cwd, env=process_env, text=True, capture_output=True, check=False)
 
     def write_executable(self, path: Path, text: str) -> None:
@@ -54,7 +57,9 @@ class PreTagReadinessBehaviorTests(unittest.TestCase):
         origin = root / "origin.git"
         source = root / "source"
         self.assertEqual(self.run_process(["git", "init", "--bare", "--quiet", str(origin)], cwd=root).returncode, 0)
-        self.assertEqual(self.run_process(["git", "clone", "--quiet", str(origin), str(source)], cwd=root).returncode, 0)
+        self.assertEqual(
+            self.run_process(["git", "clone", "--quiet", str(origin), str(source)], cwd=root).returncode, 0
+        )
         scripts = source / "desktop/macos/scripts"
         scripts.mkdir(parents=True)
         (source / "backend").mkdir()
@@ -105,6 +110,30 @@ case "$1" in
     ;;
   *) exit 2 ;;
 esac
+""",
+        )
+        self.write_executable(
+            scripts / "qualification-watchdog.py",
+            """#!/usr/bin/env python3
+import os
+import sys
+separator = sys.argv.index("--")
+command = sys.argv[separator + 1:]
+os.execvp(command[0], command)
+""",
+        )
+        self.write_executable(
+            scripts / "qualification-runner-self-clean.py",
+            """#!/usr/bin/env python3
+import json
+import os
+import sys
+report = sys.argv[sys.argv.index("--report") + 1]
+with open(os.environ["FAKE_READINESS_LOG"], "a", encoding="utf-8") as handle:
+    handle.write(f"self-clean {report}\\n")
+os.makedirs(os.path.dirname(report), exist_ok=True)
+with open(report, "w", encoding="utf-8") as handle:
+    json.dump({"guard": "qualification-runner-self-clean", "status": "passed"}, handle)
 """,
         )
         self.write_executable(
@@ -161,7 +190,13 @@ exec /bin/rm "$@"
         self.run_git(source, "commit", "--quiet", "-m", "readiness fixture")
         self.run_git(source, "branch", "-M", "main")
         self.run_git(source, "push", "--quiet", "-u", "origin", "main")
-        return source, self.run_git(source, "rev-parse", "HEAD"), fake_bin, scripts / "pre-tag-readiness.sh", foreign_agent
+        return (
+            source,
+            self.run_git(source, "rev-parse", "HEAD"),
+            fake_bin,
+            scripts / "pre-tag-readiness.sh",
+            foreign_agent,
+        )
 
     def run_readiness(
         self, root: Path, *, failed_release: str = "", npm_failure: bool = False
@@ -201,16 +236,26 @@ exec /bin/rm "$@"
         self.assertTrue(receipt["passed"])
         self.assertFalse(dependency_residue_exists)
         self.assertEqual(receipt["source_sha"], sha)
-        self.assertEqual([line.split()[0] for line in operations], [
-            "cache-prepare", "lease-acquire", "agent-deps", "harness", "agent-deps-cleanup", "lease-release", "cache-release",
-        ])
-        cache_prepare = operations[0].split()
-        lease_acquire = operations[1].split()
-        agent_deps = operations[2].split()
-        harness = operations[3].split()
-        agent_cleanup = operations[4].split()
-        lease_release = operations[5].split()
-        cache_release = operations[6].split()
+        self.assertEqual(
+            [line.split()[0] for line in operations],
+            [
+                "self-clean",
+                "cache-prepare",
+                "lease-acquire",
+                "agent-deps",
+                "harness",
+                "agent-deps-cleanup",
+                "lease-release",
+                "cache-release",
+            ],
+        )
+        cache_prepare = operations[1].split()
+        lease_acquire = operations[2].split()
+        agent_deps = operations[3].split()
+        harness = operations[4].split()
+        agent_cleanup = operations[5].split()
+        lease_release = operations[6].split()
+        cache_release = operations[7].split()
         cache_id, readiness_id = cache_prepare[3], lease_acquire[2]
         self.assertNotEqual(cache_id, readiness_id)
         self.assertTrue(cache_id.startswith(f"cache-readiness-{sha[:12]}-"))
@@ -245,9 +290,18 @@ exec /bin/rm "$@"
         self.assertFalse(receipt["passed"])
         self.assertFalse(dependency_residue_exists)
         self.assertNotIn("harness", [line.split()[0] for line in operations])
-        self.assertEqual([line.split()[0] for line in operations], [
-            "cache-prepare", "lease-acquire", "agent-deps", "agent-deps-cleanup", "lease-release", "cache-release",
-        ])
+        self.assertEqual(
+            [line.split()[0] for line in operations],
+            [
+                "self-clean",
+                "cache-prepare",
+                "lease-acquire",
+                "agent-deps",
+                "agent-deps-cleanup",
+                "lease-release",
+                "cache-release",
+            ],
+        )
 
     def test_symlinked_agent_cannot_redirect_dependency_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -266,7 +320,9 @@ exec /bin/rm "$@"
             }
             (root / "tmp").mkdir()
             completed = self.run_process(
-                [str(readiness), "--evidence", str(receipt), "--source-repository", str(source), sha], cwd=source, env=env
+                [str(readiness), "--evidence", str(receipt), "--source-repository", str(source), sha],
+                cwd=source,
+                env=env,
             )
 
             self.assertTrue(receipt.is_file(), completed.stderr)
@@ -274,9 +330,16 @@ exec /bin/rm "$@"
             self.assertNotEqual(completed.returncode, 0, completed.stderr)
             self.assertFalse(parsed_receipt["passed"])
             self.assertTrue((foreign_agent / "node_modules/foreign-sentinel").is_file())
-            self.assertEqual([line.split()[0] for line in log.read_text(encoding="utf-8").splitlines()], [
-                "cache-prepare", "lease-acquire", "lease-release", "cache-release",
-            ])
+            self.assertEqual(
+                [line.split()[0] for line in log.read_text(encoding="utf-8").splitlines()],
+                [
+                    "self-clean",
+                    "cache-prepare",
+                    "lease-acquire",
+                    "lease-release",
+                    "cache-release",
+                ],
+            )
 
     def test_inherited_git_config_cannot_redirect_fixture_origin(self) -> None:
         git_config_override = {
@@ -290,9 +353,19 @@ exec /bin/rm "$@"
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertTrue(receipt["passed"])
         self.assertFalse(dependency_residue_exists)
-        self.assertEqual([line.split()[0] for line in operations], [
-            "cache-prepare", "lease-acquire", "agent-deps", "harness", "agent-deps-cleanup", "lease-release", "cache-release",
-        ])
+        self.assertEqual(
+            [line.split()[0] for line in operations],
+            [
+                "self-clean",
+                "cache-prepare",
+                "lease-acquire",
+                "agent-deps",
+                "harness",
+                "agent-deps-cleanup",
+                "lease-release",
+                "cache-release",
+            ],
+        )
 
 
 if __name__ == "__main__":

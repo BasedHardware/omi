@@ -22,7 +22,7 @@ if os.name == "nt":
 else:
     import fcntl
 
-from . import config, safety
+from . import safety
 
 LEASE_SCHEMA_VERSION = 1
 LEASE_OWNER = "omi-desktop-qualification"
@@ -31,6 +31,10 @@ DEFAULT_RETENTION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 COMPLETION_FILENAME = "qualification-completed.json"
 QUARANTINE_DIRNAME = "quarantined-lease-pointers"
 FAULT_STATE_DIRNAME = "fault"
+# Docker's official Typesense image listens on this fixed internal port. The
+# harness varies only the loopback host port; keep this dependency-free because
+# runner self-clean imports the lease authority before any venv is provisioned.
+TYPESENSE_CONTAINER_PORT = 8108
 STOP_PHASES: tuple[tuple[signal.Signals, float], ...] = tuple(
     (signal.Signals(value), wait_seconds)
     for name, wait_seconds in (("SIGINT", 8), ("SIGTERM", 5), ("SIGKILL", 2))
@@ -482,7 +486,7 @@ def _is_exact_typesense_docker_proxy(record: dict[str, object], lease_id: str | 
         "--name",
         container,
         "-p",
-        f"127.0.0.1:{port}:{config.TYPESENSE_CONTAINER_PORT}",
+        f"127.0.0.1:{port}:{TYPESENSE_CONTAINER_PORT}",
     ]
     command = record.get("command")
     if not isinstance(command, list) or command[: len(expected_prefix)] != expected_prefix:
@@ -505,17 +509,19 @@ def _is_exact_typesense_docker_proxy(record: dict[str, object], lease_id: str | 
         return False
     network = payload.get("NetworkSettings")
     ports = network.get("Ports") if isinstance(network, dict) else None
-    bindings = ports.get(f"{config.TYPESENSE_CONTAINER_PORT}/tcp") if isinstance(ports, dict) else None
+    bindings = ports.get(f"{TYPESENSE_CONTAINER_PORT}/tcp") if isinstance(ports, dict) else None
     return isinstance(bindings, list) and any(
-        isinstance(binding, dict)
-        and binding.get("HostIp") == "127.0.0.1"
-        and binding.get("HostPort") == str(port)
+        isinstance(binding, dict) and binding.get("HostIp") == "127.0.0.1" and binding.get("HostPort") == str(port)
         for binding in bindings
     )
 
 
 def _validated_signal(
-    record: dict[str, object], process_manifest: Path, port_manifest: Path, sig: signal.Signals, lease_id: str | None = None
+    record: dict[str, object],
+    process_manifest: Path,
+    port_manifest: Path,
+    sig: signal.Signals,
+    lease_id: str | None = None,
 ) -> None:
     """Signal only a current supervisor whose listener children still prove lease lineage."""
 
@@ -527,18 +533,85 @@ def _validated_signal(
     safety.validate_owned_pid(pid, process_manifest=process_manifest, service=service)
     if getpgid(pid) != process_group or process_group != pid:
         raise QualificationLeaseError("Refusing to signal a qualification process group whose ownership changed")
-    safety.validate_port_owner(
-        port, pid=pid, port_manifest=port_manifest, process_manifest=None, service=service
-    )
+    safety.validate_port_owner(port, pid=pid, port_manifest=port_manifest, process_manifest=None, service=service)
     listeners = safety.listening_pids(port)
     if listeners and not _is_exact_typesense_docker_proxy(record, lease_id):
         for listener_pid in listeners:
             if getpgid(listener_pid) != process_group or not safety.is_descendant_of(listener_pid, pid):
-                raise QualificationLeaseError("Refusing to signal a qualification listener whose lease lineage is unproven")
+                raise QualificationLeaseError(
+                    "Refusing to signal a qualification listener whose lease lineage is unproven"
+                )
     try:
         killpg(process_group, sig)
     except (ProcessLookupError, PermissionError) as exc:
         raise QualificationLeaseError(f"Cannot signal recorded qualification process group: {exc}") from exc
+
+
+def _orphaned_record_cleanup_mode(
+    record: dict[str, object],
+    process_manifest: Path,
+    port_manifest: Path,
+    lease_id: str,
+) -> str:
+    """Classify a dead supervisor's surviving listener without name matching.
+
+    A POSIX process group remains authoritative after its leader exits: the PGID
+    cannot be reused while members remain. Docker's host proxy is the one known
+    exception because it lives outside the recorded supervisor group, so it is
+    accepted only after the exact lease container binding is re-proved.
+    """
+
+    pid = int(record["pid"])
+    process_group = int(record["process_group"])
+    port = int(record["port"])
+    service = str(record["service"])
+    if process_group != pid:
+        raise QualificationLeaseError("Qualification process group does not match its recorded leader")
+    safety.validate_port_owner(
+        port,
+        pid=pid,
+        port_manifest=port_manifest,
+        process_manifest=None,
+        service=service,
+    )
+    listeners = safety.listening_pids(port)
+    if not listeners:
+        return "none"
+    if _is_exact_typesense_docker_proxy(record, lease_id):
+        return "docker"
+    getpgid, _killpg = _posix_process_group_api()
+    try:
+        listener_groups = tuple(getpgid(listener_pid) for listener_pid in listeners)
+    except (ProcessLookupError, PermissionError) as exc:
+        raise QualificationLeaseError("Cannot validate an orphaned qualification listener process group") from exc
+    if any(group != process_group for group in listener_groups):
+        raise QualificationLeaseError(
+            "Refusing to signal an orphaned qualification listener whose recorded process group is unproven"
+        )
+    return "process-group"
+
+
+def _stop_exact_typesense_container(record: dict[str, object], lease_id: str, sig: signal.Signals) -> None:
+    if not _is_exact_typesense_docker_proxy(record, lease_id):
+        raise QualificationLeaseError("Refusing to stop a Typesense container whose exact lease binding is unproven")
+    container = f"omi-dev-harness-{lease_id}-typesense"
+    command = ["docker", "kill", container] if sig == signal.SIGKILL else ["docker", "stop", "--time", "10", container]
+    try:
+        stopped = subprocess.run(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise QualificationLeaseError(f"Cannot stop recorded qualification Typesense container: {exc}") from exc
+    if stopped.returncode != 0:
+        detail = stopped.stderr.strip()[:200]
+        raise QualificationLeaseError(
+            f"Cannot stop recorded qualification Typesense container {container}: {detail or stopped.returncode}"
+        )
 
 
 def _open_recorded_ports(records: list[dict[str, object]]) -> list[tuple[str, int, tuple[int, ...]]]:
@@ -553,7 +626,9 @@ def _open_recorded_ports(records: list[dict[str, object]]) -> list[tuple[str, in
     return open_ports
 
 
-def _wait_for_ports_to_close(records: list[dict[str, object]], seconds: float) -> list[tuple[str, int, tuple[int, ...]]]:
+def _wait_for_ports_to_close(
+    records: list[dict[str, object]], seconds: float
+) -> list[tuple[str, int, tuple[int, ...]]]:
     deadline = time.monotonic() + seconds
     open_ports = _open_recorded_ports(records)
     while open_ports and time.monotonic() < deadline:
@@ -570,11 +645,25 @@ def _stop_owned_records(
             pid = int(record["pid"])
             if safety.process_exists(pid):
                 _validated_signal(record, process_manifest, port_manifest, sig, lease_id)
+                continue
+            cleanup_mode = _orphaned_record_cleanup_mode(record, process_manifest, port_manifest, lease_id)
+            if cleanup_mode == "process-group":
+                _getpgid, killpg = _posix_process_group_api()
+                try:
+                    killpg(int(record["process_group"]), sig)
+                except (ProcessLookupError, PermissionError) as exc:
+                    raise QualificationLeaseError(f"Cannot signal orphaned qualification process group: {exc}") from exc
+            elif cleanup_mode == "docker":
+                _stop_exact_typesense_container(record, lease_id, sig)
         open_ports = _wait_for_ports_to_close(records, wait_seconds)
         if not open_ports:
             return
-    details = ", ".join(f"{service}:{port} (listeners {','.join(map(str, pids))})" for service, port, pids in open_ports)
-    raise QualificationLeaseError(f"Qualification port still open after cleanup; retaining incomplete lease state: {details}")
+    details = ", ".join(
+        f"{service}:{port} (listeners {','.join(map(str, pids))})" for service, port, pids in open_ports
+    )
+    raise QualificationLeaseError(
+        f"Qualification port still open after cleanup; retaining incomplete lease state: {details}"
+    )
 
 
 def _safe_remove_state(state_root: Path, repo_root: Path, lease_id: str) -> None:
@@ -652,8 +741,64 @@ def _prune(root: Path, *, keep_lease_ids: set[str], retained_runs: int, retentio
             shutil.rmtree(log_dir)
 
 
+def reclaim_abandoned(*, lease_root: Path, repo_root: Path, dry_run: bool = False) -> dict[str, object]:
+    """Reclaim only the dead active qualification lease at a known runner root.
+
+    Unlike ``acquire``, this runner-hygiene path fails closed on ambiguous
+    provenance instead of quarantining the pointer and admitting new work.
+    """
+
+    root_path = lease_root.expanduser().resolve(strict=False)
+    if not root_path.exists():
+        return {"status": "absent", "lease_id": None, "owned_processes": 0}
+    root = _validate_root(root_path, repo_root)
+    with _locked(root):
+        path = _lease_path(root)
+        lease = _read_lease(path)
+        if lease is None:
+            return {"status": "absent", "lease_id": None, "owned_processes": 0}
+        lease_id, state_root, recorded_repo, owner_pid, token = _lease_provenance(lease, root)
+        if safety.process_exists(owner_pid):
+            return {
+                "status": "active",
+                "lease_id": lease_id,
+                "owner_pid": owner_pid,
+                "owned_processes": 0,
+            }
+        records, process_manifest, port_manifest = _validated_owned_records(state_root, recorded_repo, lease_id, token)
+        fault_record = _validated_fault_record(state_root, token)
+        for record in records:
+            if not safety.process_exists(int(record["pid"])):
+                _orphaned_record_cleanup_mode(record, process_manifest, port_manifest, lease_id)
+        if dry_run:
+            return {
+                "status": "would-reclaim",
+                "lease_id": lease_id,
+                "owner_pid": owner_pid,
+                "owned_processes": len(records) + (1 if fault_record is not None else 0),
+            }
+        _stop_owned_fault_record(fault_record)
+        _stop_owned_records(records, process_manifest, port_manifest, lease_id)
+        _safe_remove_state(state_root, recorded_repo, lease_id)
+        logs = root / "logs" / lease_id
+        if logs.is_dir():
+            shutil.rmtree(logs)
+        path.unlink()
+        return {
+            "status": "reclaimed",
+            "lease_id": lease_id,
+            "owner_pid": owner_pid,
+            "owned_processes": len(records) + (1 if fault_record is not None else 0),
+        }
+
+
 def acquire(
-    *, repo_root: Path, lease_id: str, owner_pid: int, port_offset: int, retained_runs: int = DEFAULT_RETAINED_RUNS,
+    *,
+    repo_root: Path,
+    lease_id: str,
+    owner_pid: int,
+    port_offset: int,
+    retained_runs: int = DEFAULT_RETAINED_RUNS,
     retention_age_seconds: int = DEFAULT_RETENTION_MAX_AGE_SECONDS,
 ) -> dict[str, object]:
     root = _validate_root(lease_root_from_env(), repo_root)
@@ -672,7 +817,9 @@ def acquire(
                     f"Qualification lease {old_id!r} is held by live PID {old_owner}; refusing concurrent stack use"
                 )
             try:
-                records, process_manifest, port_manifest = _validated_owned_records(old_state, old_repo, old_id, old_token)
+                records, process_manifest, port_manifest = _validated_owned_records(
+                    old_state, old_repo, old_id, old_token
+                )
                 fault_record = _validated_fault_record(old_state, old_token)
                 _stop_owned_fault_record(fault_record)
                 _stop_owned_records(records, process_manifest, port_manifest, old_id)
@@ -696,7 +843,9 @@ def acquire(
                 previous_repo = _real(Path(str(sentinel.get("repo_root", ""))))
                 _safe_remove_state(state_root, previous_repo, lease_id)
             except safety.SafetyError as exc:
-                raise QualificationLeaseError(f"Refusing to replace unproven qualification state {state_root}: {exc}") from exc
+                raise QualificationLeaseError(
+                    f"Refusing to replace unproven qualification state {state_root}: {exc}"
+                ) from exc
         safety.create_state_layout(repo_root, lease_id, {"OMI_LOCAL_STATE_ROOT": str(root / "state")})
         log_dir = root / "logs" / lease_id
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -723,7 +872,11 @@ def acquire(
 
 
 def release(
-    *, repo_root: Path, lease_id: str, token: str, retained_runs: int = DEFAULT_RETAINED_RUNS,
+    *,
+    repo_root: Path,
+    lease_id: str,
+    token: str,
+    retained_runs: int = DEFAULT_RETAINED_RUNS,
     retention_age_seconds: int = DEFAULT_RETENTION_MAX_AGE_SECONDS,
 ) -> None:
     root = _validate_root(lease_root_from_env(), repo_root)

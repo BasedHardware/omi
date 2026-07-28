@@ -11,6 +11,8 @@ DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 CACHE_COMMAND="$SCRIPT_DIR/qualification-swift-cache.sh"
 LEASE_COMMAND="$SCRIPT_DIR/qualification-lease-command.sh"
+SELF_CLEAN_COMMAND="$SCRIPT_DIR/qualification-runner-self-clean.py"
+WATCHDOG_COMMAND="$SCRIPT_DIR/qualification-watchdog.py"
 
 EVIDENCE=""
 SOURCE_REPOSITORY="$REPO_ROOT"
@@ -31,6 +33,9 @@ READINESS_COMPLETE=0
 READINESS_CLEANUP_OK=0
 STARTED_AT=""
 START_SEC=0
+CURRENT_RUN_ID="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-attempt}"
+RUNNER_TEMP_ROOT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+HYGIENE_EVIDENCE="${OMI_QUALIFICATION_RUNNER_HYGIENE_REPORT:-$RUNNER_TEMP_ROOT/desktop-pre-tag-runner-hygiene-${CURRENT_RUN_ID}.json}"
 
 usage() {
   cat <<'USAGE'
@@ -86,8 +91,8 @@ git -C "$SOURCE_REPOSITORY" rev-parse --git-dir >/dev/null 2>&1 || {
   echo "pre-tag-readiness: --source-repository is not a git repo: $SOURCE_REPOSITORY" >&2
   exit 1
 }
-[[ -x "$CACHE_COMMAND" && -x "$LEASE_COMMAND" ]] || {
-  echo "pre-tag-readiness: cache or authenticated qualification lease command is unavailable" >&2
+[[ -x "$CACHE_COMMAND" && -x "$LEASE_COMMAND" && -x "$SELF_CLEAN_COMMAND" && -x "$WATCHDOG_COMMAND" ]] || {
+  echo "pre-tag-readiness: cache, lease, self-clean, or watchdog authority is unavailable" >&2
   exit 1
 }
 
@@ -96,12 +101,12 @@ START_SEC=$(date +%s)
 
 emit_evidence() {
   local passed="$1" duration_s="$2" err="${3:-}"
-  python3 - "$EVIDENCE" "$passed" "$SOURCE_SHA" "$LANE" "$duration_s" "$STARTED_AT" "$HARNESS_EVIDENCE" "$err" <<'PY'
+  python3 - "$EVIDENCE" "$passed" "$SOURCE_SHA" "$LANE" "$duration_s" "$STARTED_AT" "$HARNESS_EVIDENCE" "$HYGIENE_EVIDENCE" "$err" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-out_path, passed, source_sha, lane, duration_s, started_at, harness_ev, err = sys.argv[1:9]
+out_path, passed, source_sha, lane, duration_s, started_at, harness_ev, hygiene_ev, err = sys.argv[1:10]
 evidence = {
     "kind": "omi-desktop-pre-tag-readiness-v1",
     "passed": passed == "true",
@@ -113,11 +118,13 @@ evidence = {
     "checks": {
         "source_resolved_from_origin": passed == "true",
         "exact_sha_checkout_verified": passed == "true",
+        "runner_self_clean": passed == "true",
         "swift_cache_prepared": passed == "true",
         "self_check": passed == "true",
         "offline_stack_ready": passed == "true",
     },
     "harness_evidence": Path(harness_ev).name if harness_ev else None,
+    "runner_hygiene_evidence": Path(hygiene_ev).name if hygiene_ev else None,
 }
 if err:
     evidence["error"] = err
@@ -129,6 +136,16 @@ if target:
 else:
     print(json.dumps(evidence, indent=2, sort_keys=True))
 PY
+}
+
+run_watchdog() {
+  local label="$1" timeout_seconds="$2"
+  shift 2
+  python3 "$WATCHDOG_COMMAND" \
+    --label "$label" \
+    --heartbeat-seconds "${OMI_QUALIFICATION_HEARTBEAT_SECONDS:-45}" \
+    --timeout-seconds "$timeout_seconds" \
+    -- "$@"
 }
 
 json_capability_field() {
@@ -228,6 +245,25 @@ git -C "$SOURCE_REPOSITORY" merge-base --is-ancestor "$SOURCE_SHA" origin/main |
   exit 1
 }
 
+# The next run is the recovery authority for an abandoned prior run. Cleanup is
+# limited to authenticated qualification state, token-bound fault apps, exact
+# numeric run stages, and idle exact-SHA cache entries. Any ambiguous residue
+# fails before a fresh cache or qualification lease is acquired.
+run_watchdog runner-self-clean 1200 \
+  python3 "$SELF_CLEAN_COMMAND" \
+    --repo-root "$REPO_ROOT" \
+    --cache-root "${OMI_QUALIFICATION_SWIFT_CACHE_ROOT:-$HOME/Library/Caches/OmiDesktop/qualification-swiftpm-v2}" \
+    --qualification-lease-root "$LEASE_ROOT" \
+    --stage-root "$RUNNER_TEMP_ROOT/desktop-beta-qualification" \
+    --capacity-path "$RUNNER_TEMP_ROOT" \
+    --current-run-id "$CURRENT_RUN_ID" \
+    --minimum-free-kib "${OMI_QUALIFICATION_MINIMUM_FREE_KIB:-33554432}" \
+    --minimum-free-inodes "${OMI_QUALIFICATION_MINIMUM_FREE_INODES:-65536}" \
+    --minimum-age-seconds 3600 \
+    --max-entries 16 \
+    --max-reclaim-kib 134217728 \
+    --report "$HYGIENE_EVIDENCE"
+
 # Bound cache and runner ownership to one source/run/pid-derived capability set.
 RUN_SCOPE="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-attempt}-${BASHPID:-$$}"
 RUN_SCOPE="${RUN_SCOPE//[^A-Za-z0-9]/-}"
@@ -241,7 +277,8 @@ PY
 )"
 
 CACHE_JSON="$(
-  "$CACHE_COMMAND" prepare \
+  run_watchdog readiness-cache-prepare 3600 \
+    "$CACHE_COMMAND" prepare \
     "$SOURCE_SHA" "$SOURCE_REPOSITORY" "$CACHE_LEASE_ID" "$$"
 )"
 WORKTREE="$(json_capability_field source "$CACHE_JSON")"
@@ -274,8 +311,9 @@ owned_agent_directory_is_real || exit 1
 }
 (
   cd "$AGENT_DIR"
-  env -u NODE_ENV -u NPM_CONFIG_OMIT -u npm_config_omit -u NPM_CONFIG_PRODUCTION -u npm_config_production \
-    npm ci --include=dev --no-fund --no-audit
+  run_watchdog readiness-agent-dependencies 1800 \
+    env -u NODE_ENV -u NPM_CONFIG_OMIT -u npm_config_omit -u NPM_CONFIG_PRODUCTION -u npm_config_production \
+      npm ci --include=dev --no-fund --no-audit
 )
 [[ -x "$AGENT_DIR/node_modules/.bin/vitest" ]] || {
   echo "pre-tag-readiness: lockfile-pinned agent Vitest dependency is unavailable" >&2
@@ -283,7 +321,8 @@ owned_agent_directory_is_real || exit 1
 }
 (
   cd "$WORKTREE/desktop/macos"
-  OMI_READINESS_LANE="$LANE" ./scripts/desktop-core-harness.sh --readiness
+  run_watchdog readiness-offline-stack 3600 \
+    env OMI_READINESS_LANE="$LANE" ./scripts/desktop-core-harness.sh --readiness
 )
 
 HARNESS_ROOT="$WORKTREE/desktop/macos/.harness/desktop-core"

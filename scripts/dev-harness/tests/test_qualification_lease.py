@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dev_harness import qualification, safety
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FAULT_INJECTOR = REPO_ROOT / "desktop" / "macos" / "scripts" / "omi-fault-inject.sh"
 
@@ -28,7 +27,13 @@ def _stale_lease(root: Path, lease_id: str, pid: int, port: int) -> None:
     lease = json.loads(lease_path.read_text(encoding="utf-8"))
     marker = f"omi-dev-harness:{lease_id}:backend:{lease['token']}"
     state.joinpath("manifests", "processes.json").write_text(
-        json.dumps({"processes": [{"service": "backend", "pid": pid, "process_group": pid, "port": port, "ownership_marker": marker}]}),
+        json.dumps(
+            {
+                "processes": [
+                    {"service": "backend", "pid": pid, "process_group": pid, "port": port, "ownership_marker": marker}
+                ]
+            }
+        ),
         encoding="utf-8",
     )
     state.joinpath("manifests", "ports.json").write_text(
@@ -111,10 +116,14 @@ def test_qualification_file_lock_serializes_processes(tmp_path: Path) -> None:
 def test_active_lease_serializes_qualification_runs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     root = tmp_path / "qualification"
     monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
-    first = qualification.acquire(repo_root=REPO_ROOT, lease_id="qualification-one", owner_pid=os.getpid(), port_offset=1000)
+    first = qualification.acquire(
+        repo_root=REPO_ROOT, lease_id="qualification-one", owner_pid=os.getpid(), port_offset=1000
+    )
 
     with pytest.raises(qualification.QualificationLeaseError, match="refusing concurrent stack use"):
-        qualification.acquire(repo_root=REPO_ROOT, lease_id="qualification-two", owner_pid=os.getpid(), port_offset=1001)
+        qualification.acquire(
+            repo_root=REPO_ROOT, lease_id="qualification-two", owner_pid=os.getpid(), port_offset=1001
+        )
 
     qualification.release(repo_root=REPO_ROOT, lease_id="qualification-one", token=str(first["token"]))
 
@@ -147,7 +156,9 @@ def test_windows_process_manifest_is_retained_without_posix_process_provenance(
     acquired = qualification.acquire(repo_root=REPO_ROOT, lease_id=lease_id, owner_pid=os.getpid(), port_offset=1000)
     _stale_lease(root, lease_id, pid=os.getpid(), port=_free_port())
 
-    with pytest.raises(qualification.QualificationLeaseError, match="process-manifest cleanup requires POSIX process provenance"):
+    with pytest.raises(
+        qualification.QualificationLeaseError, match="process-manifest cleanup requires POSIX process provenance"
+    ):
         qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
 
     assert (root / "qualification-lease.json").is_file()
@@ -278,6 +289,8 @@ def test_fault_listener_preflight_retains_replaced_listener_and_reports_host_pre
         if foreign.poll() is None:
             foreign.terminate()
             foreign.wait(timeout=10)
+
+
 @pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
 def test_release_refuses_and_retains_an_unproven_listener_on_the_recorded_fault_port(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -330,7 +343,11 @@ def test_stale_owned_stack_is_reclaimed_without_touching_foreign_listener(
     marker = f"omi-dev-harness:{old_id}:backend:{json.loads((root / 'qualification-lease.json').read_text(encoding='utf-8'))['token']}"
     owned_pid, stopped, signalled = 42424, set(), []
     foreign = subprocess.Popen(
-        [sys.executable, "-c", "import socket,time; s=socket.socket(); s.bind(('127.0.0.1', 49199)); s.listen(); time.sleep(60)"],
+        [
+            sys.executable,
+            "-c",
+            "import socket,time; s=socket.socket(); s.bind(('127.0.0.1', 49199)); s.listen(); time.sleep(60)",
+        ],
         start_new_session=os.name != "nt",
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
     )
@@ -386,7 +403,10 @@ def test_dead_lease_with_missing_sentinel_is_quarantined_before_a_fresh_lease_ac
     assert json.loads(quarantined[0].read_text(encoding="utf-8")) == stale_pointer
     assert stale_state.exists()
     assert not (stale_state / safety.HARNESS_SENTINEL_FILENAME).exists()
-    assert json.loads((root / "qualification-lease.json").read_text(encoding="utf-8"))["lease_id"] == "qualification-replacement"
+    assert (
+        json.loads((root / "qualification-lease.json").read_text(encoding="utf-8"))["lease_id"]
+        == "qualification-replacement"
+    )
 
     qualification.release(repo_root=REPO_ROOT, lease_id="qualification-replacement", token=str(replacement["token"]))
 
@@ -432,9 +452,7 @@ def test_dead_lease_with_unproven_listener_is_quarantined_without_signalling_it(
                 return pid
             return original_getpgid(pid)
 
-        monkeypatch.setattr(
-            safety, "process_exists", lambda pid: pid == recorded_pid or original_exists(pid)
-        )
+        monkeypatch.setattr(safety, "process_exists", lambda pid: pid == recorded_pid or original_exists(pid))
         monkeypatch.setattr(safety, "command_line_for_pid", lambda pid: marker if pid == recorded_pid else "")
         monkeypatch.setattr(qualification.os, "getpgid", getpgid, raising=False)
         monkeypatch.setattr(
@@ -463,16 +481,22 @@ def test_dead_lease_with_unproven_listener_is_quarantined_without_signalling_it(
             foreign.wait(timeout=10)
 
 
-def test_retention_prunes_only_completed_sentinel_proven_qualification_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_retention_prunes_only_completed_sentinel_proven_qualification_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     root = tmp_path / "qualification"
     monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
-    completed = qualification.acquire(repo_root=REPO_ROOT, lease_id="qualification-completed", owner_pid=os.getpid(), port_offset=1000)
+    completed = qualification.acquire(
+        repo_root=REPO_ROOT, lease_id="qualification-completed", owner_pid=os.getpid(), port_offset=1000
+    )
     qualification.release(repo_root=REPO_ROOT, lease_id="qualification-completed", token=str(completed["token"]))
     completion = root / "state" / "qualification-completed" / qualification.COMPLETION_FILENAME
     payload = json.loads(completion.read_text(encoding="utf-8"))
     payload["completed_at"] = 1
     completion.write_text(json.dumps(payload), encoding="utf-8")
-    active = qualification.acquire(repo_root=REPO_ROOT, lease_id="qualification-active", owner_pid=os.getpid(), port_offset=1001)
+    active = qualification.acquire(
+        repo_root=REPO_ROOT, lease_id="qualification-active", owner_pid=os.getpid(), port_offset=1001
+    )
     foreign = root / "state" / "foreign"
     foreign.mkdir(parents=True)
     qualification._prune(root, keep_lease_ids={"qualification-active"}, retained_runs=3, retention_age_seconds=1)
@@ -482,7 +506,7 @@ def test_retention_prunes_only_completed_sentinel_proven_qualification_state(mon
     qualification.release(repo_root=REPO_ROOT, lease_id="qualification-active", token=str(active["token"]))
 
 
-def test_supervisor_dead_with_recorded_port_still_open_retains_incomplete_lease(
+def test_supervisor_dead_with_foreign_process_group_retains_incomplete_lease(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     root = tmp_path / "qualification"
@@ -502,13 +526,54 @@ def test_supervisor_dead_with_recorded_port_still_open_retains_incomplete_lease(
     monkeypatch.setattr(safety, "listening_pids", lambda candidate: (os.getpid(),) if candidate == port else ())
     try:
         _stale_lease(root, lease_id, pid=42424, port=port)
-        with pytest.raises(qualification.QualificationLeaseError, match="port.*still open"):
+        with pytest.raises(qualification.QualificationLeaseError, match="process group is unproven"):
             qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
         assert listener.fileno() >= 0
         assert (root / "qualification-lease.json").exists()
         assert not (root / "state" / lease_id / qualification.COMPLETION_FILENAME).exists()
     finally:
         listener.close()
+
+
+def test_supervisor_dead_with_exact_recorded_process_group_reclaims_fixed_port(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "qualification"
+    lease_id = "qualification-orphaned-fixed-port"
+    supervisor_pid, listener_pid, port = 42424, 51515, 9099
+    monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
+    acquired = qualification.acquire(
+        repo_root=REPO_ROOT,
+        lease_id=lease_id,
+        owner_pid=os.getpid(),
+        port_offset=1000,
+    )
+    open_listener = True
+
+    def listening_pids(candidate: int) -> tuple[int, ...]:
+        return (listener_pid,) if candidate == port and open_listener else ()
+
+    def killpg(process_group: int, _sig: signal.Signals) -> None:
+        nonlocal open_listener
+        assert process_group == supervisor_pid
+        open_listener = False
+
+    monkeypatch.setattr(safety, "process_exists", lambda pid: pid == os.getpid())
+    monkeypatch.setattr(safety, "listening_pids", listening_pids)
+    monkeypatch.setattr(
+        qualification.os,
+        "getpgid",
+        lambda pid: supervisor_pid if pid == listener_pid else pid,
+        raising=False,
+    )
+    monkeypatch.setattr(qualification.os, "killpg", killpg, raising=False)
+    _stale_lease(root, lease_id, pid=supervisor_pid, port=port)
+
+    qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+
+    assert not open_listener
+    assert not (root / "qualification-lease.json").exists()
+    assert (root / "state" / lease_id / qualification.COMPLETION_FILENAME).is_file()
 
 
 def test_docker_typesense_proxy_listener_is_reclaimed_only_with_exact_container_binding(
@@ -559,9 +624,7 @@ def test_docker_typesense_proxy_listener_is_reclaimed_only_with_exact_container_
                 {
                     "Name": f"/{container}",
                     "State": {"Running": True},
-                    "NetworkSettings": {
-                        "Ports": {"8108/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(port)}]}
-                    },
+                    "NetworkSettings": {"Ports": {"8108/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(port)}]}},
                 }
             ),
         ),
@@ -616,3 +679,70 @@ def test_external_typesense_listener_without_exact_docker_binding_is_not_signall
         )
 
     assert signalled == []
+
+
+def test_orphaned_typesense_container_is_stopped_only_after_exact_binding(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    lease_id, supervisor_pid, proxy_pid, port = "qualification-typesense-orphan", 42424, 51515, 49199
+    container = f"omi-dev-harness-{lease_id}-typesense"
+    record = {
+        "service": "typesense",
+        "pid": supervisor_pid,
+        "process_group": supervisor_pid,
+        "port": port,
+        "command": [
+            "docker",
+            "run",
+            "--rm",
+            "--name",
+            container,
+            "-p",
+            f"127.0.0.1:{port}:8108",
+        ],
+    }
+    running = True
+    calls: list[list[str]] = []
+
+    def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal running
+        calls.append(command)
+        if command[:2] == ["docker", "inspect"]:
+            return subprocess.CompletedProcess(
+                command,
+                0 if running else 1,
+                stdout=(
+                    json.dumps(
+                        {
+                            "Name": f"/{container}",
+                            "State": {"Running": True},
+                            "NetworkSettings": {
+                                "Ports": {"8108/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(port)}]}
+                            },
+                        }
+                    )
+                    if running
+                    else ""
+                ),
+                stderr="",
+            )
+        if command[:2] == ["docker", "stop"]:
+            running = False
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        raise AssertionError(command)
+
+    monkeypatch.setattr(qualification, "STOP_PHASES", ((signal.SIGTERM, 0),))
+    monkeypatch.setattr(safety, "process_exists", lambda _pid: False)
+    monkeypatch.setattr(safety, "validate_port_owner", lambda *args, **kwargs: None)
+    monkeypatch.setattr(safety, "listening_pids", lambda observed: (proxy_pid,) if observed == port and running else ())
+    monkeypatch.setattr(qualification.subprocess, "run", run)
+
+    qualification._stop_owned_records(
+        [record],
+        tmp_path / "processes.json",
+        tmp_path / "ports.json",
+        lease_id,
+    )
+
+    assert ["docker", "stop", "--time", "10", container] in calls
+    assert not running
