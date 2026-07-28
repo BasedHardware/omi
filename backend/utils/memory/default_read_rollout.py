@@ -13,6 +13,7 @@ from config.memory_rollout import (
     MemoryRolloutState,
     decide_memory_rollout_capabilities,
 )
+from database import document_store
 from database.memory_collections import MemoryCollections
 from utils.memory.memory_read_rollout_core import extract_consumer_grants
 
@@ -200,7 +201,7 @@ def read_global_read_gate(*, db_client: Any) -> GlobalReadGateDecision:
     """Read the global emergency memory product-read gate before per-user rollout state."""
 
     try:
-        snapshot = _get_firestore_document_snapshot(db_client.document(GLOBAL_READ_GATE_PATH))
+        snapshot = _get_firestore_document_snapshot(db_client, GLOBAL_READ_GATE_PATH)
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return GlobalReadGateDecision(
@@ -259,7 +260,7 @@ def read_write_convergence_gate(*, db_client: Any) -> WriteConvergencePolicy:
     """Read server-owned durable write convergence/outbox readiness."""
 
     try:
-        snapshot = _get_firestore_document_snapshot(db_client.document(WRITE_CONVERGENCE_GATE_PATH))
+        snapshot = _get_firestore_document_snapshot(db_client, WRITE_CONVERGENCE_GATE_PATH)
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return WriteConvergencePolicy(
@@ -545,13 +546,8 @@ def normalize_archive_read_rollout_decision(
     )
 
 
-def _get_firestore_document_snapshot(document_ref: Any) -> Any:
-    try:
-        return document_ref.get(timeout=DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS)
-    except TypeError as exc:
-        if 'timeout' not in str(exc):
-            raise
-        return document_ref.get()
+def _get_firestore_document_snapshot(db_client: Any, path: str) -> Any:
+    return document_store.get_document(db_client, path, timeout=DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS)
 
 
 def read_default_read_rollout(*, uid: str, db_client: Any, consumer: str) -> DefaultReadRolloutDecision:
@@ -559,7 +555,7 @@ def read_default_read_rollout(*, uid: str, db_client: Any, consumer: str) -> Def
 
     source_path = MemoryCollections(uid=uid).memory_control_state
     try:
-        snapshot = _get_firestore_document_snapshot(db_client.document(source_path))
+        snapshot = _get_firestore_document_snapshot(db_client, source_path)
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return disabled_default_read_rollout_decision(
@@ -577,7 +573,7 @@ def read_archive_read_rollout(*, uid: str, db_client: Any, consumer: str) -> Def
 
     source_path = MemoryCollections(uid=uid).memory_control_state
     try:
-        snapshot = _get_firestore_document_snapshot(db_client.document(source_path))
+        snapshot = _get_firestore_document_snapshot(db_client, source_path)
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return disabled_default_read_rollout_decision(
@@ -593,7 +589,7 @@ def read_archive_read_rollout(*, uid: str, db_client: Any, consumer: str) -> Def
 def read_rollout_state_doc(*, uid: str, db_client: Any) -> RolloutStateDocRead:
     source_path = MemoryCollections(uid=uid).memory_control_state
     try:
-        snapshot = _get_firestore_document_snapshot(db_client.document(source_path))
+        snapshot = _get_firestore_document_snapshot(db_client, source_path)
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return source_path, None, 'malformed_rollout_state'

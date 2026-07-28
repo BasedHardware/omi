@@ -5,6 +5,8 @@ This module wires the V3 memory-read production runtime.
 
 from __future__ import annotations
 
+from database import document_store
+
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -268,7 +270,7 @@ class _ProductionV3Adapters:
 
 
 def _read_doc_dict(db_client: Any, path: str) -> MemoryDbItem | None:
-    snapshot: Any = db_client.document(path).get()
+    snapshot: Any = document_store.get_document(db_client, path)
     if getattr(snapshot, 'exists', False) is False:
         return None
     data: object = snapshot.to_dict()

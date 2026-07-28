@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from database import document_store
+
 """Canonical product memory read service module (WS-G8a).
 
 Neutral ``product_memory_read_service`` is the source of truth. Legacy ``product_memory_read_service`` remains an importable alias.
@@ -96,7 +98,7 @@ def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> Lis
 
     collection_path = MemoryCollections(uid=uid).memory_items
     items: List[MemoryItem] = []
-    for snapshot in db_client.collection(collection_path).stream():
+    for snapshot in document_store.stream_collection(db_client, collection_path):
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         item = MemoryItem.model_validate(payload)

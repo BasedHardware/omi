@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from database import document_store
+
 """Canonical vector search service module (WS-G8a).
 
 Neutral ``vector_search_service`` is the source of truth. Canonical vector search service.
@@ -325,7 +327,7 @@ def _hydrate_vector_candidate_items_by_id(
         if candidate_hydration_read_count >= max_candidate_hydration_reads:
             hydration_read_budget_exhausted = True
             break
-        snapshot = db_client.document(f'users/{uid}/memory_items/{hit.memory_id}').get()
+        snapshot = document_store.get_document(db_client, f'users/{uid}/memory_items/{hit.memory_id}')
         candidate_hydration_read_count += 1
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}

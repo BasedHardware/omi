@@ -5,6 +5,8 @@ This module owns the trusted V3 account-generation read contract.
 
 from __future__ import annotations
 
+from database import document_store
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, cast
@@ -76,7 +78,7 @@ def read_memory_v3_trusted_account_generation(*, uid: str, db_client: Any) -> V3
 
     source_path = MemoryCollections(uid=uid).memory_state_head
     try:
-        data = _snapshot_data(db_client.document(source_path).get())
+        data = _snapshot_data(document_store.get_document(db_client, source_path))
     except Exception:
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.READ_FAILED)
 

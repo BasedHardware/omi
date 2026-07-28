@@ -32,9 +32,21 @@ def _resolve(db_client: Any) -> Any:
 
 # --- single-document ops --------------------------------------------------------------
 
-def get_document(db_client: Any, path: str) -> Any:
-    """Return the DocumentSnapshot at ``path``."""
-    return _resolve(db_client).document(path).get()
+def get_document(db_client: Any, path: str, *, timeout: Optional[float] = None) -> Any:
+    """Return the document handle at ``path`` (optionally with a read timeout).
+
+    ``timeout`` guards latency-sensitive reads (e.g. rollout gates). Backends that do not accept
+    a ``timeout`` kwarg (some test fakes) fall back to an untimed read.
+    """
+    ref = _resolve(db_client).document(path)
+    if timeout is None:
+        return ref.get()
+    try:
+        return ref.get(timeout=timeout)
+    except TypeError as exc:
+        if 'timeout' not in str(exc):
+            raise
+        return ref.get()
 
 
 def document_exists(db_client: Any, path: str) -> bool:
