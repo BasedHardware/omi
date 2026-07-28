@@ -164,12 +164,17 @@ class FirestoreDocumentStore:
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         fields: Optional[Sequence[str]] = None,
+        start_after: Optional[Dict[str, Any]] = None,
     ) -> List[StoredDocument]:
         query: Any = self._client.collection(collection)
         for field, op, value in filters or ():
             query = query.where(filter=FieldFilter(field, op, value))
         if order_by is not None:
             query = query.order_by(order_by, direction=_DIRECTION[direction])
+        if start_after is not None:
+            # Keyset cursor with a document-id tiebreak so ties on order_by never skip/duplicate.
+            query = query.order_by('__name__', direction=_DIRECTION[direction])
+            query = query.start_after([start_after['value'], start_after['id']])
         if fields is not None:
             query = query.select(list(fields))
         if offset is not None:

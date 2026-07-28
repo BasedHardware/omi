@@ -174,10 +174,20 @@ class FakeDocumentStore:
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         fields: Optional[Sequence[str]] = None,
+        start_after: Optional[Dict[str, Any]] = None,
     ) -> List[StoredDocument]:
         rows = self._matching_rows(collection, filters)
+        reverse = direction == "desc"
         if order_by is not None:
-            rows.sort(key=lambda pd: pd[1].get(order_by), reverse=(direction == "desc"))
+            # (value, path) key so the id tiebreak matches the adapters' keyset ordering.
+            rows.sort(key=lambda pd: (pd[1].get(order_by), pd[0]), reverse=reverse)
+        if start_after is not None:
+            cursor_key = (start_after["value"], f"{collection}/{start_after['id']}")
+            rows = [
+                pd
+                for pd in rows
+                if ((pd[1].get(order_by), pd[0]) < cursor_key if reverse else (pd[1].get(order_by), pd[0]) > cursor_key)
+            ]
         if offset is not None:
             rows = rows[offset:]
         if limit is not None:

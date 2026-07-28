@@ -165,6 +165,27 @@ def test_query_offset_and_count(store, uid):
     assert [d.to_dict()["n"] for d in page] == [1, 2]
 
 
+@pytest.mark.parametrize("direction", ["asc", "desc"])
+def test_query_keyset_start_after_is_tie_safe(store, uid, direction):
+    base = f"users/{uid}/people"
+    # All share the same order_by value (a tie) so only the id tiebreak keeps paging correct.
+    for pid in ("p1", "p2", "p3", "p4", "p5"):
+        store.set(f"{base}/{pid}", {"rank": 7, "name": pid})
+
+    seen = []
+    cursor = None
+    for _ in range(10):  # bounded; a broken keyset would loop or skip
+        page = store.query(base, order_by="rank", direction=direction, limit=2, start_after=cursor)
+        if not page:
+            break
+        seen.extend(d.id for d in page)
+        last = page[-1]
+        cursor = {"value": last.to_dict()["rank"], "id": last.id}
+
+    assert sorted(seen) == ["p1", "p2", "p3", "p4", "p5"]  # every row visited
+    assert len(seen) == len(set(seen))  # none duplicated across pages
+
+
 def test_query_is_scoped_to_the_collection(store, uid):
     other = f"u_{uuid.uuid4().hex}"
     store.set(f"users/{uid}/people/p1", {"name": "mine"})

@@ -237,12 +237,29 @@ class MongoDocumentStore:
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         fields: Optional[Sequence[str]] = None,
+        start_after: Optional[Dict[str, Any]] = None,
     ) -> List[StoredDocument]:
         mongo_filter = self._filter(collection, filters)
+        direction_i = ASCENDING if direction == "asc" else DESCENDING
+        if start_after is not None:
+            # Keyset with a full-path _id tiebreak (mirrors Firestore __name__), so ties on the
+            # order_by field neither skip nor duplicate a row across pages.
+            op = "$gt" if direction == "asc" else "$lt"
+            field_key = "d." + order_by
+            cursor_id = f"{collection}/{start_after['id']}"
+            keyset = {
+                "$or": [
+                    {field_key: {op: start_after["value"]}},
+                    {"$and": [{field_key: start_after["value"]}, {"_id": {op: cursor_id}}]},
+                ]
+            }
+            mongo_filter = {"$and": [mongo_filter, keyset]}
         projection = {"d." + field: 1 for field in fields} if fields is not None else None
         cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=None)
         if order_by is not None:
-            cursor = cursor.sort("d." + order_by, ASCENDING if direction == "asc" else DESCENDING)
+            # Always tiebreak by _id (mirrors Firestore's implicit __name__ ordering) so tie order is
+            # stable across pages — the keyset cursor depends on that consistency.
+            cursor = cursor.sort([("d." + order_by, direction_i), ("_id", direction_i)])
         if offset is not None:
             cursor = cursor.skip(offset)
         if limit is not None:
