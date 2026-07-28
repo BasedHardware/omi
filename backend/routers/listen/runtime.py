@@ -195,13 +195,22 @@ class ListenSessionRuntime:
             )
 
     def capture_client_audio(self, audio: bytes) -> None:
-        self.parity_capture.observe_client_audio(audio)
+        try:
+            self.parity_capture.observe_client_audio(audio)
+        except Exception as error:
+            logger.warning('Listen parity capture client event failed type=%s', type(error).__name__)
 
     def capture_outbound_stt(self, audio: bytes) -> None:
-        self.parity_capture.observe_outbound_stt(audio)
+        try:
+            self.parity_capture.observe_outbound_stt(audio)
+        except Exception as error:
+            logger.warning('Listen parity capture outbound event failed type=%s', type(error).__name__)
 
     def capture_inbound_stt(self, segments: List[Dict[str, Any]]) -> None:
-        self.parity_capture.observe_inbound_stt(segments)
+        try:
+            self.parity_capture.observe_inbound_stt(segments)
+        except Exception as error:
+            logger.warning('Listen parity capture inbound event failed type=%s', type(error).__name__)
 
     def complete_live_transcription(self) -> None:
         """Record the first nonempty transcript successfully delivered to the client."""
@@ -671,7 +680,10 @@ class ListenSessionRuntime:
         if self.onboarding_handler:
             self.onboarding_handler.cleanup()
         await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
-        self.parity_capture.persist()
+        try:
+            self.parity_capture.persist()
+        except Exception as error:
+            logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()

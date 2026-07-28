@@ -117,6 +117,16 @@ class ListenReceiver:
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
 
+    def _capture(self, method: str, *args: Any) -> None:
+        """Keep optional dev capture out of the production audio failure domain."""
+        capture = getattr(self.host, method, None)
+        if not callable(capture):
+            return
+        try:
+            capture(*args)
+        except Exception as error:
+            logger.warning('Listen parity capture failed method=%s type=%s', method, type(error).__name__)
+
     def initialize_decoders(self) -> None:
         request = self.host.request
         if self.host.is_multi_channel:
@@ -206,7 +216,7 @@ class ListenReceiver:
                 for index, config in enumerate(self.channel_configs):
 
                     def callback(segments: List[Dict[str, Any]], channel: ChannelConfig = config) -> None:
-                        self.host.capture_inbound_stt(segments)
+                        self._capture('capture_inbound_stt', segments)
                         for segment in segments:
                             segment['is_user'] = channel.is_user
                             segment['speaker'] = channel.speaker_label
@@ -238,7 +248,7 @@ class ListenReceiver:
                     logger.exception('VAD gate initialization failed; continuing without it')
 
             def capture_and_enqueue(segments: List[Dict[str, Any]]) -> None:
-                self.host.capture_inbound_stt(segments)
+                self._capture('capture_inbound_stt', segments)
                 self.host.transcripts.enqueue(segments)
 
             parakeet_callback = make_stream_callback(capture_and_enqueue, self.vad_gate, False)
@@ -374,7 +384,7 @@ class ListenReceiver:
             platform=self.host.client_device_context.platform,
         )
         if sent:
-            self.host.capture_outbound_stt(outbound_audio)
+            self._capture('capture_outbound_stt', outbound_audio)
             self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
 
     async def _handle_multi_channel_audio(self, data: bytes) -> None:
@@ -398,6 +408,7 @@ class ListenReceiver:
             if not audio:
                 return
         pcm = resample_pcm(bytes(audio), request.sample_rate, TARGET_SAMPLE_RATE)
+        self._capture('capture_client_audio', pcm)
         # Custom-STT clients own transcript production.  Their channel sockets are intentionally
         # absent, but captured audio still proceeds to the pusher mix path.
         if not self.host.use_custom_stt:
@@ -417,7 +428,7 @@ class ListenReceiver:
                     platform=self.host.client_device_context.platform,
                 )
                 if sent:
-                    self.host.capture_outbound_stt(pcm)
+                    self._capture('capture_outbound_stt', pcm)
                     self.host.state.dg_usage_ms_pending += dg_usage_ms
         # Only accumulate channel audio for the pusher mix when an audio-bytes consumer is attached.
         # decide_multi_channel_mix and the teardown flush both gate on this same condition, so
@@ -544,7 +555,7 @@ class ListenReceiver:
                         continue
                     if not decoded:
                         continue
-                    self.host.capture_client_audio(decoded)
+                    self._capture('capture_client_audio', decoded)
                     if self.host.state.audio_ring_buffer is not None:
                         self.host.state.audio_ring_buffer.write(decoded, now)
                     if not self.host.use_custom_stt:

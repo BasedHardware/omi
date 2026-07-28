@@ -139,6 +139,23 @@ user IDs, model revisions, or other high-cardinality request data. Custom-STT
 sessions are excluded because the backend does not own their provider socket or
 provider attempt lifecycle.
 
+### Dev-only parity-pack capture
+
+For local conformance debugging only, the listen runtime may write a restricted
+local cassette. It starts after listen has selected its STT service and accepts
+only an exact Firebase UID from `OMI_PARITY_PACK_ALLOWED_PRINCIPALS`. Capture is
+off unless all of `OMI_ENV_STAGE=dev`, `OMI_PARITY_PACK_CAPTURE=1`, and an
+absolute, outside-repository `OMI_PARITY_PACK_ROOT` are present. No Helm or
+production setting enables it.
+
+When enabled, the receiver records decoded client PCM (including each
+multi-channel PCM stream), successfully forwarded STT audio, and provider
+transcript callbacks. The runtime persists the anonymous cassette during
+teardown. Events and raw audio retained in memory are bounded (1,000 events or
+8 MiB of audio); once either limit is reached, remaining capture events are
+dropped. Capture initialization, observation, and persistence errors are
+isolated from the listen path.
+
 ### Terminal STT provider failure
 
 Provider initialization failure, a latched dead provider socket, or an audio
