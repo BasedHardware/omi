@@ -129,6 +129,52 @@ final class ToolsTests: XCTestCase {
         }
     }
 
+    /// The bug this guards against shipped and misled a real session: a stale MCP server left over
+    /// from a rename could not open the database, and every tool reported that nothing had ever been
+    /// captured — while the current app was writing a frame every three seconds.
+    ///
+    /// A nil store is ambiguous on its own. The heartbeat resolves it: the app rewrites it every
+    /// 30s, so a fresh beat means capture is running somewhere this reader cannot see, and the
+    /// honest answer is "this reader is broken", never "your life is empty".
+    func testALiveHeartbeatWithNoDatabaseIsReportedAsAReaderFaultNotAnEmptyHistory() throws {
+        let heartbeat = FileManager.default.temporaryDirectory
+            .appendingPathComponent("context-heartbeat-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: heartbeat) }
+
+        try CaptureState(capturing: true, capabilities: []).write(to: heartbeat)
+        let state = try XCTUnwrap(CaptureState.read(from: heartbeat))
+
+        XCTAssertFalse(state.isStale, "a beat written just now must not read as stale")
+        XCTAssertTrue(state.capturing)
+
+        // The classifier is the whole fix; asserting on it directly keeps this test honest even if
+        // the wording of the sentence it drives changes.
+        guard case .readerIsStale = CaptureState.diagnoseMissingDatabase() else {
+            throw XCTSkip("no live capture on this machine — the fault path cannot be exercised here")
+        }
+
+        for (name, arguments) in validArguments() {
+            let text = try Tools.call(name: name, arguments: arguments, store: nil).lowercased()
+            XCTAssertFalse(
+                text.contains("has never captured anything"),
+                "\(name) asserted an empty history while capture was live, said: \(text)")
+        }
+    }
+
+    /// A stale beat — or none at all — genuinely does mean the app is not running here, and the
+    /// tools should keep saying so plainly rather than hedging every answer.
+    func testAStaleHeartbeatIsClassifiedAsTheAppSimplyNotRunning() throws {
+        let heartbeat = FileManager.default.temporaryDirectory
+            .appendingPathComponent("context-heartbeat-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: heartbeat) }
+
+        let stale = ContextTime.now - (CaptureState.stalenessSeconds + 60)
+        try CaptureState(capturing: true, updatedAt: stale).write(to: heartbeat)
+        let state = try XCTUnwrap(CaptureState.read(from: heartbeat))
+
+        XCTAssertTrue(state.isStale, "a beat older than the staleness window must read as stale")
+    }
+
     // MARK: - Empty results
 
     func testAnEmptyResultReportsTheCoverageWindow() throws {

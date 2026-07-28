@@ -14,6 +14,16 @@ import Vision
 /// windows through the WindowServer, and Vision OCR. The first is amortised behind a cached
 /// `SCShareableContent` snapshot; the second is gated on a perceptual hash of the capture, so a
 /// screen nobody is touching costs one small screenshot and nothing else.
+///
+/// Three rules decide what a tick is allowed to produce, and all three exist because a frame here is
+/// permanent, searchable, and quoted back to a model:
+///
+/// - **Nothing sensitive is read.** `Redaction.isSensitiveWindow` refuses the window outright, and
+///   `Redaction.scrub` runs on the title and on the OCR result before either can be handed on.
+/// - **Nothing of ours is read.** This app's own window, Claude Desktop, and terminals running
+///   Claude Code are skipped, so the assistant's output cannot be recycled into its own memory.
+/// - **Nothing empty is stored.** Recent screens are remembered as a ring, and a frame with almost
+///   no text in a window that is already the newest row is dropped rather than written.
 @MainActor
 final class ScreenWatcher {
 
@@ -52,7 +62,7 @@ final class ScreenWatcher {
         self.loop = nil
         // Resuming should always produce one full observation: whatever is on screen after a pause
         // is new information regardless of what was there before.
-        lastHash = nil
+        recentHashes.removeAll()
         lastAppName = nil
         lastWindowTitle = nil
         lastSkipReason = nil
@@ -76,8 +86,14 @@ final class ScreenWatcher {
 
     // MARK: - State carried between ticks
 
-    /// Perceptual hash of the previous capture — the whole idle-cost story.
-    private var lastHash: UInt64?
+    /// Perceptual hashes of the last few *distinct* screens — the whole idle-cost story.
+    ///
+    /// A ring rather than a single previous hash because the frames that actually repeat do not
+    /// repeat consecutively: a terminal spinner alternates between two or three renderings, a
+    /// progress bar oscillates, a caret blinks against a changing clock. Compared only against its
+    /// immediate predecessor every one of those looks like new content forever, which is where the
+    /// bulk of the near-empty rows in the database came from.
+    private var recentHashes: [UInt64] = []
     /// What the last *emitted* frame said, so a title-only change is still recorded.
     private var lastAppName: String?
     private var lastWindowTitle: String?
@@ -113,8 +129,10 @@ final class ScreenWatcher {
             noteSkip("Mission Control")
             return
         }
-        guard !ScreenPipeline.isExcluded(appName: appName, bundleID: bundleID) else {
-            noteSkip("excluded app: \(appName)")
+        // Asked before the window is resolved so an app that must never be read costs no
+        // WindowServer enumeration, and asked again below once there is a title to judge.
+        if let reason = ScreenPipeline.exclusionReason(appName: appName, bundleID: bundleID, title: nil) {
+            noteSkip(reason)
             return
         }
 
@@ -123,9 +141,17 @@ final class ScreenWatcher {
             return
         }
 
-        let windowTitle = window.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        guard !ScreenPipeline.isSensitiveSettingsWindow(bundleID: bundleID, title: windowTitle) else {
-            noteSkip("System Settings privacy pane")
+        // Titles are stored and indexed exactly like OCR text, and a terminal title carrying
+        // `--token=…` or a callback URL is the same leak, so the same scrub runs before this value
+        // is compared, emitted, or written.
+        let windowTitle = Redaction.scrub(window.title ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+
+        if let reason = ScreenPipeline.exclusionReason(
+            appName: appName, bundleID: bundleID, title: windowTitle)
+        {
+            noteSkip(reason)
             return
         }
 
@@ -134,22 +160,40 @@ final class ScreenWatcher {
 
         let capturedAt = ContextTime.now
         let hash = ScreenPipeline.dHash(of: image)
-        let unchanged = lastHash.map { ScreenPipeline.isSameScreen(hash, $0) } ?? false
-        lastHash = hash
+        let seenRecently = recentHashes.contains { ScreenPipeline.isSameScreen(hash, $0) }
 
-        guard !unchanged else {
-            // Idle screen: no OCR, no JPEG, and no row at all unless the user moved to a different
-            // window — a duplicate row every 3 seconds would bury the timeline it is meant to be.
+        guard !seenRecently else {
+            // Idle or oscillating screen: no OCR, no JPEG, and no row at all unless the user moved
+            // to a different window — a duplicate row every 3 seconds would bury the timeline it is
+            // meant to be.
             if appName != lastAppName || windowTitle != lastWindowTitle {
                 emit(Frame(capturedAt: capturedAt, appName: appName, windowTitle: windowTitle))
             }
             return
         }
+        remember(hash)
+
+        // Whether this window is already the newest row on the timeline. Computed here because the
+        // decision it feeds — is there enough new text to be worth a row — has to be made before
+        // the JPEG is written, and `lastAppName`/`lastWindowTitle` belong to this actor.
+        let repeatsLastStoredWindow = appName == lastAppName && windowTitle == lastWindowTitle
 
         let captured = CapturedImage(image: image)
         let processed = await Task.detached(priority: .utility) {
-            ScreenPipeline.process(captured, capturedAt: capturedAt)
+            ScreenPipeline.process(
+                captured,
+                capturedAt: capturedAt,
+                repeatsLastStoredWindow: repeatsLastStoredWindow
+            )
         }.value
+
+        guard let processed else {
+            // Pixels moved but no readable text arrived, in a window that is already the last row
+            // stored — a spinner advancing, a progress bar filling, a repaint. The row would say
+            // nothing the row before it does not already say, so it costs a row, a JPEG, and an FTS
+            // entry for nothing.
+            return
+        }
 
         emit(
             Frame(
@@ -160,6 +204,14 @@ final class ScreenWatcher {
                 imagePath: processed.imagePath
             )
         )
+    }
+
+    /// Records a screen we have now seen, evicting the oldest once the ring is full.
+    private func remember(_ hash: UInt64) {
+        recentHashes.append(hash)
+        if recentHashes.count > ScreenPipeline.recentScreenMemory {
+            recentHashes.removeFirst()
+        }
     }
 
     private func emit(_ frame: Frame) {
@@ -284,6 +336,25 @@ private enum ScreenPipeline {
     /// 1 bit, a moved text cursor by ~4, and a real content change by 20+.
     static let dedupeDistance = 5
 
+    /// How many distinct recent screens a new capture is compared against.
+    ///
+    /// Eight covers the loops that actually occur — a two- or three-frame spinner, a window flipping
+    /// between two states, an alt-tab back and forth — without being large enough to swallow real
+    /// re-reading: at 3 s a tick, a screen has to be genuinely identical (within
+    /// ``dedupeDistance``) to something inside the last handful of *different* screens to be
+    /// skipped, and coming back to an unchanged window is not new information anyway. Only novel
+    /// hashes enter the ring, so a spinner cannot flush the real screens out of it.
+    static let recentScreenMemory = 8
+
+    /// Letters and digits below which a frame is not worth a row of its own.
+    ///
+    /// Counted over content characters only, so spinner glyphs (`⠐`, `⠂`), box drawing, progress
+    /// bars and window chrome score zero — which is what a tenth of the frames in the dogfooding
+    /// database were. Twenty-five is roughly four short words: below any real sentence, above every
+    /// decoration. It only ever applies when the window is *also* unchanged from the last stored
+    /// frame, so the first sighting of a text-free window still gets recorded.
+    static let minimumContentCharacters = 25
+
     static let dockBundleIdentifier = "com.apple.dock"
 
     /// Held for the process lifetime rather than built per request: a Swift array literal assigned
@@ -293,68 +364,109 @@ private enum ScreenPipeline {
 
     // MARK: Exclusions
 
-    /// Surfaces that must never be read. Password managers are the reason this list exists at all —
-    /// OCRing an unlocked vault would put real secrets in a plain-text database. The screenshot and
-    /// screen-share tools are here because their windows are either our own capture UI reflected
-    /// back or a picker showing someone else's screen.
-    static let excludedBundleIdentifiers: Set<String> = [
-        // Password managers and secret stores.
-        "com.1password.1password",
-        "com.1password.browser-support",
-        "com.agilebits.onepassword7",
-        "com.agilebits.onepassword-osx",
-        "com.bitwarden.desktop",
-        "com.dashlane.Dashlane",
-        "com.lastpass.LastPass",
-        "com.lastpass.lastpassmacdesktop",
-        "org.keepassxc.keepassxc",
-        "in.sinew.Enpass-Desktop",
-        "com.nordpass.macos",
-        "me.proton.pass.electron",
-        "com.apple.keychainaccess",
-        "com.apple.Passwords",
-        // Authentication surfaces the system puts in front of the user.
-        "com.apple.SecurityAgent",
-        "com.apple.loginwindow",
-        // Screenshot / screen-share tooling.
-        "com.apple.screencaptureui",
-        "com.apple.ScreenSharing",
-        "com.apple.screensharing.agent",
-        "com.apple.screensharing.MessagesAgent",
-        "pl.maketheweb.cleanshotx",
-        "com.loom.desktop",
-        "cc.ffitch.shottr",
-        "com.monosnap.monosnap",
-        "com.skitch.skitch",
-    ]
-
-    /// Bundle IDs drift between versions and rebrands; these product names do not.
-    static let excludedNameFragments = [
-        "password", "keychain", "keepass", "bitwarden", "dashlane", "lastpass", "nordpass",
-        "enpass", "authenticator", "screenshot", "screen sharing", "snagit",
-    ]
-
-    static let settingsBundleIdentifiers: Set<String> = [
-        "com.apple.systempreferences", "com.apple.SystemPreferences",
-    ]
-
-    /// System Settings is ordinary until the user is on a pane that shows credentials or the exact
-    /// permission grants this app depends on. The pane is only knowable from the window title.
-    static let sensitiveSettingsPanes = [
-        "password", "privacy", "security", "touch id", "users & groups", "login",
-    ]
-
-    static func isExcluded(appName: String, bundleID: String) -> Bool {
-        if let own = Bundle.main.bundleIdentifier, bundleID == own { return true }
-        if excludedBundleIdentifiers.contains(bundleID) { return true }
-        let name = appName.lowercased()
-        return excludedNameFragments.contains { name.contains($0) }
+    /// Why this window must not be read, or nil if it may be. The reason is the skip-log line.
+    ///
+    /// Called twice per tick — once with no title, before the WindowServer is asked anything, and
+    /// once with one. The same policy both times; the second call simply has more evidence.
+    ///
+    /// The credential half of it lives in `Redaction` so it can be unit-tested without a screen.
+    /// `Redaction` is asked twice because `app` matches either identifier form and this is the one
+    /// caller that holds both: the bundle id carries the title, and the display name catches the
+    /// vendors whose bundle id says nothing (a rebranded password manager still calls itself one).
+    /// The title is never put in the reason — a window excluded *because of* its title is exactly
+    /// the one whose title should not be written down.
+    static func exclusionReason(appName: String, bundleID: String, title: String?) -> String? {
+        if isOwnOutput(appName: appName, bundleID: bundleID, title: title) {
+            return "own output: \(appName)"
+        }
+        if Redaction.isSensitiveWindow(app: bundleID, title: nil)
+            || Redaction.isSensitiveWindow(app: appName, title: nil)
+        {
+            return "excluded app: \(appName)"
+        }
+        if Redaction.isSensitiveWindow(app: bundleID, title: title)
+            || Redaction.isSensitiveWindow(app: appName, title: title)
+        {
+            return "sensitive window in \(appName)"
+        }
+        return nil
     }
 
-    static func isSensitiveSettingsWindow(bundleID: String, title: String?) -> Bool {
-        guard settingsBundleIdentifiers.contains(bundleID) else { return false }
+    // MARK: Not reading ourselves
+
+    /// Claude Desktop. Anything else Anthropic ships is caught by the prefix below, because every
+    /// bundle they ship is a surface where this assistant's own words are on screen.
+    static let claudeDesktopBundleIdentifier = "com.anthropic.claudefordesktop"
+    static let anthropicBundlePrefix = "com.anthropic."
+
+    /// Terminal emulators, where Claude Code runs. The set exists only to gate the title check
+    /// below: a terminal is otherwise ordinary and worth capturing.
+    static let terminalBundleIdentifiers: Set<String> = [
+        "com.apple.terminal",
+        "com.googlecode.iterm2",
+        "net.kovidgoyal.kitty",
+        "com.mitchellh.ghostty",
+        "io.alacritty",
+        "org.alacritty",
+        "com.github.wez.wezterm",
+        "dev.warp.warp-stable",
+        "dev.warp.warp-preview",
+        "co.zeit.hyper",
+        "org.tabby",
+    ]
+
+    /// Emulators ship under new bundle ids faster than a list can track; their names are stabler.
+    static let terminalNameFragments = [
+        "terminal", "iterm", "kitty", "ghostty", "alacritty", "wezterm", "warp", "hyper", "tabby",
+    ]
+
+    /// What marks a terminal window as one this assistant is running inside.
+    ///
+    /// There is no honest signal for "Claude Code is the process in this window" from outside it:
+    /// the frontmost application is the emulator, not the CLI, and walking the process tree is a
+    /// different permission and a different class of bug. The title is the cheap evidence available,
+    /// and Claude Code writes its state into it — `✳` while it is working, and the word `claude` in
+    /// the command-derived title most emulators set.
+    ///
+    /// **It catches:** a Terminal / iTerm2 / kitty / Ghostty / WezTerm / Alacritty / Warp / Hyper /
+    /// Tabby window whose title mentions Claude or carries the `✳` marker. That is the shape of the
+    /// 22-in-906 self-captures found in the database.
+    ///
+    /// **It does not catch:** Claude Code in an editor's integrated terminal (VS Code, Cursor,
+    /// JetBrains) or inside a tmux/screen session that rewrites the title; an emulator configured to
+    /// show only the working directory or the hostname; a background pane; or claude.ai in a browser
+    /// tab. Nor does it distinguish "Claude Code is running here" from "this window happens to be in
+    /// ~/claude-experiments" — a directory named after Claude loses its frames, which is the cheap
+    /// side of the trade. The remaining hole is real, and the fix for it is a signal from the CLI
+    /// rather than a longer list of guesses about titles.
+    static let claudeCodeTitleMarkers = ["claude", "✳"]
+
+    /// Windows whose text originates from this app or from Claude itself.
+    ///
+    /// Storing them is not a privacy problem, it is a correctness one: OCRing the assistant's own
+    /// output back into the database means the next `recall` returns Claude's words as "context
+    /// about the user's life", and every turn compounds the last one.
+    static func isOwnOutput(appName: String, bundleID: String, title: String?) -> Bool {
+        let bundle = bundleID.lowercased()
+        let name = appName.lowercased()
+
+        // `Bundle.main.bundleIdentifier` is nil under `swift run` and in tests, so the shipped id is
+        // also compared literally — a dev build must not read itself either.
+        if bundle == ContextPaths.bundleIdentifier { return true }
+        if let own = Bundle.main.bundleIdentifier, bundleID == own { return true }
+
+        if bundle == claudeDesktopBundleIdentifier || bundle.hasPrefix(anthropicBundlePrefix) {
+            return true
+        }
+        // Claude Desktop as macOS reports its display name.
+        if name == "claude" { return true }
+
+        guard terminalBundleIdentifiers.contains(bundle)
+            || terminalNameFragments.contains(where: { name.contains($0) })
+        else { return false }
+
         guard let title = title?.lowercased() else { return false }
-        return sensitiveSettingsPanes.contains { title.contains($0) }
+        return claudeCodeTitleMarkers.contains { title.contains($0) }
     }
 
     static func isScreenLocked() -> Bool {
@@ -440,16 +552,55 @@ private enum ScreenPipeline {
 
     // MARK: Off-main work
 
-    static func process(_ captured: CapturedImage, capturedAt: Double) -> ProcessedFrame {
+    /// Reads the frame and decides whether it earns a row. Nil means store nothing at all.
+    static func process(
+        _ captured: CapturedImage,
+        capturedAt: Double,
+        repeatsLastStoredWindow: Bool
+    ) -> ProcessedFrame? {
         // Detached tasks run on the cooperative pool, which does not drain autorelease pools; the
         // CoreGraphics and Vision temporaries below would otherwise accumulate for the app's life.
-        autoreleasepool {
+        autoreleasepool { () -> ProcessedFrame? in
             let text = recognizeText(in: captured.image)
+
+            // Judged before the JPEG is written rather than after: a frame nobody stores must leave
+            // nothing behind, and an orphaned JPEG is never cleaned up — pruning walks the frames
+            // table, so a file with no row outlives the database itself.
+            if repeatsLastStoredWindow, contentLength(of: text) < minimumContentCharacters {
+                return nil
+            }
+
             let path = writeJPEG(captured.image, capturedAt: capturedAt)
             return ProcessedFrame(ocrText: text, imagePath: path)
         }
     }
 
+    /// Letters and digits in `text`, ignoring whitespace, punctuation and symbols.
+    ///
+    /// Symbols are what a low-signal frame is made of — a Braille spinner, a block-drawing progress
+    /// bar, a row of window-chrome glyphs — and counting them would let exactly the frames this is
+    /// meant to catch pass as content.
+    static func contentLength(of text: String?) -> Int {
+        guard let text else { return 0 }
+        var count = 0
+        for scalar in text.unicodeScalars where contentCharacters.contains(scalar) { count += 1 }
+        return count
+    }
+
+    static let contentCharacters = CharacterSet.letters.union(.decimalDigits)
+
+    /// OCR, scrubbed. The raw recognition result never leaves this function.
+    ///
+    /// This is the only place OCR text is produced, which is what makes "redact before the write"
+    /// enforceable rather than a habit: there is no path from Vision to the database that could skip
+    /// the scrub. Redacting afterwards would be theatre — the plaintext would already be in the
+    /// file, in the WAL, and in any backup taken between the two.
+    ///
+    /// What this does *not* protect is the JPEG written beside the row: it still holds the pixels
+    /// the credential was drawn in. Images are not searched and not returned by any MCP tool, so a
+    /// secret cannot be recalled out of one, but anyone with the frames directory can look. Fixing
+    /// that means not writing the image when a scrub fires, which is a bigger behaviour change than
+    /// this one and belongs with the retention policy.
     static func recognizeText(in image: CGImage) -> String? {
         let sink = TextSink()
         let request = VNRecognizeTextRequest { request, error in
@@ -476,7 +627,7 @@ private enum ScreenPipeline {
             ContextLog.error("OCR failed: \(failure.localizedDescription)", "screen")
             return nil
         }
-        return sink.lines.joined(separator: "\n")
+        return Redaction.scrub(sink.lines.joined(separator: "\n"))
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
     }

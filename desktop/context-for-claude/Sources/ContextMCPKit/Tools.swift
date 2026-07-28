@@ -98,13 +98,43 @@ public enum Tools {
         }
     }
 
+    /// Why this reader has no database, said in the user's terms.
+    ///
+    /// Never assert an empty life from an unopenable database. `diagnoseMissingDatabase()` reads the
+    /// heartbeat, which the app rewrites every 30s and which no reader fault can forge: a live beat
+    /// proves capture is running somewhere this process cannot see, which is a fact about *this
+    /// binary*, not about the user. Saying "nothing was ever captured here" in that state is the
+    /// confident falsehood the coverage-window design exists to prevent.
+    fileprivate static func missingDatabaseSentence(subject: String) -> String {
+        switch CaptureState.diagnoseMissingDatabase() {
+        case let .readerIsStale(capturingSince, age):
+            let since = Self.clockFormatter.string(from: Date(timeIntervalSince1970: capturingSince))
+            return """
+            \(subject) cannot read the capture database — but Context for Claude *is* running and \
+            capturing here: its heartbeat was written \(Int(age))s ago, at \(since). This is a fault \
+            in this reader, not an empty history. Do not tell the user nothing was recorded. The most \
+            likely cause is a stale MCP server left over from an earlier install: restarting Claude \
+            reconnects it to the current app.
+            """
+        case .appNotRunning:
+            return """
+            \(subject) has not captured anything on this Mac yet — the app is not running here, so \
+            there is no local speech, screen text, or activity history from the last few minutes.
+            """
+        }
+    }
+
+    /// Wall-clock only; the date is always today by the time this is reachable.
+    fileprivate static let clockFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
     /// What a local-only tool says when this Mac has captured nothing. It points at the tools that
     /// *do* reach the account, so "no local database" never reads as "Claude knows nothing".
     fileprivate static var noLocalCaptureMessage: String {
-        var out = """
-        Context for Claude has not captured anything on this Mac yet — the app has not run here, so there is no \
-        local speech, screen text, or activity history from the last few minutes.
-        """
+        var out = missingDatabaseSentence(subject: "Context for Claude")
         if OmiBackend.shared.isConfigured {
             out += " "
             out += """
@@ -628,9 +658,21 @@ extension Tools {
         return renderActivity(blocks, since: since, until: until) + swappedNote
     }
 
+    /// A store that opens but cannot be queried is a *third* state, and the one `try?` used to erase:
+    /// the database is right there and readable enough to open, so reporting "never captured
+    /// anything" is a lie about the user rather than a report about the reader. Carry the failure
+    /// through and say which of the three actually happened.
     private static func runStatus(_ store: ContextStore?) -> String {
-        let local = store.flatMap { try? Queries.status($0) }
-        return renderStatus(local) + "\n\n" + renderOmiStatus()
+        var local: StatusInfo?
+        var queryFailure: String?
+        if let store {
+            do {
+                local = try Queries.status(store)
+            } catch {
+                queryFailure = error.localizedDescription
+            }
+        }
+        return renderStatus(local, queryFailure: queryFailure) + "\n\n" + renderOmiStatus()
     }
 }
 
@@ -763,9 +805,10 @@ extension Tools {
     /// under-deduping is the safe direction: a repeated line costs a reader a moment, a dropped one
     /// costs them the fact.
     private static func dedupe(_ hits: [MergedHit]) -> [MergedHit] {
+        // Rank first: on a duplicate, the copy the ranker liked best is the one worth keeping.
         let ordered = hits.sorted { lhs, rhs in
-            if lhs.at != rhs.at { return lhs.at > rhs.at }
             if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+            if lhs.at != rhs.at { return lhs.at > rhs.at }
             // On an exact tie the live record wins: it is the raw thing the user just said.
             return lhs.origin == .live && rhs.origin == .omi
         }
@@ -799,13 +842,21 @@ extension Tools {
     }
 
     private static func renderMerged(_ hits: [MergedHit], order: HitOrder, deduped: Bool = false) -> String {
-        // Fit the *newest* hits into the budget regardless of display order, so truncation always
-        // drops the least relevant end.
-        let newestFirst = deduped ? hits.sorted { $0.at > $1.at } : dedupe(hits)
+        // Which hits survive the budget is decided by **relevance**, not recency. `Queries.recall`
+        // ranks by match quality now, and truncating the oldest end threw that away — the one
+        // genuine match for a query could be dropped for three newer incidental ones, and an empty
+        // answer inside the coverage window is something the model is explicitly licensed to report
+        // as proof the thing never happened. Selection is therefore by rank; only the *display*
+        // order below is chronological, because a dated list is what a person can read.
+        let deduplicated = deduped ? hits : dedupe(hits)
+        let byRelevance = deduplicated.sorted { lhs, rhs in
+            if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+            return lhs.at > rhs.at
+        }
         var kept: [MergedHit] = []
         var characters = 0
         var omitted = 0
-        for hit in newestFirst {
+        for hit in byRelevance {
             if kept.count >= maxHitLines || characters + hit.line.count > maxHitCharacters {
                 omitted += 1
                 continue
@@ -814,7 +865,7 @@ extension Tools {
             kept.append(hit)
         }
 
-        let display = order == .oldestFirst ? kept.sorted { $0.at < $1.at } : kept
+        let display = order == .oldestFirst ? kept.sorted { $0.at < $1.at } : kept.sorted { $0.at > $1.at }
         var out: [String] = []
         var currentDay: Date?
         var undated: [String] = []
@@ -1105,8 +1156,10 @@ extension Tools {
             }
             let start = timeFormatter.string(from: Date(timeIntervalSince1970: block.startedAt))
             let end = timeFormatter.string(from: Date(timeIntervalSince1970: block.endedAt))
-            let minutes = max(1, Int((block.durationSeconds / 60).rounded()))
-            var line = "- **\(start)–\(end)** (\(minutes) min) · \(block.app)"
+            // The same formatter `flushTotals` uses, deliberately. Rounding a 20-second block up to
+            // "1 min" here while the per-app rollup reported "20 sec" for the very same seconds made
+            // one response contradict itself, and a reader has no way to tell which half to believe.
+            var line = "- **\(start)–\(end)** (\(duration(block.durationSeconds))) · \(block.app)"
             if let window = block.window.flatMap(nonEmpty) { line += " — \(collapse(window))" }
             out.append(line)
             dayTotals[block.app, default: 0] += block.durationSeconds
@@ -1115,15 +1168,21 @@ extension Tools {
         return out.joined(separator: "\n")
     }
 
-    private static func renderStatus(_ status: StatusInfo?) -> String {
+    private static func renderStatus(_ status: StatusInfo?, queryFailure: String? = nil) -> String {
         var out: [String] = ["**This Mac — Context for Claude's live capture**", ""]
 
         guard let status else {
-            out.append("""
-            Context for Claude has never captured anything here: there is no local database, so it has not run \
-            on this Mac. Nothing from the last few minutes is available, and `recent` and `activity` \
-            have nothing to report.
-            """)
+            // The database opened and then refused to answer. That is a reader fault with the file
+            // sitting right there, so it must never be phrased as an empty history.
+            if let queryFailure {
+                out.append("""
+                The capture database opened but could not be read: \(queryFailure). This is a fault \
+                in this reader — it says nothing about whether the user was recorded. Do not report \
+                an empty history.
+                """)
+                return out.joined(separator: "\n")
+            }
+            out.append(missingDatabaseSentence(subject: "This reader"))
             return out.joined(separator: "\n")
         }
 
@@ -1368,6 +1427,9 @@ extension Tools {
         }
     }
 
+    /// The only duration formatter in this file, so no two lines of one response can disagree about
+    /// how long the same stretch of time was. Seconds below a minute, whole minutes below an hour,
+    /// hours and minutes above — never a sub-minute span rounded up to "1 min".
     fileprivate static func duration(_ seconds: Double) -> String {
         let total = Int(max(0, seconds).rounded())
         if total < 60 { return "\(total) sec" }

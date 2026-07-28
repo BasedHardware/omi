@@ -8,6 +8,9 @@ import Foundation
 /// `status` reports this **by name**. The key itself is never printed, logged, cached to disk, or
 /// echoed back to the model — this process only ever reads it and puts it in an Authorization
 /// header.
+///
+/// `appSupportFile` is the credential this product actually owns; the other two are an escape hatch
+/// and a scavenge, in that order.
 public enum OmiKeySource: Sendable {
     case environment
     case appSupportFile
@@ -27,10 +30,18 @@ public enum OmiKeySource: Sendable {
 /// `context-for-claude-mcp` is spawned per Claude session and lives for seconds, so OAuth is not an option:
 /// there is nowhere to show a browser and nothing to persist a refresh token into. A pre-issued
 /// read key is the only credential shape that fits the process.
+///
+/// **The key file is the one that is meant to answer.** The app provisions it: signed in with a real
+/// Firebase ID token, `MCPKeyProvisioner` asks the backend for an `omi_mcp_…` key of this account's
+/// own and writes it there. The environment variable is an override for development, and the Claude
+/// config is a last-resort scavenge that must never be mistaken for the design — see
+/// `fromClaudeConfig`.
 enum OmiKeyResolver {
     static let environmentVariable = "CONTEXT_OMI_MCP_KEY"
 
-    /// `~/Library/Application Support/ContextForClaude/mcp-key` — written 0600 by the app after sign-in.
+    /// `~/Library/Application Support/ContextForClaude/mcp-key` — the key the app provisions for
+    /// itself, written 0600 by `MCPKeyProvisioner` once the user is signed in. On a healthy install
+    /// this is where the credential comes from.
     static var keyFileURL: URL {
         ContextPaths.supportDirectory.appendingPathComponent("mcp-key")
     }
@@ -53,7 +64,9 @@ enum OmiKeyResolver {
     static func resolve() -> (key: String, source: OmiKeySource)? {
         guard !isRunningTests else { return nil }
         if let key = fromEnvironment() { return (key, .environment) }
+        // The expected source.
         if let key = fromKeyFile() { return (key, .appSupportFile) }
+        // Fallback only, and another server's property. See `fromClaudeConfig`.
         if let key = fromClaudeConfig() { return (key, .claudeConfig) }
         return nil
     }
@@ -64,6 +77,9 @@ enum OmiKeyResolver {
         normalize(ProcessInfo.processInfo.environment[environmentVariable])
     }
 
+    /// The app's own credential: the whole file is the key, trimmed. No JSON, no envelope — the
+    /// writer and this reader are the two halves of one contract, and the simplest possible format
+    /// is what keeps them from drifting apart across two targets.
     private static func fromKeyFile() -> String? {
         let url = keyFileURL
         guard let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) else {
@@ -78,8 +94,19 @@ enum OmiKeyResolver {
         return normalize(text)
     }
 
-    /// The user already has a working key in their Claude config; reusing it means Context for Claude answers
-    /// from their real Omi account the moment it is installed, with nothing to set up.
+    /// **Last resort, and someone else's credential.**
+    ///
+    /// This reads the Authorization header of the `omi-memory` MCP server — a *different* server,
+    /// configured by the user for their own reasons. It is kept only because it costs nothing and
+    /// rescues an install whose own key has not been provisioned yet (offline at first launch,
+    /// still signed out, a wiped support directory).
+    ///
+    /// It is not a source anything may rely on. The entry belongs to another product: it exists
+    /// only if the user happens to have set that server up, it disappears the moment they remove or
+    /// re-register it, and it may authenticate a different Omi account than the one this app is
+    /// signed in to. Depending on it is exactly the bug this fallback used to be — the app looked
+    /// for a key nothing ever wrote, found this one on the author's Mac, and reported the account
+    /// unreachable on every Mac that had never configured `omi-memory`.
     private static func fromClaudeConfig() -> String? {
         guard let data = try? Data(contentsOf: ClaudeConfig.claudeCodeConfigURL),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -405,11 +432,15 @@ public final class OmiBackend: @unchecked Sendable {
     public var seenRange: (oldest: Double, newest: Double)? { seen.range }
 
     /// The sentence every tool uses when there is no key at all, so the wording never drifts.
+    ///
+    /// It names the one action that fixes it. The app provisions its own key the first time it is
+    /// signed in, so "no key" almost always means "signed out", not "misconfigured" — and telling
+    /// the reader to go hunting through environment variables would send them the wrong way.
     public static let notConfiguredSentence = """
-    Omi account history is unavailable: no Omi MCP API key is configured. Context for Claude looked at the \
-    \(OmiKeyResolver.environmentVariable) environment variable, \
-    ~/Library/Application Support/ContextForClaude/mcp-key, and the omi-memory entry in ~/.claude.json. \
-    Only what Context for Claude captured locally on this Mac was searched.
+    Omi account history is unavailable: no Omi MCP API key is configured. Context for Claude provisions \
+    one for itself at ~/Library/Application Support/ContextForClaude/mcp-key once you are signed in, and \
+    nothing is there yet — open Context for Claude in the menu bar and sign in to your Omi account. Only \
+    what Context for Claude captured locally on this Mac was searched.
     """
 
     // MARK: Reads
