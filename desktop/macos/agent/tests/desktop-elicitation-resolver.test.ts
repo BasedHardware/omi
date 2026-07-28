@@ -20,11 +20,11 @@ const permissionRequest = normalizeAcpPermission({
   },
 })!;
 
-const questionRequest = normalizeAskUser({
+const [questionRequest] = normalizeAskUser({
   adapterId: "acp",
   agentLabel: "Omi",
-  args: { question: "Which branch?", options: ["main"] },
-})!;
+  args: { questions: [{ question: "Which branch?", options: ["main"] }] },
+});
 
 function kernelStub(overrides: Record<string, unknown> = {}) {
   const subscribers: Array<(event: AgentEvent) => void> = [];

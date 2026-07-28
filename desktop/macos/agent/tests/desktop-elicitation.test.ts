@@ -230,42 +230,103 @@ describe("ACP auto-resolution rule", () => {
 
 describe("ask_user normalization", () => {
   it("accepts plain string options", () => {
-    const request = normalizeAskUser({
+    const [request] = normalizeAskUser({
       adapterId: "acp",
       agentLabel: "Omi",
-      args: { question: "Which branch?", options: ["main", "develop"] },
+      args: { questions: [{ question: "Which branch?", options: ["main", "develop"] }] },
     });
 
-    expect(request!.options).toEqual([
+    expect(request.options).toEqual([
       { optionId: "main", label: "main", effect: "choice" },
       { optionId: "develop", label: "develop", effect: "choice" },
     ]);
-    expect(request!.allowsFreeText).toBe(true);
+    expect(request.allowsFreeText).toBe(true);
   });
 
   it("accepts labelled options with stable ids", () => {
-    const request = normalizeAskUser({
+    const [request] = normalizeAskUser({
       adapterId: "acp",
       agentLabel: "Omi",
-      args: { question: "Pick", options: [{ id: "b1", label: "Branch one" }] },
+      args: { questions: [{ question: "Pick", options: [{ id: "b1", label: "Branch one" }] }] },
     });
 
-    expect(request!.options).toEqual([{ optionId: "b1", label: "Branch one", effect: "choice" }]);
+    expect(request.options).toEqual([{ optionId: "b1", label: "Branch one", effect: "choice" }]);
   });
 
-  it("honours an explicit free-text opt-out", () => {
-    const request = normalizeAskUser({
+  it("honours an explicit free-text opt-out per question", () => {
+    const requests = normalizeAskUser({
       adapterId: "acp",
       agentLabel: "Omi",
-      args: { question: "Pick one", options: ["a", "b"], allow_free_text: false },
+      args: {
+        questions: [
+          { question: "Pick one", options: ["a", "b"], allow_free_text: false },
+          { question: "And a name?" },
+        ],
+      },
     });
 
-    expect(request!.allowsFreeText).toBe(false);
+    // Free text is a per-question property: opting one out must not carry to
+    // the rest of the set.
+    expect(requests.map((request) => request.allowsFreeText)).toEqual([false, true]);
   });
 
-  it("returns null without a question", () => {
-    expect(normalizeAskUser({ adapterId: "a", agentLabel: "A", args: {} })).toBeNull();
-    expect(normalizeAskUser({ adapterId: "a", agentLabel: "A", args: null })).toBeNull();
+  it("turns one call into one request per question, in the order asked", () => {
+    const requests = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [
+          { question: "Which stack?", options: ["Next.js", "SwiftUI"] },
+          { question: "What name?" },
+          { question: "Host where?", options: ["Vercel", "Fly"] },
+        ],
+      },
+    });
+
+    expect(requests.map((request) => request.prompt)).toEqual([
+      "Which stack?",
+      "What name?",
+      "Host where?",
+    ]);
+    expect(requests.every((request) => request.mode === "question")).toBe(true);
+    expect(requests.every((request) => request.channel === "omi_ask_user")).toBe(true);
+  });
+
+  it("drops a blank option instead of losing the question it belongs to", () => {
+    // Observed live: a model padded a free-text question with options: [""].
+    // Rejecting the call for it discarded all four questions the user was
+    // about to be asked.
+    const requests = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [
+          { question: "Which stack?", options: [""], allow_free_text: true },
+          { question: "Host where?", options: ["Vercel", "", "Fly"] },
+        ],
+      },
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0].options).toEqual([]);
+    expect(requests[0].allowsFreeText).toBe(true);
+    expect(requests[1].options.map((option) => option.label)).toEqual(["Vercel", "Fly"]);
+  });
+
+  it("drops an entry that asks nothing rather than carding an empty question", () => {
+    const requests = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: { questions: [{ question: "   " }, { question: "Real question?" }, {}] },
+    });
+
+    expect(requests.map((request) => request.prompt)).toEqual(["Real question?"]);
+  });
+
+  it("returns nothing without questions", () => {
+    expect(normalizeAskUser({ adapterId: "a", agentLabel: "A", args: {} })).toEqual([]);
+    expect(normalizeAskUser({ adapterId: "a", agentLabel: "A", args: null })).toEqual([]);
+    expect(normalizeAskUser({ adapterId: "a", agentLabel: "A", args: { questions: [] } })).toEqual([]);
   });
 });
 
@@ -276,11 +337,11 @@ describe("dispatch kind mapping", () => {
       agentLabel: "Omi",
       params: acpParams(),
     })!;
-    const question = normalizeAskUser({
+    const [question] = normalizeAskUser({
       adapterId: "acp",
       agentLabel: "Omi",
-      args: { question: "Which branch?" },
-    })!;
+      args: { questions: [{ question: "Which branch?" }] },
+    });
 
     expect(dispatchKindFor(permission)).toBe("approval");
     expect(dispatchKindFor(question)).toBe("routing_choice");

@@ -183,14 +183,15 @@ enum GeneratedToolCapabilities {
       title: "Ask User",
       latency: .asyncBackground,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Ask the user a question mid-run and wait for their answer.",
+      summary: "Ask the user one or more questions mid-run and wait for their answers.",
       bullets: [
       "Use when the work cannot proceed without a decision only the user can make.",
-      "Blocks the run until the user answers or cancels.",
+      "Carries the whole set of questions in one call; blocks the run until the user answers or cancels.",
       "Use when the work genuinely cannot proceed without a decision only the user can make.",
+      "Put every question that decision needs into one call; they are answered as one set.",
       "Prefer options the user can click; set allow_free_text when an unlisted answer is reasonable.",
       "Do not use for onboarding steps; ask_followup owns that flow.",
-      "The run blocks until the user answers or cancels, so ask once and act on the answer."
+      "The run blocks until the user answers or cancels, so ask the full set once and act on the answers."
     ]
     ),
     Capability(

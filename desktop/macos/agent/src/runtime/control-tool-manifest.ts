@@ -406,7 +406,7 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     // The model sees this description and nothing else: promptGuidelines are not
     // projected into MCP tool definitions. So the "when" has to live here, or the
     // tool only ever fires when the user names it out loud.
-    description: `Ask the user a question and wait for their answer before continuing.
+    description: `Ask the user one or more questions and wait for their answers before continuing.
 
 Use this instead of guessing whenever the next step depends on something only the user can decide:
 - their request is ambiguous and the readings lead to different work
@@ -414,22 +414,25 @@ Use this instead of guessing whenever the next step depends on something only th
 - there are several reasonable paths and the choice is theirs
 - you are about to do something significant and irreversible
 
-Prefer this over asking in plain prose: a plain question ends your turn and the user has to retype an answer, while this pauses the run and resumes with what they chose. Pass options when you can name the likely answers. Ask once, then act on the answer.
+Prefer this over asking in plain prose: a plain question ends your turn and the user has to retype an answer, while this pauses the run and resumes with what they chose.
+
+Put every question the decision actually needs into one call. They are shown as one set the user walks through and answers in a single pass, so a three-part decision costs one interruption rather than three. Pass options when you can name the likely answers, and leave allow_free_text on when an unlisted answer is reasonable.
 
 Do not use it for onboarding steps; ask_followup owns that flow. Do not use it to confirm something you already know, or to ask permission for a tool that already has its own approval.`,
-    promptSnippet: "ask_user - Ask the user a question and wait for the answer",
+    promptSnippet: "ask_user - Ask the user questions and wait for the answers",
     promptGuidelines: [
       "Use when the work genuinely cannot proceed without a decision only the user can make.",
+      "Put every question that decision needs into one call; they are answered as one set.",
       "Prefer options the user can click; set allow_free_text when an unlisted answer is reasonable.",
       "Do not use for onboarding steps; ask_followup owns that flow.",
-      "The run blocks until the user answers or cancels, so ask once and act on the answer.",
+      "The run blocks until the user answers or cancels, so ask the full set once and act on the answers.",
     ],
     capabilityDoc: controlDoc(
       "Ask User",
-      "Ask the user a question mid-run and wait for their answer.",
+      "Ask the user one or more questions mid-run and wait for their answers.",
       [
         "Use when the work cannot proceed without a decision only the user can make.",
-        "Blocks the run until the user answers or cancels.",
+        "Carries the whole set of questions in one call; blocks the run until the user answers or cancels.",
       ],
     ),
     latency: "async background",
@@ -441,18 +444,29 @@ Do not use it for onboarding steps; ask_followup owns that flow. Do not use it t
     ],
     timeoutClass: "long",
     properties: {
-      question: { type: "string", description: "The question to put to the user." },
-      options: {
+      questions: {
         type: "array",
-        items: { type: "string" },
-        description: "Optional answers the user can click.",
-      },
-      allow_free_text: {
-        type: "boolean",
-        description: "Whether the user may type an answer instead of choosing. Defaults to true.",
+        description:
+          "Every question this decision needs. Ask as many as it actually takes; they are presented as one set the user answers in a single pass.",
+        items: {
+          type: "object",
+          properties: {
+            question: { type: "string", description: "The question to put to the user." },
+            options: {
+              type: "array",
+              items: { type: "string" },
+              description: "Optional answers the user can click.",
+            },
+            allow_free_text: {
+              type: "boolean",
+              description: "Whether the user may type an answer instead of choosing. Defaults to true.",
+            },
+          },
+          required: ["question"],
+        },
       },
     },
-    required: ["question"],
+    required: ["questions"],
   },
   {
     name: "create_desktop_dispatch",

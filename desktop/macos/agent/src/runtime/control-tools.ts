@@ -180,10 +180,29 @@ const routeDesktopIntentSchema = strictObject({
   proposal: desktopIntentProposalSchema.optional(),
 });
 
-const askUserSchema = strictObject({
+/**
+ * Runaway-payload guards, not product limits.
+ *
+ * How many questions a decision needs, and how many answers to offer, is the
+ * model's call. These bounds exist only so a malformed or looping call cannot
+ * turn one invocation into thousands of dispatch rows the user would have to
+ * dismiss one at a time. No real question set approaches them.
+ */
+const ASK_USER_MAX_QUESTIONS = 32;
+const ASK_USER_MAX_OPTIONS_PER_QUESTION = 32;
+
+const askUserQuestionSchema = strictObject({
   question: z.string().min(1),
-  options: z.array(z.string()).optional(),
+  // Deliberately not `.min(1)` per option. A model that pads the list with a
+  // blank label is making a slip about one choice, and rejecting the whole call
+  // for it throws away every other question the user was about to be asked.
+  // `normalizeAskUser` drops blank labels, so the card never renders one.
+  options: z.array(z.string()).max(ASK_USER_MAX_OPTIONS_PER_QUESTION).optional(),
   allow_free_text: z.boolean().optional(),
+});
+
+const askUserSchema = strictObject({
+  questions: z.array(askUserQuestionSchema).min(1).max(ASK_USER_MAX_QUESTIONS),
 });
 
 const evaluateDesktopToolPolicySchema = strictObject({
@@ -986,20 +1005,30 @@ export async function handleAgentControlToolCall(
         if (!context.askUser || !sessionId) {
           throw new Error("Asking the user is unavailable in this runtime");
         }
-        const request = normalizeAskUser({
+        const askUser = context.askUser;
+        const requests = normalizeAskUser({
           adapterId: context.defaultAdapterId ?? "acp",
           agentLabel: "Omi",
           args: parsed,
         });
-        if (!request) {
-          throw new Error("ask_user requires a question");
+        if (requests.length === 0) {
+          throw new Error("ask_user requires at least one question");
         }
-        const outcome = await context.askUser(request, {
+        const binding = {
           sessionId,
           ownerId,
           runId: context.authorizedToolInvocation?.runId ?? null,
-        });
-        return stringifyToolResult({ outcome });
+        };
+        // Every question is put up at once rather than in sequence: the surface
+        // renders them as one set the user walks through, so a three-part
+        // decision costs one interruption instead of three.
+        const outcomes = await Promise.all(
+          requests.map(async (request) => ({
+            question: request.prompt,
+            outcome: await askUser(request, binding),
+          })),
+        );
+        return stringifyToolResult({ outcomes });
       }
 
       case "evaluate_desktop_tool_policy": {

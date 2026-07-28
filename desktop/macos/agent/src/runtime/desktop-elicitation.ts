@@ -248,16 +248,8 @@ export interface AskUserArgs {
   args: unknown;
 }
 
-/**
- * Normalize the Omi `ask_user` tool call. Omi defines this shape, so the only
- * defensive work is rejecting a call with no question.
- */
-export function normalizeAskUser(input: AskUserArgs): ElicitationRequest | null {
-  const args = asRecord(input.args);
-  const question = asNonEmptyString(args?.question);
-  if (!question) return null;
-
-  const rawOptions = Array.isArray(args?.options) ? args.options : [];
+function normalizeAskUserOptions(rawOptions: unknown): ElicitationOption[] {
+  if (!Array.isArray(rawOptions)) return [];
   const options: ElicitationOption[] = [];
   for (const entry of rawOptions) {
     const label = typeof entry === "string" ? entry : asNonEmptyString(asRecord(entry)?.label);
@@ -265,20 +257,45 @@ export function normalizeAskUser(input: AskUserArgs): ElicitationRequest | null 
     const optionId = asNonEmptyString(asRecord(entry)?.id) ?? label;
     options.push({ optionId, label, effect: "choice" });
   }
+  return options;
+}
 
-  return {
-    channel: "omi_ask_user",
-    mode: "question",
-    adapterId: input.adapterId,
-    externalSessionId: null,
-    title: `${input.agentLabel} is asking`,
-    prompt: question,
-    subject: null,
-    context: null,
-    options,
-    allowsFreeText: args?.allow_free_text !== false,
-    recommendedDefault: null,
-  };
+/**
+ * Normalize the Omi `ask_user` tool call into one request per question.
+ *
+ * One call carries the whole set of decisions, because a decision that needs
+ * three answers is one moment for the user, not three round trips through the
+ * model. Each question still becomes its own request, so the surface presents
+ * them as a queue and each answer routes back independently.
+ *
+ * Omi defines this shape, so the only defensive work is dropping an entry with
+ * no question rather than putting up a card that asks nothing.
+ */
+export function normalizeAskUser(input: AskUserArgs): ElicitationRequest[] {
+  const args = asRecord(input.args);
+  const rawQuestions = Array.isArray(args?.questions) ? args.questions : [];
+  const requests: ElicitationRequest[] = [];
+
+  for (const entry of rawQuestions) {
+    const record = asRecord(entry);
+    const question = asNonEmptyString(record?.question);
+    if (!question) continue;
+    requests.push({
+      channel: "omi_ask_user",
+      mode: "question",
+      adapterId: input.adapterId,
+      externalSessionId: null,
+      title: `${input.agentLabel} is asking`,
+      prompt: question,
+      subject: null,
+      context: null,
+      options: normalizeAskUserOptions(record?.options),
+      allowsFreeText: record?.allow_free_text !== false,
+      recommendedDefault: null,
+    });
+  }
+
+  return requests;
 }
 
 /**
