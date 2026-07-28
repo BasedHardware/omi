@@ -18,6 +18,7 @@ extension AppState {
   func startTranscription(source: AudioSource? = nil) {
     guard !isTranscribing else { return }
     sttSession.prepareForStart()
+    silentMicRecoveryAttempts = 0
     meetingEndFinalizationInProgress = false
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
@@ -322,16 +323,17 @@ extension AppState {
   func startMicrophoneAudioCapture() async {
     guard let audioCaptureService = audioCaptureService else { return }
 
-    // Silent-mic watchdog: on A2DP profile conflict the Bluetooth input device returns zero
-    // samples even though CoreAudio reports healthy capture. Fall back to built-in mic for
-    // Bluetooth, and rebuild the full CoreAudio capture stack for stale-route wedges.
+    // Silent-mic watchdog: CoreAudio can report a healthy IOProc while a Bluetooth, USB, or
+    // built-in input returns only zeros. Listen/manual/Quick Note all flow through here, so
+    // they must opt into all-transport detection just as PTT does.
+    SharedCaptureSilentMicRecoveryPolicy.configure(audioCaptureService)
     audioCaptureService.onSilentMicDetected = { [weak self] detection in
       Task { @MainActor in
         switch detection.suggestedAction {
         case .fallbackToBuiltIn:
           self?.handleSilentMicFallback()
         case .rebuildCoreAudioStack:
-          await self?.rebuildCoreAudioCaptureStack(reason: detection.reason)
+          await self?.handleSharedCaptureSilentMicDetection(reason: detection.reason)
         }
       }
     }
@@ -657,6 +659,30 @@ extension AppState {
 
     recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName() ?? recordingInputDeviceName
     await startMicrophoneAudioCapture()
+  }
+
+  /// A fresh `AudioCaptureService` resets its own watchdog cap. Keep the terminal policy at
+  /// the session owner so an unrecoverable USB/built-in route cannot loop forever while the
+  /// UI continues to claim it is recording.
+  @MainActor
+  func handleSharedCaptureSilentMicDetection(reason: String) async {
+    guard isTranscribing else { return }
+    silentMicRecoveryAttempts += 1
+
+    switch SharedCaptureSilentMicRecoveryPolicy.action(for: silentMicRecoveryAttempts) {
+    case .rebuild:
+      log("Transcription: silent microphone detected — rebuilding CoreAudio capture stack")
+      await rebuildCoreAudioCaptureStack(reason: reason)
+    case .stopAndSurfaceError:
+      log("Transcription: stopping after repeated silent microphone recovery failures")
+      DesktopDiagnosticsManager.shared.recordTranscriptionSilentCaptureExhausted(
+        recoveryAttempts: silentMicRecoveryAttempts)
+      stopTranscription()
+      showAlert(
+        title: "Microphone Isn't Capturing Audio",
+        message:
+          "Omi stopped recording because your microphone returned no audio. Check your input device and try again.")
+    }
   }
 
   /// Start BLE device audio capture
@@ -1153,6 +1179,7 @@ extension AppState {
     captureGateInFlight = false
     captureReconcilePending = false
     pendingCoreAudioCaptureRecoveryReason = nil
+    silentMicRecoveryAttempts = 0
     isAwaitingMeeting = false
     meetingEndFinalizationInProgress = false
 

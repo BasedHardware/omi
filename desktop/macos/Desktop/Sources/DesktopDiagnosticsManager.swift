@@ -437,6 +437,22 @@ final class DesktopDiagnosticsManager {
       ],
       trackRemotely: false)
   }
+
+  /// Terminal shared-capture failure for listen, manual recording, and Quick Note.
+  /// The event intentionally carries only a bounded retry count; the incident attachment is
+  /// produced by the common privacy-redacted Sentry path.
+  func recordTranscriptionSilentCaptureExhausted(recoveryAttempts: Int) {
+    recordUserVisibleIssue(
+      area: "transcription",
+      failureClass: "silent_capture",
+      phase: "audio_capture",
+      extra: [
+        "capture_path": "shared",
+        "recovery_attempts": recoveryAttempts,
+        "recovery_action": "stop_and_surface_error",
+        "recovery_result": "exhausted",
+      ])
+  }
   /// Record one bounded PTT attempt lifecycle snapshot (see
   /// `PTTAttemptLifecycleRecorder`). Routes through the shared ring buffer + Sentry
   /// attachment path. Emitted remotely (PostHog) for EVERY terminal disposition —
@@ -1345,7 +1361,7 @@ final class DesktopDiagnosticsManager {
 
   private func safeIncidentArea(_ area: String) -> String {
     switch area {
-    case "ptt", "chat", "realtime", "crash", "startup": return area
+    case "ptt", "chat", "realtime", "crash", "startup", "transcription": return area
     default: return "other"
     }
   }
@@ -1371,7 +1387,8 @@ final class DesktopDiagnosticsManager {
     "source", "mode", "hub_active",
     "turn_audio_seconds", "voiced_audio_seconds",
     "peak", "rms", "is_near_zero", "watchdog_eligible", "consecutive_silent_turns",
-    "tcc_microphone_granted", "input_device_class", "recovery_action", "recovery_result",
+    "tcc_microphone_granted", "input_device_class", "capture_path", "recovery_attempts",
+    "recovery_action", "recovery_result",
     "osstatus", "keycode", "modifiers",
   ]
 

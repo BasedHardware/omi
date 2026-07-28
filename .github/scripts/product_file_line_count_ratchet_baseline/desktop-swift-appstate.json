@@ -1,0 +1,9 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1526
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds the session-owned silent-microphone recovery cap so recreated CoreAudio services cannot loop indefinitely while transcription remains visibly active."
+  },
+  "threshold": 1500
+}
