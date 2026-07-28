@@ -872,6 +872,49 @@ def test_valid_replace_may_only_supersede_hydrated_long_term_candidate():
     assert error is None
 
 
+def test_batch_rejects_duplicate_supersede_across_decisions():
+    """Two decisions must not supersede the same Long-term candidate.
+
+    Without this batch-level guard the first promotion commits and marks the
+    target superseded; the second decision then reaches the apply phase with an
+    inactive target and fails, producing a partial-apply maintenance run that
+    could have been preflighted.
+    """
+    source_a = _item("mem_new_a", "Lives in Seattle")
+    source_b = _item("mem_new_b", "Moved to Portland")
+    old = _item("mem_old", "Lives in Portland", tier=MemoryTier.long_term)
+    candidate = ConsolidationCandidate(
+        anchor_memory_id="mem_new_a",
+        memory_id=old.memory_id,
+        content=old.content or "",
+        score=0.9,
+        tier=old.tier.value,
+        captured_at=old.captured_at.isoformat(),
+    )
+    decision_a = _promote(
+        source_a,
+        reconciliation="replace",
+        target_memory_id=old.memory_id,
+        supersedes=[old.memory_id],
+    )
+    decision_b = _promote(
+        source_b,
+        reconciliation="replace",
+        target_memory_id=old.memory_id,
+        supersedes=[old.memory_id],
+    )
+
+    error = _validate_agent_batch(
+        _context(
+            [source_a, source_b],
+            {source_a.memory_id: [candidate], source_b.memory_id: [candidate]},
+        ),
+        ConsolidationAgentBatch(decisions=[decision_a, decision_b]),
+    )
+
+    assert error == "output_invalid:duplicate_supersede_target:mem_new_b"
+
+
 def test_legacy_cohort_is_noop():
     with patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.LEGACY):
         report = run_canonical_consolidation("uid-legacy", run_id="test-run", now=NOW)

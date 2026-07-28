@@ -232,6 +232,7 @@ def test_canonical_maintenance_harness_replaces_ambient_environment(monkeypatch)
 
 
 def test_canonical_maintenance_harness_serializes_recurrence_signals() -> None:
+    pytest.importorskip("pydantic")
     module = runpy.run_path(
         str(REPO_ROOT / "scripts/dev-harness/run-canonical-maintenance.py"),
         run_name="run_canonical_maintenance_serialization_test",

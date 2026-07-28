@@ -12,8 +12,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
-from pydantic import BaseModel
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = REPO_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
@@ -25,8 +23,12 @@ from dev_harness import config  # noqa: E402
 def _jsonable(value: object) -> object:
     if is_dataclass(value):
         return {key: _jsonable(item) for key, item in asdict(cast(Any, value)).items()}
-    if isinstance(value, BaseModel):
-        return _jsonable(value.model_dump(mode="json"))
+    # Duck-type pydantic models without importing pydantic at module scope.
+    # The dev-harness test lane runs under bare python3 without backend deps;
+    # this script is loaded via runpy.run_path() in repo-checks CI.
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return _jsonable(model_dump(mode="json"))
     if isinstance(value, dict):
         return {key: _jsonable(item) for key, item in value.items()}
     if isinstance(value, list):
