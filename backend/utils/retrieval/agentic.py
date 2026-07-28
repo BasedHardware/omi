@@ -50,7 +50,15 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
-from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError, fit_within_budget, INPUT_TOO_LONG_MESSAGE
+from utils.retrieval.safety import (
+    AgentSafetyGuard,
+    SafetyGuardError,
+    fit_within_budget,
+    provider_fallback_reason,
+    should_retry_provider_error,
+    INPUT_TOO_LONG_MESSAGE,
+)
+from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, num_tokens_from_string
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
@@ -90,6 +98,18 @@ def _positive_timeout_from_env(name: str, default: float) -> float:
     return timeout
 
 
+def _positive_int_from_env(name: str, default: int) -> int:
+    """Read a positive attempt count at import time so invalid deploy config fails fast."""
+    raw_value = os.environ.get(name, str(default))
+    try:
+        attempts = int(raw_value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f'{name} must be an integer') from error
+    if attempts <= 0:
+        raise ValueError(f'{name} must be greater than zero')
+    return attempts
+
+
 # The first event must arrive before the client/proxy deadline. Afterwards a
 # heartbeat keeps a known-long tool call observable while the total deadline
 # still prevents an agent task from running without bound.
@@ -97,6 +117,17 @@ AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS = _positive_timeout_from_env('AGENT_STR
 AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS = _positive_timeout_from_env('AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS', 20.0)
 AGENT_STREAM_MAX_DURATION_SECONDS = _positive_timeout_from_env('AGENT_STREAM_MAX_DURATION_SECONDS', 150.0)
 AGENT_STREAM_CANCEL_GRACE_SECONDS = _positive_timeout_from_env('AGENT_STREAM_CANCEL_GRACE_SECONDS', 2.0)
+
+# How much of the turn budget a retry needs to be worth starting. The silent-interval bound on
+# the call itself belongs to the transport (the gateway client, or the shared Anthropic client
+# when features are not routed through it) and is deliberately not overridden per request.
+AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS = _positive_timeout_from_env(
+    'AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS', 45.0
+)
+AGENT_STREAM_PROVIDER_MAX_ATTEMPTS = _positive_int_from_env('AGENT_STREAM_PROVIDER_MAX_ATTEMPTS', 3)
+AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS = _positive_timeout_from_env(
+    'AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS', 1.0
+)
 AGENT_STREAM_PROGRESS_HEARTBEAT = 'Still working…'
 AGENT_STREAM_TIMEOUT_MESSAGE = 'The response took too long. Please try again.'
 AGENT_STREAM_FAILURE_MESSAGE = 'Unable to complete the response. Please try again.'
@@ -453,6 +484,17 @@ async def get_mobile_city(uid: str, platform: Optional[str]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
+async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list, text: str) -> None:
+    """Stream text to the client and record it as part of the answer.
+
+    ``put_data`` alone reaches only the live stream; the persisted reply and the terminal
+    ``done:`` frame are built from ``full_response``, so text that skips it is overwritten by
+    the router's canned error when the turn ends.
+    """
+    full_response.append(text)
+    await callback.put_data(text)
+
+
 async def _run_anthropic_agent_stream(
     system_prompt: str,
     messages: list,
@@ -462,86 +504,125 @@ async def _run_anthropic_agent_stream(
     full_response: list,
     safety_guard: AgentSafetyGuard,
     configurable: dict,
-):
+) -> Optional[str]:
     """Run the Anthropic tool-use loop with streaming.
 
     This replaces LangGraph's create_react_agent + astream_events with a simple
     while loop that calls Anthropic's messages API, executes any tool calls,
     and feeds results back until the model stops requesting tools.
+
+    Returns ``None`` when the loop finished on its own terms, or a short failure reason when it
+    gave up on the provider.
     """
     # System prompt with cache_control for Anthropic prompt caching
     # TTL=1h: Anthropic changed default from 1h→5m on 2026-03-06; interactive chat
     # sessions have gaps >5min between turns, so the 5-min default kills cache hit rate.
     system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
 
+    producer_started_at = asyncio.get_running_loop().time()
     loop_iteration = 0
 
     while True:
         loop_iteration += 1
-        first_text_in_iteration = True
 
-        try:
-            async with anthropic_client.messages.stream(
-                model=ANTHROPIC_AGENT_MODEL,
-                system=system_blocks,
-                messages=messages,
-                tools=tool_schemas,
-                max_tokens=8192,
-                # Anthropic moves this breakpoint to the last cacheable message
-                # block on every request. That incrementally caches both the
-                # append-only inter-turn history epoch and each agentic tool-loop
-                # iteration while the explicit system breakpoint remains stable.
-                cache_control={"type": "ephemeral", "ttl": "1h"},
-            ) as stream:
-                async for event in stream:
-                    # Stream text tokens
-                    if event.type == "content_block_delta" and hasattr(event.delta, 'type'):
-                        if event.delta.type == "text_delta":
-                            # Add separator between loop iterations so text doesn't run together
-                            if first_text_in_iteration and loop_iteration > 1 and full_response:
-                                last_char = full_response[-1][-1] if full_response[-1] else ''
-                                first_char = event.delta.text[0] if event.delta.text else ''
-                                if (
-                                    last_char
-                                    and first_char
-                                    and last_char not in (' ', '\n')
-                                    and first_char not in (' ', '\n')
-                                ):
-                                    full_response.append('\n\n')
-                                    await callback.put_data('\n\n')
-                            first_text_in_iteration = False
-                            full_response.append(event.delta.text)
-                            await callback.put_data(event.delta.text)
-                        elif event.delta.type == "thinking_delta":
-                            pass  # Don't stream thinking to client
+        attempts_made = 0
+        retried_reason: Optional[str] = None
 
-                    # Emit status when tool call starts
-                    elif event.type == "content_block_start":
-                        if hasattr(event.content_block, 'type') and event.content_block.type == "server_tool_use":
-                            server_tool_name = getattr(event.content_block, 'name', '')
-                            if server_tool_name == 'web_search':
-                                await callback.put_thought('Searching the web')
-                            logger.info(f"Server tool invoked: {server_tool_name}")
-                        elif hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
-                            tool_name = event.content_block.name
-                            # Skip tool_search_tool — handled server-side by Anthropic
-                            if 'tool_search' in tool_name:
-                                logger.info(f"Tool search invoked (server-side)")
-                                continue
-                            app_id = _extract_app_id(tool_name)
-                            tool_obj = tool_registry.get(tool_name)
-                            display_name = get_tool_display_name(tool_name, tool_obj)
-                            await callback.put_thought(display_name, app_id=app_id)
-                            logger.info(f"Tool started: {tool_name}")
+        while True:
+            attempts_made += 1
+            first_text_in_iteration = True
+            text_before_attempt = len(full_response)
 
-                # Get final message while stream is still open
-                response = await stream.get_final_message()
+            try:
+                async with anthropic_client.messages.stream(
+                    model=ANTHROPIC_AGENT_MODEL,
+                    system=system_blocks,
+                    messages=messages,
+                    tools=tool_schemas,
+                    max_tokens=8192,
+                    # Anthropic moves this breakpoint to the last cacheable message
+                    # block on every request. That incrementally caches both the
+                    # append-only inter-turn history epoch and each agentic tool-loop
+                    # iteration while the explicit system breakpoint remains stable.
+                    cache_control={"type": "ephemeral", "ttl": "1h"},
+                ) as stream:
+                    async for event in stream:
+                        # Stream text tokens
+                        if event.type == "content_block_delta" and hasattr(event.delta, 'type'):
+                            if event.delta.type == "text_delta":
+                                # Add separator between loop iterations so text doesn't run together
+                                if first_text_in_iteration and loop_iteration > 1 and full_response:
+                                    last_char = full_response[-1][-1] if full_response[-1] else ''
+                                    first_char = event.delta.text[0] if event.delta.text else ''
+                                    if (
+                                        last_char
+                                        and first_char
+                                        and last_char not in (' ', '\n')
+                                        and first_char not in (' ', '\n')
+                                    ):
+                                        full_response.append('\n\n')
+                                        await callback.put_data('\n\n')
+                                first_text_in_iteration = False
+                                full_response.append(event.delta.text)
+                                await callback.put_data(event.delta.text)
+                            elif event.delta.type == "thinking_delta":
+                                pass  # Don't stream thinking to client
 
-        except Exception as e:
-            await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
-            await callback.put_data(f"\n\nSorry, I encountered an error. Please try again.")
-            await callback.end()
-            return
+                        # Emit status when tool call starts
+                        elif event.type == "content_block_start":
+                            if hasattr(event.content_block, 'type') and event.content_block.type == "server_tool_use":
+                                server_tool_name = getattr(event.content_block, 'name', '')
+                                if server_tool_name == 'web_search':
+                                    await callback.put_thought('Searching the web')
+                                logger.info(f"Server tool invoked: {server_tool_name}")
+                            elif hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
+                                tool_name = event.content_block.name
+                                # Skip tool_search_tool — handled server-side by Anthropic
+                                if 'tool_search' in tool_name:
+                                    logger.info(f"Tool search invoked (server-side)")
+                                    continue
+                                app_id = _extract_app_id(tool_name)
+                                tool_obj = tool_registry.get(tool_name)
+                                display_name = get_tool_display_name(tool_name, tool_obj)
+                                await callback.put_thought(display_name, app_id=app_id)
+                                logger.info(f"Tool started: {tool_name}")
+
+                    # Get final message while stream is still open
+                    response = await stream.get_final_message()
+                break
+
+            except Exception as e:
+                elapsed = asyncio.get_running_loop().time() - producer_started_at
+                if should_retry_provider_error(
+                    e,
+                    attempts_made=attempts_made,
+                    max_attempts=AGENT_STREAM_PROVIDER_MAX_ATTEMPTS,
+                    text_already_streamed=len(full_response) > text_before_attempt,
+                    seconds_remaining=AGENT_STREAM_MAX_DURATION_SECONDS - elapsed,
+                    min_headroom_seconds=AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS,
+                ):
+                    retried_reason = provider_fallback_reason(e)
+                    logger.warning(
+                        'Agent stream provider call failed, retrying attempt=%d error_type=%s',
+                        attempts_made + 1,
+                        type(e).__name__,
+                    )
+                    await asyncio.sleep(AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS)
+                    continue
+
+                await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
+                await callback.put_data(f"\n\nSorry, I encountered an error. Please try again.")
+                await callback.end()
+                return f'provider_{type(e).__name__}'
+
+        if retried_reason is not None:
+            record_fallback(
+                component='other',
+                from_mode='llm_answer',
+                to_mode='llm_answer_retried',
+                reason=retried_reason,
+                outcome='recovered',
+            )
 
         # If no tool_use, we're done
         if response.stop_reason != "tool_use":
@@ -560,10 +641,10 @@ async def _run_anthropic_agent_stream(
                 if warning:
                     await callback.put_thought(warning)
             except SafetyGuardError as e:
-                await callback.put_data(f"\n\n{str(e)}")
+                await _put_answer_text(callback, full_response, f"\n\n{str(e)}")
                 logger.error(f"Safety Guard blocked tool call: {e}")
                 await callback.end()
-                return
+                return None
 
             # Execute tool
             try:
@@ -581,10 +662,10 @@ async def _run_anthropic_agent_stream(
             try:
                 safety_guard.check_context_size(result)
             except SafetyGuardError as e:
-                await callback.put_data(f"\n\n{str(e)}")
+                await _put_answer_text(callback, full_response, f"\n\n{str(e)}")
                 logger.error(f"Safety Guard blocked due to context size: {e}")
                 await callback.end()
-                return
+                return None
 
             tool_results.append(
                 {
@@ -904,11 +985,15 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
 
             yield chunk
 
-        await task
+        producer_failure = await task
 
         # Store results in callback_data
         if callback_data is not None:
             callback_data['answer'] = ''.join(full_response)
+            # Reported even though the stream ended cleanly, so the router can tell a failed
+            # turn from one the model ended empty on its own.
+            if producer_failure:
+                callback_data['error'] = producer_failure
             callback_data['memories_found'] = conversations_collected if conversations_collected else []
             callback_data['ask_for_nps'] = tool_usage_count > 0
             chart_data_from_config = configurable.get('chart_data')

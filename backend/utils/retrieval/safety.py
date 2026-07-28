@@ -300,3 +300,89 @@ def fit_within_budget(
         total += tokens
     kept.reverse()
     return kept, False
+
+
+# Matched on class name, not type, so this stays import-light and still covers the raw httpx
+# exceptions that escape the SDK once the response body is already streaming.
+TRANSIENT_PROVIDER_ERROR_NAMES = frozenset(
+    {
+        'APIConnectionError',
+        'APITimeoutError',
+        'ConnectError',
+        'ConnectTimeout',
+        'InternalServerError',
+        'PoolTimeout',
+        'ReadError',
+        'ReadTimeout',
+        'RemoteProtocolError',
+        'WriteError',
+        'WriteTimeout',
+    }
+)
+
+# 429 is deliberately absent: a rate limit does not clear within one turn's budget.
+TRANSIENT_PROVIDER_STATUS_CODES = frozenset({500, 502, 503, 504, 529})
+
+_TIMEOUT_ERROR_NAMES = frozenset({'APITimeoutError', 'ConnectTimeout', 'PoolTimeout', 'ReadTimeout', 'WriteTimeout'})
+
+
+def _provider_status_code(error: BaseException) -> Optional[int]:
+    """HTTP status carried by a provider exception, if it has one."""
+    status_code = getattr(error, 'status_code', None)
+    if isinstance(status_code, int):
+        return status_code
+
+    response = getattr(error, 'response', None)
+    response_status = getattr(response, 'status_code', None)
+    if isinstance(response_status, int):
+        return response_status
+    return None
+
+
+def is_transient_provider_error(error: BaseException) -> bool:
+    """Whether ``error`` is a transport-class provider failure worth re-issuing.
+
+    A status-carrying error is judged by its status alone: a 4xx describes the request we just
+    sent, so repeating it cannot help.
+    """
+    status_code = _provider_status_code(error)
+    if status_code is not None:
+        return status_code in TRANSIENT_PROVIDER_STATUS_CODES
+    return type(error).__name__ in TRANSIENT_PROVIDER_ERROR_NAMES
+
+
+def provider_fallback_reason(error: BaseException) -> str:
+    """Map a provider exception onto the bounded ``record_fallback`` reason set."""
+    status_code = _provider_status_code(error)
+    if status_code is not None:
+        if 500 <= status_code < 600:
+            return 'provider_5xx'
+        if status_code == 429:
+            return 'provider_429'
+        return 'other'
+    return 'timeout' if type(error).__name__ in _TIMEOUT_ERROR_NAMES else 'other'
+
+
+def should_retry_provider_error(
+    error: BaseException,
+    *,
+    attempts_made: int,
+    max_attempts: int,
+    text_already_streamed: bool,
+    seconds_remaining: float,
+    min_headroom_seconds: float,
+) -> bool:
+    """Whether the agent's streaming model call may be re-issued after ``error``.
+
+    Safe only while nothing from this attempt has reached the user: streamed text cannot be
+    un-sent, and tool calls run after a stream closes cleanly, so a failed attempt leaves
+    nothing to undo. A retry with less than ``min_headroom_seconds`` of the request budget left
+    would be cancelled mid-flight, so it is not started.
+    """
+    if text_already_streamed:
+        return False
+    if attempts_made >= max_attempts:
+        return False
+    if seconds_remaining < min_headroom_seconds:
+        return False
+    return is_transient_provider_error(error)
