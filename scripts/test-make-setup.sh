@@ -139,3 +139,23 @@ if [ "$out" != "$expected" ]; then
   exit 1
 fi
 echo "linked-worktree repo-root fallback test passed."
+
+# Regression: mistaken core.bare=true on a primary checkout (directory .git) breaks
+# git status and worktree spawning from the main path.
+MISBARE_ROOT="$TMPDIR/misbare"
+git init -q --initial-branch=main "$MISBARE_ROOT"
+git -C "$MISBARE_ROOT" config core.bare true
+if [ "$(git -C "$MISBARE_ROOT" rev-parse --is-inside-work-tree)" = "true" ]; then
+  echo "FAIL: misbare fixture should not report inside-work-tree before repair." >&2
+  exit 1
+fi
+bash "$ROOT/scripts/repair-git-primary-worktree.sh" "$MISBARE_ROOT"
+if [ "$(git -C "$MISBARE_ROOT" config --get core.bare)" != "false" ]; then
+  echo "FAIL: repair-git-primary-worktree.sh did not clear core.bare." >&2
+  exit 1
+fi
+if [ "$(git -C "$MISBARE_ROOT" rev-parse --is-inside-work-tree)" != "true" ]; then
+  echo "FAIL: primary checkout still not a work tree after core.bare repair." >&2
+  exit 1
+fi
+echo "repair-git-primary-worktree test passed."
