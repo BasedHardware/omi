@@ -13,9 +13,6 @@ enum NotchVoiceMorphGeometry {
   static let dotCount = 8
   static let dotDiameterRatio: CGFloat = 0.18
   static let ringRadiusRatio: CGFloat = 0.33
-  /// Even a quiet room needs to read as a live capture rather than eight
-  /// apparently static dots. This is display gain only; it never affects VAD.
-  static let quietLevelFloor: CGFloat = 0.28
 
   static func targetProgress(isListening: Bool) -> CGFloat {
     isListening ? 1 : 0
@@ -37,8 +34,26 @@ enum NotchVoiceMorphGeometry {
     return smoothStep(clamp(normalized))
   }
 
-  static func normalizedLevel(_ microphoneLevel: CGFloat) -> CGFloat {
-    min(max(microphoneLevel * 2.4, quietLevelFloor), 1)
+  /// Ambient room noise measured on real hardware sits around 0.005–0.015
+  /// after the capture service's own noise-floor subtraction; gate it out so
+  /// a quiet room renders a genuinely flat line / still ring.
+  static let displayLevelGate: CGFloat = 0.02
+
+  /// Perceptual display mapping shared by the waveform and the speaking
+  /// pulse: silence and room noise stay exactly zero, quiet speech is lifted
+  /// so it visibly moves, loud speech saturates at 1. Display-only; never
+  /// affects VAD or capture.
+  static func displayLevel(_ level: CGFloat, gain: CGFloat) -> CGFloat {
+    guard level > displayLevelGate else { return 0 }
+    let gated = (level - displayLevelGate) / (1 - displayLevelGate)
+    let boosted = clamp(gated * gain)
+    return boosted == 0 ? 0 : pow(boosted, 0.65)
+  }
+
+  /// Mic RMS arrives noise-floor-subtracted and snapped to zero in silence
+  /// (AudioCaptureService), so zero genuinely means "no voice".
+  static func inputDisplayLevel(_ microphoneLevel: CGFloat) -> CGFloat {
+    displayLevel(microphoneLevel, gain: 3.0)
   }
 
   static func center(in size: CGSize) -> CGPoint {
@@ -100,19 +115,20 @@ enum NotchVoiceMorphGeometry {
     1 + speakingDotScaleMax * clamp(pulse)
   }
 
-  /// Post-mixer speech RMS is quiet in absolute terms (~0.02–0.3); display
-  /// gain only, mirroring `normalizedLevel` for the mic side.
-  static func normalizedVoiceLevel(_ playbackLevel: CGFloat) -> CGFloat {
-    clamp(playbackLevel * 3.5)
+  /// Post-mixer speech RMS is quiet in absolute terms (~0.02–0.3); same
+  /// zero-stays-zero mapping as the mic side, so pauses in the reply leave
+  /// the ring still instead of breathing on a timer.
+  static func outputDisplayLevel(_ playbackLevel: CGFloat) -> CGFloat {
+    displayLevel(playbackLevel, gain: 3.5)
   }
 
-  /// Even silent stretches of a reply keep a visible breath (floor), while
-  /// louder speech drives the pulse toward full amplitude — so the ring reads
-  /// as reacting to the assistant's voice, not to a metronome.
-  static let speakingLevelFloor: CGFloat = 0.3
+  /// Fraction of the speaking pulse allowed to wobble with time. The pulse
+  /// magnitude itself comes from the live output level; the wobble only keeps
+  /// sustained speech from freezing at one scale.
+  static let speakingWobbleShare: CGFloat = 0.25
 
-  static func speakingLevelModulation(_ normalizedVoiceLevel: CGFloat) -> CGFloat {
-    speakingLevelFloor + (1 - speakingLevelFloor) * clamp(normalizedVoiceLevel)
+  static func speakingPulse(outputLevel: CGFloat, wobble: CGFloat) -> CGFloat {
+    clamp(outputLevel) * ((1 - speakingWobbleShare) + speakingWobbleShare * clamp(wobble))
   }
 
   // MARK: - Listening waveform
@@ -220,30 +236,33 @@ struct NotchVoiceMorphMark: View {
       reduceMotion: reduceMotion
     )
     let time = date.timeIntervalSinceReferenceDate
-    // Live (un-throttled) mic level, smoothed at frame rate so the waveform
-    // visibly tracks the user's voice: fast attack on speech onset, gentle
-    // release in pauses.
+    // Live (un-throttled) mic level, smoothed at frame rate. Silence maps to
+    // exactly zero amplitude — the listening line goes flat between words and
+    // oscillates in proportion to the user's actual voice.
     let level = micLevelSmoother.step(
-      target: CGFloat(AudioLevelMonitor.shared.liveMicrophoneLevel), at: time)
-    let amplitude =
-      base * 0.28 * waveProgress
-      * NotchVoiceMorphGeometry.normalizedLevel(level)
+      target: NotchVoiceMorphGeometry.inputDisplayLevel(
+        CGFloat(AudioLevelMonitor.shared.liveMicrophoneLevel)),
+      at: time)
+    let amplitude = base * 0.32 * waveProgress * level
     let thinkingRotation =
       isThinking && !reduceMotion && morphProgress < 0.001
       ? time * 2 * .pi / 0.9
       : 0
-    // Response playback pulses the resting ring like a speaker cone, scaled by
-    // the assistant's actual output level (mixer tap) so the ring moves with
-    // the voice. Listening owns the waveform, so the pulse applies only in
-    // ring formation.
+    // Response playback pulses the resting ring like a speaker cone whose
+    // magnitude IS the assistant's live output level (mixer tap): pauses in
+    // the reply leave the ring still, speech drives it. A small time wobble
+    // keeps sustained speech from freezing at one scale. Listening owns the
+    // waveform, so the pulse applies only in ring formation.
+    let speakingPresentation = isSpeaking && !isListening && morphProgress < 0.001
     let voiceLevel = voiceLevelSmoother.step(
-      target: NotchVoiceMorphGeometry.normalizedVoiceLevel(
+      target: NotchVoiceMorphGeometry.outputDisplayLevel(
         CGFloat(AudioLevelMonitor.shared.liveVoicePlaybackLevel)),
       at: time)
     let speakingPulse =
-      isSpeaking && !isListening && morphProgress < 0.001
-      ? NotchVoiceMorphGeometry.speakerPulse(time: time, reduceMotion: reduceMotion)
-        * NotchVoiceMorphGeometry.speakingLevelModulation(voiceLevel)
+      speakingPresentation && !reduceMotion
+      ? NotchVoiceMorphGeometry.speakingPulse(
+        outputLevel: voiceLevel,
+        wobble: NotchVoiceMorphGeometry.speakerPulse(time: time, reduceMotion: reduceMotion))
       : 0
     if speakingPulse > 0 {
       dotDiameter *= NotchVoiceMorphGeometry.speakingDotScale(pulse: speakingPulse)
@@ -261,7 +280,7 @@ struct NotchVoiceMorphMark: View {
         waveOffset: NotchVoiceMorphGeometry.waveOffset(
           time: time, index: index, amplitude: amplitude)
       )
-      if thinkingRotation != 0 || speakingPulse > 0 {
+      if thinkingRotation != 0 || speakingPresentation {
         let angle =
           Double(index) / Double(NotchVoiceMorphGeometry.dotCount) * Double.pi * 2
           - Double.pi + thinkingRotation
@@ -275,8 +294,10 @@ struct NotchVoiceMorphMark: View {
       }
       // PTT capture is one Omi-owned state, not an agent-status legend. White
       // keeps every waveform dot legible against the notch's black chrome.
+      // Color follows the presentation, not the pulse magnitude, so a pause
+      // in the reply can't flicker the ring between white and status colors.
       let color =
-        isListening || speakingPulse > 0
+        isListening || speakingPresentation
         ? Color.white.opacity(0.98)
         : dotColors.indices.contains(index)
           ? dotColors[index]
