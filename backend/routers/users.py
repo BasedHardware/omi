@@ -19,7 +19,6 @@ from database import (
     user_usage as user_usage_db,
     notifications as notification_db,
     daily_summaries as daily_summaries_db,
-    projections as projections_db,
     llm_usage as llm_usage_db,
     users as users_db,
 )
@@ -115,7 +114,6 @@ from utils.notifications import send_notification, send_training_data_submitted_
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from models.notification_message import NotificationMessage
 from utils.other import endpoints as auth
-from utils.projections import generate_projection, local_projection_image_path
 from utils.other.storage import (
     delete_all_conversation_recordings,
     get_speech_sample_signed_urls,
@@ -302,29 +300,6 @@ class DailySummaryResponse(BaseModel):
 
 class DailySummariesResponse(BaseModel):
     summaries: List[DailySummaryResponse] = Field(default_factory=list)
-
-
-class ProjectionGeneration(BaseModel):
-    model_config = ConfigDict(extra='allow')
-
-    model: Optional[str] = None
-    size: Optional[str] = None
-    quality: Optional[str] = None
-    prompt: Optional[str] = None
-
-
-class ProjectionResponse(BaseModel):
-    model_config = ConfigDict(extra='allow')
-
-    id: Optional[str] = None
-    created_at: Optional[datetime] = None
-    imperative: Optional[str] = None
-    image_url: Optional[str] = None
-    generation: Optional[ProjectionGeneration] = None
-
-
-class ProjectionsResponse(BaseModel):
-    projections: List[ProjectionResponse] = Field(default_factory=list)
 
 
 @router.get('/v1/users/profile', tags=['v1'], response_model=UserProfileResponse)
@@ -1630,57 +1605,6 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
         'summary_id': summary_id,
         'conversations_count': len(conversations),
     }
-
-
-# Projections API
-
-
-@router.post('/v1/users/projections/test', tags=['v1'], response_model=ProjectionResponse)
-def test_projection(uid: str = Depends(auth.get_current_user_uid)):
-    """
-    Generate a projection for the authenticated user immediately.
-
-    This is the manual trigger for a surface that will otherwise be produced on a schedule;
-    it exists so the result can be demonstrated without waiting for a scheduled run.
-    """
-    projection = generate_projection(uid)
-    projections_db.create_projection(uid, projection)
-    return projection
-
-
-@router.get('/v1/users/projections', tags=['v1'], response_model=ProjectionsResponse)
-def get_projections_endpoint(
-    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
-):
-    """List the authenticated user's projections, newest first."""
-    return {'projections': projections_db.get_projections(uid, limit=limit, offset=offset)}
-
-
-@router.get('/v1/users/projections/{projection_id}', tags=['v1'], response_model=ProjectionResponse)
-def get_projection_endpoint(projection_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    """Get a single projection by id."""
-    projection = projections_db.get_projection(uid, projection_id)
-    if not projection:
-        raise HTTPException(status_code=404, detail='Projection not found')
-    return projection
-
-
-@router.get('/v1/projection-images/{projection_id}.png', tags=['v1'], include_in_schema=False)
-def get_projection_image(projection_id: str):
-    """Serve a locally stored projection image.
-
-    Only reachable when no `BUCKET_PROJECTION_IMAGES` is configured; with a bucket, images
-    are public GCS objects and this backend never serves the bytes. Like those objects, the
-    URL is unauthenticated and unguessable rather than uid-scoped.
-    """
-    try:
-        uuid.UUID(projection_id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail='Projection image not found')
-    path = local_projection_image_path(projection_id)
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail='Projection image not found')
-    return FileResponse(path, media_type='image/png')
 
 
 # Daily Summaries API
