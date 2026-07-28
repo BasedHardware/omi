@@ -206,6 +206,7 @@ class ListenReceiver:
                 for index, config in enumerate(self.channel_configs):
 
                     def callback(segments: List[Dict[str, Any]], channel: ChannelConfig = config) -> None:
+                        self.host.capture_inbound_stt(segments)
                         for segment in segments:
                             segment['is_user'] = channel.is_user
                             segment['speaker'] = channel.speaker_label
@@ -235,8 +236,13 @@ class ListenReceiver:
                     )
                 except Exception:
                     logger.exception('VAD gate initialization failed; continuing without it')
-            parakeet_callback = make_stream_callback(self.host.transcripts.enqueue, self.vad_gate, False)
-            modulate_callback = make_stream_callback(self.host.transcripts.enqueue, self.vad_gate, True)
+
+            def capture_and_enqueue(segments: List[Dict[str, Any]]) -> None:
+                self.host.capture_inbound_stt(segments)
+                self.host.transcripts.enqueue(segments)
+
+            parakeet_callback = make_stream_callback(capture_and_enqueue, self.vad_gate, False)
+            modulate_callback = make_stream_callback(capture_and_enqueue, self.vad_gate, True)
             raw = await self._create_stt_socket(
                 parakeet_callback,
                 request.sample_rate,
@@ -358,6 +364,7 @@ class ListenReceiver:
         if self.host.state.fair_use_dg_budget_exhausted:
             buffer.clear()
             return
+        outbound_audio = bytes(buffer)
         sent = await flush_live_stt_buffer(
             request.websocket,
             self.host.state,
@@ -367,6 +374,7 @@ class ListenReceiver:
             platform=self.host.client_device_context.platform,
         )
         if sent:
+            self.host.capture_outbound_stt(outbound_audio)
             self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
 
     async def _handle_multi_channel_audio(self, data: bytes) -> None:
@@ -409,6 +417,7 @@ class ListenReceiver:
                     platform=self.host.client_device_context.platform,
                 )
                 if sent:
+                    self.host.capture_outbound_stt(pcm)
                     self.host.state.dg_usage_ms_pending += dg_usage_ms
         # Only accumulate channel audio for the pusher mix when an audio-bytes consumer is attached.
         # decide_multi_channel_mix and the teardown flush both gate on this same condition, so
@@ -535,6 +544,7 @@ class ListenReceiver:
                         continue
                     if not decoded:
                         continue
+                    self.host.capture_client_audio(decoded)
                     if self.host.state.audio_ring_buffer is not None:
                         self.host.state.audio_ring_buffer.write(decoded, now)
                     if not self.host.use_custom_stt:
