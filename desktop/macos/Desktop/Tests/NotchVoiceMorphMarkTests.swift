@@ -107,15 +107,32 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
     XCTAssertGreaterThan(edge, 0)
   }
 
-  func testWaveOffsetNeverExceedsItsAmplitude() {
+  func testSpikeOffsetNeverExceedsItsAmplitude() {
     let amplitude: CGFloat = 5.88
     for time in stride(from: 0.0, through: 2.0, by: 0.03) {
       for index in 0..<NotchVoiceMorphGeometry.dotCount {
-        let offset = NotchVoiceMorphGeometry.waveOffset(
+        let offset = NotchVoiceMorphGeometry.spikeOffset(
           time: time, index: index, amplitude: amplitude)
         XCTAssertLessThanOrEqual(abs(offset), amplitude + 0.001)
       }
     }
+  }
+
+  func testSpikeOffsetsAreDecorrelatedAcrossDotsLikeEqualizerBands() {
+    // Adjacent dots must not move as one travelling rope: at any instant
+    // some dots spike up while others spike down.
+    var sawOppositeSigns = false
+    for time in stride(from: 0.1, through: 2.0, by: 0.13) {
+      let offsets = (0..<NotchVoiceMorphGeometry.dotCount).map {
+        NotchVoiceMorphGeometry.spikeOffset(time: time, index: $0, amplitude: 1)
+      }
+      if let maxOffset = offsets.max(), let minOffset = offsets.min(),
+        maxOffset > 0.2, minOffset < -0.2
+      {
+        sawOppositeSigns = true
+      }
+    }
+    XCTAssertTrue(sawOppositeSigns)
   }
 
   func testLevelSmootherAttacksFasterThanItReleases() {
@@ -173,10 +190,10 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
   }
 
   func testSpeakingWaveAlwaysTravelsInOneDirection() {
-    // The crest pattern advances exactly one dot per quarter period, always
-    // the same way around the ring: shifting one dot forward in space and a
-    // quarter period forward in time reproduces the wave exactly.
-    let dotStep = NotchVoiceMorphGeometry.speakingWavePeriod / 4
+    // The three-crest pattern advances exactly one dot per 3/8 period,
+    // always the same way around the ring: shifting one dot forward in
+    // space and 3/8 period forward in time reproduces the wave exactly.
+    let dotStep = NotchVoiceMorphGeometry.speakingWavePeriod * 3 / 8
     for time in stride(from: 0.0, through: 2.0, by: 0.17) {
       for index in 0..<NotchVoiceMorphGeometry.dotCount {
         let here = NotchVoiceMorphGeometry.speakingRadialPush(
