@@ -21,7 +21,6 @@ from models.app import App
 from models.chat import ChatSession, Message, PageContext
 from utils.llm.chat import get_current_datetime_block, get_user_timezone, retrieve_is_file_question
 from utils.llm.clients import get_llm
-from utils.llm.usage_tracker import Features, track_usage
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import (
