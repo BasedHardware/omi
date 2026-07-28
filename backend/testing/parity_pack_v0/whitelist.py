@@ -20,7 +20,7 @@ class CaptureWhitelist:
         )
         return cls(
             enabled=env.get("OMI_PARITY_PACK_CAPTURE", "").strip().lower() in {"1", "true", "yes"},
-            environment=env.get("OMI_ENV", "").strip().lower(),
+            environment=env.get("OMI_ENV_STAGE", "").strip().lower(),
             principal_ids=principals,
         )
 

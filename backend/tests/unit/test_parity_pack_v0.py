@@ -52,13 +52,34 @@ def test_manifest_has_references_hashes_outcomes_and_invariants() -> None:
 
 def test_capture_whitelist_is_default_deny_and_dev_only() -> None:
     config = CaptureWhitelist.from_environ(
-        {"OMI_ENV": "dev", "OMI_PARITY_PACK_CAPTURE": "1", "OMI_PARITY_PACK_ALLOWED_PRINCIPALS": "u1"}
+        {"OMI_ENV_STAGE": "dev", "OMI_PARITY_PACK_CAPTURE": "1", "OMI_PARITY_PACK_ALLOWED_PRINCIPALS": "u1"}
     )
     assert config.allows("u1") and not config.allows("u2")
     assert not CaptureWhitelist.from_environ(
-        {"OMI_ENV": "prod", "OMI_PARITY_PACK_CAPTURE": "1", "OMI_PARITY_PACK_ALLOWED_PRINCIPALS": "u1"}
+        {"OMI_ENV_STAGE": "prod", "OMI_PARITY_PACK_CAPTURE": "1", "OMI_PARITY_PACK_ALLOWED_PRINCIPALS": "u1"}
     ).allows("u1")
     assert not CaptureWhitelist.from_environ({}).allows("u1")
+
+
+def test_capture_whitelist_ignores_non_canonical_env_var() -> None:
+    """OMI_ENV is not the canonical runtime-stage variable; only OMI_ENV_STAGE gates dev capture."""
+    config = CaptureWhitelist.from_environ(
+        {"OMI_ENV": "dev", "OMI_PARITY_PACK_CAPTURE": "1", "OMI_PARITY_PACK_ALLOWED_PRINCIPALS": "u1"}
+    )
+    assert not config.allows("u1")
+
+
+def test_redaction_catches_camelcase_credential_keys() -> None:
+    """camelCase credential keys like accessToken/clientSecret must be redacted."""
+    raw = {"accessToken": "Bearer abc123", "clientSecret": "shh", "model": "gpt-test"}
+    safe = redact_value(raw)
+    assert safe["accessToken"] == "[REDACTED]"
+    assert safe["clientSecret"] == "[REDACTED]"
+    assert safe["model"] == "gpt-test"
+    # drop_sensitive path (fingerprints) must also catch camelCase
+    dropped = redact_value(raw, drop_sensitive=True)
+    assert "accessToken" not in dropped
+    assert "clientSecret" not in dropped
 
 
 def test_hermetic_runner_denies_egress_counts_fakes_and_runs_cleanup() -> None:
@@ -71,3 +92,16 @@ def test_hermetic_runner_denies_egress_counts_fakes_and_runs_cleanup() -> None:
         fakes.require(llm=2)
         socket.create_connection(("example.com", 443))
     assert cleanup == ["second", "first"]
+
+
+def test_hermetic_runner_denies_low_level_socket_connect() -> None:
+    """The egress-deny guard must block socket.connect, not just create_connection."""
+    with pytest.raises(UnexpectedEgress), hermetic_run():
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(("example.com", 443))
+
+
+def test_hermetic_runner_denies_dns_resolution() -> None:
+    """The egress-deny guard must block DNS resolution."""
+    with pytest.raises(UnexpectedEgress), hermetic_run():
+        socket.getaddrinfo("example.com", 443)

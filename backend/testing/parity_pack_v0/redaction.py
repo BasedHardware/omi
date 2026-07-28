@@ -26,6 +26,17 @@ def redact_text(value: str) -> str:
     return PHONE.sub("[REDACTED_PHONE]", value)
 
 
+def _is_sensitive_key(key_text: str) -> bool:
+    """True when a mapping key names a credential-like field.
+
+    Handles snake_case, kebab-case, and camelCase so keys like
+    ``accessToken`` and ``clientSecret`` are caught alongside
+    ``access_token`` and ``access-token``.
+    """
+    normalized = re.sub(r"(?<=[a-z])(?=[A-Z])", "_", key_text)
+    return bool(SENSITIVE_KEY.search(normalized))
+
+
 def redact_value(value: Any, *, drop_sensitive: bool = False) -> Any:
     """Return a structurally equivalent, safe-to-log representation.
 
@@ -36,7 +47,7 @@ def redact_value(value: Any, *, drop_sensitive: bool = False) -> Any:
         result: dict[str, Any] = {}
         for key, item in value.items():
             key_text = str(key)
-            if SENSITIVE_KEY.search(key_text):
+            if _is_sensitive_key(key_text):
                 if not drop_sensitive:
                     result[key_text] = "[REDACTED]"
             else:
