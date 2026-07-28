@@ -2270,8 +2270,8 @@ struct HomeAskBar: View {
         ChatElicitationPanel(
           elicitation: elicitation,
           waitingCount: elicitations.waitingCount,
-          onAnswer: { elicitations.answer(elicitation, with: $0) },
-          onStopRun: onStop
+          upcoming: elicitations.upcoming,
+          onAnswer: { elicitations.answer(elicitation, with: $0) }
         )
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.md)

@@ -161,3 +161,47 @@ final class ElicitationStoreTests: XCTestCase {
     XCTAssertEqual(store.queue.map(\.id), ["b"])
   }
 }
+
+@MainActor
+final class ElicitationTranscriptTests: XCTestCase {
+  private func elicitation(options: [[String: Any]]) -> PendingElicitation {
+    PendingElicitation(payload: [
+      "dispatchId": "d1", "ownerId": "o1", "sessionId": "s1", "mode": "question",
+      "title": "Omi is asking", "prompt": "Which branch?", "options": options,
+      "allowsFreeText": true,
+    ])!
+  }
+
+  func testAnOptionIsRecordedByItsLabelNotItsId() {
+    let pending = elicitation(options: [
+      ["optionId": "opt-1", "label": "Planning / thinking", "effect": "choice"]
+    ])
+
+    XCTAssertEqual(
+      ElicitationProjection.transcriptText(for: pending, answer: .option("opt-1")),
+      "Planning / thinking")
+  }
+
+  func testAnUnknownOptionFallsBackToItsIdRatherThanVanishing() {
+    let pending = elicitation(options: [])
+
+    XCTAssertEqual(
+      ElicitationProjection.transcriptText(for: pending, answer: .option("main")), "main")
+  }
+
+  func testTypedTextIsRecordedTrimmed() {
+    let pending = elicitation(options: [])
+
+    XCTAssertEqual(
+      ElicitationProjection.transcriptText(for: pending, answer: .text("  release/0.12  ")),
+      "release/0.12")
+    XCTAssertNil(ElicitationProjection.transcriptText(for: pending, answer: .text("   ")))
+  }
+
+  func testDismissingRecordsNothing() {
+    // Declining to answer is not a message the user sent.
+    let pending = elicitation(options: [["optionId": "a", "label": "A", "effect": "choice"]])
+
+    XCTAssertNil(ElicitationProjection.transcriptText(for: pending, answer: .cancel))
+  }
+}

@@ -95,6 +95,8 @@ final class ElicitationStore: ObservableObject {
 
   var current: PendingElicitation? { queue.first }
   var waitingCount: Int { queue.count }
+  /// Everything behind the head, oldest first.
+  var upcoming: [PendingElicitation] { Array(queue.dropFirst()) }
 
   private let submit: (PendingElicitation, ElicitationAnswer) -> Void
 
@@ -143,8 +145,12 @@ final class ElicitationStore: ObservableObject {
 final class ElicitationProjection {
   let store: ElicitationStore
   private var republisher: AnyCancellable?
+  /// Records the answer in the conversation. Set by the owner so the store
+  /// stays free of chat plumbing.
+  var onAnswered: ((PendingElicitation, ElicitationAnswer) -> Void)?
 
   init() {
+    var forward: ((PendingElicitation, ElicitationAnswer) -> Void)?
     store = ElicitationStore { elicitation, answer in
       Task {
         await AgentRuntimeProcess.shared.resolveElicitation(
@@ -153,6 +159,27 @@ final class ElicitationProjection {
           answer: answer
         )
       }
+      forward?(elicitation, answer)
+    }
+    forward = { [weak self] elicitation, answer in
+      self?.onAnswered?(elicitation, answer)
+    }
+  }
+
+  /// What the answer reads as in the transcript. A dismissal records nothing:
+  /// declining to answer is not a message the user sent.
+  static func transcriptText(
+    for elicitation: PendingElicitation,
+    answer: ElicitationAnswer
+  ) -> String? {
+    switch answer {
+    case .option(let optionID):
+      return elicitation.options.first(where: { $0.id == optionID })?.label ?? optionID
+    case .text(let text):
+      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
+    case .cancel:
+      return nil
     }
   }
 

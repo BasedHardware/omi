@@ -105,8 +105,8 @@ struct ChatInputView: View {
         ChatElicitationPanel(
           elicitation: elicitation,
           waitingCount: elicitations.waitingCount,
-          onAnswer: { elicitations.answer(elicitation, with: $0) },
-          onStopRun: { onStop?() }
+          upcoming: elicitations.upcoming,
+          onAnswer: { elicitations.answer(elicitation, with: $0) }
         )
         // Keyed by dispatch id so advancing the queue crossfades between two
         // questions instead of snapping the shell closed and open again.
