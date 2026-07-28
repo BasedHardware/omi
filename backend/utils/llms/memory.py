@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 import database.memories as memories_db
-from database._client import db as firestore_db
+from database.persistence import db as firestore_db
 from database.auth import get_user_name
 from models.memories import Memory, MemoryDB
 from utils.memory.memory_service import MemoryService

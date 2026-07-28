@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from database._client import db
+from database.persistence import db
 from database.memory_vector_repair_outbox import write_vector_repair_purge_outbox_records
 from models.product_memory import MemoryAccessPolicy
 from models.memory_product import (

@@ -12,7 +12,7 @@ from langchain_core.runnables import RunnableConfig
 
 import database.memories as memory_db
 import database.vector_db as vector_db
-from database._client import db
+from database.persistence import db
 import logging
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService

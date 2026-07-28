@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
-import database._client as db_client_module
+from database.persistence import db
 import database.action_items as action_items_db
 import database.memories as memories_db
 import database.redis_db as redis_db
@@ -703,7 +703,7 @@ def delete_conversation(
     if cascade:
         # Delete associated memories and action items before removing the conversation doc
         # so a partial failure cannot orphan derived data.
-        db_client = getattr(db_client_module, 'db', None)
+        db_client = db
         memory_system = pin_memory_system(uid, db_client=db_client)
         if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)

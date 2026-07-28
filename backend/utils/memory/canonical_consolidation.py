@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Set, cast
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
-from database import firestore_paths
+from database import document_store
 from database.memory_apply_store import MissingMemoryDocument, apply_long_term_patch_firestore
 from database.memory_collections import MemoryCollections
 from database.review_queue import (
@@ -85,17 +85,17 @@ def _coerce_aware_utc(value: datetime) -> datetime:
 def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
     path = collections.memory_apply_control_state
-    snapshot = firestore_paths.get_document(db_client, path)
+    snapshot = document_store.get_document(db_client, path)
     payload = _snapshot_payload(snapshot)
     if payload:
         return MemoryControlState(**payload)
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    firestore_paths.set_document(db_client, path, control.model_dump(mode="json"))
+    document_store.set_document(db_client, path, control.model_dump(mode="json"))
     return control
 
 
 def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
-    firestore_paths.set_document(
+    document_store.set_document(
         db_client,
         MemoryCollections(uid=control.uid).memory_apply_control_state,
         {
@@ -239,7 +239,7 @@ def _hydrate_memory_item(
     if memory_id in cache:
         return cache[memory_id]
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    payload = _snapshot_payload(firestore_paths.get_document(db_client, path))
+    payload = _snapshot_payload(document_store.get_document(db_client, path))
     if not payload:
         cache[memory_id] = None
         return None
@@ -546,8 +546,8 @@ def _ensure_consolidation_operation(
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    if not firestore_paths.document_exists(db_client, op_path):
-        firestore_paths.set_document(db_client, op_path, operation.model_dump(mode="json"))
+    if not document_store.document_exists(db_client, op_path):
+        document_store.set_document(db_client, op_path, operation.model_dump(mode="json"))
     return operation
 
 
@@ -581,8 +581,8 @@ def _apply_superseded_item(
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    if not firestore_paths.document_exists(db_client, op_path):
-        firestore_paths.set_document(db_client, op_path, operation.model_dump(mode="json"))
+    if not document_store.document_exists(db_client, op_path):
+        document_store.set_document(db_client, op_path, operation.model_dump(mode="json"))
 
     patch_payload: Payload = {
         "patch_id": f"patch_sup_{idempotency_key[:24]}",
@@ -611,7 +611,7 @@ def _apply_superseded_item(
 
     item = result.memory_items[0] if result.memory_items else None
     if item is None:
-        payload = _snapshot_payload(firestore_paths.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"))
+        payload = _snapshot_payload(document_store.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"))
         if payload:
             item = MemoryItem(**payload)
     if item is not None and item.tier == MemoryLayer.long_term:
@@ -662,7 +662,7 @@ def _load_survivor_item(
     if memory_id in pending_by_id:
         return pending_by_id[memory_id]
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    payload = _snapshot_payload(firestore_paths.get_document(db_client, path))
+    payload = _snapshot_payload(document_store.get_document(db_client, path))
     if not payload:
         return None
     return MemoryItem(**payload)

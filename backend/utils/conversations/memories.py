@@ -1,7 +1,7 @@
 import hashlib
 from typing import Any, Dict, List, Optional
 
-import database._client as db_client_module
+from database.persistence import db
 import database.memories as memories_db
 import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
@@ -122,7 +122,7 @@ def process_external_integration_memory(
     # Save all memories to the database if any were created
     if saved_memories:
         # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
-        db_client = getattr(db_client_module, 'db', None)
+        db_client = db
         if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
             memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:
@@ -178,7 +178,7 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
     # Save all memories in batch
     if saved_memories:
         # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
-        db_client = getattr(db_client_module, 'db', None)
+        db_client = db
         if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
             memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:

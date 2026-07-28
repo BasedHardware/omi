@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Callable, cast
 
 from database import knowledge_graph as kg_db
 from database import memories as memories_db
-from database._client import db as firestore_db
+from database.persistence import db as firestore_db
 from database.auth import get_user_name
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem

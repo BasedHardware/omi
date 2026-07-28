@@ -200,7 +200,7 @@ class TestBatchDeleteCanonicalCohort:
         monkeypatch.setattr(mem_mod.memories_db, 'delete_memories_batch', delete_mock)
 
         mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a', 'b']), uid='u1')
-        atomic_delete_mock.assert_called_once_with('u1', ['a', 'b'], db_client=mem_mod.db_client_module.db)
+        atomic_delete_mock.assert_called_once_with('u1', ['a', 'b'], db_client=mem_mod.db)
         get_mock.assert_not_called()
         delete_mock.assert_not_called()
 
@@ -224,7 +224,7 @@ class TestBatchDeleteCanonicalCohort:
         atomic_delete_mock.assert_called_once_with(
             'u1',
             ['valid', 'missing'],
-            db_client=mem_mod.db_client_module.db,
+            db_client=mem_mod.db,
         )
 
     def test_canonical_batch_adapter_failure_never_falls_back_to_per_id_delete(self, monkeypatch):

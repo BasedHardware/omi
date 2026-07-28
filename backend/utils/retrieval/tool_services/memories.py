@@ -9,7 +9,7 @@ from typing import Optional, Any, Dict, List, cast
 import database.memories as memory_db
 import database.notifications as notification_db
 import database.vector_db as vector_db
-from database._client import db as firestore_db
+from database.persistence import db as firestore_db
 from models.memories import MemoryDB
 from utils.conversations.render import format_local_date, resolve_display_tz
 from utils.memory.memory_service import MemoryService

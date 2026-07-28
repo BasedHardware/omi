@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import timezone
 from typing import Any, Dict, List, Optional, cast
 
-from database import firestore_paths
+from database import document_store
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
@@ -86,7 +86,7 @@ def user_allows_atom_keyword_index(uid: str, *, db_client: Any = None) -> bool:
     """Canonical cohort + conversation-Typesense-compatible data protection."""
     if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return False
-    user_doc: Any = firestore_paths.get_document(db_client, f"users/{uid}")
+    user_doc: Any = document_store.get_document(db_client, f"users/{uid}")
     user_data = _payload_or_empty(user_doc.to_dict() if getattr(user_doc, "exists", False) else {})
     return user_data.get("data_protection_level", "enhanced") != "e2ee"
 

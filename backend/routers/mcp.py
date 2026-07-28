@@ -14,7 +14,7 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
-from database._client import db
+from database.persistence import db
 import database.phone_calls as phone_calls_db
 from firebase_admin import auth as firebase_auth
 

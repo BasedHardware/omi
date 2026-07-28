@@ -13,7 +13,7 @@ import database.conversations as conversations_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
-from database._client import db
+from database.persistence import db
 from database.vector_db import search_memories_by_vector, upsert_memory_vectors_batch
 
 from models.folder import Folder

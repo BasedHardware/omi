@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 import database.conversations as conversations_db
-from database._client import db as firestore_db
+from database.persistence import db as firestore_db
 from database.vector_db import delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation

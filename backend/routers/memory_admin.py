@@ -12,7 +12,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 
 from models.memory_admin import MemoryReadRolloutObservabilityReport, ShortTermLifecycleRunResponse
 
-from database._client import db
+from database.persistence import db
 from jobs.short_term_lifecycle_worker import ShortTermLifecycleWorkerReport, run_short_term_lifecycle_firestore
 from utils.memory.non_active_route_audit import NonActiveRouteAuditReport, fetch_non_active_route_audit_report
 from utils.memory.default_read_rollout import (

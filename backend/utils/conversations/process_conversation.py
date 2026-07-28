@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from fastapi import HTTPException
 
-import database._client as db_client_module
+from database.persistence import db
 from database import redis_db
 from database.auth import get_user_name
 import database.memories as memories_db
@@ -632,7 +632,7 @@ def _extract_memories_canonical(
 
 def _extract_memories_inner(uid: str, conversation: Conversation) -> ConversationMemoryExtractionResult:
     with memory_system_request_scope(uid) as memory_system:
-        db_client = getattr(db_client_module, 'db', None)
+        db_client = db
         if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
             return _extract_memories_canonical(uid, conversation, db_client=db_client)

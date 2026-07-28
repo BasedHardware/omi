@@ -209,7 +209,7 @@ def _route_client(monkeypatch, db, legacy_calls):
     monkeypatch.setitem(sys.modules, 'utils.other.storage', fake_storage)
     import routers.memories as memories_router
 
-    monkeypatch.setattr(memories_router.db_client_module, 'db', db)
+    monkeypatch.setattr(memories_router, 'db', db)
 
     def legacy_get(uid, limit, offset):
         legacy_calls.append({'uid': uid, 'limit': limit, 'offset': offset})
