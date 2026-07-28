@@ -165,13 +165,14 @@ final class ElicitationStoreTests: XCTestCase {
 
 @MainActor
 final class ElicitationQueueNavigationTests: XCTestCase {
-  private func pending(_ id: String) -> PendingElicitation {
-    PendingElicitation(payload: [
-      "dispatchId": id, "ownerId": "o1", "sessionId": "s1", "mode": "question",
-      "title": "Omi is asking", "prompt": "Q \(id)",
-      "options": [["optionId": "yes", "label": "Yes", "effect": "choice"]],
-      "allowsFreeText": true,
-    ])!
+  private func pending(_ id: String) throws -> PendingElicitation {
+    try XCTUnwrap(
+      PendingElicitation(payload: [
+        "dispatchId": id, "ownerId": "o1", "sessionId": "s1", "mode": "question",
+        "title": "Omi is asking", "prompt": "Q \(id)",
+        "options": [["optionId": "yes", "label": "Yes", "effect": "choice"]],
+        "allowsFreeText": true,
+      ]))
   }
 
   private func makeStore() -> (ElicitationStore, () -> [(PendingElicitation, ElicitationAnswer)]) {
@@ -179,9 +180,9 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     return (ElicitationStore { sent.append(($0, $1)) }, { sent })
   }
 
-  func testChoosingAnOptionSendsNothingUntilSend() {
+  func testChoosingAnOptionSendsNothingUntilSend() throws {
     let (store, sent) = makeStore()
-    let one = pending("a")
+    let one = try pending("a")
     store.enqueue(one)
 
     store.stage(.option("yes"), for: one)
@@ -193,9 +194,9 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     XCTAssertEqual(store.waitingCount, 0)
   }
 
-  func testSendDoesNothingWithoutAChoice() {
+  func testSendDoesNothingWithoutAChoice() throws {
     let (store, sent) = makeStore()
-    store.enqueue(pending("a"))
+    store.enqueue(try pending("a"))
 
     store.submitFocused()
 
@@ -203,12 +204,12 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     XCTAssertEqual(store.waitingCount, 1)
   }
 
-  func testTheUserCanMoveBetweenQuestionsInAnyOrder() {
+  func testTheUserCanMoveBetweenQuestionsInAnyOrder() throws {
     let (store, _) = makeStore()
-    let a = pending("a")
-    let c = pending("c")
+    let a = try pending("a")
+    let c = try pending("c")
     store.enqueue(a)
-    store.enqueue(pending("b"))
+    store.enqueue(try pending("b"))
     store.enqueue(c)
 
     XCTAssertEqual(store.focused?.id, "a")
@@ -222,10 +223,10 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     XCTAssertEqual(store.focused?.id, "c")
   }
 
-  func testChoicesSurviveMovingBetweenQuestions() {
+  func testChoicesSurviveMovingBetweenQuestions() throws {
     let (store, sent) = makeStore()
-    let a = pending("a")
-    let b = pending("b")
+    let a = try pending("a")
+    let b = try pending("b")
     store.enqueue(a)
     store.enqueue(b)
 
@@ -243,11 +244,11 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     XCTAssertEqual(store.staged[b.id], .text("later"), "sending one keeps the other's choice")
   }
 
-  func testAnsweringMovesFocusToWhatTookItsPlace() {
+  func testAnsweringMovesFocusToWhatTookItsPlace() throws {
     let (store, _) = makeStore()
-    let a = pending("a")
+    let a = try pending("a")
     store.enqueue(a)
-    store.enqueue(pending("b"))
+    store.enqueue(try pending("b"))
 
     store.stage(.option("yes"), for: a)
     store.submitFocused()
@@ -255,9 +256,9 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     XCTAssertEqual(store.focused?.id, "b")
   }
 
-  func testRetiringTheFocusedQuestionDropsItsStagedChoice() {
+  func testRetiringTheFocusedQuestionDropsItsStagedChoice() throws {
     let (store, _) = makeStore()
-    let a = pending("a")
+    let a = try pending("a")
     store.enqueue(a)
     store.stage(.option("yes"), for: a)
 
@@ -267,12 +268,12 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     XCTAssertNil(store.focused)
   }
 
-  func testFocusingAQuestionThatIsNotQueuedIsIgnored() {
+  func testFocusingAQuestionThatIsNotQueuedIsIgnored() throws {
     let (store, _) = makeStore()
-    let a = pending("a")
+    let a = try pending("a")
     store.enqueue(a)
 
-    store.focus(pending("ghost"))
+    store.focus(try pending("ghost"))
 
     XCTAssertEqual(store.focused?.id, "a")
   }
@@ -280,13 +281,14 @@ final class ElicitationQueueNavigationTests: XCTestCase {
 
 @MainActor
 final class ElicitationBatchTests: XCTestCase {
-  private func pending(_ id: String) -> PendingElicitation {
-    PendingElicitation(payload: [
-      "dispatchId": id, "ownerId": "o1", "sessionId": "s1", "mode": "question",
-      "title": "Omi is asking", "prompt": "Q \(id)",
-      "options": [["optionId": "yes", "label": "Yes", "effect": "choice"]],
-      "allowsFreeText": true,
-    ])!
+  private func pending(_ id: String) throws -> PendingElicitation {
+    try XCTUnwrap(
+      PendingElicitation(payload: [
+        "dispatchId": id, "ownerId": "o1", "sessionId": "s1", "mode": "question",
+        "title": "Omi is asking", "prompt": "Q \(id)",
+        "options": [["optionId": "yes", "label": "Yes", "effect": "choice"]],
+        "allowsFreeText": true,
+      ]))
   }
 
   private func makeStore() -> (ElicitationStore, () -> [(PendingElicitation, ElicitationAnswer)]) {
@@ -294,10 +296,10 @@ final class ElicitationBatchTests: XCTestCase {
     return (ElicitationStore { sent.append(($0, $1)) }, { sent })
   }
 
-  func testSendingTheBatchDeliversEveryChoiceAtOnce() {
+  func testSendingTheBatchDeliversEveryChoiceAtOnce() throws {
     let (store, sent) = makeStore()
-    let a = pending("a")
-    let b = pending("b")
+    let a = try pending("a")
+    let b = try pending("b")
     store.enqueue(a)
     store.enqueue(b)
     store.stage(.option("yes"), for: a)
@@ -311,12 +313,12 @@ final class ElicitationBatchTests: XCTestCase {
     XCTAssertEqual(store.waitingCount, 0)
   }
 
-  func testAQuestionPassedOverIsCancelledRatherThanLeftPending() {
+  func testAQuestionPassedOverIsCancelledRatherThanLeftPending() throws {
     // A question nobody answers would block its agent forever.
     let (store, sent) = makeStore()
-    let a = pending("a")
+    let a = try pending("a")
     store.enqueue(a)
-    store.enqueue(pending("b"))
+    store.enqueue(try pending("b"))
     store.stage(.option("yes"), for: a)
 
     store.submitAll()
@@ -325,10 +327,10 @@ final class ElicitationBatchTests: XCTestCase {
     XCTAssertEqual(store.waitingCount, 0, "the batch drains completely")
   }
 
-  func testSendingWithNothingChosenCancelsTheWholeBatch() {
+  func testSendingWithNothingChosenCancelsTheWholeBatch() throws {
     let (store, sent) = makeStore()
-    store.enqueue(pending("a"))
-    store.enqueue(pending("b"))
+    store.enqueue(try pending("a"))
+    store.enqueue(try pending("b"))
 
     store.submitAll()
 
