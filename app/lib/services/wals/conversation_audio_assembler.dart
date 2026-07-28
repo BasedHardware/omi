@@ -51,43 +51,87 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
     throw ArgumentError.value(parts, 'parts', 'must not be empty');
   }
 
-  final ordered = List<ConversationAudioPart>.from(parts)
+  final orderedSources = List<ConversationAudioPart>.from(parts)
     ..sort((left, right) {
       final leftRange = RingProtocol.parseRecoverySourceRange(left.wal.sourceId);
       final rightRange = RingProtocol.parseRecoverySourceRange(right.wal.sourceId);
       if (leftRange == null || rightRange == null) {
         throw StateError('Canonical assembly requires pendant sequence identity');
       }
-      return leftRange.start.compareTo(rightRange.start);
+      final startCompare = leftRange.start.compareTo(rightRange.start);
+      if (startCompare != 0) return startCompare;
+      return rightRange.end.compareTo(leftRange.end);
     });
 
-  final first = ordered.first.wal;
-  if (!first.codec.isOpusSupported()) {
+  final formatReference = orderedSources.first.wal;
+  if (!formatReference.codec.isOpusSupported()) {
     throw StateError('Canonical assembly supports Opus pendant audio only');
   }
-  final fps = first.codec.getFramesPerSecond();
+  final fps = formatReference.codec.getFramesPerSecond();
   if (fps <= 0) {
     throw StateError('Canonical assembly requires a positive frame rate');
   }
 
-  var expectedSequence = RingProtocol.parseRecoverySourceRange(first.sourceId)!.start;
-  var hadLiveGap = false;
-  for (final part in ordered) {
+  for (final part in orderedSources) {
     final wal = part.wal;
     final range = RingProtocol.parseRecoverySourceRange(wal.sourceId);
-    if (range == null || range.start < expectedSequence) {
-      throw StateError('Canonical assembly found overlapping pendant sequence');
+    if (range == null) {
+      throw StateError('Canonical assembly requires pendant sequence identity');
     }
-    hadLiveGap = hadLiveGap || range.start > expectedSequence;
-    if (wal.device != first.device ||
-        wal.codec != first.codec ||
-        wal.sampleRate != first.sampleRate ||
-        wal.channel != first.channel ||
-        wal.frameSize != first.frameSize) {
+    if (wal.device != formatReference.device ||
+        wal.codec != formatReference.codec ||
+        wal.sampleRate != formatReference.sampleRate ||
+        wal.channel != formatReference.channel ||
+        wal.frameSize != formatReference.frameSize) {
       throw StateError('Canonical assembly found incompatible audio formats');
     }
+  }
+
+  /*
+   * Reconnect replay can durably rediscover a range using different timestamp
+   * chunk boundaries. For example, [10, 20) + [20, 30) may later be replayed
+   * as [10, 30). The sequence union is identical, but treating every immutable
+   * durability artifact as independent audio duplicates speech and permanently
+   * blocks canonical assembly.
+   *
+   * Remove a source only when the remaining sources still cover its complete
+   * sequence range. Longest-first removal resolves both containing replays and
+   * crossing replay ranges while preserving the exact union. Any irreducible
+   * partial overlap still fails closed below.
+   */
+  final ordered = List<ConversationAudioPart>.from(orderedSources);
+  final removalCandidates = List<ConversationAudioPart>.from(orderedSources)
+    ..sort((left, right) {
+      final leftRange = RingProtocol.parseRecoverySourceRange(left.wal.sourceId)!;
+      final rightRange = RingProtocol.parseRecoverySourceRange(right.wal.sourceId)!;
+      return (rightRange.end - rightRange.start).compareTo(
+        leftRange.end - leftRange.start,
+      );
+    });
+  for (final candidate in removalCandidates) {
+    if (!ordered.any((part) => identical(part, candidate))) continue;
+    final candidateRange = RingProtocol.parseRecoverySourceRange(candidate.wal.sourceId)!;
+    final remainingCoverage = RingSequenceCoverage(
+      ordered
+          .where((part) => !identical(part, candidate))
+          .map((part) => RingProtocol.parseRecoverySourceRange(part.wal.sourceId)!),
+    );
+    if (remainingCoverage.covers(candidateRange.start, candidateRange.end)) {
+      ordered.removeWhere((part) => identical(part, candidate));
+    }
+  }
+
+  var expectedSequence = RingProtocol.parseRecoverySourceRange(ordered.first.wal.sourceId)!.start;
+  var hadLiveGap = orderedSources.any((part) => part.wal.status == WalStatus.miss);
+  for (final part in ordered) {
+    final range = RingProtocol.parseRecoverySourceRange(part.wal.sourceId)!;
+    if (range.start < expectedSequence) {
+      throw StateError('Canonical assembly found irreducible overlapping pendant sequence');
+    }
+    hadLiveGap = hadLiveGap || range.start > expectedSequence;
     expectedSequence = range.end;
   }
+  final first = ordered.first.wal;
 
   final partial = File('${destination.path}.partial');
   if (await destination.exists()) await destination.delete();
@@ -152,7 +196,7 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
     timerStart: first.timerStart,
     totalFrames: totalFrames,
     hadLiveGap: hadLiveGap,
-    sourceWals: ordered.map((part) => part.wal).toList(growable: false),
+    sourceWals: orderedSources.map((part) => part.wal).toList(growable: false),
   );
 }
 

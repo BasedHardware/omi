@@ -342,6 +342,103 @@ void main() {
     );
   });
 
+  test('delivered replay coverage suppresses an older overlapping pending range', () {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final wals = [
+      Wal(
+        timerStart: now - 10,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        device: 'cv1-test',
+        sourceId: 'ring_100_120',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 2,
+      ),
+      Wal(
+        timerStart: now - 9,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        device: 'cv1-test',
+        sourceId: 'ring_100_110',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 1,
+      ),
+      Wal(
+        timerStart: now - 8,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        device: 'cv1-test',
+        sourceId: 'ring_110_120',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 1,
+      ),
+    ];
+
+    expect(
+      ringLiveResumeSequence(
+        wals: wals,
+        deviceId: 'cv1-test',
+        readSeq: 90,
+        writeSeq: 130,
+        nowSeconds: now,
+      ),
+      120,
+    );
+  });
+
+  test('reconnect reads durable replay and uncovered tail as separate ranges', () async {
+    const now = _FakeRingConnection.baseTimestamp + 130;
+    final connection = _FakeRingConnection(
+      readSeq: 90,
+      writeSeq: 130,
+    );
+    final local = localSync();
+    local.testWals = [
+      Wal(
+        timerStart: now - 2,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'cv1-test',
+        sourceId: 'ring_100_110',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 1,
+      ),
+      Wal(
+        timerStart: now - 1,
+        codec: BleAudioCodec.opus,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'cv1-test',
+        sourceId: 'ring_110_120',
+        uploadIntent: WalUploadIntent.liveContinuity,
+        seconds: 1,
+      ),
+    ];
+    final sync = ringSync(
+      connection,
+      local,
+      nowSeconds: now,
+      deepBacklogEnabled: false,
+    );
+
+    final session = await sync.startAudioTail(
+      onLiveFrames: (_) => _delivered(),
+      resumeLiveContinuity: true,
+    );
+
+    await connection.secondRead.future.timeout(const Duration(seconds: 3));
+    expect(connection.reads[0], (start: 100, count: 20));
+    expect(connection.reads[1], (start: 120, count: 10));
+
+    await session!.cancel();
+  });
+
   test('recent delivery ending at the device cursor resumes that cursor instead of the head', () {
     const now = _FakeRingConnection.baseTimestamp + 10000;
     final delivered = Wal(

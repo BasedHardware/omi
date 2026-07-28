@@ -68,6 +68,8 @@ int? ringLiveResumeSequence({
 }) {
   int? earliestPending;
   int? newestDeliveredEnd;
+  final deliveredCoverage = RingSequenceCoverage();
+  final pendingRanges = <({int start, int end})>[];
   final cutoff = nowSeconds - recentSeconds;
   for (final wal in wals) {
     if (wal.device != deviceId ||
@@ -77,13 +79,26 @@ int? ringLiveResumeSequence({
     }
     final range = RingProtocol.parseSourceRange(wal.sourceId);
     if (range == null || range.end < readSeq || range.start >= writeSeq) continue;
-    if (wal.status == WalStatus.miss) {
-      final start = range.start.clamp(readSeq, writeSeq).toInt();
-      if (earliestPending == null || start < earliestPending) earliestPending = start;
-    }
+    final start = range.start.clamp(readSeq, writeSeq).toInt();
     final end = range.end.clamp(readSeq, writeSeq).toInt();
-    if (newestDeliveredEnd == null || end > newestDeliveredEnd) {
-      newestDeliveredEnd = end;
+    if (wal.status == WalStatus.miss) {
+      if (start < end) pendingRanges.add((start: start, end: end));
+      continue;
+    }
+    if (wal.status == WalStatus.synced) {
+      if (start < end) deliveredCoverage.add(start, end);
+      if (newestDeliveredEnd == null || end > newestDeliveredEnd) {
+        newestDeliveredEnd = end;
+      }
+    }
+  }
+  for (final pending in pendingRanges) {
+    final uncovered = deliveredCoverage.firstUncovered(
+      pending.start,
+      pending.end,
+    );
+    if (uncovered < pending.end && (earliestPending == null || uncovered < earliestPending)) {
+      earliestPending = uncovered;
     }
   }
   return earliestPending ?? newestDeliveredEnd;
@@ -650,9 +665,27 @@ class RingStorageSyncImpl implements RingStorageSync {
           liveStart = coverage.firstUncovered(liveStart, info.writeSeq);
         }
         final availableLiveCount = info.writeSeq - liveStart;
-        final liveCount = resumeLiveContinuity && availableLiveCount > _backlogPacketsPerSlice
+        var liveCount = resumeLiveContinuity && availableLiveCount > _backlogPacketsPerSlice
             ? _backlogPacketsPerSlice
             : availableLiveCount;
+        if (resumeLiveContinuity && liveCount > 0) {
+          final proposedEnd = liveStart + liveCount;
+          final coveredEnd = coverage.contiguousEndFrom(liveStart);
+          if (coveredEnd > liveStart && coveredEnd < proposedEnd) {
+            // Finish the durable replay before reading newly uncovered audio.
+            // Otherwise a reconnect can persist one range that crosses the
+            // old/new boundary and cannot be reduced without duplicating or
+            // discarding audio during canonical assembly.
+            liveCount = coveredEnd - liveStart;
+          } else if (coveredEnd == liveStart) {
+            final nextCovered = coverage.firstRangeAtOrAfter(liveStart);
+            if (nextCovered != null && nextCovered.start > liveStart && nextCovered.start < proposedEnd) {
+              // Symmetric case: finish the uncovered prefix before entering
+              // an already durable island.
+              liveCount = nextCovered.start - liveStart;
+            }
+          }
+        }
 
         if (liveCount > 0) {
           partialLiveSince ??= DateTime.now();

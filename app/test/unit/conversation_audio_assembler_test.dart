@@ -98,6 +98,96 @@ void main() {
     expect(await secondFile.exists(), isTrue);
   });
 
+  test('removes a replay overlap when the original ranges preserve the complete sequence', () async {
+    final firstFile = File('${directory.path}/first.bin');
+    final replayFile = File('${directory.path}/replay.bin');
+    final secondFile = File('${directory.path}/second.bin');
+    await firstFile.writeAsBytes(_frame([1]), flush: true);
+    await replayFile.writeAsBytes(_frame([9]), flush: true);
+    await secondFile.writeAsBytes(_frame([2]), flush: true);
+    final first = _wal(
+      timerStart: 1000,
+      sourceId: 'ring_10_20',
+      filePath: firstFile.path,
+      status: WalStatus.synced,
+    );
+    final replay = _wal(
+      timerStart: 1000,
+      sourceId: 'ring_15_25',
+      filePath: replayFile.path,
+      status: WalStatus.miss,
+    );
+    final second = _wal(
+      timerStart: 1000,
+      sourceId: 'ring_20_30',
+      filePath: secondFile.path,
+      status: WalStatus.synced,
+    );
+    final destination = File('${directory.path}/canonical.bin');
+
+    final result = await assembleConversationAudio(
+      parts: [
+        ConversationAudioPart(wal: replay, file: replayFile),
+        ConversationAudioPart(wal: second, file: secondFile),
+        ConversationAudioPart(wal: first, file: firstFile),
+      ],
+      destination: destination,
+      silenceFrameFactory: (_) => [0],
+    );
+
+    expect(_frames(await destination.readAsBytes()), [
+      [1],
+      [2],
+    ]);
+    expect(result.totalFrames, 2);
+    expect(result.hadLiveGap, isTrue);
+    expect(result.sourceWals, [first, replay, second]);
+  });
+
+  test('refuses an overlap that cannot be removed without losing a sequence', () async {
+    final firstFile = File('${directory.path}/first.bin');
+    final secondFile = File('${directory.path}/second.bin');
+    await firstFile.writeAsBytes(_frame([1]), flush: true);
+    await secondFile.writeAsBytes(_frame([2]), flush: true);
+    final destination = File('${directory.path}/canonical.bin');
+
+    await expectLater(
+      assembleConversationAudio(
+        parts: [
+          ConversationAudioPart(
+            wal: _wal(
+              timerStart: 1000,
+              sourceId: 'ring_10_20',
+              filePath: firstFile.path,
+              status: WalStatus.miss,
+            ),
+            file: firstFile,
+          ),
+          ConversationAudioPart(
+            wal: _wal(
+              timerStart: 1000,
+              sourceId: 'ring_15_25',
+              filePath: secondFile.path,
+              status: WalStatus.miss,
+            ),
+            file: secondFile,
+          ),
+        ],
+        destination: destination,
+        silenceFrameFactory: (_) => [0],
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('irreducible overlapping pendant sequence'),
+        ),
+      ),
+    );
+
+    expect(await destination.exists(), isFalse);
+  });
+
   test('refuses malformed source audio without publishing a partial file', () async {
     final source = File('${directory.path}/malformed.bin');
     await source.writeAsBytes([4, 0, 0, 0, 1], flush: true);
