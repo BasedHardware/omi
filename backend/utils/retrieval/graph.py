@@ -37,7 +37,7 @@ from utils.retrieval.agentic import (
     get_mobile_city,
     next_stream_chunk,
 )
-from utils.observability.langsmith import get_chat_tracer_callbacks
+from utils.observability.langsmith import get_chat_tracer_callbacks, has_langsmith_api_key
 import logging
 
 logger = logging.getLogger(__name__)
@@ -218,60 +218,60 @@ async def execute_persona_chat_stream(
             formatted_messages.append(HumanMessage(content=text))
 
     full_response: List[str] = []
-    callback = AsyncStreamingCallback()
 
-    # Generate run_id for LangSmith tracing
-    langsmith_run_id = str(uuid.uuid4())
+    # LangSmith tracing — only generate a run_id when the API key is configured
+    # so callback_data doesn't carry a phantom UUID that submit_langsmith_feedback()
+    # would 404 against.
+    langsmith_run_id = uuid.uuid4() if has_langsmith_api_key() else None
 
-    tracer_callbacks = get_chat_tracer_callbacks(
-        run_id=langsmith_run_id,
-        run_name="chat.persona.stream",
-        tags=["chat", "persona", "streaming"],
-        metadata={
-            "uid": uid,
-            "app_id": app.id if app else None,
-            "app_name": app.name if app else None,
-            "cited": cited,
-        },
+    tracer_callbacks = (
+        get_chat_tracer_callbacks(
+            run_id=str(langsmith_run_id),
+            run_name="chat.persona.stream",
+            tags=["chat", "persona", "streaming"],
+            metadata={
+                "uid": uid,
+                "app_id": app.id if app else None,
+                "app_name": app.name if app else None,
+                "cited": cited,
+            },
+        )
+        if langsmith_run_id is not None
+        else []
     )
 
-    all_callbacks: List[Any] = [callback] + tracer_callbacks
-
-    run_metadata: Dict[str, Any] = {
-        "run_id": langsmith_run_id,
-        "run_name": "chat.persona.stream",
-        "tags": ["chat", "persona", "streaming"],
-        "metadata": {
-            "uid": uid,
-            "app_id": app.id if app else None,
-            "app_name": app.name if app else None,
-            "cited": cited,
-        },
+    # Pass a RunnableConfig to astream() so LangSmith traces get stamped with
+    # the run_id. The config carries 'callbacks' (tracer wiring) and 'run_id'
+    # (trace UUID stamping); the tracer constructor silently swallows run_id.
+    runnable_kwargs = {
+        "config": {
+            "callbacks": tracer_callbacks,
+            "run_id": langsmith_run_id,
+            "tags": ["chat", "persona", "streaming"],
+            "metadata": {
+                "uid": uid,
+                "app_id": app.id if app else None,
+                "app_name": app.name if app else None,
+                "cited": cited,
+            },
+        }
     }
 
-    if callback_data is not None:
-        callback_data['langsmith_run_id'] = langsmith_run_id
+    if callback_data is not None and langsmith_run_id is not None:
+        callback_data['langsmith_run_id'] = str(langsmith_run_id)
 
     try:
-        with track_usage(uid, Features.CHAT):
-            task = asyncio.create_task(
-                get_llm('persona_chat', streaming=True).agenerate(
-                    messages=[formatted_messages], callbacks=all_callbacks, **run_metadata
-                )
-            )
-
-        async for chunk in _drain_chat_callback(callback, task, route='persona'):
-            if chunk and chunk.startswith('error: '):
-                if callback_data is not None:
-                    callback_data['error'] = 'stream_failure'
-                yield chunk
-                return
-            if chunk:
-                if chunk.startswith("data: "):
-                    full_response.append(chunk.removeprefix("data: "))
-                yield chunk
-
-        await task
+        llm = get_llm('persona_chat', streaming=True)
+        # astream() with a RunnableConfig — the agenerate(callbacks=) pattern
+        # required AsyncStreamingCallback to implement the full langchain callback
+        # protocol, which it doesn't; after the langchain_core bump that crashes.
+        # astream() yields chunks directly and accepts run_id via RunnableConfig.
+        async for chunk in llm.astream(formatted_messages, **runnable_kwargs):  # type: ignore[arg-type]
+            raw = chunk.content if hasattr(chunk, 'content') else str(chunk)
+            token = raw if isinstance(raw, str) else str(raw)
+            if token:
+                full_response.append(token)
+                yield f"data: {token}"
 
         if callback_data is not None:
             callback_data['answer'] = ''.join(full_response)
