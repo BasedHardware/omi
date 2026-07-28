@@ -1,6 +1,6 @@
 {
   "files": {
-    "backend/routers/apps.py": 2373,
+    "backend/routers/apps.py": 2382,
     "backend/routers/chat.py": 1588,
     "backend/routers/developer.py": 2263,
     "backend/routers/mcp_sse.py": 1858,
@@ -8,7 +8,7 @@
     "backend/routers/users.py": 2076
   },
   "raise_justifications": {
-    "backend/routers/apps.py": "The owner-migration route validates a source-bound Firebase anonymous-token proof before its existing database write and tracked background work, keeping the authorization decision at the HTTP mutation boundary.",
+    "backend/routers/apps.py": "Developer-API-key creation for the AI Clone persona app (id/hashed/label write path) so the connect sheet can mint a per-user key without a separate route (PR #8822); supersedes the owner-migration authorization raise.",
     "backend/routers/chat.py": "Merging the Windows-port chat surface with main combined the stream-error fallback (answered guard) with mains journey/attempt observability in the same SSE generators; +11 lines of combined guard flow, no new route.",
     "backend/routers/developer.py": "GET /v1/dev/user/memories and /vector/search both serve the authoritative legacy memories collection for legacy-cohort accounts with no rollout state (#9892/#10203), keeping the narrow deny/legacy-fallback decision in the route that owns the read contract.",
     "backend/routers/mcp_sse.py": "MCP SSE memory reads route their legacy-fallback decision through the shared mcp_legacy_read_authorized helper (#9892); one import line.",
