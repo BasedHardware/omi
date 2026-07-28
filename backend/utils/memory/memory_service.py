@@ -170,7 +170,8 @@ def _validate_memory_list(memories: List[MemoryPayload]) -> List[MemoryDB]:
 
 
 def _legacy_read_memories(uid: str, *, limit: int = 100, offset: int = 0) -> List[MemoryDB]:
-    effective_limit = 5000 if offset == 0 else limit
+    # Bound list reads; do not expand first page to 5000 (prod GET 504s).
+    effective_limit = max(1, min(limit if limit else 100, 500))
     memories = memories_db.get_memories(uid, effective_limit, offset)
     return _validate_memory_list(memories)
 
