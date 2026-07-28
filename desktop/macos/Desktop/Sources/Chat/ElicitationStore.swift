@@ -37,6 +37,10 @@ struct PendingElicitation: Identifiable, Equatable, Sendable {
   let context: String?
   let options: [ElicitationOption]
   let allowsFreeText: Bool
+  /// The option the source protocol marked as its recommended answer, when it
+  /// named one. Advisory only: it is never staged or sent on the user's behalf,
+  /// because a default that answers itself is not consent.
+  let recommendedDefault: String?
   let createdAtMs: Double
 
   init?(payload: [String: Any]) {
@@ -70,6 +74,10 @@ struct PendingElicitation: Identifiable, Equatable, Sendable {
     // payload claims, so the protocol constraint is re-asserted here rather
     // than trusted from the wire.
     self.allowsFreeText = mode == .question && (payload["allowsFreeText"] as? Bool ?? false)
+    // Only honoured when it names an option that was actually offered, so a
+    // stale or malformed recommendation cannot mark a row the user cannot pick.
+    let recommended = payload["recommendedDefault"] as? String
+    self.recommendedDefault = self.options.contains { $0.id == recommended } ? recommended : nil
     self.createdAtMs = payload["createdAtMs"] as? Double ?? 0
   }
 }

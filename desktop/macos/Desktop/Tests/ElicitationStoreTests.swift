@@ -53,6 +53,31 @@ final class ElicitationStoreTests: XCTestCase {
     XCTAssertEqual(elicitation.options.map(\.label), ["Allow once", "Allow always", "Deny"])
   }
 
+  func testCarriesTheAgentsRecommendationWithoutActingOnIt() throws {
+    var body = payload()
+    body["recommendedDefault"] = "once"
+    let elicitation = try XCTUnwrap(PendingElicitation(payload: body))
+
+    XCTAssertEqual(elicitation.recommendedDefault, "once")
+
+    // The recommendation is advisory. Nothing is staged, so nothing can be sent
+    // without the user choosing it: a default that answers itself is not consent.
+    let (store, submitted) = makeStore()
+    store.enqueue(elicitation)
+    store.submitFocused()
+    XCTAssertTrue(submitted().isEmpty)
+    XCTAssertNil(store.stagedForFocused)
+  }
+
+  func testIgnoresARecommendationThatNamesNoOfferedOption() throws {
+    var unknown = payload()
+    unknown["recommendedDefault"] = "not-an-offered-option"
+    XCTAssertNil(try XCTUnwrap(PendingElicitation(payload: unknown)).recommendedDefault)
+
+    // Absent is the common case and must not resolve to an arbitrary option.
+    XCTAssertNil(try XCTUnwrap(PendingElicitation(payload: payload())).recommendedDefault)
+  }
+
   func testPermissionRefusesFreeTextEvenWhenThePayloadClaimsOtherwise() throws {
     // The ACP response shape carries only an optionId, so a payload asserting
     // otherwise must not open a text field that produces an invalid answer.

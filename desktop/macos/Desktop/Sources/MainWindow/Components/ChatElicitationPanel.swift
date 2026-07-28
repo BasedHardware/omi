@@ -4,10 +4,13 @@ import SwiftUI
 /// The card that replaces the composer while an agent is waiting on the user.
 ///
 /// It occupies the composer's own shell rather than sitting above it, so the
-/// input row is unmounted for as long as a question is open. Escape dismisses
-/// the question rather than the run: the agent is told the user declined to
-/// choose and carries on, which is also why there is no stop control here —
-/// declining one question should not end everything else in flight.
+/// input row is unmounted for as long as a question is open.
+///
+/// Escape cancels the item on screen, and what that means depends on the
+/// protocol underneath: a cancelled question returns to the model as a tool
+/// result it can act on, while a cancelled ACP permission is answered with the
+/// protocol's `cancelled` outcome and ends that agent's turn. The card says
+/// which, rather than describing both as harmless.
 ///
 /// Choosing and sending are separate. A click stages the answer and nothing
 /// leaves until Send, so a mis-click costs a second click rather than an
@@ -37,6 +40,19 @@ struct ChatElicitationPanel: View {
   /// Always available. Skipping a question is a legitimate answer — the agent
   /// is told the user declined — so there is nothing to disable.
   private var primaryTitle: String { isLastQuestion ? "Send" : "Next" }
+
+  /// Cancelling means different things to the two protocols underneath, so the
+  /// card must not describe them the same way.
+  ///
+  /// A cancelled question comes back to the model as a tool result and it
+  /// carries on. A cancelled ACP permission is answered with the protocol's
+  /// `cancelled` outcome, which ends the agent's current turn — the deny
+  /// options on the card are what refuse an action without stopping the turn.
+  private var cancelHelp: String {
+    elicitation.mode == .permission
+      ? "Cancel this request and stop what the agent is doing. To refuse just this action and let it continue, choose a deny option above."
+      : "Cancel this question. The agent keeps working."
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -159,27 +175,44 @@ struct ChatElicitationPanel: View {
           }
           .buttonStyle(.plain)
           .onHover { hoveredOptionID = $0 ? option.id : nil }
-          .help(option.isPermanent ? "Remembered for future requests" : option.label)
+          .help(optionHelp(option))
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     } else if !elicitation.options.isEmpty {
-      VStack(spacing: OmiSpacing.xxs) {
-        ForEach(elicitation.options) { option in
-          Button {
-            stage(option)
-          } label: {
-            optionRowLabel(option)
+      // A long enum stays inside the card instead of pushing the transcript off
+      // screen, and scrolls rather than clipping: `maxHeight` alone hid the
+      // options past the cap with no way to reach them, and how many options a
+      // question offers is the model's call, not a number the card can assume.
+      ScrollView(.vertical) {
+        VStack(spacing: OmiSpacing.xxs) {
+          ForEach(elicitation.options) { option in
+            Button {
+              stage(option)
+            } label: {
+              optionRowLabel(option)
+            }
+            .buttonStyle(.plain)
+            .onHover { hoveredOptionID = $0 ? option.id : nil }
           }
-          .buttonStyle(.plain)
-          .onHover { hoveredOptionID = $0 ? option.id : nil }
         }
       }
-      // A long enum stays inside the card instead of pushing the transcript
-      // off screen.
-      .frame(maxHeight: 220)
-      .fixedSize(horizontal: false, vertical: true)
+      .frame(maxHeight: optionListMaxHeight)
+      .scrollBounceBehavior(.basedOnSize)
     }
+  }
+
+  /// The agent's own recommendation, shown but never acted on. It tells the
+  /// user which answer the agent expects without choosing for them.
+  private func isRecommended(_ option: ElicitationOption) -> Bool {
+    elicitation.recommendedDefault == option.id
+  }
+
+  private func optionHelp(_ option: ElicitationOption) -> String {
+    var parts: [String] = []
+    if isRecommended(option) { parts.append("Suggested by the agent") }
+    parts.append(option.isPermanent ? "Remembered for future requests" : option.label)
+    return parts.joined(separator: " · ")
   }
 
   private func optionChipLabel(_ option: ElicitationOption) -> some View {
@@ -188,6 +221,11 @@ struct ChatElicitationPanel: View {
         Image(systemName: "checkmark").scaledFont(size: OmiType.micro, weight: .bold)
       }
       Text(option.label).scaledFont(size: OmiType.caption, weight: .medium)
+      if isRecommended(option) && stagedOptionID != option.id {
+        Text("suggested")
+          .scaledFont(size: OmiType.micro, weight: .medium)
+          .foregroundColor(OmiColors.textTertiary)
+      }
     }
     .foregroundColor(option.isRejection ? OmiColors.textSecondary : OmiColors.textPrimary)
     .padding(.horizontal, OmiSpacing.md)
@@ -265,9 +303,7 @@ struct ChatElicitationPanel: View {
       }
       .buttonStyle(.plain)
       .keyboardShortcut(.return, modifiers: [])
-      .help(
-        isLastQuestion
-          ? "Send every answer you have chosen" : "Move to the next question")
+      .help(primaryHelp)
 
       Button(action: dismiss) {
         actionLabel(
@@ -276,16 +312,38 @@ struct ChatElicitationPanel: View {
       }
       .buttonStyle(.plain)
       .keyboardShortcut(.cancelAction)
-      .help("Cancel this question. The agent keeps working.")
+      .help(cancelHelp)
 
       Spacer()
 
       if elicitations.waitingCount > 1 {
-        Text("\(answeredCount) of \(elicitations.waitingCount) answered")
+        // Send cancels whatever is still unanswered, so the count has to name
+        // that rather than leave the user to discover it after the fact.
+        Text(batchStatus)
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(unansweredCount > 0 ? OmiColors.textTertiary : OmiColors.textQuaternary)
+          .accessibilityLabel(batchStatus)
       }
     }
+  }
+
+  /// Send is a batch action: it answers what was chosen and cancels the rest.
+  /// Saying so on the control is the difference between a deliberate skip and
+  /// silently declining questions the user never saw.
+  private var primaryHelp: String {
+    guard isLastQuestion else { return "Move to the next question" }
+    if unansweredCount == 0 {
+      return elicitations.waitingCount > 1 ? "Send every answer you have chosen" : "Send your answer"
+    }
+    return unansweredCount == 1
+      ? "Send your answers and cancel the 1 question you did not answer"
+      : "Send your answers and cancel the \(unansweredCount) questions you did not answer"
+  }
+
+  private var batchStatus: String {
+    unansweredCount == 0
+      ? "\(answeredCount) of \(elicitations.waitingCount) answered"
+      : "\(answeredCount) of \(elicitations.waitingCount) answered · Send cancels the rest"
   }
 
   private func actionLabel(
@@ -308,6 +366,29 @@ struct ChatElicitationPanel: View {
 
   private var answeredCount: Int {
     elicitations.queue.filter { elicitations.staged[$0.id] != nil }.count
+  }
+
+  private var unansweredCount: Int {
+    elicitations.waitingCount - answeredCount
+  }
+
+  /// One option row: a line of body text plus its vertical padding. Scales with
+  /// the user's font size so the cap stays honest at larger text.
+  private var optionRowHeight: CGFloat {
+    round(OmiType.body * fontScale) + OmiSpacing.sm * 2
+  }
+
+  /// Height for the option list: its natural size until it would crowd the
+  /// transcript, then a scrolling cap.
+  ///
+  /// The row height is an estimate, and it degrades safely in both directions
+  /// because the list scrolls: too small and the last row scrolls into reach,
+  /// too large and the card carries a little slack. The previous fixed cap
+  /// clipped instead, which put options permanently out of reach.
+  private var optionListMaxHeight: CGFloat {
+    let rows = CGFloat(elicitation.options.count)
+    let natural = rows * optionRowHeight + max(0, rows - 1) * OmiSpacing.xxs
+    return min(natural, 260)
   }
 
   private func stage(_ option: ElicitationOption) {
