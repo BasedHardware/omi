@@ -326,12 +326,34 @@ function labelFromOptionEntry(entry: unknown): string | null {
   return direct;
 }
 
+/**
+ * Trailing markup a model sometimes leaves on a label, e.g.
+ * `"Other (I'll specify)</item>"`. Stripped so the closing tag does not read as
+ * part of the answer.
+ */
+const TRAILING_MARKUP = /<\/[A-Za-z][\w-]*>\s*$/;
+
+/**
+ * Flatten an options list that arrived wrapped in arrays.
+ *
+ * Observed live as `[[[[[["Other"]]]]]]`. Every entry was an array, arrays are
+ * neither a record nor a string, so every option was dropped and a pick-many
+ * question rendered with nothing to pick. Depth is bounded because a runaway
+ * structure should cost a dropped option, not the process.
+ */
+function flattenOptionEntries(value: unknown, depth = 0): unknown[] {
+  if (!Array.isArray(value)) return [value];
+  if (depth >= 8) return [];
+  return value.flatMap((entry) => flattenOptionEntries(entry, depth + 1));
+}
+
 function normalizeAskUserOptions(rawOptions: unknown): ElicitationOption[] {
   if (!Array.isArray(rawOptions)) return [];
   const options: ElicitationOption[] = [];
   const seen = new Set<string>();
-  for (const entry of rawOptions) {
-    const label = labelFromOptionEntry(entry);
+  for (const entry of flattenOptionEntries(rawOptions)) {
+    const raw = labelFromOptionEntry(entry);
+    const label = raw?.replace(TRAILING_MARKUP, "").trim();
     if (!label) continue;
     const optionId = asNonEmptyString(asRecord(entry)?.id) ?? label;
     // Two identical ids would make the answer ambiguous, and a duplicate row is

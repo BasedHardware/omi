@@ -406,6 +406,27 @@ describe("ask_user normalization", () => {
     expect(permission.allowsMultiple).toBe(false);
   });
 
+  it("finds options a model buried in nested arrays", () => {
+    // Observed live: every option arrived wrapped in arrays, so all of them
+    // were dropped and a pick-many question rendered with nothing to pick.
+    const [request] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [{
+          question: "Which decisions?",
+          options: [[[["Stack"]]], [["Name"]], "Hosting", [[[["Other (I'll specify)</item>"]]]]],
+          allow_multiple: true,
+        }],
+      },
+    });
+
+    expect(request.options.map((option) => option.label)).toEqual([
+      "Stack", "Name", "Hosting", "Other (I'll specify)",
+    ]);
+    expect(request.allowsMultiple).toBe(true);
+  });
+
   it("drops a duplicate option rather than offering the same answer twice", () => {
     const [request] = normalizeAskUser({
       adapterId: "acp",
