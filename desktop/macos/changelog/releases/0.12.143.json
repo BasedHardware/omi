@@ -1,0 +1,10 @@
+{
+  "version": "0.12.143",
+  "date": "2026-07-28",
+  "changes": [
+    "Simplified the notch shortcut hints to Talk and Open, matching the Open Omi shortcut named in Settings",
+    "The notch Omi mark now reacts to live audio: the waveform follows your voice as you speak, and the ring pulses with the assistant's actual speech output",
+    "Fixed voice questions that need a smarter answer or a live web lookup — the assistant can escalate and search the web again instead of failing silently",
+    "Fixed push-to-talk getting stuck listening when you interrupt Omi mid-answer and immediately ask something else"
+  ]
+}
