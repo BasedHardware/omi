@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from types import SimpleNamespace
 import pytest
 
 from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
+from database.memory_vector_metadata import canonical_memory_provider_id
 from fakes.firestore import seed_conversation
 from fakes.vector_search import install_vector_search_fakes
 from models.memories import MemoryCategory
@@ -16,6 +17,7 @@ from models.memory_apply import MemoryControlState
 from models.product_memory import (
     MemoryAccessPolicy,
     MemoryConsumer,
+    MemoryItem,
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
@@ -28,11 +30,10 @@ from tests.unit.fixtures.memory_adapter_fakes import (
     stored_item,
 )
 from tests.unit.test_ws_i_write_convergence import _sample_memory_payload
-from utils.memory.canonical_consolidation import ConsolidationAgentBatch
+from utils.memory.canonical_consolidation import ConsolidationAgentBatch, ConsolidationAgentDecision
 from utils.memory.canonical_memory_adapter import (
     delete_canonical_memory,
     extraction_memory_id,
-    neutral_vector_id_for_memory,
     write_canonical_extraction_memory,
 )
 from utils.memory.chat_memory_adapter import (
@@ -43,10 +44,16 @@ from utils.memory.default_read_rollout import GLOBAL_READ_GATE_PATH, MemoryReadD
 from utils.memory.developer_memory_adapter import search_memory_default_developer_memories
 from utils.memory.memory_service import MemoryService
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.memory.short_term_promotion import run_canonical_short_term_maintenance
+from utils.memory.short_term_promotion import _drain_canonical_outbox, run_canonical_short_term_maintenance
+from utils.memory.v3.projection_reader_contract import (
+    V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+    V3_COMPATIBILITY_PROJECTION_SOURCE,
+    V3_COMPATIBILITY_PROJECTION_VERSION,
+)
 from utils.retrieval.tool_services import memories as tool_memories_service
 
 NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
+OUTBOX_DUE_AT = datetime(2099, 1, 1, tzinfo=timezone.utc)
 PIPELINE_UID = "123"
 CONV_ID = "canonical-pipeline-conv-001"
 PIPELINE_CONTENT = "User prefers hermetic canonical memory pipeline coverage."
@@ -65,18 +72,16 @@ def _trusted_generation_patch(monkeypatch) -> None:
         monkeypatch.setattr(target, lambda **_: trusted, raising=False)
 
 
-def _promotion_side_effect_patches(monkeypatch) -> None:
-    from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
-
-    monkeypatch.setattr(
-        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-        lambda *args, **kwargs: CanonicalKgPromotionResult(attempted=False, success=True),
-    )
+def _consolidation_side_effect_patches(monkeypatch) -> None:
     monkeypatch.setattr(
         "utils.memory.canonical_consolidation.query_memory_vector_candidates",
         lambda *args, **kwargs: SimpleNamespace(hits=[], rejected_count=0),
         raising=False,
     )
+    # Typesense has focused provider tests; this E2E keeps that network boundary
+    # hermetic while exercising the normal outbox, vector, and `/v3` projection.
+    monkeypatch.setattr("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", lambda *_, **__: True)
+    monkeypatch.setattr("utils.memory.short_term_promotion.delete_atom_keyword_doc", lambda *_, **__: True)
 
 
 def _seed_apply_control(db, uid: str, *, account_generation: int = 3) -> None:
@@ -109,6 +114,29 @@ def _seed_rollout_readiness(db, uid: str, *, grant_consumer: str) -> None:
         MemoryRolloutStageGate.read.value: PASSED,
     }
     db.collection("users").document(uid).collection("memory_control").document("state").set(rollout)
+    db.collection("users").document(uid).collection("v3_compatibility_projection").document("state").set(
+        {
+            "uid": uid,
+            "schema_version": V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+            "source": V3_COMPATIBILITY_PROJECTION_SOURCE,
+            "ready": True,
+            "account_generation": 3,
+            "projection_generation": 3,
+            "freshness_fence_generation": 3,
+            "tombstone_fence_generation": 3,
+            "vector_cleanup_fence_generation": 3,
+            "source_commit_id": "head-enrollment",
+            "projection_commit_id": "commit-head-enrollment",
+            "source_evidence_fence": "head-head-enrollment",
+            "projection_evidence_fence": "head-head-enrollment",
+            "projection_version": V3_COMPATIBILITY_PROJECTION_VERSION,
+            "source_version": "memory_state_head:3",
+            "write_convergence_complete": True,
+            "delete_convergence_complete": True,
+            "tombstone_convergence_complete": True,
+            "empty_projection": False,
+        }
+    )
 
 
 def _seed_memory_item_doc(db, item: MemoryItem) -> None:
@@ -136,17 +164,36 @@ def _list_outbox_records(db, uid: str) -> list[dict]:
 
 
 def _scripted_consolidation_llm(_prompt: str) -> str:
-    return json.dumps(ConsolidationAgentBatch(decisions=[], reasoning="no_changes").model_dump(mode="json"))
+    source_memory_id = extraction_memory_id(
+        uid=PIPELINE_UID,
+        source_id=CONV_ID,
+        content=PIPELINE_CONTENT,
+    )
+    decision = ConsolidationAgentDecision(
+        source_memory_id=source_memory_id,
+        route="promote",
+        reconciliation="create",
+        memory_text=PIPELINE_CONTENT,
+        evidence_ids=["ev_ws_i_1"],
+        subject_entity_id="user",
+        predicate="prefers",
+        arguments={"object": "hermetic canonical memory pipeline coverage"},
+        relationship_to_user="self",
+        aboutness="primary_user",
+        basis_for_memory="explicit",
+        confidence="high",
+        rationale="Explicit user-authored preference.",
+    )
+    return json.dumps(ConsolidationAgentBatch(decisions=[decision]).model_dump(mode="json"))
 
 
 def _enroll_canonical_pipeline(monkeypatch, uid: str = PIPELINE_UID) -> None:
     set_canonical_cohort(monkeypatch, uid)
     monkeypatch.setenv("MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD", "1")
-    monkeypatch.setattr("utils.memory.short_term_promotion.promotion_batch_threshold", lambda: 1)
     monkeypatch.setattr("utils.memory.canonical_consolidation.consolidation_batch_threshold", lambda: 1)
     monkeypatch.setattr("utils.other.endpoints._enforce_rate_limit", lambda *args, **kwargs: None)
     _trusted_generation_patch(monkeypatch)
-    _promotion_side_effect_patches(monkeypatch)
+    _consolidation_side_effect_patches(monkeypatch)
 
 
 def _write_short_term_via_conversation_ingress(client, auth_headers, monkeypatch, *, db) -> str:
@@ -190,6 +237,8 @@ def _write_short_term_via_conversation_ingress(client, auth_headers, monkeypatch
             content=PIPELINE_CONTENT,
         )
         payload["category"] = MemoryCategory.system.value
+        payload["subject_entity_id"] = "user"
+        payload["subject_attribution"] = "user"
         memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
         import database.conversations as conversations_db
 
@@ -255,6 +304,7 @@ class TestCanonicalMemoryPipelineE2E:
         _seed_rollout_readiness(db, PIPELINE_UID, grant_consumer="omi_chat")
 
         memory_id = _write_short_term_via_conversation_ingress(client, auth_headers, monkeypatch, db=db)
+        provider_id = canonical_memory_provider_id(PIPELINE_UID, memory_id)
         short_term = _read_memory_item(db, PIPELINE_UID, memory_id)
         assert short_term["tier"] == MemoryTier.short_term.value
         assert short_term["status"] == MemoryItemStatus.active.value
@@ -268,31 +318,39 @@ class TestCanonicalMemoryPipelineE2E:
         )
         assert maintenance.skipped_reason is None
         assert maintenance.consolidation.skipped_reason is None
-        assert maintenance.promotion.promoted_count == 1
-        assert maintenance.promotion.vector_sync_failures == 0
+        assert maintenance.promoted_count == 1
+        assert maintenance.routed_count == 1
 
         promoted = _read_memory_item(db, PIPELINE_UID, memory_id)
         assert promoted["memory_id"] == memory_id
         assert promoted["tier"] == MemoryTier.long_term.value
+        assert promoted["graph_ready"] is True
+        assert promoted["graph_assertion_id"]
 
         vectors = _vector_store(fake_index)
-        assert memory_id in vectors, "promotion should upsert canonical vector using memory_id"
-        assert vectors[memory_id]["metadata"]["memory_id"] == memory_id
-        assert vectors[memory_id]["metadata"]["memory_layer"] == MemoryTier.long_term.value
+        assert provider_id not in vectors, "canonical apply must not bypass the durable outbox"
+        projection = _drain_canonical_outbox(
+            PIPELINE_UID,
+            db_client=db,
+            run_id="e2e-canonical-pipeline-projection",
+            now=OUTBOX_DUE_AT,
+        )
+        assert projection["errors"] == []
+        assert projection["retryable_failure_count"] == 0
+        assert any(action["action"] == "vector_upsert" for action in projection["actions"])
+        assert provider_id in vectors, "promotion should upsert a user-scoped canonical vector"
+        assert vectors[provider_id]["metadata"]["memory_id"] == memory_id
+        assert vectors[provider_id]["metadata"]["memory_layer"] == MemoryTier.long_term.value
 
         from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
-        from database.vector_db import upsert_canonical_memory_vector
-        from models.product_memory import MemoryItem
 
         promoted_item = MemoryItem(**promoted)
-        projection_commit_id = promoted_item.ledger_commit_id or "head0"
-        assert upsert_canonical_memory_vector(promoted_item, projection_commit_id=projection_commit_id) is not None
         authoritative_items = {
             item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=PIPELINE_UID, db_client=db)
         }
         assert memory_id in authoritative_items
         assert authoritative_items[memory_id].content == promoted_item.content
-        assert vectors[memory_id]["id"] == memory_id
+        assert vectors[provider_id]["id"] == provider_id
 
         archive_item = memory_item(
             "archive-hidden",
@@ -351,14 +409,26 @@ class TestCanonicalMemoryPipelineE2E:
         assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
 
         outbox_records = _list_outbox_records(db, PIPELINE_UID)
-        purge_records = [
+        durable_delete_records = [
             record
             for record in outbox_records
-            if record.get("memory_id") == memory_id and record.get("event_type") == "vector_repair_purge"
+            if record.get("memory_id") == memory_id
+            and record.get("payload", {}).get("action") == "delete"
+            and record.get("event_type") in {"projection_sync", "vector_sync"}
         ]
-        assert purge_records, "delete should enqueue vector repair outbox records"
-        assert purge_records[0]["vector_id"] == neutral_vector_id_for_memory(memory_id)
-        assert purge_records[0]["reason"] == "canonical_memory_delete"
+        assert {record["event_type"] for record in durable_delete_records} == {"projection_sync", "vector_sync"}
+        assert {record["payload"]["reason"] for record in durable_delete_records} == {"canonical_memory_delete"}
+
+        cleanup = _drain_canonical_outbox(
+            PIPELINE_UID,
+            db_client=db,
+            run_id="e2e-canonical-pipeline-delete",
+            now=OUTBOX_DUE_AT,
+        )
+        assert cleanup["errors"] == []
+        assert cleanup["retryable_failure_count"] == 0
+        assert {action["action"] for action in cleanup["actions"]} >= {"projection_delete", "vector_delete"}
+        assert provider_id not in vectors
 
     def test_dual_stack_projection_failure_fails_closed_without_legacy_bleed(
         self, client, auth_headers, fake_firestore, monkeypatch
