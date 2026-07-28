@@ -414,6 +414,11 @@ checks:
     triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_swift_ci_contract.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
+  - id: resolve-desktop-changelog-sync-fixtures
+    command: ["python3", ".github/scripts/test_resolve_desktop_changelog_sync.py"]
+    triggers: [".github/scripts/resolve-desktop-changelog-sync.py", ".github/scripts/test_resolve_desktop_changelog_sync.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "partial tag-release recovery must resolve already-on-main changelog without O(n) main history scans"
   - id: desktop-candidate-source-gate
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
     triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]

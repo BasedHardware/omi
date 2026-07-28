@@ -7,13 +7,18 @@ immutable tag, retries can see:
 - a source-qualified remote branch tip that is *not* an ancestor of origin/main
   (orphan rewrite of the consolidate commit), while the merge's second parent
   *is* on main;
-- consolidate dirt left in the worktree that blocks ``git checkout -B`` reuse.
+- consolidate dirt left in the worktree that blocks ``git checkout -B`` reuse;
+- a newer planned source SHA (tip-bumps) that is a descendant of the already
+  merged changelog, so consolidate^1 != planned source.
 
 This helper prefers any consolidate commit that is reachable from origin/main
-with first-parent == planned source and the exact consolidate subject for the
-version. Callers must still clean the worktree before checkout.
-"""
+for the exact version subject. When the planned source still matches the
+consolidate parent that binding is preferred; otherwise a version-matched
+main-reachable consolidate is accepted for already-on-main recovery.
 
+Never scan every commit on main (rev-list + per-sha rev-parse): that path is
+O(history) and hung M1 tag-release for 15+ minutes while v0.12.143 was blocked.
+"""
 from __future__ import annotations
 
 import argparse
@@ -76,13 +81,19 @@ def find_main_reachable_consolidate(
     version: str,
     main_ref: str = "origin/main",
 ) -> str | None:
-    """Return consolidate commit on main with parent == planned source, if any."""
+    """Return consolidate commit on main for this version.
+
+    Prefer parent == planned source. Fall back to any main-reachable consolidate
+    with the exact version subject (tip-bump / partial tag recovery).
+    """
     planned_source_sha = require_sha("planned_source_sha", planned_source_sha)
     want = consolidate_subject(version)
     log = git(
         repository_root,
         ["log", main_ref, "--format=%H%x00%P%x00%s", "--grep", f"consolidate changelog for v{version}"],
     )
+    parent_match: str | None = None
+    version_match: str | None = None
     for line in log.splitlines():
         if not line.strip():
             continue
@@ -90,23 +101,16 @@ def find_main_reachable_consolidate(
         parent_list = parents.split()
         if not parent_list:
             continue
-        if parent_list[0] != planned_source_sha:
-            continue
         if subject.strip() != want:
             continue
-        if is_ancestor(repository_root, sha, main_ref):
-            return sha
-    # Broader scan: first-parent walk can miss second parents of merges; use rev-list
-    # of all commits reachable from main.
-    all_commits = git(repository_root, ["rev-list", main_ref]).splitlines()
-    for sha in all_commits:
-        parents = git(repository_root, ["rev-parse", f"{sha}^@"]).splitlines()
-        if not parents or parents[0] != planned_source_sha:
+        if not is_ancestor(repository_root, sha, main_ref):
             continue
-        subject = git(repository_root, ["log", "-1", "--format=%s", sha])
-        if subject.strip() == want:
-            return sha
-    return None
+        if parent_list[0] == planned_source_sha:
+            parent_match = sha
+            break
+        if version_match is None:
+            version_match = sha
+    return parent_match or version_match
 
 
 def find_changelog_merge_on_main(
@@ -177,13 +181,12 @@ def resolve_changelog_sync(
 
     commit = preferred or main_commit or ""
     if not commit and branch_tip and preferred == "":
-        # Orphan branch tip: only accept if main has the equivalent consolidate.
         if main_commit:
             commit = main_commit
         else:
             raise ValueError(
                 "changelog branch tip is not reachable from main and no main-reachable "
-                f"consolidate commit exists for v{version} with parent {planned_source_sha}"
+                f"consolidate commit exists for v{version}"
             )
 
     if not commit:
