@@ -224,6 +224,21 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
             ["fake: runtime env FAKE_RUNTIME_CONFIG is not classified config"],
         )
 
+    def test_gateway_required_target_rejects_missing_or_empty_gateway_wiring(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["gateway_required"] = True
+        self.write_json("config/public-build-contract.json", contract)
+
+        self.assertEqual(
+            STATIC.validate_target(self.root, self.target(), {"FAKE_PUBLIC_INPUT"}),
+            [
+                ".github/workflows/gcp_fake.yml: gateway-required target must source "
+                "OMI_LLM_GATEWAY_URL from GitHub environment vars",
+                ".github/workflows/gcp_fake.yml: gateway-required target must reject an empty "
+                "OMI_LLM_GATEWAY_URL",
+            ],
+        )
+
     def test_runtime_preflight_rejects_literal_binding(self) -> None:
         service = {
             "template": {
@@ -651,6 +666,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
             personas.deployment.remove_runtime_secrets,
             (
                 "LINKEDIN_API_HOST",
+                "NEXT_PUBLIC_LINKEDIN_API_HOST",
                 "NEXT_PUBLIC_FIREBASE_API_KEY",
                 "NEXT_PUBLIC_FIREBASE_APP_ID",
                 "NEXT_PUBLIC_FIREBASE_VAPID_KEY",
