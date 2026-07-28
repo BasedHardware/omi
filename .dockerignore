@@ -1,1 +1,18 @@
 backend/google-credentials.json
+
+# --- self-host (WP0): slim down the monorepo build context ---
+# NB: do NOT exclude backend/, .github/scripts/, firestore.rules, firestore.indexes.json,
+# deploy/onprem/ — they are copied by the Dockerfiles (backend + emulator).
+.git/
+**/__pycache__/
+**/.venv/
+**/*.pyc
+**/node_modules/
+app/
+web/
+omiGlass/
+desktop/
+sdks/
+plugins/
+mcp/
+omi/firmware/

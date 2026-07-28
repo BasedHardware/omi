@@ -1,0 +1,75 @@
+# Omi self-host — WP0 baseline (offline, hermetic by construction).
+#
+# The `omi` network is `internal: true`: containers have NO route to the internet.
+# This IS the proof of "zero external calls" (ADR-0001): the core boots and serves
+# with no cloud, by construction. The build (which downloads liblc3, deps, the
+# emulator jar) runs on the daemon network, not on this service network, so it works.
+#
+# Verify (no host port on an internal network -> test from inside):
+#   docker compose up -d --build
+#   docker compose exec backend curl -fsS http://localhost:8080/v1/health   # {"status":"ok"}
+#   docker compose exec backend sh -c 'curl -m3 https://api.openai.com; echo exit=$?'  # must FAIL
+#
+# To curl from the host (accepts egress), add the override:
+#   docker compose -f docker-compose.yml -f docker-compose.expose.override.yml up -d
+
+name: omi-onprem
+
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [omi]
+    restart: unless-stopped
+
+  firestore-emulator:
+    build:
+      context: ../../
+      dockerfile: deploy/onprem/firestore-emulator/Dockerfile
+    healthcheck:
+      # the Firestore emulator answers 200 on / once it is ready
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    networks: [omi]
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../../
+      dockerfile: backend/Dockerfile
+      args:
+        # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
+        PYTHON_BASE_IMAGE: python:3.11-slim
+    env_file:
+      - ./backend.env
+    # create the temp dirs used at runtime (main.py does not create them), then start uvicorn
+    command:
+      - sh
+      - -c
+      - mkdir -p _temp _samples _segments _speech_profiles && exec uvicorn main:app --host 0.0.0.0 --port 8080 --loop uvloop
+    depends_on:
+      valkey:
+        condition: service_healthy
+      firestore-emulator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    networks: [omi]
+    restart: unless-stopped
+
+networks:
+  omi:
+    driver: bridge
+    internal: true
