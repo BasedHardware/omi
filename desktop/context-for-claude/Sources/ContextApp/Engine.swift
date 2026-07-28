@@ -52,6 +52,9 @@ private enum CaptureComponent: CaseIterable {
 /// `EngineStore`, which owns its own serial queue.
 @MainActor
 final class Engine: ObservableObject {
+    /// Keeps the sign-in subscription that provisions the MCP key alive.
+    private var keyProvisioning: Set<AnyCancellable> = []
+
     static let shared = Engine()
 
     @Published private(set) var isCapturing = false
@@ -112,6 +115,16 @@ final class Engine: ObservableObject {
             let result = ClaudeRegistrar.register()
             ContextLog.info("Claude registration on launch: \(result.message)", "claude")
         }
+
+        // The MCP server needs its own Omi credential rather than borrowing one out of another
+        // server's entry in ~/.claude.json. A fresh install is still signed out here, so this is a
+        // no-op until the sign-in below fires it again.
+        Task { await MCPKeyProvisioner.shared.ensureKey() }
+        OmiAuth.shared.$isSignedIn
+            .removeDuplicates()
+            .filter { $0 }
+            .sink { _ in Task { await MCPKeyProvisioner.shared.ensureKey() } }
+            .store(in: &keyProvisioning)
         ScreenActivityUploader.shared.start()
         Task { await ConversationUploader.shared.drain() }
 

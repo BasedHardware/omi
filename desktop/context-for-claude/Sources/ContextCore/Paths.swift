@@ -131,6 +131,32 @@ public struct CaptureState: Codable, Sendable, Equatable {
         try data.write(to: url, options: .atomic)
     }
 
+    /// Why a reader could not open the capture database — and, crucially, whether "empty" is a
+    /// fact about the user's life or a fault in the reader.
+    ///
+    /// This exists because the two were conflated and produced a confident falsehood. After a
+    /// rename, Claude kept running the previous install's MCP binary from a bundle that had already
+    /// been deleted. It looked for a database at the old path, did not find one, and reported that
+    /// nothing had ever been captured on this Mac — while the current app was capturing a frame
+    /// every three seconds. A stale reader asserting an empty life is the exact failure the
+    /// coverage-window design exists to prevent, so absence of a database must never be reported as
+    /// absence of history without checking this first.
+    public enum ReaderFault: Sendable, Equatable {
+        /// A live heartbeat says capture is running, so the database exists somewhere this reader
+        /// cannot see. Its own view is wrong; the user's history is not empty.
+        case readerIsStale(capturingSince: Double, heartbeatAgeSeconds: Double)
+        /// No heartbeat at all, or a long-stale one: the app genuinely is not running here.
+        case appNotRunning
+    }
+
+    /// Classifies an unopenable database. Call this before saying anything about emptiness.
+    public static func diagnoseMissingDatabase() -> ReaderFault {
+        guard let state = read() else { return .appNotRunning }
+        let age = ContextTime.now - state.updatedAt
+        guard !state.isStale else { return .appNotRunning }
+        return .readerIsStale(capturingSince: state.updatedAt, heartbeatAgeSeconds: age)
+    }
+
     public static func read(from url: URL = ContextPaths.heartbeatURL) -> CaptureState? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(CaptureState.self, from: data)

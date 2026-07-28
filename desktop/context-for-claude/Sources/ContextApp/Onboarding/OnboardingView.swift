@@ -10,9 +10,14 @@ import SwiftUI
 /// the main actor anyway, and annotating them one at a time only invites the next one to be missed.
 @MainActor
 struct OnboardingView: View {
-    /// Four screens, and only the first two ask anything of the user. `setup` runs itself.
+    /// Five screens. Only `signIn` asks a question; `setup` runs itself.
+    ///
+    /// `value` earns the two asks that follow it. Before it existed, the second thing this app ever
+    /// said was "which account is this?" — a request for a login from something the user had been
+    /// told one sentence about. Saying what is recorded, and where it goes, is the part that makes
+    /// the microphone prompt reasonable rather than startling.
     private enum Step {
-        case intro, signIn, setup, done
+        case intro, value, signIn, setup, done
     }
 
     /// Fixed order. Microphone first because it is the one people expect; the system tap second
@@ -100,6 +105,7 @@ struct OnboardingView: View {
     private var content: some View {
         switch step {
         case .intro: intro
+        case .value: value
         case .signIn: signIn
         case .setup: setup
         case .done: done
@@ -127,13 +133,68 @@ struct OnboardingView: View {
 
             // The button arrives after the last word does; offering it mid-sentence invites a
             // click before the sentence has been read.
-            InkButton("Turn me on") { go(to: firstAsk) }
+            InkButton("Turn me on") { go(to: .value) }
                 .opacity(settled ? 1 : 0)
                 .animation(stepAnimation, value: settled)
         }
     }
 
-    // MARK: - 2. Sign in — before anything is recorded, not after
+    // MARK: - 2. What I do — said before anything is asked for
+
+    /// The three sources, then where it all goes. Plain sentences rather than a feature list,
+    /// because the honest version of this screen is short and a padded one reads as a pitch.
+    ///
+    /// The destination line is the one that has to be here and not later: the next screen asks for
+    /// an account, and a user who has not been told what leaves the machine cannot meaningfully
+    /// agree to it.
+    private var value: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Here's what I do.")
+                .inkStyle(.firstTitle)
+                .foregroundStyle(Ink.ink)
+
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Self.valueLines, id: \.self) { line in
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        // A dot rather than a glyph: three SF Symbols across three lines start
+                        // competing with the sentences they are meant to introduce.
+                        Circle()
+                            .fill(Ink.faint)
+                            .frame(width: 4, height: 4)
+                            .offset(y: -3)
+                        Text(line)
+                            .inkStyle(.rowCopy)
+                            .foregroundStyle(Ink.mid)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            Text("It all lands in your Omi account. Nothing goes anywhere else, and I never send a recording of your screen or your voice — only what was said and what was on it.")
+                .inkStyle(.prose)
+                .foregroundStyle(Ink.mid)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 12) {
+                InkButton("Go on") { go(to: firstAsk) }
+                InkButton("Skip", kind: .secondary) { go(to: firstAsk) }
+            }
+            .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .opacity(settled ? 1 : 0)
+        .animation(stepAnimation, value: settled)
+    }
+
+    /// Ordered to match the capability sequence the setup step asks for, so the permission prompts
+    /// arrive in the order they were just described.
+    private static let valueLines = [
+        "I hear you through your microphone, and the other side of your calls through the system audio.",
+        "I glance at your screen every few seconds and read what is on it.",
+        "Claude asks me what you have been doing, and I answer — so you never have to re-explain yourself.",
+    ]
+
+    // MARK: - 3. Sign in — before anything is recorded, not after
 
     /// The one screen with a real choice on it. It exists because everything Context for Claude hears lands in
     /// an Omi account, and starting to record before knowing which account that is would be wrong.
@@ -202,7 +263,7 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - 3. Setup — one click, then it runs itself
+    // MARK: - 4. Setup — one click, then it runs itself
 
     private var setup: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -246,7 +307,7 @@ struct OnboardingView: View {
         return "Say yes and I\u{2019}m yours."
     }
 
-    // MARK: - 4. Done
+    // MARK: - 5. Done
 
     private var done: some View {
         VStack(spacing: 14) {
@@ -318,10 +379,14 @@ struct OnboardingView: View {
 
     // MARK: - Step machine
 
+    /// `value` reads as a list, the same as `setup`, so it takes the same full column and the same
+    /// left edge. Centring a three-line list gives every line a different left margin.
+    private var isLeftAligned: Bool { step == .setup || step == .value }
+
     private var columnWidth: CGFloat {
-        step == .setup ? InkLayout.permissionsMaxWidth : InkLayout.contentMaxWidth
+        isLeftAligned ? InkLayout.permissionsMaxWidth : InkLayout.contentMaxWidth
     }
-    private var columnAlignment: Alignment { step == .setup ? .leading : .center }
+    private var columnAlignment: Alignment { isLeftAligned ? .leading : .center }
 
     /// What the single button on the first screen actually starts. A restored session skips the
     /// question entirely, so a reinstall stays one click.
@@ -335,7 +400,7 @@ struct OnboardingView: View {
         switch step {
         case .signIn: return auth.isSigningIn
         case .setup: return granting || warmingModels
-        case .intro, .done: return false
+        case .intro, .value, .done: return false
         }
     }
 
@@ -359,6 +424,8 @@ struct OnboardingView: View {
         case .intro:
             // The word-by-word reveal runs for 1200 ms; the step is not settled until it lands.
             scheduleSettle(after: 1.2)
+        case .value:
+            scheduleSettle(after: 0.34)
         case .signIn:
             scheduleSettle(after: 0.34)
         case .setup:

@@ -9,13 +9,27 @@ private func note(_ message: String) {
     try? FileHandle.standardError.write(contentsOf: data)
 }
 
-/// A missing or unreadable database is the normal first-run state, not a failure: the server still
-/// starts, and every tool explains that Context for Claude has not captured anything yet.
+/// A missing database is the normal first-run state, not a failure: the server still starts, and
+/// every tool explains that Context for Claude has not captured anything yet.
+///
+/// A database that exists but will not open is a different thing entirely, and the two used to be
+/// nilled into one. The heartbeat is the tiebreaker — the app rewrites it every 30s, so a live beat
+/// against an unopenable store proves the fault is in this process, not in the user's history. It is
+/// logged loudly here because the operator reading stderr is the one who can fix it.
 private func openStore() -> ContextStore? {
     do {
         return try ContextStore(readOnly: true)
     } catch ContextStoreError.notInitialized {
-        note("no database yet — Context for Claude has not captured anything")
+        switch CaptureState.diagnoseMissingDatabase() {
+        case let .readerIsStale(_, age):
+            note("""
+            no database at \(ContextPaths.databaseURL.path), but the app's heartbeat is \(Int(age))s \
+            old — capture is running somewhere this binary cannot see. This is almost certainly a \
+            stale MCP server from an earlier install; restart Claude to reconnect it.
+            """)
+        case .appNotRunning:
+            note("no database yet — Context for Claude has not captured anything")
+        }
         return nil
     } catch {
         note("could not open the database read-only: \(error)")

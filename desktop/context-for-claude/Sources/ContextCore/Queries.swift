@@ -18,12 +18,82 @@ public enum Queries {
     /// Anything shorter is a glance, and a day made of glances is noise rather than a shape.
     private static let activityMinimumSeconds: Double = 15
 
+    // MARK: - Recall ranking
+    //
+    // `recall` used to OR every query term together and then sort purely by recency. Searching
+    // "Omi parity pack SCA-219" therefore returned ten hits — effectively the whole database — and
+    // buried the one genuine match (a window titled "SCA-219: Parity Pack v0: one PR (dev whitelist
+    // capture)") in eighth place, below three captures of a browser bookmark bar whose only
+    // connection to the query was the word "pack".
+    //
+    // That is worse than an annoying result order. `status` reports an exact coverage window, which
+    // licenses a reader to treat an empty result *inside* that window as evidence something did not
+    // happen. A true match ranked below incidental noise — or pushed past `limit` entirely — turns a
+    // ranking bug into a confident false statement. So relevance decides the order and recency only
+    // breaks near-ties.
+    //
+    //     coverage  = distinct query terms present in the document / distinct query terms   (0, 1]
+    //     lexical   = max(0, -bm25) / best max(0, -bm25) in the *same* FTS table            [0, 1]
+    //     relevance = 0.6 * coverage + 0.4 * lexical                                        [0, 1]
+    //     recency   = exp(-(newestCandidateAt - at) / 3 days)                               (0, 1]
+    //     score     = relevance * (0.75 + 0.25 * recency)                                   [0, 1]
+    //
+    // Coverage carries the larger weight because it is the only term that means the same thing in
+    // both tables: bm25 magnitudes depend on each table's row count, average document length, and
+    // term distribution, so a raw score is comparable only against other scores from the same table.
+    // Normalising within a table and then blending on coverage is what makes a merged ranking honest
+    // rather than a coin toss between two different scales.
+    //
+    // Recency is a multiplier capped at `recencyPull`, not an additive term, so it is bounded by
+    // construction: an infinitely old hit still keeps 75% of its relevance. A newer hit can therefore
+    // only overturn a relevance gap smaller than 25% — the bookmark-bar captures were fresher than
+    // the real match and must never win on that alone.
+    private static let coverageWeight = 0.6
+    private static let lexicalWeight = 0.4
+    /// The most of a hit's relevance that age is allowed to take away.
+    private static let recencyPull = 0.25
+    /// e-folding time. Three days is roughly the horizon over which "I was just looking at this"
+    /// stops being a reason to prefer one match over a better one.
+    private static let recencyDecaySeconds: Double = 3 * 24 * 60 * 60
+
+    /// Hits scoring below this fraction of the best hit are dropped instead of padding the result to
+    /// `limit`. Relative rather than absolute because scores are only meaningful within one query:
+    /// there is no absolute number that separates "relevant" from "noise" across every corpus.
+    ///
+    /// 0.40 is chosen against the floor of a full-coverage hit. A document containing *every*
+    /// distinct query term scores at least `0.6 * 1.0 * 0.75 = 0.45`, and no score can exceed 1.0, so
+    /// the floor can never remove a hit that matched the whole query however old it is. It only ever
+    /// trims partial-coverage hits — which is exactly the bookmark bar, and exactly the case where
+    /// padding to `limit` misleads a reader into thinking the database is full of matches.
+    private static let relevanceFloorFraction = 0.4
+
+    /// bm25 column weights for `frames_fts(ocrText, windowTitle, appName)`.
+    ///
+    /// A term in the window title is a claim about what the user was actually looking at. The same
+    /// term in OCR may be a bookmark, a sidebar link, or a notification that happened to be on
+    /// screen — that is literally what outranked the real match. 10x is the ratio at which one title
+    /// occurrence beats several body occurrences in a long page. The app name sits between them: it
+    /// is a real signal for "find that thing in Slack", but it is identical across every frame from
+    /// that app, so it must never outweigh a title.
+    private static let frameOCRWeight = 1.0
+    private static let frameTitleWeight = 10.0
+    private static let frameAppWeight = 3.0
+
+    /// How many rows per table to score before capping to `limit`.
+    ///
+    /// The pool is ordered by bm25, so a cut here can only ever discard the weakest matches. Cutting
+    /// by recency first — the old behaviour — could drop the best match before ranking ever saw it.
+    private static let candidatePoolFactor = 4
+    private static let candidatePoolMinimum = 200
+
     // MARK: - Search
 
-    /// Full-text search across speech and screen text, newest first.
+    /// Full-text search across speech and screen text, best match first.
     ///
-    /// Rank is deliberately *not* blended across the two FTS tables: their scores are not
-    /// comparable, and for ambient context recency is the better default anyway.
+    /// Scores from `segments_fts` and `frames_fts` are not directly comparable, so each table is
+    /// normalised against its own best hit and the two are then blended on query-term coverage,
+    /// which does mean the same thing in both. See the ranking notes above for the weights and why
+    /// they are what they are.
     public static func recall(
         _ store: ContextStore,
         query: String,
@@ -32,13 +102,20 @@ public enum Queries {
         limit: Int = 40
     ) throws -> [Hit] {
         guard limit > 0, let match = ftsExpression(for: query) else { return [] }
+        let terms = distinctTerms(in: query)
+        // `limit` is caller-supplied, so the widening saturates rather than trapping.
+        let pool = limit >= Int.max / candidatePoolFactor
+            ? Int.max
+            : max(limit * candidatePoolFactor, candidatePoolMinimum)
 
-        let hits: [Hit] = try store.read { db in
-            let spoken = try matchedSegments(db, match: match, since: since, until: until, limit: limit)
-            let seen = try matchedFrames(db, match: match, since: since, until: until, limit: limit)
+        let matched: [Candidate] = try store.read { db in
+            let spoken = try matchedSegments(
+                db, match: match, terms: terms, since: since, until: until, limit: pool)
+            let seen = try matchedFrames(
+                db, match: match, terms: terms, since: since, until: until, limit: pool)
             return spoken + seen
         }
-        return cap(newestFirst(hits), to: limit)
+        return cap(ranked(matched), to: limit)
     }
 
     /// Everything captured in the last `minutes`, speech and screen merged.
@@ -236,7 +313,19 @@ public enum Queries {
     /// Returns nil when nothing survives, so callers answer with an empty result instead of
     /// handing SQLite a query like `""` or `*`.
     public static func ftsExpression(for query: String) -> String? {
-        let terms = query
+        let terms = sanitizedTerms(in: query).map { "\"\($0)\"" }
+
+        guard !terms.isEmpty else { return nil }
+        return terms.joined(separator: " OR ")
+    }
+
+    /// The terms behind `ftsExpression`, in query order and with duplicates left intact so the
+    /// expression it builds is byte-for-byte what it always was.
+    ///
+    /// Extracted rather than duplicated: the coverage boost has to score the exact set of terms the
+    /// MATCH searched for, or a document could be credited for a term the index never looked at.
+    private static func sanitizedTerms(in query: String) -> [String] {
+        query
             .split(whereSeparator: { $0.isWhitespace })
             .map { token -> String in
                 let kept = token.unicodeScalars.filter { !ftsOperatorCharacters.contains($0) }
@@ -248,10 +337,16 @@ public enum Queries {
                 guard term.rangeOfCharacter(from: .alphanumerics) != nil else { return false }
                 return !ftsOperatorWords.contains(term.uppercased())
             }
-            .map { "\"\($0)\"" }
+    }
 
-        guard !terms.isEmpty else { return nil }
-        return terms.joined(separator: " OR ")
+    /// Case-folded distinct terms: the denominator of the coverage boost. Typing a word twice must
+    /// not make a document that contains it look twice as relevant.
+    private static func distinctTerms(in query: String) -> [String] {
+        var seen: Set<String> = []
+        return sanitizedTerms(in: query).compactMap { term in
+            let folded = term.lowercased()
+            return seen.insert(folded).inserted ? folded : nil
+        }
     }
 
     // MARK: - Row fetching
@@ -259,12 +354,14 @@ public enum Queries {
     private static func matchedSegments(
         _ db: Database,
         match: String,
+        terms: [String],
         since: Double?,
         until: Double?,
         limit: Int
-    ) throws -> [Hit] {
+    ) throws -> [Candidate] {
         var sql = """
-            SELECT s.startedAt AS at, s.source AS source, s.text AS text, s.sessionId AS sessionId
+            SELECT s.startedAt AS at, s.source AS source, s.text AS text, s.sessionId AS sessionId,
+                   bm25(segments_fts) AS bm25Score
             FROM segments_fts
             JOIN segments s ON s.rowid = segments_fts.rowid
             WHERE segments_fts MATCH ?
@@ -278,21 +375,29 @@ public enum Queries {
             sql += "\n  AND s.startedAt <= ?"
             args.append(until)
         }
-        sql += "\nORDER BY s.startedAt DESC\nLIMIT ?"
+        // bm25 is negative and more negative is better, so ascending is best-first. Recency only
+        // settles ties here; it decides nothing about which rows survive the pool cut.
+        sql += "\nORDER BY bm25Score ASC, s.startedAt DESC\nLIMIT ?"
         args.append(limit)
 
-        return try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map(segmentHit)
+        let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
+        return candidates(rows, terms: terms, hit: segmentHit) { row in
+            let text: String? = row["text"]
+            return text ?? ""
+        }
     }
 
     private static func matchedFrames(
         _ db: Database,
         match: String,
+        terms: [String],
         since: Double?,
         until: Double?,
         limit: Int
-    ) throws -> [Hit] {
+    ) throws -> [Candidate] {
         var sql = """
-            SELECT f.capturedAt AS at, f.appName AS appName, f.windowTitle AS windowTitle, f.ocrText AS ocrText
+            SELECT f.capturedAt AS at, f.appName AS appName, f.windowTitle AS windowTitle, f.ocrText AS ocrText,
+                   bm25(frames_fts, \(frameOCRWeight), \(frameTitleWeight), \(frameAppWeight)) AS bm25Score
             FROM frames_fts
             JOIN frames f ON f.rowid = frames_fts.rowid
             WHERE frames_fts MATCH ?
@@ -306,10 +411,18 @@ public enum Queries {
             sql += "\n  AND f.capturedAt <= ?"
             args.append(until)
         }
-        sql += "\nORDER BY f.capturedAt DESC\nLIMIT ?"
+        sql += "\nORDER BY bm25Score ASC, f.capturedAt DESC\nLIMIT ?"
         args.append(limit)
 
-        return try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map(frameHit)
+        let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
+        return candidates(rows, terms: terms, hit: frameHit) { row in
+            let app: String? = row["appName"]
+            let window: String? = row["windowTitle"]
+            let ocr: String? = row["ocrText"]
+            // Coverage reads the untruncated row: `frameHit` clips OCR for the reader, and a term
+            // that fell off the end of the snippet is still a term the frame contained.
+            return [window, app, ocr].compactMap { $0 }.joined(separator: " ")
+        }
     }
 
     private static func segmentRows(_ db: Database, since: Double?, until: Double?, limit: Int) throws -> [Row] {
@@ -391,6 +504,144 @@ public enum Queries {
             return "\(speakerLabel(source: source, speaker: speaker)): \(text)"
         }
         return truncate(lines.joined(separator: " / "), to: sessionPreviewLimit)
+    }
+
+    // MARK: - Ranking
+
+    /// A hit plus the two comparable relevance signals derived from it. `lexical` is already
+    /// normalised against the best hit of its own FTS table, so candidates from both tables can be
+    /// scored side by side.
+    private struct Candidate {
+        let hit: Hit
+        let coverage: Double
+        let lexical: Double
+    }
+
+    /// Turns one table's matched rows into candidates, normalising bm25 within that table.
+    private static func candidates(
+        _ rows: [Row],
+        terms: [String],
+        hit: (Row) -> Hit,
+        document: (Row) -> String
+    ) -> [Candidate] {
+        // SQLite returns bm25 as a negative number where more negative is a better match, and clamps
+        // its IDF to a small positive value, so flipping the sign always yields a quality >= 0.
+        let qualities = rows.map { row -> Double in
+            let score: Double? = row["bm25Score"]
+            return max(0, -(score ?? 0))
+        }
+        let best = qualities.max() ?? 0
+
+        return zip(rows, qualities).map { row, quality in
+            Candidate(
+                hit: hit(row),
+                coverage: coverage(of: document(row), terms: terms),
+                // A table whose matches are all degenerate ranks on coverage and recency alone
+                // rather than dividing by zero.
+                lexical: best > 0 ? quality / best : 1)
+        }
+    }
+
+    private struct Scored {
+        let hit: Hit
+        let score: Double
+    }
+
+    /// Scores, floors, and orders the merged candidate set. Best match first; recency only decides
+    /// between hits the lexical signals could not separate.
+    private static func ranked(_ pool: [Candidate]) -> [Hit] {
+        guard let newest = pool.map(\.hit.at).max() else { return [] }
+
+        // Recency is measured against the newest candidate rather than the wall clock, so the same
+        // corpus always ranks the same way however long ago it was captured.
+        let scored = pool.map { candidate -> Scored in
+            let relevance = coverageWeight * candidate.coverage + lexicalWeight * candidate.lexical
+            let age = max(0, newest - candidate.hit.at)
+            let recency = exp(-age / recencyDecaySeconds)
+            return Scored(
+                hit: candidate.hit,
+                score: relevance * (1 - recencyPull + recencyPull * recency))
+        }
+
+        guard let best = scored.map(\.score).max() else { return [] }
+        let floor = relevanceFloorFraction * best
+
+        return scored
+            .filter { $0.score >= floor }
+            .sorted { lhs, rhs in
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                if lhs.hit.at != rhs.hit.at { return lhs.hit.at > rhs.hit.at }
+                // Deterministic ties, and speech reads better before the screen it was said in
+                // front of.
+                return kindRank(lhs.hit.kind) < kindRank(rhs.hit.kind)
+            }
+            .map(\.hit)
+    }
+
+    /// Fraction of the distinct query terms this document actually contains.
+    ///
+    /// The point of the OR expression is that nothing is lost; the point of this number is that a
+    /// document matching three of four terms outranks one matching a single incidental word. Never
+    /// returns zero: the row is in the result set because FTS matched *something*, so a zero here
+    /// would only ever mean our tokenizer and the porter-stemmed index disagreed.
+    private static func coverage(of document: String, terms: [String]) -> Double {
+        guard !terms.isEmpty else { return 1 }
+        let tokens = documentTokens(document)
+        let matched = terms.reduce(into: 0) { total, term in
+            if tokens.contains(term) || tokens.contains(where: { inflected($0, matches: term) }) {
+                total += 1
+            }
+        }
+        return Double(max(1, matched)) / Double(terms.count)
+    }
+
+    /// Lowercased word tokens of a document, indexed under *both* readings of a punctuated
+    /// identifier.
+    ///
+    /// The query side strips FTS operator characters, so `SCA-219` arrives as the term `sca219`; the
+    /// unicode61 tokenizer splits on them, so the index holds `sca` and `219`. Emitting only one
+    /// reading loses coverage credit for a document the index genuinely matched — `SCA-219` under
+    /// the split reading, `omi-eng` under the joined one — and under-credited coverage is the
+    /// direction that costs a true match its place, which is the whole bug. Emitting both can only
+    /// credit terms that FTS itself matched.
+    private static func documentTokens(_ document: String) -> Set<String> {
+        var tokens: Set<String> = []
+        var joined = ""
+        var split = ""
+
+        for scalar in document.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) {
+                joined.unicodeScalars.append(scalar)
+                split.unicodeScalars.append(scalar)
+            } else if ftsOperatorCharacters.contains(scalar) {
+                flush(&split, into: &tokens)
+            } else {
+                flush(&joined, into: &tokens)
+                flush(&split, into: &tokens)
+            }
+        }
+        flush(&joined, into: &tokens)
+        flush(&split, into: &tokens)
+        return tokens
+    }
+
+    private static func flush(_ token: inout String, into tokens: inout Set<String>) {
+        guard !token.isEmpty else { return }
+        tokens.insert(token.lowercased())
+        token = ""
+    }
+
+    /// The suffixes the porter-stemmed index folds away but a plain token comparison would not.
+    private static let inflectionSuffixes: Set<String> = ["s", "es", "d", "ed", "ing", "ly", "er", "ers"]
+
+    /// Deliberately narrower than a prefix test: `pack` must not be credited for `package`, because
+    /// crediting incidental prefixes is how a bookmark bar came to outrank a real match.
+    private static func inflected(_ token: String, matches term: String) -> Bool {
+        let (longer, shorter) = token.count >= term.count ? (token, term) : (term, token)
+        guard shorter.count >= 3, longer.count > shorter.count, longer.hasPrefix(shorter) else {
+            return false
+        }
+        return inflectionSuffixes.contains(String(longer.dropFirst(shorter.count)))
     }
 
     // MARK: - Row → Hit
