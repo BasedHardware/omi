@@ -1,14 +1,21 @@
-"""Path-based Firestore verb layer — the persistence boundary for injected-client callers.
+"""Document-store port — a backend-neutral, path-based persistence primitive.
 
-The memory subsystem threads a ``db_client`` (a real client, a test fake, or ``None``) but must
-not hold the client or run raw Firestore ops itself. These verbs are the only place those raw
-ops live: callers pass ``db_client`` and a document/collection *path string*; when ``db_client``
-is ``None`` the injected boundary client (``db``) is used, so the same conftest global patch that
-swaps ``db`` continues to reach these ops.
+This is the seam that lets code outside ``database/`` (today: the memory subsystem) read and
+write documents WITHOUT importing the Firestore SDK or the client. Callers speak only in
+document/collection *path strings* and a ``db_client`` (a real client, a test fake, or ``None``);
+they never hold the client or run a raw ``.document()/.collection()`` op themselves.
 
-Raw ``DocumentSnapshot`` objects are returned by reads: ``.exists`` / ``.to_dict()`` /
-``.get(field)`` need no SDK import and are not client/reference ops. Do not call
-``snapshot.reference.set(...)`` outside ``database/`` — use the write verbs instead.
+Contract (deliberately backend-agnostic so WP2 can put adapters under it):
+  * ``db_client=None`` resolves to the injected boundary client ``db`` — so the conftest global
+    patch that swaps ``db`` keeps reaching these ops through the port.
+  * Reads return a **document handle** exposing ``.exists`` and ``.to_dict()``. Today this is a
+    Firestore ``DocumentSnapshot``; a Mongo/ArcadeDB adapter (WP2) returns an equivalent handle.
+  * Callers must NOT reach into a returned handle's ``.reference`` — use the write verbs.
+
+ROLE IN THE ROADMAP: this is the WP1 seal — the single Firestore-touching primitive for the
+memory subsystem. In WP2 (ADR-0002) it grows real backend adapters (Firestore | Mongo | ArcadeDB)
+underneath and/or the domain repositories sit on top of it. It is an evolving port, not a
+throwaway: the Firestore-specific implementation here becomes the "firestore adapter" of the port.
 
 Transaction helpers are added here (mirroring the SDK ``@firestore.transactional`` pattern) when
 the first transaction-heavy caller is migrated.
@@ -66,3 +73,31 @@ def stream_collection_where(
     if limit is not None:
         query = query.limit(limit)
     return query.stream()
+
+
+# --- transactions ---------------------------------------------------------------------
+# The ``@transactional`` decorator that wraps the transaction body stays with the caller
+# (imported from database.memory_apply_store, itself inside the boundary). These helpers keep
+# transaction creation and per-document ops off the raw client: the body receives the
+# write-transaction handle and uses tx_get/tx_set with path strings only.
+
+def new_transaction(db_client: Any) -> Any:
+    """Create a transaction bound to the resolved client."""
+    return _resolve(db_client).transaction()
+
+
+def tx_get(transaction: Any, db_client: Any, path: str) -> Any:
+    """Read a document handle inside a transaction."""
+    return _resolve(db_client).document(path).get(transaction=transaction)
+
+
+def tx_set(transaction: Any, db_client: Any, path: str, data: dict) -> None:
+    transaction.set(_resolve(db_client).document(path), data)
+
+
+def tx_update(transaction: Any, db_client: Any, path: str, data: dict) -> None:
+    transaction.update(_resolve(db_client).document(path), data)
+
+
+def tx_delete(transaction: Any, db_client: Any, path: str) -> None:
+    transaction.delete(_resolve(db_client).document(path))
