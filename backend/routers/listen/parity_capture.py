@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from copy import deepcopy
 from hashlib import sha256
 import logging
 import os
@@ -14,6 +15,10 @@ from testing.parity_pack_v0.schema import CassetteIdentity
 from testing.parity_pack_v0.whitelist import CaptureWhitelist
 
 logger = logging.getLogger(__name__)
+
+# Cassettes are a local diagnostic aid, never an unbounded in-memory recording.
+MAX_CAPTURE_EVENTS = 1_000
+MAX_CAPTURE_AUDIO_BYTES = 8 * 1024 * 1024
 
 
 def _anonymous_id(*parts: str) -> str:
@@ -46,6 +51,9 @@ class ListenParityCapture:
 
     def __init__(self, invocation: CaptureInvocation | None) -> None:
         self._invocation = invocation
+        self._event_count = 0
+        self._audio_bytes = 0
+        self._limit_reached = False
 
     @classmethod
     def from_environ(
@@ -70,8 +78,15 @@ class ListenParityCapture:
             retry_attempt=0,
             parent_event_anon=_anonymous_id(session_id, "listen-stt"),
         )
-        invocation = CaptureTap(root, CaptureWhitelist.from_environ(dict(env))).start(principal_id, identity, request)
-        return cls(invocation)
+        try:
+            invocation = CaptureTap(root, CaptureWhitelist.from_environ(dict(env))).start(
+                principal_id, identity, request
+            )
+            return cls(invocation)
+        except Exception as error:
+            # Capture must never make an otherwise valid listen session unavailable.
+            logger.warning("Parity pack capture initialization failed error_type=%s", type(error).__name__)
+            return cls(None)
 
     @property
     def enabled(self) -> bool:
@@ -84,12 +99,36 @@ class ListenParityCapture:
         self._observe_audio("outbound", audio)
 
     def observe_inbound_stt(self, segments: list[dict[str, Any]]) -> None:
-        if self._invocation is not None:
-            self._invocation.observe("inbound", {"type": "transcript", "segments": segments})
+        # Transcript processing annotates these dictionaries later; preserve the provider
+        # callback as it arrived instead of retaining a mutable reference.
+        if not self._can_observe():
+            return
+        self._observe("inbound", {"type": "transcript", "segments": deepcopy(segments)})
 
     def _observe_audio(self, direction: str, audio: bytes) -> None:
-        if self._invocation is not None:
-            self._invocation.observe(direction, {"type": "audio", "audio_b64": base64.b64encode(audio).decode("ascii")})
+        # Check the raw input before allocating its base64 representation.
+        if not self._can_observe(len(audio)):
+            return
+        self._observe(direction, {"type": "audio", "audio_b64": base64.b64encode(audio).decode("ascii")}, len(audio))
+
+    def _can_observe(self, audio_bytes: int = 0) -> bool:
+        if self._invocation is None or self._limit_reached:
+            return False
+        if self._event_count >= MAX_CAPTURE_EVENTS or self._audio_bytes + audio_bytes > MAX_CAPTURE_AUDIO_BYTES:
+            self._limit_reached = True
+            logger.warning("Parity pack capture limit reached; dropping subsequent events")
+            return False
+        return True
+
+    def _observe(self, direction: str, payload: Mapping[str, Any], audio_bytes: int = 0) -> None:
+        if not self._can_observe(audio_bytes):
+            return
+        try:
+            self._invocation.observe(direction, payload)
+            self._event_count += 1
+            self._audio_bytes += audio_bytes
+        except Exception as error:
+            logger.warning("Parity pack capture observe failed error_type=%s", type(error).__name__)
 
     def persist(self) -> None:
         if self._invocation is None:

@@ -64,3 +64,14 @@ def test_multichannel_mix_still_drains_with_audio_bytes_consumer():
     asyncio.run(_feed(recv, [(0, pcm), (1, pcm)]))
     assert sent, "expected a mixed frame delivered to the audio-bytes consumer"
     assert sum(len(b) for b in recv.channel_mix_buffers) == 0
+
+
+def test_multichannel_client_pcm_reaches_optional_parity_capture():
+    captured = []
+    recv = _make_receiver(audio_bytes_send=None)
+    recv.host.capture_client_audio = captured.append
+    pcm = b'\x01\x02' * 160
+
+    asyncio.run(_feed(recv, [(0, pcm)]))
+
+    assert captured == [pcm]
