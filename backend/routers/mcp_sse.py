@@ -750,6 +750,21 @@ def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
     raise ToolExecutionError(str(exc.detail)) from exc
 
 
+def _raise_memory_read_denied(fallback_reason: Optional[str]) -> NoReturn:
+    """Surface a denied memory read as an error instead of an empty result (#10735).
+
+    Every reason that reaches here is a server-side authorization state the caller
+    cannot see or act on (missing app-key grant, unreadable rollout state,
+    shadow-only). Returning `{"memories": []}` for those is indistinguishable from
+    an account that genuinely has no memories, so the client reports the user's
+    data as gone rather than as withheld.
+    """
+    raise ToolExecutionError(
+        f"Memory read is not authorized for this key (reason: {fallback_reason or 'denied'})",
+        code=-32009,
+    )
+
+
 def _raise_screen_activity_index_error(exc: FailedPrecondition) -> NoReturn:
     """Turn a missing-Firestore-index failure into a typed, actionable tool error.
 
@@ -864,7 +879,7 @@ def execute_tool(
         if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
             return {"memories": memory_list_results.memories}
         if not mcp_legacy_read_authorized(memory_list_results):
-            return {"memories": []}
+            _raise_memory_read_denied(memory_list_results.fallback_reason)
 
         result = collect_filtered_memories(
             lambda batch_offset, batch_limit: memories_db.get_memories(
@@ -1092,7 +1107,7 @@ def execute_tool(
         if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
             return {"memories": vector_search_results.memories}
         if not mcp_legacy_read_authorized(vector_search_results):
-            return {"memories": []}
+            _raise_memory_read_denied(vector_search_results.fallback_reason)
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
         if not matches:
