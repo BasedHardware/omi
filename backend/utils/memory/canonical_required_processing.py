@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, cast
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator
 
-from database._client import db as default_db_client
+from database import firestore_paths
 from database.memory_apply_store import apply_long_term_patch_firestore
 from database.memory_collections import MemoryCollections
 from models.memory_admission import REQUIRED_PROCESSING_RECEIPT_VERSION, valid_required_processing_receipt
@@ -111,12 +111,12 @@ def _snapshot_payload(snapshot: Any) -> Dict[str, Any]:
 
 
 def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
-    ref = db_client.document(MemoryCollections(uid=uid).memory_apply_control_state)
-    snapshot = ref.get()
+    path = MemoryCollections(uid=uid).memory_apply_control_state
+    snapshot = firestore_paths.get_document(db_client, path)
     if getattr(snapshot, "exists", False):
         return MemoryControlState(**_snapshot_payload(snapshot))
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    ref.set(control.model_dump(mode="json"))
+    firestore_paths.set_document(db_client, path, control.model_dump(mode="json"))
     return control
 
 
@@ -139,8 +139,7 @@ def list_pending_required_processing_items(
     db_client: Any = None,
     limit: int = 25,
 ) -> List[MemoryItem]:
-    client = db_client if db_client is not None else default_db_client
-    snapshots = client.collection(MemoryCollections(uid=uid).memory_items).stream()
+    snapshots = firestore_paths.stream_collection(db_client, MemoryCollections(uid=uid).memory_items)
     pending: List[MemoryItem] = []
     for snapshot in snapshots:
         payload = _snapshot_payload(snapshot)
@@ -208,7 +207,7 @@ def _processing_receipt(
 
 
 def _read_current_item(item: MemoryItem, *, db_client: Any) -> Optional[MemoryItem]:
-    snapshot = db_client.document(f"{MemoryCollections(uid=item.uid).memory_items}/{item.memory_id}").get()
+    snapshot = firestore_paths.get_document(db_client, f"{MemoryCollections(uid=item.uid).memory_items}/{item.memory_id}")
     payload = _snapshot_payload(snapshot)
     return MemoryItem(**payload) if payload else None
 
@@ -273,9 +272,9 @@ def _apply_processed_result(
         source_generation=control.source_generation,
         observed_head_commit_id=control.head_commit_id,
     )
-    operation_ref = db_client.document(f"{MemoryCollections(uid=item.uid).memory_operations}/{operation.operation_id}")
-    if not operation_ref.get().exists:
-        operation_ref.set(operation.model_dump(mode="json"))
+    operation_path = f"{MemoryCollections(uid=item.uid).memory_operations}/{operation.operation_id}"
+    if not firestore_paths.document_exists(db_client, operation_path):
+        firestore_paths.set_document(db_client, operation_path, operation.model_dump(mode="json"))
     idempotency_key = deterministic_contract_id(
         "canonical-required-processing",
         {
@@ -317,10 +316,9 @@ def process_required_memory_item(
     processor: Optional[RequiredMemoryProcessor] = None,
     now: Optional[datetime] = None,
 ) -> RequiredMemoryProcessingResult:
-    client = db_client if db_client is not None else default_db_client
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_canonical_cohort")
-    snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
+    snapshot = firestore_paths.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{memory_id}")
     payload = _snapshot_payload(snapshot)
     if not payload:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="memory_not_found")
@@ -333,9 +331,9 @@ def process_required_memory_item(
     current_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     try:
         processed = processor(item)
-        status = _apply_processed_result(item, processed, db_client=client, now=current_time)
+        status = _apply_processed_result(item, processed, db_client=db_client, now=current_time)
     except Exception as exc:
-        race_result = _completed_or_replaced_result(item, db_client=client)
+        race_result = _completed_or_replaced_result(item, db_client=db_client)
         if race_result is not None:
             return race_result
         error_code = type(exc).__name__
@@ -347,7 +345,7 @@ def process_required_memory_item(
         )
         return RequiredMemoryProcessingResult(memory_id=memory_id, error_code=error_code)
     if status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
-        race_result = _completed_or_replaced_result(item, db_client=client)
+        race_result = _completed_or_replaced_result(item, db_client=db_client)
         if race_result is not None:
             return race_result
         error_code = f"apply_{status.value}"
@@ -363,15 +361,14 @@ def run_required_memory_processing(
     now: Optional[datetime] = None,
     limit: int = 25,
 ) -> RequiredMemoryProcessingReport:
-    client = db_client if db_client is not None else default_db_client
     report = RequiredMemoryProcessingReport(uid=uid)
-    items = list_pending_required_processing_items(uid, db_client=client, limit=limit)
+    items = list_pending_required_processing_items(uid, db_client=db_client, limit=limit)
     for item in items:
         report.attempted_count += 1
         result = process_required_memory_item(
             uid,
             item.memory_id,
-            db_client=client,
+            db_client=db_client,
             processor=processor,
             now=now,
         )
