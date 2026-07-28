@@ -421,7 +421,7 @@ export type ElicitationOutcome =
    * one, because that is all its protocol can answer with; a multi-select
    * question may carry several, in the order they appear on the card.
    */
-  | { kind: "selected"; optionIds: readonly string[] }
+  | { kind: "selected"; optionIds: readonly string[]; text?: string }
   | { kind: "answered"; text: string }
   | { kind: "cancelled"; reason: string };
 

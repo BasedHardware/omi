@@ -344,6 +344,39 @@ describe("multi-select answers", () => {
       .toEqual({ kind: "selected", optionIds: ["a"] });
   });
 
+  it("carries chosen options and typed words together", () => {
+    const [multi] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [{ question: "Constraints?", options: ["a", "b"], allow_multiple: true }],
+      },
+    });
+
+    expect(outcomeFromResolution(multi, "resolved", { optionIds: ["a"], text: "and this" }))
+      .toEqual({ kind: "selected", optionIds: ["a"], text: "and this" });
+
+    // Typed words alone are still the plain answered shape.
+    expect(outcomeFromResolution(multi, "resolved", { text: "just this" }))
+      .toEqual({ kind: "answered", text: "just this" });
+  });
+
+  it("never lets typed words reach a permission", () => {
+    const permission = normalizeAcpPermission({
+      adapterId: "hermes",
+      agentLabel: "Hermes",
+      params: {
+        sessionId: "s",
+        toolCall: { title: "Run", kind: "execute" },
+        options: [{ optionId: "once", name: "Allow once", kind: "allow_once" }],
+      },
+    })!;
+
+    // ACP answers with an optionId and nothing else; text has no way home.
+    expect(outcomeFromResolution(permission, "resolved", { optionIds: ["once"], text: "why not" }))
+      .toEqual({ kind: "selected", optionIds: ["once"] });
+  });
+
   it("keeps a single-select question single even when several ids arrive", () => {
     const [single] = normalizeAskUser({
       adapterId: "acp",

@@ -95,14 +95,20 @@ export function outcomeFromResolution(
   const selected = claimed.filter(
     (id): id is string => typeof id === "string" && offered.has(id),
   );
+  const typed = typeof resolution?.text === "string" ? resolution.text.trim() : "";
   if (selected.length > 0) {
     // A permission answers with exactly one option whatever the surface sent;
     // the protocol has no way to carry a second.
-    return { kind: "selected", optionIds: request.allowsMultiple ? selected : [selected[0]!] };
+    const optionIds = request.allowsMultiple ? selected : [selected[0]!];
+    // A pick-many question can be answered with options *and* the user's own
+    // words -- "these three, plus this" -- so both are carried rather than one
+    // silently discarding the other.
+    return request.allowsFreeText && typed.length > 0
+      ? { kind: "selected", optionIds, text: typed }
+      : { kind: "selected", optionIds };
   }
-  const text = resolution?.text;
-  if (request.allowsFreeText && typeof text === "string" && text.trim().length > 0) {
-    return { kind: "answered", text };
+  if (request.allowsFreeText && typed.length > 0) {
+    return { kind: "answered", text: typed };
   }
   return { kind: "cancelled", reason: "resolution_carried_no_valid_answer" };
 }

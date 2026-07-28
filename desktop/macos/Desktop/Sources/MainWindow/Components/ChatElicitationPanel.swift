@@ -28,9 +28,18 @@ struct ChatElicitationPanel: View {
   private var staged: ElicitationAnswer? { elicitations.staged[elicitation.id] }
 
   /// Every option currently chosen. A single-select question holds at most one.
-  private var stagedOptionIDs: [String] {
-    if case .options(let ids) = staged { return ids }
-    return []
+  private var stagedOptionIDs: [String] { staged?.optionIDs ?? [] }
+
+  /// Whether the user's own words are part of the answer right now.
+  private var customAnswerChosen: Bool {
+    !(staged?.text?.isEmpty ?? true)
+  }
+
+  /// The custom answer sits after the listed options, so its number continues
+  /// the same sequence and the key that picks it is the one shown on it.
+  private var customAnswerNumber: Int? {
+    let next = elicitation.options.count + 1
+    return next <= 9 ? next : nil
   }
 
   private func isChosen(_ option: ElicitationOption) -> Bool {
@@ -384,8 +393,27 @@ struct ChatElicitationPanel: View {
     return OmiColors.border.opacity(option.isPermanent ? 0.4 : 0.12)
   }
 
+  /// The user's own words, presented as one more option rather than a stray
+  /// field below them.
+  ///
+  /// It carries the next number in the sequence, and shows the same chosen mark
+  /// the listed options do, so "what I typed" reads as an answer among the
+  /// others instead of a separate control competing with them.
   private var freeTextField: some View {
-    TextField("Type a different answer\u{2026}", text: $freeText)
+    HStack(spacing: OmiSpacing.sm) {
+      if let number = customAnswerNumber {
+        Text("\(number)")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .monospacedDigit()
+          .foregroundColor(customAnswerChosen ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .frame(width: numberColumnWidth, alignment: .center)
+          .accessibilityHidden(true)
+      }
+
+      TextField(
+        elicitation.options.isEmpty ? "Type your answer\u{2026}" : "Or type your own answer\u{2026}",
+        text: $freeText
+      )
       .textFieldStyle(.plain)
       .scaledFont(size: OmiType.body)
       .foregroundColor(OmiColors.textPrimary)
@@ -397,10 +425,33 @@ struct ChatElicitationPanel: View {
         stageFreeText(value)
       }
       .onSubmit(advance)
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.vertical, OmiSpacing.xs)
-      .background(OmiColors.backgroundTertiary)
-      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous))
+
+      if elicitation.allowsMultiple {
+        Image(systemName: customAnswerChosen ? "checkmark.square.fill" : "square")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(customAnswerChosen ? OmiColors.accent : OmiColors.textQuaternary)
+      } else if customAnswerChosen {
+        Image(systemName: "checkmark")
+          .scaledFont(size: OmiType.caption, weight: .bold)
+          .foregroundColor(OmiColors.accent)
+      }
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.md)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+        .fill(customAnswerChosen ? OmiColors.backgroundQuaternary : OmiColors.backgroundTertiary.opacity(0.55))
+    )
+    .overlay {
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+        .stroke(
+          customAnswerChosen ? OmiColors.accent.opacity(0.55) : OmiColors.border.opacity(0.12),
+          lineWidth: customAnswerChosen ? 1.5 : 1)
+    }
+    .accessibilityLabel(
+      customAnswerNumber.map { "Option \($0), type your own answer" } ?? "Type your own answer"
+    )
+    .accessibilityAddTraits(customAnswerChosen ? .isSelected : [])
   }
 
   /// Both actions sit under the options on the left, so the eye travels
@@ -529,16 +580,21 @@ struct ChatElicitationPanel: View {
       }
       // Keep card order so the answer reads the way the question was asked.
       let ordered = elicitation.options.map(\.id).filter { chosen.contains($0) }
-      if ordered.isEmpty {
+      // Keep whatever the user typed: on a pick-many question the options and
+      // their own words are parts of one answer.
+      let typed = freeText.trimmingCharacters(in: .whitespacesAndNewlines)
+      let answer = ElicitationAnswer.answer(optionIDs: ordered, text: typed.isEmpty ? nil : typed)
+      if answer.isEmpty {
         elicitations.clearStaged(for: elicitation)
       } else {
-        elicitations.stage(.options(ordered), for: elicitation)
+        elicitations.stage(answer, for: elicitation)
       }
-      freeText = ""
       return
     }
 
-    elicitations.stage(.options([option.id]), for: elicitation)
+    // Pick-one: the option replaces whatever was typed, the same way it
+    // replaces another option.
+    elicitations.stage(.answer(optionIDs: [option.id], text: nil), for: elicitation)
     freeText = ""
     if !isLastQuestion { elicitations.focusNext() }
   }
@@ -547,23 +603,42 @@ struct ChatElicitationPanel: View {
   private func selectOption(number: Int) {
     guard !freeTextFocused else { return }
     let index = number - 1
-    guard elicitation.options.indices.contains(index) else { return }
-    stage(elicitation.options[index])
-  }
-
-  private func stageFreeText(_ value: String) {
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty {
-      if case .text = staged { elicitations.clearStaged(for: elicitation) }
+    if elicitation.options.indices.contains(index) {
+      stage(elicitation.options[index])
       return
     }
-    elicitations.stage(.text(trimmed), for: elicitation)
+    // The number past the last option is the custom answer; choosing it means
+    // putting the caret where the words go.
+    if elicitation.allowsFreeText && number == customAnswerNumber {
+      freeTextFocused = true
+      elicitations.noteInteraction()
+    }
+  }
+
+  /// Typing is choosing the custom answer.
+  ///
+  /// On a pick-many question it joins whatever options are already chosen, so
+  /// "these three, plus this" is one answer. On a pick-one question it is the
+  /// answer, and takes the place of any option that was chosen — the same way
+  /// clicking a second option would.
+  private func stageFreeText(_ value: String) {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    let keptOptions = elicitation.allowsMultiple ? stagedOptionIDs : []
+    if trimmed.isEmpty {
+      if keptOptions.isEmpty {
+        elicitations.clearStaged(for: elicitation)
+      } else {
+        elicitations.stage(.answer(optionIDs: keptOptions, text: nil), for: elicitation)
+      }
+      return
+    }
+    elicitations.stage(.answer(optionIDs: keptOptions, text: trimmed), for: elicitation)
   }
 
   /// Typed answers survive moving between questions, so the field is refilled
   /// from what was staged rather than cleared.
   private func restoreStagedText() {
-    if case .text(let text) = staged { freeText = text } else { freeText = "" }
+    freeText = staged?.text ?? ""
   }
 
   /// Move through the batch, then send it. A question the user passes over

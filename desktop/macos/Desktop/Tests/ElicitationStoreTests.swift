@@ -53,6 +53,36 @@ final class ElicitationStoreTests: XCTestCase {
     XCTAssertEqual(elicitation.options.map(\.label), ["Allow once", "Allow always", "Deny"])
   }
 
+  func testAnAnswerCanCarryChosenOptionsAndTheUsersOwnWords() throws {
+    let elicitation = try XCTUnwrap(PendingElicitation(payload: payload(mode: "question")))
+    let wire = try XCTUnwrap(
+      ElicitationWire.resolvePayload(
+        dispatchID: elicitation.id,
+        ownerID: elicitation.ownerID,
+        currentOwnerID: elicitation.ownerID,
+        answer: .answer(optionIDs: ["once", "no"], text: "and this")))
+
+    // A pick-many question is legitimately answered "these two, plus this", so
+    // neither part silently discards the other.
+    XCTAssertEqual(wire["optionIds"] as? [String], ["once", "no"])
+    XCTAssertEqual(wire["text"] as? String, "and this")
+  }
+
+  func testAnEmptyAnswerCarriesNeitherKey() throws {
+    let elicitation = try XCTUnwrap(PendingElicitation(payload: payload(mode: "question")))
+    let wire = try XCTUnwrap(
+      ElicitationWire.resolvePayload(
+        dispatchID: elicitation.id,
+        ownerID: elicitation.ownerID,
+        currentOwnerID: elicitation.ownerID,
+        answer: .answer(optionIDs: [], text: nil)))
+
+    XCTAssertNil(wire["optionIds"])
+    XCTAssertNil(wire["text"])
+    XCTAssertTrue(ElicitationAnswer.answer(optionIDs: [], text: "").isEmpty)
+    XCTAssertFalse(ElicitationAnswer.answer(optionIDs: [], text: "x").isEmpty)
+  }
+
   func testAWaitingQuestionArmsADeadlineThatInteractionPushesBack() throws {
     let (store, _) = makeStore()
     let elicitation = try XCTUnwrap(PendingElicitation(payload: payload(mode: "question")))

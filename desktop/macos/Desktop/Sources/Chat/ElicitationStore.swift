@@ -91,12 +91,33 @@ struct PendingElicitation: Identifiable, Equatable, Sendable {
 }
 
 /// The user's answer, on its way back to the kernel.
+/// What the user put together for one question.
+///
+/// Options and typed words are one answer, not two competing ones: a pick-many
+/// question can legitimately be answered "these three, plus this". A pick-one
+/// question and every permission carry exactly one option and no text.
 enum ElicitationAnswer: Equatable, Sendable {
-  /// The options the user chose, in the order the card offers them. A
-  /// single-select question and every permission carry exactly one.
-  case options([String])
-  case text(String)
+  case answer(optionIDs: [String], text: String?)
   case cancel
+
+  static func options(_ ids: [String]) -> ElicitationAnswer { .answer(optionIDs: ids, text: nil) }
+  static func text(_ value: String) -> ElicitationAnswer { .answer(optionIDs: [], text: value) }
+
+  var optionIDs: [String] {
+    if case .answer(let ids, _) = self { return ids }
+    return []
+  }
+
+  var text: String? {
+    if case .answer(_, let text) = self { return text }
+    return nil
+  }
+
+  /// An answer with nothing in it is not an answer; the card clears it instead.
+  var isEmpty: Bool {
+    guard case .answer(let ids, let text) = self else { return false }
+    return ids.isEmpty && (text?.isEmpty ?? true)
+  }
 }
 
 /// Holds the questions waiting on the user, oldest first.
@@ -377,12 +398,10 @@ enum ElicitationWire {
       "dispatchId": dispatchID,
     ]
     switch answer {
-    case .options(let optionIDs):
+    case .answer(let optionIDs, let text):
       payload["decision"] = "answer"
-      payload["optionIds"] = optionIDs
-    case .text(let text):
-      payload["decision"] = "answer"
-      payload["text"] = text
+      if !optionIDs.isEmpty { payload["optionIds"] = optionIDs }
+      if let text, !text.isEmpty { payload["text"] = text }
     case .cancel:
       payload["decision"] = "cancel"
     }
