@@ -300,3 +300,111 @@ def fit_within_budget(
         total += tokens
     kept.reverse()
     return kept, False
+
+
+# ---------------------------------------------------------------------------
+# Transient provider failures on the agent's streaming model call.
+#
+# The chat agent's Anthropic call can fail from transport-class faults: a read timeout on a
+# stalled stream, a dropped connection, a provider 5xx. Those are not defects in the request —
+# the same request normally succeeds on a second attempt. Treating them as fatal ends the turn
+# with an empty answer, which the router can only render as a canned error, so a momentary
+# provider stall costs the user their whole reply.
+#
+# The classification is pure and import-light (no anthropic/httpx imports) so it can be
+# unit-tested without the LLM stack, and so it also recognises the raw httpx exceptions that
+# escape the SDK's own retry once the response body is already streaming — which is exactly the
+# case observed in production (`error_type=ReadTimeout`).
+# ---------------------------------------------------------------------------
+
+
+# Matched on the exception's class name so both the SDK wrappers (anthropic.APITimeoutError)
+# and the underlying transport exceptions (httpx.ReadTimeout) are covered.
+TRANSIENT_PROVIDER_ERROR_NAMES = frozenset(
+    {
+        'APIConnectionError',
+        'APITimeoutError',
+        'ConnectError',
+        'ConnectTimeout',
+        'InternalServerError',
+        'PoolTimeout',
+        'ReadError',
+        'ReadTimeout',
+        'RemoteProtocolError',
+        'WriteError',
+        'WriteTimeout',
+    }
+)
+
+# 429 is deliberately absent: a rate limit or exhausted quota does not clear within one turn's
+# budget, so re-issuing the call just burns the remaining seconds the user is waiting on.
+TRANSIENT_PROVIDER_STATUS_CODES = frozenset({500, 502, 503, 504, 529})
+
+_TIMEOUT_ERROR_NAMES = frozenset({'APITimeoutError', 'ConnectTimeout', 'PoolTimeout', 'ReadTimeout', 'WriteTimeout'})
+
+
+def _provider_status_code(error: BaseException) -> Optional[int]:
+    """HTTP status carried by a provider exception, if it has one."""
+    status_code = getattr(error, 'status_code', None)
+    if isinstance(status_code, int):
+        return status_code
+
+    response = getattr(error, 'response', None)
+    response_status = getattr(response, 'status_code', None)
+    if isinstance(response_status, int):
+        return response_status
+    return None
+
+
+def is_transient_provider_error(error: BaseException) -> bool:
+    """Whether ``error`` is a transport-class provider failure worth re-issuing.
+
+    A response-carrying error is judged by its status alone: a 4xx describes the request we
+    just sent, so repeating it cannot help. Errors without a status (connection resets, read
+    timeouts) are judged by class name.
+    """
+    status_code = _provider_status_code(error)
+    if status_code is not None:
+        return status_code in TRANSIENT_PROVIDER_STATUS_CODES
+    return type(error).__name__ in TRANSIENT_PROVIDER_ERROR_NAMES
+
+
+def provider_fallback_reason(error: BaseException) -> str:
+    """Map a provider exception onto the bounded ``record_fallback`` reason set."""
+    status_code = _provider_status_code(error)
+    if status_code is not None:
+        if 500 <= status_code < 600:
+            return 'provider_5xx'
+        if status_code == 429:
+            return 'provider_429'
+        return 'other'
+    return 'timeout' if type(error).__name__ in _TIMEOUT_ERROR_NAMES else 'other'
+
+
+def should_retry_provider_error(
+    error: BaseException,
+    *,
+    attempts_made: int,
+    max_attempts: int,
+    text_already_streamed: bool,
+    seconds_remaining: float,
+    seconds_per_attempt: float,
+) -> bool:
+    """Whether the agent's streaming model call may be re-issued after ``error``.
+
+    Retrying is only safe while nothing from this attempt has reached the user: streamed text
+    cannot be un-sent, so a second attempt would duplicate it on screen. Tool calls run only
+    after a stream closes cleanly, so a failed attempt leaves no side effect to undo and the
+    identical request can simply be sent again.
+
+    The remaining-time check keeps a doomed retry from starting: an attempt that cannot finish
+    before the turn's total deadline would be cancelled mid-flight, spending the user's wait on
+    nothing.
+    """
+    if text_already_streamed:
+        return False
+    if attempts_made >= max_attempts:
+        return False
+    if seconds_remaining < seconds_per_attempt:
+        return False
+    return is_transient_provider_error(error)

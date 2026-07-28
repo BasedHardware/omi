@@ -160,6 +160,10 @@ if not hasattr(obs_mod, "__path__"):
 langsmith_mod = _stub_module("utils.observability.langsmith")
 langsmith_mod.get_chat_tracer_callbacks = MagicMock(return_value=[])
 langsmith_mod.is_langsmith_enabled = MagicMock(return_value=False)
+# utils.observability.fallback is import-light (metrics counter + logging) and agentic.py calls
+# record_fallback on the provider-retry path, so the real module is loaded below (once
+# _load_module_from_file is defined) rather than hand-stubbed. test_chat_agent_provider_retry.py
+# asserts against its bounded reason set through the same sys.modules entry.
 langsmith_prompts_mod = _stub_module("utils.observability.langsmith_prompts")
 langsmith_prompts_mod.get_agentic_system_prompt_template = MagicMock(side_effect=Exception("not available"))
 langsmith_prompts_mod.render_prompt = MagicMock()
@@ -237,6 +241,9 @@ _load_module_from_file("models.other", BACKEND_DIR / "models" / "other.py")
 # message_text, MAX_CHAT_INPUT_TOKENS, INPUT_TOO_LONG_MESSAGE. agentic.py imports several of these,
 # and test_chat_input_guard.py shares this same sys.modules entry.
 _load_module_from_file("utils.retrieval.safety", BACKEND_DIR / "utils" / "retrieval" / "safety.py")
+
+# Real (import-light) fallback telemetry: agentic.py imports record_fallback from it.
+_load_module_from_file("utils.observability.fallback", BACKEND_DIR / "utils" / "observability" / "fallback.py")
 
 # Stub firebase_admin (used by endpoints.py and auth)
 firebase_mod = _stub_module("firebase_admin")
