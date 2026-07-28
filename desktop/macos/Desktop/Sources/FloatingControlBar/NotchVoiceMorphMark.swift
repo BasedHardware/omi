@@ -39,7 +39,17 @@ enum NotchVoiceMorphGeometry {
   /// subtraction) runs 0.005–0.013; the gate sits just above it so a quiet
   /// room renders a genuinely flat line / still ring, while even quiet
   /// speech (~0.03+) passes and is auto-gained to full range.
-  static let displayLevelGate: CGFloat = 0.015
+  static let displayLevelGate: CGFloat = 0.013
+
+  /// Once speech has opened the gate, sub-gate levels keep rendering for this
+  /// long, so the quieter tail of a phrase rides through instead of
+  /// flatlining while the speaker is still talking.
+  static let displayGateHangover: TimeInterval = 0.6
+
+  /// During the hangover only genuine near-silence closes the wave; the
+  /// capture pipeline's residual after noise-floor subtraction sits below
+  /// this.
+  static let displayLevelResidual: CGFloat = 0.006
 
   /// Perceptual knee applied after auto-gain normalization: lifts the quiet
   /// half of the range so word-to-word dynamics stay visible.
@@ -88,19 +98,23 @@ enum NotchVoiceMorphGeometry {
   /// inside the 21pt identity slot: 6.93×1.24 + 3.78/2 ≈ 10.48 ≤ 10.5.
   static let speakingPushMax: CGFloat = 0.24
 
-  /// Circular sound-wave displacement for one speaking-ring dot: two angular
-  /// harmonics travelling around the ring in opposite directions, scaled by
-  /// the live output level. Always outward (0…level) so the ring reads as
-  /// pushed by the voice — like a circular audio visualizer, not a uniform
-  /// swell.
+  /// Temporal period of the speaking wave at any fixed dot. The crest
+  /// pattern advances exactly one dot every quarter period, always in the
+  /// same direction around the ring.
+  static let speakingWavePeriod: TimeInterval = 1.2
+
+  /// Circular sound-wave displacement for one speaking-ring dot: two
+  /// opposite crests orbiting the ring in one fixed direction, scaled by the
+  /// live output level. Squaring sharpens the crests and calms the troughs
+  /// so it reads as a wave front sweeping the ring, not a chaotic wobble.
+  /// Always outward (0…level) so the ring is pushed by the voice.
   static func speakingRadialPush(index: Int, time: TimeInterval, level: CGFloat) -> CGFloat {
     let bounded = clamp(level)
     guard bounded > 0 else { return 0 }
     let angle = Double(index) / Double(dotCount) * 2 * .pi
-    let travelling = sin(angle * 2 + time * 2 * .pi / 0.85)
-    let counterWave = sin(angle * 3 - time * 2 * .pi / 0.5 + 1.3) * 0.6
-    let wave = (travelling + counterWave + 1.6) / 3.2
-    return bounded * clamp(CGFloat(wave))
+    let phase = angle * 2 - time * 2 * .pi / speakingWavePeriod
+    let crest = (sin(phase) + 1) / 2
+    return bounded * CGFloat(crest * crest)
   }
 
   // MARK: - Listening waveform
@@ -145,6 +159,10 @@ final class VoiceLevelDisplay {
   private let peakHalfLife: TimeInterval
   private var peak: CGFloat
   private var lastTime: TimeInterval?
+  /// Last moment the raw level cleared the opening gate; sub-gate levels
+  /// within `displayGateHangover` of it still render, so the quiet tail of a
+  /// phrase doesn't flatline mid-word.
+  private var lastVoicedTime: TimeInterval?
 
   init(
     minPeak: CGFloat,
@@ -159,7 +177,17 @@ final class VoiceLevelDisplay {
   }
 
   func step(rawLevel: CGFloat, at time: TimeInterval) -> CGFloat {
-    let gated = rawLevel > NotchVoiceMorphGeometry.displayLevelGate ? min(rawLevel, 1) : 0
+    if rawLevel > NotchVoiceMorphGeometry.displayLevelGate {
+      lastVoicedTime = time
+    }
+    let inHangover =
+      lastVoicedTime.map {
+        time - $0 <= NotchVoiceMorphGeometry.displayGateHangover
+      } ?? false
+    let passes =
+      rawLevel > NotchVoiceMorphGeometry.displayLevelGate
+      || (inHangover && rawLevel > NotchVoiceMorphGeometry.displayLevelResidual)
+    let gated = passes ? min(rawLevel, 1) : 0
     if let last = lastTime, time > last {
       let dt = min(time - last, 1)
       peak = max(minPeak, peak * pow(0.5, CGFloat(dt / peakHalfLife)))
@@ -214,9 +242,11 @@ struct NotchVoiceMorphMark: View {
   @State private var morphProgress: CGFloat = 0
   /// Reference peaks measured on real hardware: close-mic speech ~0.03–0.2
   /// RMS after the capture noise floor; post-mixer reply speech ~0.1–0.25.
-  /// The mic side smooths tighter so the wave snaps to syllables.
+  /// The mic side attacks tight so the wave snaps to syllables, but its peak
+  /// half-life is short so a loud opening word doesn't crush the quieter
+  /// tail of the phrase, and release rides through inter-syllable dips.
   @State private var micLevelDisplay = VoiceLevelDisplay(
-    minPeak: 0.035, attackTau: 0.02, releaseTau: 0.11)
+    minPeak: 0.035, peakHalfLife: 2, attackTau: 0.02, releaseTau: 0.16)
   @State private var voiceLevelDisplay = VoiceLevelDisplay(
     minPeak: 0.1, attackTau: 0.03, releaseTau: 0.14)
 
