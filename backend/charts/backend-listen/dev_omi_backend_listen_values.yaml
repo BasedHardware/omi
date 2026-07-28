@@ -199,7 +199,7 @@ env:
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omiapi.com"
   - name: TRANSLATION_SERVICE_MODELS
-    value: "nllb,google"
+    value: "nllb,gemini"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:

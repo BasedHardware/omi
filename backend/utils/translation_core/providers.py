@@ -67,7 +67,7 @@ class GeminiTranslationBatch(BaseModel):
 
 
 class GeminiTranslationProvider:
-    provider = TranslationProvider.google
+    provider = TranslationProvider.gemini
     model_name = 'gemini-2.5-flash-lite'
 
     def __init__(self, client_factory: Callable[[], Any] | None = None) -> None:
@@ -240,7 +240,7 @@ class TranslationProviderChain:
                 raise failure
 
         raise TranslationProviderError(
-            TranslationProvider.google, 'config_incomplete', 'No translation provider configured'
+            TranslationProvider.gemini, 'config_incomplete', 'No translation provider configured'
         )
 
     def _record_fallback(
@@ -266,7 +266,7 @@ def default_provider_chain(
 ) -> TranslationProviderChain:
     return TranslationProviderChain(
         providers={
-            TranslationProvider.google: GeminiTranslationProvider(),
+            TranslationProvider.gemini: GeminiTranslationProvider(),
             TranslationProvider.nllb: NllbTranslationProvider(),
         },
         metrics=metrics,
