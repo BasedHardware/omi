@@ -46,6 +46,21 @@ public enum ToolError: LocalizedError, CustomStringConvertible {
     public var errorDescription: String? { description }
 }
 
+// MARK: - Origin
+//
+// Two very different records reach these tools. Claude has to be able to tell them apart without
+// guessing: the local half is seconds fresh but only covers this Mac since Earshot was installed;
+// the Omi half is the user's whole account history but lags a conversation by minutes.
+
+private enum Origin {
+    /// Captured by Earshot on this Mac.
+    case live
+    /// The Omi account's own history, read from api.omi.me.
+    case omi
+
+    var tag: String { self == .live ? "live" : "omi" }
+}
+
 // MARK: - Tools
 
 public enum Tools {
@@ -63,11 +78,13 @@ public enum Tools {
         ToolDefinition(name: "status", description: statusDescription, inputSchema: statusSchema),
     ]
 
-    /// Executes a tool against the store and returns the text payload for the MCP content block.
+    /// Executes a tool and returns the text payload for the MCP content block.
+    ///
+    /// `store` is nil when nothing has been captured on this Mac yet — which is the *normal* state
+    /// five minutes after install, and no longer means the tools have nothing to say: the Omi
+    /// account's own history answers most of them on its own.
     public static func call(name: String, arguments: JSONValue?, store: EarshotStore?) throws -> String {
         guard all.contains(where: { $0.name == name }) else { throw ToolError.unknownTool(name) }
-        // A missing database is the ordinary "you installed it five minutes ago" state, not an error.
-        guard let store else { return neverRanMessage }
 
         switch name {
         case "recall": return try runRecall(arguments, store)
@@ -76,80 +93,100 @@ public enum Tools {
         case "transcript": return try runTranscript(arguments, store)
         case "screen": return try runScreen(arguments, store)
         case "activity": return try runActivity(arguments, store)
-        case "status": return try runStatus(store)
+        case "status": return runStatus(store)
         default: throw ToolError.unknownTool(name)
         }
     }
 
-    private static let neverRanMessage = """
-    Earshot has not captured anything yet: the app has not run on this Mac, so there is no \
-    speech, screen text, or activity history to search.
-    """
+    /// What a local-only tool says when this Mac has captured nothing. It points at the tools that
+    /// *do* reach the account, so "no local database" never reads as "Claude knows nothing".
+    fileprivate static var noLocalCaptureMessage: String {
+        var out = """
+        Earshot has not captured anything on this Mac yet — the app has not run here, so there is no \
+        local speech, screen text, or activity history from the last few minutes.
+        """
+        if OmiBackend.shared.isConfigured {
+            out += " "
+            out += """
+            The user's Omi account history is still available: use `recall` for what they have said \
+            and what Omi remembers about them, and `conversations` for their recorded conversations.
+            """
+        }
+        return out
+    }
 }
 
 // MARK: - Descriptions
 //
 // These are the product. They are the only thing Claude sees before deciding whether the answer to
-// the user's question already exists on their machine, so they say *when to reach for the tool*.
+// the user's question already exists, so they say *when to reach for the tool* — and, now that these
+// tools read the user's whole Omi account, that the answer is very likely in here.
 
 extension Tools {
     static let recallDescription = """
-    Search everything the user has said, heard in a call, or had on their screen — the running \
-    record of their real life on this Mac, from speech transcripts and on-screen text.
+    Search the user's entire recorded life: their Omi account — every conversation Omi has recorded \
+    and every durable fact it has learned about them, going back years — merged with what Earshot \
+    captured on this Mac in the last few seconds.
 
     Reach for this whenever the user mentions a person, plan, decision, project, meeting, price, \
-    place or event you have no record of. The answer is very often already in here. Prefer searching \
-    over asking the user to explain context they have obviously already lived through, and search \
-    again with different words — a name, a company, a phrase they would have said out loud — before \
-    concluding you do not know.
+    place, preference or event you have no record of. The answer is very often already in here. \
+    Prefer searching over asking the user to explain context they have obviously already lived \
+    through, and search again with different words — a name, a company, a phrase they would have \
+    said out loud — before concluding you do not know.
 
-    Results come back newest-first, grouped by day, each line timed and attributed: *me* is the user \
-    speaking, *them* is the other side of a call, *screen* is text that was on their display. Bound \
-    the search with `since` / `until` when the user anchors it in time. If it comes back empty, check \
-    `status` before saying it never happened.
+    Results are newest-first, grouped by day, each line timed and labelled with where it came from: \
+    `live` is Earshot's capture on this Mac (*me* is the user speaking, *them* is the other side of \
+    a call, *screen* is text on their display), `omi` is the account's own history. Facts Omi \
+    remembers carry no date and are listed separately. Bound the search with `since` / `until` when \
+    the user anchors it in time. If it comes back empty, check `status` before saying it never \
+    happened.
     """
 
     static let recentDescription = """
-    See what the user is doing right now — the last N minutes of their speech and screen, merged in \
-    order.
+    See what the user is doing right now — the last N minutes of their speech and screen on this \
+    Mac, merged in order.
 
     Reach for this when a request starts mid-thought and assumes context you were never given: \
     "help me with this", "what do you think?", "draft a reply", "summarise that", "why is this \
     failing?". They mean something in front of them. Look before you ask them to paste it.
 
-    Also worth calling at the start of a session to know what they are in the middle of, and right \
-    after a call ends to catch what was just discussed.
+    This one is deliberately local only: it answers "what is happening this minute", where the Omi \
+    account still lags by minutes. For anything older than the current session, use `recall` or \
+    `conversations`, which read the account too.
     """
 
     static let conversationsDescription = """
-    List the user's recent conversations and calls: when each started, how long it ran, which app it \
-    happened in, whether both sides were captured, and a short preview.
+    List the user's conversations: their Omi account's recorded conversations — each with the title \
+    and summary Omi wrote for it — merged with any conversation Earshot captured on this Mac that \
+    has not reached the account yet.
 
-    Reach for this when the user points at a conversation rather than a fact — "my call with Sarah", \
-    "the standup this morning", "that interview last week", "what did I agree to yesterday" — and \
-    you need to find the right one before reading it. A session tagged with a meeting app (Zoom, \
-    Meet, Slack) and marked *both sides* is a real call; *one side only* is the user talking near \
-    their Mac.
+    Reach for this when the user points at a conversation rather than a fact — "my call with \
+    Sarah", "the standup this morning", "that interview last week", "what did I agree to \
+    yesterday" — and you need to find the right one before reading it. Bound it with `since` / \
+    `until`; without them it returns the most recent conversations across both.
 
-    Each entry carries a session id. Pass it to `transcript` to read the conversation in full.
+    Every entry carries an id. Pass it to `transcript` to read that conversation in full.
     """
 
     static let transcriptDescription = """
-    Read one whole conversation line by line, attributed to *me* (the user) and *them* (whoever they \
-    were speaking with).
+    Read one whole conversation line by line. From the Omi account the speakers are resolved to real \
+    names and the conversation carries Omi's own title and summary; from this Mac's local capture \
+    the lines are attributed to *me* (the user) and *them* (whoever they were speaking with).
 
-    Reach for this once `conversations` or `recall` has pointed you at a session and you need what \
-    was actually said — the exact commitment, number, name, date or decision — rather than a \
+    Reach for this once `conversations` or `recall` has pointed you at a conversation and you need \
+    what was actually said — the exact commitment, number, name, date or decision — rather than a \
     paraphrase. Use it before writing anything that must be faithful to a call: follow-up emails, \
     summaries, action items, meeting notes, "what did I promise them?".
 
-    Quote from the transcript when details matter. It is on-device speech recognition, so names and \
-    rare words can be misheard; read around a line before treating it as exact.
+    `session_id` takes either id shape exactly as printed: an Omi conversation id (a UUID) or a \
+    local Earshot conversation number. Quote from the transcript when details matter — it is speech \
+    recognition, so names and rare words can be misheard; read around a line before treating it as \
+    exact.
     """
 
     static let screenDescription = """
-    See what the user was reading, writing, or looking at: the window titles they had open and the \
-    text that was on screen, newest-first.
+    See what the user was reading, writing, or looking at: window titles and on-screen text, \
+    newest-first, from the Omi account's screen history and from Earshot's capture on this Mac.
 
     Reach for this when the question is visual rather than spoken — an article, a document, a \
     dashboard, an error message, a chat thread, a pull request, a booking or checkout page, code \
@@ -161,8 +198,8 @@ extension Tools {
     """
 
     static let activityDescription = """
-    Get the shape of the user's day or week: contiguous blocks of time per app and window, with \
-    totals.
+    Get the shape of the user's day or week on this Mac: contiguous blocks of time per app and \
+    window, with totals. Local capture only — it measures attention at this machine.
 
     Reach for this for questions about time and attention — "what did I do today", "where did the \
     afternoon go", "how long was I in Figma", "was I heads-down or in meetings", "what have I been \
@@ -174,16 +211,17 @@ extension Tools {
     """
 
     static let statusDescription = """
-    Check what Earshot has actually recorded: whether it is capturing right now, which \
-    permissions are granted, how much is stored, and the exact window of time it covers.
+    Check what these tools can actually see, on both halves: whether Earshot is capturing on this \
+    Mac right now, which permissions are granted, how much is stored locally — and whether the \
+    user's Omi account is reachable, how far back its history goes, and which key source was used.
 
     Call this before telling the user that something never happened, or that you cannot find \
     anything. An empty search inside the coverage window is real evidence; an empty search outside \
-    it, or with the microphone, system audio, or screen permission denied, only means nothing was \
-    captured. Those two must never be reported to the user the same way.
+    it, with a capture permission denied, or while the Omi account is unreachable, only means \
+    nothing was recorded or nothing could be read. Those must never be reported the same way.
 
     This is also the tool to reach for when the user asks whether Omi is working, why you seem to be \
-    missing something, or how far back your knowledge of their machine goes.
+    missing something, or how far back your knowledge of their life goes.
     """
 }
 
@@ -238,9 +276,11 @@ extension Tools {
     static var transcriptSchema: JSONValue {
         Schema.object(
             properties: [
-                ("session_id", Schema.integer("""
-                The id of the conversation to read, as printed by `conversations` (the number after \
-                the #) or carried on a `recall` hit.
+                ("session_id", Schema.stringOrInteger("""
+                The id of the conversation to read, copied exactly as `conversations` or `recall` \
+                printed it. Two shapes are accepted: an Omi conversation id, which is a UUID such as \
+                "5db3de8c-3c1c-5fee-bad1-2907d2a5a473", and a local Earshot conversation number such \
+                as 14 (the number after the #).
                 """)),
             ],
             required: ["session_id"]
@@ -303,12 +343,21 @@ private enum Schema {
             "default": .number(Double(defaultValue)),
         ])
     }
+
+    /// A union type, because one id space is a UUID and the other is a row number. Declaring only
+    /// one of them would make a client coerce — and a coerced UUID is a truncated UUID.
+    static func stringOrInteger(_ description: String) -> JSONValue {
+        .object([
+            "type": .array([.string("string"), .string("integer")]),
+            "description": .string(description),
+        ])
+    }
 }
 
 // MARK: - Implementations
 
 extension Tools {
-    private static func runRecall(_ args: JSONValue?, _ store: EarshotStore) throws -> String {
+    private static func runRecall(_ args: JSONValue?, _ store: EarshotStore?) throws -> String {
         guard let query = stringArg(args, "query") else {
             throw ToolError.missingArgument(tool: "recall", argument: "query")
         }
@@ -316,18 +365,57 @@ extension Tools {
         let until = try dateArg(args, "until")
         let limit = clamp(intArg(args, "limit") ?? 40, 1, 500)
 
-        let hits = try Queries.recall(store, query: query, since: since, until: until, limit: limit)
-        guard !hits.isEmpty else {
+        var notes: [String] = []
+        let local = readLocal(store, &notes) {
+            try Queries.recall($0, query: query, since: since, until: until, limit: limit)
+        }
+
+        // One round trip, two requests: memories are the durable facts, conversations the episodes.
+        let omi = OmiBackend.shared.recall(query: query, since: since, until: until, limit: limit)
+
+        var merged = local.map(liveHit)
+        merged += omi.conversations.map(omiConversationHit)
+        merged = dedupe(merged)
+        merged = Array(merged.prefix(limit))
+
+        let memories = Array(omi.memories.prefix(20))
+        guard !merged.isEmpty || !memories.isEmpty else {
             return emptyMessage(
                 store,
-                "Nothing Earshot captured matches \"\(query)\"\(rangeSuffix(since, until))."
-            )
+                "Nothing in the Omi account or Earshot's local capture matches \"\(query)\"\(rangeSuffix(since, until))."
+            ) + footerBlock(omi.failures, notes)
         }
-        let header = "**\(plural(hits.count, "match", "matches")) for \"\(query)\"\(rangeSuffix(since, until))**"
-        return header + "\n\n" + renderHits(hits, order: .newestFirst)
+
+        var out = header(for: merged, memories: memories, query: query, since: since, until: until)
+        if !merged.isEmpty {
+            out += "\n\n" + renderMerged(merged, order: .newestFirst)
+        }
+        if !memories.isEmpty {
+            out += "\n\n" + renderMemories(memories)
+        }
+        return out + footerBlock(omi.failures, notes)
     }
 
-    private static func runRecent(_ args: JSONValue?, _ store: EarshotStore) throws -> String {
+    private static func header(
+        for hits: [MergedHit],
+        memories: [OmiMemory],
+        query: String,
+        since: Double?,
+        until: Double?
+    ) -> String {
+        var parts: [String] = []
+        let live = hits.filter { $0.origin == .live }.count
+        let omi = hits.count - live
+        if live > 0 { parts.append("\(number(live)) captured live on this Mac") }
+        if omi > 0 { parts.append("\(number(omi)) from Omi's conversation history") }
+        if !memories.isEmpty { parts.append(plural(memories.count, "fact") + " Omi remembers") }
+        let total = plural(hits.count + memories.count, "match", "matches")
+        let breakdown = parts.isEmpty ? "" : " — " + parts.joined(separator: ", ")
+        return "**\(total) for \"\(query)\"\(rangeSuffix(since, until))**\(breakdown)"
+    }
+
+    private static func runRecent(_ args: JSONValue?, _ store: EarshotStore?) throws -> String {
+        guard let store else { return noLocalCaptureMessage }
         let minutes = clamp(intArg(args, "minutes") ?? 30, 1, 24 * 60)
         // `recent` is read as a narrative, so ask for enough lines to actually cover the window and
         // let the output budget do the trimming.
@@ -335,75 +423,161 @@ extension Tools {
 
         let hits = try Queries.recent(store, minutes: minutes, limit: limit)
         guard !hits.isEmpty else {
-            return emptyMessage(store, "Earshot captured nothing in the last \(plural(minutes, "minute")).")
+            var out = emptyMessage(store, "Earshot captured nothing on this Mac in the last \(plural(minutes, "minute")).")
+            if OmiBackend.shared.isConfigured {
+                out += "\n\n"
+                out += """
+                _This tool is local only, by design — it answers "what is happening this minute". \
+                The user's Omi account history is not empty just because this window is: reach for \
+                `recall` or `conversations` for anything older than the current session._
+                """
+            }
+            return out
         }
-        let header = "**The last \(plural(minutes, "minute")) — \(plural(hits.count, "entry", "entries"))**"
-        return header + "\n\n" + renderHits(hits, order: .oldestFirst)
+        let header = "**The last \(plural(minutes, "minute")) on this Mac — \(plural(hits.count, "entry", "entries"))**"
+        return header + "\n\n" + renderHitsOnly(hits, order: .oldestFirst)
     }
 
-    private static func runConversations(_ args: JSONValue?, _ store: EarshotStore) throws -> String {
+    private static func runConversations(_ args: JSONValue?, _ store: EarshotStore?) throws -> String {
         let since = try dateArg(args, "since")
         let until = try dateArg(args, "until")
         let limit = clamp(intArg(args, "limit") ?? 30, 1, 200)
 
-        let sessions = try Queries.sessions(store, since: since, until: until, limit: limit)
-        guard !sessions.isEmpty else {
-            return emptyMessage(store, "Earshot recorded no conversations\(rangeSuffix(since, until)).")
+        var notes: [String] = []
+        let sessions = readLocal(store, &notes) {
+            try Queries.sessions($0, since: since, until: until, limit: limit)
         }
-        return renderSessions(sessions, since: since, until: until)
+
+        // The account is preferred: it has titles, overviews and speaker-resolved people. Local
+        // sessions fill in whatever has not reached it yet.
+        let backend = OmiBackend.shared.conversations(since: since, until: until, limit: limit)
+        let failures = backend.failure.map { ["conversations: \($0.reason)"] } ?? []
+
+        var entries = (backend.value ?? []).map(omiConversationEntry)
+        entries += sessions.map(localConversationEntry)
+        entries.sort { $0.at > $1.at }
+        entries = Array(entries.prefix(limit))
+
+        guard !entries.isEmpty else {
+            return emptyMessage(
+                store,
+                "No conversations found in the Omi account or Earshot's local capture\(rangeSuffix(since, until))."
+            ) + footerBlock(failures, notes)
+        }
+        return renderConversations(entries, since: since, until: until) + footerBlock(failures, notes)
     }
 
-    private static func runTranscript(_ args: JSONValue?, _ store: EarshotStore) throws -> String {
+    private static func runTranscript(_ args: JSONValue?, _ store: EarshotStore?) throws -> String {
         guard let raw = args?["session_id"] else {
             throw ToolError.missingArgument(tool: "transcript", argument: "session_id")
         }
-        guard let sessionId = raw.int64Value else {
+        guard let token = identifierToken(raw) else {
             throw ToolError.invalidArgument(
                 argument: "session_id",
-                value: raw.stringValue ?? String(describing: raw),
-                expected: "It must be the whole number printed after the # by `conversations`."
+                value: String(describing: raw),
+                expected: """
+                It must be an Omi conversation id (a UUID) or the local conversation number printed \
+                after the # by `conversations`.
+                """
             )
         }
 
+        switch Identifier.classify(token) {
+        case let .local(id):
+            return try localTranscript(id, store)
+        case let .backend(id):
+            return backendTranscript(id, fallbackLocal: nil, store)
+        case let .ambiguous(id, localID):
+            // A bare number is only ever a local id, but an explicit `omi:` prefix on a number, or a
+            // token that reads as both, gets one attempt at each before giving up.
+            return backendTranscript(id, fallbackLocal: localID, store)
+        }
+    }
+
+    private static func localTranscript(_ sessionId: Int64, _ store: EarshotStore?) throws -> String {
+        guard let store else {
+            return """
+            \(noLocalCaptureMessage)
+
+            \(number(Int(sessionId))) is a local Earshot conversation number, and this Mac has no \
+            local capture, so there is nothing to read. Omi conversation ids are UUIDs — call \
+            `conversations` to list the ids that do exist.
+            """
+        }
         let hits = try Queries.transcript(store, sessionId: sessionId)
         guard !hits.isEmpty else {
             return emptyMessage(
                 store,
                 """
-                Earshot has no conversation #\(sessionId) — the id may be wrong, or the \
-                conversation may predate what it recorded. Call `conversations` to list the ids it holds.
+                Earshot has no local conversation #\(sessionId) — the id may be wrong, or the \
+                conversation may live in the Omi account instead, where ids are UUIDs. Call \
+                `conversations` to list the ids that exist on both sides.
                 """
             )
         }
         let start = hits.map(\.at).min() ?? 0
         let end = hits.map(\.at).max() ?? start
         let header = """
-        **Conversation #\(sessionId)** — \(plural(hits.count, "line")), \
+        **Conversation #\(sessionId)** · captured live on this Mac — \(plural(hits.count, "line")), \
         \(EarshotTime.describe(start)) to \(timeFormatter.string(from: Date(timeIntervalSince1970: end))) \
         (\(duration(end - start)))
         """
-        return header + "\n\n" + renderHits(hits, order: .oldestFirst)
+        return header + "\n\n" + renderHitsOnly(hits, order: .oldestFirst)
     }
 
-    private static func runScreen(_ args: JSONValue?, _ store: EarshotStore) throws -> String {
+    private static func backendTranscript(_ id: String, fallbackLocal: Int64?, _ store: EarshotStore?) -> String {
+        switch OmiBackend.shared.conversation(id: id) {
+        case let .ok(full):
+            return renderOmiTranscript(full)
+        case let .unavailable(error):
+            if let fallbackLocal, let text = try? localTranscript(fallbackLocal, store) { return text }
+            var out = """
+            The Omi conversation `\(id)` could not be read: \(error.reason).
+            """
+            if error == .notConfigured {
+                out += "\n\n" + OmiBackend.notConfiguredSentence
+            }
+            out += "\n\n"
+            out += """
+            Treat this as "could not be reached", not as "the conversation does not exist". Call \
+            `conversations` to see which ids are readable right now.
+            """
+            return out
+        }
+    }
+
+    private static func runScreen(_ args: JSONValue?, _ store: EarshotStore?) throws -> String {
         let since = try dateArg(args, "since")
         let until = try dateArg(args, "until")
         let app = stringArg(args, "app")
         let limit = clamp(intArg(args, "limit") ?? 60, 1, 500)
 
-        let hits = try Queries.screen(store, since: since, until: until, app: app, limit: limit)
+        var notes: [String] = []
+        let local = readLocal(store, &notes) {
+            try Queries.screen($0, since: since, until: until, app: app, limit: limit)
+        }
+
+        let backend = OmiBackend.shared.screenActivity(since: since, until: until, app: app, limit: limit)
+        let failures = backend.failure.map { ["screen history: \($0.reason)"] } ?? []
+
+        var merged = local.map(liveHit)
+        merged += (backend.value ?? []).map(omiScreenHit)
+        merged = dedupe(merged)
+        merged = Array(merged.prefix(limit))
+
         let appSuffix = app.map { " in \($0)" } ?? ""
-        guard !hits.isEmpty else {
+        guard !merged.isEmpty else {
             return emptyMessage(
                 store,
-                "Earshot captured nothing on screen\(appSuffix)\(rangeSuffix(since, until))."
-            )
+                "Nothing was recorded on screen\(appSuffix)\(rangeSuffix(since, until))."
+            ) + footerBlock(failures, notes)
         }
-        let header = "**\(plural(hits.count, "screen observation"))\(appSuffix)\(rangeSuffix(since, until))**"
-        return header + "\n\n" + renderHits(hits, order: .newestFirst)
+        let header = "**\(plural(merged.count, "screen observation"))\(appSuffix)\(rangeSuffix(since, until))**"
+        return header + "\n\n" + renderMerged(merged, order: .newestFirst) + footerBlock(failures, notes)
     }
 
-    private static func runActivity(_ args: JSONValue?, _ store: EarshotStore) throws -> String {
+    private static func runActivity(_ args: JSONValue?, _ store: EarshotStore?) throws -> String {
+        guard let store else { return noLocalCaptureMessage }
         // `dateArg` throws on an unreadable value, so nil here means the argument was simply absent.
         guard var since = try dateArg(args, "since") else {
             throw ToolError.missingArgument(tool: "activity", argument: "since")
@@ -419,60 +593,222 @@ extension Tools {
         guard !blocks.isEmpty else {
             return emptyMessage(
                 store,
-                "Earshot recorded no screen activity between \(EarshotTime.describe(since)) and \(EarshotTime.describe(until))."
+                "Earshot recorded no screen activity on this Mac between \(EarshotTime.describe(since)) and \(EarshotTime.describe(until))."
             )
         }
         return renderActivity(blocks, since: since, until: until) + swappedNote
     }
 
-    private static func runStatus(_ store: EarshotStore) throws -> String {
-        let status = try Queries.status(store)
-        return renderStatus(status)
+    private static func runStatus(_ store: EarshotStore?) -> String {
+        let local = store.flatMap { try? Queries.status($0) }
+        return renderStatus(local) + "\n\n" + renderOmiStatus()
     }
 }
 
-// MARK: - Rendering
+// MARK: - Local reads
+//
+// A local failure degrades exactly like a backend failure. Once these tools answer from two
+// sources, either one being down is a partial answer, never an exception.
+
+extension Tools {
+    /// Runs a local query, turning a missing or unreadable database into an empty result plus a
+    /// note. Absent is not the same as broken, and neither is the same as an exception.
+    private static func readLocal<Element>(
+        _ store: EarshotStore?,
+        _ notes: inout [String],
+        _ body: (EarshotStore) throws -> [Element]
+    ) -> [Element] {
+        guard let store else { return [] }
+        do {
+            return try body(store)
+        } catch {
+            notes.append("Earshot's local database on this Mac could not be read (\(error)).")
+            return []
+        }
+    }
+}
+
+// MARK: - Identifiers
+
+/// One tool, two id spaces. `transcript` accepts either shape rather than making Claude know which
+/// surface a conversation came from — it copies back whatever was printed.
+private enum Identifier {
+    case local(Int64)
+    case backend(String)
+    case ambiguous(String, Int64)
+
+    static func classify(_ raw: String) -> Identifier {
+        var token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        var forcedBackend = false
+        for prefix in ["omi:", "omi/", "omi "] where token.lowercased().hasPrefix(prefix) {
+            token = String(token.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            forcedBackend = true
+        }
+        while token.hasPrefix("#") { token = String(token.dropFirst()) }
+        token = token.trimmingCharacters(in: CharacterSet(charactersIn: "`\"'"))
+
+        if let id = Int64(token) {
+            return forcedBackend ? .ambiguous(token, id) : .local(id)
+        }
+        return .backend(token)
+    }
+}
+
+// MARK: - Merged rendering
 //
 // Markdown, not JSON. Claude reads a dated, attributed list of sentences far better than it reads a
 // wall of records, and the day headings are what let it answer "on Tuesday you said…".
 
+/// One rendered line plus everything needed to order, dedupe and budget it. Pre-rendering the line
+/// is what lets a local `Hit` and an Omi conversation share one timeline without either being
+/// squeezed into the other's shape.
+private struct MergedHit {
+    let at: Double
+    let origin: Origin
+    /// Content fingerprint used to drop the same moment reported by both halves.
+    let key: String
+    /// Speech before the screen it was said in front of, on an exact tie.
+    let rank: Int
+    let line: String
+}
+
 extension Tools {
-    private enum HitOrder { case oldestFirst, newestFirst }
+    fileprivate enum HitOrder { case oldestFirst, newestFirst }
 
     /// Roughly 1500 rendered lines, whichever of the two limits bites first.
     private static let maxHitLines = 1500
     private static let maxHitCharacters = 120_000
+    private static let omiOverviewLimit = 400
+    private static let omiScreenTextLimit = 600
 
-    private static func renderHits(_ hits: [Hit], order: HitOrder) -> String {
+    // MARK: Building
+
+    private static func liveHit(_ hit: Hit) -> MergedHit {
+        MergedHit(
+            at: hit.at,
+            origin: .live,
+            key: fingerprint(hit.text, at: hit.at),
+            rank: hit.kind == "screen" ? 1 : 0,
+            line: hitLine(hit, origin: .live)
+        )
+    }
+
+    private static func omiConversationHit(_ conversation: OmiConversation) -> MergedHit {
+        let at = conversation.startedAt ?? 0
+        var line = "- "
+        line += at > 0 ? "**\(timeFormatter.string(from: Date(timeIntervalSince1970: at)))** · " : "**undated** · "
+        line += "*conversation* · omi: **\(collapse(conversation.title))**"
+        let overview = collapse(conversation.overview)
+        if !overview.isEmpty { line += " — \(truncate(overview, to: omiOverviewLimit))" }
+        line += " (id `\(conversation.id)`)"
+        return MergedHit(
+            at: at,
+            origin: .omi,
+            key: fingerprint(conversation.title + " " + conversation.overview, at: at),
+            rank: 0,
+            line: line
+        )
+    }
+
+    private static func omiScreenHit(_ row: OmiScreenRow) -> MergedHit {
+        let at = row.at ?? 0
+        let hit = Hit(
+            kind: "screen",
+            at: at,
+            text: truncate(collapse(row.ocr ?? row.window ?? row.app ?? ""), to: omiScreenTextLimit),
+            app: row.app.flatMap(nonEmpty),
+            window: row.window.flatMap(nonEmpty)
+        )
+        return MergedHit(
+            at: at,
+            origin: .omi,
+            key: fingerprint(hit.text, at: at),
+            rank: 1,
+            line: hitLine(hit, origin: .omi)
+        )
+    }
+
+    /// Same content, same couple of minutes, both halves: report it once.
+    ///
+    /// Buckets rather than exact timestamps, because two recorders never agree to the second — and
+    /// under-deduping is the safe direction: a repeated line costs a reader a moment, a dropped one
+    /// costs them the fact.
+    private static func dedupe(_ hits: [MergedHit]) -> [MergedHit] {
+        let ordered = hits.sorted { lhs, rhs in
+            if lhs.at != rhs.at { return lhs.at > rhs.at }
+            if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+            // On an exact tie the live record wins: it is the raw thing the user just said.
+            return lhs.origin == .live && rhs.origin == .omi
+        }
+        var seen = Set<String>()
+        var kept: [MergedHit] = []
+        kept.reserveCapacity(ordered.count)
+        for hit in ordered where seen.insert(hit.key).inserted {
+            kept.append(hit)
+        }
+        return kept
+    }
+
+    private static func fingerprint(_ text: String, at: Double) -> String {
+        let letters = text.lowercased().filter { $0.isLetter || $0.isNumber || $0 == " " }
+        let squeezed = letters.split(separator: " ").joined(separator: " ")
+        let head = String(squeezed.prefix(120))
+        guard at > 0 else { return "undated|" + head }
+        return "\(Int((at / 120).rounded()))|\(head)"
+    }
+
+    // MARK: Rendering
+
+    private static func renderHitsOnly(_ hits: [Hit], order: HitOrder) -> String {
+        renderMerged(
+            hits.map {
+                MergedHit(at: $0.at, origin: .live, key: "", rank: 0, line: hitLine($0, origin: nil))
+            },
+            order: order,
+            deduped: true
+        )
+    }
+
+    private static func renderMerged(_ hits: [MergedHit], order: HitOrder, deduped: Bool = false) -> String {
         // Fit the *newest* hits into the budget regardless of display order, so truncation always
         // drops the least relevant end.
-        let newestFirst = hits.sorted { $0.at > $1.at }
-        var kept: [(hit: Hit, line: String)] = []
+        let newestFirst = deduped ? hits.sorted { $0.at > $1.at } : dedupe(hits)
+        var kept: [MergedHit] = []
         var characters = 0
         var omitted = 0
         for hit in newestFirst {
-            let line = hitLine(hit)
-            if kept.count >= maxHitLines || characters + line.count > maxHitCharacters {
+            if kept.count >= maxHitLines || characters + hit.line.count > maxHitCharacters {
                 omitted += 1
                 continue
             }
-            characters += line.count + 1
-            kept.append((hit, line))
+            characters += hit.line.count + 1
+            kept.append(hit)
         }
 
-        let display = order == .oldestFirst ? kept.sorted { $0.hit.at < $1.hit.at } : kept
+        let display = order == .oldestFirst ? kept.sorted { $0.at < $1.at } : kept
         var out: [String] = []
         var currentDay: Date?
+        var undated: [String] = []
         let calendar = Calendar.current
         for entry in display {
-            let day = calendar.startOfDay(for: Date(timeIntervalSince1970: entry.hit.at))
+            guard entry.at > 0 else {
+                undated.append(entry.line)
+                continue
+            }
+            let day = calendar.startOfDay(for: Date(timeIntervalSince1970: entry.at))
             if day != currentDay {
                 if currentDay != nil { out.append("") }
-                out.append(dayHeading(for: entry.hit.at))
+                out.append(dayHeading(for: entry.at))
                 out.append("")
                 currentDay = day
             }
             out.append(entry.line)
+        }
+        if !undated.isEmpty {
+            if !out.isEmpty { out.append("") }
+            out.append("## Undated")
+            out.append("")
+            out.append(contentsOf: undated)
         }
 
         if omitted > 0 {
@@ -485,14 +821,17 @@ extension Tools {
         return out.joined(separator: "\n")
     }
 
-    private static func hitLine(_ hit: Hit) -> String {
-        let time = timeFormatter.string(from: Date(timeIntervalSince1970: hit.at))
+    private static func hitLine(_ hit: Hit, origin: Origin?) -> String {
+        let time = hit.at > 0
+            ? timeFormatter.string(from: Date(timeIntervalSince1970: hit.at))
+            : "undated"
+        let tag = origin.map { " · \($0.tag)" } ?? ""
         let text = collapse(hit.text)
         switch hit.kind {
         case "said":
-            return "- **\(time)** · *me*: \(text)"
+            return "- **\(time)** · *me*\(tag): \(text)"
         case "heard":
-            return "- **\(time)** · *them*: \(text)"
+            return "- **\(time)** · *them*\(tag): \(text)"
         case "screen":
             let app = hit.app.flatMap(nonEmpty)
             // Window titles are quoted, so a title of its own quotes ("Re: "the plan"") would read
@@ -508,45 +847,210 @@ extension Tools {
             case (nil, nil): context = ""
             }
             return text.isEmpty
-                ? "- **\(time)** · *screen*\(context)"
-                : "- **\(time)** · *screen*\(context): \(text)"
+                ? "- **\(time)** · *screen*\(tag)\(context)"
+                : "- **\(time)** · *screen*\(tag)\(context): \(text)"
         default:
-            return "- **\(time)** · *\(hit.kind)*: \(text)"
+            return "- **\(time)** · *\(hit.kind)*\(tag): \(text)"
         }
     }
 
-    private static func renderSessions(_ sessions: [SessionSummary], since: Double?, until: Double?) -> String {
+    private static func renderMemories(_ memories: [OmiMemory]) -> String {
         var out: [String] = [
-            "**\(plural(sessions.count, "conversation"))\(rangeSuffix(since, until))**",
+            "**What Omi remembers about the user** · omi",
             "",
         ]
-        for session in sessions.sorted(by: { $0.startedAt > $1.startedAt }) {
-            var parts: [String] = [
-                "#\(session.id)",
-                sessionHeaderFormatter.string(from: Date(timeIntervalSince1970: session.startedAt)),
-                session.endedAt == nil ? "ongoing" : duration(session.durationSeconds),
-            ]
-            if let app = session.appHint.flatMap(nonEmpty) { parts.append(app) }
-            parts.append(session.bothSidesPresent ? "both sides" : "one side only")
-            parts.append(plural(session.lineCount, "line"))
-            out.append("### " + parts.joined(separator: " · "))
+        for memory in memories {
+            let content = collapse(memory.content)
+            guard !content.isEmpty else { continue }
+            let category = memory.category.flatMap(nonEmpty).map { " _(\($0))_" } ?? ""
+            out.append("- \(content)\(category)")
+        }
+        out.append("")
+        out.append("""
+        _These are durable facts Omi has learned, not moments — the Omi API returns them without a \
+        timestamp, so they are listed undated rather than placed on the timeline._
+        """)
+        return out.joined(separator: "\n")
+    }
+}
 
-            let preview = session.preview.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !preview.isEmpty {
-                for line in preview.split(separator: "\n") {
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-                    if !trimmed.isEmpty { out.append("  " + trimmed) }
-                }
-            }
+// MARK: - Conversation rendering
+
+/// A conversation from either half, flattened to the same shape so one list can carry both.
+private struct ConversationEntry {
+    let at: Double
+    let origin: Origin
+    let title: String
+    /// The line of facts under the title: when, how long, which app, how many lines.
+    let meta: String
+    /// Copy-paste id for `transcript`.
+    let identifier: String
+    let body: [String]
+}
+
+extension Tools {
+    private static func omiConversationEntry(_ conversation: OmiConversation) -> ConversationEntry {
+        let at = conversation.startedAt ?? 0
+        var meta: [String] = ["Omi"]
+        if at > 0 { meta.append(sessionHeaderFormatter.string(from: Date(timeIntervalSince1970: at))) }
+        if let seconds = conversation.durationSeconds { meta.append(duration(seconds)) }
+        if let category = conversation.category.flatMap(nonEmpty) { meta.append(category) }
+        if let language = conversation.language.flatMap(nonEmpty) { meta.append(language) }
+        meta.append("id `\(conversation.id)`")
+
+        var body: [String] = []
+        let overview = collapse(conversation.overview)
+        if !overview.isEmpty { body.append("  " + overview) }
+        // Omi's own apps often carry the action items; one is a useful hint, all of them is a wall.
+        if let note = conversation.appNotes.first.map(collapse), !note.isEmpty {
+            body.append("  " + truncate(note, to: omiOverviewLimit))
+        }
+        return ConversationEntry(
+            at: at,
+            origin: .omi,
+            title: collapse(conversation.title),
+            meta: meta.joined(separator: " · "),
+            identifier: conversation.id,
+            body: body
+        )
+    }
+
+    private static func localConversationEntry(_ session: SessionSummary) -> ConversationEntry {
+        var meta: [String] = [
+            "live on this Mac",
+            sessionHeaderFormatter.string(from: Date(timeIntervalSince1970: session.startedAt)),
+            session.endedAt == nil ? "ongoing" : duration(session.durationSeconds),
+        ]
+        if let app = session.appHint.flatMap(nonEmpty) { meta.append(app) }
+        meta.append(session.bothSidesPresent ? "both sides" : "one side only")
+        meta.append(plural(session.lineCount, "line"))
+        meta.append("id `\(session.id)`")
+
+        var body: [String] = []
+        let preview = session.preview.trimmingCharacters(in: .whitespacesAndNewlines)
+        for line in preview.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { body.append("  " + trimmed) }
+        }
+        return ConversationEntry(
+            at: session.startedAt,
+            origin: .live,
+            title: "Conversation #\(session.id)",
+            meta: meta.joined(separator: " · "),
+            identifier: String(session.id),
+            body: body
+        )
+    }
+
+    private static func renderConversations(
+        _ entries: [ConversationEntry],
+        since: Double?,
+        until: Double?
+    ) -> String {
+        let omi = entries.filter { $0.origin == .omi }.count
+        let live = entries.count - omi
+        var parts: [String] = []
+        if omi > 0 { parts.append("\(number(omi)) from the Omi account") }
+        if live > 0 { parts.append("\(number(live)) captured live on this Mac") }
+        let breakdown = parts.isEmpty ? "" : " — " + parts.joined(separator: ", ")
+
+        var out: [String] = [
+            "**\(plural(entries.count, "conversation"))\(rangeSuffix(since, until))**\(breakdown)",
+            "",
+        ]
+        for entry in entries {
+            out.append("### \(entry.title)")
+            out.append(entry.meta)
+            out.append(contentsOf: entry.body)
             out.append("")
         }
-        out.append("_Call `transcript` with one of the session ids above to read that conversation in full._")
+        out.append("""
+        _Read any of these in full with `transcript`, passing the id exactly as printed: a UUID reads \
+        the Omi record (title, overview, speaker names), a number reads Earshot's local capture on \
+        this Mac._
+        """)
         return out.joined(separator: "\n")
     }
 
+    private static func renderOmiTranscript(_ full: OmiFullConversation) -> String {
+        let conversation = full.conversation
+        let start = conversation.startedAt ?? 0
+
+        var meta: [String] = ["Omi conversation `\(conversation.id)`"]
+        if start > 0 { meta.append(EarshotTime.describe(start)) }
+        if let seconds = conversation.durationSeconds { meta.append(duration(seconds)) }
+        if let category = conversation.category.flatMap(nonEmpty) { meta.append(category) }
+        meta.append(plural(full.segments.count, "line"))
+
+        var out: [String] = [
+            "**\(collapse(conversation.title))**",
+            meta.joined(separator: " · "),
+        ]
+        let overview = collapse(conversation.overview)
+        if !overview.isEmpty {
+            out.append("")
+            out.append(overview)
+        }
+
+        if full.segments.isEmpty {
+            out.append("")
+            out.append("""
+            Omi kept the summary above but no transcript for this conversation, so nothing here can \
+            be quoted as an exact line.
+            """)
+        } else {
+            out.append("")
+            for segment in full.segments {
+                let text = collapse(segment.text)
+                guard !text.isEmpty else { continue }
+                let speaker = speakerLabel(segment)
+                // Segment offsets are seconds from the start of the conversation.
+                let time = start > 0
+                    ? timeFormatter.string(from: Date(timeIntervalSince1970: start + segment.start))
+                    : offsetLabel(segment.start)
+                out.append("- **\(time)** · *\(speaker)*: \(text)")
+            }
+        }
+
+        if !conversation.appNotes.isEmpty {
+            out.append("")
+            out.append("**What Omi's apps wrote about this conversation**")
+            out.append("")
+            for note in conversation.appNotes.prefix(3) {
+                out.append(note)
+                out.append("")
+            }
+        }
+
+        out.append("""
+        _Speakers are resolved by Omi against the account's known people; an unrecognised voice is \
+        numbered rather than named. It is speech recognition, so read around a line before treating \
+        it as exact._
+        """)
+        return out.joined(separator: "\n")
+    }
+
+    private static func speakerLabel(_ segment: OmiTranscriptSegment) -> String {
+        if let name = segment.speakerName.flatMap(nonEmpty) {
+            // Omi labels the account owner "User"; the rest of this surface calls them "me".
+            return name.lowercased() == "user" ? "me" : name
+        }
+        if let id = segment.speakerID { return "speaker \(id)" }
+        return "unknown"
+    }
+
+    private static func offsetLabel(_ seconds: Double) -> String {
+        let total = Int(max(0, seconds).rounded())
+        return String(format: "+%d:%02d", total / 60, total % 60)
+    }
+}
+
+// MARK: - Activity and status rendering
+
+extension Tools {
     private static func renderActivity(_ blocks: [ActivityBlock], since: Double, until: Double) -> String {
         var out: [String] = [
-            "**Activity from \(EarshotTime.describe(since)) to \(EarshotTime.describe(until))**",
+            "**Activity on this Mac from \(EarshotTime.describe(since)) to \(EarshotTime.describe(until))**",
             "",
         ]
         let calendar = Calendar.current
@@ -582,8 +1086,17 @@ extension Tools {
         return out.joined(separator: "\n")
     }
 
-    private static func renderStatus(_ status: StatusInfo) -> String {
-        var out: [String] = []
+    private static func renderStatus(_ status: StatusInfo?) -> String {
+        var out: [String] = ["**This Mac — Earshot's live capture**", ""]
+
+        guard let status else {
+            out.append("""
+            Earshot has never captured anything here: there is no local database, so it has not run \
+            on this Mac. Nothing from the last few minutes is available, and `recent` and `activity` \
+            have nothing to report.
+            """)
+            return out.joined(separator: "\n")
+        }
 
         let headline: String
         if status.capturing {
@@ -596,8 +1109,8 @@ extension Tools {
 
         if status.segmentCount == 0 && status.frameCount == 0 {
             out.append("""
-            \(headline) It has recorded nothing so far — no speech and no screen text — so an empty \
-            answer from any other tool means "not captured", never "did not happen".
+            \(headline) It has recorded nothing locally so far — no speech and no screen text — so an \
+            empty answer from `recent` or `activity` means "not captured", never "did not happen".
             """)
         } else {
             out.append("""
@@ -607,8 +1120,10 @@ extension Tools {
             """)
             out.append("")
             out.append("""
-            Coverage: **\(status.coverage)**. Anything inside that window was recorded, so an empty \
-            search there is real evidence it did not happen. Anything outside it was never captured.
+            Local coverage: **\(status.coverage)**. Anything inside that window was recorded here, so \
+            an empty local search there is real evidence it did not happen at this Mac. Anything \
+            outside it was never captured here — check the Omi account below before concluding \
+            anything.
             """)
         }
 
@@ -627,8 +1142,8 @@ extension Tools {
             if status.capabilities.contains(where: { !$0.granted }) {
                 out.append("")
                 out.append("""
-                At least one capture permission is off, so a whole class of context is missing rather \
-                than absent. Say that plainly instead of concluding something never happened.
+                At least one capture permission is off, so a whole class of local context is missing \
+                rather than absent. Say that plainly instead of concluding something never happened.
                 """)
             }
         }
@@ -638,20 +1153,80 @@ extension Tools {
         return out.joined(separator: "\n")
     }
 
+    /// The other half of honesty: an unreachable account and an empty account must never read the
+    /// same way, and the key's *source* is reportable while its value is not.
+    private static func renderOmiStatus() -> String {
+        let backend = OmiBackend.shared
+        guard let source = backend.keySourceLabel else {
+            return """
+            **The Omi account — history**
+
+            Not configured: no Omi MCP API key was found in the \(OmiKeyResolver.environmentVariable) \
+            environment variable, in ~/Library/Application Support/Earshot/mcp-key, or in the \
+            omi-memory entry in ~/.claude.json. The account's conversations and remembered facts \
+            cannot be read, so every tool above answers from this Mac's local capture only. That is a \
+            missing connection, not an empty life — do not tell the user their history is empty.
+            """
+        }
+
+        var out: [String] = ["**The Omi account — history**", ""]
+        switch backend.history() {
+        case let .ok(probe):
+            out.append("Reachable. Key source: \(source) — Earshot reads that key and never prints, copies, or stores it.")
+            out.append("")
+            if let newest = probe.newest, let at = newest.startedAt {
+                out.append("Newest record in the account: \(EarshotTime.describe(at)) — \"\(collapse(newest.title))\".")
+            } else {
+                out.append("The account is reachable but holds no conversations yet.")
+            }
+            if let deep = probe.atProbeOffset, let at = deep.startedAt {
+                out.append("""
+                History depth: at least \(number(probe.probeOffset + 1)) conversations — counting back, \
+                number \(number(probe.probeOffset + 1)) starts at \(EarshotTime.describe(at)), so the \
+                account reaches at least that far. Earshot stops probing there to stay inside Omi's \
+                300-reads-an-hour limit; the real history may go back further.
+                """)
+            } else if probe.newest != nil {
+                out.append("""
+                History depth: fewer than \(number(probe.probeOffset + 1)) conversations, ending at the \
+                date above.
+                """)
+            }
+            if let range = backend.seenRange, range.oldest > 0 {
+                out.append("Oldest Omi record read in this session: \(EarshotTime.describe(range.oldest)).")
+            }
+            out.append("")
+            out.append("""
+            `recall`, `conversations`, `transcript` and `screen` read this history and merge it with \
+            the local capture above; `recent` and `activity` are local only, by design.
+            """)
+        case let .unavailable(error):
+            out.append("Unreachable: \(error.reason). Key source: \(source).")
+            out.append("")
+            out.append("""
+            Only this Mac's local capture is searchable right now. An empty result from `recall` or \
+            `conversations` currently means "the account could not be read", never "it did not \
+            happen" — say so rather than concluding anything about the user's history.
+            """)
+        }
+        return out.joined(separator: "\n")
+    }
+
     /// The single most important non-result in the product: it is what stops Claude from turning
     /// "not captured" into "never happened".
-    private static func emptyMessage(_ store: EarshotStore, _ sentence: String) -> String {
-        guard let status = try? Queries.status(store) else {
+    private static func emptyMessage(_ store: EarshotStore?, _ sentence: String) -> String {
+        guard let store, let status = try? Queries.status(store) else {
             return sentence + "\n\n" + """
-            Earshot could not read its own capture status, so treat this as "not captured" rather \
-            than "did not happen".
+            Earshot has captured nothing on this Mac (no local database), so this answer rests \
+            entirely on the Omi account. Treat it as "not found in what could be read" rather than \
+            "did not happen", and call `status` to see which halves are actually available.
             """
         }
         if status.segmentCount == 0 && status.frameCount == 0 {
-            return """
-            Earshot has not captured anything yet — no speech and no screen text has been recorded \
-            on this Mac so far, so there is nothing to search. This is not evidence that anything did \
-            or did not happen.
+            return sentence + "\n\n" + """
+            Earshot has recorded nothing locally on this Mac yet, so nothing here rules anything out. \
+            Call `status` to see whether the Omi account is reachable before telling the user this \
+            did not happen.
             """
         }
 
@@ -659,7 +1234,7 @@ extension Tools {
         out += "\n\n"
         out += """
         Earshot has recorded \(plural(status.segmentCount, "transcript line")) and \
-        \(plural(status.frameCount, "screen observation")), covering **\(status.coverage)**.
+        \(plural(status.frameCount, "screen observation")) on this Mac, covering **\(status.coverage)**.
         """
         if !status.capturing {
             let reason = status.pausedReason.flatMap(nonEmpty) ?? "it is not running"
@@ -671,11 +1246,38 @@ extension Tools {
         }
         out += "\n\n"
         out += """
-        Inside that window an empty result is real evidence; outside it, nothing was ever recorded. \
-        Try different wording, widen `since` / `until`, or call `status` for the full picture before \
-        telling the user it did not happen.
+        Try different wording, widen `since` / `until`, or call `status` for the full picture — \
+        including whether the Omi account was reachable for this answer — before telling the user it \
+        did not happen.
         """
         return out
+    }
+
+    /// The one place a degraded answer is explained. Everything above it is real; this says exactly
+    /// what is missing and why, which is what makes reasoning over a partial answer safe.
+    private static func footerBlock(_ backendFailures: [String], _ localNotes: [String]) -> String {
+        var lines: [String] = []
+
+        if !OmiBackend.shared.isConfigured {
+            lines.append("_\(OmiBackend.notConfiguredSentence)_")
+        } else if !backendFailures.isEmpty {
+            lines.append("""
+            _Omi account history could not be reached — \(backendFailures.joined(separator: "; ")). \
+            Everything above is only what Earshot captured locally on this Mac, so an absence here is \
+            not evidence about the user's history._
+            """)
+        } else {
+            lines.append("""
+            _Origins: `live` = captured by Earshot on this Mac, seconds fresh; `omi` = the user's Omi \
+            account history, which lags a conversation by a few minutes._
+            """)
+        }
+
+        for note in localNotes {
+            lines.append("_\(note) Results above come from the Omi account only._")
+        }
+
+        return lines.isEmpty ? "" : "\n\n" + lines.joined(separator: "\n\n")
     }
 }
 
@@ -689,10 +1291,10 @@ extension Tools {
         return formatter
     }
 
-    private static let timeFormatter = fixedFormatter("h:mm a")
+    fileprivate static let timeFormatter = fixedFormatter("h:mm a")
     private static let dayFormatter = fixedFormatter("EEEE d MMMM")
     private static let dayWithYearFormatter = fixedFormatter("EEEE d MMMM yyyy")
-    private static let sessionHeaderFormatter = fixedFormatter("EEE d MMM, h:mm a")
+    fileprivate static let sessionHeaderFormatter = fixedFormatter("EEE d MMM yyyy, h:mm a")
 
     private static let decimalFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
@@ -727,7 +1329,7 @@ extension Tools {
         }
     }
 
-    private static func duration(_ seconds: Double) -> String {
+    fileprivate static func duration(_ seconds: Double) -> String {
         let total = Int(max(0, seconds).rounded())
         if total < 60 { return "\(total) sec" }
         let minutes = total / 60
@@ -737,22 +1339,34 @@ extension Tools {
         return remainder == 0 ? "\(hours) h" : "\(hours) h \(remainder) min"
     }
 
-    private static func number(_ value: Int) -> String {
+    fileprivate static func number(_ value: Int) -> String {
         decimalFormatter.string(from: NSNumber(value: value)) ?? String(value)
     }
 
-    private static func plural(_ value: Int, _ singular: String, _ plural: String? = nil) -> String {
+    fileprivate static func plural(_ value: Int, _ singular: String, _ plural: String? = nil) -> String {
         value == 1 ? "\(number(value)) \(singular)" : "\(number(value)) \(plural ?? singular + "s")"
     }
 
     /// One hit is one line, so newlines and runs of whitespace have to go.
-    private static func collapse(_ text: String) -> String {
+    fileprivate static func collapse(_ text: String) -> String {
         text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).joined(separator: " ")
     }
 
-    private static func nonEmpty(_ text: String) -> String? {
+    fileprivate static func nonEmpty(_ text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Word-boundary truncation. The result, ellipsis included, is never longer than `limit`.
+    fileprivate static func truncate(_ text: String, to limit: Int) -> String {
+        guard limit > 1, text.count > limit else { return text }
+        var cut = String(text.prefix(limit - 1))
+        if let space = cut.lastIndex(of: " ") {
+            let word = cut[cut.startIndex..<space]
+            // Only honour the word boundary when it does not throw away most of the snippet.
+            if word.count >= (limit - 1) / 2 { cut = String(word) }
+        }
+        return cut.trimmingCharacters(in: .whitespaces) + "…"
     }
 }
 
@@ -767,6 +1381,15 @@ extension Tools {
     /// `JSONValue.intValue` already unquotes numbers the model sent as strings.
     private static func intArg(_ args: JSONValue?, _ key: String) -> Int? {
         args?[key]?.intValue
+    }
+
+    /// An id may arrive as a JSON string (a UUID) or a JSON number (a local row). Both become text
+    /// here so one classifier can read them; a number is rendered without a decimal point, because
+    /// "14.0" is not an id anybody printed.
+    private static func identifierToken(_ raw: JSONValue) -> String? {
+        if let text = raw.stringValue.flatMap(nonEmpty) { return text }
+        if let value = raw.int64Value { return String(value) }
+        return nil
     }
 
     /// The subscript treats an explicit `null` as absent, so nil here means "no filter asked for" —

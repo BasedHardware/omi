@@ -40,9 +40,9 @@ DO_INSTALL=1
 DO_RUN=0
 DO_CLEAN=0
 
-log()  { printf '\033[1m[ambient]\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[ambient]\033[0m %s\n' "$*" >&2; }
-die()  { printf '\033[1;31m[ambient]\033[0m %s\n' "$*" >&2; exit 1; }
+log()  { printf '\033[1m[earshot]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[earshot]\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31m[earshot]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------------------------
 # Production-app guard.
@@ -143,6 +143,26 @@ cp -f "$BIN_DIR/earshot-mcp" "$APP_BUNDLE/Contents/MacOS/earshot-mcp"
 chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/earshot-mcp"
 
 cp -f "$INFO_PLIST_TEMPLATE" "$APP_BUNDLE/Contents/Info.plist"
+
+# Firebase Web API key for project `based-hardware`. This is a public client key by design — it
+# identifies the project to identitytoolkit/securetoken and grants nothing on its own; the user's
+# actual credential is the OAuth code they get in the browser. It is injected at build time rather
+# than committed to this package so there is exactly one copy of it on disk, in the Omi checkout
+# that already ships it.
+GS_PLIST="${OMI_GOOGLE_SERVICE_PLIST:-/Users/architlal/Documents/omi/desktop/macos/Desktop/Sources/GoogleService-Info.plist}"
+if [[ -f "$GS_PLIST" ]]; then
+  FB_KEY="$(/usr/libexec/PlistBuddy -c 'Print :API_KEY' "$GS_PLIST" 2>/dev/null || true)"
+  if [[ -n "$FB_KEY" ]]; then
+    /usr/libexec/PlistBuddy -c "Add :OmiFirebaseAPIKey string $FB_KEY" "$APP_BUNDLE/Contents/Info.plist" >/dev/null 2>&1 \
+      || /usr/libexec/PlistBuddy -c "Set :OmiFirebaseAPIKey $FB_KEY" "$APP_BUNDLE/Contents/Info.plist" >/dev/null
+    log "injected Firebase web API key (project based-hardware)"
+  else
+    warn "could not read API_KEY from $GS_PLIST — sign-in will fail"
+  fi
+else
+  warn "$GS_PLIST not found — sign-in will fail without FIREBASE_API_KEY in the environment"
+fi
+
 plutil -lint "$APP_BUNDLE/Contents/Info.plist" >/dev/null || die "generated Info.plist is not valid"
 printf 'APPL????' > "$APP_BUNDLE/Contents/PkgInfo"
 

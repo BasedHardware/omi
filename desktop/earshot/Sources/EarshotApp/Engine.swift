@@ -101,6 +101,12 @@ final class Engine: ObservableObject {
         capabilities = Permissions.report()
         startLineConsumer()
 
+        // Restore any Omi session from a previous launch, then start the two uploaders. Both are
+        // no-ops while signed out — captures queue locally and go up once an account is attached.
+        OmiAuth.shared.restore()
+        ScreenActivityUploader.shared.start()
+        Task { await ConversationUploader.shared.drain() }
+
         Task { [weak self] in
             guard let self else { return }
             await self.ensureStorage()
@@ -493,6 +499,10 @@ private final class EngineStore: @unchecked Sendable {
                 {
                     if let previous = self.openSessionId {
                         try store.closeSession(previous, at: self.lastSegmentEndedAt ?? line.startedAt)
+                        // A closed session is a finished conversation; the uploader turns it into a
+                        // real one in the user's Omi account. Enqueued, not sent — it survives being
+                        // signed out, offline, or rate limited.
+                        Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: previous) }
                     }
                     self.openSessionId = try store.openSession(at: line.startedAt, appHint: appHint)
                 }
@@ -573,6 +583,7 @@ private final class EngineStore: @unchecked Sendable {
             guard let store = self.store, let id = self.openSessionId else { return }
             try? store.closeSession(id, at: self.lastSegmentEndedAt ?? EarshotTime.now)
             self.openSessionId = nil
+            Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: id) }
         }
     }
 
@@ -585,6 +596,9 @@ private final class EngineStore: @unchecked Sendable {
             let lastLineAt = ((try? Queries.transcript(store, sessionId: session.id)) ?? [])
                 .map(\.at).max()
             try? store.closeSession(session.id, at: lastLineAt ?? session.startedAt)
+            // Sessions orphaned by a crash still belong in the account.
+            let orphan = session.id
+            Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: orphan) }
         }
     }
 }
