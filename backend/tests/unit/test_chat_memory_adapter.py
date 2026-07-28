@@ -50,7 +50,9 @@ def test_chat_memory_tool_wires_memory_adapter_before_legacy_vector_search():
     assert legacy_call in contents
     assert contents.index(rollout_call) < contents.index(legacy_call)
     assert 'if default_memories is not None:' not in contents
-    assert 'MemoryReadDecision.USE_LEGACY_SAFE' in contents
+    # The legacy-fallback decision is centralized in chat_legacy_read_authorized (#10736),
+    # which allows USE_LEGACY_SAFE plus the un-enrolled missing_rollout_state cohort.
+    assert 'if not chat_legacy_read_authorized(default_memories):' in contents
 
 
 def test_chat_rollout_reader_supports_omi_chat_grant_without_reading_memory_items():

@@ -213,10 +213,15 @@ memory_adapter_stub.list_default_chat_memories_decision_text = MagicMock(
 memory_adapter_stub.search_memory_default_chat_memories_vector_decision_text = MagicMock(
     return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
 )
+memory_adapter_stub.chat_legacy_read_authorized = MagicMock(
+    side_effect=lambda result: result.read_decision == "use_legacy_safe"
+    or (result.read_decision == "deny_memory" and result.fallback_reason == "missing_rollout_state")
+)
 read_rollout_stub = _stub_module("utils.memory.default_read_rollout")
 read_rollout_stub.MemoryReadDecision = types.SimpleNamespace(
     USE_MEMORY="use_memory",
     USE_LEGACY_SAFE="use_legacy_safe",
+    DENY_MEMORY="deny_memory",
 )
 
 memory_system_stub = _stub_module("utils.memory.memory_system")
