@@ -417,16 +417,21 @@ async def test_callback_preserves_langchain_persona_stream_contract():
 async def test_persona_stream_forwards_langchain_callbacks_and_terminates():
     """Persona chat must yield tokens and its terminal sentinel through the real stream path."""
 
+    class FakeChunk:
+        def __init__(self, content):
+            self.content = content
+
     class FakeLLM:
-        async def agenerate(self, *, callbacks, **_kwargs):
-            await callbacks[0].on_llm_new_token('hello')
-            await callbacks[0].on_llm_end(None)
+        # execute_persona_chat_stream uses llm.astream(...) with a RunnableConfig
+        # (run_id plumbing) and yields chunk.content directly — no agenerate/callback-drain.
+        async def astream(self, _messages, **_kwargs):
+            yield FakeChunk('hello')
 
     callback_data = {}
     app = SimpleNamespace(id='persona-1', name='Persona', persona_prompt='SYSTEM')
     with patch.object(graph, 'get_llm', lambda *_args, **_kwargs: FakeLLM()), patch.object(
         graph, 'get_chat_tracer_callbacks', lambda **_kwargs: []
-    ), patch.object(graph, 'track_usage', lambda *_args, **_kwargs: nullcontext()):
+    ):
         chunks = [
             chunk
             async for chunk in graph.execute_persona_chat_stream(
