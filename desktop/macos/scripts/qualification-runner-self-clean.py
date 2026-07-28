@@ -1,3 +1,4 @@
+# Post-#10764 source bump: keep this file on the releasable desktop path after changelog exemption.
 #!/usr/bin/env python3
 """Ownership-scoped self-clean and capacity gate for the trusted M1 runner."""
 
