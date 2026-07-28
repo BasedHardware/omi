@@ -498,8 +498,8 @@ class _SyncPageState extends State<SyncPage> {
     }
 
     final isActive = syncProvider.isSyncing;
-    final uploaded = syncProvider.uploadedWals.length;
-    final readyToSync = syncProvider.missingWals.length;
+    final uploaded = syncProvider.processingRecordingCount;
+    final readyToSync = syncProvider.readyToSyncRecordingCount;
     final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimited;
 
     String title;

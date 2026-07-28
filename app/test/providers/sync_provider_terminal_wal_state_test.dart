@@ -1,13 +1,18 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
@@ -257,6 +262,65 @@ void main() {
     expect(syncProvider.pendingWals, [logicalArchive]);
     expect(syncProvider.displaySortedWals, [logicalArchive]);
     expect(syncProvider.walsForDisplayFilter(WalDisplayFilter.all), [logicalArchive]);
+    expect(syncProvider.readyToSyncRecordingCount, 1);
+    expect(syncProvider.processingRecordingCount, 0);
+    expect(syncProvider.missingWals, hasLength(2), reason: 'raw transfer ranges remain internal accounting only');
+  });
+
+  testWidgets('Sync status card counts logical recordings instead of raw pendant ranges', (tester) async {
+    final rawRange = Wal(
+      timerStart: 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 1,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      originalStorage: WalStorage.sdcard,
+      device: 'cv1',
+      filePath: 'raw.bin',
+      sourceId: 'ring_10_11',
+    );
+    final assembledArchive = Wal(
+      timerStart: 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      originalStorage: WalStorage.sdcard,
+      device: 'cv1',
+      filePath: 'archive.bin',
+      sourceId: 'archive_ring_10_40_1000',
+    );
+    localSync.testWals = [rawRange, assembledArchive];
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+    final userProvider = UserProvider(
+      privateCloudSyncFetcher: () async => false,
+      privateCloudSyncSetter: (_) async => true,
+    );
+    addTearDown(userProvider.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<SyncProvider>.value(value: syncProvider),
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SyncPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 recording ready to sync'), findsOneWidget);
+    expect(find.text('2 recordings ready to sync'), findsNothing);
   });
 
   test('logical archive sync submits every physical part in one job while row deletion stays non-destructive',

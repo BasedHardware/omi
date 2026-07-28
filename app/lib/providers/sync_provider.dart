@@ -280,6 +280,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   List<Wal> get uploadedWals => _allWals.where((w) => w.status == WalStatus.uploaded).toList();
 
+  /// Logical recordings ready for a user-initiated upload.
+  ///
+  /// Raw pendant ranges and physical archive boundaries are intentionally
+  /// excluded so status cards describe the same recordings as the Sync list.
+  int get readyToSyncRecordingCount => userVisibleWals.where((w) => w.status == WalStatus.miss).length;
+
+  /// Logical recordings accepted by the server and awaiting reconciliation.
+  int get processingRecordingCount => userVisibleWals.where((w) => w.status == WalStatus.uploaded).length;
+
   List<Wal> get pendingDeletableWals =>
       userVisibleWals.where((w) => !w.isSyncing && w.status == WalStatus.miss).toList();
 

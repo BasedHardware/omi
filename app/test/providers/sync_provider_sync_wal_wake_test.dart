@@ -587,6 +587,18 @@ void main() {
     expect(provider.logicalRingArchiveMembersForTest(logical), archives);
     expect(logical.seconds, 3000, reason: 'display duration is the wall-clock span, not compressed audio sum');
     expect(provider.pendingStatusCount, 1);
+    expect(provider.readyToSyncRecordingCount, 1);
+    expect(provider.processingRecordingCount, 0);
+    expect(provider.missingWals, hasLength(10), reason: 'physical transport accounting remains independent');
+
+    for (final archive in archives) {
+      archive.status = WalStatus.uploaded;
+    }
+    await provider.refreshWals();
+
+    expect(provider.readyToSyncRecordingCount, 0);
+    expect(provider.processingRecordingCount, 1);
+    expect(provider.uploadedWals, hasLength(10), reason: 'server reconciliation still retains every physical member');
   });
 
   test('backend-minimum silence boundary joins inside the boundary and splits at it', () async {
