@@ -64,6 +64,7 @@ import type {
   JournalBackendDeleteResultMessage,
   JournalBackendReconcileResultMessage,
   RefreshOwnerMessage,
+  ResolveElicitationMessage,
   RevokeOwnerRuntimeMessage,
   RefreshTokenMessage,
   AuthMethod,
@@ -1284,7 +1285,36 @@ async function main(): Promise<void> {
   // Give every ACP adapter a way to reach a person. Without this an adapter
   // fails closed on any permission its policy will not auto-resolve, so the
   // installation has to cover the pi adapter and each externally spawned one.
-  const elicitationResolver = createKernelElicitationResolver({ kernel, log: logErr });
+  const elicitationResolver = createKernelElicitationResolver({
+    kernel,
+    log: logErr,
+    notifier: {
+      pending: ({ dispatchId, ownerId, sessionId, runId, request, createdAtMs }) => send({
+        type: "elicitation_pending",
+        ownerId,
+        dispatchId,
+        sessionId,
+        runId,
+        channel: request.channel,
+        mode: request.mode,
+        adapterId: request.adapterId,
+        title: request.title,
+        prompt: request.prompt,
+        subject: request.subject,
+        context: request.context,
+        options: request.options.map((option) => ({ ...option })),
+        allowsFreeText: request.allowsFreeText,
+        recommendedDefault: request.recommendedDefault,
+        createdAtMs,
+      }),
+      resolved: ({ dispatchId, ownerId, outcome }) => send({
+        type: "elicitation_resolved",
+        ownerId,
+        dispatchId,
+        outcome,
+      }),
+    },
+  });
   const installElicitationResolver = (adapter: RuntimeAdapter): void => {
     if (adapter instanceof AcpRuntimeAdapter) adapter.elicitationResolver = elicitationResolver;
   };
@@ -2982,6 +3012,22 @@ async function main(): Promise<void> {
         const invalidate = msg as InvalidateSessionMessage;
         invalidate.ownerId = resolveActiveOwner(invalidate.ownerId);
         transport.handleInvalidateSession(invalidate);
+        break;
+      }
+
+      case "resolve_elicitation": {
+        const request = msg as ResolveElicitationMessage;
+        // Owner-scoped by the store, so a stale surface cannot answer a
+        // question that now belongs to a different signed-in user.
+        kernel.resolveDesktopDispatch(request.dispatchId, {
+          ownerId: request.ownerId,
+          status: request.decision === "answer" ? "resolved" : "cancelled",
+          resolvedBy: "user",
+          resolutionJson: JSON.stringify({
+            optionId: request.optionId ?? null,
+            text: request.text ?? null,
+          }),
+        });
         break;
       }
 

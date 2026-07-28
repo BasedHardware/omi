@@ -229,6 +229,7 @@ actor AgentRuntimeProcess {
   nonisolated static let requiredRuntimeCapabilities: Set<String> = [
     "journal_import_remote_turn",
     "runtime_adapter_availability",
+    "elicitation",
   ]
   private static let ownerTransitionClientID = "runtime-owner-transition"
 

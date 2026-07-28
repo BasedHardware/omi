@@ -26,6 +26,23 @@ export interface ElicitationResolutionPayload {
   text?: unknown;
 }
 
+/** Notifies the desktop surface that a question is waiting, or no longer is. */
+export interface ElicitationNotifier {
+  pending(input: {
+    dispatchId: string;
+    ownerId: string;
+    sessionId: string;
+    runId: string | null;
+    request: ElicitationRequest;
+    createdAtMs: number;
+  }): void;
+  resolved(input: {
+    dispatchId: string;
+    ownerId: string;
+    outcome: "answered" | "cancelled";
+  }): void;
+}
+
 export interface KernelElicitationDeps {
   kernel: {
     createDesktopDispatch(input: NewDesktopCoordinatorDispatch): DesktopCoordinatorDispatch;
@@ -35,6 +52,7 @@ export interface KernelElicitationDeps {
     ): { sessionId: string; ownerId: string; runId: string | null } | null;
     subscribe(subscriber: (event: AgentEvent) => void): () => void;
   };
+  notifier?: ElicitationNotifier;
   log: (message: string) => void;
 }
 
@@ -132,7 +150,24 @@ export function createKernelElicitationResolver(deps: KernelElicitationDeps): El
     }
 
     deps.log(`Elicitation dispatch ${dispatch.dispatchId} pending for ${request.adapterId}`);
-    return await waitForDispatchResolution(deps, request, dispatch.dispatchId);
+    deps.notifier?.pending({
+      dispatchId: dispatch.dispatchId,
+      ownerId: binding.ownerId,
+      sessionId: binding.sessionId,
+      runId: binding.runId,
+      request,
+      createdAtMs: dispatch.createdAtMs,
+    });
+
+    const outcome = await waitForDispatchResolution(deps, request, dispatch.dispatchId);
+    // Announced for every terminal transition, not only a user answer, so a
+    // card cannot outlive the question it belongs to.
+    deps.notifier?.resolved({
+      dispatchId: dispatch.dispatchId,
+      ownerId: binding.ownerId,
+      outcome: outcome.kind === "cancelled" ? "cancelled" : "answered",
+    });
+    return outcome;
   };
 }
 

@@ -141,6 +141,86 @@ describe("elicitation dispatch creation", () => {
   });
 });
 
+describe("the surface is told when a question starts and stops waiting", () => {
+  function notifierSpy() {
+    const pending: Array<Record<string, unknown>> = [];
+    const resolved: Array<Record<string, unknown>> = [];
+    return {
+      notifier: {
+        pending: (input: any) => pending.push(input),
+        resolved: (input: any) => resolved.push(input),
+      },
+      pending,
+      resolved,
+    };
+  }
+
+  it("announces the pending question with everything the card needs", async () => {
+    const stub = kernelStub();
+    const spy = notifierSpy();
+    const resolver = createKernelElicitationResolver({
+      kernel: stub.kernel as any,
+      notifier: spy.notifier,
+      log: () => {},
+    });
+
+    const promise = resolver(permissionRequest);
+    await Promise.resolve();
+
+    expect(spy.pending).toHaveLength(1);
+    expect(spy.pending[0]).toMatchObject({
+      dispatchId: "disp-1",
+      ownerId: "owner-1",
+      sessionId: "sess-1",
+      runId: "run-1",
+    });
+    expect((spy.pending[0] as any).request).toMatchObject({
+      mode: "permission",
+      allowsFreeText: false,
+    });
+
+    stub.emitResolution({ dispatchId: "disp-1", status: "resolved", resolution: { optionId: "once" } });
+    await promise;
+    expect(spy.resolved).toEqual([
+      { dispatchId: "disp-1", ownerId: "owner-1", outcome: "answered" },
+    ]);
+  });
+
+  it("announces resolution on a cancellation too, so no card outlives its question", async () => {
+    const stub = kernelStub();
+    const spy = notifierSpy();
+    const resolver = createKernelElicitationResolver({
+      kernel: stub.kernel as any,
+      notifier: spy.notifier,
+      log: () => {},
+    });
+
+    const promise = resolver(permissionRequest);
+    await Promise.resolve();
+    stub.emitResolution({ dispatchId: "disp-1", status: "cancelled" });
+    await promise;
+
+    expect(spy.resolved).toEqual([
+      { dispatchId: "disp-1", ownerId: "owner-1", outcome: "cancelled" },
+    ]);
+  });
+
+  it("announces nothing when it never reached a person", async () => {
+    const stub = kernelStub({ sessionForAdapterNativeSession: vi.fn(() => null) });
+    const spy = notifierSpy();
+    const resolver = createKernelElicitationResolver({
+      kernel: stub.kernel as any,
+      notifier: spy.notifier,
+      log: () => {},
+    });
+
+    await resolver(permissionRequest);
+
+    expect(spy.pending).toEqual([]);
+    expect(spy.resolved).toEqual([]);
+  });
+});
+
 describe("elicitation fails closed when no person is reachable", () => {
   it("denies when the adapter session has no kernel binding", async () => {
     const stub = kernelStub({ sessionForAdapterNativeSession: vi.fn(() => null) });
