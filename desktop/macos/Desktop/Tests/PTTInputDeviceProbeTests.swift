@@ -90,7 +90,20 @@ final class PTTInputDeviceProbeTests: XCTestCase {
         snapshotReads.fulfill()
       }
     }
+<<<<<<< HEAD
     await fulfillment(of: [mainActorProgress, snapshotReads], timeout: 5)
+=======
+
+    // A responsive run loop pumps this 10ms ticker many times over 0.3s (~30 on a fast
+    // machine); a run loop wedged by a blocking `currentSnapshot` pumps ~0. The assertion only
+    // needs to separate those two regimes, so the threshold is deliberately low: a slow or
+    // loaded CI runner (observed as few as 5 ticks) must never flake, while a genuinely wedged
+    // loop (~0 ticks) still fails loudly. Do not raise this to chase a fast-machine number.
+    XCTAssertGreaterThan(
+      ticker.count, 2,
+      "the main run loop must keep pumping while the HAL is wedged (got \(ticker.count) ticks)")
+    XCTAssertGreaterThan(reads, 2, "turn-start reads must keep completing")
+>>>>>>> 402765359b (test(desktop): make PTT run-loop probe tolerant of slow CI runners)
 
     release.signal()
     await fulfillment(of: [finished], timeout: 5)
