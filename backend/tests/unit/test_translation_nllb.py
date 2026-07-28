@@ -68,7 +68,7 @@ def test_filtered_configured_primary_records_recovered_fallback_after_google_suc
 
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
     assert recorder.events[0].fields['from_mode'] == 'nllb'
-    assert recorder.events[0].fields['to_mode'] == 'google'
+    assert recorder.events[0].fields['to_mode'] == 'gemini'
     assert recorder.events[0].fields['reason'] == 'config_incomplete'
     assert recorder.events[0].fields['outcome'] == 'recovered'
 
@@ -93,15 +93,17 @@ def test_filtered_configured_primary_records_exhausted_when_google_fails():
     assert recorder.events[0].fields['outcome'] == 'exhausted'
 
 
-def test_config_normalizes_case_whitespace_and_duplicate_providers():
+@pytest.mark.parametrize('gemini_token', ('gemini', 'google'))
+def test_config_normalizes_gemini_and_legacy_google_to_canonical_gemini(gemini_token):
     resolved = resolve_translation_profile(
         {
-            'TRANSLATION_SERVICE_MODELS': ' NLLB, google, nllb, GOOGLE ',
+            'TRANSLATION_SERVICE_MODELS': f' NLLB, {gemini_token}, nllb, {gemini_token.upper()} ',
             'HOSTED_TRANSLATION_API_URL': ' http://nllb ',
         }
     )
 
-    assert resolved.providers == (TranslationProvider.nllb, TranslationProvider.google)
+    assert resolved.providers == (TranslationProvider.nllb, TranslationProvider.gemini)
+    assert resolved.configured_providers == (TranslationProvider.nllb, TranslationProvider.gemini)
     assert resolved.nllb_url == 'http://nllb'
 
 
@@ -136,7 +138,7 @@ def test_nllb_failure_recovers_through_google_with_shared_fallback_event():
 
     assert outcomes[0].text == 'Hola'
     assert recorder.events[0].fields['from_mode'] == 'nllb'
-    assert recorder.events[0].fields['to_mode'] == 'google'
+    assert recorder.events[0].fields['to_mode'] == 'gemini'
     assert recorder.events[0].fields['reason'] == 'timeout'
     assert recorder.events[0].fields['outcome'] == 'recovered'
 
@@ -184,7 +186,7 @@ def test_exhausted_provider_chain_records_truthful_outcome():
     assert store.puts == []
     assert recorder.events[0].fields['outcome'] == 'exhausted'
     assert recorder.events[0].fields['from_mode'] == 'nllb'
-    assert recorder.events[0].fields['to_mode'] == 'google'
+    assert recorder.events[0].fields['to_mode'] == 'gemini'
 
 
 def test_google_first_can_recover_through_nllb_when_configured():
@@ -201,7 +203,7 @@ def test_google_first_can_recover_through_nllb_when_configured():
     )
 
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
-    assert recorder.events[0].fields['from_mode'] == 'google'
+    assert recorder.events[0].fields['from_mode'] == 'gemini'
     assert recorder.events[0].fields['to_mode'] == 'nllb'
 
 
