@@ -197,7 +197,9 @@ if [[ -d "$FONTS_DIR" ]]; then
         [[ -n "$font" ]] || continue
         cp -f "$font" "$APP_BUNDLE/Contents/Resources/Fonts/"
         FONT_COUNT=$((FONT_COUNT + 1))
-    done < <(find "$FONTS_DIR" -maxdepth 1 -type f -name '*.ttf' | sort)
+    # Open Runde ships as OpenType/CFF, so both extensions travel — a `.ttf`-only glob would leave
+    # the bundle with no faces at all and every role falling back to the system font.
+    done < <(find "$FONTS_DIR" -maxdepth 1 -type f \( -name '*.otf' -o -name '*.ttf' \) | sort)
     log "copied $FONT_COUNT font(s)"
 else
     warn "no Fonts directory at $FONTS_DIR — the app will fall back to system fonts"

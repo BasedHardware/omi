@@ -90,7 +90,7 @@ is capped at 10 conversations/hour against 30 for from-segments, and `source: "p
 extracted immediately where `source: "desktop"` defers them and opts into a trial paywall.
 
 Detail: `ARCHITECTURE.md`. The interface contracts every file was built against: `CONTRACTS.md`.
-Exact visual values: `docs/context-for-claude-design-system.md`.
+Exact visual values: `docs/design-system.md`.
 
 ## Tests
 

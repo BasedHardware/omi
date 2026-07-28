@@ -139,7 +139,8 @@ enum MenuBarSpotlight {
 
 // MARK: - Ring
 
-/// A cream ring that breathes, so the eye finds it against a busy menu bar.
+/// A paper ring that breathes, so the eye finds it against a busy menu bar. Paper and not
+/// ink: this one lands on the menu bar, which is the system's surface and is routinely dark.
 private final class SpotlightRingView: NSView {
     private let ring = CAShapeLayer()
 
@@ -148,7 +149,7 @@ private final class SpotlightRingView: NSView {
         wantsLayer = true
         layer?.addSublayer(ring)
         ring.fillColor = NSColor.clear.cgColor
-        ring.strokeColor = Ink.nsCream.withAlphaComponent(0.9).cgColor
+        ring.strokeColor = Ink.nsPaper.withAlphaComponent(0.9).cgColor
         ring.lineWidth = 2
     }
 

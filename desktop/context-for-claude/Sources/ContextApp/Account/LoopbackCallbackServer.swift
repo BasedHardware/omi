@@ -251,10 +251,13 @@ final class LoopbackCallbackServer: @unchecked Sendable {
             }
         }
 
+        /// The same two accents the app uses: ink for the ordinary case, the site's red when
+        /// something failed. This page opens in the same browser as the product site, so it is
+        /// held to the site's palette rather than the app's old one.
         var accent: String {
             switch self {
-            case .success: return "#FFFCEC"
-            case .failure, .invalid: return "#FFB4AB"
+            case .success: return "#171412"
+            case .failure, .invalid: return "#C9352B"
             }
         }
     }
@@ -269,18 +272,18 @@ final class LoopbackCallbackServer: @unchecked Sendable {
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>\(page.title)</title>
         <style>
-          :root { color-scheme: dark; }
+          :root { color-scheme: light; }
           body {
             margin: 0; min-height: 100vh;
             display: flex; align-items: center; justify-content: center;
-            background: #171716; color: #FFFCEC;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #FBF8F4; color: #171412;
+            font-family: "Open Runde", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
           }
           .card { max-width: 26rem; padding: 3rem 2rem; text-align: center; }
           svg { display: block; margin: 0 auto 1.75rem; opacity: 0.9; }
           h1 { margin: 0 0 0.6rem; font-size: 1.6rem; font-weight: 600; letter-spacing: -0.03em; color: \(page.accent); }
-          p { margin: 0; font-size: 1rem; line-height: 1.55; color: rgba(255, 252, 236, 0.7); }
+          p { margin: 0; font-size: 1rem; line-height: 1.55; color: #6B625B; }
         </style>
         </head>
         <body>

@@ -53,14 +53,14 @@ struct RandomizedText: View {
     ///   - segments: Text runs and their emphasis, in reading order.
     ///   - style: A complete type role — `.introHero`, `.stepHeadline`, `.prose`, …
     ///   - color: The colour the words resolve *to*. See the note on the type.
-    init(segments: [(String, Emphasis)], style: InkTextStyle, color: Color = Ink.cream) {
+    init(segments: [(String, Emphasis)], style: InkTextStyle, color: Color = Ink.ink) {
         self.segments = segments.map { Segment($0.0, $0.1) }
         self.style = style
         self.color = color
     }
 
     /// Convenience for a headline with no emphasis runs.
-    init(_ text: String, style: InkTextStyle, color: Color = Ink.cream) {
+    init(_ text: String, style: InkTextStyle, color: Color = Ink.ink) {
         self.init(segments: [(text, .plain)], style: style, color: color)
     }
 
@@ -124,13 +124,16 @@ struct RandomizedText: View {
         return out
     }
 
-    /// The bundled families are Inter Regular/Medium/SemiBold/Bold and Literata Regular/SemiBold —
-    /// so `.bold()` resolves to a real face, and `.italic()` has none to find on Literata and
-    /// leans on Core Text synthesising an oblique.
+    /// Emphasis names a face rather than asking for a trait. Open Runde's Medium and Semibold each
+    /// ship as their own single-face family ("Open Runde Semibold" / Regular), so `.bold()` on a
+    /// headline set in Semibold has no bolder member to resolve to and the emphasis quietly
+    /// vanishes. Naming `OpenRunde-Bold` outright is the only way a bold run is real.
+    ///
+    /// `.italic()` stays a trait: the family has no oblique anywhere, so Core Text synthesises one.
     private func emphasised(_ text: Text, _ emphasis: Emphasis) -> Text {
         switch emphasis {
         case .plain: return text
-        case .bold: return text.bold()
+        case .bold: return text.font(.openRunde(style.size, .bold))
         case .italic: return text.italic()
         }
     }

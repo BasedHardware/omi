@@ -1,12 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// The onboarding surface: one small, centred oval of glass that dissolves into the desktop.
+/// The onboarding surface: one small, centred oval of paper that dissolves into the desktop.
 ///
-/// No title bar, no traffic lights, no second window — and deliberately **no edge**. The material,
-/// the darkness and the colour field are all masked by the same radial falloff, so the surface has
-/// no border to notice and no rectangle to read as a dialog. It is a warm spot on the desktop that
-/// happens to have words in it.
+/// No title bar, no traffic lights, no second window — and deliberately **no edge**. The paper
+/// floor and the warm wash over it are masked by the same radial falloff, so the surface has no
+/// border to notice and no rectangle to read as a dialog. It is a sheet lying on the desktop that
+/// happens to have words on it.
 ///
 /// The window is larger than the legible area on purpose: the outer third is falloff, and cropping
 /// it would put back the hard edge the mask exists to remove.
