@@ -147,7 +147,38 @@ struct ChatElicitationPanel: View {
       if elicitations.waitingCount > 1 { queueStepper }
 
       Spacer()
+
+      countdown
     }
+  }
+
+  /// How long before the card answers for the user.
+  ///
+  /// Shown so the wait is never a surprise: a card that closes itself without
+  /// warning reads as a bug. It goes quiet until the last stretch, because a
+  /// clock ticking through the whole interaction is pressure the user has not
+  /// earned, and turns urgent only when it is nearly out.
+  @ViewBuilder
+  private var countdown: some View {
+    if let seconds = elicitations.secondsRemaining {
+      let urgent = seconds <= 30
+      Text(formattedRemaining(seconds))
+        .scaledFont(size: OmiType.micro, weight: urgent ? .semibold : .regular)
+        .monospacedDigit()
+        .foregroundColor(urgent ? OmiColors.textPrimary : OmiColors.textQuaternary)
+        .padding(.horizontal, OmiSpacing.xs)
+        .padding(.vertical, OmiSpacing.hairline)
+        .background(
+          Capsule().fill(
+            urgent ? OmiColors.backgroundQuaternary : OmiColors.backgroundQuaternary.opacity(0.5))
+        )
+        .help("Answers on their own in \(formattedRemaining(seconds)); anything you do resets it")
+        .accessibilityLabel("\(seconds) seconds before this answers on its own")
+    }
+  }
+
+  private func formattedRemaining(_ seconds: Int) -> String {
+    String(format: "%d:%02d", seconds / 60, seconds % 60)
   }
 
   /// Move between pending questions without answering the one on screen.
@@ -359,7 +390,12 @@ struct ChatElicitationPanel: View {
       .scaledFont(size: OmiType.body)
       .foregroundColor(OmiColors.textPrimary)
       .focused($freeTextFocused)
-      .onChange(of: freeText) { _, value in stageFreeText(value) }
+      .onChange(of: freeText) { _, value in
+        // Typing is the user working on the answer, even before the field has
+        // anything worth staging.
+        elicitations.noteInteraction()
+        stageFreeText(value)
+      }
       .onSubmit(advance)
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xs)

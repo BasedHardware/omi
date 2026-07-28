@@ -1083,7 +1083,16 @@ type McpServerConfig = {
   command: string;
   args: string[];
   env: Array<{ name: string; value: string }>;
+  /** Per-tool-call budget in seconds, honoured by MCP hosts that read it. */
+  timeout?: number;
 };
+
+/**
+ * Ceiling for an MCP host's own per-tool-call budget on the omi-tools server.
+ * Generous on purpose: Omi's card owns the real deadline for a question, and
+ * Omi's relay and stall guards own it for everything else.
+ */
+const OMI_TOOLS_MCP_TIMEOUT_SECONDS = 1_800;
 
 function buildMcpServers(
   mode: string,
@@ -1118,6 +1127,19 @@ function buildMcpServers(
       command: process.execPath,
       args: [omiToolsStdioScript],
       env: omiToolsEnv,
+      // ask_user blocks until a person answers, and an MCP host's own per-call
+      // budget knows nothing about that: hermes defaults to 300s and killed
+      // questions out from under the card, leaving one on screen answering a
+      // turn that was already gone.
+      //
+      // Omi owns this deadline instead. The card runs a visible idle budget
+      // that resets on interaction and, when it expires, delivers the answers
+      // already given and cancels the rest. This ceiling only has to stay out
+      // of that policy's way; it is not the thing bounding a hung tool. Every
+      // other tool on this server is still caught far sooner by Omi's own
+      // relay and stall guards, which exempt only the tools that wait on a
+      // person.
+      timeout: OMI_TOOLS_MCP_TIMEOUT_SECONDS,
     });
   }
 

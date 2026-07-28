@@ -114,6 +114,20 @@ final class ElicitationStore: ObservableObject {
   /// Choices made but not yet sent, per question. Kept here rather than in the
   /// card so moving between questions does not discard what was already picked.
   @Published private(set) var staged: [String: ElicitationAnswer] = [:]
+  /// When the questions on screen will answer themselves, or nil when nothing
+  /// is waiting. Published so the card can count down against it.
+  @Published private(set) var deadline: Date?
+
+  /// How long a question waits on an idle user.
+  ///
+  /// This is an *idle* budget, not a total one: every interaction restarts it,
+  /// so reading a long question or working through a set never runs it down.
+  /// It exists because an unanswered question holds its agent open, and a card
+  /// the user has walked away from should give the agent something to act on
+  /// rather than nothing.
+  static let idleTimeout: TimeInterval = 120
+
+  private var ticker: AnyCancellable?
 
   var focused: PendingElicitation? {
     queue.first(where: { $0.id == focusedID }) ?? queue.first
@@ -130,6 +144,56 @@ final class ElicitationStore: ObservableObject {
   func focus(_ elicitation: PendingElicitation) {
     guard queue.contains(where: { $0.id == elicitation.id }) else { return }
     focusedID = elicitation.id
+    noteInteraction()
+  }
+
+  /// Restart the idle budget. Reading, choosing, typing and moving between
+  /// questions are all the user working on the answer, so any of them buys the
+  /// full budget back.
+  func noteInteraction() {
+    guard !queue.isEmpty else { return }
+    deadline = Date().addingTimeInterval(Self.idleTimeout)
+    startTicking()
+  }
+
+  private func startTicking() {
+    guard ticker == nil else { return }
+    ticker = Timer.publish(every: 1, on: .main, in: .common)
+      .autoconnect()
+      .sink { [weak self] _ in self?.tick() }
+  }
+
+  private func stopTicking() {
+    ticker?.cancel()
+    ticker = nil
+    deadline = nil
+  }
+
+  private func tick() {
+    guard let deadline, !queue.isEmpty else {
+      stopTicking()
+      return
+    }
+    guard Date() >= deadline else {
+      // Republish so the card's countdown advances even with no interaction.
+      objectWillChange.send()
+      return
+    }
+    expire()
+  }
+
+  /// The budget ran out. Send every answer the user did give and cancel the
+  /// rest, so the work they had already done is not thrown away with the
+  /// questions they never reached.
+  private func expire() {
+    stopTicking()
+    submitAll()
+  }
+
+  /// Seconds left, floored at zero. Nil when nothing is waiting.
+  var secondsRemaining: Int? {
+    guard let deadline else { return nil }
+    return max(0, Int(deadline.timeIntervalSinceNow.rounded(.up)))
   }
 
   func focusNext() { step(by: 1) }
@@ -146,10 +210,12 @@ final class ElicitationStore: ObservableObject {
   func stage(_ answer: ElicitationAnswer, for elicitation: PendingElicitation) {
     guard queue.contains(where: { $0.id == elicitation.id }) else { return }
     staged[elicitation.id] = answer
+    noteInteraction()
   }
 
   func clearStaged(for elicitation: PendingElicitation) {
     staged[elicitation.id] = nil
+    noteInteraction()
   }
 
   /// Send what is staged for the question on screen.
@@ -179,6 +245,9 @@ final class ElicitationStore: ObservableObject {
     guard !queue.contains(where: { $0.id == elicitation.id }) else { return }
     queue.append(elicitation)
     if focusedID == nil { focusedID = elicitation.id }
+    // A question arriving is the start of the wait, not an interaction, but it
+    // is what arms the budget in the first place.
+    noteInteraction()
   }
 
   /// Retires a question the kernel says is no longer pending, whoever ended it.
@@ -188,6 +257,7 @@ final class ElicitationStore: ObservableObject {
     let index = queue.firstIndex(where: { $0.id == id })
     queue.removeAll { $0.id == id }
     staged[id] = nil
+    if queue.isEmpty { stopTicking() }
     guard focusedID == id else { return }
     guard let index, !queue.isEmpty else {
       focusedID = queue.first?.id
@@ -213,11 +283,13 @@ final class ElicitationStore: ObservableObject {
       queue.removeAll()
       staged.removeAll()
       focusedID = nil
+      stopTicking()
       return
     }
     for dropped in queue where dropped.ownerID == ownerID { staged[dropped.id] = nil }
     queue.removeAll { $0.ownerID == ownerID }
     if queue.first(where: { $0.id == focusedID }) == nil { focusedID = queue.first?.id }
+    if queue.isEmpty { stopTicking() }
   }
 }
 

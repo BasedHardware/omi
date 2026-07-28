@@ -53,6 +53,54 @@ final class ElicitationStoreTests: XCTestCase {
     XCTAssertEqual(elicitation.options.map(\.label), ["Allow once", "Allow always", "Deny"])
   }
 
+  func testAWaitingQuestionArmsADeadlineThatInteractionPushesBack() throws {
+    let (store, _) = makeStore()
+    let elicitation = try XCTUnwrap(PendingElicitation(payload: payload(mode: "question")))
+    XCTAssertNil(store.deadline, "nothing is waiting, so nothing is counting down")
+
+    store.enqueue(elicitation)
+    let armed = try XCTUnwrap(store.deadline)
+    XCTAssertEqual(
+      armed.timeIntervalSinceNow, ElicitationStore.idleTimeout, accuracy: 2,
+      "a question arriving starts the budget")
+
+    // The budget is idle-based, not total: working on the answer buys it back.
+    store.stage(.options(["once"]), for: elicitation)
+    let afterChoosing = try XCTUnwrap(store.deadline)
+    XCTAssertGreaterThanOrEqual(afterChoosing, armed)
+  }
+
+  func testTheClockStopsWhenNothingIsWaiting() throws {
+    let (store, _) = makeStore()
+    let elicitation = try XCTUnwrap(PendingElicitation(payload: payload(mode: "question")))
+    store.enqueue(elicitation)
+    XCTAssertNotNil(store.deadline)
+
+    // Answering the last question retires the card, so a countdown pointing at
+    // nothing must not keep running.
+    store.answer(elicitation, with: .options(["once"]))
+    XCTAssertNil(store.deadline)
+    XCTAssertNil(store.secondsRemaining)
+  }
+
+  func testExpirySendsWhatWasAnsweredAndCancelsTheRest() throws {
+    let (store, submitted) = makeStore()
+    let first = try XCTUnwrap(PendingElicitation(payload: payload(dispatchID: "a", mode: "question")))
+    let second = try XCTUnwrap(PendingElicitation(payload: payload(dispatchID: "b", mode: "question")))
+    store.enqueue(first)
+    store.enqueue(second)
+    store.stage(.options(["once"]), for: first)
+
+    // Expiry is the same act as Send: the work the user did give is delivered
+    // rather than thrown away with the questions they never reached.
+    store.submitAll()
+
+    XCTAssertEqual(submitted().map(\.0.id), ["a", "b"])
+    XCTAssertEqual(submitted().map(\.1), [.options(["once"]), .cancel])
+    XCTAssertTrue(store.queue.isEmpty)
+    XCTAssertNil(store.deadline)
+  }
+
   func testAPermissionIsNeverMultiSelectHoweverThePayloadArrives() throws {
     // An ACP response names exactly one option, so a pick-many control there
     // would build an answer the protocol cannot send.
