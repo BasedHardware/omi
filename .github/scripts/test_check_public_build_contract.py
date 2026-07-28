@@ -736,6 +736,21 @@ jobs:
         finally:
             RUNTIME_PREFLIGHT.subprocess.run = original_run
 
+    def test_runtime_preflight_classifies_cloud_run_cannot_find_service_as_first_create(self) -> None:
+        # Live gcloud run wording (2026-07): "Cannot find service [omi-web]"
+        original_run = RUNTIME_PREFLIGHT.subprocess.run
+        RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RUNTIME_PREFLIGHT.subprocess.CalledProcessError(
+                1,
+                "gcloud",
+                stderr="ERROR: (gcloud.run.services.describe) Cannot find service [omi-web]",
+            )
+        )
+        try:
+            self.assertIsNone(RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project"))
+        finally:
+            RUNTIME_PREFLIGHT.subprocess.run = original_run
+
     def test_runtime_preflight_rejects_secret_where_reviewed_runtime_config_will_be_applied(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "reviewed.example"}
