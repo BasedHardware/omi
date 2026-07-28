@@ -14,7 +14,7 @@ translated to their Firestore equivalents at this boundary and nowhere else.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from google.cloud import firestore
@@ -58,10 +58,42 @@ def _translate(data: Dict[str, Any]) -> Dict[str, Any]:
     return {key: _to_firestore_value(value) for key, value in data.items()}
 
 
+def _ensure_timezone_aware(dt: datetime) -> datetime:
+    """A naive datetime is assumed UTC (mirrors the pre-port database boundary)."""
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
 def _revision(snapshot: Any) -> Any:
-    """Neutral last-write revision from the Firestore snapshot ``update_time`` (a datetime subclass)."""
-    update_time = getattr(snapshot, "update_time", None)
-    return update_time if isinstance(update_time, datetime) else None
+    """Neutral last-write revision (ADR-0017) from the Firestore snapshot ``update_time``.
+
+    The production client exposes ``DatetimeWithNanoseconds`` (a ``datetime`` subclass), while
+    Firestore emulators and fakes may expose protobuf-like ``ToDatetime()`` or raw
+    ``seconds``/``nanos`` values. This SDK variation is normalized here — at the adapter boundary —
+    so the neutral ``updated_at`` is always an aware ``datetime`` or ``None``.
+    """
+    value = getattr(snapshot, "update_time", None)
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return _ensure_timezone_aware(value)
+
+    to_datetime = getattr(value, "ToDatetime", None)
+    if callable(to_datetime):
+        try:
+            return _ensure_timezone_aware(to_datetime(tzinfo=timezone.utc))
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    try:
+        seconds = getattr(value, "seconds")
+        nanos = getattr(value, "nanos")
+        if isinstance(seconds, str) and isinstance(nanos, str):
+            timestamp = float(f"{seconds}.{nanos}")
+        else:
+            timestamp = float(seconds) + (float(nanos) / 1_000_000_000)
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
+        return None
 
 
 def _snapshot_to_record(snapshot: Any, path: str) -> StoredDocument:
