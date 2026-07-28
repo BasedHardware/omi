@@ -230,7 +230,7 @@ class TestMemoryServiceParity:
         get_memories.assert_called_with("uid-test", 25, 10)
         assert via_service == direct
 
-    def test_read_first_page_uses_router_limit_cap(self, monkeypatch):
+    def test_read_respects_caller_limit_without_first_page_expansion(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
         memories = [_sample_memory_dict()]
 
@@ -240,7 +240,7 @@ class TestMemoryServiceParity:
             direct = service_mod._legacy_read_memories("uid-test", limit=25, offset=0)
 
         assert get_memories.call_count == 2
-        get_memories.assert_called_with("uid-test", 5000, 0)
+        get_memories.assert_called_with("uid-test", 25, 0)
         assert via_service == direct
 
     def test_search_matches_direct_legacy_helper(self, monkeypatch):

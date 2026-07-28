@@ -595,7 +595,7 @@ export function createGetMemoriesExecutor(caller?: BackendToolCaller): ProductTo
       method: 'GET',
       path: '/v1/tools/memories',
       query: {
-        limit: clampInt(input.limit, 50, 1, 5000),
+        limit: clampInt(input.limit, 50, 1, 500),
         offset: clampInt(input.offset, 0, 0, 1_000_000),
         start_date: start.value,
         end_date: end.value

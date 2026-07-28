@@ -54,6 +54,9 @@ class KnowledgeEdge(BaseModel):
 class KnowledgeGraphResponse(BaseModel):
     nodes: List[Dict[str, Any]]
     edges: List[Dict[str, Any]]
+    truncated: bool = False
+    node_limit: int | None = None
+    edge_limit: int | None = None
 
 
 class RebuildResponse(BaseModel):
@@ -69,7 +72,13 @@ class DeleteKnowledgeGraphResponse(BaseModel):
 @router.get('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=KnowledgeGraphResponse)
 def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
     graph = get_knowledge_graph_payload(uid)
-    return KnowledgeGraphResponse(nodes=graph.get('nodes', []), edges=graph.get('edges', []))
+    return KnowledgeGraphResponse(
+        nodes=graph.get('nodes', []),
+        edges=graph.get('edges', []),
+        truncated=bool(graph.get('truncated', False)),
+        node_limit=graph.get('node_limit'),
+        edge_limit=graph.get('edge_limit'),
+    )
 
 
 def _rebuild_graph_task(uid: str, user_name: str):

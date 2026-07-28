@@ -163,7 +163,14 @@ def _gcloud_json(arguments: Sequence[str]) -> Mapping[str, Any]:
         )
     except subprocess.CalledProcessError as exc:
         raw_message = f"{exc.stderr}\n{exc.stdout}".lower()
-        if "not found" in raw_message or "does not exist" in raw_message or "not_found" in raw_message:
+        if (
+            "not found" in raw_message
+            or "could not be found" in raw_message
+            # gcloud run services describe: "Cannot find service [name]"
+            or "cannot find" in raw_message
+            or "does not exist" in raw_message
+            or "not_found" in raw_message
+        ):
             message, category = "resource not found", "not_found"
         elif "permission denied" in raw_message or "permissiondenied" in raw_message:
             message, category = "permission denied", "permission_denied"
@@ -223,6 +230,14 @@ def validate_preserved_secret_versions(*, target: Target, service: Mapping[str, 
     return validate_secret_references(service_name=target.service, references=references, project_id=project_id)
 
 
+def validate_fallback_secret_versions(*, target: Target, project_id: str) -> list[str]:
+    return validate_secret_references(
+        service_name=target.service,
+        references=target.deployment.fallback_runtime_secrets,
+        project_id=project_id,
+    )
+
+
 def validate_secret_references(*, service_name: str, references: Mapping[str, str], project_id: str) -> list[str]:
     errors: list[str] = []
     results: dict[str, RuntimePreflightError | Mapping[str, Any]] = {}
@@ -257,22 +272,27 @@ def validate_secret_references(*, service_name: str, references: Mapping[str, st
     return errors
 
 
-def preflight(*, target: Target, project_id: str) -> list[str]:
+def preflight_result(*, target: Target, project_id: str) -> tuple[list[str], dict[str, str]]:
+    """Validate the runtime and return fallbacks needed only for a first create."""
+
     errors = validate_secret_versions(target=target, project_id=project_id)
+    fallback_runtime_secrets: dict[str, str] = {}
     try:
         service = load_current_service(target=target, project_id=project_id)
     except RuntimePreflightError as exc:
         errors.append(str(exc))
     else:
         if service is None:
-            if target.deployment.preserve_runtime_secrets:
-                errors.append(
-                    f"{target.name}: cannot preserve runtime secrets because current Cloud Run service {target.service} is absent"
-                )
+            fallback_runtime_secrets = target.deployment.fallback_runtime_secrets
+            errors.extend(validate_fallback_secret_versions(target=target, project_id=project_id))
         else:
             errors.extend(validate_current_bindings(target, service))
             errors.extend(validate_preserved_secret_versions(target=target, service=service, project_id=project_id))
-    return errors
+    return errors, fallback_runtime_secrets
+
+
+def preflight(*, target: Target, project_id: str) -> list[str]:
+    return preflight_result(target=target, project_id=project_id)[0]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -280,6 +300,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--target", required=True)
     parser.add_argument("--project-id", required=True)
     parser.add_argument("--contract", type=Path, default=ROOT / "config" / "public-build-contract.json")
+    parser.add_argument("--github-output", type=Path)
     args = parser.parse_args(argv)
     try:
         contract = load_contract(args.contract)
@@ -288,11 +309,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"public-build runtime preflight failed: {exc}", file=sys.stderr)
         return 1
 
-    errors = preflight(target=target, project_id=args.project_id)
+    errors, fallback_runtime_secrets = preflight_result(target=target, project_id=args.project_id)
     if errors:
         print("public-build runtime preflight failed:", file=sys.stderr)
         print("\n".join(f"- {error}" for error in errors), file=sys.stderr)
         return 1
+    if args.github_output is not None:
+        fallback_lines = "\n".join(
+            f"{name}={reference}" for name, reference in sorted(fallback_runtime_secrets.items())
+        )
+        with args.github_output.open("a", encoding="utf-8") as output:
+            output.write(f"fallback_runtime_secrets<<EOF\n{fallback_lines}\nEOF\n")
     print(f"public-build runtime preflight passed: target={target.name}")
     return 0
 

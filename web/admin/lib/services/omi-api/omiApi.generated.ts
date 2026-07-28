@@ -2016,8 +2016,11 @@ export interface InterventionRecord {
 export type InterventionSurface = "suggested" | "what_matters_now";
 
 export interface KnowledgeGraphResponse {
+  edge_limit?: number | null;
   edges: Array<Record<string, unknown>>;
+  node_limit?: number | null;
   nodes: Array<Record<string, unknown>>;
+  truncated?: boolean;
 }
 
 export interface LinkCalendarEventRequest {

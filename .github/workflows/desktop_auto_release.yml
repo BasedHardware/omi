@@ -369,14 +369,19 @@ jobs:
 
       - name: Run ownership-scoped M1 pre-tag readiness
         if: steps.final-plan.outputs.should_release == 'true'
+        timeout-minutes: 130
         env:
           OMI_READINESS_LANE: ci
         run: |
           set -euo pipefail
-          desktop/macos/scripts/pre-tag-readiness.sh \
-            --source-repository "$GITHUB_WORKSPACE" \
-            --evidence "$RUNNER_TEMP/desktop-pre-tag-readiness.json" \
-            "${{ steps.identity.outputs.candidate_sha }}"
+          python3 desktop/macos/scripts/qualification-watchdog.py \
+            --label m1-pre-tag-readiness \
+            --heartbeat-seconds 45 \
+            --timeout-seconds 7200 \
+            -- desktop/macos/scripts/pre-tag-readiness.sh \
+              --source-repository "$GITHUB_WORKSPACE" \
+              --evidence "$RUNNER_TEMP/desktop-pre-tag-readiness.json" \
+              "${{ steps.identity.outputs.candidate_sha }}"
 
       - name: Verify M1 readiness receipt
         if: steps.final-plan.outputs.should_release == 'true'
@@ -391,7 +396,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: desktop-pre-tag-readiness-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/desktop-pre-tag-readiness.json
+          path: |
+            ${{ runner.temp }}/desktop-pre-tag-readiness.json
+            ${{ runner.temp }}/desktop-pre-tag-runner-hygiene-${{ github.run_id }}-${{ github.run_attempt }}.json
           if-no-files-found: error
           overwrite: false
 

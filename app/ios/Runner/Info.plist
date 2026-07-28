@@ -130,9 +130,9 @@
 		<true/>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Bluetooth permission is required to connect with your Omi.</string>
+	<string>Omi uses Bluetooth to connect to your Omi wearable and stream its microphone audio to your phone — for example, to transcribe your meetings into notes and check the device's battery.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Bluetooth permission is required to connect with your Omi.</string>
+	<string>Omi uses Bluetooth to connect to your Omi wearable and stream its microphone audio to your phone — for example, to transcribe your meetings into notes and check the device's battery.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Access most functions for calendar viewing and editing.</string>
 	<key>NSCalendarsUsageDescription</key>

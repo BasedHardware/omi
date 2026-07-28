@@ -12442,6 +12442,17 @@
       },
       "KnowledgeGraphResponse": {
         "properties": {
+          "edge_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edge Limit"
+          },
           "edges": {
             "items": {
               "additionalProperties": true,
@@ -12450,6 +12461,17 @@
             "title": "Edges",
             "type": "array"
           },
+          "node_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Limit"
+          },
           "nodes": {
             "items": {
               "additionalProperties": true,
@@ -12457,6 +12479,11 @@
             },
             "title": "Nodes",
             "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
           }
         },
         "required": [

@@ -7,20 +7,11 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 // (headers) — avoids coupling this module to the full axios type surface.
 type MemoriesResponse = { data: unknown; headers?: Record<string, unknown> }
 
-// Page through every memory. GET /v3/memories clamps `limit` to at most 5000
-// and — on BOTH the legacy and canonical read paths — FORCES limit to 5000
-// whenever offset is 0, regardless of the requested limit (see
-// _legacy_get_memories and the canonical branch of get_memories in
-// backend/routers/memories.py). We request the server's max page (5000) on
-// every page so a >5000-memory account resumes in 5000-row strides instead of
-// small hops — a 12k-memory account is 3 requests, not dozens. Advance `offset`
-// by the number of items actually received (not a fixed step) so the next
-// request picks up where the server really left off — a fixed step would
-// re-request already-seen ids from inside a forced/clamped page and hit the
-// dedup guard early, silently truncating the tail. Dedupes by id and stops when
-// a page is empty or adds nothing new — guards against a server that ignores
-// `offset` entirely.
-const MEMORIES_PAGE_LIMIT = 5000
+// Page through every memory. GET /v3/memories clamps `limit` to at most 500
+// (no first-page 5000 expansion — that caused prod GET 504s). Request the
+// server max page on every call and advance `offset` by items actually received.
+// Dedupes by id; stops on empty page or zero new ids.
+const MEMORIES_PAGE_LIMIT = 500
 //
 // `onResponse` fires for every raw page response so a caller (the Memories page)
 // can read capability headers off the first page — e.g.

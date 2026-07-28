@@ -7,6 +7,8 @@ CORE_HARNESS="$SCRIPT_DIR/../scripts/desktop-core-harness.sh"
 PROFILE_PREP="$SCRIPT_DIR/../scripts/prepare-qualification-profile.sh"
 SWIFT_CACHE="$SCRIPT_DIR/../scripts/qualification-swift-cache.sh"
 LEASE_COMMAND="$SCRIPT_DIR/../scripts/qualification-lease-command.sh"
+SELF_CLEAN="$SCRIPT_DIR/../scripts/qualification-runner-self-clean.py"
+WATCHDOG="$SCRIPT_DIR/../scripts/qualification-watchdog.py"
 APP_CONFIG="$SCRIPT_DIR/../scripts/app-config.sh"
 RUN_SH="$SCRIPT_DIR/../run.sh"
 WORKFLOW="$SCRIPT_DIR/../../../.github/workflows/desktop_qualify_beta.yml"
@@ -81,6 +83,14 @@ require_text 'QUALIFICATION_CACHE_LEASE_ID'
 require_text 'QUALIFICATION_CACHE_LEASE_TOKEN'
 require_text '"$SCRIPT_DIR/qualification-swift-cache.sh" release'
 require_text 'qualification-cache-reclaim.py' "$SWIFT_CACHE"
+require_text 'qualification-runner-self-clean.py' "$WORKFLOW"
+require_text 'qualification-watchdog.py' "$WORKFLOW"
+require_text '--current-run-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' "$WORKFLOW"
+require_text '--max-reclaim-kib 134217728' "$WORKFLOW"
+require_text 'runner-hygiene.json' "$WORKFLOW"
+require_text '--label m1-desktop-qualification' "$WORKFLOW"
+require_text '--heartbeat-seconds 45' "$WORKFLOW"
+require_text '--timeout-seconds 14400' "$WORKFLOW"
 require_text 'qualification-lease "$action"' "$LEASE_COMMAND"
 require_text 'acquire)' "$LEASE_COMMAND"
 require_text 'preflight-fault-cleanup)' "$LEASE_COMMAND"
@@ -183,6 +193,10 @@ if [[ ! -x "$SWIFT_CACHE" ]]; then
 fi
 if [[ ! -x "$LEASE_COMMAND" ]]; then
   echo "FAIL: missing executable qualification lease command helper" >&2
+  exit 1
+fi
+if [[ ! -x "$SELF_CLEAN" || ! -x "$WATCHDOG" ]]; then
+  echo "FAIL: missing executable qualification self-clean/watchdog helper" >&2
   exit 1
 fi
 

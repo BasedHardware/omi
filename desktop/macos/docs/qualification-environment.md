@@ -65,27 +65,32 @@ This readiness gate never grants Beta or Stable authority.
 ## Runner capacity preflight
 
 Before expanding the candidate checkout, the M1-only workflow loads the reclaim
-authority from the exact immutable candidate and writes `runner-capacity.json`
-in its run-isolated stage. The guard still requires at least 32 GiB of free
-filesystem blocks plus 65,536 free inodes.
+authority from the exact immutable candidate and runs
+`desktop/macos/scripts/qualification-runner-self-clean.py`. Maintainers can run
+the same entrypoint with `--dry-run --report <path>` for a read-only before/after
+process and capacity report. The workflow writes `runner-hygiene.json` in its
+run-isolated stage. The guard still requires at least 32 GiB of free filesystem
+blocks plus 65,536 free inodes.
 
 When capacity is low, reclaim considers only owner-only
 `qualification-swiftpm-v2/<40-character-SHA>` entries with a valid v2 manifest,
 completion marker, matching Git HEAD, and direct SwiftPM build directory. It
-orders entries by last use and SHA, requires six hours of age, and removes at
-most eight entries or 64 GiB per run, stopping as soon as the unchanged capacity
-threshold passes. The active harness lease, live cache leases, and live process
-references protect their exact worktrees. A malformed entry, symlink, unknown
-lock, ambiguous harness lease, or live qualifier without an authoritative lease
-refuses the entire plan before deletion. Run staging, cleanup artifacts,
-qualification evidence, and release assets are outside the cache root and are
-never reclaim targets.
+orders entries by last use and SHA, removes hour-old idle entries first, then
+admits younger idle entries only while the host is still below the capacity
+gate. It removes at most sixteen entries or 128 GiB per run and stops as soon as
+the threshold passes. Dead cache lease records are retired; the active harness
+lease, live cache leases, and live process references protect their exact
+worktrees. A malformed entry, symlink, unknown lock, ambiguous harness lease,
+or live qualifier without an authoritative lease refuses the entire plan before
+deletion. Run staging, cleanup artifacts, qualification evidence, and release
+assets are outside the cache root and are never reclaim targets.
 
 On a controlled capacity failure, the workflow fails closed before candidate
 assets or the full source checkout are fetched, then its normal finalizer writes
-cleanup evidence and uploads both evidence files. The capacity report records
-the before/after observations and the bounded exact-SHA deletion list; it does
-not attribute a prior incident to a runner or host cause.
+cleanup evidence and uploads both evidence files. The hygiene report records the
+before/after observations, known disposable process counts, abandoned run IDs,
+and bounded exact-SHA deletion list; it does not attribute a prior incident to
+a runner or host cause.
 
 ## Cleanup safety
 
@@ -97,6 +102,15 @@ recorded owner PID is dead and that provenance validates. Unknown listeners and
 unrecorded processes are never killed. `--keep-stack` intentionally leaves the
 recorded lease for later safe reclamation. Retention removes only completed,
 sentinel-proven state and paired logs, never a live/incomplete or foreign root.
+
+If Actions loses communication before the normal finalizer runs, the next
+pre-tag or qualification invocation runs the self-clean entrypoint before
+acquiring new capabilities. It reclaims only the dead authenticated lease,
+listeners that remain in the exact recorded PGID (including fixed 8085/9099),
+an exactly bound `omi-dev-harness-<lease>-typesense` container, token/start-time/
+command-hash-proven `omi-fault-*` apps, and non-current numeric run stages with
+no live path reference. `/Applications/Omi.app`, `Omi Beta.app`, their bundle
+IDs, foreign listeners, and name-only process matches are never cleanup targets.
 
 The automatic fault suite keeps its fault-inject state under the same
 sentinel-protected lease root. Normal harness cleanup stops that token-bearing

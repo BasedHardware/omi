@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -47,7 +48,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         return subprocess.run(
             ["bash", "-c", self._workflow_script(step_name)],
             cwd=cwd,
-        env=isolated_env,
+            env=isolated_env,
             check=False,
             capture_output=True,
             text=True,
@@ -81,7 +82,15 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         reclaim_target.parent.mkdir(parents=True)
         reclaim_target.write_bytes(reclaim_source.read_bytes())
         reclaim_target.chmod(0o755)
-        git("add", "candidate.txt", "desktop/macos/scripts/qualification-cache-reclaim.py")
+        for name in ("qualification-runner-self-clean.py", "qualification-watchdog.py"):
+            target = reclaim_target.parent / name
+            target.write_bytes((reclaim_source.parent / name).read_bytes())
+            target.chmod(0o755)
+        shutil.copytree(
+            ROOT / "scripts/dev-harness/dev_harness",
+            source / "scripts/dev-harness/dev_harness",
+        )
+        git("add", "candidate.txt", "desktop/macos/scripts", "scripts/dev-harness/dev_harness")
         git("-c", "core.hooksPath=/dev/null", "commit", "--quiet", "-m", "candidate")
         candidate_sha = git("rev-parse", "HEAD")
         git("tag", "-a", RELEASE_TAG, "-m", "candidate")
@@ -107,7 +116,8 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             'git rev-parse "$RELEASE_TAG^{commit}"',
             "git rev-parse 'HEAD^{commit}'",
             "check-desktop-auto-beta-candidate.py",
-            "--automatic --github-actions-artifact",
+            "--automatic",
+            "--github-actions-artifact",
             "group: desktop-beta-qualification-m1",
             "cancel-in-progress: false",
         ):
@@ -146,10 +156,12 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             "Finalize only this authenticated qualification lease",
             "if: always()",
             "qualification-lease-command.sh\" release",
-            "runner-capacity.json",
-            "--minimum-age-seconds 21600",
-            "--max-entries 8",
-            "--max-reclaim-kib 67108864",
+            "runner-hygiene.json",
+            "qualification-runner-self-clean.py",
+            "qualification-watchdog.py",
+            "--minimum-age-seconds 3600",
+            "--max-entries 16",
+            "--max-reclaim-kib 134217728",
             "33554432",
             "desktop-qualification-evidence-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}",
             "overwrite: false",
@@ -180,6 +192,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             env = {
                 **os.environ,
                 "RUNNER_TEMP": str(runner_temp),
+                "TMPDIR": str(runner_temp),
                 "GITHUB_RUN_ID": run_id,
                 "GITHUB_RUN_ATTEMPT": run_attempt,
                 "QUALIFICATION_STAGE": str(stage),
@@ -246,6 +259,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             env = {
                 **os.environ,
                 "RUNNER_TEMP": str(runner_temp),
+                "TMPDIR": str(runner_temp),
                 "GITHUB_RUN_ID": run_id,
                 "GITHUB_RUN_ATTEMPT": run_attempt,
                 "QUALIFICATION_STAGE": str(stage),
@@ -291,6 +305,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             env = {
                 **os.environ,
                 "RUNNER_TEMP": str(runner_temp),
+                "TMPDIR": str(runner_temp),
                 "GITHUB_RUN_ID": run_id,
                 "GITHUB_RUN_ATTEMPT": run_attempt,
                 "QUALIFICATION_STAGE": str(stage),
@@ -322,17 +337,17 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
                 env=env,
             )
             self.assertNotEqual(capacity_result.returncode, 0)
-            self.assertIn("M1 qualification runner capacity guard refused to start", capacity_result.stdout)
+            self.assertIn("qualification runner self-clean failed", capacity_result.stdout)
             self.assertFalse(
                 (stage / "source/candidate.txt").exists(),
                 "capacity failure must precede expansion of the candidate checkout",
             )
-            capacity = json.loads((stage / "runner-capacity.json").read_text(encoding="utf-8"))
-            self.assertEqual(capacity["status"], "failed")
-            self.assertEqual(capacity["guard"], "runner-capacity-preflight")
-            self.assertNotIn("failure_class", capacity)
-            self.assertIn("insufficient-free-kib", capacity["failure_reasons"])
-            self.assertEqual(capacity["minimum_free_kib"], 2**63 - 1)
+            hygiene = json.loads((stage / "runner-hygiene.json").read_text(encoding="utf-8"))
+            self.assertEqual(hygiene["status"], "failed")
+            self.assertEqual(hygiene["guard"], "qualification-runner-self-clean")
+            self.assertNotIn("failure_class", hygiene)
+            self.assertIn("insufficient-free-kib", hygiene["capacity"]["failure_reasons"])
+            self.assertEqual(hygiene["capacity"]["minimum_free_kib"], 2**63 - 1)
 
             finalize_result = self._run_workflow_script(
                 "Finalize only this authenticated qualification lease",

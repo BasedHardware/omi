@@ -10,6 +10,10 @@ users_collection = 'users'
 knowledge_nodes_collection = 'knowledge_nodes'
 knowledge_edges_collection = 'knowledge_edges'
 
+# GET /v1/knowledge-graph must not stream unbounded nodes/edges (prod 30s GET 504s).
+MAX_KNOWLEDGE_GRAPH_NODES = 2000
+MAX_KNOWLEDGE_GRAPH_EDGES = 5000
+
 
 def _firestore_client(db_client: Any = None) -> Any:
     return db_client if db_client is not None else db
@@ -126,11 +130,20 @@ class KnowledgeEdge:
         )
 
 
-def get_knowledge_nodes(uid: str, *, db_client: Any = None) -> List[Dict[str, Any]]:
+def get_knowledge_nodes(
+    uid: str,
+    *,
+    db_client: Any = None,
+    limit: int = MAX_KNOWLEDGE_GRAPH_NODES,
+) -> List[Dict[str, Any]]:
     client = _firestore_client(db_client)
     user_ref = client.collection(users_collection).document(uid)
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
-    return [_typed_doc(doc) for doc in nodes_ref.stream()]
+    # Allow callers (get_knowledge_graph) to request one past the public cap for truncation probes.
+    capped = max(0, min(int(limit), MAX_KNOWLEDGE_GRAPH_NODES + 1))
+    if capped == 0:
+        return []
+    return [_typed_doc(doc) for doc in nodes_ref.limit(capped).stream()]
 
 
 def get_knowledge_node(uid: str, node_id: str, *, db_client: Any = None) -> Optional[Dict[str, Any]]:
@@ -216,11 +229,19 @@ def find_node_by_label_or_alias(uid: str, label: str, *, db_client: Any = None) 
     return None
 
 
-def get_knowledge_edges(uid: str, *, db_client: Any = None) -> List[Dict[str, Any]]:
+def get_knowledge_edges(
+    uid: str,
+    *,
+    db_client: Any = None,
+    limit: int = MAX_KNOWLEDGE_GRAPH_EDGES,
+) -> List[Dict[str, Any]]:
     client = _firestore_client(db_client)
     user_ref = client.collection(users_collection).document(uid)
     edges_ref = user_ref.collection(knowledge_edges_collection)
-    return [_typed_doc(doc) for doc in edges_ref.stream()]
+    capped = max(0, min(int(limit), MAX_KNOWLEDGE_GRAPH_EDGES + 1))
+    if capped == 0:
+        return []
+    return [_typed_doc(doc) for doc in edges_ref.limit(capped).stream()]
 
 
 def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any = None) -> Dict[str, Any]:
@@ -253,10 +274,28 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any
 
 
 def get_knowledge_graph(uid: str, *, db_client: Any = None) -> Dict[str, Any]:
+    """Return a bounded graph snapshot for GET /v1/knowledge-graph.
+
+    Full-collection streams of nodes+edges previously unbounded-read large accounts
+    into the 30s GET timeout. Caps keep the response bounded; `truncated` signals
+    that denser graphs need a follow-up pagination/summarization API.
+    """
     client = _firestore_client(db_client)
+    # Fetch one extra row past the cap to detect truncation without a count() round-trip.
+    nodes = get_knowledge_nodes(uid, db_client=client, limit=MAX_KNOWLEDGE_GRAPH_NODES + 1)
+    edges = get_knowledge_edges(uid, db_client=client, limit=MAX_KNOWLEDGE_GRAPH_EDGES + 1)
+    nodes_truncated = len(nodes) > MAX_KNOWLEDGE_GRAPH_NODES
+    edges_truncated = len(edges) > MAX_KNOWLEDGE_GRAPH_EDGES
+    if nodes_truncated:
+        nodes = nodes[:MAX_KNOWLEDGE_GRAPH_NODES]
+    if edges_truncated:
+        edges = edges[:MAX_KNOWLEDGE_GRAPH_EDGES]
     return {
-        'nodes': get_knowledge_nodes(uid, db_client=client),
-        'edges': get_knowledge_edges(uid, db_client=client),
+        'nodes': nodes,
+        'edges': edges,
+        'truncated': nodes_truncated or edges_truncated,
+        'node_limit': MAX_KNOWLEDGE_GRAPH_NODES,
+        'edge_limit': MAX_KNOWLEDGE_GRAPH_EDGES,
     }
 
 
