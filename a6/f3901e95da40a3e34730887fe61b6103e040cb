@@ -1,0 +1,123 @@
+desktop/earshot/Sources/EarshotApp/Onboarding/Backdrop.swift
+  s_030a94a2f319d8::t_89504c415e6b96 28,54,60,63,66,71,80-81,85-108,128,130-132,144,172,177,225,243,289,295,302
+  s_030a94a2f319d8::t_095096e8023b65 46-51
+  s_030a94a2f319d8::t_5a24f8c785ed8c 1-27,29-45,52-53,55-59,61-62,64-65,67-70,72-79,82-84,109-127,129,133-143,145-171,173-176,178-224,226-242,244-288,290-294,296-301,303-325
+desktop/earshot/ARCHITECTURE.md
+  s_030a94a2f319d8::t_9a5d76008c97f6 1-110
+desktop/earshot/CONTRACTS.md
+  s_030a94a2f319d8::t_dd63f861428507 1-466
+desktop/earshot/Package.resolved
+  s_030a94a2f319d8::t_67a1ded6d04ca6 1-23
+desktop/earshot/Package.swift
+  s_030a94a2f319d8::t_3e1a3a72bdc701 1-57
+desktop/earshot/Resources/Earshot.entitlements
+  s_030a94a2f319d8::t_bd7bb1611170a8 1-17
+desktop/earshot/Resources/Info.plist
+  s_030a94a2f319d8::t_28bc32113b6ab9 1-36
+desktop/earshot/Sources/EarshotApp/Capture/MicCapture.swift
+  s_030a94a2f319d8::t_b0ee5470873f01 1-781
+desktop/earshot/Sources/EarshotApp/Capture/ScreenWatcher.swift
+  s_030a94a2f319d8::t_0c6b9e9f42632d 1-560
+desktop/earshot/Sources/EarshotApp/Capture/SystemAudioCapture.swift
+  s_030a94a2f319d8::t_1d1c6e7956be67 1-456
+desktop/earshot/Sources/EarshotApp/EarshotApp.swift
+  s_030a94a2f319d8::t_55af8c38ee9e1b 1-90
+desktop/earshot/Sources/EarshotApp/Engine.swift
+  s_030a94a2f319d8::t_a55a972e6378fb 1-590
+desktop/earshot/Sources/EarshotApp/Integration/ClaudeRegistrar.swift
+  s_030a94a2f319d8::t_023a1a69e7a953 1-328
+desktop/earshot/Sources/EarshotApp/Integration/LoginItem.swift
+  s_030a94a2f319d8::t_8da62e71a8a6be 1-47
+desktop/earshot/Sources/EarshotApp/MenuBar/StatusView.swift
+  s_030a94a2f319d8::t_c48a7e1cfe61a8 1-237
+desktop/earshot/Sources/EarshotApp/Onboarding/Ink.swift
+  s_030a94a2f319d8::t_6db961a8410a36 1-874
+desktop/earshot/Sources/EarshotApp/Onboarding/OnboardingView.swift
+  s_030a94a2f319d8::t_4d6e9704930770 1-419
+desktop/earshot/Sources/EarshotApp/Onboarding/OnboardingWindow.swift
+  s_030a94a2f319d8::t_331cd420f8b7a1 1-132
+desktop/earshot/Sources/EarshotApp/Onboarding/RandomizedText.swift
+  s_030a94a2f319d8::t_0f97b37bb75fb3 1-211
+desktop/earshot/Sources/EarshotApp/Permissions.swift
+  s_030a94a2f319d8::t_1329684509408d 1-403
+desktop/earshot/Sources/EarshotApp/Support/Log.swift
+  s_030a94a2f319d8::t_c048e7801c9752 1-118
+desktop/earshot/Sources/EarshotApp/Transcribe/Transcriber.swift
+  s_030a94a2f319d8::t_acd94c48772830 1-490
+desktop/earshot/Sources/EarshotCore/ClaudeConfig.swift
+  s_030a94a2f319d8::t_8e338bf0f57aec 1-300
+desktop/earshot/Sources/EarshotCore/Models.swift
+  s_030a94a2f319d8::t_aa67791e801fc0 1-270
+desktop/earshot/Sources/EarshotCore/Paths.swift
+  s_030a94a2f319d8::t_63844bac0ae855 1-81
+desktop/earshot/Sources/EarshotCore/Policy.swift
+  s_030a94a2f319d8::t_2b6a586acec658 1-298
+desktop/earshot/Sources/EarshotCore/Queries.swift
+  s_030a94a2f319d8::t_e7af27997d0a6b 1-553
+desktop/earshot/Sources/EarshotCore/Store.swift
+  s_030a94a2f319d8::t_1d9d5bc85735de 1-240
+desktop/earshot/Sources/EarshotMCP/main.swift
+  s_030a94a2f319d8::t_8ba42da3b2783c 1-29
+desktop/earshot/Sources/EarshotMCPKit/JSONRPC.swift
+  s_25f8ff007195e3::t_7af00fa28c1fc4 1-251
+desktop/earshot/Sources/EarshotMCPKit/MCPServer.swift
+  s_030a94a2f319d8::t_54e7ffaa90e94b 1-152
+desktop/earshot/Sources/EarshotMCPKit/Tools.swift
+  s_030a94a2f319d8::t_8dcf0c05e588d9 1-911
+desktop/earshot/Tests/EarshotCoreTests/ClaudeConfigTests.swift
+  s_030a94a2f319d8::t_0e151a7ac00281 1-218
+desktop/earshot/Tests/EarshotCoreTests/Fixture.swift
+  s_030a94a2f319d8::t_27608cd6c4677d 1-131
+desktop/earshot/Tests/EarshotCoreTests/PolicyTests.swift
+  s_030a94a2f319d8::t_2134e09e85eed1 1-175
+desktop/earshot/Tests/EarshotCoreTests/QueriesTests.swift
+  s_030a94a2f319d8::t_0d592ce8c73aed 1-289
+desktop/earshot/Tests/EarshotCoreTests/StoreTests.swift
+  s_030a94a2f319d8::t_3d4e85f303deed 1-269
+desktop/earshot/Tests/EarshotMCPKitTests/MCPServerTests.swift
+  s_030a94a2f319d8::t_2659ea44b48662 1-182
+desktop/earshot/Tests/EarshotMCPKitTests/ToolsTests.swift
+  s_030a94a2f319d8::t_a2ce84c3963923 1-234
+desktop/earshot/docs/earshot-design-system.md
+  s_030a94a2f319d8::t_5a70a27234a273 1-138
+desktop/earshot/scripts/build.sh
+  s_030a94a2f319d8::t_636bc955861bfe 1-257
+desktop/earshot/scripts/uninstall.sh
+  s_030a94a2f319d8::t_c5066311b5f1a4 1-113
+docs/superpowers/specs/2026-07-28-earshot-design.md
+  s_030a94a2f319d8::t_8ee9be3b16d963 1-177
+desktop/earshot/Sources/EarshotApp/Capture/AudioSource.swift
+  s_62592ff4970fe9::t_57d6d86c126118 1-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "a6f3901e95da40a3e34730887fe61b6103e040cb",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_25f8ff007195e3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "821c803f-1e35-4d95-a7a9-e5540fc6492a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_62592ff4970fe9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a5b0e837b881b7590",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
