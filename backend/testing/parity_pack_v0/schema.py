@@ -41,8 +41,14 @@ class CassetteIdentity:
     parent_event_anon: str
 
     def __post_init__(self) -> None:
-        if not self.anon_session or not self.provider_lane or not self.route_or_model or not self.parent_event_anon:
-            raise ValueError("cassette identity fields must be non-empty")
+        text_fields = (
+            self.anon_session,
+            self.provider_lane,
+            self.route_or_model,
+            self.parent_event_anon,
+        )
+        if any(not isinstance(value, str) or not value.strip() for value in text_fields):
+            raise ValueError("cassette identity fields must be non-empty strings")
         if self.call_ordinal < 0 or self.retry_attempt < 0:
             raise ValueError("call_ordinal and retry_attempt must be non-negative")
 

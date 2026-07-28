@@ -7,7 +7,10 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 SENSITIVE_KEY = re.compile(
-    r"(?:^|[_-])(?:authorization|auth|cookie|token|secret|api[_-]?key|password|signature|signed)(?:$|[_-])", re.I
+    r"(?:^|[_-])(?:authorization|auths?|cookies?|tokens?|secrets?|api[_-]?keys?|"
+    r"passwords?|passwd|pwd|signatures?|signed|private[_-]?keys?|access[_-]?keys?|"
+    r"credentials?|bearer|jwts?)(?:$|[_-])",
+    re.I,
 )
 EMAIL = re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+(?![\w.+-])")
 PHONE = re.compile(r"(?<!\w)(?:\+?\d[\d(). -]{6,}\d)(?!\w)")
