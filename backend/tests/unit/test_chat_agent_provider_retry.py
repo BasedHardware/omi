@@ -1,20 +1,9 @@
 """Tests for the chat agent's recovery from a failed provider stream.
 
-Production symptom this covers: the agent's Anthropic call died mid-stream with a transport
-error (``error_type=ReadTimeout``), the loop treated it as fatal, and the turn ended with an
-empty answer — which the router can only render as "Sorry, something went wrong while generating
-a response." A momentary provider stall cost the user their whole reply.
+Regression: the Anthropic call died mid-stream (``error_type=ReadTimeout``), the loop treated
+it as fatal, and the turn ended with an empty answer the router could only render as a canned
+error.
 
-Three behaviours are pinned here:
-
-1. A transport-class failure is re-issued while nothing has reached the user yet, and is *not*
-   re-issued once text has streamed (a second attempt would duplicate it on screen).
-2. Text the loop shows the user — a safety-guard explanation — becomes part of the answer, so
-   the terminal ``done:`` frame does not overwrite it with the canned error.
-3. A provider failure the loop could not recover from is reported to the caller instead of
-   looking like a model that legitimately produced nothing.
-
-The pure decision logic is exercised directly against ``utils.retrieval.safety`` (import-light).
 The loop tests reuse the agentic-module harness from ``test_prompt_cache_integration`` rather
 than re-stubbing the LLM import stack, so both files share one ``sys.modules`` view.
 """
@@ -34,11 +23,7 @@ from utils.retrieval.safety import (
 
 from tests.unit.test_prompt_cache_integration import _get_agentic_module
 
-# ---------------------------------------------------------------------------
-# Stand-ins for the provider exceptions. Classification is by class name because the raw
-# httpx exceptions escape the SDK once the response body is already streaming — the exact
-# shape seen in production — so these carry the real names rather than the real packages.
-# ---------------------------------------------------------------------------
+# Provider exception stand-ins. Classification is by class name, so these carry the real names.
 
 
 class ReadTimeout(Exception):
@@ -81,7 +66,6 @@ class TestIsTransientProviderError:
         assert is_transient_provider_error(_StatusError(529))
 
     def test_client_errors_are_not_transient(self):
-        # The request itself is the problem; sending it again cannot help.
         assert not is_transient_provider_error(BadRequestError())
         assert not is_transient_provider_error(_StatusError(401))
 
@@ -141,7 +125,6 @@ class TestShouldRetryProviderError:
         assert self._decide() is True
 
     def test_streamed_text_blocks_a_retry(self):
-        # The tokens are already on the user's screen; a second attempt would duplicate them.
         assert self._decide(text_already_streamed=True) is False
 
     def test_attempt_budget_is_respected(self):
@@ -162,11 +145,7 @@ class TestShouldRetryProviderError:
 
 
 class FakeStream:
-    """Minimal stand-in for ``anthropic_client.messages.stream(...)``.
-
-    ``events`` are yielded before ``error`` (if any) is raised, which is what distinguishes a
-    stall before the first token from one that interrupts text already on the user's screen.
-    """
+    """Stand-in for ``anthropic_client.messages.stream(...)``: yields ``events``, then raises."""
 
     def __init__(self, response=None, events=(), error=None):
         self.response = response
@@ -213,7 +192,6 @@ def _tool_use_final(tool_name='lookup'):
 @pytest.fixture
 def agentic_mod(monkeypatch):
     mod = _get_agentic_module()
-    # The production backoff is a real wait; unit tests must not sleep through it.
     monkeypatch.setattr(mod, 'AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS', 0)
     return mod
 
@@ -256,7 +234,7 @@ def _run(agentic_mod, streams, safety_guard=None, tool_result='tool result'):
 
 
 async def test_transient_provider_failure_is_retried_and_the_turn_survives(agentic_mod):
-    """The regression: a stalled stream with nothing yet delivered must not cost the turn."""
+    """A stalled stream with nothing yet delivered must not cost the turn."""
     streams = [
         FakeStream(error=ReadTimeout()),
         FakeStream(response=_final(), events=[_text_delta('Here is your answer.')]),
@@ -373,11 +351,7 @@ def _chat_message(text, sender='human'):
 
 
 async def test_unrecovered_provider_failure_is_reported_to_the_caller(agentic_mod):
-    """``error=False`` on a failed turn is what made this indistinguishable from an empty model.
-
-    The router logs and the fallback metric read ``callback_data['error']``; a provider failure
-    the loop gave up on must land there even though the stream itself ended cleanly.
-    """
+    """The router reads ``callback_data['error']``; a gave-up provider failure must land there."""
 
     async def producer(_system, _messages, _schemas, _registry, callback, _full_response, _guard, _configurable):
         await callback.put_thought('Searching your conversations')

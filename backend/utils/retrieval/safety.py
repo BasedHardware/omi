@@ -302,24 +302,8 @@ def fit_within_budget(
     return kept, False
 
 
-# ---------------------------------------------------------------------------
-# Transient provider failures on the agent's streaming model call.
-#
-# The chat agent's Anthropic call can fail from transport-class faults: a read timeout on a
-# stalled stream, a dropped connection, a provider 5xx. Those are not defects in the request —
-# the same request normally succeeds on a second attempt. Treating them as fatal ends the turn
-# with an empty answer, which the router can only render as a canned error, so a momentary
-# provider stall costs the user their whole reply.
-#
-# The classification is pure and import-light (no anthropic/httpx imports) so it can be
-# unit-tested without the LLM stack, and so it also recognises the raw httpx exceptions that
-# escape the SDK's own retry once the response body is already streaming — which is exactly the
-# case observed in production (`error_type=ReadTimeout`).
-# ---------------------------------------------------------------------------
-
-
-# Matched on the exception's class name so both the SDK wrappers (anthropic.APITimeoutError)
-# and the underlying transport exceptions (httpx.ReadTimeout) are covered.
+# Matched on class name, not type, so this stays import-light and still covers the raw httpx
+# exceptions that escape the SDK once the response body is already streaming.
 TRANSIENT_PROVIDER_ERROR_NAMES = frozenset(
     {
         'APIConnectionError',
@@ -336,8 +320,7 @@ TRANSIENT_PROVIDER_ERROR_NAMES = frozenset(
     }
 )
 
-# 429 is deliberately absent: a rate limit or exhausted quota does not clear within one turn's
-# budget, so re-issuing the call just burns the remaining seconds the user is waiting on.
+# 429 is deliberately absent: a rate limit does not clear within one turn's budget.
 TRANSIENT_PROVIDER_STATUS_CODES = frozenset({500, 502, 503, 504, 529})
 
 _TIMEOUT_ERROR_NAMES = frozenset({'APITimeoutError', 'ConnectTimeout', 'PoolTimeout', 'ReadTimeout', 'WriteTimeout'})
@@ -359,9 +342,8 @@ def _provider_status_code(error: BaseException) -> Optional[int]:
 def is_transient_provider_error(error: BaseException) -> bool:
     """Whether ``error`` is a transport-class provider failure worth re-issuing.
 
-    A response-carrying error is judged by its status alone: a 4xx describes the request we
-    just sent, so repeating it cannot help. Errors without a status (connection resets, read
-    timeouts) are judged by class name.
+    A status-carrying error is judged by its status alone: a 4xx describes the request we just
+    sent, so repeating it cannot help.
     """
     status_code = _provider_status_code(error)
     if status_code is not None:
@@ -392,14 +374,9 @@ def should_retry_provider_error(
 ) -> bool:
     """Whether the agent's streaming model call may be re-issued after ``error``.
 
-    Retrying is only safe while nothing from this attempt has reached the user: streamed text
-    cannot be un-sent, so a second attempt would duplicate it on screen. Tool calls run only
-    after a stream closes cleanly, so a failed attempt leaves no side effect to undo and the
-    identical request can simply be sent again.
-
-    The remaining-time check keeps a doomed retry from starting: an attempt that cannot finish
-    before the turn's total deadline would be cancelled mid-flight, spending the user's wait on
-    nothing.
+    Safe only while nothing from this attempt has reached the user: streamed text cannot be
+    un-sent, and tool calls run after a stream closes cleanly, so a failed attempt leaves
+    nothing to undo. An attempt that cannot finish inside the remaining budget is not started.
     """
     if text_already_streamed:
         return False
