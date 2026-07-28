@@ -4,7 +4,7 @@ Tests the endpoint logic with mocked database calls,
 following the pattern in test_lock_bypass_fixes.py.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import ANY, MagicMock, patch
 import os
 import pytest
 import sys
@@ -408,7 +408,9 @@ class TestEditMemoryVectorSync:
         mock_service_memories_db.get_memory.return_value = _legacy_memory_doc(category='hobbies')
         result = edit_memory(memory_id="mem-1", value="new text", auth_context=_auth_context())
         assert result == {"status": "ok"}
-        mock_service_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
+        mock_service_memories_db.edit_memory.assert_called_once_with(
+            "user-1", "mem-1", "new text", firestore_client=ANY
+        )
         mock_upsert_vector.assert_called_once_with("user-1", "mem-1", "new text", "hobbies", subject_entity_id=None)
 
     @patch('utils.memory.memory_service.guard_legacy_memory_write', side_effect=_allowed_write_guard)
@@ -425,7 +427,9 @@ class TestEditMemoryVectorSync:
         mock_upsert_vector.side_effect = Exception("pinecone down")
         result = edit_memory(memory_id="mem-1", value="new text", auth_context=_auth_context())
         assert result == {"status": "ok"}
-        mock_service_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
+        mock_service_memories_db.edit_memory.assert_called_once_with(
+            "user-1", "mem-1", "new text", firestore_client=ANY
+        )
 
 
 class TestDeleteMemoryVectorSync:
@@ -448,9 +452,12 @@ class TestDeleteMemoryVectorSync:
         mock_pin.return_value = _LEGACY
         mock_fetch.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
         mock_service_memories_db.get_memory.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
+        mock_service_memories_db.delete_memory.return_value = SimpleNamespace(
+            committed_count=1,
+        )
         result = delete_memory(memory_id="mem-1", auth_context=_auth_context())
         assert result == {"status": "ok"}
-        mock_service_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1")
+        mock_service_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1", firestore_client=ANY)
         mock_delete_vector.assert_called_once_with("user-1", "mem-1")
 
     @patch('utils.memory.memory_service.guard_legacy_memory_write', side_effect=_allowed_write_guard)
@@ -464,7 +471,10 @@ class TestDeleteMemoryVectorSync:
         mock_pin.return_value = _LEGACY
         mock_fetch.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
         mock_service_memories_db.get_memory.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
+        mock_service_memories_db.delete_memory.return_value = SimpleNamespace(
+            committed_count=1,
+        )
         mock_delete_vector.side_effect = Exception("pinecone down")
         result = delete_memory(memory_id="mem-1", auth_context=_auth_context())
         assert result == {"status": "ok"}
-        mock_service_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1")
+        mock_service_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1", firestore_client=ANY)

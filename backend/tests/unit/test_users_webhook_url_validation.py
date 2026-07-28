@@ -121,13 +121,42 @@ def test_missing_url_returns_422():
         SetUserWebhookUrlRequest()
 
 
-def test_valid_url_sets():
-    with patch.object(users_mod, 'set_user_webhook_db') as setdb, patch.object(users_mod, 'disable_user_webhook_db'):
+def test_nonempty_url_reenables_delivery_and_resets_failure_health():
+    wtype = users_mod.WebhookType.audio_bytes
+    webhook_url = 'https://example.com/audio?token=replacement'
+    with (
+        patch.object(users_mod, 'set_user_webhook_db') as setdb,
+        patch.object(users_mod, 'get_user_webhook_db', return_value=webhook_url),
+        patch.object(users_mod, 'disable_user_webhook_db') as disable,
+        patch.object(users_mod, 'enable_user_webhook_db') as enable,
+        patch.object(users_mod, 'reset_user_webhook_delivery_health') as reset_health,
+    ):
         result = users_mod.set_user_webhook_endpoint(
-            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x'), uid='u1'
+            wtype=wtype, data=SetUserWebhookUrlRequest(url=webhook_url), uid='u1'
         )
+
     assert result['status'] == 'ok'
-    setdb.assert_called_once()
+    setdb.assert_called_once_with('u1', wtype, webhook_url)
+    disable.assert_not_called()
+    enable.assert_called_once_with('u1', wtype)
+    reset_health.assert_called_once_with('u1', wtype, webhook_url)
+
+
+def test_empty_url_disables_without_resetting_failure_health():
+    wtype = users_mod.WebhookType.audio_bytes
+    with (
+        patch.object(users_mod, 'set_user_webhook_db') as setdb,
+        patch.object(users_mod, 'disable_user_webhook_db') as disable,
+        patch.object(users_mod, 'enable_user_webhook_db') as enable,
+        patch.object(users_mod, 'reset_user_webhook_delivery_health') as reset_health,
+    ):
+        result = users_mod.set_user_webhook_endpoint(wtype=wtype, data=SetUserWebhookUrlRequest(url=''), uid='u1')
+
+    assert result['status'] == 'ok'
+    setdb.assert_called_once_with('u1', wtype, '')
+    disable.assert_called_once_with('u1', wtype)
+    reset_health.assert_not_called()
+    enable.assert_not_called()
 
 
 def test_get_missing_webhook_url_validates_as_nullable_response():

@@ -74,6 +74,9 @@ def test_realtime_webhook_config_roundtrip_and_delivery_capture(client, auth_hea
 
 def test_realtime_webhook_does_not_call_provider_when_disabled(client, auth_headers, monkeypatch, fake_redis):
     _configure_realtime_webhook(client, auth_headers)
+    disabled = client.post("/v1/users/developer/webhook/realtime_transcript/disable", headers=auth_headers)
+    assert disabled.status_code == 200, disabled.text
+    health_before = _health(fake_redis)
     requests = []
 
     async def handler(request):
@@ -83,7 +86,7 @@ def test_realtime_webhook_does_not_call_provider_when_disabled(client, auth_head
     _run_realtime_delivery(monkeypatch, handler)
 
     assert requests == []
-    assert _health(fake_redis) == {}
+    assert _health(fake_redis) == health_before
 
 
 @pytest.mark.parametrize(

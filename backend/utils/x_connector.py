@@ -377,8 +377,12 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
                 for mdb in memory_dbs:
                     memory_service.write(uid, mdb.model_dump())
             else:
-                memories_db.save_memories(uid, [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs])
-                upsert_memory_vectors_batch(
+                memories_db.save_memories(
+                    uid,
+                    [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs],
+                    firestore_client=db,
+                )
+                projected_count = upsert_memory_vectors_batch(
                     uid,
                     [
                         {
@@ -390,6 +394,10 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
                         for m in memory_dbs
                     ],
                 )
+                if projected_count != len(memory_dbs):
+                    raise RuntimeError(
+                        "X memory vector upsert was partial " f"expected={len(memory_dbs)} actual={projected_count!r}"
+                    )
             total += len(memory_dbs)
 
         # Do not acknowledge this raw source until every write above succeeds.

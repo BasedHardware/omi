@@ -1,8 +1,11 @@
 import ast
 import base64
+import hashlib
 import json
 import os
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
+import secrets
+import threading
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
 import redis
@@ -28,6 +31,24 @@ r: Any = redis.Redis(
     password=os.getenv('REDIS_DB_PASSWORD'),
     health_check_interval=30,
 )
+_pusher_delivery_r: Any = None
+_pusher_delivery_r_lock = threading.Lock()
+
+_PUSHER_DELIVERY_COMPLETE_LUA = """
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+redis.call('SET', KEYS[1], 'done', 'EX', ARGV[2])
+return 1
+"""
+
+_PUSHER_DELIVERY_ABANDON_LUA = """
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+redis.call('DEL', KEYS[1])
+return 1
+"""
 
 
 T = TypeVar("T")
@@ -841,7 +862,7 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # Lua script: atomic increment + TTL in a single round-trip.
 # Returns [current_count, ttl_remaining].  Sets TTL on first hit
 # and self-heals any key that lost its TTL (prevents permanent buckets).
-_RATE_LIMIT_LUA = r.register_script("""
+_RATE_LIMIT_LUA_SOURCE = """
 local key = KEYS[1]
 local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
@@ -854,7 +875,8 @@ if ttl < 0 then
     ttl = window
 end
 return {current, ttl}
-""")
+"""
+_RATE_LIMIT_LUA = r.register_script(_RATE_LIMIT_LUA_SOURCE)
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -883,7 +905,7 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
 # Burst uses a sorted set keyed by timestamp-ms for sliding-window accuracy,
 # trimmed on every call (O(log n)). Daily char counter auto-expires at midnight
 # UTC (caller passes seconds_until_midnight_utc as the TTL).
-_TTS_RATE_LIMIT_LUA = r.register_script("""
+_TTS_RATE_LIMIT_LUA_SOURCE = """
 local burst_key = KEYS[1]
 local daily_key = KEYS[2]
 local now_ms = tonumber(ARGV[1])
@@ -911,7 +933,8 @@ if new_daily == char_count then
     redis.call('EXPIRE', daily_key, daily_ttl)
 end
 return {0, 0}
-""")
+"""
+_TTS_RATE_LIMIT_LUA = r.register_script(_TTS_RATE_LIMIT_LUA_SOURCE)
 
 
 def _seconds_until_midnight_utc() -> int:
@@ -956,6 +979,101 @@ def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
     """Atomically try to acquire listen rate limit lock. Returns True if acquired (not rate limited), False if already rate limited."""
     result = r.set(f'users:{uid}:listen_rate_limit', '1', ex=ttl, nx=True)
     return result is not None
+
+
+def _get_pusher_delivery_redis() -> Any:
+    """Return a lazy, tightly bounded Redis client for realtime ACK fencing."""
+    global _pusher_delivery_r
+    if _pusher_delivery_r is not None:
+        return _pusher_delivery_r
+    with _pusher_delivery_r_lock:
+        if _pusher_delivery_r is None:
+            _pusher_delivery_r = redis.Redis(
+                host=cast(str, _redis_host),
+                port=int(_redis_port_env) if _redis_port_env is not None else 6379,
+                username='default',
+                password=os.getenv('REDIS_DB_PASSWORD'),
+                health_check_interval=30,
+                socket_connect_timeout=0.5,
+                socket_timeout=0.5,
+                retry_on_timeout=False,
+            )
+    return _pusher_delivery_r
+
+
+def _pusher_delivery_key(uid: str, delivery_id: str) -> str:
+    digest = hashlib.sha256(delivery_id.encode('utf-8')).hexdigest()
+    return f'users:{uid}:pusher_delivery:{digest}'
+
+
+def begin_pusher_delivery(
+    uid: str,
+    delivery_id: str,
+    lease_ttl: int = 600,
+    *,
+    redis_client: Any = None,
+) -> Tuple[str, Optional[str]]:
+    """Acquire a short processing lease for a stable realtime delivery."""
+    client = redis_client or _get_pusher_delivery_redis()
+    key = _pusher_delivery_key(uid, delivery_id)
+    lease_token = secrets.token_urlsafe(18)
+    processing_value = f'processing:{lease_token}'
+    try:
+        if client.set(key, processing_value, ex=lease_ttl, nx=True) is not None:
+            return 'claimed', lease_token
+        state = client.get(key)
+        if state is not None and _decode_redis_value(state) == 'done':
+            return 'done', None
+        return 'busy', None
+    except Exception as exc:
+        logger.warning('pusher delivery lease unavailable uid=%s error=%s', uid, type(exc).__name__)
+        return 'unavailable', None
+
+
+def complete_pusher_delivery(
+    uid: str,
+    delivery_id: str,
+    lease_token: str,
+    retention_ttl: int = 604800,
+    *,
+    redis_client: Any = None,
+) -> bool:
+    """Replace a processing lease with a bounded done marker."""
+    client = redis_client or _get_pusher_delivery_redis()
+    try:
+        result = client.eval(
+            _PUSHER_DELIVERY_COMPLETE_LUA,
+            1,
+            _pusher_delivery_key(uid, delivery_id),
+            f'processing:{lease_token}',
+            retention_ttl,
+        )
+        return int(result) == 1
+    except Exception as exc:
+        logger.warning('pusher delivery completion unavailable uid=%s error=%s', uid, type(exc).__name__)
+        return False
+
+
+def abandon_pusher_delivery(
+    uid: str,
+    delivery_id: str,
+    lease_token: str,
+    *,
+    redis_client: Any = None,
+) -> bool:
+    """Release this worker's lease after an effect fails or is cancelled."""
+    client = redis_client or _get_pusher_delivery_redis()
+    try:
+        result = client.eval(
+            _PUSHER_DELIVERY_ABANDON_LUA,
+            1,
+            _pusher_delivery_key(uid, delivery_id),
+            f'processing:{lease_token}',
+        )
+        return int(result) == 1
+    except Exception as exc:
+        logger.warning('pusher delivery abandon unavailable uid=%s error=%s', uid, type(exc).__name__)
+        return False
 
 
 def try_acquire_client_device_write_lock(uid: str, client_device_id: str, ttl: int = 600) -> bool:

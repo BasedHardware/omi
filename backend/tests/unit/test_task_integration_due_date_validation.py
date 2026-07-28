@@ -72,3 +72,33 @@ def test_missing_due_date_is_allowed(app_client, monkeypatch):
 
     assert resp.status_code == 200
     assert created.await_args.kwargs["due_date"] is None
+
+
+def test_provider_failure_metadata_is_preserved_in_public_response(app_client, monkeypatch):
+    client, ti = app_client
+    monkeypatch.setattr(ti.users_db, "get_task_integration", _connected)
+    monkeypatch.setattr(
+        ti,
+        "create_task_internal",
+        AsyncMock(
+            return_value={
+                "success": False,
+                "error": "ReadTimeout",
+                "error_code": "transport_error",
+                "retryable": False,
+                "ambiguous": True,
+            }
+        ),
+    )
+
+    resp = client.post("/v1/task-integrations/todoist/tasks", json={"title": "ambiguous task"})
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "success": False,
+        "external_task_id": None,
+        "error": "ReadTimeout",
+        "error_code": "transport_error",
+        "retryable": False,
+        "ambiguous": True,
+    }

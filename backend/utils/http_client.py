@@ -195,6 +195,13 @@ _CIRCUIT_BREAKER_MAX_ENTRIES = 500
 _CIRCUIT_BREAKER_IDLE_TTL = 3600  # seconds — evict entries idle for 1 hour
 
 
+def _webhook_circuit_breaker_key(url: str) -> str:
+    try:
+        return url.split('?')[0].split('#')[0]
+    except (IndexError, AttributeError):
+        return url
+
+
 def get_webhook_circuit_breaker(url: str) -> WebhookCircuitBreaker:
     """Get or create a circuit breaker for a webhook target URL.
 
@@ -202,16 +209,17 @@ def get_webhook_circuit_breaker(url: str) -> WebhookCircuitBreaker:
     different webhook endpoints on the same host are isolated from each other.
     Evicts stale entries when the registry grows beyond _CIRCUIT_BREAKER_MAX_ENTRIES.
     """
-    try:
-        # Strip query params but keep scheme + host + path
-        key = url.split('?')[0].split('#')[0]
-    except (IndexError, AttributeError):
-        key = url
+    key = _webhook_circuit_breaker_key(url)
     if key not in _webhook_circuit_breakers:
         if len(_webhook_circuit_breakers) > _CIRCUIT_BREAKER_MAX_ENTRIES:
             _evict_stale_circuit_breakers()
         _webhook_circuit_breakers[key] = WebhookCircuitBreaker(key)
     return _webhook_circuit_breakers[key]
+
+
+def reset_webhook_circuit_breaker(url: str) -> None:
+    """Forget prior failures when a user explicitly replaces or re-enables a target."""
+    _webhook_circuit_breakers.pop(_webhook_circuit_breaker_key(url), None)
 
 
 def _evict_stale_circuit_breakers():

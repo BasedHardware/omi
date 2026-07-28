@@ -94,6 +94,18 @@ _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER = 'X-Omi-Memory-Canonical-Lifecycle-E
 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'X-Omi-Memory-Device-Scope-Supported'
 
 
+def _single_vector_write_succeeded(result: Any) -> bool:
+    if result is None or result is False:
+        return False
+    if isinstance(result, (list, tuple)) and not result:
+        return False
+    return True
+
+
+def _batch_vector_write_succeeded(result: Any, expected_count: int) -> bool:
+    return type(result) is int and result == expected_count
+
+
 @dataclass(frozen=True)
 class V3GetRuntime:
     """Lazy, overrideable F4 runtime bundle for GET `/v3/memories`.
@@ -364,25 +376,30 @@ def _mirror_delete_into_legacy(uid: str, memory_ids: List[str], *, db_client: An
 
 
 def _purge_legacy_memories(uid: str) -> None:
-    """Delete every legacy memory for a user, plus its vectors.
+    """Delete one authoritative legacy snapshot and converge its vectors."""
 
-    Collects ids before the Firestore delete so the Pinecone vectors can be purged too —
-    otherwise orphaned vectors become search noise nothing ever cleans up.
-    """
-    memory_ids: List[str] = []
-    offset = 0
-    batch_size = 1000
-    while True:
-        memories = memories_db.get_memories(uid, limit=batch_size, offset=offset, include_invalidated=True)
-        if not memories:
-            break
-        memory_ids.extend([memory_id for m in memories if isinstance((memory_id := m.get('id')), str) and memory_id])
-        offset += batch_size
+    delete_result = memories_db.delete_all_memories(uid)
+    memory_ids = delete_result.memory_ids
+    if not memory_ids:
+        return
 
-    memories_db.delete_all_memories(uid)
+    try:
+        vector_deleted_count = delete_memory_vectors_batch(uid, memory_ids)
+    except Exception:
+        logger.exception(
+            "legacy delete-all vector purge failed uid=%s count=%d",
+            sanitize_pii(uid),
+            len(memory_ids),
+        )
+        return
 
-    if memory_ids:
-        delete_memory_vectors_batch(uid, memory_ids)
+    if vector_deleted_count != len(memory_ids):
+        logger.warning(
+            "legacy delete-all vector purge was partial uid=%s expected=%d actual=%r",
+            sanitize_pii(uid),
+            len(memory_ids),
+            vector_deleted_count,
+        )
 
 
 def _mirror_delete_all_into_legacy(uid: str, *, db_client: Any) -> None:
@@ -482,7 +499,7 @@ async def create_memory(
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     try:
-        await run_blocking(
+        projection_result = await run_blocking(
             postprocess_executor,
             upsert_memory_vector,
             uid,
@@ -491,9 +508,14 @@ async def create_memory(
             memory_db.category.value,
             memory_db.subject_entity_id,
         )
+        if not _single_vector_write_succeeded(projection_result):
+            logger.warning(
+                "Vector upsert returned no write uid=%s memory_id=%s (memory saved, vector missing)",
+                uid,
+                memory_db.id,
+            )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
-
     return _legacy_memory_response(memory_db)
 
 
@@ -623,7 +645,7 @@ async def create_memories_batch(
     # single-create path) so a slow embeddings/Pinecone call can't starve the
     # FastAPI sync threadpool.
     try:
-        await run_blocking(
+        projection_result = await run_blocking(
             postprocess_executor,
             upsert_memory_vectors_batch,
             uid,
@@ -637,11 +659,17 @@ async def create_memories_batch(
                 for m in memory_dbs
             ],
         )
+        if not _batch_vector_write_succeeded(projection_result, len(memory_dbs)):
+            logger.warning(
+                "Batch vector upsert returned partial/no write uid=%s expected=%s actual=%r",
+                uid,
+                len(memory_dbs),
+                projection_result,
+            )
     except Exception:
         logger.exception(
             "Batch vector upsert failed uid=%s count=%s (memories saved, vectors missing)", uid, len(memory_dbs)
         )
-
     return _legacy_batch_memories_response(memory_dbs)
 
 
@@ -888,9 +916,24 @@ def delete_memories_batch(
         if memory.get('is_locked', False):
             raise HTTPException(status_code=402, detail='A paid plan is required to access this memory.')
 
-    memories_db.delete_memories_batch(uid, memory_ids)
+    delete_result = memories_db.delete_memories_batch(uid, memory_ids)
+    if delete_result.committed_count != len(memory_ids):
+        logger.error(
+            "Firestore batch delete count mismatch uid=%s expected=%d actual=%r",
+            uid,
+            len(memory_ids),
+            delete_result.committed_count,
+        )
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     try:
-        delete_memory_vectors_batch(uid, memory_ids)
+        vector_deleted_count = delete_memory_vectors_batch(uid, memory_ids)
+        if vector_deleted_count != len(memory_ids):
+            logger.warning(
+                "Vector batch delete returned partial/no write uid=%s expected=%d actual=%r",
+                uid,
+                len(memory_ids),
+                vector_deleted_count,
+            )
     except Exception:
         logger.exception("Vector batch delete failed uid=%s count=%d (Firestore already deleted)", uid, len(memory_ids))
     return {'status': 'ok'}
@@ -913,9 +956,23 @@ def delete_memory(
         return {'status': 'ok'}
 
     _validate_memory(uid, memory_id)
-    memories_db.delete_memory(uid, memory_id)
+    delete_result = memories_db.delete_memory(uid, memory_id)
+    if delete_result.committed_count != 1:
+        logger.error(
+            "Firestore delete count mismatch uid=%s memory_id=%s actual=%r",
+            uid,
+            memory_id,
+            delete_result.committed_count,
+        )
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     try:
-        delete_memory_vector(uid, memory_id)
+        projection_result = delete_memory_vector(uid, memory_id)
+        if projection_result is not True:
+            logger.warning(
+                "Vector delete returned no write uid=%s memory_id=%s (Firestore deleted)",
+                uid,
+                memory_id,
+            )
     except Exception:
         logger.exception("Vector delete failed uid=%s memory_id=%s (Firestore deleted)", uid, memory_id)
     return {'status': 'ok'}
@@ -984,13 +1041,19 @@ def edit_memory(
     # vector keeps matching the OLD text — a silent staleness bug that breaks the
     # "constantly updated brain" (search would still surface the pre-edit fact).
     try:
-        upsert_memory_vector(
+        projection_result = upsert_memory_vector(
             uid,
             memory_id,
             mutation_value,
             memory.get('category', 'system'),
             subject_entity_id=memory.get('subject_entity_id'),
         )
+        if not _single_vector_write_succeeded(projection_result):
+            logger.warning(
+                "Vector upsert returned no write uid=%s memory_id=%s (memory edited, vector stale)",
+                uid,
+                memory_id,
+            )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
     return {'status': 'ok'}

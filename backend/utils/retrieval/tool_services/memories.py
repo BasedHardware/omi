@@ -4,15 +4,14 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
 from datetime import datetime, timezone
-from typing import Optional, Any, Dict, List, cast
+from typing import Optional, Any, Dict, List
 
 import database.memories as memory_db
 import database.notifications as notification_db
-import database.vector_db as vector_db
 from database._client import db as firestore_db
 from models.memories import MemoryDB
 from utils.conversations.render import format_local_date, resolve_display_tz
-from utils.memory.memory_service import MemoryService
+from utils.memory.memory_service import MemoryService, search_legacy_memories
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
 from utils.memory.chat_memory_adapter import (
@@ -179,45 +178,17 @@ def search_memories_text(
         return default_memories.text or "No memories available for this request."
 
     try:
-        matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
-
+        matches = search_legacy_memories(uid, query, limit=limit)
         if not matches:
             return f"No memories found matching '{query}'."
 
-        memory_ids = [cast(str, match.get('memory_id')) for match in matches if match.get('memory_id')]
-        scores_by_id = {match.get('memory_id'): match.get('score', 0) for match in matches}
-
-        if not memory_ids:
-            return f"Found matches but no valid memory IDs for query: '{query}'"
-
-        memories_data = memory_db.get_memories_by_ids(uid, memory_ids)
-
-        # Filter locked
-        memories_data = [m for m in memories_data if not m.get('is_locked', False)]
-        if not memories_data:
-            return f"No memories found matching '{query}'."
-
-        # Format with scores
-        memory_objects: List[Dict[str, Any]] = []
-        for memory_data in memories_data:
-            try:
-                memory_obj = MemoryDB(**memory_data)
-                score = scores_by_id.get(memory_data.get('id'), 0)
-                memory_objects.append({'memory': memory_obj, 'score': score})
-            except Exception as e:
-                logger.error(f"Error creating MemoryDB object: {e}")
-                continue
-
-        if not memory_objects:
-            return f"Found matches but could not retrieve memory details for query: '{query}'"
-
-        result = f"Found {len(memory_objects)} memories matching '{query}':\n\n"
-        for item in memory_objects:
-            memory = item['memory']
-            score = item['score']
+        result = f"Found {len(matches)} memories matching '{query}':\n\n"
+        for match in matches:
+            memory = match.memory
             date_str = format_local_date(memory.created_at, display_tz) if memory.created_at else 'Unknown'
             result += (
-                f"- {memory.content} (relevance: {score:.2f}, category: {memory.category.value}, date: {date_str})\n"
+                f"- {memory.content} (relevance: {match.score:.2f}, "
+                f"category: {memory.category.value}, date: {date_str})\n"
             )
 
         return result.strip()

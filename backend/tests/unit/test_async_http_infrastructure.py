@@ -56,6 +56,7 @@ _ensure_package("utils", BACKEND_DIR / "utils")
 _drop_stale_module("utils.http_client", ["WebhookCircuitBreaker", "get_webhook_circuit_breaker"])
 _drop_stale_module("utils.executors", ["critical_executor", "storage_executor", "shutdown_executors"])
 
+import utils.http_client as http_client_module
 from utils.http_client import (
     WebhookCircuitBreaker,
     get_webhook_circuit_breaker,
@@ -71,6 +72,7 @@ from utils.http_client import (
     _SEMAPHORE_CACHE_MAX,
     _CIRCUIT_BREAKER_FAILURE_THRESHOLD,
     _CIRCUIT_BREAKER_RECOVERY_TIMEOUT,
+    reset_webhook_circuit_breaker,
 )
 from utils.executors import critical_executor, storage_executor
 
@@ -218,6 +220,18 @@ class TestCircuitBreakerRegistry:
         cb = get_webhook_circuit_breaker("not-a-url")
         assert cb is not None
         assert cb.state == 'closed'
+
+    def test_same_path_url_replacement_is_allowed_immediately(self):
+        old_cb = get_webhook_circuit_breaker("https://example.com/hook?version=old")
+        for _ in range(_CIRCUIT_BREAKER_FAILURE_THRESHOLD):
+            old_cb.record_failure()
+        assert old_cb.allow_request() is False
+
+        reset_webhook_circuit_breaker("https://example.com/hook?version=new")
+
+        replacement_cb = get_webhook_circuit_breaker("https://example.com/hook?version=new")
+        assert replacement_cb is not old_cb
+        assert replacement_cb.allow_request() is True
 
 
 # ============================================================================
@@ -571,7 +585,7 @@ class TestPrivateCloudQueueCap:
         pytest.fail("PRIVATE_CLOUD_QUEUE_MAX_SIZE constant not found")
 
     def test_overflow_warning_at_all_enqueue_points(self):
-        """All 3 enqueue points must log overflow warning before deque drops oldest."""
+        """All enqueue points must log overflow warning before deque drops oldest."""
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -580,7 +594,7 @@ class TestPrivateCloudQueueCap:
 
         # Count occurrences of the overflow warning pattern
         warning_count = src.count('private_cloud_queue full')
-        assert warning_count == 3, f"Expected 3 overflow warnings, found {warning_count}"
+        assert warning_count == 4, f"Expected 4 overflow warnings, found {warning_count}"
 
     def test_deque_maxlen_drops_oldest(self):
         """Verify deque(maxlen=N) drops oldest item when full."""
@@ -638,15 +652,12 @@ class TestCircuitBreakerAccessTracking:
         assert 'https://stale.test/hook' not in _webhook_circuit_breakers
         _webhook_circuit_breakers.clear()
 
-    def test_allow_request_updates_access_time(self):
+    def test_allow_request_updates_access_time(self, monkeypatch):
         """allow_request() must update _last_access_time."""
-        import time
-        from utils.http_client import _webhook_circuit_breakers, get_webhook_circuit_breaker
-
         _webhook_circuit_breakers.clear()
         cb = get_webhook_circuit_breaker('https://test.test/hook')
-        old_access = cb._last_access_time
-        time.sleep(0.01)
+        cb._last_access_time = 100.0
+        monkeypatch.setattr(http_client_module.time, 'monotonic', lambda: 101.0)
         cb.allow_request()
-        assert cb._last_access_time > old_access
+        assert cb._last_access_time == 101.0
         _webhook_circuit_breakers.clear()

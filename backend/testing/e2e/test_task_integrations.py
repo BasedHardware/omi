@@ -72,7 +72,14 @@ def test_task_integration_crud_default_and_todoist_task_creation(client, auth_he
         _close_async_client(fake_client)
 
     assert created.status_code == 200, created.text
-    assert created.json() == {"success": True, "external_task_id": "todo-123", "error": None}
+    assert created.json() == {
+        "success": True,
+        "external_task_id": "todo-123",
+        "error": None,
+        "error_code": None,
+        "retryable": None,
+        "ambiguous": None,
+    }
     assert len(requests) == 1
     request = requests[0]
     assert str(request.url) == "https://api.todoist.com/rest/v2/tasks"
@@ -145,6 +152,9 @@ def test_todoist_provider_500_returns_failure_without_disconnect(client, auth_he
         "success": False,
         "external_task_id": None,
         "error": "Todoist API error: 500",
+        "error_code": "api_error",
+        "retryable": False,
+        "ambiguous": True,
     }
     assert len(requests) == 1
     assert _get_todoist_integration(client, auth_headers)["connected"] is True
@@ -196,5 +206,8 @@ def test_todoist_timeout_returns_failure_without_real_network(client, auth_heade
     assert response.json() == {
         "success": False,
         "external_task_id": None,
-        "error": "deterministic Todoist timeout",
+        "error": "ConnectTimeout",
+        "error_code": "transport_error",
+        "retryable": True,
+        "ambiguous": False,
     }

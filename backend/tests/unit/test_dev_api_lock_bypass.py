@@ -396,15 +396,22 @@ class TestDevApiMemoryLockEnforcement:
         import database.memories as memories_db
 
         memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.delete_memory = MagicMock()
+        memories_db.delete_memory = MagicMock(return_value=SimpleNamespace(committed_count=1))
 
-        from routers.developer import delete_memory
+        from routers import developer as developer_module
 
         _allow_developer_memory_write_grant()
 
-        result = delete_memory(memory_id='mem-1', auth_context=_developer_memory_write_context())
+        result = developer_module.delete_memory(
+            memory_id='mem-1',
+            auth_context=_developer_memory_write_context(),
+        )
         assert result == {"success": True}
-        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
+        memories_db.delete_memory.assert_called_once_with(
+            'test-uid',
+            'mem-1',
+            firestore_client=developer_module.db,
+        )
 
 
 # =============================================================================

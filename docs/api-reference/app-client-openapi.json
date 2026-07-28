@@ -7765,6 +7765,17 @@
       "CreateTaskResponse": {
         "description": "Response for task creation",
         "properties": {
+          "ambiguous": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ambiguous"
+          },
           "error": {
             "anyOf": [
               {
@@ -7776,6 +7787,17 @@
             ],
             "title": "Error"
           },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
           "external_task_id": {
             "anyOf": [
               {
@@ -7786,6 +7808,17 @@
               }
             ],
             "title": "External Task Id"
+          },
+          "retryable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retryable"
           },
           "success": {
             "title": "Success",

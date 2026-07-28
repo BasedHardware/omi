@@ -358,12 +358,23 @@
     {
       "id": "webhook_delivery_health",
       "risk": "high",
-      "sources": ["backend/utils/webhooks.py", "backend/database/webhook_health.py"],
-      "tests": ["tests/unit/test_async_webhooks.py", "tests/unit/test_webhook_auto_disable.py"],
+      "sources": [
+        "backend/utils/webhooks.py",
+        "backend/utils/http_client.py",
+        "backend/database/webhook_health.py",
+        "backend/routers/users.py"
+      ],
+      "tests": [
+        "tests/unit/test_async_webhooks.py",
+        "tests/unit/test_async_http_infrastructure.py",
+        "tests/unit/test_webhook_auto_disable.py",
+        "tests/unit/test_users_webhook_url_validation.py"
+      ],
       "checks": [],
       "invariants": [
         "delivery failures are counted durably",
-        "auto-disable state is endpoint-aware and race-safe"
+        "auto-disable state is endpoint-aware and race-safe",
+        "manual enable resets persistent and process-local failure gates without recording a synthetic delivery success"
       ]
     },
     {
@@ -457,14 +468,49 @@
       ]
     },
     {
+      "id": "legacy_memory_projection_convergence",
+      "risk": "high",
+      "sources": [
+        "backend/database/memories.py",
+        "backend/database/memory_ledger.py",
+        "backend/database/projection_repair.py",
+        "backend/database/vector_db.py",
+        "backend/routers/memories.py",
+        "backend/utils/memory/memory_service.py",
+        "backend/utils/retrieval/tool_services/memories.py",
+        "backend/utils/x_connector.py"
+      ],
+      "tests": [
+        "tests/unit/test_memory_service_parity.py",
+        "tests/unit/test_memories_batch_delete.py",
+        "tests/unit/test_memories_delete_batch_chunk.py",
+        "tests/unit/test_memory_ledger.py",
+        "tests/unit/test_memories_batch.py",
+        "tests/unit/test_mcp_search_memories.py",
+        "tests/unit/test_lock_bypass_fixes.py",
+        "tests/unit/test_tools_rest_memory_runtime_adapter.py",
+        "tests/unit/test_x_memory_extraction_retry.py"
+      ],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "legacy mutation guards, reads, and writes use one selected Firestore client",
+        "deletions enumerate every authoritative memory id before removing projections",
+        "search overfetches and filters stale, locked, rejected, invalid, or invalidated projections"
+      ]
+    },
+    {
       "id": "listen_pusher_pipeline",
       "risk": "high",
       "sources": [
         "backend/routers/transcribe.py",
         "backend/routers/listen/**",
         "backend/routers/pusher.py",
+        "backend/database/redis_db.py",
         "backend/utils/listen_pusher_session.py",
+        "backend/utils/speaker_identification.py",
         "backend/utils/pusher.py",
+        "backend/utils/app_integrations.py",
+        "backend/utils/webhooks.py",
         "backend/utils/stt/live_failure.py",
         "backend/utils/stt/streaming.py",
         "backend/config/stt_provider_policy.py",
@@ -481,6 +527,12 @@
       "tests": [
         "tests/unit/test_listen_pipeline.py",
         "tests/unit/test_pusher_heartbeat.py",
+        "tests/unit/test_pusher_readiness_drain.py",
+        "tests/unit/test_redis_db_cache_serialization.py",
+        "tests/unit/test_speaker_identification_delivery.py",
+        "tests/unit/test_listen_finalization_cloud_tasks.py",
+        "tests/unit/test_async_app_integrations.py",
+        "tests/unit/test_async_webhooks.py",
         "tests/unit/test_pusher_conversation_retry.py",
         "tests/unit/test_live_stt_failure.py",
         "tests/unit/test_listen_runtime_regressions.py",
@@ -498,6 +550,13 @@
         "teardown flushes tail audio before pusher close",
         "pending conversation requests retry until ack or give-up limit",
         "pusher heartbeat prevents idle connection drops",
+        "draining pusher pods reject new sockets cleanly while preserving established-session shutdown",
+        "transcript and speaker deliveries retain stable identity until a local-invocation completion acknowledgement on negotiated sockets",
+        "route-stamped audio survives explicit send failure and cancellation while ambiguous local completion remains documented as best effort",
+        "pusher leases stable deliveries only when a worker owns the effect and never evicts an accepted unacknowledged frame",
+        "done markers suppress stable delivery replays across sockets and replicas while Redis failure remains observable and fail-open",
+        "graceful close performs a bounded acknowledgement drain after the listen runtime becomes inactive",
+        "downstream realtime webhooks receive stable idempotency keys while opcode 202 acknowledges local worker invocation rather than downstream HTTP delivery",
         "a client Parakeet preference cannot route a live session to an incompatible model",
         "listen-to-pusher boundary changes run the credential-free local Firestore, Redis, and Parakeet-stub stack gauntlet in PR CI"
       ]

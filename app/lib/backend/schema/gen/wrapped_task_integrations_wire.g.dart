@@ -107,28 +107,40 @@ class GeneratedOAuthUrlResponse {
 }
 
 class GeneratedCreateTaskResponse {
+  final bool? ambiguous;
   final String? error;
+  final String? errorCode;
   final String? externalTaskId;
+  final bool? retryable;
   final bool success;
 
   const GeneratedCreateTaskResponse({
+    this.ambiguous,
     this.error,
+    this.errorCode,
     this.externalTaskId,
+    this.retryable,
     required this.success,
   });
 
   factory GeneratedCreateTaskResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedCreateTaskResponse(
+      ambiguous: _readFieldValue<bool>(_readField(json, const ["ambiguous"]), "ambiguous", _readBool, requiredField: false, nullable: true),
       error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
+      errorCode: _readFieldValue<String>(_readField(json, const ["error_code"]), "error_code", _readString, requiredField: false, nullable: true),
       externalTaskId: _readFieldValue<String>(_readField(json, const ["external_task_id"]), "external_task_id", _readString, requiredField: false, nullable: true),
+      retryable: _readFieldValue<bool>(_readField(json, const ["retryable"]), "retryable", _readBool, requiredField: false, nullable: true),
       success: _required(_readFieldValue<bool>(_readField(json, const ["success"]), "success", _readBool, requiredField: true, nullable: false), "success"),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'ambiguous': ambiguous,
       'error': error,
+      'error_code': errorCode,
       'external_task_id': externalTaskId,
+      'retryable': retryable,
       'success': success,
     };
   }

@@ -42,10 +42,14 @@ def _force_legacy(monkeypatch):
 
 def _patch_db(monkeypatch, fetched):
     get_mock = MagicMock(return_value=fetched)
-    delete_mock = MagicMock()
+    delete_mock = MagicMock(
+        return_value=mem_mod.memories_db.LegacyMemoryDeleteResult(
+            memory_ids=[item["id"] for item in fetched],
+        )
+    )
     monkeypatch.setattr(mem_mod.memories_db, 'get_memories_by_ids', get_mock)
     monkeypatch.setattr(mem_mod.memories_db, 'delete_memories_batch', delete_mock)
-    vectors_mock = MagicMock()
+    vectors_mock = MagicMock(return_value=len(fetched))
     monkeypatch.setattr(mem_mod, 'delete_memory_vectors_batch', vectors_mock)
     return get_mock, delete_mock, vectors_mock
 
@@ -187,6 +191,27 @@ class TestBatchDeleteHappyPath:
         result = mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a']), uid='u1')
         assert result == {'status': 'ok'}
         delete_mock.assert_called_once_with('u1', ['a'])
+
+
+class TestLegacyDeleteAllProjection:
+    def test_delete_all_uses_ids_from_the_atomic_delete_snapshot(self, monkeypatch):
+        _force_legacy(monkeypatch)
+        all_ids = ["visible", "locked", "rejected", "invalidated"]
+        delete_all = MagicMock(
+            return_value=mem_mod.memories_db.LegacyMemoryDeleteResult(
+                memory_ids=all_ids,
+            )
+        )
+        monkeypatch.setattr(mem_mod.memories_db, "delete_all_memories", delete_all)
+        monkeypatch.setattr(
+            mem_mod.memories_db,
+            "get_memories",
+            MagicMock(side_effect=AssertionError("delete-all must not use the filtered memory reader")),
+        )
+        monkeypatch.setattr(mem_mod, "delete_memory_vectors_batch", MagicMock(return_value=2))
+
+        assert mem_mod.delete_memories(uid="u1") == {"status": "ok"}
+        delete_all.assert_called_once_with("u1")
 
 
 class TestBatchDeleteCanonicalCohort:

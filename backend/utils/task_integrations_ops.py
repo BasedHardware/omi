@@ -28,6 +28,51 @@ OAUTH_CONFIGS = {
 http_client: Optional[httpx.AsyncClient] = None
 
 
+def _provider_create_success(external_task_id: Any) -> dict:
+    task_id = str(external_task_id).strip() if external_task_id is not None else ''
+    if not task_id:
+        return {
+            'success': False,
+            'error': 'Provider response omitted task identity',
+            'error_code': 'invalid_provider_response',
+            'retryable': False,
+            'ambiguous': True,
+        }
+    return {'success': True, 'external_task_id': task_id}
+
+
+def _provider_create_http_failure(provider: str, status_code: int) -> dict:
+    if 200 <= status_code < 300:
+        return {
+            'success': False,
+            'error': f'{provider} response did not contain a completed task',
+            'error_code': 'invalid_provider_response',
+            'status_code': status_code,
+            'retryable': False,
+            'ambiguous': True,
+        }
+    ambiguous = status_code in {408, 425} or status_code >= 500
+    return {
+        'success': False,
+        'error': f'{provider} API error: {status_code}',
+        'error_code': 'api_error',
+        'status_code': status_code,
+        'retryable': status_code == 429,
+        'ambiguous': ambiguous,
+    }
+
+
+def _provider_create_transport_failure(error: httpx.TransportError) -> dict:
+    safe_before_send = isinstance(error, (httpx.PoolTimeout, httpx.ConnectTimeout, httpx.ConnectError))
+    return {
+        'success': False,
+        'error': type(error).__name__,
+        'error_code': 'transport_error',
+        'retryable': safe_before_send,
+        'ambiguous': not safe_before_send,
+    }
+
+
 def get_http_client() -> httpx.AsyncClient:
     """Get or create the HTTP client instance."""
     global http_client
@@ -187,6 +232,48 @@ async def ensure_valid_oauth_token(
     return integration
 
 
+def _task_create_configuration_failure(app_key: str, integration: dict) -> Optional[dict]:
+    if app_key not in OAUTH_CONFIGS:
+        return {
+            'success': False,
+            'error': f'Unsupported integration: {app_key}',
+            'error_code': 'unsupported',
+            'retryable': False,
+            'ambiguous': False,
+        }
+    if integration.get('connected') is False:
+        name = OAUTH_CONFIGS[app_key]['name']
+        return {
+            'success': False,
+            'error': f'{name} token refresh failed',
+            'error_code': 'token_refresh_failed',
+            'retryable': False,
+            'ambiguous': False,
+        }
+    if not integration.get('access_token'):
+        return {
+            'success': False,
+            'error': f'No access token for {app_key}',
+            'error_code': 'no_access_token',
+            'retryable': False,
+            'ambiguous': False,
+        }
+    required_field = {
+        'asana': ('workspace_gid', 'No workspace configured', 'no_workspace'),
+        'google_tasks': ('default_list_id', 'No task list configured', 'no_list'),
+        'clickup': ('list_id', 'No list configured', 'no_list'),
+    }.get(app_key)
+    if required_field and not integration.get(required_field[0]):
+        return {
+            'success': False,
+            'error': required_field[1],
+            'error_code': required_field[2],
+            'retryable': False,
+            'ambiguous': False,
+        }
+    return None
+
+
 async def perform_request_with_token_retry(
     uid: str,
     app_key: str,
@@ -224,7 +311,7 @@ async def create_task_internal(
     Returns:
         dict: {"success": bool, "external_task_id": str, "error": str, "error_code": str}
     """
-    if app_key in ['google_tasks', 'asana']:
+    if app_key in {'google_tasks', 'asana'}:
         integration = await ensure_valid_oauth_token(
             uid,
             app_key,
@@ -232,18 +319,13 @@ async def create_task_internal(
             refresh_if_missing_expires_at=(app_key == 'google_tasks'),
             client=client,
         )
-        # Use `is False` so a missing key (None) falls through to access_token
-        # validation below instead of blocking valid tokens on legacy records.
-        if integration.get('connected') is False:
-            name = OAUTH_CONFIGS.get(app_key, {'name': app_key}).get('name', app_key)
-            return {"success": False, "error": f"{name} token refresh failed", "error_code": "token_refresh_failed"}
-
-    access_token = integration.get('access_token')
-    if not access_token:
-        return {"success": False, "error": f"No access token for {app_key}", "error_code": "no_access_token"}
+    preflight_error = _task_create_configuration_failure(app_key, integration)
+    if preflight_error is not None:
+        return preflight_error
 
     try:
         client = client or get_http_client()
+        access_token = str(integration['access_token'])
 
         if app_key == 'todoist':
             body = {'content': title, 'priority': 2}
@@ -260,7 +342,7 @@ async def create_task_internal(
 
             if response.status_code in [200, 201]:
                 task_data = response.json()
-                return {"success": True, "external_task_id": str(task_data.get('id'))}
+                return _provider_create_success(task_data.get('id'))
             else:
                 if response.status_code == 401:
                     await run_blocking(
@@ -270,19 +352,12 @@ async def create_task_internal(
                         'todoist',
                         {'connected': False},
                     )
-                return {
-                    "success": False,
-                    "error": f"Todoist API error: {response.status_code}",
-                    "error_code": "api_error",
-                }
+                return _provider_create_http_failure('Todoist', response.status_code)
 
         elif app_key == 'asana':
-            workspace_gid = integration.get('workspace_gid')
+            workspace_gid = str(integration['workspace_gid'])
             project_gid = integration.get('project_gid')
             user_gid = integration.get('user_gid')
-
-            if not workspace_gid:
-                return {"success": False, "error": "No workspace configured", "error_code": "no_workspace"}
 
             task_data = {'name': title, 'workspace': workspace_gid}
             if description:
@@ -305,22 +380,21 @@ async def create_task_internal(
                 uid, app_key, integration, _asana_post, client=client
             )
             if retry_err:
-                return {"success": False, "error": "Asana token refresh failed", "error_code": "token_refresh_failed"}
+                return {
+                    "success": False,
+                    "error": "Asana token refresh failed",
+                    "error_code": "token_refresh_failed",
+                    "retryable": False,
+                }
 
             if response.status_code in [200, 201]:
                 result = response.json()
-                return {"success": True, "external_task_id": result.get('data', {}).get('gid')}
+                return _provider_create_success(result.get('data', {}).get('gid'))
             else:
-                return {
-                    "success": False,
-                    "error": f"Asana API error: {response.status_code}",
-                    "error_code": "api_error",
-                }
+                return _provider_create_http_failure('Asana', response.status_code)
 
         elif app_key == 'google_tasks':
-            list_id = integration.get('default_list_id')
-            if not list_id:
-                return {"success": False, "error": "No task list configured", "error_code": "no_list"}
+            list_id = str(integration['default_list_id'])
 
             task_data = {'title': title}
             if description:
@@ -343,22 +417,17 @@ async def create_task_internal(
                     "success": False,
                     "error": "Google Tasks token refresh failed",
                     "error_code": "token_refresh_failed",
+                    "retryable": False,
                 }
 
             if response.status_code in [200, 201]:
                 result = response.json()
-                return {"success": True, "external_task_id": result.get('id')}
+                return _provider_create_success(result.get('id'))
             else:
-                return {
-                    "success": False,
-                    "error": f"Google Tasks API error: {response.status_code}",
-                    "error_code": "api_error",
-                }
+                return _provider_create_http_failure('Google Tasks', response.status_code)
 
         elif app_key == 'clickup':
-            list_id = integration.get('list_id')
-            if not list_id:
-                return {"success": False, "error": "No list configured", "error_code": "no_list"}
+            list_id = str(integration['list_id'])
 
             task_data: dict[str, Any] = {'name': title}
             if description:
@@ -374,17 +443,27 @@ async def create_task_internal(
 
             if response.status_code in [200, 201]:
                 result = response.json()
-                return {"success": True, "external_task_id": result.get('id')}
+                return _provider_create_success(result.get('id'))
             else:
-                return {
-                    "success": False,
-                    "error": f"ClickUp API error: {response.status_code}",
-                    "error_code": "api_error",
-                }
-
+                return _provider_create_http_failure('ClickUp', response.status_code)
         else:
-            return {"success": False, "error": f"Unsupported integration: {app_key}", "error_code": "unsupported"}
+            return {
+                'success': False,
+                'error': f'Unsupported integration: {app_key}',
+                'error_code': 'unsupported',
+                'retryable': False,
+                'ambiguous': False,
+            }
 
+    except httpx.TransportError as e:
+        logger.error(f"Error creating task in {app_key}: {e}")
+        return _provider_create_transport_failure(e)
     except Exception as e:
         logger.error(f"Error creating task in {app_key}: {e}")
-        return {"success": False, "error": str(e)}
+        return {
+            "success": False,
+            "error": type(e).__name__,
+            "error_code": "internal_error",
+            "retryable": False,
+            "ambiguous": True,
+        }
