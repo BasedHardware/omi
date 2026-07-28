@@ -684,6 +684,41 @@ jobs:
         self.assertEqual(errors, [])
         self.assertEqual(fallbacks, {"PRESERVED_RUNTIME_SECRET": "fallback-secret:latest"})
 
+    def test_runtime_preflight_reports_first_create_to_the_deployment_action(self) -> None:
+        output = self.root / "runtime-preflight-output"
+        original_result = RUNTIME_PREFLIGHT.preflight_deployment_result
+        RUNTIME_PREFLIGHT.preflight_deployment_result = lambda **_kwargs: ([], {}, False)
+        try:
+            result = RUNTIME_PREFLIGHT.main(
+                [
+                    "--target",
+                    "fake",
+                    "--project-id",
+                    "fake-project",
+                    "--contract",
+                    str(self.root / "config/public-build-contract.json"),
+                    "--github-output",
+                    str(output),
+                ]
+            )
+        finally:
+            RUNTIME_PREFLIGHT.preflight_deployment_result = original_result
+
+        self.assertEqual(result, 0)
+        self.assertIn("service_exists=false", output.read_text(encoding="utf-8"))
+
+    def test_shared_action_keeps_existing_services_no_traffic_and_fails_closed_for_prod_first_creates(self) -> None:
+        deploy = (ROOT / ".github/actions/deploy-public-build/action.yml").read_text(encoding="utf-8")
+        promotion = (ROOT / ".github/actions/public-build-candidate-promotion/action.yml").read_text(encoding="utf-8")
+
+        self.assertIn("steps.runtime-preflight.outputs.service_exists", deploy)
+        self.assertIn("no_traffic: ${{ steps.runtime-preflight.outputs.service_exists == 'true' }}", deploy)
+        self.assertIn("Fail closed for a production first create", deploy)
+        self.assertIn("refusing to create a public Cloud Run service outside development", deploy)
+        self.assertIn("first_create: ${{ steps.runtime-preflight.outputs.service_exists != 'true' }}", deploy)
+        self.assertIn("first_create", promotion)
+        self.assertIn("confirm first-create traffic", promotion)
+
     def test_runtime_preflight_never_outputs_fallback_bindings_for_a_live_service(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]

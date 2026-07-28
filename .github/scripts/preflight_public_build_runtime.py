@@ -303,11 +303,12 @@ def validate_secret_references(*, service_name: str, references: Mapping[str, st
     return errors
 
 
-def preflight_result(*, target: Target, project_id: str) -> tuple[list[str], dict[str, str]]:
-    """Validate the runtime and return fallbacks needed only for a first create."""
+def preflight_deployment_result(*, target: Target, project_id: str) -> tuple[list[str], dict[str, str], bool]:
+    """Validate the runtime and report whether the Cloud Run service already exists."""
 
     errors = validate_secret_versions(target=target, project_id=project_id)
     fallback_runtime_secrets: dict[str, str] = {}
+    service_exists = False
     try:
         service = load_current_service(target=target, project_id=project_id)
     except RuntimePreflightError as exc:
@@ -317,8 +318,18 @@ def preflight_result(*, target: Target, project_id: str) -> tuple[list[str], dic
             fallback_runtime_secrets = target.deployment.fallback_runtime_secrets
             errors.extend(validate_fallback_secret_versions(target=target, project_id=project_id))
         else:
+            service_exists = True
             errors.extend(validate_current_bindings(target, service))
             errors.extend(validate_preserved_secret_versions(target=target, service=service, project_id=project_id))
+    return errors, fallback_runtime_secrets, service_exists
+
+
+def preflight_result(*, target: Target, project_id: str) -> tuple[list[str], dict[str, str]]:
+    """Backward-compatible runtime preflight result for callers that do not deploy."""
+
+    errors, fallback_runtime_secrets, _service_exists = preflight_deployment_result(
+        target=target, project_id=project_id
+    )
     return errors, fallback_runtime_secrets
 
 
@@ -340,7 +351,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"public-build runtime preflight failed: {exc}", file=sys.stderr)
         return 1
 
-    errors, fallback_runtime_secrets = preflight_result(target=target, project_id=args.project_id)
+    errors, fallback_runtime_secrets, service_exists = preflight_deployment_result(
+        target=target, project_id=args.project_id
+    )
     if errors:
         print("public-build runtime preflight failed:", file=sys.stderr)
         print("\n".join(f"- {error}" for error in errors), file=sys.stderr)
@@ -351,6 +364,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         with args.github_output.open("a", encoding="utf-8") as output:
             output.write(f"fallback_runtime_secrets<<EOF\n{fallback_lines}\nEOF\n")
+            output.write(f"service_exists={'true' if service_exists else 'false'}\n")
     print(f"public-build runtime preflight passed: target={target.name}")
     return 0
 

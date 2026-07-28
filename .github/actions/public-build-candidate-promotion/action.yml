@@ -19,10 +19,14 @@ inputs:
   tag:
     description: Cloud Run tag that must resolve to the exact candidate revision.
     required: true
+  first_create:
+    description: Whether Cloud Run created this service during the current development deployment.
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
-    - name: Wait for no-traffic candidate revision
+    - name: Wait for candidate revision
       shell: bash
       run: |
         set -euo pipefail
@@ -58,9 +62,13 @@ runs:
           --format='value(status.latestCreatedRevisionName)')"
         test "$latest" = "${{ inputs.revision }}"
 
-    - name: Shift traffic to browser-accepted candidate
+    - name: Promote browser-accepted candidate or confirm first-create traffic
       shell: bash
       run: |
+        # A development first create is already serving because Cloud Run does
+        # not support --no-traffic for a new service. This idempotent update
+        # both preserves the normal promotion contract and confirms that exact
+        # browser-smoked revision remains the serving revision.
         gcloud run services update-traffic "${{ inputs.service }}" \
           --project="${{ inputs.project_id }}" \
           --region="${{ inputs.region }}" \
