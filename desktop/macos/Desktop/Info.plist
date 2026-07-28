@@ -43,6 +43,8 @@
     <string>Omi needs permission to capture system audio for transcription of calls and meetings.</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>Omi needs Bluetooth access to connect to your Omi wearable device for audio capture and transcription.</string>
+    <key>NSContactsUsageDescription</key>
+    <string>Omi uses your Contacts to put names to the people in your messages, so it can understand your relationships. This stays on your device.</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>

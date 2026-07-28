@@ -38,6 +38,11 @@ enum PeopleGraphBuilder {
   /// own timestamps, so calling this from many data-arrival seams is cheap. Pass `force: true` right
   /// after an explicit user action (e.g. enabling iMessage mapping) to bypass the throttle.
   static func syncIfNeeded(uid: String?, force: Bool = false) async {
+    // Names for iMessage-only 1:1 threads (which store phone numbers only) come from Contacts, so a
+    // grant here is what lets those threads be labelled and deep-ingested by PeopleThreadIngest.
+    // Fire-and-forget so the permission prompt NEVER blocks the export/graph/ingest pipeline — the
+    // grant is picked up on the next sync. A denial is fine (WhatsApp names still apply).
+    requestContactsAccessIfNeeded()
     await IMessageExporter.exportIfRequested(force: force)
     // WhatsApp shares the single Full Disk Access grant and the same `peopleIMessageExport` consent
     // flag, so opting in to on-device message mapping re-reads it too. Own throttle; off-main.
@@ -1157,6 +1162,16 @@ enum PeopleGraphBuilder {
   /// Builds a `phone_last10 → display name` map from the local Contacts store, but **only** when
   /// access is already granted. Status is checked explicitly so this never triggers a TCC prompt.
   /// Shared with `PeopleThreadIngest` (which resolves counterpart names the same way).
+  /// Request Contacts access once the user has opted into on-device message mapping, so iMessage-only
+  /// 1:1 threads (phone numbers only) can be named and deep-ingested. Fire-and-forget: it prompts
+  /// only when the status is undecided and never blocks the caller — the grant is applied on the next
+  /// sync. A denial is a no-op (WhatsApp names and any existing grant still apply).
+  static func requestContactsAccessIfNeeded() {
+    guard UserDefaults.standard.bool(forKey: .peopleIMessageExport) else { return }
+    guard CNContactStore.authorizationStatus(for: .contacts) == .notDetermined else { return }
+    CNContactStore().requestAccess(for: .contacts) { _, _ in }
+  }
+
   static func loadContactsByPhone() -> [String: String] {
     guard CNContactStore.authorizationStatus(for: .contacts) == .authorized else { return [:] }
     var map: [String: String] = [:]

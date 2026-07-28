@@ -43,7 +43,7 @@ enum PeopleThreadIngest {
   /// Max people (threads) submitted per run, so a first pass over a large message history trickles
   /// out rather than flooding the conversation list / backend. Remaining threads are picked up on
   /// subsequent throttled runs.
-  static let maxPeoplePerRun = 12
+  static let maxPeoplePerRun = 40
 
   /// Only the most-recent messages of a thread are turned into a transcript (bounds token cost and
   /// stays well under the backend's 500-segment ceiling).

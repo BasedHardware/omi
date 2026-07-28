@@ -584,7 +584,7 @@ final class PeopleConnectorsModel: ObservableObject {
   func enableIMessageMapping() {
     UserDefaults.standard.set(true, forKey: .peopleIMessageExport)
     imessageMappingEnabled = true
-    // Explicit opt-in: force past the throttle so the export + graph run right now.
+    // Explicit opt-in: force past the throttle so export/graph run now (syncIfNeeded requests Contacts).
     Task {
       await PeopleGraphBuilder.syncIfNeeded(
         uid: UserDefaults.standard.string(forKey: .authUserId), force: true)
