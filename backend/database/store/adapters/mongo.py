@@ -235,18 +235,29 @@ class MongoDocumentStore:
         order_by: Optional[str] = None,
         direction: str = "asc",
         limit: Optional[int] = None,
+        offset: Optional[int] = None,
         fields: Optional[Sequence[str]] = None,
     ) -> List[StoredDocument]:
-        mongo_filter: Dict[str, Any] = {"_parent": collection}
-        for field, op, value in filters or ():
-            mongo_filter.setdefault("d." + field, {})[_OP[op]] = value
+        mongo_filter = self._filter(collection, filters)
         projection = {"d." + field: 1 for field in fields} if fields is not None else None
         cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=None)
         if order_by is not None:
             cursor = cursor.sort("d." + order_by, ASCENDING if direction == "asc" else DESCENDING)
+        if offset is not None:
+            cursor = cursor.skip(offset)
         if limit is not None:
             cursor = cursor.limit(limit)
         return [_to_record(doc, doc["_id"]) for doc in cursor]
+
+    @staticmethod
+    def _filter(collection: str, filters: Optional[Iterable[Filter]]) -> Dict[str, Any]:
+        mongo_filter: Dict[str, Any] = {"_parent": collection}
+        for field, op, value in filters or ():
+            mongo_filter.setdefault("d." + field, {})[_OP[op]] = value
+        return mongo_filter
+
+    def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int:
+        return self._db[_collection_name(collection)].count_documents(self._filter(collection, filters))
 
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]:
         if not ids:

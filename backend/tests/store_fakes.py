@@ -172,23 +172,29 @@ class FakeDocumentStore:
         order_by: Optional[str] = None,
         direction: str = "asc",
         limit: Optional[int] = None,
+        offset: Optional[int] = None,
         fields: Optional[Sequence[str]] = None,
     ) -> List[StoredDocument]:
-        rows = [
-            (path, data)
-            for path, data in self._docs.items()
-            if path.rsplit("/", 1)[0] == collection
-        ]
-        for field, op, value in filters or ():
-            rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
+        rows = self._matching_rows(collection, filters)
         if order_by is not None:
             rows.sort(key=lambda pd: pd[1].get(order_by), reverse=(direction == "desc"))
+        if offset is not None:
+            rows = rows[offset:]
         if limit is not None:
             rows = rows[:limit]
         if fields is not None:
             keep = set(fields)
             rows = [(p, {k: v for k, v in d.items() if k in keep}) for p, d in rows]
         return [StoredDocument.present(p, copy.deepcopy(d), updated_at=self._updated.get(p)) for p, d in rows]
+
+    def _matching_rows(self, collection: str, filters: Optional[Iterable]) -> List[tuple]:
+        rows = [(p, d) for p, d in self._docs.items() if p.rsplit("/", 1)[0] == collection]
+        for field, op, value in filters or ():
+            rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
+        return rows
+
+    def count(self, collection: str, *, filters: Optional[Iterable] = None) -> int:
+        return len(self._matching_rows(collection, filters))
 
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]:
         result = []

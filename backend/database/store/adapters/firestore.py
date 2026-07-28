@@ -162,6 +162,7 @@ class FirestoreDocumentStore:
         order_by: Optional[str] = None,
         direction: str = "asc",
         limit: Optional[int] = None,
+        offset: Optional[int] = None,
         fields: Optional[Sequence[str]] = None,
     ) -> List[StoredDocument]:
         query: Any = self._client.collection(collection)
@@ -171,9 +172,18 @@ class FirestoreDocumentStore:
             query = query.order_by(order_by, direction=_DIRECTION[direction])
         if fields is not None:
             query = query.select(list(fields))
+        if offset is not None:
+            query = query.offset(offset)
         if limit is not None:
             query = query.limit(limit)
         return [_record_from_query(snapshot) for snapshot in query.stream()]
+
+    def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int:
+        query: Any = self._client.collection(collection)
+        for field, op, value in filters or ():
+            query = query.where(filter=FieldFilter(field, op, value))
+        result = query.count().get()
+        return int(result[0][0].value)
 
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]:
         if not ids:

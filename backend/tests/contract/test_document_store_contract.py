@@ -155,6 +155,16 @@ def test_query_equality_order_and_limit(store, uid):
     assert [d.id for d in limited] == ["p2"]
 
 
+def test_query_offset_and_count(store, uid):
+    base = f"users/{uid}/people"
+    for i in range(5):
+        store.set(f"{base}/p{i}", {"name": f"p{i}", "n": i})
+    assert store.count(base) == 5
+    assert store.count(base, filters=[("n", ">=", 3)]) == 2
+    page = store.query(base, order_by="n", direction="asc", offset=1, limit=2)
+    assert [d.to_dict()["n"] for d in page] == [1, 2]
+
+
 def test_query_is_scoped_to_the_collection(store, uid):
     other = f"u_{uuid.uuid4().hex}"
     store.set(f"users/{uid}/people/p1", {"name": "mine"})
