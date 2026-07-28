@@ -82,6 +82,51 @@ final class NotchVoiceMorphMarkTests: XCTestCase {
     }
   }
 
+  func testSpeakerPulseStaysBoundedAndRespectsReduceMotion() {
+    for time in stride(from: 0.0, through: 3.0, by: 0.05) {
+      let pulse = NotchVoiceMorphGeometry.speakerPulse(time: time, reduceMotion: false)
+      XCTAssertGreaterThanOrEqual(pulse, 0)
+      XCTAssertLessThanOrEqual(pulse, 1)
+    }
+    XCTAssertEqual(
+      NotchVoiceMorphGeometry.speakerPulse(time: 0.42, reduceMotion: true),
+      0,
+      accuracy: 0.001
+    )
+  }
+
+  func testSpeakingPulseKeepsEveryDotInsideTheIdentitySlot() {
+    // Speaker pulse scales both the ring radius and the dot diameter; at full
+    // pulse the outermost dot edge must still fit the 21pt mark slot.
+    let size = NotchVoiceMorphGeometry.markSize
+    let base = min(size.width, size.height)
+    let maxRingRadius =
+      base * NotchVoiceMorphGeometry.ringRadiusRatio
+      * NotchVoiceMorphGeometry.speakingRingRadiusScale(pulse: 1)
+    let maxDotRadius =
+      base * NotchVoiceMorphGeometry.dotDiameterRatio
+      * NotchVoiceMorphGeometry.speakingDotScale(pulse: 1) / 2
+    XCTAssertLessThanOrEqual(maxRingRadius + maxDotRadius, base / 2)
+  }
+
+  func testWaveEnvelopeIsCenterWeighted() {
+    let edge = NotchVoiceMorphGeometry.waveEnvelope(index: 0)
+    let center = NotchVoiceMorphGeometry.waveEnvelope(index: NotchVoiceMorphGeometry.dotCount / 2)
+    XCTAssertGreaterThan(center, edge)
+    XCTAssertGreaterThan(edge, 0)
+  }
+
+  func testWaveOffsetNeverExceedsItsAmplitude() {
+    let amplitude: CGFloat = 5.88
+    for time in stride(from: 0.0, through: 2.0, by: 0.03) {
+      for index in 0..<NotchVoiceMorphGeometry.dotCount {
+        let offset = NotchVoiceMorphGeometry.waveOffset(
+          time: time, index: index, amplitude: amplitude)
+        XCTAssertLessThanOrEqual(abs(offset), amplitude + 0.001)
+      }
+    }
+  }
+
   func testQuietListeningStillProducesAVisibleWave() {
     XCTAssertEqual(
       NotchVoiceMorphGeometry.normalizedLevel(0),
