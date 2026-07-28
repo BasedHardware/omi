@@ -47,6 +47,23 @@ struct CachedToken {
     expires_at: i64,
 }
 
+/// A freshly minted access token plus the lifetime its issuer reported.
+struct FetchedToken {
+    token: String,
+    /// Seconds of remaining life, as reported by the token endpoint.
+    expires_in: Option<i64>,
+}
+
+/// Lifetime assumed when a token endpoint omits `expires_in`.
+const DEFAULT_TOKEN_LIFETIME_SECS: i64 = 3600;
+
+/// GCE metadata server token endpoint. The server hands back a *shared* token
+/// whose remaining life is frequently far below an hour, so its `expires_in`
+/// is the only correct cache lifetime — assuming a full hour serves an expired
+/// token until the local cache happens to lapse.
+const METADATA_TOKEN_URL: &str =
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
+
 /// Firestore collection paths
 /// Copied from Python database.py
 const USERS_COLLECTION: &str = "users";
@@ -71,6 +88,7 @@ pub(crate) struct FirestoreService {
     project_id: String,
     credentials: Option<ServiceAccountCredentials>,
     cached_token: Arc<RwLock<Option<CachedToken>>>,
+    metadata_token_url: String,
 }
 
 impl FirestoreService {
@@ -88,6 +106,7 @@ impl FirestoreService {
             project_id,
             credentials,
             cached_token: Arc::new(RwLock::new(None)),
+            metadata_token_url: METADATA_TOKEN_URL.to_string(),
         };
 
         // Pre-fetch an access token
@@ -146,24 +165,26 @@ impl FirestoreService {
         }
 
         // Need to refresh token
-        let token = self.fetch_new_access_token().await?;
+        let fetched = self.fetch_new_access_token().await?;
 
-        // Cache it (tokens are valid for 1 hour, we'll refresh after 55 minutes)
+        // Cache it until the issuer's own expiry; the read path above keeps a
+        // 60s safety margin. Never assume a lifetime the issuer did not grant.
         {
             let mut cache = self.cached_token.write().await;
             *cache = Some(CachedToken {
-                token: token.clone(),
-                expires_at: Utc::now().timestamp() + 3300, // 55 minutes
+                token: fetched.token.clone(),
+                expires_at: Utc::now().timestamp()
+                    + fetched.expires_in.unwrap_or(DEFAULT_TOKEN_LIFETIME_SECS),
             });
         }
 
-        Ok(token)
+        Ok(fetched.token)
     }
 
     /// Fetch a new access token from Google OAuth
     async fn fetch_new_access_token(
         &self,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<FetchedToken, Box<dyn std::error::Error + Send + Sync>> {
         // Use service account credentials first (has full permissions)
         if let Some(creds) = &self.credentials {
             let token = self.get_token_from_service_account(creds).await?;
@@ -183,13 +204,10 @@ impl FirestoreService {
     /// Try to get token from GCP metadata server
     async fn try_metadata_server(
         &self,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let metadata_url =
-            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
-
+    ) -> Result<FetchedToken, Box<dyn std::error::Error + Send + Sync>> {
         let response = self
             .client
-            .get(metadata_url)
+            .get(&self.metadata_token_url)
             .header("Metadata-Flavor", "Google")
             .timeout(std::time::Duration::from_secs(2))
             .send()
@@ -199,9 +217,13 @@ impl FirestoreService {
             #[derive(Deserialize)]
             struct TokenResponse {
                 access_token: String,
+                expires_in: Option<i64>,
             }
             let token: TokenResponse = response.json().await?;
-            return Ok(token.access_token);
+            return Ok(FetchedToken {
+                token: token.access_token,
+                expires_in: token.expires_in,
+            });
         }
 
         Err("Metadata server not available".into())
@@ -211,7 +233,7 @@ impl FirestoreService {
     async fn get_token_from_service_account(
         &self,
         creds: &ServiceAccountCredentials,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<FetchedToken, Box<dyn std::error::Error + Send + Sync>> {
         let now = Utc::now().timestamp();
         let token_uri = creds
             .token_uri
@@ -254,6 +276,7 @@ impl FirestoreService {
         #[derive(Deserialize)]
         struct TokenResponse {
             access_token: String,
+            expires_in: Option<i64>,
         }
 
         let token_response: TokenResponse = response
@@ -261,7 +284,10 @@ impl FirestoreService {
             .await
             .map_err(|e| format!("Failed to parse token response: {}", e))?;
 
-        Ok(token_response.access_token)
+        Ok(FetchedToken {
+            token: token_response.access_token,
+            expires_in: token_response.expires_in,
+        })
     }
 
     /// Build Firestore REST API base URL
@@ -402,7 +428,80 @@ fn parse_effective_plan_from_doc(doc: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
+    // Tests may unwrap: the crate-level unwrap_used deny targets production
+    // code; a test failing on unwrap is the test doing its job.
+    #![allow(clippy::unwrap_used)]
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Serve the metadata-server token shape with a caller-chosen lifetime and
+    /// count how many times a token was minted.
+    async fn spawn_token_server(expires_in: i64) -> (String, Arc<AtomicUsize>) {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let served = hits.clone();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let app = axum::Router::new().route(
+            "/token",
+            axum::routing::get(move || {
+                let served = served.clone();
+                async move {
+                    let minted = served.fetch_add(1, Ordering::SeqCst);
+                    axum::Json(serde_json::json!({
+                        "access_token": format!("token-{}", minted),
+                        "expires_in": expires_in,
+                        "token_type": "Bearer",
+                    }))
+                }
+            }),
+        );
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        (format!("http://{}/token", address), hits)
+    }
+
+    fn service_with_metadata_url(metadata_token_url: String) -> FirestoreService {
+        FirestoreService {
+            client: Client::builder().no_proxy().build().unwrap(),
+            project_id: "test-project".to_string(),
+            credentials: None,
+            cached_token: Arc::new(RwLock::new(None)),
+            metadata_token_url,
+        }
+    }
+
+    /// The metadata server hands back a shared token that is often minutes from
+    /// expiry. Caching it for a hardcoded 55 minutes kept an already-expired
+    /// token in use — every Firestore call then failed UNAUTHENTICATED
+    /// (ACCESS_TOKEN_EXPIRED) until the local cache lapsed. The issuer's
+    /// `expires_in` has to win.
+    #[tokio::test]
+    async fn short_lived_metadata_token_is_not_cached_past_its_expiry() {
+        let (url, hits) = spawn_token_server(30).await;
+        let service = service_with_metadata_url(url);
+
+        let first = service.get_access_token().await.unwrap();
+        let second = service.get_access_token().await.unwrap();
+
+        // 30s of life is inside the 60s freshness margin, so the second call
+        // must mint a new token instead of serving the stale one.
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+        assert_eq!(first, "token-0");
+        assert_eq!(second, "token-1");
+    }
+
+    #[tokio::test]
+    async fn long_lived_metadata_token_is_reused_from_cache() {
+        let (url, hits) = spawn_token_server(3600).await;
+        let service = service_with_metadata_url(url);
+
+        let first = service.get_access_token().await.unwrap();
+        let second = service.get_access_token().await.unwrap();
+
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert_eq!(first, second);
+    }
 
     #[test]
     fn test_document_id_from_seed() {
