@@ -20,6 +20,14 @@ export interface AgentControlManifestProperty {
   description?: string;
   enum?: string[];
   items?: AgentControlManifestProperty;
+  /**
+   * Object shape, on an `object` property or on `array` items that are objects.
+   * A tool whose input is a list of structured records — several questions, each
+   * with its own choices — cannot describe itself without this, and a projector
+   * that drops it advertises an array of untyped values.
+   */
+  properties?: Record<string, AgentControlManifestProperty>;
+  required?: readonly string[];
   additionalProperties?: boolean;
 }
 
@@ -884,31 +892,37 @@ Pill dismissal writes here; it never deletes canonical run state.`,
 
 export type AgentControlManifestToolName = (typeof agentControlCapabilityManifest)[number]["name"];
 
+/**
+ * Project one manifest property into JSON Schema.
+ *
+ * Recursive so `items` and `properties` carry their full shape to the provider.
+ * Top-level composition (`anyOf`/`oneOf`/`allOf`) is still never emitted: some
+ * providers reject it on a tool's root schema, which is what the flat-schema
+ * contract in `tool-surfaces-exhaustiveness` protects.
+ */
+function projectManifestProperty(property: AgentControlManifestProperty): Record<string, unknown> {
+  const schema: Record<string, unknown> = { type: property.type };
+  if (property.description) schema.description = property.description;
+  if (property.enum) schema.enum = property.enum;
+  if (property.items) schema.items = projectManifestProperty(property.items);
+  if (property.properties) {
+    schema.properties = Object.fromEntries(
+      Object.entries(property.properties).map(([name, nested]) => [name, projectManifestProperty(nested)]),
+    );
+  }
+  if (property.required) schema.required = [...property.required];
+  if (property.additionalProperties !== undefined) {
+    schema.additionalProperties = property.additionalProperties;
+  }
+  return schema;
+}
+
 export function agentControlInputSchema(tool: AgentControlManifestTool): Record<string, unknown> {
-  const properties = Object.fromEntries(
-    Object.entries(tool.properties).map(([name, property]) => {
-      const schema: Record<string, unknown> = {
-        type: property.type,
-      };
-      if (property.description) schema.description = property.description;
-      if (property.enum) schema.enum = property.enum;
-      if (property.type === "array" && property.items) {
-        const itemSchema: Record<string, unknown> = {
-          type: property.items.type,
-        };
-        if (property.items.description) itemSchema.description = property.items.description;
-        if (property.items.enum) itemSchema.enum = property.items.enum;
-        schema.items = itemSchema;
-      }
-      if (property.type === "object" && property.additionalProperties !== undefined) {
-        schema.additionalProperties = property.additionalProperties;
-      }
-      return [name, schema];
-    })
-  );
   return {
     type: "object",
-    properties,
+    properties: Object.fromEntries(
+      Object.entries(tool.properties).map(([name, property]) => [name, projectManifestProperty(property)]),
+    ),
     required: tool.required,
   };
 }

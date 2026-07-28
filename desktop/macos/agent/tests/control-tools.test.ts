@@ -466,6 +466,47 @@ describe("agent control tools", () => {
     );
   });
 
+  it("projects nested object items so a list of structured records keeps its shape", () => {
+    const schema = agentControlInputSchema({
+      properties: {
+        questions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              question: { type: "string", description: "The question." },
+              options: { type: "array", items: { type: "string" } },
+              allow_free_text: { type: "boolean" },
+            },
+            required: ["question"],
+          },
+        },
+      },
+      required: ["questions"],
+    } as unknown as Parameters<typeof agentControlInputSchema>[0]);
+
+    // Without recursion the item schema degrades to a bare {type:"object"} and
+    // the provider is told to send a list of untyped values.
+    expect(schema).toMatchObject({
+      type: "object",
+      required: ["questions"],
+      properties: {
+        questions: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["question"],
+            properties: {
+              question: { type: "string", description: "The question." },
+              options: { type: "array", items: { type: "string" } },
+              allow_free_text: { type: "boolean" },
+            },
+          },
+        },
+      },
+    });
+  });
+
   it("keeps agent-control registry, manifest, and schemas in parity", () => {
     expect(new Set(agentControlCapabilityManifest.map((tool) => tool.name))).toEqual(new Set(AGENT_CONTROL_TOOL_NAMES));
     expect(new Set([...AGENT_CONTROL_TOOL_NAMES, ...INTERNAL_AGENT_CONTROL_TOOL_NAMES])).toEqual(
