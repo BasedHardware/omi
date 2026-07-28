@@ -1,0 +1,3 @@
+{
+  "change": "Omi now asks you directly when a request is ambiguous or a detail is missing, showing the choices in the chat composer instead of ending its reply with a question you have to answer by typing"
+}

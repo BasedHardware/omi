@@ -663,7 +663,8 @@ struct DashboardPage: View {
         },
         onAttachmentRemoved: { id in
           chatProvider.removePendingAttachment(id: id)
-        }
+        },
+        elicitations: chatProvider.elicitations
       )
       .padding(.horizontal, OmiSpacing.section)
       .padding(.top, OmiSpacing.md)
@@ -1232,7 +1233,8 @@ struct DashboardPage: View {
       onConnect: toggleHomeConnectPanel,
       // Tapping the bar begins a fresh chat and focuses it to type, staying on
       // the hero; only sending enters the chat surface (see sendFromHomeAskBar).
-      onActivate: { focusHomeAskBar() }
+      onActivate: { focusHomeAskBar() },
+      elicitations: chatProvider.elicitations
     )
   }
 
@@ -2241,6 +2243,10 @@ struct HomeAskBar: View {
   let onStop: () -> Void
   let onConnect: () -> Void
   let onActivate: () -> Void
+  /// Home renders its own composer rather than ChatInputView, so the question
+  /// swap has to be applied here too. Required and observed for the same reason
+  /// it is on ChatInputView: a surface that silently shows no card is the defect.
+  @ObservedObject var elicitations: ElicitationStore
 
   @State private var isHovering = false
   @State private var isDropTargeted = false
@@ -2259,6 +2265,39 @@ struct HomeAskBar: View {
   private var isFocused: Bool { focus.wrappedValue }
 
   var body: some View {
+    Group {
+      if let elicitation = elicitations.focused {
+        // Not keyed by dispatch id: see ChatInputView. One card updating in
+        // place keeps switching smooth.
+        ChatElicitationPanel(elicitations: elicitations, elicitation: elicitation)
+          .padding(.horizontal, OmiSpacing.lg)
+          .padding(.vertical, OmiSpacing.md)
+          .transition(.opacity)
+      } else {
+        askBarInput
+          .transition(.opacity)
+      }
+    }
+    .omiAnimation(SBMotion.standard, value: elicitations.focused?.id)
+    .omiAnimation(SBMotion.standard, value: elicitations.waitingCount)
+    .background(
+      RoundedRectangle(cornerRadius: 29, style: .continuous)
+        .fill(HomePalette.tile.opacity(isHovering || isFocused ? 1 : 0.92))
+    )
+    .overlay {
+      if isDropTargeted {
+        RoundedRectangle(cornerRadius: 29, style: .continuous)
+          .stroke(Color.white.opacity(0.42), lineWidth: 1)
+      } else {
+        RoundedRectangle(cornerRadius: 29, style: .continuous)
+          .stroke(HomePalette.stageGlow.opacity(isFocused ? 0.16 : 0.08), lineWidth: 1)
+      }
+    }
+    .contentShape(.rect(cornerRadius: 29))
+    .onHover { isHovering = $0 }
+  }
+
+  private var askBarInput: some View {
     VStack(spacing: OmiSpacing.sm) {
       if !attachments.isEmpty {
         AttachmentPreviewRow(
@@ -2311,19 +2350,6 @@ struct HomeAskBar: View {
       .padding(.trailing, OmiSpacing.sm)
       .padding(.vertical, 12)
       .frame(minHeight: 58)
-    }
-    .background(
-      RoundedRectangle(cornerRadius: 29, style: .continuous)
-        .fill(HomePalette.tile.opacity(isHovering || isFocused ? 1 : 0.92))
-    )
-    .overlay {
-      if isDropTargeted {
-        RoundedRectangle(cornerRadius: 29, style: .continuous)
-          .stroke(Color.white.opacity(0.42), lineWidth: 1)
-      } else {
-        RoundedRectangle(cornerRadius: 29, style: .continuous)
-          .stroke(HomePalette.stageGlow.opacity(isFocused ? 0.16 : 0.08), lineWidth: 1)
-      }
     }
     // Keep the composer visually separate without casting a large, opaque bezel
     // into the transcript. These are intentionally only 10% of the old shadow.

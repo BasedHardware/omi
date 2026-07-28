@@ -332,6 +332,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
     case .initMessage, .toolUse, .authorizedToolExecution,
       .authRequired, .authSuccess, .controlToolResult,
       .journalOperationResult, .journalTurnChanged, .journalBackendSync, .journalBackendDelete,
+      .elicitationPending, .elicitationResolved,
       .journalBackendReconcile,
       .defaultExecutionProfileConfigured, .surfaceSessionResolved,
       .sessionExecutionProfileMigrated, .contextSourceUpdated, .contextSnapshot,

@@ -101,17 +101,22 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
     });
 
     await adapter.start();
+    // A permanent-only permission request used to be dead-ended with a -32001
+    // protocol error the user could never resolve. With no resolver installed
+    // it now fails closed on the protocol's own cancelled outcome instead.
     proc.stdout.write(`${JSON.stringify({
       jsonrpc: "2.0",
       id: 99,
       method: "session/request_permission",
-      params: { options: [{ kind: "allow_always", optionId: "allow" }] },
-    })}\n`);
-    await vi.waitUntil(() => requests.some((request) => request.id === 99 && "error" in request));
-    expect(requests.find((request) => request.id === 99)).toMatchObject({
-      error: {
-        code: -32001,
+      params: {
+        sessionId: "hermes-native-session",
+        toolCall: { toolCallId: "t1", title: "Write a file", kind: "edit" },
+        options: [{ optionId: "allow", name: "Allow always", kind: "allow_always" }],
       },
+    })}\n`);
+    await vi.waitUntil(() => requests.some((request) => request.id === 99 && "result" in request));
+    expect(requests.find((request) => request.id === 99)).toMatchObject({
+      result: { outcome: { outcome: "cancelled" } },
     });
     expect(spawn).toHaveBeenCalledWith(
       "/Users/dazheng/.local/bin/hermes acp --accept-hooks",

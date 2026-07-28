@@ -74,10 +74,18 @@ struct ChatInputView: View {
   /// Called when the user removes a staged attachment chip.
   var onAttachmentRemoved: ((String) -> Void)? = nil
 
+  /// The shared question queue. Required and observed directly rather than
+  /// passed as optional pieces: a composer that silently renders no card when a
+  /// caller forgets to wire it is the exact defect this shape prevents.
+  @ObservedObject var elicitations: ElicitationStore
+
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @Environment(\.fontScale) private var fontScale
   @State private var isDropTargeted = false
   @State private var hasMarkedText = false
+  /// Holds the draft across the swap, so a half-written message survives a
+  /// question the user did not ask for.
+  @State private var draftHeldDuringElicitation: String = ""
 
   private var hasText: Bool {
     !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -92,6 +100,46 @@ struct ChatInputView: View {
   private let inputPaddingV: CGFloat = 12
 
   var body: some View {
+    Group {
+      if let elicitation = elicitations.focused {
+        // Deliberately not keyed by dispatch id. Keying it rebuilds the whole
+        // card on every switch, so two cards exist mid-transition and the shell
+        // jumps between their heights. Letting one card update in place makes
+        // switching a height change instead of a teardown.
+        ChatElicitationPanel(elicitations: elicitations, elicitation: elicitation)
+          .transition(.opacity)
+      } else {
+        composer
+          .transition(.opacity)
+      }
+    }
+    // One shell for both states. Keeping it here, rather than on each branch,
+    // is what makes the swap read as the composer changing shape instead of one
+    // control being replaced by another.
+    .chatComposerShell(fill: OmiColors.backgroundSecondary.opacity(isDropTargeted ? 0.96 : 0.82))
+    .overlay {
+      RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
+        .stroke(dropStrokeColor, lineWidth: isDropTargeted ? 1.5 : 0)
+    }
+    .fixedSize(horizontal: false, vertical: true)
+    .omiAnimation(SBMotion.standard, value: elicitations.focused?.id)
+    .omiAnimation(SBMotion.standard, value: elicitations.waitingCount)
+    .onChange(of: elicitations.focused?.id) { _, newValue in
+      if newValue != nil {
+        // Park the draft, then clear the field so the returning composer is not
+        // holding text the user typed before the question arrived.
+        if !inputText.isEmpty {
+          draftHeldDuringElicitation = inputText
+          inputText = ""
+        }
+      } else if !draftHeldDuringElicitation.isEmpty {
+        inputText = draftHeldDuringElicitation
+        draftHeldDuringElicitation = ""
+      }
+    }
+  }
+
+  private var composer: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       if attachmentsEnabled && !currentAttachments.isEmpty {
         AttachmentPreviewRow(
@@ -187,12 +235,6 @@ struct ChatInputView: View {
         }
       }
     }
-    .chatComposerShell(fill: OmiColors.backgroundSecondary.opacity(isDropTargeted ? 0.96 : 0.82))
-    .overlay {
-      RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
-        .stroke(dropStrokeColor, lineWidth: isDropTargeted ? 1.5 : 0)
-    }
-    .fixedSize(horizontal: false, vertical: true)
     .if(attachmentsEnabled) { view in
       view.onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
     }

@@ -4,7 +4,7 @@
 // === Swift → Bridge (stdin) ===
 
 export const PROTOCOL_VERSION = 2 as const;
-export const RUNTIME_CAPABILITIES = ["journal_import_remote_turn", "runtime_adapter_availability"] as const;
+export const RUNTIME_CAPABILITIES = ["journal_import_remote_turn", "runtime_adapter_availability", "elicitation"] as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 export interface ProtocolEnvelope {
@@ -436,6 +436,25 @@ export interface RefreshOwnerMessage {
   ownerId: string;
 }
 
+/**
+ * The user's answer to a pending elicitation.
+ *
+ * Carries dispatch identity and owner rather than request or client
+ * correlation, so holding a live connection is not by itself authority to
+ * answer someone else's question. `optionId` names one of the offered options;
+ * `text` is a typed answer and is accepted only by a question that allows it.
+ */
+export interface ResolveElicitationMessage {
+  type: "resolve_elicitation";
+  ownerId: string;
+  dispatchId: string;
+  decision: "answer" | "cancel";
+  /** Every option the user chose. A pick-one question carries exactly one. */
+  optionIds?: string[];
+  /** The user's own words, which may accompany chosen options. */
+  text?: string;
+}
+
 export type InboundMessage =
   | QueryMessage
   | AuthorizedToolExecutionResultMessage
@@ -468,7 +487,8 @@ export type InboundMessage =
   | JournalBackendDeleteResultMessage
   | JournalBackendReconcileResultMessage
   | RefreshTokenMessage
-  | RefreshOwnerMessage;
+  | RefreshOwnerMessage
+  | ResolveElicitationMessage;
 
 const INBOUND_RESPONSE_MESSAGE_TYPES = new Set<InboundMessage["type"]>([
   "authorized_tool_execution_result",
@@ -911,6 +931,50 @@ export interface JournalTurnChangedMessage extends OutboundEnvelope {
   turn: JournalTurnProjection;
 }
 
+/**
+ * An elicitation is waiting on the user.
+ *
+ * Emitted when a dispatch is recorded, not when the agent asks, so the surface
+ * renders exactly what the kernel persisted. Everything the card needs travels
+ * here; Swift does not read the dispatch row itself.
+ */
+export interface ElicitationPendingMessage extends OutboundEnvelope {
+  type: "elicitation_pending";
+  ownerId: string;
+  dispatchId: string;
+  sessionId: string;
+  runId: string | null;
+  channel: "acp_permission" | "omi_ask_user";
+  mode: "permission" | "question";
+  adapterId: string;
+  title: string;
+  prompt: string;
+  subject: string | null;
+  context: string | null;
+  options: Array<{ optionId: string; label: string; effect: string }>;
+  allowsFreeText: boolean;
+  /**
+   * Whether the card may offer several options at once. Required, not optional:
+   * a field the surface honours but the wire may omit is a field that silently
+   * defaults, which is how every pick-many question once rendered as pick-one.
+   */
+  allowsMultiple: boolean;
+  recommendedDefault: string | null;
+  createdAtMs: number;
+}
+
+/**
+ * A pending elicitation stopped needing the user: answered elsewhere, the turn
+ * was cancelled, or the adapter went away. The card must leave on this, so it
+ * is emitted for every terminal transition and not only for a user answer.
+ */
+export interface ElicitationResolvedMessage extends OutboundEnvelope {
+  type: "elicitation_resolved";
+  ownerId: string;
+  dispatchId: string;
+  outcome: "answered" | "cancelled";
+}
+
 export interface JournalBackendSyncMessage extends OutboundEnvelope {
   type: "journal_backend_sync";
   ownerId: string;
@@ -985,6 +1049,8 @@ export type OutboundMessage =
   | JournalOperationResultMessage
   | AgentSpawnJournalEnsuredMessage
   | JournalTurnChangedMessage
+  | ElicitationPendingMessage
+  | ElicitationResolvedMessage
   | JournalBackendSyncMessage
   | JournalBackendDeleteMessage
   | JournalBackendReconcileMessage;
@@ -1021,6 +1087,8 @@ export type OutboundMessageDraft =
   | DraftEnvelope<JournalOperationResultMessage>
   | DraftEnvelope<AgentSpawnJournalEnsuredMessage>
   | DraftEnvelope<JournalTurnChangedMessage>
+  | DraftEnvelope<ElicitationPendingMessage>
+  | DraftEnvelope<ElicitationResolvedMessage>
   | DraftEnvelope<JournalBackendSyncMessage>
   | DraftEnvelope<JournalBackendDeleteMessage>
   | DraftEnvelope<JournalBackendReconcileMessage>;

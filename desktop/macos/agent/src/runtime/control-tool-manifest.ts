@@ -20,6 +20,14 @@ export interface AgentControlManifestProperty {
   description?: string;
   enum?: string[];
   items?: AgentControlManifestProperty;
+  /**
+   * Object shape, on an `object` property or on `array` items that are objects.
+   * A tool whose input is a list of structured records — several questions, each
+   * with its own choices — cannot describe itself without this, and a projector
+   * that drops it advertises an array of untyped values.
+   */
+  properties?: Record<string, AgentControlManifestProperty>;
+  required?: readonly string[];
   additionalProperties?: boolean;
 }
 
@@ -27,6 +35,7 @@ export type AgentControlSurface = "desktopChat" | "realtimeHub";
 
 export interface AgentControlManifestTool {
   name:
+    | "ask_user"
     | "list_agent_sessions"
     | "get_agent_run"
     | "build_desktop_awareness_snapshot"
@@ -390,6 +399,87 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
       resourceRef: { type: "string", description: "Optional resource ref." },
     },
     required: ["selectedBundles"],
+  },
+  {
+    name: "ask_user",
+    label: "Ask User",
+    // The model sees this description and nothing else: promptGuidelines are not
+    // projected into MCP tool definitions. So the "when" has to live here, or the
+    // tool only ever fires when the user names it out loud.
+    description: `Ask the user one or more questions and wait for their answers before continuing.
+
+Use this instead of guessing whenever the next step depends on something only the user can decide:
+- their request is ambiguous and the readings lead to different work
+- a required detail is missing and you would otherwise pick one
+- there are several reasonable paths and the choice is theirs
+- you are about to do something significant and irreversible
+
+Prefer this over asking in plain prose: a plain question ends your turn and the user has to retype an answer, while this pauses the run and resumes with what they chose.
+
+Put every question the decision actually needs into one call. They are shown as one set the user walks through and answers in a single pass, so a three-part decision costs one interruption rather than three. Pass options when you can name the likely answers, and leave allow_free_text on when an unlisted answer is reasonable. allow_multiple defaults to false and should stay false unless the question itself invites more than one answer ("any that apply", "all that apply"). A question asking for the stack, the status, the stage, which one, or what you would most like has alternatives as answers, not a combination, and a single choice there moves the user straight to the next question.
+
+Do not use it for onboarding steps; ask_followup owns that flow. Do not use it to confirm something you already know, or to ask permission for a tool that already has its own approval.`,
+    promptSnippet: "ask_user - Ask the user questions and wait for the answers",
+    promptGuidelines: [
+      "Use when the work genuinely cannot proceed without a decision only the user can make.",
+      "Put every question that decision needs into one call; they are answered as one set.",
+      "Prefer options the user can click; set allow_free_text when an unlisted answer is reasonable.",
+      "Leave allow_multiple off unless the question says any/all that apply; status, stage, and which-one questions take exactly one answer.",
+      "Do not use for onboarding steps; ask_followup owns that flow.",
+      "The run blocks until the user answers or cancels, so ask the full set once and act on the answers.",
+    ],
+    capabilityDoc: controlDoc(
+      "Ask User",
+      "Ask the user one or more questions mid-run and wait for their answers.",
+      [
+        "Use when the work cannot proceed without a decision only the user can make.",
+        "Carries the whole set of questions in one call; blocks the run until the user answers or cancels.",
+      ],
+    ),
+    latency: "async background",
+    // Desktop chat only. The card renders in the chat composer and the floating
+    // bar has no elicitation surface, so realtime never exposed this as a
+    // callable tool. It did claim it as a capability, which put a tool the
+    // realtime model could not call into its own capability model. Declaring
+    // the surface it actually has keeps that claim honest, and means a future
+    // floating-bar card is what re-opens it rather than a silent mismatch.
+    surfaces: ["desktopChat"],
+    ...agentControlManagePolicy,
+    allowedSurfaces: ["desktopChat"],
+    runtimePreconditions: [
+      "Records a routing_choice dispatch scoped to the calling session's owner.",
+      "Blocks until the user answers or the turn is cancelled; a runtime restart cancels it.",
+    ],
+    timeoutClass: "long",
+    properties: {
+      questions: {
+        type: "array",
+        description:
+          "Every question this decision needs. Ask as many as it actually takes; they are presented as one set the user answers in a single pass.",
+        items: {
+          type: "object",
+          properties: {
+            question: { type: "string", description: "The question to put to the user." },
+            options: {
+              type: "array",
+              items: { type: "string" },
+              description: "Optional answers the user can click.",
+            },
+            allow_free_text: {
+              type: "boolean",
+              description: "Whether the user may type an answer instead of choosing. Defaults to true.",
+            },
+            allow_multiple: {
+              type: "boolean",
+              description:
+                "Whether the user may pick several options at once. Default false. Set it true only when the question itself invites more than one answer -- it says any that apply, all that apply, or select any. Leave it false whenever the question asks for one thing: the stack, the status, the stage, which one, what is your main X, what would you most like. Those answers are alternatives, and offering checkboxes for them makes the user answer a question you did not ask.",
+            },
+          },
+          required: ["question"],
+        },
+      },
+    },
+    required: ["questions"],
   },
   {
     name: "create_desktop_dispatch",
@@ -829,31 +919,37 @@ Pill dismissal writes here; it never deletes canonical run state.`,
 
 export type AgentControlManifestToolName = (typeof agentControlCapabilityManifest)[number]["name"];
 
+/**
+ * Project one manifest property into JSON Schema.
+ *
+ * Recursive so `items` and `properties` carry their full shape to the provider.
+ * Top-level composition (`anyOf`/`oneOf`/`allOf`) is still never emitted: some
+ * providers reject it on a tool's root schema, which is what the flat-schema
+ * contract in `tool-surfaces-exhaustiveness` protects.
+ */
+function projectManifestProperty(property: AgentControlManifestProperty): Record<string, unknown> {
+  const schema: Record<string, unknown> = { type: property.type };
+  if (property.description) schema.description = property.description;
+  if (property.enum) schema.enum = property.enum;
+  if (property.items) schema.items = projectManifestProperty(property.items);
+  if (property.properties) {
+    schema.properties = Object.fromEntries(
+      Object.entries(property.properties).map(([name, nested]) => [name, projectManifestProperty(nested)]),
+    );
+  }
+  if (property.required) schema.required = [...property.required];
+  if (property.additionalProperties !== undefined) {
+    schema.additionalProperties = property.additionalProperties;
+  }
+  return schema;
+}
+
 export function agentControlInputSchema(tool: AgentControlManifestTool): Record<string, unknown> {
-  const properties = Object.fromEntries(
-    Object.entries(tool.properties).map(([name, property]) => {
-      const schema: Record<string, unknown> = {
-        type: property.type,
-      };
-      if (property.description) schema.description = property.description;
-      if (property.enum) schema.enum = property.enum;
-      if (property.type === "array" && property.items) {
-        const itemSchema: Record<string, unknown> = {
-          type: property.items.type,
-        };
-        if (property.items.description) itemSchema.description = property.items.description;
-        if (property.items.enum) itemSchema.enum = property.items.enum;
-        schema.items = itemSchema;
-      }
-      if (property.type === "object" && property.additionalProperties !== undefined) {
-        schema.additionalProperties = property.additionalProperties;
-      }
-      return [name, schema];
-    })
-  );
   return {
     type: "object",
-    properties,
+    properties: Object.fromEntries(
+      Object.entries(tool.properties).map(([name, property]) => [name, projectManifestProperty(property)]),
+    ),
     required: tool.required,
   };
 }

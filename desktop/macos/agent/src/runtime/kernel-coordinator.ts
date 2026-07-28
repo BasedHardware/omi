@@ -500,6 +500,18 @@ export class AgentRuntimeKernel extends KernelSessions {
     return this.store.insertDesktopDispatch(input);
   }
 
+  /**
+   * Bridge an adapter-native session id to the Omi session that owns it, so an
+   * in-flight adapter request can be recorded against kernel identity rather
+   * than against the adapter's own.
+   */
+  sessionForAdapterNativeSession(
+    adapterId: string,
+    adapterNativeSessionId: string,
+  ): { sessionId: string; ownerId: string; runId: string | null } | null {
+    return this.store.sessionForAdapterNativeSession(adapterId, adapterNativeSessionId);
+  }
+
   resolveDesktopDispatch(dispatchId: string, input: ResolveDesktopDispatchInput): ResolveDesktopDispatchResult {
     return this.withTransaction(() => {
       const dispatch = this.store.resolveDesktopDispatch(dispatchId, input);

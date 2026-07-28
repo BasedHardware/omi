@@ -1054,6 +1054,11 @@ class ChatProvider: ObservableObject {
   @Published var isLoadingSessions = true  // Start true since we load sessions on init
   @Published var isSending = false
   @Published var isStopping = false
+  /// Questions agents are waiting on, projected from kernel dispatches. Held
+  /// here rather than per-view so main chat and the task panel present the one
+  /// queue instead of forking it.
+  private let elicitationProjection = ElicitationProjection()
+  var elicitations: ElicitationStore { elicitationProjection.store }
   @Published private(set) var activeTurnOwner: ChatTurnOwner?
   @Published var isClearing = false
   @Published var errorMessage: String?
@@ -1394,6 +1399,7 @@ class ChatProvider: ObservableObject {
     isRestoringDraft = false
     log("ChatProvider initialized, will start Claude bridge on first use")
 
+    elicitationProjection.start { [weak self] in self?.objectWillChange.send() }
     // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
     // Pre-6594 installs may have the old agentSDK tag saved; the settings
     // picker no longer offers it, so leaving it stored would leave the UI
@@ -4332,7 +4338,16 @@ class ChatProvider: ObservableObject {
               self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
             }
           }
-          if !issuedToolStallAbort {
+          // A question on screen is not a stalled tool. ask_user blocks by
+          // design until the user answers, so the tool emits nothing while they
+          // read and decide; without this the guard interrupted the bridge
+          // under an open card and the answer landed on a revoked turn.
+          let awaitingUserAnswer = await MainActor.run { [weak self] in
+            (self?.elicitations.waitingCount ?? 0) > 0
+          }
+          if awaitingUserAnswer {
+            await stallDetector.noteAllToolsProgressing(atMs: nowMs)
+          } else if !issuedToolStallAbort {
             let overdueToolIds = await stallDetector.toolIdsWithoutProgress(
               durationMs: Self.perToolStallAbortMs,
               atMs: nowMs

@@ -118,6 +118,19 @@ actor StallDetector {
     toolStartedAtMs.isEmpty && atMs - lastEventAtMs >= durationMs
   }
 
+  /// Treat every in-flight tool as having just made progress.
+  ///
+  /// A tool waiting on a question the user has not answered yet emits nothing,
+  /// which by elapsed time alone is indistinguishable from a hung one. Someone
+  /// reading the question and deciding is progress. That judgment lives with
+  /// the caller, which can see the surface; the detector stays pure and goes on
+  /// knowing nothing about elicitation.
+  func noteAllToolsProgressing(atMs: Int) {
+    for id in toolLastProgressAtMs.keys {
+      toolLastProgressAtMs[id] = atMs
+    }
+  }
+
   // MARK: - Observation
 
   /// Record an event at simulated time `atMs` and return any state

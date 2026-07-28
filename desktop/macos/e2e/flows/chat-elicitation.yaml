@@ -1,0 +1,103 @@
+version: 2
+name: chat-elicitation
+tier: 2
+description: >-
+  Agent questions take over the chat composer and hand it back. A real
+  permission needs a signed-in bundle and a live external agent, so this drives
+  the production elicitation store through the bridge and asserts the queue
+  transitions the card renders from.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Chat/ElicitationStore.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+Elicitation.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeStatusStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatElicitationPanel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationElicitationQA.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Home where chat lives
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+
+  - id: S2
+    name: Composer starts with no question waiting
+    bridge.action:
+      name: elicitation_snapshot
+    expect:
+      result.detail.waiting_count: "0"
+      result.detail.composer_shows_card: "false"
+
+  - id: S3
+    name: A permission arrives and takes over the composer
+    bridge.action:
+      name: elicitation_probe
+      params:
+        dispatch_id: e2e-permission-1
+        mode: permission
+    expect:
+      result.detail.queued: "1"
+      result.detail.current_dispatch_id: e2e-permission-1
+
+  - id: S4
+    name: The card is showing and refuses free text
+    bridge.action:
+      name: elicitation_snapshot
+    expect:
+      result.detail.composer_shows_card: "true"
+      result.detail.current_mode: permission
+      result.detail.current_allows_free_text: "false"
+
+  - id: S5
+    name: A second question queues behind the first rather than replacing it
+    bridge.action:
+      name: elicitation_probe
+      params:
+        dispatch_id: e2e-question-2
+        mode: question
+        allow_free_text: "true"
+    expect:
+      result.detail.queued: "2"
+      result.detail.current_dispatch_id: e2e-permission-1
+
+  - id: S6
+    name: Answering the permission advances to the queued question
+    bridge.action:
+      name: elicitation_answer
+      params:
+        option_id: allow
+    expect:
+      result.detail.answered: "true"
+      result.detail.waiting_count: "1"
+      result.detail.current_dispatch_id: e2e-question-2
+
+  - id: S7
+    name: The question allows a typed answer where the permission did not
+    bridge.action:
+      name: elicitation_snapshot
+    expect:
+      result.detail.current_mode: question
+      result.detail.current_allows_free_text: "true"
+
+  - id: S8
+    name: Answering the last question hands the composer back
+    bridge.action:
+      name: elicitation_answer
+      params:
+        option_id: main
+    expect:
+      result.detail.answered: "true"
+      result.detail.waiting_count: "0"
+
+  - id: S9
+    name: Composer is the input again, with nothing waiting
+    bridge.action:
+      name: elicitation_snapshot
+    expect:
+      result.detail.waiting_count: "0"
+      result.detail.composer_shows_card: "false"

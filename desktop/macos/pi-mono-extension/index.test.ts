@@ -1149,6 +1149,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     build_desktop_context_packet: ["objective", "packetJson", "retentionClass", "surfaceKind", "ttlMs"],
     route_desktop_intent: ["surfaceKind", "utterance"],
     evaluate_desktop_tool_policy: ["selectedBundles"],
+    ask_user: ["questions"],
     create_desktop_dispatch: ["decisionPrompt", "kind", "priority", "title"],
     cancel_agent_run: ["runId"],
     inspect_agent_artifacts: [],

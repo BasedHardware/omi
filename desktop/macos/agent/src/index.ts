@@ -64,6 +64,7 @@ import type {
   JournalBackendDeleteResultMessage,
   JournalBackendReconcileResultMessage,
   RefreshOwnerMessage,
+  ResolveElicitationMessage,
   RevokeOwnerRuntimeMessage,
   RefreshTokenMessage,
   AuthMethod,
@@ -82,6 +83,15 @@ import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapters/acp.js";
+import {
+  askUser,
+  createKernelElicitationResolver,
+  elicitationPendingFields,
+  elicitationResolution,
+  humanIsBeingAsked,
+} from "./runtime/desktop-elicitation-resolver.js";
+import type { KernelElicitationDeps } from "./runtime/desktop-elicitation-resolver.js";
+import { relayToolTimeoutMs } from "./runtime/desktop-elicitation.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
@@ -285,7 +295,8 @@ const pendingToolCalls = new Map<
     client: Socket;
     callId: string;
     invocation: AuthorizedRunToolInvocation;
-    timeout: ReturnType<typeof setTimeout>;
+    /** Absent for a tool that waits on a person; those end by answer or cancel. */
+    timeout?: ReturnType<typeof setTimeout>;
   }
 >();
 
@@ -816,23 +827,28 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
-              const timeout = setTimeout(() => {
-                const pending = pendingToolCalls.get(pendingKey);
-                if (!pending) return;
-                pendingToolCalls.delete(pendingKey);
-                try {
-                  runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, "swift_tool_timeout");
-                } catch (error) {
-                  logErr(`Failed to mark timed-out tool invocation outcome unknown: ${error}`);
-                }
-                writeRelayToolResult(
-                  pending.client,
-                  pending.callId,
-                  relayError("swift_tool_timeout", "Timed out waiting for the Swift tool executor"),
-                  pending.invocation,
-                  "failed",
-                );
-              }, 120_000);
+              // null for a tool that waits on a person: the turn's own
+              // cancellation path ends it, not a clock the relay picked.
+              const relayTimeoutMs = relayToolTimeoutMs(msg.name);
+              const timeout = relayTimeoutMs === null
+                ? undefined
+                : setTimeout(() => {
+                  const pending = pendingToolCalls.get(pendingKey);
+                  if (!pending) return;
+                  pendingToolCalls.delete(pendingKey);
+                  try {
+                    runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, "swift_tool_timeout");
+                  } catch (error) {
+                    logErr(`Failed to mark timed-out tool invocation outcome unknown: ${error}`);
+                  }
+                  writeRelayToolResult(
+                    pending.client,
+                    pending.callId,
+                    relayError("swift_tool_timeout", "Timed out waiting for the Swift tool executor"),
+                    pending.invocation,
+                    "failed",
+                  );
+                }, relayTimeoutMs);
               pendingToolCalls.set(pendingKey, {
                 client,
                 callId,
@@ -1073,7 +1089,16 @@ type McpServerConfig = {
   command: string;
   args: string[];
   env: Array<{ name: string; value: string }>;
+  /** Per-tool-call budget in seconds, honoured by MCP hosts that read it. */
+  timeout?: number;
 };
+
+/**
+ * Ceiling for an MCP host's own per-tool-call budget on the omi-tools server.
+ * Generous on purpose: Omi's card owns the real deadline for a question, and
+ * Omi's relay and stall guards own it for everything else.
+ */
+const OMI_TOOLS_MCP_TIMEOUT_SECONDS = 1_800;
 
 function buildMcpServers(
   mode: string,
@@ -1108,6 +1133,19 @@ function buildMcpServers(
       command: process.execPath,
       args: [omiToolsStdioScript],
       env: omiToolsEnv,
+      // ask_user blocks until a person answers, and an MCP host's own per-call
+      // budget knows nothing about that: hermes defaults to 300s and killed
+      // questions out from under the card, leaving one on screen answering a
+      // turn that was already gone.
+      //
+      // Omi owns this deadline instead. The card runs a visible idle budget
+      // that resets on interaction and, when it expires, delivers the answers
+      // already given and cancels the rest. This ceiling only has to stay out
+      // of that policy's way; it is not the thing bounding a hung tool. Every
+      // other tool on this server is still caught far sooner by Omi's own
+      // relay and stall guards, which exempt only the tools that wait on a
+      // person.
+      timeout: OMI_TOOLS_MCP_TIMEOUT_SECONDS,
     });
   }
 
@@ -1280,6 +1318,38 @@ async function main(): Promise<void> {
   });
   kernel.subscribe(rejectPendingToolCallsForKernelEvent);
   runtimeKernel = kernel;
+  // Give every ACP adapter a way to reach a person. Without this an adapter
+  // fails closed on any permission its policy will not auto-resolve, so the
+  // installation has to cover the pi adapter and each externally spawned one.
+  const elicitationDeps: KernelElicitationDeps = {
+    kernel,
+    log: logErr,
+    notifier: {
+      pending: ({ dispatchId, ownerId, sessionId, runId, request, createdAtMs }) => send({
+        type: "elicitation_pending",
+        ownerId,
+        dispatchId,
+        sessionId,
+        runId,
+        ...elicitationPendingFields(request),
+        createdAtMs,
+      }),
+      resolved: ({ dispatchId, ownerId, outcome }) => send({
+        type: "elicitation_resolved",
+        ownerId,
+        dispatchId,
+        outcome,
+      }),
+    },
+  };
+  const elicitationResolver = createKernelElicitationResolver(elicitationDeps);
+  const installElicitationResolver = (adapter: RuntimeAdapter): void => {
+    if (!(adapter instanceof AcpRuntimeAdapter)) return;
+    adapter.elicitationResolver = elicitationResolver;
+    // The idle watchdog must not read "blocked on a person" as "stalled".
+    adapter.humanIsBeingAsked = humanIsBeingAsked;
+  };
+  installElicitationResolver(acpAdapter);
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
@@ -1310,14 +1380,20 @@ async function main(): Promise<void> {
     return ensureRegisteredAdapter(registry, "hermes", {
       log: logErr,
       maxWorkers: 1,
-      onCreate: (adapter) => localAcpAdapters.add(adapter),
+      onCreate: (adapter) => {
+        localAcpAdapters.add(adapter);
+        installElicitationResolver(adapter);
+      },
     });
   };
   const ensureOpenClawAdapter = async (): Promise<boolean> => {
     return ensureRegisteredAdapter(registry, "openclaw", {
       log: logErr,
       maxWorkers: configuredPiMonoMaxWorkers(),
-      onCreate: (adapter) => localAcpAdapters.add(adapter),
+      onCreate: (adapter) => {
+        localAcpAdapters.add(adapter);
+        installElicitationResolver(adapter);
+      },
     });
   };
   const hermesAvailable = await ensureHermesAdapter();
@@ -1344,6 +1420,7 @@ async function main(): Promise<void> {
   }
   agentControlToolContext = {
     kernel,
+    askUser: (request, binding) => askUser(elicitationDeps, request, binding),
     defaultAdapterId,
     providerBoundary: providerBoundaryForAdapter(defaultAdapterId),
     executionRole: "coordinator",
@@ -2967,6 +3044,23 @@ async function main(): Promise<void> {
         const invalidate = msg as InvalidateSessionMessage;
         invalidate.ownerId = resolveActiveOwner(invalidate.ownerId);
         transport.handleInvalidateSession(invalidate);
+        break;
+      }
+
+      case "resolve_elicitation": {
+        const request = msg as ResolveElicitationMessage;
+        // Owner-scoped by the store, so a stale surface cannot answer a
+        // question that now belongs to a different signed-in user.
+        kernel.resolveDesktopDispatch(request.dispatchId, {
+          ownerId: request.ownerId,
+          status: request.decision === "answer" ? "resolved" : "cancelled",
+          resolvedBy: "user",
+          // Both parts travel: a pick-many question is answered with options
+          // and, when it allows them, the user's own words alongside.
+          resolutionJson: JSON.stringify(
+            elicitationResolution({ optionIds: request.optionIds, text: request.text }),
+          ),
+        });
         break;
       }
 

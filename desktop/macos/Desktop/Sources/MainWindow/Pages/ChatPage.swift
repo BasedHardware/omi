@@ -494,7 +494,8 @@ struct ChatPage: View {
       },
       onAttachmentRemoved: { id in
         chatProvider.removePendingAttachment(id: id)
-      }
+      },
+      elicitations: chatProvider.elicitations
     )
     .padding(.horizontal, ChatComposerLayout.pageMargin)
     .padding(.bottom, ChatComposerLayout.pageMargin)

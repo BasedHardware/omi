@@ -122,6 +122,39 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("hands the child the live bridge pipe instead of dropping it with the stale one", async () => {
+    // The volatile-key filter correctly strips OMI_BRIDGE_PIPE so a persisted
+    // binding cannot hand a child the socket of a runtime process that has
+    // since died. It used to strip it and stop there, leaving the child with no
+    // path at all: omi-tools-stdio then fails every tool it hosts on
+    // `!pipeConnection` with "Error: not connected to bridge".
+    const previous = process.env.OMI_BRIDGE_PIPE;
+    process.env.OMI_BRIDGE_PIPE = "/tmp/omi-tools-live.sock";
+    try {
+      const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+
+      await kernel.executeRun({
+        ...baseRunInput,
+        mcpServers: [
+          {
+            name: "omi-tools",
+            command: "node",
+            args: ["tools.js"],
+            env: [{ name: "OMI_BRIDGE_PIPE", value: "/tmp/omi-tools-dead-from-a-previous-process.sock" }],
+          },
+        ],
+      });
+
+      const delivered = mcpEnvValue(adapter.opened[0].mcpServers, "OMI_BRIDGE_PIPE");
+      expect(delivered).toBe("/tmp/omi-tools-live.sock");
+      expect(delivered).not.toContain("dead-from-a-previous-process");
+      store.close();
+    } finally {
+      if (previous === undefined) delete process.env.OMI_BRIDGE_PIPE;
+      else process.env.OMI_BRIDGE_PIPE = previous;
+    }
+  });
+
   it("preserves legacy active bindings without MCP metadata hashes", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
 

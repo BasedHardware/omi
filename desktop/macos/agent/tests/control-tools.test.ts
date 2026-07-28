@@ -396,6 +396,7 @@ describe("agent control tools", () => {
       "build_desktop_context_packet",
       "route_desktop_intent",
       "evaluate_desktop_tool_policy",
+      "ask_user",
       "create_desktop_dispatch",
       "resolve_desktop_dispatch",
       "cancel_agent_run",
@@ -463,6 +464,208 @@ describe("agent control tools", () => {
         inputSchema: agentControlInputSchema(tool),
       })),
     );
+  });
+
+  it("puts every question from one ask_user call to the user and returns each answer", async () => {
+    const asked: Array<{ prompt: string; binding: unknown }> = [];
+    const context = {
+      kernel: {} as never,
+      callerSessionId: "sess-ask",
+      defaultAdapterId: "acp",
+      getOwnerId: () => "owner-ask",
+      authorizedToolInvocation: {
+        invocationId: "inv-1",
+        runId: "run-ask",
+        attemptId: "att-1",
+        toolName: "ask_user",
+      },
+      askUser: async (request, binding) => {
+        asked.push({ prompt: request.prompt, binding });
+        return { kind: "answered" as const, text: `answer to ${request.prompt}` };
+      },
+    } satisfies AgentControlToolContext;
+
+    const raw = await handleAgentControlToolCall(context, "ask_user", {
+      questions: [
+        { question: "Which stack?", options: ["Next.js", "SwiftUI"] },
+        { question: "What name?" },
+        { question: "Host where?", options: ["Vercel", "Fly"] },
+      ],
+    });
+
+    // All three are put up against the one calling session, so the user answers
+    // the set in a single pass instead of one round trip per decision.
+    expect(asked.map((entry) => entry.prompt)).toEqual([
+      "Which stack?",
+      "What name?",
+      "Host where?",
+    ]);
+    for (const entry of asked) {
+      expect(entry.binding).toEqual({
+        sessionId: "sess-ask",
+        ownerId: "owner-ask",
+        runId: "run-ask",
+      });
+    }
+    expect(JSON.parse(raw)).toMatchObject({
+      outcomes: [
+        { question: "Which stack?", outcome: { kind: "answered", text: "answer to Which stack?" } },
+        { question: "What name?", outcome: { kind: "answered", text: "answer to What name?" } },
+        { question: "Host where?", outcome: { kind: "answered", text: "answer to Host where?" } },
+      ],
+    });
+  });
+
+  it("takes the option shapes the normalizer can read instead of making the model retry", async () => {
+    const offered: string[][] = [];
+    const context = {
+      kernel: {} as never,
+      callerSessionId: "sess-ask",
+      defaultAdapterId: "acp",
+      getOwnerId: () => "owner-ask",
+      askUser: async (request) => {
+        offered.push(request.options.map((option) => option.label));
+        return { kind: "cancelled" as const, reason: "test" };
+      },
+    } satisfies AgentControlToolContext;
+
+    // Observed live: the model sent objects, the schema answered "expected
+    // string, received object", and the turn spent a round trip on the model
+    // apologising and retrying. The normalizer reads all of these, so the gate
+    // in front of it no longer rejects what the code behind it understands.
+    const raw = await handleAgentControlToolCall(context, "ask_user", {
+      questions: [
+        { question: "Objects?", options: [{ label: "TypeScript" }, { value: "Go" }] },
+        { question: "Encoded?", options: ['{"label":"Python"}'] },
+        { question: "Nested?", options: [[["Rust"]], "Zig"] },
+      ],
+    });
+
+    expect(offered).toEqual([["TypeScript", "Go"], ["Python"], ["Rust", "Zig"]]);
+    expect(JSON.parse(raw).outcomes).toHaveLength(3);
+  });
+
+  it("caps a flattened option list so a nested payload cannot outgrow the schema bound", async () => {
+    const offered: number[] = [];
+    const context = {
+      kernel: {} as never,
+      callerSessionId: "sess-ask",
+      defaultAdapterId: "acp",
+      getOwnerId: () => "owner-ask",
+      askUser: async (request) => {
+        offered.push(request.options.length);
+        return { kind: "cancelled" as const, reason: "test" };
+      },
+    } satisfies AgentControlToolContext;
+
+    // 8 top-level entries pass the schema's per-question bound, but each holds
+    // 10 options, so flattening produces 80. The bound has to hold after the
+    // flatten, not only before it.
+    await handleAgentControlToolCall(context, "ask_user", {
+      questions: [
+        {
+          question: "Too many?",
+          options: Array.from({ length: 8 }, (_, group) =>
+            Array.from({ length: 10 }, (_, index) => `option-${group}-${index}`)),
+        },
+      ],
+    });
+
+    expect(offered).toEqual([32]);
+  });
+
+  it("reports a failure rather than hanging when no one can be asked", async () => {
+    const withoutResolver = {
+      kernel: {} as never,
+      callerSessionId: "sess-ask",
+      getOwnerId: () => "owner-ask",
+    } satisfies AgentControlToolContext;
+    // No askUser installed: the runtime cannot reach a person, and the model has
+    // to be told that rather than left waiting on a card nobody will ever see.
+    expect(
+      JSON.parse(await handleAgentControlToolCall(withoutResolver, "ask_user", {
+        questions: [{ question: "Which branch?" }],
+      })),
+    ).toMatchObject({ error: { message: expect.stringContaining("unavailable") } });
+
+    const withoutSession = {
+      kernel: {} as never,
+      getOwnerId: () => "owner-ask",
+      askUser: async () => ({ kind: "cancelled" as const, reason: "unused" }),
+    } satisfies AgentControlToolContext;
+    // A question has to be recorded against the session it was asked from.
+    expect(
+      JSON.parse(await handleAgentControlToolCall(withoutSession, "ask_user", {
+        questions: [{ question: "Which branch?" }],
+      })),
+    ).toMatchObject({ error: { message: expect.stringContaining("unavailable") } });
+  });
+
+  it("accepts a question set a model padded with a blank option", () => {
+    // A blank label is a slip about one choice. Rejecting the call for it costs
+    // the user every other question in the set, which is what happened live.
+    const parsed = agentControlToolSchemas.ask_user.safeParse({
+      questions: [
+        { question: "Which stack?", options: [""], allow_free_text: true },
+        { question: "Host where?", options: ["Vercel", "", "Fly"] },
+      ],
+    });
+    expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+  });
+
+  it("rejects an ask_user call that carries no question", async () => {
+    const context = {
+      kernel: {} as never,
+      callerSessionId: "sess-ask",
+      getOwnerId: () => "owner-ask",
+      askUser: async () => ({ kind: "cancelled" as const, reason: "unused" }),
+    } satisfies AgentControlToolContext;
+
+    expect(agentControlToolSchemas.ask_user.safeParse({ questions: [] }).success).toBe(false);
+    expect(
+      JSON.parse(await handleAgentControlToolCall(context, "ask_user", { questions: [] })),
+    ).toMatchObject({ error: {} });
+  });
+
+  it("projects nested object items so a list of structured records keeps its shape", () => {
+    const schema = agentControlInputSchema({
+      properties: {
+        questions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              question: { type: "string", description: "The question." },
+              options: { type: "array", items: { type: "string" } },
+              allow_free_text: { type: "boolean" },
+            },
+            required: ["question"],
+          },
+        },
+      },
+      required: ["questions"],
+    } as unknown as Parameters<typeof agentControlInputSchema>[0]);
+
+    // Without recursion the item schema degrades to a bare {type:"object"} and
+    // the provider is told to send a list of untyped values.
+    expect(schema).toMatchObject({
+      type: "object",
+      required: ["questions"],
+      properties: {
+        questions: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["question"],
+            properties: {
+              question: { type: "string", description: "The question." },
+              options: { type: "array", items: { type: "string" } },
+              allow_free_text: { type: "boolean" },
+            },
+          },
+        },
+      },
+    });
   });
 
   it("keeps agent-control registry, manifest, and schemas in parity", () => {

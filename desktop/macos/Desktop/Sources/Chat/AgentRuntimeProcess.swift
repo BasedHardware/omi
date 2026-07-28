@@ -229,6 +229,7 @@ actor AgentRuntimeProcess {
   nonisolated static let requiredRuntimeCapabilities: Set<String> = [
     "journal_import_remote_turn",
     "runtime_adapter_availability",
+    "elicitation",
   ]
   private static let ownerTransitionClientID = "runtime-owner-transition"
 
@@ -327,6 +328,8 @@ actor AgentRuntimeProcess {
       case controlToolResult
       case journalOperationResult
       case journalTurnChanged
+      case elicitationPending
+      case elicitationResolved
       case journalBackendSync
       case journalBackendDelete
       case journalBackendReconcile
@@ -387,6 +390,8 @@ actor AgentRuntimeProcess {
       case "control_tool_result": return .controlToolResult
       case "journal_operation_result": return .journalOperationResult
       case "journal_turn_changed": return .journalTurnChanged
+      case "elicitation_pending": return .elicitationPending
+      case "elicitation_resolved": return .elicitationResolved
       case "journal_backend_sync": return .journalBackendSync
       case "journal_backend_delete": return .journalBackendDelete
       case "journal_backend_reconcile": return .journalBackendReconcile
@@ -538,6 +543,8 @@ actor AgentRuntimeProcess {
   private var timedOutKernelContractRequests: [RuntimeMessage.RequestKey: TimedOutKernelContractRequest] = [:]
   private var activeAuthorizedToolExecutionTasks: [UUID: Task<Void, Never>] = [:]
   private var journalTurnChangedHandler: JournalTurnChangedHandler?
+  var elicitationPendingHandler: ElicitationPendingHandler?
+  var elicitationResolvedHandler: ElicitationResolvedHandler?
   private var authorizedRealtimeToolHandler: AuthorizedRealtimeToolHandler?
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
@@ -3271,6 +3278,9 @@ actor AgentRuntimeProcess {
         journalTurnChangedHandler?(turn)
       }
 
+    case .elicitationPending, .elicitationResolved:
+      handleElicitationMessage(message)
+
     case .journalBackendSync:
       if messageOwnerIsCurrentlyAuthorized(message) { handleJournalBackendSync(message) }
 
@@ -3308,7 +3318,9 @@ actor AgentRuntimeProcess {
     return nil
   }
 
-  private func messageOwnerIsCurrentlyAuthorized(_ message: RuntimeMessage) -> Bool {
+  /// Internal rather than private so the elicitation extension can fence on it.
+  /// A read-only predicate: it grants no capability, unlike the stdin writer.
+  func messageOwnerIsCurrentlyAuthorized(_ message: RuntimeMessage) -> Bool {
     guard let ownerID = message.payload["ownerId"] as? String else { return false }
     return RuntimeOwnerIdentity.captureAuthorizationSnapshot(
       expectedOwnerID: ownerID) != nil
@@ -3747,6 +3759,21 @@ actor AgentRuntimeProcess {
         )
       }
     }
+  }
+
+  /// Send the user's answer back to the kernel.
+  func resolveElicitation(dispatchID: String, ownerID: String, answer: ElicitationAnswer) {
+    guard
+      let payload = ElicitationWire.resolvePayload(
+        dispatchID: dispatchID,
+        ownerID: ownerID,
+        currentOwnerID: currentOwnerId(),
+        answer: answer)
+    else {
+      log("AgentRuntimeProcess: dropping elicitation answer for a non-current owner")
+      return
+    }
+    sendJson(payload)
   }
 
   private func sendJournalBackendSyncResult(
