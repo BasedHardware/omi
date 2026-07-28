@@ -146,6 +146,8 @@ export function normalizeAcpPermission(input: AcpPermissionParams): ElicitationR
   const toolCall = asRecord(params?.toolCall);
   const title = asNonEmptyString(toolCall?.title);
   const recommended = options.find((option) => option.effect === "allow_once");
+  const subject = subjectFromRawInput(toolCall?.rawInput);
+  const locations = contextFromLocations(toolCall?.locations);
 
   return {
     channel: "acp_permission",
@@ -154,8 +156,11 @@ export function normalizeAcpPermission(input: AcpPermissionParams): ElicitationR
     externalSessionId: asNonEmptyString(params?.sessionId),
     title: `${input.agentLabel} needs permission`,
     prompt: title ?? `${input.agentLabel} wants to run a tool`,
-    subject: subjectFromRawInput(toolCall?.rawInput),
-    context: contextFromLocations(toolCall?.locations),
+    subject,
+    // A file-write tool reports the same path as both its raw input and its
+    // location. Rendering it twice adds nothing and reads as a bug, so the
+    // location is kept only when it says something the subject does not.
+    context: locations === subject ? null : locations,
     options,
     allowsFreeText: false,
     recommendedDefault: recommended?.optionId ?? null,

@@ -103,6 +103,44 @@ describe("ACP permission normalization", () => {
     expect(partial!.externalSessionId).toBeNull();
   });
 
+  it("does not repeat the same path as both subject and context", () => {
+    // Shape taken from a live Claude Code file-write permission, which reports
+    // the identical path in rawInput and locations.
+    const request = normalizeAcpPermission({
+      adapterId: "acp",
+      agentLabel: "Claude Code",
+      params: acpParams({
+        toolCall: {
+          title: "Write /tmp/notes.txt",
+          kind: "edit",
+          rawInput: { file_path: "/tmp/notes.txt" },
+          locations: [{ path: "/tmp/notes.txt" }],
+        },
+      }),
+    });
+
+    expect(request!.subject).toBe("/tmp/notes.txt");
+    expect(request!.context).toBeNull();
+  });
+
+  it("keeps the location when it says something the subject does not", () => {
+    const request = normalizeAcpPermission({
+      adapterId: "acp",
+      agentLabel: "Claude Code",
+      params: acpParams({
+        toolCall: {
+          title: "Run a command",
+          kind: "execute",
+          rawInput: { command: "npm test" },
+          locations: [{ path: "/Users/dev/omi" }],
+        },
+      }),
+    });
+
+    expect(request!.subject).toBe("npm test");
+    expect(request!.context).toBe("/Users/dev/omi");
+  });
+
   it("falls back to serialized raw input rather than approving an unnamed action", () => {
     const request = normalizeAcpPermission({
       adapterId: "acp",

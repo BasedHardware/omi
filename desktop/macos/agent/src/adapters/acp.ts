@@ -174,12 +174,19 @@ const EXTERNAL_TERMINAL_HTTP_FAILURE = /^\s*HTTP\s+([45]\d{2})\s*:\s*(?:\{|\[)/i
  * leading 4xx/5xx JSON response are classified.  A normal agent discussion of
  * an HTTP status therefore remains ordinary assistant text.
  */
-/** Human-facing agent name. Shown to the user on permission cards. */
+/**
+ * Human-facing agent name, shown on permission cards.
+ *
+ * The `acp` adapter is Claude Code through the packaged entry, so it is named
+ * as such: a card that says only "the agent" gives the user no basis for
+ * deciding who they are granting something to.
+ */
 function adapterLabel(adapterId: ProductionAdapterId): string {
   switch (adapterId) {
     case "hermes": return "Hermes";
     case "openclaw": return "OpenClaw";
-    default: return "The agent";
+    case "acp": return "Claude Code";
+    default: return "Omi";
   }
 }
 
