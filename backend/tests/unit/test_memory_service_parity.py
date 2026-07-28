@@ -260,10 +260,87 @@ class TestMemoryServiceParity:
             direct = service_mod._legacy_search_memories("uid-test", "hiking", limit=5)
 
         assert find_similar.call_count == 2
-        find_similar.assert_called_with("uid-test", "hiking", threshold=0.0, limit=5)
+        find_similar.assert_called_with("uid-test", "hiking", threshold=0.0, limit=15)
         assert get_by_ids.call_count == 2
         get_by_ids.assert_called_with("uid-test", ["mem-1", "mem-2"])
         assert via_service == direct
+
+    def test_search_overfetches_and_backfills_filtered_or_invalid_vector_hits(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        vector_matches = [
+            {"memory_id": "missing", "score": 0.99},
+            {"memory_id": "locked", "score": 0.98},
+            {"memory_id": "rejected", "score": 0.97},
+            {"memory_id": "invalidated", "score": 0.96},
+            {"memory_id": "malformed", "score": 0.95},
+            {"memory_id": "visible-1", "score": 0.80},
+            {"memory_id": "visible-2", "score": 0.70},
+        ]
+        locked = _sample_memory_dict("locked", locked=True)
+        rejected = _sample_memory_dict("rejected")
+        rejected["user_review"] = False
+        invalidated = _sample_memory_dict("invalidated")
+        invalidated["invalid_at"] = datetime(2026, 1, 16, tzinfo=timezone.utc)
+        malformed = _sample_memory_dict("malformed")
+        malformed.pop("content")
+        # Firestore get_all order is not a relevance contract. Deliberately
+        # return visible docs in reverse order and require vector ordering.
+        memories = [
+            _sample_memory_dict("visible-2"),
+            invalidated,
+            rejected,
+            malformed,
+            locked,
+            _sample_memory_dict("visible-1"),
+        ]
+
+        def find_similar_memories(_uid, _query, *, threshold, limit):
+            assert threshold == 0.0
+            return vector_matches[:limit]
+
+        def get_memories_by_ids(_uid, memory_ids):
+            requested = set(memory_ids)
+            return [memory for memory in memories if memory["id"] in requested]
+
+        with (
+            patch.object(
+                service_mod.vector_db,
+                "find_similar_memories",
+                side_effect=find_similar_memories,
+            ) as find_similar,
+            patch.object(service_mod.memories_db, "get_memories_by_ids", side_effect=get_memories_by_ids),
+        ):
+            results = service_mod._legacy_search_memories("uid-test", "hiking", limit=2)
+
+        assert [call.kwargs["limit"] for call in find_similar.call_args_list] == [
+            6,
+            12,
+        ], "memory search must overfetch until filtering yields requested visible results"
+        assert [result.memory.id for result in results] == ["visible-1", "visible-2"]
+        assert [result.score for result in results] == [0.80, 0.70]
+
+    def test_search_progressive_backfill_stops_at_candidate_cap(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+
+        def find_similar_memories(_uid, _query, *, threshold, limit):
+            assert threshold == 0.0
+            return [{"memory_id": f"locked-{index}", "score": 1.0 - (index / 100)} for index in range(limit)]
+
+        def get_memories_by_ids(_uid, memory_ids):
+            return [_sample_memory_dict(memory_id, locked=True) for memory_id in memory_ids]
+
+        with (
+            patch.object(
+                service_mod.vector_db,
+                "find_similar_memories",
+                side_effect=find_similar_memories,
+            ) as find_similar,
+            patch.object(service_mod.memories_db, "get_memories_by_ids", side_effect=get_memories_by_ids),
+        ):
+            results = service_mod._legacy_search_memories("uid-test", "hiking", limit=2)
+
+        assert results == []
+        assert [call.kwargs["limit"] for call in find_similar.call_args_list] == [6, 12, 24, 48, 60]
 
     def test_external_canonical_write_gate_failure_does_not_fallback_to_legacy_create(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
@@ -512,7 +589,8 @@ class TestMemoryServiceParity:
             lambda *args, **kwargs: SimpleNamespace(allowed=True, status_code=200, detail=None),
         )
 
-        result = service_mod.MemoryService(db_client=_FirestoreFake()).create_external_memory(
+        db_client = _FirestoreFake()
+        result = service_mod.MemoryService(db_client=db_client).create_external_memory(
             "uid-test",
             memory_db,
             memory_system=MemorySystem.LEGACY,
@@ -526,6 +604,80 @@ class TestMemoryServiceParity:
         assert "layer" not in payload
         assert "tier" not in payload
         assert result.memory_tier is None
+        assert create_memory.call_args.kwargs["firestore_client"] is db_client
+
+    def test_external_legacy_edit_uses_the_injected_firestore_client_for_reads_and_write(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        before = _sample_memory_dict()
+        after = {**before, "content": "Updated hiking preference"}
+        monkeypatch.setattr(
+            service_mod,
+            "guard_legacy_memory_write",
+            lambda *args, **kwargs: SimpleNamespace(allowed=True, status_code=200, detail=None),
+        )
+        get_memory = MagicMock(side_effect=[before, after])
+        monkeypatch.setattr(service_mod.memories_db, "get_memory", get_memory)
+        monkeypatch.setattr(
+            service_mod.memories_db,
+            "edit_memory",
+            MagicMock(return_value={"commit": {"commit_id": "commit-edit"}}),
+        )
+        db_client = _FirestoreFake()
+
+        result = service_mod.MemoryService(db_client=db_client).update_external_memory_content(
+            "uid-test",
+            "mem-1",
+            "Updated hiking preference",
+            memory_system=MemorySystem.LEGACY,
+            consumer="mcp",
+            operation="mcp_tool_memory_edit",
+            upsert_vector=False,
+        )
+
+        assert result.content == "Updated hiking preference"
+        assert [item.kwargs["firestore_client"] for item in get_memory.call_args_list] == [db_client, db_client]
+        service_mod.memories_db.edit_memory.assert_called_once_with(
+            "uid-test",
+            "mem-1",
+            "Updated hiking preference",
+            firestore_client=db_client,
+        )
+
+    def test_external_legacy_delete_uses_the_injected_firestore_client_for_read_and_write(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        monkeypatch.setattr(
+            service_mod,
+            "guard_legacy_memory_write",
+            lambda *args, **kwargs: SimpleNamespace(allowed=True, status_code=200, detail=None),
+        )
+        get_memory = MagicMock(return_value=_sample_memory_dict())
+        monkeypatch.setattr(service_mod.memories_db, "get_memory", get_memory)
+        monkeypatch.setattr(
+            service_mod.memories_db,
+            "delete_memory",
+            MagicMock(
+                return_value=service_mod.memories_db.LegacyMemoryDeleteResult(
+                    memory_ids=["mem-1"],
+                )
+            ),
+        )
+        db_client = _FirestoreFake()
+
+        service_mod.MemoryService(db_client=db_client).delete_external_memory(
+            "uid-test",
+            "mem-1",
+            memory_system=MemorySystem.LEGACY,
+            consumer="mcp",
+            operation="mcp_tool_memory_delete",
+            delete_vector=False,
+        )
+
+        get_memory.assert_called_once_with("uid-test", "mem-1", firestore_client=db_client)
+        service_mod.memories_db.delete_memory.assert_called_once_with(
+            "uid-test",
+            "mem-1",
+            firestore_client=db_client,
+        )
 
     def test_search_mcp_legacy_fetch_limit_filters_and_rrf(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
@@ -577,6 +729,43 @@ class TestMemoryServiceParity:
         assert direct == via_service
         assert len(direct) == 1
         assert direct[0]["id"] == "mem-ok"
+
+    def test_search_mcp_progressively_backfills_filtered_vector_hits(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        vector_matches = [{"memory_id": f"rejected-{index}", "score": 0.99 - (index / 100)} for index in range(5)] + [
+            {"memory_id": "visible-1", "score": 0.80},
+            {"memory_id": "visible-2", "score": 0.70},
+        ]
+        memories = []
+        for index in range(5):
+            rejected = _sample_memory_dict(f"rejected-{index}")
+            rejected["user_review"] = False
+            memories.append(rejected)
+        memories.extend([_sample_memory_dict("visible-2"), _sample_memory_dict("visible-1")])
+
+        def find_similar_memories(_uid, _query, *, threshold, limit):
+            assert threshold == 0.0
+            return vector_matches[:limit]
+
+        def get_memories_by_ids(_uid, memory_ids):
+            requested = set(memory_ids)
+            return [memory for memory in memories if memory["id"] in requested]
+
+        with (
+            patch.object(
+                service_mod.vector_db,
+                "find_similar_memories",
+                side_effect=find_similar_memories,
+            ) as find_similar,
+            patch.object(service_mod.memories_db, "get_memories_by_ids", side_effect=get_memories_by_ids),
+            patch.object(
+                service_mod, "rrf_rerank", side_effect=lambda query, candidates, limit, k=60: candidates[:limit]
+            ),
+        ):
+            results = service_mod._legacy_search_memories_mcp("uid-test", "visible", limit=2)
+
+        assert [call.kwargs["limit"] for call in find_similar.call_args_list] == [6, 12]
+        assert [result["id"] for result in results] == ["visible-1", "visible-2"]
 
 
 class TestMemoryServiceUsesRequestPin:

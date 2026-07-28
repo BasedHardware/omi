@@ -60,6 +60,7 @@ def enqueue_projection_repairs(
     collection_ref: Any = database.collection(users_collection).document(uid).collection(projection_repairs_collection)
     repair_ids: List[str] = []
     reasons_by_fact = _reasons_by_fact(mutations)
+    pending_writes = 0
     for fact_id in fact_ids:
         reasons = reasons_by_fact.get(fact_id, ['unknown'])
         repair_id = f"{commit.get('commit_id')}:{fact_id}"
@@ -82,7 +83,13 @@ def enqueue_projection_repairs(
                 'updated_at': now,
             },
         )
-    batch.commit()
+        pending_writes += 1
+        if pending_writes >= 499:
+            batch.commit()
+            batch = database.batch()
+            pending_writes = 0
+    if pending_writes:
+        batch.commit()
     return repair_ids
 
 

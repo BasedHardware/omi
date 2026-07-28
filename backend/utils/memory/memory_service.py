@@ -10,7 +10,11 @@ from pydantic import ValidationError
 
 import database.memories as memories_db
 import database.vector_db as vector_db
-from database.vector_db import delete_memory_vector, upsert_memory_vector, upsert_memory_vectors_batch
+from database.vector_db import (
+    delete_memory_vector,
+    upsert_memory_vector,
+    upsert_memory_vectors_batch,
+)
 from models.memories import MemoryDB
 from utils.memory.canonical_memory_adapter import (
     delete_all_canonical_memories,
@@ -39,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 MemoryPayload = Dict[str, Any]
 McpSearchPayload = Dict[str, Any]
+LEGACY_SEARCH_MAX_CANDIDATES = 60
 
 
 class DeviceScopeNotSupportedError(ValueError):
@@ -183,74 +188,137 @@ def _memory_ids_and_scores(matches: List[MemoryPayload]) -> tuple[List[str], Dic
         memory_id = match.get("memory_id")
         if not isinstance(memory_id, str) or not memory_id:
             continue
+        if memory_id in scores_by_id:
+            continue
         memory_ids.append(memory_id)
         scores_by_id[memory_id] = float(match.get("score") or 0)
     return memory_ids, scores_by_id
 
 
+def _legacy_search_fetch_limits(capped_limit: int) -> List[int]:
+    """Grow Pinecone top_k only when filtering leaves a result page underfilled."""
+    fetch_limit = min(capped_limit * 3, LEGACY_SEARCH_MAX_CANDIDATES)
+    limits = [fetch_limit]
+    while fetch_limit < LEGACY_SEARCH_MAX_CANDIDATES:
+        fetch_limit = min(fetch_limit * 2, LEGACY_SEARCH_MAX_CANDIDATES)
+        limits.append(fetch_limit)
+    return limits
+
+
+def _hydrate_legacy_search_memories(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    requested_memory_ids: set[str],
+    memories_by_id: Dict[str, MemoryPayload],
+) -> None:
+    new_memory_ids = [memory_id for memory_id in memory_ids if memory_id not in requested_memory_ids]
+    if not new_memory_ids:
+        return
+    requested_memory_ids.update(new_memory_ids)
+    for memory in memories_db.get_memories_by_ids(uid, new_memory_ids):
+        memory_id = memory.get("id")
+        if isinstance(memory_id, str) and memory_id:
+            memories_by_id[memory_id] = memory
+
+
 def _legacy_search_memories(uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
     capped_limit = max(1, min(limit, 20))
-    matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=capped_limit)
-    if not matches:
-        return []
-
-    memory_ids, scores_by_id = _memory_ids_and_scores(matches)
-    if not memory_ids:
-        return []
-
-    memories_data = memories_db.get_memories_by_ids(uid, memory_ids)
-    memories_data = [
-        memory_api_payload(memory, MemoryApiExposure.LEGACY)
-        for memory in memories_data
-        if not memory.get("is_locked", False)
-    ]
-
+    memories_by_id: Dict[str, MemoryPayload] = {}
+    requested_memory_ids: set[str] = set()
     results: List[MemorySearchMatch] = []
-    for memory_data in memories_data:
-        memory_id = memory_data.get("id")
-        if not isinstance(memory_id, str):
-            continue
-        try:
-            memory_obj = _legacy_memorydb(memory_data)
-        except ValidationError:
-            continue
-        results.append(MemorySearchMatch(memory=memory_obj, score=scores_by_id.get(memory_id, 0.0)))
+    for fetch_limit in _legacy_search_fetch_limits(capped_limit):
+        matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
+        if not matches:
+            break
+
+        memory_ids, scores_by_id = _memory_ids_and_scores(matches)
+        _hydrate_legacy_search_memories(
+            uid,
+            memory_ids,
+            requested_memory_ids=requested_memory_ids,
+            memories_by_id=memories_by_id,
+        )
+
+        results = []
+        for memory_id in memory_ids:
+            memory_data = memories_by_id.get(memory_id)
+            if not memory_data:
+                continue
+            if (
+                memory_data.get("is_locked", False)
+                or memory_data.get("user_review") is False
+                or memory_data.get("invalid_at") is not None
+            ):
+                continue
+            try:
+                memory_obj = _legacy_memorydb(memory_api_payload(memory_data, MemoryApiExposure.LEGACY))
+            except ValidationError:
+                continue
+            results.append(MemorySearchMatch(memory=memory_obj, score=scores_by_id.get(memory_id, 0.0)))
+            if len(results) >= capped_limit:
+                return results
+        if len(matches) < fetch_limit:
+            break
     return results
+
+
+def search_legacy_memories(uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
+    """Shared filtered legacy search for API and chat-tool surfaces."""
+    return _legacy_search_memories(uid, query, limit=limit)
+
+
+def _single_vector_write_succeeded(result: Any) -> bool:
+    if result is None or result is False:
+        return False
+    if isinstance(result, (list, tuple)) and not result:
+        return False
+    return True
+
+
+def _batch_vector_write_succeeded(result: Any, expected_count: int) -> bool:
+    return type(result) is int and result == expected_count
 
 
 def _legacy_search_memories_mcp(uid: str, query: str, *, limit: int = 5) -> List[McpSearchPayload]:
     """Legacy MCP search path: over-fetch, filter, RRF rerank (Wave 2 cf#1 parity)."""
     capped_limit = max(1, min(limit, 20))
-    fetch_limit = min(capped_limit * 3, 60)
-    matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
-    if not matches:
-        return []
-
-    memory_ids, scores = _memory_ids_and_scores(matches)
-    if not memory_ids:
-        return []
-
     docs: Dict[str, MemoryPayload] = {}
-    for memory in memories_db.get_memories_by_ids(uid, memory_ids):
-        memory_id = memory.get("id")
-        if isinstance(memory_id, str) and memory_id:
-            docs[memory_id] = memory
-
+    requested_memory_ids: set[str] = set()
     candidates: List[McpSearchPayload] = []
-    for memory_id in memory_ids:
-        memory = docs.get(memory_id)
-        if not memory:
-            continue
-        if memory.get("user_review") is False or memory.get("is_locked", False) or memory.get("invalid_at") is not None:
-            continue
-        candidates.append(
-            {
-                "id": memory.get("id", ""),
-                "content": memory.get("content", ""),
-                "category": memory.get("category", "other"),
-                "vector_score": scores.get(memory_id, 0),
-            }
+    for fetch_limit in _legacy_search_fetch_limits(capped_limit):
+        matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
+        if not matches:
+            break
+
+        memory_ids, scores = _memory_ids_and_scores(matches)
+        _hydrate_legacy_search_memories(
+            uid,
+            memory_ids,
+            requested_memory_ids=requested_memory_ids,
+            memories_by_id=docs,
         )
+        candidates = []
+        for memory_id in memory_ids:
+            memory = docs.get(memory_id)
+            if not memory:
+                continue
+            if (
+                memory.get("user_review") is False
+                or memory.get("is_locked", False)
+                or memory.get("invalid_at") is not None
+            ):
+                continue
+            candidates.append(
+                {
+                    "id": memory.get("id", ""),
+                    "content": memory.get("content", ""),
+                    "category": memory.get("category", "other"),
+                    "vector_score": scores.get(memory_id, 0),
+                }
+            )
+        if len(candidates) >= capped_limit or len(matches) < fetch_limit:
+            break
 
     candidates.sort(key=lambda candidate: candidate.get("vector_score", 0), reverse=True)
     reranked = rrf_rerank(query, candidates, capped_limit)
@@ -610,16 +678,26 @@ class MemoryService:
             raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
         _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
-        memories_db.create_memory(uid, memory_write_payload(memory_db, MemoryApiExposure.LEGACY))
+        memories_db.create_memory(
+            uid,
+            memory_write_payload(memory_db, MemoryApiExposure.LEGACY),
+            firestore_client=self._db_client,
+        )
         if upsert_vector:
             try:
-                upsert_memory_vector(
+                projection_result = upsert_memory_vector(
                     uid,
                     memory_db.id,
                     memory_db.content,
                     memory_db.category.value,
                     subject_entity_id=memory_db.subject_entity_id,
                 )
+                if not _single_vector_write_succeeded(projection_result):
+                    logger.warning(
+                        "Vector upsert returned no write uid=%s memory_id=%s (memory saved, vector missing)",
+                        uid,
+                        memory_db.id,
+                    )
             except Exception:
                 logger.exception(
                     "Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)",
@@ -662,10 +740,11 @@ class MemoryService:
         memories_db.save_memories(
             uid,
             [memory_write_payload(memory, MemoryApiExposure.LEGACY) for memory in memory_dbs],
+            firestore_client=self._db_client,
         )
         if upsert_vectors:
             try:
-                upsert_memory_vectors_batch(
+                projection_result = upsert_memory_vectors_batch(
                     uid,
                     [
                         {
@@ -677,6 +756,13 @@ class MemoryService:
                         for memory in memory_dbs
                     ],
                 )
+                if not _batch_vector_write_succeeded(projection_result, len(memory_dbs)):
+                    logger.warning(
+                        "Vector batch upsert returned partial/no write uid=%s expected=%d actual=%r",
+                        uid,
+                        len(memory_dbs),
+                        projection_result,
+                    )
             except Exception:
                 logger.exception("Vector batch upsert failed uid=%s (memories saved, vectors missing)", uid)
         return [_legacy_memorydb(memory) for memory in memory_dbs]
@@ -702,15 +788,29 @@ class MemoryService:
             return
 
         _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
-        memory = memories_db.get_memory(uid, memory_id)
+        memory = memories_db.get_memory(uid, memory_id, firestore_client=self._db_client)
         if not memory:
             raise HTTPException(status_code=404, detail="Memory not found")
         if memory.get('is_locked', False):
             raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
-        memories_db.delete_memory(uid, memory_id)
+        delete_result = memories_db.delete_memory(uid, memory_id, firestore_client=self._db_client)
+        if delete_result.committed_count != 1:
+            logger.error(
+                "Firestore delete count mismatch uid=%s memory_id=%s actual=%r",
+                uid,
+                memory_id,
+                delete_result.committed_count,
+            )
+            raise HTTPException(status_code=503, detail="Service temporarily unavailable")
         if delete_vector:
             try:
-                delete_memory_vector(uid, memory_id)
+                projection_result = delete_memory_vector(uid, memory_id)
+                if projection_result is not True:
+                    logger.warning(
+                        "Vector delete returned no write uid=%s memory_id=%s (Firestore deleted)",
+                        uid,
+                        memory_id,
+                    )
             except Exception:
                 logger.exception("Vector delete failed uid=%s memory_id=%s (Firestore deleted)", uid, memory_id)
 
@@ -735,25 +835,41 @@ class MemoryService:
                 raise HTTPException(status_code=404, detail="Memory not found")
 
         _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
-        memory = memories_db.get_memory(uid, memory_id)
+        memory = memories_db.get_memory(uid, memory_id, firestore_client=self._db_client)
         if not memory:
             raise HTTPException(status_code=404, detail="Memory not found")
         if memory.get('is_locked', False):
             raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
-        memories_db.edit_memory(uid, memory_id, content)
+        memories_db.edit_memory(
+            uid,
+            memory_id,
+            content,
+            firestore_client=self._db_client,
+        )
         if upsert_vector:
             try:
-                upsert_memory_vector(
+                projection_result = upsert_memory_vector(
                     uid,
                     memory_id,
                     content,
                     memory.get('category', 'other'),
                     subject_entity_id=memory.get('subject_entity_id'),
                 )
+                if not _single_vector_write_succeeded(projection_result):
+                    logger.warning(
+                        "Vector upsert returned no write uid=%s memory_id=%s (memory edited, vector stale)",
+                        uid,
+                        memory_id,
+                    )
             except Exception:
                 logger.exception(
                     "Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)",
                     uid,
                     memory_id,
                 )
-        return _legacy_memorydb(cast(MemoryPayload, memories_db.get_memory(uid, memory_id)))
+        return _legacy_memorydb(
+            cast(
+                MemoryPayload,
+                memories_db.get_memory(uid, memory_id, firestore_client=self._db_client),
+            )
+        )

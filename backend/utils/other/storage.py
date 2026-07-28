@@ -214,6 +214,7 @@ def upload_person_speech_sample_from_bytes(
     uid: str,
     person_id: str,
     sample_rate: int = 16000,
+    deduplication_key: Optional[str] = None,
 ) -> str:
     """Upload PCM audio bytes as WAV speech sample. Returns GCS path."""
     import uuid as uuid_module
@@ -224,14 +225,13 @@ def upload_person_speech_sample_from_bytes(
         wav_file.setsampwidth(2)  # 16-bit audio
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(audio_bytes)
-
     bucket = _get_speech_profiles_bucket(required=True)
     assert bucket is not None  # required=True raises if missing
-    filename = f"{uuid_module.uuid4()}.wav"
+    filename_id = hashlib.sha256(deduplication_key.encode()).hexdigest() if deduplication_key else uuid_module.uuid4()
+    filename = f"{filename_id}.wav"
     path = f'{uid}/people_profiles/{person_id}/{filename}'
     blob = bucket.blob(path)
     blob.upload_from_string(wav_buffer.getvalue(), content_type='audio/wav')
-
     return path
 
 

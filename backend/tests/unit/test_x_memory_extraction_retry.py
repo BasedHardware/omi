@@ -96,5 +96,26 @@ def test_pending_x_source_is_acknowledged_only_after_memory_writes_succeed(monke
     assert acknowledgements == [('uid-1', ['post-1'])]
 
 
+def test_pending_x_source_remains_unacknowledged_after_partial_legacy_projection(monkeypatch):
+    post = {'id': 'post-1', 'text': 'I prefer tea', 'created_at': '2026-07-14T00:00:00Z', 'kind': 'tweet'}
+    acknowledgements = []
+    memory = Memory(content='User prefers tea', category=MemoryCategory.interesting)
+
+    monkeypatch.setattr(x_connector, 'extract_memories_from_text', lambda *args: [memory])
+    monkeypatch.setattr(x_connector, 'resolve_memory_system', lambda *args, **kwargs: MemorySystem.LEGACY)
+    monkeypatch.setattr(x_connector.memories_db, 'save_memories', lambda *args, **kwargs: None)
+    monkeypatch.setattr(x_connector, 'upsert_memory_vectors_batch', lambda *args, **kwargs: 0)
+    monkeypatch.setattr(
+        x_connector.x_posts_db,
+        'mark_memory_extraction_completed',
+        lambda uid, post_ids: acknowledgements.append((uid, post_ids)),
+    )
+
+    with pytest.raises(RuntimeError, match='partial expected=1 actual=0'):
+        x_connector._extract_and_index('uid-1', [post])
+
+    assert acknowledgements == []
+
+
 async def _async_value(value):
     return value

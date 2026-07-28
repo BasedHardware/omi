@@ -387,6 +387,14 @@ class VectorCandidateQueryResult:
     rejected_count: int = 0
 
 
+def _reported_upsert_count(result: Any) -> int | None:
+    if isinstance(result, dict):
+        count = result.get('upserted_count')
+    else:
+        count = getattr(result, 'upserted_count', None)
+    return count if type(count) is int and count >= 0 else None
+
+
 def upsert_memory_vector(
     uid: str,
     memory_id: str,
@@ -426,6 +434,9 @@ def upsert_memory_vector(
     }
     res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
     logger.info(f'upsert_memory_vector {memory_id} {res}')
+    if _reported_upsert_count(res) == 0:
+        logger.warning('upsert_memory_vector returned zero writes memory_id=%s', memory_id)
+        return None
     return vector
 
 
@@ -481,7 +492,8 @@ def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
         )
     res = index.upsert(vectors=payload, namespace=MEMORIES_NAMESPACE)
     logger.info(f'upsert_memory_vectors_batch count={len(payload)} {res}')
-    return len(payload)
+    reported_count = _reported_upsert_count(res)
+    return len(payload) if reported_count is None else reported_count
 
 
 def find_similar_memories(
@@ -665,17 +677,18 @@ def query_memory_vector_candidates(
     return VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
 
 
-def delete_memory_vector(uid: str, memory_id: str) -> None:
+def delete_memory_vector(uid: str, memory_id: str) -> bool:
     """
     Delete a memory vector from Pinecone.
     """
     if index is None:
         logger.warning('Pinecone index not initialized, skipping memory vector delete')
-        return
+        return False
 
     vector_id = f'{uid}-{memory_id}'
     result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
     logger.info(f'delete_memory_vector {vector_id} {result}')
+    return True
 
 
 def enqueue_projection_repair(uid: str, fact_id: str, reason: str, source_commit_id: str | None = None) -> List[str]:

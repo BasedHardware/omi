@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -13,8 +14,11 @@ class _FakeRedis:
     def __init__(self) -> None:
         self._store: Dict[str, Any] = {}
 
-    def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
+    def set(self, key: str, value: Any, ex: Optional[int] = None, nx: bool = False) -> Optional[bool]:
+        if nx and key in self._store:
+            return None
         self._store[key] = value
+        return True
 
     def get(self, key: str) -> Optional[Any]:
         return self._store.get(key)
@@ -24,6 +28,15 @@ class _FakeRedis:
 
     def mget(self, keys: List[str]) -> List[Optional[Any]]:
         return [self._store.get(key) for key in keys]
+
+    def eval(self, script: str, _numkeys: int, key: str, expected: str, *args: Any) -> int:
+        if self._store.get(key) != expected:
+            return 0
+        if "redis.call('DEL'" in script:
+            del self._store[key]
+        else:
+            self._store[key] = 'done'
+        return 1
 
 
 @pytest.fixture
@@ -104,3 +117,73 @@ def test_apps_reviews_batch_round_trip(fake_redis: _FakeRedis) -> None:
         "app-b": {"uid-2": {"rating": 5}},
         "app-missing": {},
     }
+
+
+def test_pusher_delivery_lease_reaches_done_with_a_bounded_key(fake_redis: _FakeRedis) -> None:
+    delivery_id = f"delivery-{'x' * 512}"
+
+    state, lease_token = redis_db.begin_pusher_delivery("uid-1", delivery_id, redis_client=fake_redis)
+    assert state == 'claimed'
+    assert lease_token
+    assert redis_db.begin_pusher_delivery("uid-1", delivery_id, redis_client=fake_redis) == ('busy', None)
+    assert (
+        redis_db.complete_pusher_delivery(
+            "uid-1",
+            delivery_id,
+            lease_token,
+            redis_client=fake_redis,
+        )
+        is True
+    )
+    assert redis_db.begin_pusher_delivery("uid-1", delivery_id, redis_client=fake_redis) == ('done', None)
+    assert redis_db.begin_pusher_delivery("uid-2", delivery_id, redis_client=fake_redis)[0] == 'claimed'
+    assert all(delivery_id not in key for key in fake_redis._store)
+    assert all(len(key) < 128 for key in fake_redis._store)
+
+
+def test_pusher_failed_effect_releases_only_its_own_lease(fake_redis: _FakeRedis) -> None:
+    state, lease_token = redis_db.begin_pusher_delivery("uid-1", "delivery-1", redis_client=fake_redis)
+    assert state == 'claimed'
+    assert lease_token
+    assert (
+        redis_db.abandon_pusher_delivery(
+            "uid-1",
+            "delivery-1",
+            "wrong-token",
+            redis_client=fake_redis,
+        )
+        is False
+    )
+    assert (
+        redis_db.abandon_pusher_delivery(
+            "uid-1",
+            "delivery-1",
+            lease_token,
+            redis_client=fake_redis,
+        )
+        is True
+    )
+    assert redis_db.begin_pusher_delivery("uid-1", "delivery-1", redis_client=fake_redis)[0] == 'claimed'
+
+
+def test_pusher_delivery_lease_fails_open_when_redis_is_unavailable() -> None:
+    class _UnavailableRedis:
+        def set(self, *args: Any, **kwargs: Any) -> None:
+            raise ConnectionError("redis unavailable")
+
+    client = _UnavailableRedis()
+
+    assert redis_db.begin_pusher_delivery("uid-1", "delivery-1", redis_client=client) == ('unavailable', None)
+    assert redis_db.complete_pusher_delivery("uid-1", "delivery-1", "lease-1", redis_client=client) is False
+    assert redis_db.abandon_pusher_delivery("uid-1", "delivery-1", "lease-1", redis_client=client) is False
+
+
+def test_pusher_delivery_client_has_bounded_network_timeouts(monkeypatch: pytest.MonkeyPatch) -> None:
+    constructor = MagicMock(return_value=object())
+    monkeypatch.setattr(redis_db.redis, 'Redis', constructor)
+    monkeypatch.setattr(redis_db, '_pusher_delivery_r', None)
+
+    assert redis_db._get_pusher_delivery_redis() is constructor.return_value
+    assert constructor.call_args.kwargs['socket_connect_timeout'] == 0.5
+    assert constructor.call_args.kwargs['socket_timeout'] == 0.5
+    assert constructor.call_args.kwargs['retry_on_timeout'] is False

@@ -1,7 +1,8 @@
 import io
 import re
 import wave
-from typing import Any, Dict, List, Optional, cast
+from dataclasses import dataclass
+from typing import Any, Dict, List, Literal, Optional, cast
 
 import av
 import numpy as np
@@ -19,6 +20,16 @@ from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SpeakerSampleExtractionResult:
+    status: Literal['stored', 'already_present', 'terminal_no_sample', 'retryable']
+    reason: str
+
+    @property
+    def retryable(self) -> bool:
+        return self.status == 'retryable'
 
 
 def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
@@ -327,7 +338,8 @@ async def extract_speaker_samples(
     conversation_id: str,
     segment_ids: List[str],
     sample_rate: int = 16000,
-):
+    delivery_id: Optional[str] = None,
+) -> SpeakerSampleExtractionResult:
     """
     Extract speech samples from segments and store as speaker profiles.
     Fetches conversation from DB to get started_at and segment details.
@@ -337,6 +349,8 @@ async def extract_speaker_samples(
         # Run lazy migration for samples before checking count
         # (migration may drop invalid samples, freeing up space)
         person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
+        if person is None:
+            return SpeakerSampleExtractionResult('retryable', 'person_not_ready')
         if person:
             person = await maybe_migrate_person_samples(uid, person)
 
@@ -344,18 +358,18 @@ async def extract_speaker_samples(
         sample_count = await run_blocking(db_executor, users_db.get_person_speech_samples_count, uid, person_id)
         if sample_count >= 1:
             logger.warning(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
-            return
+            return SpeakerSampleExtractionResult('already_present', 'sample_already_present')
 
         # Fetch conversation to get started_at and segment details
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation:
             logger.warning(f"Conversation {conversation_id} not found {uid}")
-            return
+            return SpeakerSampleExtractionResult('retryable', 'conversation_not_ready')
 
         started_at = conversation.get('started_at')
         if not started_at:
             logger.info(f"Conversation {conversation_id} has no started_at {uid}")
-            return
+            return SpeakerSampleExtractionResult('retryable', 'conversation_not_ready')
 
         started_at_ts = started_at.timestamp() if hasattr(started_at, 'timestamp') else float(started_at)
 
@@ -367,7 +381,7 @@ async def extract_speaker_samples(
         audio_files = conversation.get('audio_files', [])
         if not audio_files:
             logger.warning(f"No audio files found for {conversation_id}, skipping speaker sample extraction {uid}")
-            return
+            return SpeakerSampleExtractionResult('retryable', 'audio_files_not_ready')
 
         # Collect all chunk timestamps from audio files
         all_timestamps: List[Any] = []
@@ -377,13 +391,14 @@ async def extract_speaker_samples(
 
         if not all_timestamps:
             logger.warning(f"No chunk timestamps found for {conversation_id}, skipping speaker sample extraction {uid}")
-            return
+            return SpeakerSampleExtractionResult('retryable', 'audio_timestamps_not_ready')
 
         # Build chunks list in expected format
         chunks: List[Dict[str, Any]] = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
 
         samples_added = 0
         max_samples_to_add = 1 - sample_count
+        retryable_reason: Optional[str] = None
 
         # Build ordered list with index lookup for expansion
         ordered_segments = [s for s in conv_segments if s.get('id')]
@@ -396,6 +411,7 @@ async def extract_speaker_samples(
             seg = segment_map.get(seg_id)
             if not seg:
                 logger.warning(f"Segment {seg_id} not found in conversation {uid} {conversation_id}")
+                retryable_reason = 'transcript_segments_not_ready'
                 continue
 
             segment_start = seg.get('start')
@@ -464,6 +480,7 @@ async def extract_speaker_samples(
                 logger.info(
                     f"No relevant chunks for segment {segment_start:.1f}-{segment_end:.1f}s {uid} {conversation_id}"
                 )
+                retryable_reason = 'audio_chunks_not_ready'
                 continue
 
             # Download, merge, and extract (sync_executor avoids parent-child deadlock on storage_executor, #7387)
@@ -503,15 +520,30 @@ async def extract_speaker_samples(
             transcript, is_valid, reason = await verify_and_transcribe_sample(wav_bytes, sample_rate, expected_text)
             if not is_valid:
                 logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
+                if reason.startswith('transcription_failed'):
+                    retryable_reason = 'transcription_failed'
                 continue  # Try next segment
 
             # Upload and store
+            sample_deduplication_key = f'speaker-sample\0{uid}\0{person_id}\0{delivery_id}' if delivery_id else None
             path = await run_blocking(
-                storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
+                storage_executor,
+                upload_person_speech_sample_from_bytes,
+                sample_audio,
+                uid,
+                person_id,
+                sample_rate,
+                sample_deduplication_key,
             )
 
             success = await run_blocking(
-                db_executor, users_db.add_person_speech_sample, uid, person_id, path, transcript=transcript
+                db_executor,
+                users_db.add_person_speech_sample,
+                uid,
+                person_id,
+                path,
+                transcript=transcript,
+                max_samples=1,
             )
             if success:
                 samples_added += 1
@@ -533,9 +565,20 @@ async def extract_speaker_samples(
                     )
                 except Exception as emb_err:
                     logger.error(f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}")
+                return SpeakerSampleExtractionResult('stored', 'sample_stored')
             else:
                 logger.error(f"Failed to add speech sample for person {person_id} {uid} {conversation_id}")
-                break  # Likely hit limit
+                current_count = await run_blocking(
+                    db_executor, users_db.get_person_speech_samples_count, uid, person_id
+                )
+                if current_count >= 1:
+                    return SpeakerSampleExtractionResult('already_present', 'sample_added_concurrently')
+                return SpeakerSampleExtractionResult('retryable', 'sample_persistence_failed')
 
     except Exception as e:
         logger.error(f"Error extracting speaker samples: {e} {uid} {conversation_id}")
+        return SpeakerSampleExtractionResult('retryable', 'extraction_failed')
+
+    if retryable_reason is not None:
+        return SpeakerSampleExtractionResult('retryable', retryable_reason)
+    return SpeakerSampleExtractionResult('terminal_no_sample', 'no_eligible_segment')

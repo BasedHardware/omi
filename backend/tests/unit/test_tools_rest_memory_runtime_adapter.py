@@ -72,11 +72,6 @@ class _UnexpectedLegacyMemoryDb:
         raise AssertionError('legacy get_memories_by_ids must not run for memory denied/enabled tools REST reads')
 
 
-class _UnexpectedLegacyVectorDb:
-    def find_similar_memories(self, *args, **kwargs):
-        raise AssertionError('legacy vector search must not run for memory denied/enabled tools REST reads')
-
-
 def test_tools_rest_get_memories_text_requests_legacy_safe_memory_decision(monkeypatch):
     memory_services = _load_memory_services()
     captured = []
@@ -168,13 +163,6 @@ def test_tools_rest_search_memories_text_requests_legacy_safe_memory_vector_deci
         )
 
     monkeypatch.setattr(memory_services, 'memory_db', _UnexpectedLegacyMemoryDb())
-    monkeypatch.setattr(memory_services, 'vector_db', _UnexpectedLegacyVectorDb())
-    monkeypatch.setattr(memory_services.notification_db, 'get_user_time_zone', lambda _uid: 'UTC')
-    monkeypatch.setattr(
-        memory_services,
-        'pin_memory_system',
-        lambda *_args, **_kwargs: memory_services.MemorySystem.LEGACY,
-    )
     monkeypatch.setattr(
         memory_services, 'search_memory_default_chat_memories_vector_decision_text', fake_search_adapter
     )
@@ -200,13 +188,6 @@ def test_tools_rest_search_memories_text_requests_legacy_safe_memory_vector_deci
 def test_tools_rest_search_memories_text_preserves_adapter_denied_or_empty_memory_states(monkeypatch):
     memory_services = _load_memory_services()
     monkeypatch.setattr(memory_services, 'memory_db', _UnexpectedLegacyMemoryDb())
-    monkeypatch.setattr(memory_services, 'vector_db', _UnexpectedLegacyVectorDb())
-    monkeypatch.setattr(memory_services.notification_db, 'get_user_time_zone', lambda _uid: 'UTC')
-    monkeypatch.setattr(
-        memory_services,
-        'pin_memory_system',
-        lambda *_args, **_kwargs: memory_services.MemorySystem.LEGACY,
-    )
 
     monkeypatch.setattr(
         memory_services,

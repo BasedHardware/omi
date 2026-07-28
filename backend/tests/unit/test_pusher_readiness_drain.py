@@ -227,7 +227,7 @@ def test_real_app_registers_readiness_routes_and_shutdown_drain(handlers):
 
 def test_ws_drain_reject_ordering_is_static_tripwire():
     """STATIC source-ordering tripwire (NOT behavioral coverage): asserts that, in
-    the source of ``_websocket_util_trigger``, ``await websocket.accept()`` precedes
+    the source of ``_websocket_util_trigger``, ``await websocket.accept(...)`` precedes
     the ``ReadinessGate.is_serving()`` drain check, which precedes
     ``await websocket.close(code=1001)``. It does NOT drive a live WebSocket
     handshake or observe a real close frame; per AGENTS.md this is a static
@@ -244,7 +244,7 @@ def test_ws_drain_reject_ordering_is_static_tripwire():
     from routers import pusher as pusher_router
 
     source = inspect.getsource(pusher_router._websocket_util_trigger)
-    accept_pos = source.find('await websocket.accept()')
+    accept_pos = source.find('await websocket.accept(')
     drain_check_pos = source.find('if not ReadinessGate.is_serving()')
     close_1001_pos = source.find('await websocket.close(code=1001)')
 

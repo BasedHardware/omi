@@ -4,7 +4,7 @@ Covers:
 1. get_conversations_text — date parsing, limit caps, empty results
 2. search_conversations_text — query routing, date conversion to timestamps
 3. get_memories_text — date parsing, locked memory filtering
-4. search_memories_text — vector search delegation
+4. search_memories_text — shared legacy search delegation
 5. get_action_items_text — date parsing, status filtering
 6. create_action_item_text — validation, default due date, past-date rejection
 7. update_action_item_text — exists check, field updates
@@ -177,7 +177,6 @@ memories_db.get_memories_by_ids = MagicMock(return_value=[])
 # Stub database.vector_db
 vector_db = _stub_module("database.vector_db")
 vector_db.query_vectors = MagicMock(return_value=[])
-vector_db.find_similar_memories = MagicMock(return_value=[])
 
 # Stub database.action_items
 action_items_db = _stub_module("database.action_items")
@@ -229,6 +228,7 @@ memory_system_stub.MemorySystem = types.SimpleNamespace(LEGACY="legacy", CANONIC
 
 memory_service_stub = _stub_module("utils.memory.memory_service")
 memory_service_stub.MemoryService = MagicMock
+memory_service_stub.search_legacy_memories = MagicMock(return_value=[])
 
 surface_routing_stub = _stub_module("utils.memory.surface_routing")
 surface_routing_stub.pin_memory_system = MagicMock(return_value=memory_system_stub.MemorySystem.LEGACY)
@@ -650,10 +650,9 @@ class TestGetMemoriesText:
 # ===========================================================================
 class TestSearchMemoriesText:
     def setup_method(self):
-        vector_db.find_similar_memories.reset_mock()
-        vector_db.find_similar_memories.return_value = []
-        memories_db.get_memories_by_ids.reset_mock()
-        memories_db.get_memories_by_ids.return_value = []
+        memories_svc.search_legacy_memories.reset_mock()
+        memories_svc.search_legacy_memories.return_value = []
+        memories_svc.search_legacy_memories.side_effect = None
 
     def test_no_results(self):
         result = memories_svc.search_memories_text(uid="test-uid", query="cooking")
@@ -661,15 +660,16 @@ class TestSearchMemoriesText:
         assert "cooking" in result
 
     def test_with_results(self):
-        vector_db.find_similar_memories.return_value = [
-            {'memory_id': 'mem-1', 'score': 0.95},
-        ]
-        memories_db.get_memories_by_ids.return_value = [
-            {'id': 'mem-1', 'content': 'likes pasta', 'is_locked': False, 'created_at': datetime.now(timezone.utc)},
+        memories_svc.search_legacy_memories.return_value = [
+            types.SimpleNamespace(
+                memory=FakeMemoryDB(id='mem-1', content='likes pasta', created_at=datetime.now(timezone.utc)),
+                score=0.95,
+            )
         ]
         result = memories_svc.search_memories_text(uid="test-uid", query="food")
         assert "likes pasta" in result
         assert "0.95" in result
+        memories_svc.search_legacy_memories.assert_called_once_with("test-uid", "food", limit=5)
 
 
 # ===========================================================================
@@ -852,8 +852,9 @@ class TestRouterEndpoints:
         memories_db.get_memories.return_value = []
         memories_db.get_memories_by_ids.reset_mock()
         memories_db.get_memories_by_ids.return_value = []
-        vector_db.find_similar_memories.reset_mock()
-        vector_db.find_similar_memories.return_value = []
+        memories_svc.search_legacy_memories.reset_mock()
+        memories_svc.search_legacy_memories.return_value = []
+        memories_svc.search_legacy_memories.side_effect = None
         action_items_db.get_action_items.reset_mock()
         action_items_db.get_action_items.return_value = []
         action_items_db.get_action_item.reset_mock()
@@ -1090,36 +1091,28 @@ class TestConversationLockedFiltering:
 
 
 # ===========================================================================
-# Tests: Search memories locked filtering
+# Tests: Search memories shared helper results
 # ===========================================================================
-class TestSearchMemoriesLockedFiltering:
+class TestSearchMemoriesSharedHelperResults:
     def setup_method(self):
-        vector_db.find_similar_memories.reset_mock()
-        memories_db.get_memories_by_ids.reset_mock()
+        memories_svc.search_legacy_memories.reset_mock()
+        memories_svc.search_legacy_memories.return_value = []
+        memories_svc.search_legacy_memories.side_effect = None
 
-    def test_search_memories_filters_locked(self):
-        """Locked memories are excluded from search results."""
-        vector_db.find_similar_memories.return_value = [
-            {'memory_id': 'mem-1', 'score': 0.9},
-            {'memory_id': 'mem-2', 'score': 0.8},
-        ]
-        memories_db.get_memories_by_ids.return_value = [
-            {'id': 'mem-1', 'content': 'visible', 'is_locked': False, 'created_at': datetime.now(timezone.utc)},
-            {'id': 'mem-2', 'content': 'locked', 'is_locked': True, 'created_at': datetime.now(timezone.utc)},
+    def test_search_memories_formats_shared_helper_results(self):
+        """The tool formats the visible matches returned by the shared helper."""
+        memories_svc.search_legacy_memories.return_value = [
+            types.SimpleNamespace(
+                memory=FakeMemoryDB(id='mem-1', content='visible', created_at=datetime.now(timezone.utc)),
+                score=0.9,
+            )
         ]
         result = memories_svc.search_memories_text(uid="test-uid", query="test")
         assert "visible" in result
-        assert "locked" not in result
         assert "1 memories" in result
 
-    def test_search_memories_all_locked_returns_empty(self):
-        """All locked memories in search returns 'no memories' message."""
-        vector_db.find_similar_memories.return_value = [
-            {'memory_id': 'mem-1', 'score': 0.9},
-        ]
-        memories_db.get_memories_by_ids.return_value = [
-            {'id': 'mem-1', 'content': 'locked', 'is_locked': True, 'created_at': datetime.now(timezone.utc)},
-        ]
+    def test_search_memories_empty_shared_helper_result_returns_empty(self):
+        """Filtering everything in the shared helper returns the no-results message."""
         result = memories_svc.search_memories_text(uid="test-uid", query="test")
         assert "No memories found" in result
 
@@ -1133,7 +1126,9 @@ class TestErrorHandling:
         conversations_db.get_conversations_by_id.reset_mock()
         vector_db.query_vectors.reset_mock()
         memories_db.get_memories.reset_mock()
-        vector_db.find_similar_memories.reset_mock()
+        memories_svc.search_legacy_memories.reset_mock()
+        memories_svc.search_legacy_memories.return_value = []
+        memories_svc.search_legacy_memories.side_effect = None
         action_items_db.get_action_items.reset_mock()
         action_items_db.create_action_item.reset_mock()
         action_items_db.get_action_item.reset_mock()
@@ -1163,13 +1158,13 @@ class TestErrorHandling:
         assert "Firestore down" in result
         memories_db.get_memories.side_effect = None
 
-    def test_search_memories_vector_error(self):
-        """Vector DB failure in search_memories returns error text."""
-        vector_db.find_similar_memories.side_effect = Exception("Vector timeout")
+    def test_search_memories_shared_helper_error(self):
+        """A shared legacy search failure returns error text."""
+        memories_svc.search_legacy_memories.side_effect = Exception("Vector timeout")
         result = memories_svc.search_memories_text(uid="test-uid", query="test")
         assert "Error" in result
         assert "Vector timeout" in result
-        vector_db.find_similar_memories.side_effect = None
+        memories_svc.search_legacy_memories.side_effect = None
 
     def test_get_action_items_db_error(self):
         """DB failure in get_action_items returns error text."""
@@ -1222,8 +1217,9 @@ class TestBoundaryConditions:
         vector_db.query_vectors.return_value = []
         memories_db.get_memories.reset_mock()
         memories_db.get_memories.return_value = []
-        vector_db.find_similar_memories.reset_mock()
-        vector_db.find_similar_memories.return_value = []
+        memories_svc.search_legacy_memories.reset_mock()
+        memories_svc.search_legacy_memories.return_value = []
+        memories_svc.search_legacy_memories.side_effect = None
         action_items_db.get_action_items.reset_mock()
         action_items_db.get_action_items.return_value = []
 
@@ -1236,9 +1232,7 @@ class TestBoundaryConditions:
     def test_search_memories_limit_cap(self):
         """search_memories_text caps limit at 20."""
         memories_svc.search_memories_text(uid="test-uid", query="test", limit=100)
-        call_kwargs = vector_db.find_similar_memories.call_args
-        # limit is positional arg 3 or keyword
-        assert call_kwargs[1].get('limit', call_kwargs[0][2] if len(call_kwargs[0]) > 2 else 20) <= 20
+        memories_svc.search_legacy_memories.assert_called_once_with('test-uid', 'test', limit=20)
 
     def test_action_items_limit_cap(self):
         """get_action_items_text caps limit at 500."""

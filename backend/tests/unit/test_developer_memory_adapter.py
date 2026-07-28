@@ -59,6 +59,28 @@ def _function_source_for_route(path: str, method: str) -> str:
     raise AssertionError(f'route not found: {method.upper()} {path}')
 
 
+def _class_method_ast(path: Path, class_name: str, method_name: str) -> ast.FunctionDef:
+    module = ast.parse(path.read_text(encoding='utf-8'))
+    for node in module.body:
+        if not isinstance(node, ast.ClassDef) or node.name != class_name:
+            continue
+        for child in node.body:
+            if isinstance(child, ast.FunctionDef) and child.name == method_name:
+                return child
+    raise AssertionError(f'method not found: {class_name}.{method_name}')
+
+
+def _qualified_call_name(call: ast.Call) -> str:
+    parts = []
+    node = call.func
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+    return '.'.join(reversed(parts))
+
+
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):
     return memory_item(
         memory_id,
@@ -151,20 +173,29 @@ def test_developer_batch_create_route_checks_split_brain_guard_before_categoriza
 def test_developer_delete_route_checks_split_brain_guard_before_reads_and_legacy_delete():
     memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     route_source = _function_source_for_route('/v1/dev/user/memories/{memory_id}', 'delete')
-    service_contents = memory_service_py.read_text(encoding='utf-8')
+    method = _class_method_ast(memory_service_py, 'MemoryService', 'delete_external_memory')
     pin_call = 'pin_memory_system(uid, db_client=db)'
     external_delete = '.delete_external_memory('
-    guard_call = 'guard_legacy_memory_write('
-    legacy_read = 'memory = memories_db.get_memory(uid, memory_id)'
-    legacy_delete = 'memories_db.delete_memory(uid, memory_id)'
+    calls = sorted(
+        (node for node in ast.walk(method) if isinstance(node, ast.Call)),
+        key=lambda node: (node.lineno, node.col_offset),
+    )
+    calls_by_name = {_qualified_call_name(call): call for call in calls}
+    guard_call = calls_by_name['_require_legacy_write_guard']
+    legacy_read = calls_by_name['memories_db.get_memory']
+    legacy_delete = calls_by_name['memories_db.delete_memory']
     assert pin_call in route_source
     assert external_delete in route_source
-    assert guard_call in service_contents
-    assert legacy_read in service_contents
-    assert legacy_delete in service_contents
     assert route_source.index(pin_call) < route_source.index(external_delete)
-    guard_index = service_contents.index(guard_call)
-    assert guard_index < service_contents.index(legacy_read) < service_contents.index(legacy_delete)
+    assert guard_call.lineno < legacy_read.lineno < legacy_delete.lineno
+    for call in (legacy_read, legacy_delete):
+        firestore_client = next((keyword.value for keyword in call.keywords if keyword.arg == 'firestore_client'), None)
+        assert (
+            isinstance(firestore_client, ast.Attribute)
+            and firestore_client.attr == '_db_client'
+            and isinstance(firestore_client.value, ast.Name)
+            and firestore_client.value.id == 'self'
+        ), f'{_qualified_call_name(call)} must use the injected Firestore client'
 
 
 def test_developer_update_route_checks_split_brain_guard_before_reads_and_legacy_mutations():

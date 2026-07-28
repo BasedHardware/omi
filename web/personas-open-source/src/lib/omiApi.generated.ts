@@ -1224,8 +1224,11 @@ export interface CreateTaskRequest {
 }
 
 export interface CreateTaskResponse {
+  ambiguous?: boolean | null;
   error?: string | null;
+  error_code?: string | null;
   external_task_id?: string | null;
+  retryable?: boolean | null;
   success: boolean;
 }
 

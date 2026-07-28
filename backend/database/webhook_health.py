@@ -428,3 +428,24 @@ def record_dev_webhook_success(uid: str, wtype: object):
         r.expire(key, _HEALTH_TTL)
     except Exception as e:
         logger.warning(f'record_dev_webhook_success redis error uid={uid} type={wtype}: {e}')
+
+
+def reset_dev_webhook_health(uid: str, wtype: object):
+    """Clear delivery failures without claiming that an HTTP request succeeded."""
+    try:
+        wtype_str = getattr(wtype, 'value') if hasattr(wtype, 'value') else str(wtype)
+        key = f'dev_webhook_health:{uid}:{wtype_str}'
+        r.hset(
+            key,
+            mapping={
+                'failure_count': '0',
+                'last_failure_at': '',
+                'last_success_at': '',
+                'last_status': '',
+                'last_error': '',
+                'disabled': '0',
+            },
+        )
+        r.expire(key, _HEALTH_TTL)
+    except Exception as e:
+        logger.warning(f'reset_dev_webhook_health redis error uid={uid} type={wtype}: {e}')

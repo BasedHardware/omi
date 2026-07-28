@@ -1639,7 +1639,7 @@ class TestMcpMemoryLockEnforcement:
         import database.memories as memories_db
 
         memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.delete_memory = MagicMock()
+        memories_db.delete_memory = MagicMock(return_value=SimpleNamespace(committed_count=1))
 
         from routers import mcp
         from routers.mcp import delete_memory
@@ -1729,16 +1729,25 @@ class TestMcpSseMemoryLockEnforcement:
         import database.memories as memories_db
 
         memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.delete_memory = MagicMock()
+        memories_db.delete_memory = MagicMock(return_value=SimpleNamespace(committed_count=1))
 
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool
 
         _allow_memory_product_auth(mcp_sse)
         _force_legacy_memory_paths(mcp_sse)
-        result = execute_tool('test-uid', 'delete_memory', {'memory_id': 'mem-1'}, auth_context=_memory_auth_context())
+        result = execute_tool(
+            'test-uid',
+            'delete_memory',
+            {'memory_id': 'mem-1'},
+            auth_context=_memory_auth_context(),
+        )
         assert result == {"success": True}
-        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
+        memories_db.delete_memory.assert_called_once_with(
+            'test-uid',
+            'mem-1',
+            firestore_client=mcp_sse.db,
+        )
 
     def test_mcp_sse_delete_memory_404_missing(self):
         import database.memories as memories_db
@@ -1789,7 +1798,12 @@ class TestMcpSseMemoryLockEnforcement:
             'test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'}, auth_context=_memory_auth_context()
         )
         assert result == {"success": True}
-        memories_db.edit_memory.assert_called_once_with('test-uid', 'mem-1', 'new')
+        memories_db.edit_memory.assert_called_once_with(
+            'test-uid',
+            'mem-1',
+            'new',
+            firestore_client=mcp_sse.db,
+        )
 
 
 # =============================================================================

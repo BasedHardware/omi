@@ -9,10 +9,15 @@ import os
 import re
 from unittest.mock import MagicMock, AsyncMock, patch
 
+import httpx
 import pytest
 
 import utils.webhooks as webhooks_module
-from utils.webhooks import realtime_transcript_webhook, send_audio_bytes_developer_webhook, day_summary_webhook
+from utils.webhooks import (
+    day_summary_webhook,
+    realtime_transcript_webhook,
+    send_audio_bytes_developer_webhook,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -29,6 +34,82 @@ def _stub_webhook_db_helpers(monkeypatch):
     monkeypatch.setattr(webhooks_module, "set_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_success", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_failure", MagicMock(return_value=False))
+
+
+class TestPostDevWebhookRetryPolicy:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('status_code', [400, 401, 403, 404, 409, 410, 422])
+    async def test_permanent_4xx_is_not_retried(self, status_code):
+        response = MagicMock(status_code=status_code)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=response)
+        mock_sleep = AsyncMock()
+
+        with patch.object(webhooks_module, 'get_webhook_client', return_value=mock_client), patch.object(
+            webhooks_module.asyncio, 'sleep', new=mock_sleep
+        ):
+            actual = await webhooks_module._post_dev_webhook(
+                'test_webhook',
+                'https://example.com/webhook',
+                retry_delays=(1.0,),
+                json={'event': 'conversation.completed'},
+            )
+
+        assert actual is response
+        mock_client.post.assert_awaited_once()
+        mock_sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('status_code', [408, 425, 429, 500, 503])
+    async def test_retryable_http_status_retries_with_stable_idempotency_key(self, status_code):
+        retryable_response = MagicMock(status_code=status_code)
+        success_response = MagicMock(status_code=204)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=[retryable_response, success_response])
+        mock_sleep = AsyncMock()
+
+        with patch.object(webhooks_module, 'get_webhook_client', return_value=mock_client), patch.object(
+            webhooks_module.asyncio, 'sleep', new=mock_sleep
+        ):
+            actual = await webhooks_module._post_dev_webhook(
+                'test_webhook',
+                'https://example.com/webhook',
+                retry_delays=(1.0,),
+                json={'event': 'conversation.completed'},
+            )
+
+        assert actual is success_response
+        assert mock_client.post.await_count == 2
+        mock_sleep.assert_awaited_once_with(1.0)
+        idempotency_keys = [call.kwargs['headers']['Idempotency-Key'] for call in mock_client.post.await_args_list]
+        assert idempotency_keys[0]
+        assert idempotency_keys[0] == idempotency_keys[1]
+
+    @pytest.mark.asyncio
+    async def test_network_failure_retries_with_stable_idempotency_key(self):
+        request = httpx.Request('POST', 'https://example.com/webhook')
+        network_error = httpx.ConnectError('connection failed', request=request)
+        success_response = MagicMock(status_code=200)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=[network_error, success_response])
+        mock_sleep = AsyncMock()
+
+        with patch.object(webhooks_module, 'get_webhook_client', return_value=mock_client), patch.object(
+            webhooks_module.asyncio, 'sleep', new=mock_sleep
+        ):
+            actual = await webhooks_module._post_dev_webhook(
+                'test_webhook',
+                'https://example.com/webhook',
+                retry_delays=(1.0,),
+                json={'event': 'conversation.completed'},
+            )
+
+        assert actual is success_response
+        assert mock_client.post.await_count == 2
+        mock_sleep.assert_awaited_once_with(1.0)
+        idempotency_keys = [call.kwargs['headers']['Idempotency-Key'] for call in mock_client.post.await_args_list]
+        assert idempotency_keys[0]
+        assert idempotency_keys[0] == idempotency_keys[1]
 
 
 class TestRealtimeTranscriptWebhook:
@@ -50,6 +131,21 @@ class TestRealtimeTranscriptWebhook:
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
         assert "segments" in call_args.kwargs.get("json", {})
+
+    @pytest.mark.asyncio
+    async def test_stable_delivery_id_reaches_realtime_webhook(self):
+        mock_response = MagicMock(status_code=204)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            await realtime_transcript_webhook(
+                "uid-1",
+                [{"text": "hello"}],
+                idempotency_key="delivery-1",
+            )
+
+        assert mock_client.post.await_args.kwargs["headers"]["Idempotency-Key"] == "delivery-1"
 
     @pytest.mark.asyncio
     async def test_notification_on_200_with_message(self):
@@ -103,7 +199,7 @@ class TestRealtimeTranscriptWebhook:
         mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("connect timeout"))
 
         with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
-            "utils.webhooks._get_dev_webhook_retry_delays", return_value=()
+            "utils.webhooks._REALTIME_DEV_WEBHOOK_RETRY_DELAYS", ()
         ):
             # Should not raise
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
@@ -396,7 +492,7 @@ class TestCircuitBreakerIntegration:
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
             "utils.webhooks.get_webhook_client", return_value=mock_client
-        ), patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()):
+        ), patch("utils.webhooks._REALTIME_DEV_WEBHOOK_RETRY_DELAYS", ()):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_cb.record_failure.assert_called_once()
 

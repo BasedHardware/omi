@@ -3,6 +3,7 @@ import threading
 from typing import List
 import os
 import time
+import uuid
 
 import httpx
 
@@ -85,6 +86,58 @@ _RETRYABLE_DELIVERY_STATUSES = frozenset({408, 425, 429})
 def _delivery_failure_is_retryable(status_code: int) -> bool:
     """Whether a non-2xx webhook response leaves the finalization job retryable."""
     return status_code >= 500 or status_code in _RETRYABLE_DELIVERY_STATUSES
+
+
+_REALTIME_APP_WEBHOOK_RETRY_DELAYS = (0.5, 2.0)
+
+
+async def _post_realtime_app_webhook(
+    app_id: str,
+    webhook_url: str,
+    *,
+    idempotency_key: str | None = None,
+    retry_delays: tuple[float, ...] = _REALTIME_APP_WEBHOOK_RETRY_DELAYS,
+    **request_kwargs,
+):
+    """Retry a realtime app delivery without changing its receiver-visible identity."""
+    headers = dict(request_kwargs.pop('headers', {}) or {})
+    headers.setdefault('X-Omi-Idempotency-Key', idempotency_key or str(uuid.uuid4()))
+    request_kwargs['headers'] = headers
+    client = get_webhook_client()
+    attempts = len(retry_delays) + 1
+    last_response = None
+    last_exception: httpx.TransportError | None = None
+
+    for attempt_index in range(attempts):
+        try:
+            async with get_webhook_semaphore():
+                response = await client.post(webhook_url, **request_kwargs)
+            last_response = response
+            last_exception = None
+            if 200 <= response.status_code < 300:
+                return response
+            if not _delivery_failure_is_retryable(response.status_code):
+                return response
+        except httpx.TransportError as error:
+            last_response = None
+            last_exception = error
+
+        if attempt_index < len(retry_delays):
+            delay = retry_delays[attempt_index]
+            logger.warning(
+                'Realtime app webhook retry app=%s attempt=%s/%s delay=%ss',
+                app_id,
+                attempt_index + 1,
+                attempts,
+                f'{delay:g}',
+            )
+            await asyncio.sleep(delay)
+
+    if last_response is not None:
+        return last_response
+    if last_exception is not None:
+        raise last_exception
+    raise RuntimeError('Realtime app webhook failed without a response')
 
 
 def _notify_app_owner(app_id: str, title: str, body: str):
@@ -342,10 +395,18 @@ async def trigger_realtime_integrations(
     segments: list[dict],
     conversation_id: str | None,
     source: str | None = None,
+    *,
+    idempotency_key: str | None = None,
 ):
     logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
-    return await _async_trigger_realtime_integrations(uid, segments, conversation_id, source=source)
+    return await _async_trigger_realtime_integrations(
+        uid,
+        segments,
+        conversation_id,
+        source=source,
+        idempotency_key=idempotency_key,
+    )
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
@@ -779,6 +840,8 @@ async def _async_trigger_realtime_integrations(
     segments: List[dict],
     conversation_id: str | None,
     source: str | None = None,
+    *,
+    idempotency_key: str | None = None,
 ) -> dict:
     # Paywall: skip mentor + third-party proactive notifications when this
     # transcription session belongs to a paywalled desktop user.
@@ -842,15 +905,15 @@ async def _async_trigger_realtime_integrations(
             return
 
         try:
-            async with get_webhook_semaphore():
-                client = get_webhook_client()
-                response = await client.post(
-                    pinned_url,
-                    json={"session_id": uid, "segments": segments},
-                    headers=pin_kwargs['headers'],
-                    extensions=pin_kwargs['extensions'],
-                    follow_redirects=False,
-                )
+            response = await _post_realtime_app_webhook(
+                app.id,
+                pinned_url,
+                json={"session_id": uid, "segments": segments},
+                headers=pin_kwargs['headers'],
+                extensions=pin_kwargs['extensions'],
+                follow_redirects=False,
+                idempotency_key=idempotency_key,
+            )
             if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
