@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Tests/PTTInputDeviceProbeTests.swift
+  s_525e97d8f6425e::t_98bfe3bc48aa3a 81-85,87,89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "402765359b6dbe89a60c15986316fe1f2a534f3c",
+  "prompts": {},
+  "sessions": {
+    "s_525e97d8f6425e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81424a8f-9e27-4689-8547-3152f2473712",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
