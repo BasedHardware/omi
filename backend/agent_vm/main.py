@@ -1,6 +1,8 @@
 import asyncio
 import base64
 import copy
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -15,6 +17,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 SYNC_TABLES = frozenset(
@@ -124,28 +128,67 @@ async def stop_instance() -> None:
         return
 
 
+def validate_signed_update_manifest(manifest_bytes: bytes, signature: bytes, source: bytes) -> dict[str, str]:
+    """Validate the signed, content-addressed update artifact before execution."""
+    try:
+        public_key = base64.b64decode(os.environ["AGENT_UPDATE_ED25519_PUBLIC_KEY"], validate=True)
+        Ed25519PublicKey.from_public_bytes(public_key).verify(signature, manifest_bytes)
+        manifest = json.loads(manifest_bytes)
+        path = manifest["path"]
+        version = manifest["version"]
+        expected_sha256 = manifest["sha256"]
+    except (KeyError, TypeError, ValueError, InvalidSignature, json.JSONDecodeError):
+        raise ValueError("invalid signed Agent VM update manifest") from None
+
+    if (
+        not isinstance(path, str)
+        or not isinstance(version, str)
+        or not version
+        or not isinstance(expected_sha256, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256)
+        or Path(path).is_absolute()
+        or ".." in Path(path).parts
+        or not hmac.compare_digest(hashlib.sha256(source).hexdigest(), expected_sha256)
+    ):
+        raise ValueError("invalid signed Agent VM update artifact")
+    return {"path": path, "version": version}
+
+
 async def check_update() -> None:
     base = os.environ.get("AGENT_GCS_BASE", "https://storage.googleapis.com/based-hardware-agent")
-    path = os.environ.get("AGENT_UPDATE_PATH", "main.py")
+    manifest_path = os.environ.get("AGENT_UPDATE_MANIFEST_PATH", "manifest.json")
+    signature_path = f"{manifest_path}.sig"
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            version_response = await client.get(f"{base}/version.txt")
-            version_response.raise_for_status()
-            version = version_response.text.strip()
-            if runtime.current_version is None:
-                runtime.current_version = version
-                return
-            if not version or version == runtime.current_version:
+            manifest_response, signature_response = await asyncio.gather(
+                client.get(f"{base}/{manifest_path}"),
+                client.get(f"{base}/{signature_path}"),
+            )
+            manifest_response.raise_for_status()
+            signature_response.raise_for_status()
+            untrusted_manifest = json.loads(manifest_response.content)
+            path = untrusted_manifest.get("path") if isinstance(untrusted_manifest, dict) else None
+            if not isinstance(path, str) or Path(path).is_absolute() or ".." in Path(path).parts:
                 return
             source_response = await client.get(f"{base}/{path}")
             source_response.raise_for_status()
+        update = validate_signed_update_manifest(
+            manifest_response.content,
+            base64.b64decode(signature_response.content, validate=True),
+            source_response.content,
+        )
+        if runtime.current_version is None:
+            runtime.current_version = update["version"]
+            return
+        if update["version"] == runtime.current_version:
+            return
         target = Path(__file__).resolve()
         temporary = target.with_suffix(".updating")
-        temporary.write_text(source_response.text)
+        temporary.write_bytes(source_response.content)
         temporary.replace(target)
-        runtime.current_version = version
+        runtime.current_version = update["version"]
         os.execv(sys.executable, [sys.executable, *sys.argv])
-    except (httpx.HTTPError, OSError):
+    except (httpx.HTTPError, OSError, ValueError, json.JSONDecodeError):
         return
 
 
