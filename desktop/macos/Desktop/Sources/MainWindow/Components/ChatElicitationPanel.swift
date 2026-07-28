@@ -393,6 +393,29 @@ struct ChatElicitationPanel: View {
     return OmiColors.border.opacity(option.isPermanent ? 0.4 : 0.12)
   }
 
+  /// The field's text, where only the field's own edits stage an answer.
+  ///
+  /// `freeText` is also written by the card itself — refilled when the user
+  /// moves to another question, emptied when an option replaces what was typed.
+  /// Those writes must not stage, and observing the state is what made them:
+  /// every write, whoever made it, ran the staging path against whichever
+  /// question was on screen at the time. Moving to a question that had no typed
+  /// answer emptied the field, which staged an empty answer against the
+  /// question just arrived at and cleared the options it already held. A binding
+  /// is only set by the control it feeds, so a restore cannot reach staging at
+  /// all rather than being suppressed once it gets there.
+  private var typedAnswer: Binding<String> {
+    Binding(
+      get: { freeText },
+      set: { value in
+        freeText = value
+        // Typing is the user working on the answer, even before the field has
+        // anything worth staging.
+        elicitations.noteInteraction()
+        elicitations.stageTypedText(value, for: elicitation)
+      })
+  }
+
   /// The user's own words, presented as one more option rather than a stray
   /// field below them.
   ///
@@ -412,18 +435,12 @@ struct ChatElicitationPanel: View {
 
       TextField(
         elicitation.options.isEmpty ? "Type your answer\u{2026}" : "Or type your own answer\u{2026}",
-        text: $freeText
+        text: typedAnswer
       )
       .textFieldStyle(.plain)
       .scaledFont(size: OmiType.body)
       .foregroundColor(OmiColors.textPrimary)
       .focused($freeTextFocused)
-      .onChange(of: freeText) { _, value in
-        // Typing is the user working on the answer, even before the field has
-        // anything worth staging.
-        elicitations.noteInteraction()
-        stageFreeText(value)
-      }
       .onSubmit(advance)
 
       if elicitation.allowsMultiple {
@@ -623,26 +640,6 @@ struct ChatElicitationPanel: View {
       freeTextFocused = true
       elicitations.noteInteraction()
     }
-  }
-
-  /// Typing is choosing the custom answer.
-  ///
-  /// On a pick-many question it joins whatever options are already chosen, so
-  /// "these three, plus this" is one answer. On a pick-one question it is the
-  /// answer, and takes the place of any option that was chosen — the same way
-  /// clicking a second option would.
-  private func stageFreeText(_ value: String) {
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    let keptOptions = elicitation.allowsMultiple ? stagedOptionIDs : []
-    if trimmed.isEmpty {
-      if keptOptions.isEmpty {
-        elicitations.clearStaged(for: elicitation)
-      } else {
-        elicitations.stage(.answer(optionIDs: keptOptions, text: nil), for: elicitation)
-      }
-      return
-    }
-    elicitations.stage(.answer(optionIDs: keptOptions, text: trimmed), for: elicitation)
   }
 
   /// Typed answers survive moving between questions, so the field is refilled

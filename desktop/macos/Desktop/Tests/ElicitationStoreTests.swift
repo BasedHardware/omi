@@ -300,13 +300,14 @@ final class ElicitationStoreTests: XCTestCase {
 
 @MainActor
 final class ElicitationQueueNavigationTests: XCTestCase {
-  private func pending(_ id: String) throws -> PendingElicitation {
+  private func pending(_ id: String, allowsMultiple: Bool = false) throws -> PendingElicitation {
     try XCTUnwrap(
       PendingElicitation(payload: [
         "dispatchId": id, "ownerId": "o1", "sessionId": "s1", "mode": "question",
         "title": "Omi is asking", "prompt": "Q \(id)",
         "options": [["optionId": "yes", "label": "Yes", "effect": "choice"]],
         "allowsFreeText": true,
+        "allowsMultiple": allowsMultiple,
       ]))
   }
 
@@ -411,6 +412,81 @@ final class ElicitationQueueNavigationTests: XCTestCase {
     store.focus(try pending("ghost"))
 
     XCTAssertEqual(store.focused?.id, "a")
+  }
+
+  /// Next is `focusNext`, and what the user reported losing was the answer they
+  /// had already chosen on the question they were walking towards.
+  func testWalkingTheQueueWithNextKeepsEveryChoiceAlreadyMade() throws {
+    let (store, sent) = makeStore()
+    let a = try pending("a")
+    let b = try pending("b")
+    store.enqueue(a)
+    store.enqueue(b)
+
+    store.stage(.options(["yes"]), for: a)
+    store.focusNext()
+    store.stage(.text("ship it"), for: b)
+    store.focusPrevious()
+    store.focusNext()
+
+    XCTAssertEqual(store.staged[a.id], .options(["yes"]))
+    XCTAssertEqual(store.staged[b.id], .text("ship it"))
+
+    store.submitAll()
+    XCTAssertEqual(sent().count, 2)
+    XCTAssertEqual(sent().first(where: { $0.0.id == "a" })?.1, .options(["yes"]))
+    XCTAssertEqual(
+      sent().first(where: { $0.0.id == "b" })?.1, .text("ship it"),
+      "Send carries what the user chose rather than cancelling it")
+  }
+
+  func testTypedWordsJoinChosenOptionsOnAPickManyQuestion() throws {
+    let (store, _) = makeStore()
+    let many = try pending("many", allowsMultiple: true)
+    store.enqueue(many)
+
+    store.stage(.options(["yes"]), for: many)
+    store.stageTypedText("and this", for: many)
+
+    XCTAssertEqual(store.staged[many.id], .answer(optionIDs: ["yes"], text: "and this"))
+  }
+
+  func testTypedWordsReplaceTheChosenOptionOnAPickOneQuestion() throws {
+    let (store, _) = makeStore()
+    let one = try pending("one")
+    store.enqueue(one)
+
+    store.stage(.options(["yes"]), for: one)
+    store.stageTypedText("something else", for: one)
+
+    XCTAssertEqual(
+      store.staged[one.id], .text("something else"),
+      "a pick-one question carries one answer, so typing takes the option's place")
+  }
+
+  func testEmptyingTheFieldWithdrawsOnlyWhatItContributed() throws {
+    let (store, _) = makeStore()
+    let many = try pending("many", allowsMultiple: true)
+    store.enqueue(many)
+
+    store.stage(.options(["yes"]), for: many)
+    store.stageTypedText("draft", for: many)
+    store.stageTypedText("   ", for: many)
+
+    XCTAssertEqual(
+      store.staged[many.id], .options(["yes"]),
+      "clearing the words leaves the options standing")
+  }
+
+  func testEmptyingTheFieldWithNoOptionsChosenClearsTheAnswer() throws {
+    let (store, _) = makeStore()
+    let a = try pending("a")
+    store.enqueue(a)
+
+    store.stageTypedText("draft", for: a)
+    store.stageTypedText("", for: a)
+
+    XCTAssertNil(store.staged[a.id])
   }
 }
 

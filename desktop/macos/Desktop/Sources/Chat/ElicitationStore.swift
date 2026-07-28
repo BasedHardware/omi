@@ -224,6 +224,9 @@ final class ElicitationStore: ObservableObject {
     guard queue.count > 1 else { return }
     let next = (focusedIndex + offset + queue.count) % queue.count
     focusedID = queue[next].id
+    // Walking the queue is the user working through the set, so it buys the
+    // idle budget back the same way choosing or typing does.
+    noteInteraction()
   }
 
   /// Record a choice without sending it. Sending is a separate, explicit act so
@@ -237,6 +240,31 @@ final class ElicitationStore: ObservableObject {
   func clearStaged(for elicitation: PendingElicitation) {
     staged[elicitation.id] = nil
     noteInteraction()
+  }
+
+  /// Stage what the user typed as part of the answer to `elicitation`.
+  ///
+  /// On a pick-many question the typed words join whatever options are already
+  /// chosen, so "these three, plus this" is one answer. On a pick-one question
+  /// they are the answer and take the place of any option that was chosen, the
+  /// same way clicking a second option would. Emptying the field withdraws only
+  /// what it contributed.
+  ///
+  /// Lives here rather than on the card because the rule reads and rewrites
+  /// staged state, which this type owns, and because a rule inside a SwiftUI
+  /// view is a rule no test can reach.
+  func stageTypedText(_ value: String, for elicitation: PendingElicitation) {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    let keptOptions = elicitation.allowsMultiple ? (staged[elicitation.id]?.optionIDs ?? []) : []
+    guard !trimmed.isEmpty else {
+      if keptOptions.isEmpty {
+        clearStaged(for: elicitation)
+      } else {
+        stage(.answer(optionIDs: keptOptions, text: nil), for: elicitation)
+      }
+      return
+    }
+    stage(.answer(optionIDs: keptOptions, text: trimmed), for: elicitation)
   }
 
   /// Send what is staged for the question on screen.
