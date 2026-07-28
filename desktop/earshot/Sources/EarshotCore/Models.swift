@@ -1,0 +1,270 @@
+import Foundation
+import GRDB
+
+// MARK: - Stored records
+
+/// A contiguous run of speech. A gap longer than `SessionPolicy.gapSeconds` starts a new one.
+public struct Session: Codable, Sendable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "sessions"
+
+    public var id: Int64?
+    /// Unix epoch seconds.
+    public var startedAt: Double
+    /// Unix epoch seconds; nil while the session is still open.
+    public var endedAt: Double?
+    /// Frontmost app when the session opened. Turns a Zoom/Meet session into an identifiable
+    /// meeting without any meeting-detection logic.
+    public var appHint: String?
+
+    public init(id: Int64? = nil, startedAt: Double, endedAt: Double? = nil, appHint: String? = nil) {
+        self.id = id
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.appHint = appHint
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
+/// Where a transcript line came from. Mic is the user; the system tap is everyone else.
+public enum SegmentSource: String, Codable, Sendable, CaseIterable {
+    case mic
+    case system
+
+    /// Speaker attribution without a diarization model.
+    public var speaker: String { self == .mic ? "me" : "them" }
+}
+
+/// One transcribed line of speech.
+public struct Segment: Codable, Sendable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "segments"
+
+    public var id: Int64?
+    public var sessionId: Int64
+    /// Unix epoch seconds.
+    public var startedAt: Double
+    /// Unix epoch seconds.
+    public var endedAt: Double
+    /// Raw value of `SegmentSource`.
+    public var source: String
+    /// "me" or "them".
+    public var speaker: String
+    public var text: String
+
+    public init(
+        id: Int64? = nil,
+        sessionId: Int64,
+        startedAt: Double,
+        endedAt: Double,
+        source: SegmentSource,
+        text: String
+    ) {
+        self.id = id
+        self.sessionId = sessionId
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.source = source.rawValue
+        self.speaker = source.speaker
+        self.text = text
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
+/// One screen observation: the active window, its title, and whatever text was on it.
+public struct Frame: Codable, Sendable, Identifiable, FetchableRecord, MutablePersistableRecord {
+    public static let databaseTableName = "frames"
+
+    public var id: Int64?
+    /// Unix epoch seconds.
+    public var capturedAt: Double
+    public var appName: String?
+    public var windowTitle: String?
+    public var ocrText: String?
+    /// Absolute path to the JPEG, if one was kept.
+    public var imagePath: String?
+
+    public init(
+        id: Int64? = nil,
+        capturedAt: Double,
+        appName: String? = nil,
+        windowTitle: String? = nil,
+        ocrText: String? = nil,
+        imagePath: String? = nil
+    ) {
+        self.id = id
+        self.capturedAt = capturedAt
+        self.appName = appName
+        self.windowTitle = windowTitle
+        self.ocrText = ocrText
+        self.imagePath = imagePath
+    }
+
+    public mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
+// MARK: - Query results (the MCP wire shape)
+
+/// A single dated, attributed piece of context. The one shape every search returns.
+public struct Hit: Codable, Sendable, Equatable {
+    /// "said" (you), "heard" (someone else), or "screen".
+    public var kind: String
+    /// Unix epoch seconds.
+    public var at: Double
+    /// Local human-readable timestamp — Claude reasons about "last Tuesday", not about epochs.
+    public var when: String
+    public var text: String
+    public var app: String?
+    public var window: String?
+    public var sessionId: Int64?
+
+    public init(
+        kind: String,
+        at: Double,
+        text: String,
+        app: String? = nil,
+        window: String? = nil,
+        sessionId: Int64? = nil
+    ) {
+        self.kind = kind
+        self.at = at
+        self.when = EarshotTime.describe(at)
+        self.text = text
+        self.app = app
+        self.window = window
+        self.sessionId = sessionId
+    }
+}
+
+public struct SessionSummary: Codable, Sendable, Equatable {
+    public var id: Int64
+    public var startedAt: Double
+    public var endedAt: Double?
+    public var when: String
+    public var durationSeconds: Double
+    public var appHint: String?
+    public var lineCount: Int
+    /// Whether the other side was captured at all — a one-sided session is you talking, not a call.
+    public var bothSidesPresent: Bool
+    /// First few lines, enough for Claude to decide whether to pull the transcript.
+    public var preview: String
+
+    public init(
+        id: Int64,
+        startedAt: Double,
+        endedAt: Double?,
+        durationSeconds: Double,
+        appHint: String?,
+        lineCount: Int,
+        bothSidesPresent: Bool,
+        preview: String
+    ) {
+        self.id = id
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.when = EarshotTime.describe(startedAt)
+        self.durationSeconds = durationSeconds
+        self.appHint = appHint
+        self.lineCount = lineCount
+        self.bothSidesPresent = bothSidesPresent
+        self.preview = preview
+    }
+}
+
+/// A contiguous stretch spent in one app — the shape of a day.
+public struct ActivityBlock: Codable, Sendable, Equatable {
+    public var app: String
+    public var window: String?
+    public var startedAt: Double
+    public var endedAt: Double
+    public var when: String
+    public var durationSeconds: Double
+    public var sampleText: String?
+
+    public init(app: String, window: String?, startedAt: Double, endedAt: Double, sampleText: String?) {
+        self.app = app
+        self.window = window
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.when = EarshotTime.describe(startedAt)
+        self.durationSeconds = max(0, endedAt - startedAt)
+        self.sampleText = sampleText
+    }
+}
+
+public struct CapabilityReport: Codable, Sendable, Equatable {
+    public var name: String
+    public var granted: Bool
+    public var detail: String
+
+    public init(name: String, granted: Bool, detail: String) {
+        self.name = name
+        self.granted = granted
+        self.detail = detail
+    }
+}
+
+/// Capture health. Lets Claude say "I only have data from 2pm" instead of guessing.
+public struct StatusInfo: Codable, Sendable, Equatable {
+    public var capturing: Bool
+    public var pausedReason: String?
+    public var capabilities: [CapabilityReport]
+    public var segmentCount: Int
+    public var frameCount: Int
+    public var sessionCount: Int
+    public var oldestAt: Double?
+    public var newestAt: Double?
+    public var coverage: String
+    public var databasePath: String
+
+    public init(
+        capturing: Bool,
+        pausedReason: String?,
+        capabilities: [CapabilityReport],
+        segmentCount: Int,
+        frameCount: Int,
+        sessionCount: Int,
+        oldestAt: Double?,
+        newestAt: Double?,
+        databasePath: String
+    ) {
+        self.capturing = capturing
+        self.pausedReason = pausedReason
+        self.capabilities = capabilities
+        self.segmentCount = segmentCount
+        self.frameCount = frameCount
+        self.sessionCount = sessionCount
+        self.oldestAt = oldestAt
+        self.newestAt = newestAt
+        self.databasePath = databasePath
+        if let oldestAt, let newestAt {
+            self.coverage = "\(EarshotTime.describe(oldestAt)) → \(EarshotTime.describe(newestAt))"
+        } else {
+            self.coverage = "no data captured yet"
+        }
+    }
+}
+
+// MARK: - Time
+
+public enum EarshotTime {
+    public static var now: Double { Date().timeIntervalSince1970 }
+
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE d MMM yyyy 'at' h:mm a"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    /// Local human-readable timestamp, e.g. "Tue 28 Jul 2026 at 2:14 PM".
+    public static func describe(_ epoch: Double) -> String {
+        formatter.string(from: Date(timeIntervalSince1970: epoch))
+    }
+}
