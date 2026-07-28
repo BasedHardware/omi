@@ -189,6 +189,39 @@ describe("ACP auto-resolution rule", () => {
     expect(decision.reason).toContain("no one-time allow");
   });
 
+  it("never gates asking the user behind a permission to ask", () => {
+    // The agent calling ask_user must not produce a permission card about
+    // ask_user: that is two cards for one question, and the first is noise.
+    for (const name of ["ask_user", "mcp__omi-tools__ask_user", "mcp__omi_tools__ask_user"]) {
+      const decision = classifyAcpPermission(request, "other", name);
+      expect(decision.decision).toBe("auto");
+      expect(decision).toMatchObject({ optionId: "once" });
+    }
+  });
+
+  it("still gates every other tool that happens to share the prefix", () => {
+    for (const name of ["mcp__omi-tools__execute_sql", "ask_user_details", "write_file"]) {
+      expect(classifyAcpPermission(request, "other", name).decision).toBe("dispatch");
+    }
+  });
+
+  it("prefers a one-time grant so asking never accumulates a remembered one", () => {
+    const permanentOnly = normalizeAcpPermission({
+      adapterId: "acp",
+      agentLabel: "Claude Code",
+      params: acpParams({
+        options: [{ optionId: "always", name: "Always Allow", kind: "allow_always" }],
+      }),
+    })!;
+
+    // Only a permanent option is offered, so it is used — the effect being
+    // authorized is the question itself, which is harmless to remember.
+    expect(classifyAcpPermission(permanentOnly, "other", "ask_user")).toMatchObject({
+      decision: "auto",
+      optionId: "always",
+    });
+  });
+
   it("treats a missing or non-string tool kind as not read-shaped", () => {
     expect(classifyAcpPermission(request, undefined).decision).toBe("dispatch");
     expect(classifyAcpPermission(request, 42).decision).toBe("dispatch");

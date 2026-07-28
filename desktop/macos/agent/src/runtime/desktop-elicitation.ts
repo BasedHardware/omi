@@ -172,11 +172,35 @@ export type AcpPermissionClassification =
   | { decision: "dispatch"; reason: string };
 
 /**
+ * Tools whose entire effect is to put a question to the user.
+ *
+ * These are never gated. Asking the user is the consent mechanism, so routing
+ * it through consent produces a permission card asking whether the agent may
+ * ask a question — two cards for one question, and the first one is noise the
+ * user cannot act on meaningfully.
+ */
+const USER_INTERACTION_TOOLS: ReadonlySet<string> = new Set(["ask_user"]);
+
+/** Strip any MCP server prefix: `mcp__omi-tools__ask_user` → `ask_user`. */
+function bareToolName(toolName: unknown): string | null {
+  if (typeof toolName !== "string" || toolName.length === 0) return null;
+  const segments = toolName.split("__").filter((segment) => segment.length > 0);
+  return segments[segments.length - 1] ?? null;
+}
+
+export function isUserInteractionTool(toolName: unknown): boolean {
+  const bare = bareToolName(toolName);
+  return bare !== null && USER_INTERACTION_TOOLS.has(bare);
+}
+
+/**
  * Decide whether an ACP permission request may resolve without the user.
  *
- * Exactly one branch stays automatic: a one-time grant on a read-shaped tool.
- * Anything that mutates state, executes, fetches, or asks to be remembered goes
- * to the user, because a remembered grant outlives the turn that requested it.
+ * Two branches stay automatic: putting a question to the user, which is the
+ * consent mechanism and cannot itself sit behind consent, and a one-time grant
+ * on a read-shaped tool. Anything that mutates state, executes, fetches, or
+ * asks to be remembered goes to the user, because a remembered grant outlives
+ * the turn that requested it.
  *
  * This replaces two prior behaviors that never reached a human — a blind
  * `allow_always` selection for the pi adapter, and a `-32001` rejection for
@@ -185,8 +209,25 @@ export type AcpPermissionClassification =
 export function classifyAcpPermission(
   request: ElicitationRequest,
   toolKind: unknown,
+  toolName?: unknown,
 ): AcpPermissionClassification {
   const kind = typeof toolKind === "string" ? toolKind : "other";
+
+  if (isUserInteractionTool(toolName)) {
+    // Prefer a one-time grant so the tool never accumulates a remembered one,
+    // but any allow works: the effect being authorized is the question itself.
+    const allow =
+      request.options.find((option) => option.effect === "allow_once")
+      ?? request.options.find((option) => option.effect === "allow_always");
+    if (allow) {
+      return {
+        decision: "auto",
+        optionId: allow.optionId,
+        reason: "asking the user needs no permission to ask",
+      };
+    }
+  }
+
   if (!READ_SHAPED_TOOL_KINDS.has(kind)) {
     return { decision: "dispatch", reason: `tool kind ${kind} is not read-shaped` };
   }

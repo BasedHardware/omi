@@ -760,11 +760,12 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       return;
     }
 
-    const toolKind = (rawParams as Record<string, unknown> | undefined)?.toolCall;
-    const classification = classifyAcpPermission(
-      request,
-      (toolKind as Record<string, unknown> | undefined)?.kind,
-    );
+    const toolCall = (rawParams as Record<string, unknown> | undefined)?.toolCall as
+      | Record<string, unknown>
+      | undefined;
+    // ACP carries no dedicated tool-name field on the permission request; the
+    // MCP-prefixed name arrives as the title.
+    const classification = classifyAcpPermission(request, toolCall?.kind, toolCall?.title);
     if (classification.decision === "auto") {
       this.log(`${this.adapterId} ACP permission auto-resolved: ${classification.reason}`);
       this.writePermissionOutcome(id, { kind: "selected", optionId: classification.optionId });
