@@ -45,6 +45,10 @@ final class TaskChatCoordinator: ObservableObject {
   private var isResettingOwnerProjection = false
 
   private let chatProvider: ChatProvider
+
+  /// The one elicitation queue, shared with main chat rather than duplicated:
+  /// a question belongs to a conversation, not to whichever panel is open.
+  var elicitations: ElicitationStore { chatProvider.elicitations }
   private let workstreamAPI: any TaskWorkstreamAPI
   private let persistWorkstreamLink: @MainActor (String, String, String, LocalMutationAuthorization) async -> Void
   private let ownerIDProvider: @MainActor () -> String?

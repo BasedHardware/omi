@@ -1054,6 +1054,10 @@ class ChatProvider: ObservableObject {
   @Published var isLoadingSessions = true  // Start true since we load sessions on init
   @Published var isSending = false
   @Published var isStopping = false
+  /// Questions agents are waiting on, projected from kernel dispatches. Held
+  /// here rather than per-view so main chat and the task panel present the one
+  /// queue instead of forking it.
+  let elicitations: ElicitationStore
   @Published private(set) var activeTurnOwner: ChatTurnOwner?
   @Published var isClearing = false
   @Published var errorMessage: String?
@@ -1285,6 +1289,7 @@ class ChatProvider: ObservableObject {
   }
 
   private var multiChatObserver: AnyCancellable?
+  private var elicitationObserver: AnyCancellable?
   private var playwrightExtensionObserver: AnyCancellable?
   private var sessionGroupingObserver: AnyCancellable?
   private var activationObserver: AnyCancellable?
@@ -1389,10 +1394,38 @@ class ChatProvider: ObservableObject {
 
   init(bridgeHarnessOverride: AgentHarnessMode? = nil) {
     self.bridgeHarnessOverride = bridgeHarnessOverride
+    elicitations = ElicitationStore { elicitation, answer in
+      Task {
+        await AgentRuntimeProcess.shared.resolveElicitation(
+          dispatchID: elicitation.id,
+          ownerID: elicitation.ownerID,
+          answer: answer
+        )
+      }
+    }
     isRestoringDraft = true
     draftText = ChatDraftStore.shared.text(for: activeDraftKey)
     isRestoringDraft = false
     log("ChatProvider initialized, will start Claude bridge on first use")
+
+    // A nested ObservableObject does not republish through its parent, so
+    // views observing the provider would never see the queue change.
+    elicitationObserver = elicitations.objectWillChange
+      .receive(on: DispatchQueue.main)
+      .sink { [weak self] _ in self?.objectWillChange.send() }
+
+    // Project elicitations from the runtime. The store owns no truth; these
+    // handlers are the only way an entry appears or leaves.
+    Task { [elicitations] in
+      await AgentRuntimeProcess.shared.setElicitationHandlers(
+        pending: { elicitation in
+          Task { @MainActor in elicitations.enqueue(elicitation) }
+        },
+        resolved: { dispatchID in
+          Task { @MainActor in elicitations.remove(id: dispatchID) }
+        }
+      )
+    }
 
     // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
     // Pre-6594 installs may have the old agentSDK tag saved; the settings

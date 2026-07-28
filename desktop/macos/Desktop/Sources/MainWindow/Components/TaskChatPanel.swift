@@ -110,7 +110,13 @@ struct TaskChatPanel: View {
               placeholder: "Continue this work...",
               mode: $taskState.chatMode,
               pendingText: $coordinator.pendingInputText,
-              inputText: $taskState.draftText
+              inputText: $taskState.draftText,
+              elicitation: coordinator.elicitations.current,
+              elicitationWaitingCount: coordinator.elicitations.waitingCount,
+              onElicitationAnswer: { answer in
+                guard let pending = coordinator.elicitations.current else { return }
+                coordinator.elicitations.answer(pending, with: answer)
+              }
             )
             .padding(OmiSpacing.md)
           }
