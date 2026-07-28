@@ -90,6 +90,40 @@ def test_redaction_catches_camelcase_credential_keys() -> None:
     assert "clientSecret" not in dropped
 
 
+def test_redaction_catches_plural_and_synonym_credential_keys() -> None:
+    """Plurals (cookies/tokens/passwords) and synonyms (passwd/private_key/access_key/bearer/jwt) redact."""
+    raw = {
+        "cookies": "session=abc",
+        "accessTokens": ["t1"],
+        "passwords": "p",
+        "passwd": "p",
+        "private_key": "-----BEGIN-----",
+        "access_key": "AKIA...",
+        "credentials": "blob",
+        "bearer": "xyz",
+        "jwt": "eyJ...",
+        "model": "gpt-test",
+    }
+    masked = redact_value(raw)
+    for key, original in raw.items():
+        if key == "model":
+            assert masked[key] == original
+        else:
+            assert masked[key] == "[REDACTED]", key
+    dropped = redact_value(raw, drop_sensitive=True)
+    assert dropped["model"] == "gpt-test"
+    for key in raw:
+        if key != "model":
+            assert key not in dropped, key
+
+
+def test_identity_rejects_whitespace_only_fields() -> None:
+    with pytest.raises(ValueError):
+        CassetteIdentity("   ", "llm", "model", 0, 0, "event")
+    with pytest.raises(ValueError):
+        CassetteIdentity("session", "llm", "model", 0, 0, "")
+
+
 def test_hermetic_runner_denies_egress_counts_fakes_and_runs_cleanup() -> None:
     cleanup: list[str] = []
     with pytest.raises(UnexpectedEgress), hermetic_run(

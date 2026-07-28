@@ -10,7 +10,7 @@ are restricted local/dev artifacts and must never be committed.
 deny. A capture is permitted only with all three settings:
 
 ```bash
-OMI_ENV=dev
+OMI_ENV_STAGE=dev
 OMI_PARITY_PACK_CAPTURE=1
 OMI_PARITY_PACK_ALLOWED_PRINCIPALS='synthetic-user-1,synthetic-device-2'
 ```
@@ -45,9 +45,10 @@ inputs and must not be committed.
   cassettes/<identity-key>.json # referenced by cassette_refs
 ```
 
-`manifest.json` records the schema version, artifact hashes, input/cassette
-references, expected outcomes, and invariant IDs. Run the foundation checks with
-`npm run test:parity-pack-v0`.
+`manifest.json` records the schema version, `pack_id`, artifact hashes, and one
+entry per case: input/cassette references, expected outcomes, invariant IDs, the
+anonymous cassette identity, and the redacted request fingerprint (digest only).
+Run the foundation checks with `npm run test:parity-pack-v0`.
 
 ## Gold, drift, and rewrite slot
 
