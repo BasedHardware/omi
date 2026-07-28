@@ -1,0 +1,63 @@
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_030a94a2f319d8::t_7fa40dd77d8115 48-53
+  s_030a94a2f319d8::t_d41493ca59f0fe 74,78-82,88,93
+desktop/context-for-claude/docs/design-system.md
+  s_030a94a2f319d8::t_9897503782f8e0 3-8,12-13,15-21,24-25,27,29-31,33-35,37,39-50,54-94,97-100,102-107,109-111,113-133,137-138,140-141,145-151,155-161,165-182,189,194-199,202-204,208,215,218-221,228,230-233,240-262
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingWindow.swift
+  s_030a94a2f319d8::t_f4fa6db4094cba 4,6-9
+desktop/context-for-claude/Sources/ContextApp/Onboarding/MenuBarSpotlight.swift
+  s_030a94a2f319d8::t_2550bf6baa2d13 142-143,152
+desktop/context-for-claude/scripts/build.sh
+  s_030a94a2f319d8::t_54d96f938bef3d 200-202
+desktop/context-for-claude/Sources/ContextApp/Account/LoopbackCallbackServer.swift
+  s_030a94a2f319d8::t_6e7f6ba4757b1d 254-256,259-260,275,279-280,286
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_030a94a2f319d8::t_e0d2f5bffb2ce2 300-302
+  s_030a94a2f319d8::t_1baa62a21df371 115,144,148,155,211,229,255,261,286,306-308
+  s_030a94a2f319d8::t_7c9d331d44d03a 121-124
+desktop/context-for-claude/ARCHITECTURE.md
+  s_030a94a2f319d8::t_b23a12b31a05c3 97
+desktop/context-for-claude/CONTRACTS.md
+  s_030a94a2f319d8::t_5d0a8a35bb5832 457
+  s_0e9ad3a205d861::t_708630ea803862 453
+desktop/context-for-claude/README.md
+  s_030a94a2f319d8::t_363ca52d6a5948 93
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_030a94a2f319d8::t_f3eae2fb0d5ee4 38,49,54,63,77,163-165,174,181,195,201,212,264,273
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Ink.swift
+  s_030a94a2f319d8::t_67416c81400df4 4-7,9-14,23,37,51-71,73-87,90-91,104-107,109-117,184-186,189-191,194-197,227,250,258,272-273,291,296,303-304,309-310,317,343,361-363,365,368,370,373-374,376,379-380,382,385-386,388,391-393,395,398,400,409,411,413,421,424,445,458,477,488,490,533-536,541,554,597,601,607-610,620,630-631,635,668,670,774-775,777,780,795
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_030a94a2f319d8::t_84bbdd9e7d784b 274
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Backdrop.swift
+  s_030a94a2f319d8::t_db0e9dca9dd8d0 265-268
+  s_030a94a2f319d8::t_62e310da9ad5e5 46-49,54-58
+  s_030a94a2f319d8::t_c47fe45dc314ed 64-65
+  s_030a94a2f319d8::t_b39dc073ae2e3e 106-107,109-113
+desktop/context-for-claude/Sources/ContextApp/Onboarding/RandomizedText.swift
+  s_030a94a2f319d8::t_c4c16ef0508f3d 56,63
+  s_030a94a2f319d8::t_eae608b8cb15d6 127-132,136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "3eeb4a4f757eb2e09f7cd4273d9cd8e9dde61284",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_0e9ad3a205d861": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d0f6918-e135-41f2-b66f-fd3775f34b29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
