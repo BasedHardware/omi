@@ -19,7 +19,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
+from google.api_core.exceptions import AlreadyExists as _FirestoreAlreadyExists, Conflict as _FirestoreConflict
+
 from ..._client import db as _boundary_db, delete_collection_recursive, run_transactional
+from ..errors import AlreadyExists
 from ..records import StoredDocument
 from ..sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 from ..ports import Filter
@@ -66,6 +69,26 @@ def _record_from_query(snapshot: Any) -> StoredDocument:
     return StoredDocument(id=snapshot.id, path=path, exists=True, data=snapshot.to_dict())
 
 
+class _FirestoreBatch:
+    """Neutral batched-write accumulator over a Firestore WriteBatch (atomic per commit)."""
+
+    def __init__(self, client: Any):
+        self._client = client
+        self._batch = client.batch()
+
+    def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
+        self._batch.set(self._client.document(path), _translate(data), merge=merge)
+
+    def update(self, path: str, data: Dict[str, Any]) -> None:
+        self._batch.update(self._client.document(path), _translate(data))
+
+    def delete(self, path: str) -> None:
+        self._batch.delete(self._client.document(path))
+
+    def commit(self) -> None:
+        self._batch.commit()
+
+
 class _FirestoreTransaction:
     """Neutral transaction handle over a Firestore transaction. Reads/writes are path-based."""
 
@@ -110,6 +133,12 @@ class FirestoreDocumentStore:
     def update(self, path: str, data: Dict[str, Any]) -> None:
         self._client.document(path).update(_translate(data))
 
+    def create(self, path: str, data: Dict[str, Any]) -> None:
+        try:
+            self._client.document(path).create(_translate(data))
+        except (_FirestoreAlreadyExists, _FirestoreConflict) as exc:
+            raise AlreadyExists(path) from exc
+
     def delete(self, path: str) -> None:
         self._client.document(path).delete()
 
@@ -122,12 +151,15 @@ class FirestoreDocumentStore:
         order_by: Optional[str] = None,
         direction: str = "asc",
         limit: Optional[int] = None,
+        fields: Optional[Sequence[str]] = None,
     ) -> List[StoredDocument]:
         query: Any = self._client.collection(collection)
         for field, op, value in filters or ():
             query = query.where(filter=FieldFilter(field, op, value))
         if order_by is not None:
             query = query.order_by(order_by, direction=_DIRECTION[direction])
+        if fields is not None:
+            query = query.select(list(fields))
         if limit is not None:
             query = query.limit(limit)
         return [_record_from_query(snapshot) for snapshot in query.stream()]
@@ -170,6 +202,9 @@ class FirestoreDocumentStore:
 
         # run_transactional restarts on an expired-transaction 400; @transactional retries contention.
         return run_transactional(client, _runner, attempts=attempts)
+
+    def batch(self) -> _FirestoreBatch:
+        return _FirestoreBatch(self._client)
 
 
 __all__ = ["FirestoreDocumentStore"]

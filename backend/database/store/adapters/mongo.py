@@ -27,10 +27,13 @@ honor identically.
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
-from pymongo import ASCENDING, DESCENDING, MongoClient
+from pymongo import ASCENDING, DESCENDING, DeleteOne, MongoClient, ReplaceOne, UpdateOne
+from pymongo.errors import DuplicateKeyError
 
+from ..errors import AlreadyExists
 from ..records import StoredDocument
 from ..sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 from ..ports import Filter
@@ -80,6 +83,41 @@ def _build_update_ops(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 def _to_record(doc: Dict[str, Any], path: str) -> StoredDocument:
     return StoredDocument(id=doc.get("_key", path.split("/")[-1]), path=path, exists=True, data=doc.get("d", {}))
+
+
+class _MongoBatch:
+    """Neutral batched-write accumulator; on commit, groups ops by collection and bulk-writes."""
+
+    def __init__(self, store: "MongoDocumentStore"):
+        self._store = store
+        self._ops: List[tuple] = []
+
+    def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
+        collection_name, parent, key = _doc_meta(path)
+        if merge:
+            update: Dict[str, Any] = _build_update_ops(data)
+            update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key})
+            self._ops.append((collection_name, UpdateOne({"_id": path}, update, upsert=True)))
+        else:
+            plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
+            document = {"_id": path, "_parent": parent, "_key": key, "d": plain}
+            self._ops.append((collection_name, ReplaceOne({"_id": path}, document, upsert=True)))
+
+    def update(self, path: str, data: Dict[str, Any]) -> None:
+        collection_name, _, _ = _doc_meta(path)
+        self._ops.append((collection_name, UpdateOne({"_id": path}, _build_update_ops(data))))
+
+    def delete(self, path: str) -> None:
+        collection_name, _, _ = _doc_meta(path)
+        self._ops.append((collection_name, DeleteOne({"_id": path})))
+
+    def commit(self) -> None:
+        by_collection: Dict[str, list] = defaultdict(list)
+        for collection_name, op in self._ops:
+            by_collection[collection_name].append(op)
+        for collection_name, ops in by_collection.items():
+            self._store._db[collection_name].bulk_write(ops, ordered=False)
+        self._ops = []
 
 
 class _MongoTransaction:
@@ -157,6 +195,18 @@ class MongoDocumentStore:
     def update(self, path: str, data: Dict[str, Any]) -> None:
         self._update(path, data)
 
+    def create(self, path: str, data: Dict[str, Any]) -> None:
+        collection_name, parent, key = _doc_meta(path)
+        plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
+        document = {"_id": path, "_parent": parent, "_key": key, "d": plain}
+        try:
+            self._db[collection_name].insert_one(document)
+        except DuplicateKeyError as exc:
+            raise AlreadyExists(path) from exc
+        transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
+        if transforms:
+            self._db[collection_name].update_one({"_id": path}, _build_update_ops(transforms))
+
     def delete(self, path: str) -> None:
         self._delete(path)
 
@@ -168,11 +218,13 @@ class MongoDocumentStore:
         order_by: Optional[str] = None,
         direction: str = "asc",
         limit: Optional[int] = None,
+        fields: Optional[Sequence[str]] = None,
     ) -> List[StoredDocument]:
         mongo_filter: Dict[str, Any] = {"_parent": collection}
         for field, op, value in filters or ():
             mongo_filter.setdefault("d." + field, {})[_OP[op]] = value
-        cursor = self._db[_collection_name(collection)].find(mongo_filter, session=None)
+        projection = {"d." + field: 1 for field in fields} if fields is not None else None
+        cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=None)
         if order_by is not None:
             cursor = cursor.sort("d." + order_by, ASCENDING if direction == "asc" else DESCENDING)
         if limit is not None:
@@ -214,6 +266,9 @@ class MongoDocumentStore:
         """
         with self._mongo_client.start_session() as session:
             return session.with_transaction(lambda s: fn(_MongoTransaction(self, s)))
+
+    def batch(self) -> _MongoBatch:
+        return _MongoBatch(self)
 
 
 __all__ = ["MongoDocumentStore"]

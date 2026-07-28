@@ -16,6 +16,7 @@ import copy
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
+from database.store.errors import AlreadyExists
 from database.store.records import StoredDocument
 from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 
@@ -72,6 +73,31 @@ def _apply(data: Dict[str, Any], patch: Dict[str, Any]) -> None:
             _set_path(data, key, value)
 
 
+class _FakeBatch:
+    def __init__(self, store: "FakeDocumentStore"):
+        self._store = store
+        self._ops: List[tuple] = []
+
+    def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
+        self._ops.append(("set", path, data, merge))
+
+    def update(self, path: str, data: Dict[str, Any]) -> None:
+        self._ops.append(("update", path, data, None))
+
+    def delete(self, path: str) -> None:
+        self._ops.append(("delete", path, None, None))
+
+    def commit(self) -> None:
+        for kind, path, data, merge in self._ops:
+            if kind == "set":
+                self._store.set(path, data, merge=merge)
+            elif kind == "update":
+                self._store.update(path, data)
+            else:
+                self._store.delete(path)
+        self._ops = []
+
+
 class _FakeTransaction:
     def __init__(self, store: "FakeDocumentStore"):
         self._store = store
@@ -107,10 +133,18 @@ class FakeDocumentStore:
         return path in self._docs
 
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
-        if merge and path in self._docs:
-            self._docs[path].update(copy.deepcopy(data))
-        else:
-            self._docs[path] = copy.deepcopy(data)
+        # Resolve neutral sentinels (ArrayUnion/DELETE/SERVER_TIMESTAMP/...) like the real adapters,
+        # merging shallowly at the top level when merge=True.
+        target = self._docs[path] if (merge and path in self._docs) else {}
+        _apply(target, copy.deepcopy(data))
+        self._docs[path] = target
+
+    def create(self, path: str, data: Dict[str, Any]) -> None:
+        if path in self._docs:
+            raise AlreadyExists(path)
+        document: Dict[str, Any] = {}
+        _apply(document, copy.deepcopy(data))
+        self._docs[path] = document
 
     def update(self, path: str, data: Dict[str, Any]) -> None:
         self._docs.setdefault(path, {})
@@ -127,6 +161,7 @@ class FakeDocumentStore:
         order_by: Optional[str] = None,
         direction: str = "asc",
         limit: Optional[int] = None,
+        fields: Optional[Sequence[str]] = None,
     ) -> List[StoredDocument]:
         rows = [
             (path, data)
@@ -139,6 +174,9 @@ class FakeDocumentStore:
             rows.sort(key=lambda pd: pd[1].get(order_by), reverse=(direction == "desc"))
         if limit is not None:
             rows = rows[:limit]
+        if fields is not None:
+            keep = set(fields)
+            rows = [(p, {k: v for k, v in d.items() if k in keep}) for p, d in rows]
         return [StoredDocument.present(p, copy.deepcopy(d)) for p, d in rows]
 
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]:
@@ -162,6 +200,9 @@ class FakeDocumentStore:
 
     def run_transaction(self, fn: Callable[[_FakeTransaction], Any], *, attempts: int = 3) -> Any:
         return fn(_FakeTransaction(self))
+
+    def batch(self) -> _FakeBatch:
+        return _FakeBatch(self)
 
 
 __all__ = ["FakeDocumentStore"]

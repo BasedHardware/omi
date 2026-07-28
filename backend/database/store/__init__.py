@@ -12,16 +12,18 @@ Public surface:
 """
 
 from .records import StoredDocument
-from .ports import DocumentStore, Transaction, Filter
+from .ports import DocumentStore, Transaction, WriteBatch, Filter
 from .factory import get_document_store, reset_document_store
-from . import sentinels
+from . import errors, sentinels
 
 __all__ = [
     "StoredDocument",
     "DocumentStore",
     "Transaction",
+    "WriteBatch",
     "Filter",
     "get_document_store",
     "reset_document_store",
+    "errors",
     "sentinels",
 ]

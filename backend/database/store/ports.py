@@ -30,6 +30,21 @@ class Transaction(Protocol):
 
 
 @runtime_checkable
+class WriteBatch(Protocol):
+    """A neutral batched-write accumulator: queue path-based writes, then ``commit`` them.
+
+    For bulk throughput (the domain already chunks large writes). Firestore commits each batch
+    atomically; the Mongo adapter groups by collection and bulk-writes. Not a cross-backend
+    atomicity guarantee — use ``run_transaction`` when read-modify-write atomicity is required.
+    """
+
+    def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None: ...
+    def update(self, path: str, data: Dict[str, Any]) -> None: ...
+    def delete(self, path: str) -> None: ...
+    def commit(self) -> None: ...
+
+
+@runtime_checkable
 class DocumentStore(Protocol):
     """Backend-neutral document store. Implemented per backend (Firestore | Mongo | ArcadeDB)."""
 
@@ -38,6 +53,7 @@ class DocumentStore(Protocol):
     def exists(self, path: str) -> bool: ...
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None: ...
     def update(self, path: str, data: Dict[str, Any]) -> None: ...  # dotted keys + neutral sentinels
+    def create(self, path: str, data: Dict[str, Any]) -> None: ...  # raises errors.AlreadyExists on conflict
     def delete(self, path: str) -> None: ...
 
     # --- collection ops ---
@@ -49,13 +65,15 @@ class DocumentStore(Protocol):
         order_by: Optional[str] = None,
         direction: str = "asc",
         limit: Optional[int] = None,
+        fields: Optional[Sequence[str]] = None,
     ) -> List[StoredDocument]: ...
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]: ...
     def list_ids(self, collection: str) -> List[str]: ...
     def delete_recursive(self, path: str) -> None: ...
 
-    # --- transactions ---
+    # --- transactions & batches ---
     def run_transaction(self, fn: Callable[[Transaction], Any], *, attempts: int = 3) -> Any: ...
+    def batch(self) -> WriteBatch: ...
 
 
-__all__ = ["DocumentStore", "Transaction", "Filter"]
+__all__ = ["DocumentStore", "Transaction", "WriteBatch", "Filter"]

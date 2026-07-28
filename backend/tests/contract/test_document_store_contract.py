@@ -20,6 +20,7 @@ from datetime import datetime
 
 import pytest
 
+from database.store.errors import AlreadyExists
 from database.store.records import StoredDocument
 from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 
@@ -207,6 +208,37 @@ def test_run_transaction_commits_read_modify_write(store, uid):
     result = store.run_transaction(append_sample)
     assert result == 2
     assert store.get(f"users/{uid}").to_dict()["samples"] == ["s1", "s2"]
+
+
+def test_create_succeeds_then_conflicts(store, uid):
+    store.create(f"users/{uid}", {"name": "Ada"})
+    assert store.get(f"users/{uid}").to_dict() == {"name": "Ada"}
+    with pytest.raises(AlreadyExists):
+        store.create(f"users/{uid}", {"name": "someone else"})
+    assert store.get(f"users/{uid}").to_dict() == {"name": "Ada"}  # first write is preserved
+
+
+def test_query_projection_returns_only_requested_fields(store, uid):
+    store.set(f"users/{uid}/people/p1", {"name": "Ada", "secret": "hidden", "n": 1})
+    (doc,) = store.query(f"users/{uid}/people", fields=["name"])
+    data = doc.to_dict()
+    assert data.get("name") == "Ada"
+    assert "secret" not in data and "n" not in data
+
+
+def test_batch_set_update_delete_commit(store, uid):
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p3", {"name": "to-remove"})
+    batch = store.batch()
+    batch.set(f"{base}/p1", {"name": "Ada", "team": "x"})
+    batch.set(f"{base}/p2", {"name": "Bob", "team": "x"})
+    batch.update(f"{base}/p1", {"team": "y"})
+    batch.delete(f"{base}/p3")
+    batch.commit()
+
+    assert store.get(f"{base}/p1").to_dict() == {"name": "Ada", "team": "y"}
+    assert store.get(f"{base}/p2").to_dict() == {"name": "Bob", "team": "x"}
+    assert store.exists(f"{base}/p3") is False
 
 
 def test_run_transaction_aborts_on_exception(store, uid):
