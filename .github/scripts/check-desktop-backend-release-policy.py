@@ -233,14 +233,25 @@ def validate_recovery_workflow(text: str) -> list[str]:
     return errors
 
 
-def validate_contract_sources(*, dockerfile: str, rust_chat: str, pi_extension: str) -> list[str]:
+def validate_contract_sources(*, dockerfile: str, python_health: str, python_chat: str) -> list[str]:
     errors: list[str] = []
     if "COPY google-credentials.json" in dockerfile:
         errors.append("Dockerfile: runtime credentials must not be copied into immutable image layers")
-    rust_contract = 'CHAT_CONTRACT_VERSION: &str = "1"'
-    pi_contract = 'OMI_CHAT_CONTRACT_VERSION = "1"'
-    if rust_contract not in rust_chat or pi_contract not in pi_extension:
-        errors.append("desktop chat contract version must remain aligned across Rust and Pi")
+    for fragment in (
+        '"status": "healthy"',
+        '"service": DESKTOP_BACKEND_SERVICE',
+        '("backend_release_sha", "OMI_DESKTOP_BACKEND_RELEASE_SHA")',
+        '("backend_release_channel", "OMI_DESKTOP_BACKEND_RELEASE_CHANNEL")',
+        '"chat_contract_version": CHAT_CONTRACT_VERSION',
+    ):
+        if fragment not in python_health:
+            errors.append(f"desktop health contract missing {fragment!r}")
+    for fragment in (
+        "x_omi_chat_contract_version not in {None, '1'}",
+        "'X-Omi-Chat-Contract-Version': '1'",
+    ):
+        if fragment not in python_chat:
+            errors.append(f"desktop chat contract missing {fragment!r}")
     return errors
 
 
@@ -252,8 +263,8 @@ def validate_all(
     stable: str,
     recovery: str,
     dockerfile: str,
-    rust_chat: str,
-    pi_extension: str,
+    python_health: str,
+    python_chat: str,
 ) -> list[str]:
     return [
         *validate_deploy_workflow(dev, production=False),
@@ -262,8 +273,8 @@ def validate_all(
         *validate_recovery_workflow(recovery),
         *validate_contract_sources(
             dockerfile=dockerfile,
-            rust_chat=rust_chat,
-            pi_extension=pi_extension,
+            python_health=python_health,
+            python_chat=python_chat,
         ),
     ]
 
@@ -275,9 +286,9 @@ def main() -> int:
         qualification=(WORKFLOWS / "desktop_qualify_beta.yml").read_text(encoding="utf-8"),
         stable=(WORKFLOWS / "desktop_promote_prod.yml").read_text(encoding="utf-8"),
         recovery=(WORKFLOWS / "desktop_backend_recover_prod.yml").read_text(encoding="utf-8"),
-        dockerfile=(ROOT / "desktop/macos/Backend-Rust/Dockerfile").read_text(encoding="utf-8"),
-        rust_chat=(ROOT / "desktop/macos/Backend-Rust/src/routes/chat/mod.rs").read_text(encoding="utf-8"),
-        pi_extension=(ROOT / "desktop/macos/pi-mono-extension/index.ts").read_text(encoding="utf-8"),
+        dockerfile=(ROOT / "backend/Dockerfile.desktop_backend").read_text(encoding="utf-8"),
+        python_health=(ROOT / "backend/routers/desktop_core.py").read_text(encoding="utf-8"),
+        python_chat=(ROOT / "backend/routers/desktop_chat.py").read_text(encoding="utf-8"),
     )
     if errors:
         for error in errors:

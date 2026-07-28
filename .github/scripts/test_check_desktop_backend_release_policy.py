@@ -61,9 +61,9 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         cls.qualification = (workflows / "desktop_qualify_beta.yml").read_text(encoding="utf-8")
         cls.stable = (workflows / "desktop_promote_prod.yml").read_text(encoding="utf-8")
         cls.recovery = (workflows / "desktop_backend_recover_prod.yml").read_text(encoding="utf-8")
-        cls.dockerfile = (ROOT / "desktop/macos/Backend-Rust/Dockerfile").read_text(encoding="utf-8")
-        cls.rust_chat = (ROOT / "desktop/macos/Backend-Rust/src/routes/chat/mod.rs").read_text(encoding="utf-8")
-        cls.pi_extension = (ROOT / "desktop/macos/pi-mono-extension/index.ts").read_text(encoding="utf-8")
+        cls.dockerfile = (ROOT / "backend/Dockerfile.desktop_backend").read_text(encoding="utf-8")
+        cls.python_health = (ROOT / "backend/routers/desktop_core.py").read_text(encoding="utf-8")
+        cls.python_chat = (ROOT / "backend/routers/desktop_chat.py").read_text(encoding="utf-8")
 
     def test_current_release_boundary_passes(self) -> None:
         self.assertEqual(
@@ -74,11 +74,15 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                 stable=self.stable,
                 recovery=self.recovery,
                 dockerfile=self.dockerfile,
-                rust_chat=self.rust_chat,
-                pi_extension=self.pi_extension,
+                python_health=self.python_health,
+                python_chat=self.python_chat,
             ),
             [],
         )
+
+    def test_development_workflow_covers_full_desktop_runtime_source_closure(self) -> None:
+        self.assertIn("'backend/**/*.py'", self.dev)
+        self.assertIn("'backend/pylock.runtime.toml'", self.dev)
 
     def test_rejects_traffic_before_candidate_proof(self) -> None:
         mutated = self.dev.replace(
@@ -199,16 +203,21 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_desktop_release_gates(self.qualification, mutated)
         self.assertTrue(any("desktop_promote_prod.yml" in error for error in errors), errors)
 
-    def test_rejects_baked_credentials_or_contract_version_drift(self) -> None:
+    def test_rejects_baked_credentials_or_python_contract_version_drift(self) -> None:
         errors = POLICY.validate_contract_sources(
             dockerfile=self.dockerfile + "\nCOPY google-credentials.json /app/google-credentials.json\n",
-            rust_chat=self.rust_chat,
-            pi_extension=self.pi_extension.replace(
-                'OMI_CHAT_CONTRACT_VERSION = "1"',
-                'OMI_CHAT_CONTRACT_VERSION = "2"',
+            python_health=self.python_health.replace(
+                '"status": "healthy",',
+                '"status": "unhealthy",',
+                1,
+            ),
+            python_chat=self.python_chat.replace(
+                "x_omi_chat_contract_version not in {None, '1'}",
+                "x_omi_chat_contract_version not in {None, '2'}",
+                1,
             ),
         )
-        self.assertEqual(len(errors), 2, errors)
+        self.assertEqual(len(errors), 3, errors)
 
     def test_rejects_automatic_recovery_or_unready_revision(self) -> None:
         mutated = self.recovery.replace(
