@@ -344,11 +344,21 @@ function optionEntries(value: unknown, depth = 0): unknown[] {
   return value.flatMap((entry) => optionEntries(entry, depth + 1));
 }
 
+/**
+ * Runaway-payload guard, not a product limit. How many answers to offer is the
+ * model's call; this only stops a malformed or looping call turning one
+ * question into a list nobody can read. Enforced here rather than only in the
+ * tool schema because flattening a nested list can produce more entries than
+ * the call sent.
+ */
+export const ASK_USER_MAX_OPTIONS_PER_QUESTION = 32;
+
 function normalizeAskUserOptions(rawOptions: unknown): ElicitationOption[] {
   if (!Array.isArray(rawOptions)) return [];
   const options: ElicitationOption[] = [];
   const seen = new Set<string>();
   for (const entry of optionEntries(rawOptions)) {
+    if (options.length >= ASK_USER_MAX_OPTIONS_PER_QUESTION) break;
     const label = labelFrom(entry)?.replace(TRAILING_MARKUP, "").trim();
     if (!label) continue;
     const optionId = asNonEmptyString(asRecord(entry)?.id) ?? label;

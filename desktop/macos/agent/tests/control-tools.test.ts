@@ -516,6 +516,64 @@ describe("agent control tools", () => {
     });
   });
 
+  it("takes the option shapes the normalizer can read instead of making the model retry", async () => {
+    const offered: string[][] = [];
+    const context = {
+      kernel: {} as never,
+      callerSessionId: "sess-ask",
+      defaultAdapterId: "acp",
+      getOwnerId: () => "owner-ask",
+      askUser: async (request) => {
+        offered.push(request.options.map((option) => option.label));
+        return { kind: "cancelled" as const, reason: "test" };
+      },
+    } satisfies AgentControlToolContext;
+
+    // Observed live: the model sent objects, the schema answered "expected
+    // string, received object", and the turn spent a round trip on the model
+    // apologising and retrying. The normalizer reads all of these, so the gate
+    // in front of it no longer rejects what the code behind it understands.
+    const raw = await handleAgentControlToolCall(context, "ask_user", {
+      questions: [
+        { question: "Objects?", options: [{ label: "TypeScript" }, { value: "Go" }] },
+        { question: "Encoded?", options: ['{"label":"Python"}'] },
+        { question: "Nested?", options: [[["Rust"]], "Zig"] },
+      ],
+    });
+
+    expect(offered).toEqual([["TypeScript", "Go"], ["Python"], ["Rust", "Zig"]]);
+    expect(JSON.parse(raw).outcomes).toHaveLength(3);
+  });
+
+  it("caps a flattened option list so a nested payload cannot outgrow the schema bound", async () => {
+    const offered: number[] = [];
+    const context = {
+      kernel: {} as never,
+      callerSessionId: "sess-ask",
+      defaultAdapterId: "acp",
+      getOwnerId: () => "owner-ask",
+      askUser: async (request) => {
+        offered.push(request.options.length);
+        return { kind: "cancelled" as const, reason: "test" };
+      },
+    } satisfies AgentControlToolContext;
+
+    // 8 top-level entries pass the schema's per-question bound, but each holds
+    // 10 options, so flattening produces 80. The bound has to hold after the
+    // flatten, not only before it.
+    await handleAgentControlToolCall(context, "ask_user", {
+      questions: [
+        {
+          question: "Too many?",
+          options: Array.from({ length: 8 }, (_, group) =>
+            Array.from({ length: 10 }, (_, index) => `option-${group}-${index}`)),
+        },
+      ],
+    });
+
+    expect(offered).toEqual([32]);
+  });
+
   it("reports a failure rather than hanging when no one can be asked", async () => {
     const withoutResolver = {
       kernel: {} as never,

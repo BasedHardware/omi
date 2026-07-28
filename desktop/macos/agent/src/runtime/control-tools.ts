@@ -25,7 +25,7 @@ import {
   type AgentSpawnProducerJournalDescriptor,
 } from "./agent-spawn-journal.js";
 import { evaluateDesktopToolPolicy } from "./desktop-tool-policy.js";
-import { normalizeAskUser } from "./desktop-elicitation.js";
+import { ASK_USER_MAX_OPTIONS_PER_QUESTION, normalizeAskUser } from "./desktop-elicitation.js";
 import type { ElicitationOutcome, ElicitationRequest } from "./desktop-elicitation.js";
 import type { DesktopCoordinatorBundle } from "./desktop-tool-policy.js";
 import type {
@@ -189,15 +189,18 @@ const routeDesktopIntentSchema = strictObject({
  * dismiss one at a time. No real question set approaches them.
  */
 const ASK_USER_MAX_QUESTIONS = 32;
-const ASK_USER_MAX_OPTIONS_PER_QUESTION = 32;
 
 const askUserQuestionSchema = strictObject({
   question: z.string().min(1),
-  // Deliberately not `.min(1)` per option. A model that pads the list with a
-  // blank label is making a slip about one choice, and rejecting the whole call
-  // for it throws away every other question the user was about to be asked.
-  // `normalizeAskUser` drops blank labels, so the card never renders one.
-  options: z.array(z.string()).max(ASK_USER_MAX_OPTIONS_PER_QUESTION).optional(),
+  // Deliberately unknown per option rather than `z.string()`.
+  //
+  // Models send options as plain strings, as objects keyed half a dozen ways,
+  // as JSON encoded into a string, and wrapped in arrays. `normalizeAskUser`
+  // reads every one of those, so rejecting them here only cost the user a
+  // round trip while the model apologised and retried. Blank and unreadable
+  // entries are dropped by the normalizer, which also caps the result, so
+  // nothing unreadable reaches the card.
+  options: z.array(z.unknown()).max(ASK_USER_MAX_OPTIONS_PER_QUESTION).optional(),
   allow_free_text: z.boolean().optional(),
   allow_multiple: z.boolean().optional(),
 });
