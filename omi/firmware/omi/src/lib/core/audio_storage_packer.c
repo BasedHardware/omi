@@ -2,12 +2,12 @@
 
 #include <string.h>
 
-audio_delivery_route_t audio_delivery_route(bool live_queued, bool storage_available)
+audio_delivery_route_t audio_delivery_route(bool live_available, bool storage_available)
 {
-    if (live_queued) {
-        return AUDIO_DELIVERY_LIVE;
+    if (!storage_available) {
+        return AUDIO_DELIVERY_DROP;
     }
-    return storage_available ? AUDIO_DELIVERY_STORAGE : AUDIO_DELIVERY_DROP;
+    return live_available ? AUDIO_DELIVERY_LIVE_AND_STORAGE : AUDIO_DELIVERY_STORAGE;
 }
 
 static bool submit_record(audio_storage_packer_t *packer, audio_storage_writer_t writer, void *context)

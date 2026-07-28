@@ -6,6 +6,14 @@
 #define CRC32_IEEE_POLYNOMIAL 0xEDB88320U
 #define MIN_VALID_UTC_TIMESTAMP 1700000000U
 
+ring_advance_action_t ring_advance_action(uint64_t read_seq, uint64_t write_seq, uint64_t requested_seq)
+{
+    if (requested_seq < read_seq || requested_seq > write_seq) {
+        return RING_ADVANCE_INVALID;
+    }
+    return requested_seq == read_seq ? RING_ADVANCE_IDEMPOTENT : RING_ADVANCE_COMMIT;
+}
+
 uint32_t ring_transfer_crc32_update(uint32_t crc, const uint8_t *data, size_t length)
 {
     if (!data && length != 0U) {
