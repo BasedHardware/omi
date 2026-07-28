@@ -1,0 +1,3 @@
+{
+  "change": "Agents now ask you before file writes, commands, and other sensitive actions instead of deciding on your behalf, with the request shown in the chat composer"
+}

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// One option the agent offered. `id` is echoed back verbatim: for an ACP
@@ -131,5 +132,50 @@ final class ElicitationStore: ObservableObject {
       return
     }
     queue.removeAll { $0.ownerID == ownerID }
+  }
+}
+
+/// Owns the elicitation queue and its runtime subscription.
+///
+/// Separated from `ChatProvider` so the provider holds one reference instead of
+/// the store, its republishing observer, and the handler registration.
+@MainActor
+final class ElicitationProjection {
+  let store: ElicitationStore
+  private var republisher: AnyCancellable?
+
+  init() {
+    store = ElicitationStore { elicitation, answer in
+      Task {
+        await AgentRuntimeProcess.shared.resolveElicitation(
+          dispatchID: elicitation.id,
+          ownerID: elicitation.ownerID,
+          answer: answer
+        )
+      }
+    }
+  }
+
+  /// Subscribe to the runtime and republish queue changes.
+  ///
+  /// A nested `ObservableObject` does not publish through its parent, so
+  /// without the republisher a view observing the provider never sees the card
+  /// appear. `onChange` is the parent's `objectWillChange`.
+  func start(onChange: @escaping () -> Void) {
+    republisher = store.objectWillChange
+      .receive(on: DispatchQueue.main)
+      .sink { _ in onChange() }
+
+    let store = store
+    Task {
+      await AgentRuntimeProcess.shared.setElicitationHandlers(
+        pending: { elicitation in
+          Task { @MainActor in store.enqueue(elicitation) }
+        },
+        resolved: { dispatchID in
+          Task { @MainActor in store.remove(id: dispatchID) }
+        }
+      )
+    }
   }
 }

@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2204,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4369
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4445
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "deleteBackend flag threaded through both clearJournalTurns variants so a reset is local-only",
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Typed failed-start context records checked binary/permission/port facts, elapsed timeout, and exit code at the existing runtime owner; the one-time diagnostics handoff keeps the UI owner as the sole Sentry event surface."
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Elicitation projection and the owner-scoped answer writer stay on the runtime actor because both need its file-private send and owner-authorization helpers; extracting them would mean widening that access control to satisfy a line count."
   },
   "threshold": 1500
 }
