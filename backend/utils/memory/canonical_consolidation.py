@@ -1104,6 +1104,17 @@ def _validate_agent_batch(
             for memory_id in decision.supersedes
         ):
             return f"output_invalid:supersede_target_not_long_term:{source.memory_id}"
+
+    # Batch-level guard: two decisions must not supersede the same Long-term
+    # candidate. Per-decision validation cannot catch this — the first promotion
+    # commits and marks the target superseded, so the second reaches this
+    # validation with an inactive target and fails after partial apply.
+    seen_supersede_targets: Dict[str, str] = {}
+    for decision in agent_batch.decisions:
+        for target_id in decision.supersedes:
+            if target_id in seen_supersede_targets:
+                return f"output_invalid:duplicate_supersede_target:{decision.source_memory_id}"
+            seen_supersede_targets[target_id] = decision.source_memory_id
     return None
 
 
