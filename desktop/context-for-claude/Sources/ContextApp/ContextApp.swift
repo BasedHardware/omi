@@ -17,18 +17,15 @@ struct ContextApp: App {
     @StateObject private var engine = Engine.shared
 
     var body: some Scene {
-        MenuBarExtra {
-            StatusView()
-        } label: {
-            // The Context for Claude mark, drawn as a template image. Not the eight-dot omi mark: at 18 pt a
-            // ring of dots is indistinguishable from a loading spinner, so it stays in onboarding
-            // where it has room to read as a mark.
-            //
-            // The menu bar answers "is it listening?" without a click — the mark is struck through
-            // when it is not.
-            Image(nsImage: engine.isCapturing ? ContextMark.menuBar : ContextMark.menuBarPaused)
-        }
-        .menuBarExtraStyle(.window)
+        // The status item is an `NSStatusItem` created by the delegate, not a `MenuBarExtra`.
+        // `MenuBarExtra` exposes no way to find out where its own button ended up on screen, and
+        // the button is not in the window list either — so "I live up here" had nothing to point
+        // at. `NSStatusItem.button.window` gives the exact frame, which is what the onboarding
+        // spotlight needs to ring the icon and walk the cursor to it.
+        //
+        // A SwiftUI `App` still needs one scene. `Settings` is the only one that never shows itself
+        // unaided, which is what an app with no windows wants.
+        Settings { EmptyView() }
     }
 }
 
@@ -54,6 +51,9 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         registerBundledFonts()
 
         MainActor.assumeIsolated {
+            // Before Engine.start(), so the icon exists the moment there is state to show — and
+            // before onboarding, which finishes by pointing at it.
+            StatusItemController.shared.install()
             Engine.shared.start()
 
             if !UserDefaults.standard.bool(forKey: Self.onboardedKey) {
