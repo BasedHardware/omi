@@ -91,8 +91,6 @@ def releasable_desktop_changes_since(ref: str | None) -> list[str]:
             continue
         if path.startswith("desktop/macos/changelog/"):
             continue
-        if path.startswith("desktop/macos/Backend-Rust/"):
-            continue
         changes.append(path)
     return changes
 

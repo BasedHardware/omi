@@ -42,16 +42,20 @@ class DevFeedbackTests(unittest.TestCase):
         (self.desktop_root / "Desktop" / "Sources").mkdir(parents=True)
         (self.desktop_root / "Desktop" / "Tests").mkdir()
         (self.desktop_root / "Desktop" / "Package.swift").write_text("// package\n")
-        (self.desktop_root / "Backend-Rust" / "src").mkdir(parents=True)
-        (self.desktop_root / "Backend-Rust" / "tests").mkdir()
-        (self.desktop_root / "Backend-Rust" / "Cargo.toml").write_text("[package]\n")
+        backend_root = self.desktop_root.parent.parent / "backend"
+        (backend_root / "routers").mkdir(parents=True)
+        (backend_root / "database").mkdir()
+        (backend_root / "utils").mkdir()
+        (backend_root / "desktop_backend.py").write_text("app = None\n")
+        (backend_root / "requirements.txt").write_text("\n")
+        (backend_root / "pylock.toml").write_text("\n")
 
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
 
     def test_constructs_the_required_focused_commands(self) -> None:
         swift = dev_feedback.test_command_for(self.desktop_root, "swift", "ChatTests/testSendsMessage")
-        rust = dev_feedback.test_command_for(self.desktop_root, "rust", "handles_timeout")
+        python = dev_feedback.test_command_for(self.desktop_root, "python", "tests/unit/test_desktop_chat.py")
 
         self.assertEqual(
             swift.command,
@@ -66,28 +70,28 @@ class DevFeedbackTests(unittest.TestCase):
             ),
         )
         self.assertEqual(swift.cwd, self.desktop_root.resolve())
-        self.assertEqual(rust.command, ("cargo", "test", "--locked", "handles_timeout"))
-        self.assertEqual(rust.cwd, self.desktop_root.resolve() / "Backend-Rust")
+        self.assertEqual(python.command, (".venv/bin/python", "-m", "pytest", "tests/unit/test_desktop_chat.py"))
+        self.assertEqual(python.cwd, self.desktop_root.resolve().parent.parent / "backend")
 
     def test_watch_roots_are_limited_to_the_selected_component_inputs(self) -> None:
         resolved_root = self.desktop_root.resolve()
         swift_roots = {
             path.relative_to(resolved_root).as_posix() for path in dev_feedback.watch_paths(self.desktop_root, "swift")
         }
-        rust_roots = {
-            path.relative_to(resolved_root).as_posix() for path in dev_feedback.watch_paths(self.desktop_root, "rust")
+        python_roots = {
+            path.relative_to(resolved_root).as_posix() for path in dev_feedback.watch_paths(self.desktop_root, "python")
         }
 
         self.assertEqual(swift_roots, set(dev_feedback.SWIFT_WATCH_INPUTS))
-        self.assertEqual(rust_roots, set(dev_feedback.RUST_WATCH_INPUTS))
+        self.assertEqual(python_roots, set(dev_feedback.PYTHON_WATCH_INPUTS))
         self.assertNotIn("Desktop/.build", swift_roots)
-        self.assertNotIn("Backend-Rust/target", rust_roots)
-        self.assertNotIn("run.sh", swift_roots | rust_roots)
-        self.assertIn("Backend-Rust/fixtures", rust_roots)
-        self.assertIn("Backend-Rust/templates", rust_roots)
+        self.assertNotIn("../../backend/.venv", python_roots)
+        self.assertNotIn("run.sh", swift_roots | python_roots)
+        self.assertIn("../../backend/routers", python_roots)
+        self.assertIn("../../backend/database", python_roots)
 
     def test_watch_continues_after_a_failed_test_and_coalesces_saves(self) -> None:
-        command = dev_feedback.test_command_for(self.desktop_root, "rust", "handles_timeout")
+        command = dev_feedback.test_command_for(self.desktop_root, "python", "tests/unit/test_desktop_chat.py")
         calls: list[tuple[tuple[str, ...], Path, bool]] = []
         output: list[str] = []
         exit_codes = iter((1, 0))

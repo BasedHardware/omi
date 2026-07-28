@@ -8,7 +8,7 @@ on:
   # and qualify-m4-mini fallbacks); on qualification success desktop_promote_beta.yml
   # advances the beta channel to the Codemagic-built, notarized, Sparkle-signed
   # artifact. The push filter is intentionally coarse (the planner does the precise
-  # releasable-change check, excluding CHANGELOG/AGENTS/changelog/Backend-Rust); the
+  # releasable-change check, excluding CHANGELOG/AGENTS/changelog); the
   # quiet-window, exact-SHA, and one-active-release fences still admit at most one
   # candidate at a time, so bursts collapse to the newest SHA. Keep these paths in
   # lockstep with DESKTOP_RELEASE_PATHS in plan-desktop-release.py; the alignment is

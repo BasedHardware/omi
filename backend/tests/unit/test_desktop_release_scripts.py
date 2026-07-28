@@ -162,7 +162,6 @@ def test_beta_workflow_has_only_the_narrow_server_owned_promotion_capability():
         "stable",
         "rollback",
         "emergency",
-        "Backend-Rust",
     ):
         assert forbidden not in workflow
 

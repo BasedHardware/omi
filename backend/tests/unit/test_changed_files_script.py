@@ -38,7 +38,7 @@ def test_changed_files_reports_delete_rename_and_file_type_change(tmp_path):
     subprocess.run(['git', 'config', 'user.email', 'ci@example.com'], cwd=repo, check=True)
     subprocess.run(['git', 'config', 'user.name', 'CI'], cwd=repo, check=True)
 
-    risky = repo / 'desktop/macos/Backend-Rust/src/risky.rs'
+    risky = repo / 'backend/desktop_backend.py'
     risky.parent.mkdir(parents=True)
     risky.write_text('pub fn risky() {}\n')
     deleted = repo / 'backend/routers/deleted.py'
@@ -61,7 +61,7 @@ def test_changed_files_reports_delete_rename_and_file_type_change(tmp_path):
     assert changed == {
         'backend/routers/deleted.py',
         'backend/routers/changed_type.py',
-        'desktop/macos/Backend-Rust/src/risky.rs',
+        'backend/desktop_backend.py',
         'docs/risky.rs',
     }
 

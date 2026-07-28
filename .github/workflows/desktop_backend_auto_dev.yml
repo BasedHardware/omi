@@ -4,7 +4,11 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'desktop/macos/Backend-Rust/**'
+      - 'backend/Dockerfile.desktop_backend'
+      - 'backend/**/*.py'
+      - 'backend/pylock.runtime.toml'
+      - 'backend/agent_vm/**'
+      - 'backend/runtime_images.json'
       - '.github/workflows/desktop_backend_auto_dev.yml'
       - '.github/scripts/desktop_backend_candidate_probe.py'
       - '.github/scripts/verify_desktop_backend_image_lineage.py'
@@ -28,6 +32,7 @@ env:
   DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app
   CANDIDATE_TAG: desktop-dev-candidate
   CHAT_CONTRACT_VERSION: '1'
+  AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}
 
 concurrency:
   group: desktop-backend-auto-dev
@@ -168,12 +173,26 @@ jobs:
         id: build-image
         uses: docker/build-push-action@v7
         with:
-          context: ./desktop/macos/Backend-Rust
-          file: ./desktop/macos/Backend-Rust/Dockerfile
+          context: .
+          file: ./backend/Dockerfile.desktop_backend
           push: true
           tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.candidate-identity.outputs.image_tag }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+
+      - name: Build and publish Agent VM image
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$AGENT_GCS_BUCKET"
+          agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.candidate-identity.outputs.image_tag }}"
+          docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
+          docker push "$agent_image"
+          AGENT_VM_IMAGE="$agent_image" envsubst < backend/agent_vm/startup.sh \
+            | gcloud storage cp - "gs://$AGENT_GCS_BUCKET/startup.sh"
 
       - name: Deploy desktop-backend to Cloud Run
         id: deploy-candidate
@@ -195,6 +214,7 @@ jobs:
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development
+            AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest
