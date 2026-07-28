@@ -1,0 +1,19 @@
+docs/superpowers/specs/2026-07-28-context-for-claude-design.md
+  s_030a94a2f319d8::t_470b580d6af686 1,4,15,37,41,84,165,167,170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "78e76c88c3e1cdf09adeacc014d900c6ed5acd19",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
