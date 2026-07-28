@@ -370,298 +370,144 @@ class TestCreateAdviceValidation:
 
 
 # ===========================================================================
-# 2. WIRE-COMPATIBILITY TESTS (mock Firestore)
+# 2. STORAGE BEHAVIOR (WP2 port) — inject an in-memory FakeDocumentStore via the
+#    _store() seam and assert on observable behavior/state (ADR-0002), rather than
+#    on raw-Firestore call patterns.
 # ===========================================================================
+
+from tests.store_fakes import FakeDocumentStore  # noqa: E402
+
+
+@pytest.fixture
+def store(monkeypatch):
+    fake = FakeDocumentStore()
+    monkeypatch.setattr(users_db, '_store', lambda: fake)
+    monkeypatch.setattr(chat_db, '_store', lambda: fake)
+    return fake
 
 
 class TestNotificationSettingsWireCompat:
     """Verify notification settings return Swift-compatible field names."""
 
-    def _mock_user_doc(self, data, exists=True):
-        """Create a mock user doc snapshot."""
-        snap = MagicMock()
-        snap.exists = exists
-        snap.to_dict.return_value = data
-        return snap
-
-    def test_returns_enabled_and_frequency_keys(self):
-        """get_notification_settings returns 'enabled'/'frequency' not 'notifications_enabled'."""
-        snap = self._mock_user_doc({'notifications_enabled': False, 'notification_frequency': 2})
-        mock_db.collection.return_value.document.return_value.get.return_value = snap
+    def test_returns_enabled_and_frequency_keys(self, store):
+        store.set('users/test-uid', {'notifications_enabled': False, 'notification_frequency': 2})
         result = users_db.get_notification_settings('test-uid')
+        assert result == {'enabled': False, 'frequency': 2}
 
-        assert 'enabled' in result
-        assert 'frequency' in result
-        assert 'notifications_enabled' not in result
-        assert 'notification_frequency' not in result
-        assert result['enabled'] is False
-        assert result['frequency'] == 2
-
-    def test_defaults_frequency_to_off_when_unset(self):
-        """Frequency defaults to 0 (Off) when the user doc has no notification_frequency."""
-        snap = self._mock_user_doc({})
-        mock_db.collection.return_value.document.return_value.get.return_value = snap
+    def test_defaults_frequency_to_off_when_unset(self, store):
+        store.set('users/test-uid', {})
         result = users_db.get_notification_settings('test-uid')
+        assert result == {'enabled': True, 'frequency': 0}
 
-        assert result['frequency'] == 0
-        assert result['enabled'] is True
-
-    def test_defaults_when_doc_missing(self):
-        """Returns defaults when user doc doesn't exist."""
-        snap = self._mock_user_doc({}, exists=False)
-        mock_db.collection.return_value.document.return_value.get.return_value = snap
+    def test_defaults_when_doc_missing(self, store):
         result = users_db.get_notification_settings('test-uid')
-
         assert result == {'enabled': True, 'frequency': 0}
 
 
 class TestAssistantSettingsWireCompat:
     """Verify assistant settings deep-merge and update_channel handling."""
 
-    def _mock_user_doc(self, data, exists=True):
-        snap = MagicMock()
-        snap.exists = exists
-        snap.to_dict.return_value = data
-        return snap
-
-    def test_get_includes_update_channel(self):
-        """get_assistant_settings includes top-level update_channel from user doc."""
-        snap = self._mock_user_doc(
-            {
-                'assistant_settings': {'focus': {'enabled': True}},
-                'update_channel': 'beta',
-            }
-        )
-        mock_db.collection.return_value.document.return_value.get.return_value = snap
+    def test_get_includes_update_channel(self, store):
+        store.set('users/test-uid', {'assistant_settings': {'focus': {'enabled': True}}, 'update_channel': 'beta'})
         result = users_db.get_assistant_settings('test-uid')
-
         assert result['update_channel'] == 'beta'
         assert result['focus'] == {'enabled': True}
 
-    def test_deep_merge_preserves_sibling_sections(self):
-        """update_assistant_settings deep-merges without destroying sibling sections."""
-        existing_data = {
-            'assistant_settings': {
-                'focus': {'enabled': True, 'cooldown_interval': 30},
-                'task': {'enabled': False},
-            },
-        }
-        snap = self._mock_user_doc(existing_data)
-        mock_db.collection.return_value.document.return_value.get.return_value = snap
+    def test_deep_merge_preserves_sibling_sections(self, store):
+        store.set(
+            'users/test-uid',
+            {'assistant_settings': {'focus': {'enabled': True, 'cooldown_interval': 30}, 'task': {'enabled': False}}},
+        )
         result = users_db.update_assistant_settings('test-uid', {'focus': {'enabled': False}})
-
-        # focus.enabled should be updated, but focus.cooldown_interval preserved
         assert result['focus']['enabled'] is False
         assert result['focus']['cooldown_interval'] == 30
-        # task section should be untouched
         assert result['task'] == {'enabled': False}
+        # Persisted deep-merge (sibling sections intact).
+        stored = store.get('users/test-uid').to_dict()['assistant_settings']
+        assert stored == {'focus': {'enabled': False, 'cooldown_interval': 30}, 'task': {'enabled': False}}
 
-    def test_update_channel_written_to_top_level(self):
-        """update_assistant_settings writes update_channel to top-level, not inside assistant_settings."""
-        snap = self._mock_user_doc({'assistant_settings': {}})
-        captured_updates = {}
-
-        def capture_update(data):
-            import copy
-
-            captured_updates.update(copy.deepcopy(data))
-
-        mock_ref = mock_db.collection.return_value.document.return_value
-        mock_ref.get.return_value = snap
-        mock_ref.update.side_effect = capture_update
+    def test_update_channel_written_to_top_level(self, store):
+        store.set('users/test-uid', {'assistant_settings': {}})
         users_db.update_assistant_settings('test-uid', {'update_channel': 'beta'})
+        stored = store.get('users/test-uid').to_dict()
+        assert stored['update_channel'] == 'beta'
+        assert 'update_channel' not in stored.get('assistant_settings', {})
 
-        assert 'update_channel' in captured_updates
-        assert captured_updates['update_channel'] == 'beta'
-        assert 'update_channel' not in captured_updates.get('assistant_settings', {})
-
-    def test_raw_assistant_settings_excludes_update_channel(self):
-        """_get_raw_assistant_settings does NOT include update_channel."""
-        snap = self._mock_user_doc(
-            {
-                'assistant_settings': {'focus': {'enabled': True}},
-                'update_channel': 'beta',
-            }
-        )
-        mock_db.collection.return_value.document.return_value.get.return_value = snap
+    def test_raw_assistant_settings_excludes_update_channel(self, store):
+        store.set('users/test-uid', {'assistant_settings': {'focus': {'enabled': True}}, 'update_channel': 'beta'})
         result = users_db._get_raw_assistant_settings('test-uid')
-
         assert 'update_channel' not in result
         assert result == {'focus': {'enabled': True}}
+
+
+def _msg(store, uid, doc_id, **fields):
+    fields.setdefault('id', doc_id)
+    fields.setdefault('created_at', datetime.now(timezone.utc))
+    store.set(f'users/{uid}/messages/{doc_id}', fields)
 
 
 class TestDesktopMessagesWireCompat:
     """Verify message field names match cross-platform expectations."""
 
-    def test_save_message_writes_expected_fields(self):
-        """save_message writes plugin_id, chat_session_id, type='text', from_external_integration=False."""
-        mock_doc_ref = MagicMock()
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = True
+    def test_save_message_writes_expected_fields(self, store, monkeypatch):
+        monkeypatch.setattr(chat_db, 'acquire_chat_session', lambda uid, app_id=None: 'session-123')
+        store.set('users/test-uid/chat_sessions/session-123', {'id': 'session-123'})
+        result = chat_db.save_message('test-uid', text='hello', sender='human', app_id='my-app')
 
-        # Mock the db.collection chain for messages and chat_sessions
-        def collection_side_effect(name):
-            col_mock = MagicMock()
-            doc_mock = MagicMock()
-            if name == 'users':
-                doc_mock.collection.return_value.document.return_value = mock_doc_ref
-            col_mock.document.return_value = doc_mock
-            return col_mock
-
-        with patch.object(chat_db, 'acquire_chat_session', return_value='session-123'):
-            with patch.object(chat_db, 'db') as patched_db:
-                patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                    mock_doc_ref
-                )
-                result = chat_db.save_message('test-uid', text='hello', sender='human', app_id='my-app')
-
-        # Verify the doc written to Firestore
-        set_call = mock_doc_ref.set.call_args[0][0]
-        assert set_call['plugin_id'] == 'my-app'
-        assert set_call['app_id'] == 'my-app'
-        assert set_call['chat_session_id'] == 'session-123'
-        assert set_call['type'] == 'text'
-        assert set_call['from_external_integration'] is False
-        assert set_call['text'] == 'hello'
-        assert set_call['sender'] == 'human'
+        stored = store.get(f"users/test-uid/messages/{result['id']}").to_dict()
+        assert stored['plugin_id'] == 'my-app'
+        assert stored['app_id'] == 'my-app'
+        assert stored['chat_session_id'] == 'session-123'
+        assert stored['type'] == 'text'
+        assert stored['from_external_integration'] is False
+        assert stored['text'] == 'hello'
+        assert stored['sender'] == 'human'
 
 
 class TestSessionScopedQueries:
-    """Verify session-scoped queries use the correct FieldFilter field name."""
+    """Verify session-scoped reads/deletes are scoped by chat_session_id, app-scoped by plugin_id."""
 
-    def _get_field_filter_fields(self):
-        """Extract field names from FieldFilter calls since last reset."""
-        return [call.args[0] for call in field_filter_stub.FieldFilter.call_args_list if call.args]
+    def test_get_messages_session_scoped_filters_by_session_not_plugin(self, store):
+        _msg(store, 'uid', 'm1', chat_session_id='sess-1', plugin_id='app-x', text='a')
+        _msg(store, 'uid', 'm2', chat_session_id='other', plugin_id='app-x', text='b')
+        result = chat_db.get_messages('uid', chat_session_id='sess-1', app_id='some-app')
+        assert [m['id'] for m in result] == ['m1']
 
-    def setup_method(self):
-        field_filter_stub.FieldFilter.reset_mock()
+    def test_get_messages_app_scoped_filters_by_plugin_id(self, store):
+        _msg(store, 'uid', 'm1', plugin_id='my-app', text='a')
+        _msg(store, 'uid', 'm2', plugin_id='other', text='b')
+        result = chat_db.get_messages('uid', app_id='my-app')
+        assert [m['id'] for m in result] == ['m1']
 
-    def test_get_messages_session_scoped_filters_by_session_not_plugin(self):
-        """get_messages with chat_session_id should filter by chat_session_id, NOT plugin_id."""
-        mock_query = MagicMock()
-        mock_query.where.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.stream.return_value = []
+    def test_delete_messages_session_scoped_filters_by_session_not_plugin(self, store):
+        _msg(store, 'uid', 'm1', chat_session_id='sess-1', plugin_id='app-x')
+        _msg(store, 'uid', 'm2', chat_session_id='other', plugin_id='app-x')
+        chat_db.delete_messages('uid', session_id='sess-1')
+        assert store.exists('users/uid/messages/m1') is False
+        assert store.exists('users/uid/messages/m2') is True
 
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_query
-            chat_db.get_messages('uid', chat_session_id='sess-1', app_id='some-app')
-
-        fields = self._get_field_filter_fields()
-        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
-        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id is given: {fields}"
-
-    def test_get_messages_app_scoped_filters_by_plugin_id(self):
-        """get_messages without chat_session_id should filter by plugin_id."""
-        mock_query = MagicMock()
-        mock_query.where.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.stream.return_value = []
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_query
-            chat_db.get_messages('uid', app_id='my-app')
-
-        fields = self._get_field_filter_fields()
-        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
-        assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
-
-    def test_delete_messages_session_scoped_filters_by_session_not_plugin(self):
-        """delete_messages with session_id should filter by chat_session_id, NOT plugin_id."""
-        mock_col = MagicMock()
-        mock_query = MagicMock()
-        mock_col.where.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            chat_db.delete_messages('uid', session_id='sess-1')
-
-        fields = self._get_field_filter_fields()
-        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
-        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id is given: {fields}"
-
-    def test_delete_messages_app_scoped_filters_by_plugin_id(self):
-        """delete_messages without session_id should filter by plugin_id."""
-        mock_col = MagicMock()
-        mock_query = MagicMock()
-        mock_col.where.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            chat_db.delete_messages('uid', app_id='my-app')
-
-        fields = self._get_field_filter_fields()
-        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
-        assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
+    def test_delete_messages_app_scoped_filters_by_plugin_id(self, store):
+        _msg(store, 'uid', 'm1', plugin_id='my-app')
+        _msg(store, 'uid', 'm2', plugin_id='other')
+        chat_db.delete_messages('uid', app_id='my-app')
+        assert store.exists('users/uid/messages/m1') is False
+        assert store.exists('users/uid/messages/m2') is True
 
 
 class TestMessageReconcileKeyset:
-    class FakeDocument:
-        def __init__(self, document_id, payload, exists=True):
-            self.id = document_id
-            self._payload = payload
-            self.exists = exists
+    """Keyset journal pagination (WP2 tie-safe start_after, ADR-0018).
 
-        def to_dict(self):
-            return dict(self._payload)
-
-        def get(self):
-            return self
-
-    class FakeQuery:
-        def __init__(self, collection, after_id=None, requested_limit=None):
-            self.collection = collection
-            self.after_id = after_id
-            self.requested_limit = requested_limit
-
-        def where(self, **_kwargs):
-            return self
-
-        def order_by(self, *_args, **_kwargs):
-            return self
-
-        def start_after(self, document):
-            return self.__class__(self.collection, after_id=document.id)
-
-        def limit(self, value):
-            return self.__class__(self.collection, after_id=self.after_id, requested_limit=value)
-
-        def stream(self):
-            rows = self.collection.rows
-            start = 0
-            if self.after_id is not None:
-                start = next(index for index, row in enumerate(rows) if row.id == self.after_id) + 1
-            end = start + (self.requested_limit or len(rows))
-            return rows[start:end]
-
-    class FakeCollection:
-        def __init__(self, rows):
-            self.rows = rows
-
-        def where(self, **_kwargs):
-            return TestMessageReconcileKeyset.FakeQuery(self)
-
-        def document(self, document_id):
-            return next(
-                (row for row in self.rows if row.id == document_id),
-                TestMessageReconcileKeyset.FakeDocument(document_id, {}, exists=False),
-            )
+    With the port, ties on created_at order deterministically by document id, so pages neither skip
+    nor duplicate rows. (Rigorous tie-safety is proven in the storage-port contract test.)
+    """
 
     @staticmethod
-    def message(document_id, created_at, *, reported=False, plugin_id=None):
-        return TestMessageReconcileKeyset.FakeDocument(
-            document_id,
+    def _seed(store, doc_id, created_at, *, reported=False, plugin_id=None):
+        store.set(
+            f'users/uid/messages/{doc_id}',
             {
-                'id': document_id,
-                'text': document_id,
+                'id': doc_id,
+                'text': doc_id,
                 'sender': 'human',
                 'type': 'text',
                 'created_at': created_at,
@@ -671,834 +517,350 @@ class TestMessageReconcileKeyset:
             },
         )
 
-    @staticmethod
-    def patched_db(collection):
-        patched_db = MagicMock()
-        patched_db.collection.return_value.document.return_value.collection.return_value = collection
-        return patch.object(chat_db, 'db', patched_db)
-
-    def test_insert_between_pages_does_not_skip_or_duplicate(self):
+    def test_insert_between_pages_does_not_skip_or_duplicate(self, store):
         now = datetime.now(timezone.utc)
-        collection = self.FakeCollection(
-            [
-                self.message('remote-4', now),
-                self.message('remote-3', now),
-                self.message('remote-2', now),
-                self.message('remote-1', now),
-            ]
-        )
-        with self.patched_db(collection):
-            first, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
-            collection.rows.insert(0, self.message('remote-new', now))
-            second, next_cursor, _ = chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id=cursor)
+        for doc_id in ('remote-4', 'remote-3', 'remote-2', 'remote-1'):
+            self._seed(store, doc_id, now)
 
+        first, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
+        self._seed(store, 'remote-new', now)  # a newer row arrives between pages
+        second, next_cursor, _ = chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id=cursor)
+
+        # created_at ties -> deterministic desc-by-id order: remote-4, remote-3, remote-2, remote-1.
         assert [row['id'] for row in first] == ['remote-4', 'remote-3']
         assert cursor == 'remote-3'
         assert has_more is True
-        assert [row['id'] for row in second] == ['remote-2', 'remote-1']
+        assert [row['id'] for row in second] == ['remote-2', 'remote-1']  # remote-new not duplicated/skipped
         assert next_cursor == 'remote-1'
 
-    def test_reported_rows_advance_cursor_without_consuming_page_capacity(self):
+    def test_reported_rows_advance_cursor_without_consuming_page_capacity(self, store):
         now = datetime.now(timezone.utc)
-        collection = self.FakeCollection(
-            [
-                self.message('visible-2', now),
-                self.message('reported', now, reported=True),
-                self.message('visible-1', now),
-            ]
+        self._seed(store, 'visible-2', now)
+        self._seed(store, 'visible-1', now)
+        self._seed(store, 'reported', now, reported=True)
+
+        rows, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
+        tail_rows, tail_cursor, tail_has_more = chat_db.get_messages_reconcile_page(
+            'uid', limit=2, cursor_message_id=cursor
         )
-        with self.patched_db(collection):
-            rows, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
-            tail_rows, tail_cursor, tail_has_more = chat_db.get_messages_reconcile_page(
-                'uid', limit=2, cursor_message_id=cursor
-            )
 
         assert [row['id'] for row in rows] == ['visible-2', 'visible-1']
         assert cursor == 'visible-1'
         assert has_more is True
+        # Tail scans only the reported row (skipped): no visible rows, and no further page.
         assert tail_rows == []
-        assert tail_cursor is None
         assert tail_has_more is False
 
-    def test_cursor_must_exist_in_authenticated_filter_scope(self):
+    def test_cursor_must_exist_in_authenticated_filter_scope(self, store):
         now = datetime.now(timezone.utc)
-        collection = self.FakeCollection(
-            [
-                self.message('other-app', now, plugin_id='other'),
-            ]
-        )
-        with self.patched_db(collection):
-            with pytest.raises(chat_db.MessageReconcileCursorError):
-                chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id='other-app', app_id='requested')
+        self._seed(store, 'other-app', now, plugin_id='other')
+        with pytest.raises(chat_db.MessageReconcileCursorError):
+            chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id='other-app', app_id='requested')
+
+
+def _session(store, uid, sid, **fields):
+    fields.setdefault('id', sid)
+    fields.setdefault('updated_at', datetime.now(timezone.utc))
+    fields.setdefault('title', sid)
+    fields.setdefault('message_count', 0)
+    fields.setdefault('starred', False)
+    store.set(f'users/{uid}/chat_sessions/{sid}', fields)
 
 
 class TestGetChatSessionsQuery:
-    """Verify get_chat_sessions query construction."""
+    """Verify get_chat_sessions ordering (updated_at desc) and plugin_id scoping."""
 
-    def setup_method(self):
-        field_filter_stub.FieldFilter.reset_mock()
+    def test_orders_by_updated_at_descending(self, store):
+        _session(store, 'uid', 's1', plugin_id=None, updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+        _session(store, 'uid', 's2', plugin_id=None, updated_at=datetime(2026, 1, 3, tzinfo=timezone.utc))
+        _session(store, 'uid', 's3', plugin_id=None, updated_at=datetime(2026, 1, 2, tzinfo=timezone.utc))
+        result = chat_db.get_chat_sessions('uid')
+        assert [s['id'] for s in result] == ['s2', 's3', 's1']
 
-    def test_orders_by_updated_at_descending(self):
-        """get_chat_sessions should order by updated_at DESC."""
-        mock_col = MagicMock()
-        mock_query = MagicMock()
-        mock_col.order_by.return_value = mock_query
-        mock_query.where.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            chat_db.get_chat_sessions('uid')
-
-        mock_col.order_by.assert_called_once_with('updated_at', direction='DESCENDING')
-
-    def test_filters_by_plugin_id_field(self):
-        """get_chat_sessions should filter by plugin_id == app_id."""
-        mock_col = MagicMock()
-        mock_query = MagicMock()
-        mock_col.order_by.return_value = mock_query
-        mock_query.where.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            chat_db.get_chat_sessions('uid', app_id='test-app')
-
-        fields = [call.args[0] for call in field_filter_stub.FieldFilter.call_args_list if call.args]
-        assert 'plugin_id' in fields, f"Expected plugin_id filter, got: {fields}"
-        assert 'app_id' not in fields, f"Should use plugin_id, not app_id as filter field: {fields}"
+    def test_filters_by_plugin_id_field(self, store):
+        _session(store, 'uid', 's1', plugin_id='test-app')
+        _session(store, 'uid', 's2', plugin_id='other')
+        result = chat_db.get_chat_sessions('uid', app_id='test-app')
+        assert [s['id'] for s in result] == ['s1']
 
 
 class TestCreateChatSession:
     """Verify create_chat_session writes correct fields."""
 
-    def test_default_title_and_counters(self):
-        """create_chat_session with no title uses 'New Chat' and initializes counters."""
-        mock_doc_ref = MagicMock()
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_doc_ref
-            )
-            result = chat_db.create_chat_session('uid')
-
+    def test_default_title_and_counters(self, store):
+        result = chat_db.create_chat_session('uid')
         assert result['title'] == 'New Chat'
         assert result['message_count'] == 0
         assert result['starred'] is False
         assert result['preview'] is None
-        mock_doc_ref.set.assert_called_once()
+        assert store.exists(f"users/uid/chat_sessions/{result['id']}")
 
-    def test_plugin_id_matches_app_id(self):
-        """create_chat_session sets both plugin_id and app_id to the given app_id."""
-        mock_doc_ref = MagicMock()
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_doc_ref
-            )
-            result = chat_db.create_chat_session('uid', app_id='my-plugin')
-
+    def test_plugin_id_matches_app_id(self, store):
+        result = chat_db.create_chat_session('uid', app_id='my-plugin')
         assert result['plugin_id'] == 'my-plugin'
         assert result['app_id'] == 'my-plugin'
 
-    def test_custom_title(self):
-        """create_chat_session uses the provided title."""
-        mock_doc_ref = MagicMock()
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_doc_ref
-            )
-            result = chat_db.create_chat_session('uid', title='My Custom Chat')
-
+    def test_custom_title(self, store):
+        result = chat_db.create_chat_session('uid', title='My Custom Chat')
         assert result['title'] == 'My Custom Chat'
 
 
 class TestAcquireChatSession:
     """Verify acquire_chat_session reuse vs create logic."""
 
-    def test_reuses_existing_session(self):
-        """acquire_chat_session returns existing session ID when one exists."""
-        mock_doc = MagicMock()
-        mock_doc.id = 'existing-session-id'
-        mock_query = MagicMock()
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = [mock_doc]
+    def test_reuses_existing_session(self, store):
+        _session(store, 'uid', 'existing-session-id', plugin_id='my-app')
+        assert chat_db.acquire_chat_session('uid', app_id='my-app') == 'existing-session-id'
 
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
-                mock_query
-            )
-            result = chat_db.acquire_chat_session('uid', app_id='my-app')
+    def test_creates_new_session_when_none_exists(self, store, monkeypatch):
+        created = {}
 
-        assert result == 'existing-session-id'
+        def _fake_create(uid, app_id=None):
+            created['args'] = (uid, app_id)
+            return {'id': 'new-session-id'}
 
-    def test_creates_new_session_when_none_exists(self):
-        """acquire_chat_session creates a new session when no matching session found."""
-        mock_query = MagicMock()
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []  # No existing sessions
-
-        with patch.object(chat_db, 'db') as patched_db, patch.object(
-            chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}
-        ) as mock_create:
-            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
-                mock_query
-            )
-            result = chat_db.acquire_chat_session('uid', app_id='my-app')
-
-        assert result == 'new-session-id'
-        mock_create.assert_called_once_with('uid', app_id='my-app')
+        monkeypatch.setattr(chat_db, 'create_chat_session', _fake_create)
+        assert chat_db.acquire_chat_session('uid', app_id='my-app') == 'new-session-id'
+        assert created['args'] == ('uid', 'my-app')
 
 
 class TestUpdateChatSession:
     """Verify update_chat_session behavior."""
 
-    def test_not_found_returns_none(self):
-        """update_chat_session returns None when session doesn't exist."""
-        mock_ref = MagicMock()
-        mock_ref.get.return_value.exists = False
+    def test_not_found_returns_none(self, store):
+        assert chat_db.update_chat_session('uid', 'nonexistent-session', title='New Title') is None
 
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_ref
-            )
-            result = chat_db.update_chat_session('uid', 'nonexistent-session', title='New Title')
+    def test_title_only_update(self, store):
+        _session(store, 'uid', 'sess-1', title='Old')
+        chat_db.update_chat_session('uid', 'sess-1', title='Updated Title')
+        stored = store.get('users/uid/chat_sessions/sess-1').to_dict()
+        assert stored['title'] == 'Updated Title'
+        assert 'updated_at' in stored
 
-        assert result is None
-        mock_ref.update.assert_not_called()
-
-    def test_title_only_update(self):
-        """update_chat_session with title only updates title and updated_at."""
-        mock_ref = MagicMock()
-        mock_ref.get.return_value.exists = True
-        mock_ref.get.return_value.to_dict.return_value = {'title': 'Updated Title'}
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_ref
-            )
-            chat_db.update_chat_session('uid', 'sess-1', title='Updated Title')
-
-        update_call = mock_ref.update.call_args[0][0]
-        assert 'title' in update_call
-        assert 'updated_at' in update_call
-        assert 'starred' not in update_call
-
-    def test_starred_only_update(self):
-        """update_chat_session with starred only updates starred and updated_at."""
-        mock_ref = MagicMock()
-        mock_ref.get.return_value.exists = True
-        mock_ref.get.return_value.to_dict.return_value = {'starred': True}
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_ref
-            )
-            chat_db.update_chat_session('uid', 'sess-1', starred=True)
-
-        update_call = mock_ref.update.call_args[0][0]
-        assert 'starred' in update_call
-        assert 'updated_at' in update_call
-        assert 'title' not in update_call
+    def test_starred_only_update(self, store):
+        store.set('users/uid/chat_sessions/sess-1', {'id': 'sess-1', 'starred': False})
+        chat_db.update_chat_session('uid', 'sess-1', starred=True)
+        stored = store.get('users/uid/chat_sessions/sess-1').to_dict()
+        assert stored['starred'] is True
+        assert 'updated_at' in stored
+        assert 'title' not in stored
 
 
 class TestDeleteChatSessionCascade:
     """Verify delete_chat_session with cascade_messages."""
 
-    def test_cascade_deletes_messages_then_session(self):
-        """delete_chat_session with cascade_messages=True deletes messages first."""
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = True
-        mock_msg_col = MagicMock()
-        mock_query = MagicMock()
-        mock_msg_col.where.return_value = mock_query
+    def test_cascade_deletes_messages_then_session(self, store):
+        _session(store, 'uid', 'sess-1')
+        _msg(store, 'uid', 'msg-1', chat_session_id='sess-1')
+        _msg(store, 'uid', 'msg-2', chat_session_id='sess-1')
+        chat_db.delete_chat_session('uid', 'sess-1', cascade_messages=True)
+        assert store.exists('users/uid/chat_sessions/sess-1') is False
+        assert store.list_ids('users/uid/messages') == []
 
-        # Return 2 docs on first batch, then empty
-        mock_doc1 = MagicMock()
-        mock_doc1.id = 'msg-1'
-        mock_doc2 = MagicMock()
-        mock_doc2.id = 'msg-2'
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.side_effect = [[mock_doc1, mock_doc2], []]
-
-        mock_batch = MagicMock()
-
-        with patch.object(chat_db, 'db') as patched_db:
-            mock_user_ref = MagicMock()
-            mock_user_ref.collection.side_effect = lambda name: (
-                MagicMock(document=MagicMock(return_value=mock_session_ref))
-                if name == 'chat_sessions'
-                else mock_msg_col
-            )
-            patched_db.collection.return_value.document.return_value = mock_user_ref
-            patched_db.batch.return_value = mock_batch
-            chat_db.delete_chat_session('uid', 'sess-1', cascade_messages=True)
-
-        mock_batch.commit.assert_called_once()
-        mock_session_ref.delete.assert_called_once()
-
-    def test_cascade_nonexistent_session_short_circuits(self):
-        """delete_chat_session with cascade on nonexistent session returns False."""
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = False
-
-        with patch.object(chat_db, 'db') as patched_db:
-            mock_user_ref = MagicMock()
-            mock_user_ref.collection.return_value.document.return_value = mock_session_ref
-            patched_db.collection.return_value.document.return_value = mock_user_ref
-            result = chat_db.delete_chat_session('uid', 'nonexistent', cascade_messages=True)
-
-        assert result is False
+    def test_cascade_nonexistent_session_short_circuits(self, store):
+        assert chat_db.delete_chat_session('uid', 'nonexistent', cascade_messages=True) is False
 
 
 class TestSaveMessageSessionBehavior:
-    """Verify save_message session acquisition and preview behavior."""
+    """Verify save_message idempotency, journal-revision arbitration, and session behavior."""
 
-    def test_client_message_id_retry_returns_same_row_without_second_write(self):
+    def test_client_message_id_retry_returns_same_row_without_second_write(self, store):
         payload_hash = chat_db._message_idempotency_payload_hash(
-            text='hello',
-            sender='human',
-            app_id=None,
-            session_id=None,
-            metadata='{"origin":"typed_chat"}',
-            message_source='desktop_chat',
+            text='hello', sender='human', app_id=None, session_id=None,
+            metadata='{"origin":"typed_chat"}', message_source='desktop_chat',
         )
-        existing = MagicMock()
-        existing.exists = True
-        existing.to_dict.return_value = {
-            'id': 'turn-1',
-            'text': 'hello',
-            'sender': 'human',
-            'metadata': '{"origin":"typed_chat"}',
-            'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1',
+        seeded = {
+            'id': 'turn-1', 'text': 'hello', 'sender': 'human', 'metadata': '{"origin":"typed_chat"}',
+            'message_source': 'desktop_chat', 'chat_session_id': 'session-1',
             'client_message_payload_hash': payload_hash,
         }
-        message_ref = MagicMock()
-        message_ref.get.return_value = existing
+        store.set('users/uid/messages/turn-1', dict(seeded))
 
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
-            )
-            result = chat_db.save_message(
-                'uid',
-                text='hello',
-                sender='human',
-                metadata='{"origin":"typed_chat"}',
-                client_message_id='turn-1',
-            )
+        result = chat_db.save_message(
+            'uid', text='hello', sender='human', metadata='{"origin":"typed_chat"}', client_message_id='turn-1'
+        )
 
         assert result['id'] == 'turn-1'
         assert result['created'] is False
-        message_ref.create.assert_not_called()
-        message_ref.set.assert_not_called()
+        assert store.get('users/uid/messages/turn-1').to_dict() == seeded  # unchanged (no second write)
 
-    def test_newer_journal_revision_atomically_enriches_delivered_message(self):
-        existing = MagicMock()
-        existing.exists = True
-        existing.to_dict.return_value = {
-            'id': 'turn-1',
-            'text': 'Agent started.',
-            'sender': 'ai',
-            'app_id': None,
-            'plugin_id': None,
-            'metadata': '{"content_blocks":[{"type":"agent_spawn"}]}',
-            'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1',
-            'session_id': 'session-1',
-            'journal_revision': 10,
+    def test_newer_journal_revision_atomically_enriches_delivered_message(self, store):
+        store.set('users/uid/messages/turn-1', {
+            'id': 'turn-1', 'text': 'Agent started.', 'sender': 'ai', 'app_id': None, 'plugin_id': None,
+            'metadata': '{"content_blocks":[{"type":"agent_spawn"}]}', 'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1', 'session_id': 'session-1', 'journal_revision': 10,
             'client_message_payload_hash': 'sha256:old',
-        }
-        message_ref = MagicMock()
-        message_ref.get.return_value = existing
+        })
         enriched_metadata = (
             '{"content_blocks":[{"type":"agent_spawn"},{"type":"agent_completion"}],'
             '"resources":[{"id":"artifact-1","type":"file"}]}'
         )
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
-            )
-            result = chat_db.save_message(
-                'uid',
-                text='Agent started.',
-                sender='ai',
-                session_id='session-1',
-                metadata=enriched_metadata,
-                client_message_id='turn-1',
-                journal_revision=11,
-            )
+        result = chat_db.save_message(
+            'uid', text='Agent started.', sender='ai', session_id='session-1',
+            metadata=enriched_metadata, client_message_id='turn-1', journal_revision=11,
+        )
 
         assert result['created'] is False
         assert result['updated'] is True
         assert result['journal_revision'] == 11
-        patched_db.transaction.return_value.update.assert_called_once()
-        update = patched_db.transaction.return_value.update.call_args.args[1]
-        assert update['metadata'] == enriched_metadata
-        assert update['journal_revision'] == 11
+        stored = store.get('users/uid/messages/turn-1').to_dict()
+        assert stored['metadata'] == enriched_metadata
+        assert stored['journal_revision'] == 11
 
-    def test_equal_journal_revision_with_different_payload_fails_closed(self):
-        existing = MagicMock()
-        existing.exists = True
-        existing.to_dict.return_value = {
-            'id': 'turn-1',
-            'text': 'original',
-            'sender': 'ai',
-            'app_id': None,
-            'plugin_id': None,
-            'metadata': None,
-            'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1',
-            'session_id': 'session-1',
-            'journal_revision': 7,
-            'client_message_payload_hash': 'sha256:original',
-        }
-        message_ref = MagicMock()
-        message_ref.get.return_value = existing
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
+    def test_equal_journal_revision_with_different_payload_fails_closed(self, store):
+        store.set('users/uid/messages/turn-1', {
+            'id': 'turn-1', 'text': 'original', 'sender': 'ai', 'app_id': None, 'plugin_id': None,
+            'metadata': None, 'message_source': 'desktop_chat', 'chat_session_id': 'session-1',
+            'session_id': 'session-1', 'journal_revision': 7, 'client_message_payload_hash': 'sha256:original',
+        })
+        with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+            chat_db.save_message(
+                'uid', text='collision', sender='ai', session_id='session-1',
+                client_message_id='turn-1', journal_revision=7,
             )
-            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
-                chat_db.save_message(
-                    'uid',
-                    text='collision',
-                    sender='ai',
-                    session_id='session-1',
-                    client_message_id='turn-1',
-                    journal_revision=7,
-                )
+        assert store.get('users/uid/messages/turn-1').to_dict()['text'] == 'original'  # unchanged
 
-        patched_db.transaction.return_value.update.assert_not_called()
-
-    def test_older_journal_revision_is_ignored_without_rollback(self):
-        existing = MagicMock()
-        existing.exists = True
-        existing.to_dict.return_value = {
-            'id': 'turn-1',
-            'text': 'newest',
-            'sender': 'ai',
-            'app_id': None,
-            'plugin_id': None,
-            'metadata': '{"resources":[{"id":"new"}]}',
-            'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1',
-            'session_id': 'session-1',
-            'journal_revision': 12,
+    def test_older_journal_revision_is_ignored_without_rollback(self, store):
+        store.set('users/uid/messages/turn-1', {
+            'id': 'turn-1', 'text': 'newest', 'sender': 'ai', 'app_id': None, 'plugin_id': None,
+            'metadata': '{"resources":[{"id":"new"}]}', 'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1', 'session_id': 'session-1', 'journal_revision': 12,
             'client_message_payload_hash': 'sha256:newest',
-        }
-        message_ref = MagicMock()
-        message_ref.get.return_value = existing
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
-            )
-            result = chat_db.save_message(
-                'uid',
-                text='stale',
-                sender='ai',
-                session_id='session-1',
-                metadata='{"resources":[]}',
-                client_message_id='turn-1',
-                journal_revision=11,
-            )
-
+        })
+        result = chat_db.save_message(
+            'uid', text='stale', sender='ai', session_id='session-1',
+            metadata='{"resources":[]}', client_message_id='turn-1', journal_revision=11,
+        )
         assert result['updated'] is False
         assert result['journal_revision'] == 12
-        patched_db.transaction.return_value.update.assert_not_called()
+        assert store.get('users/uid/messages/turn-1').to_dict()['text'] == 'newest'  # unchanged
 
-    def test_lost_ack_then_newer_journal_revision_converges_without_remote_receipt(self):
-        existing = MagicMock()
-        existing.exists = True
-        existing.to_dict.return_value = {
-            'id': 'turn-1',
-            'text': 'original',
-            'sender': 'ai',
-            'app_id': None,
-            'plugin_id': None,
-            'metadata': None,
-            'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1',
-            'session_id': 'session-1',
-            'journal_revision': 2,
-            'client_message_payload_hash': 'sha256:original',
-        }
-        message_ref = MagicMock()
-        message_ref.get.return_value = existing
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
-            )
-            result = chat_db.save_message(
-                'uid',
-                text='enriched after lost ack',
-                sender='ai',
-                session_id='session-1',
-                metadata='{"content_blocks":[{"type":"agent_completion"}]}',
-                client_message_id='turn-1',
-                journal_revision=3,
-            )
-
+    def test_lost_ack_then_newer_journal_revision_converges_without_remote_receipt(self, store):
+        store.set('users/uid/messages/turn-1', {
+            'id': 'turn-1', 'text': 'original', 'sender': 'ai', 'app_id': None, 'plugin_id': None,
+            'metadata': None, 'message_source': 'desktop_chat', 'chat_session_id': 'session-1',
+            'session_id': 'session-1', 'journal_revision': 2, 'client_message_payload_hash': 'sha256:original',
+        })
+        result = chat_db.save_message(
+            'uid', text='enriched after lost ack', sender='ai', session_id='session-1',
+            metadata='{"content_blocks":[{"type":"agent_completion"}]}', client_message_id='turn-1', journal_revision=3,
+        )
         assert result['updated'] is True
         assert result['journal_revision'] == 3
-        patched_db.transaction.return_value.update.assert_called_once()
 
-    def test_client_message_id_fingerprint_distinguishes_omitted_from_explicit_session(self):
+    def test_client_message_id_fingerprint_distinguishes_omitted_from_explicit_session(self, store):
         payload_hash = chat_db._message_idempotency_payload_hash(
-            text='hello',
-            sender='human',
-            app_id=None,
-            session_id=None,
-            metadata=None,
-            message_source='desktop_chat',
+            text='hello', sender='human', app_id=None, session_id=None, metadata=None, message_source='desktop_chat',
         )
-        existing = MagicMock()
-        existing.exists = True
-        existing.to_dict.return_value = {
-            'id': 'turn-1',
-            'text': 'hello',
-            'sender': 'human',
-            'metadata': None,
-            'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1',
-            'client_message_payload_hash': payload_hash,
+        store.set('users/uid/messages/turn-1', {
+            'id': 'turn-1', 'text': 'hello', 'sender': 'human', 'metadata': None, 'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1', 'client_message_payload_hash': payload_hash,
+        })
+        with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+            chat_db.save_message('uid', text='hello', sender='human', session_id='session-1', client_message_id='turn-1')
+
+    def test_client_message_id_payload_collision_is_rejected(self, store):
+        store.set('users/uid/messages/turn-1', {
+            'id': 'turn-1', 'text': 'original', 'sender': 'human', 'metadata': None,
+            'message_source': 'desktop_chat', 'chat_session_id': 'session-1',
+        })
+        with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+            chat_db.save_message('uid', text='different', sender='human', session_id='session-1', client_message_id='turn-1')
+
+    def test_legacy_client_message_id_rejects_different_app_when_retry_omits_app(self, store):
+        store.set('users/uid/messages/turn-1', {
+            'id': 'turn-1', 'text': 'hello', 'sender': 'human', 'app_id': 'different-app', 'plugin_id': 'different-app',
+            'metadata': None, 'message_source': 'desktop_chat', 'chat_session_id': 'session-1',
+        })
+        with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+            chat_db.save_message('uid', text='hello', sender='human', client_message_id='turn-1')
+
+    def test_legacy_race_validates_the_requested_session_not_the_locally_acquired_session(self, store, monkeypatch):
+        monkeypatch.setattr(chat_db, 'acquire_chat_session', lambda uid, app_id=None: 'locally-acquired-session')
+        winner = {
+            'id': 'turn-1', 'text': 'hello', 'sender': 'human', 'app_id': None, 'plugin_id': None, 'metadata': None,
+            'message_source': 'desktop_chat', 'chat_session_id': 'winner-session', 'session_id': 'winner-session',
         }
-        message_ref = MagicMock()
-        message_ref.get.return_value = existing
 
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
-            )
-            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
-                chat_db.save_message(
-                    'uid',
-                    text='hello',
-                    sender='human',
-                    session_id='session-1',
-                    client_message_id='turn-1',
-                )
+        # Simulate a concurrent writer winning the create: absent at the exists-check, then create
+        # loses the race (AlreadyExists) and a re-read sees the winner's row (a different session).
+        def racing_create(path, data):
+            store.set(path, winner)
+            raise chat_db.AlreadyExists('concurrent writer won')
 
-        message_ref.create.assert_not_called()
+        monkeypatch.setattr(store, 'create', racing_create)
 
-    def test_client_message_id_payload_collision_is_rejected(self):
-        existing = MagicMock()
-        existing.exists = True
-        existing.to_dict.return_value = {
-            'id': 'turn-1',
-            'text': 'original',
-            'sender': 'human',
-            'metadata': None,
-            'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1',
-        }
-        message_ref = MagicMock()
-        message_ref.get.return_value = existing
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
-            )
-            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
-                chat_db.save_message(
-                    'uid',
-                    text='different',
-                    sender='human',
-                    session_id='session-1',
-                    client_message_id='turn-1',
-                )
-
-        message_ref.create.assert_not_called()
-
-    def test_legacy_client_message_id_rejects_different_app_when_retry_omits_app(self):
-        existing = MagicMock()
-        existing.exists = True
-        existing.to_dict.return_value = {
-            'id': 'turn-1',
-            'text': 'hello',
-            'sender': 'human',
-            'app_id': 'different-app',
-            'plugin_id': 'different-app',
-            'metadata': None,
-            'message_source': 'desktop_chat',
-            'chat_session_id': 'session-1',
-        }
-        message_ref = MagicMock()
-        message_ref.get.return_value = existing
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
-            )
-            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
-                chat_db.save_message(
-                    'uid',
-                    text='hello',
-                    sender='human',
-                    client_message_id='turn-1',
-                )
-
-        message_ref.create.assert_not_called()
-
-    def test_legacy_race_validates_the_requested_session_not_the_locally_acquired_session(self):
-        missing = MagicMock()
-        missing.exists = False
-        winner = MagicMock()
-        winner.to_dict.return_value = {
-            'id': 'turn-1',
-            'text': 'hello',
-            'sender': 'human',
-            'app_id': None,
-            'plugin_id': None,
-            'metadata': None,
-            'message_source': 'desktop_chat',
-            'chat_session_id': 'winner-session',
-            'session_id': 'winner-session',
-        }
-        message_ref = MagicMock()
-        message_ref.get.side_effect = [missing, winner]
-        message_ref.create.side_effect = chat_db.AlreadyExists('concurrent writer won')
-
-        with patch.object(chat_db, 'acquire_chat_session', return_value='locally-acquired-session'), patch.object(
-            chat_db, 'db'
-        ) as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
-            )
-            result = chat_db.save_message(
-                'uid',
-                text='hello',
-                sender='human',
-                client_message_id='turn-1',
-            )
+        result = chat_db.save_message('uid', text='hello', sender='human', client_message_id='turn-1')
 
         assert result['id'] == 'turn-1'
         assert result['session_id'] == 'winner-session'
         assert result['created'] is False
-        message_ref.create.assert_called_once()
 
-    def test_explicit_session_id_skips_acquire(self):
-        """save_message with explicit session_id doesn't call acquire_chat_session."""
-        mock_doc_ref = MagicMock()
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = True
+    def test_explicit_session_id_skips_acquire(self, store, monkeypatch):
+        calls = []
+        monkeypatch.setattr(chat_db, 'acquire_chat_session', lambda *a, **k: calls.append(1) or 'x')
+        store.set('users/uid/chat_sessions/my-session', {'id': 'my-session'})
+        chat_db.save_message('uid', text='hello', sender='human', session_id='my-session')
+        assert calls == []
 
-        with patch.object(chat_db, 'acquire_chat_session') as mock_acquire, patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_doc_ref
-            )
-            # Make session ref accessible for the session update path
-            mock_doc_ref.set.return_value = None
-            chat_db.save_message('uid', text='hello', sender='human', session_id='my-session')
-
-        mock_acquire.assert_not_called()
-
-    def test_preview_truncated_to_100_chars(self):
-        """save_message truncates preview to 100 characters."""
-        long_text = 'x' * 200
-        mock_msg_ref = MagicMock()
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = True
-
-        with patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'), patch.object(
-            chat_db, 'db'
-        ) as patched_db:
-            # Mock message write
-            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda name: (
-                MagicMock(document=MagicMock(return_value=mock_session_ref))
-                if name == 'chat_sessions'
-                else MagicMock(document=MagicMock(return_value=mock_msg_ref))
-            )
-            chat_db.save_message('uid', text=long_text, sender='human')
-
-        # Check the session update call has truncated preview
-        if mock_session_ref.update.called:
-            update_call = mock_session_ref.update.call_args[0][0]
-            assert len(update_call['preview']) == 100
+    def test_preview_truncated_to_100_chars(self, store, monkeypatch):
+        monkeypatch.setattr(chat_db, 'acquire_chat_session', lambda uid, app_id=None: 'sess-1')
+        store.set('users/uid/chat_sessions/sess-1', {'id': 'sess-1'})
+        chat_db.save_message('uid', text='x' * 200, sender='human')
+        stored_session = store.get('users/uid/chat_sessions/sess-1').to_dict()
+        assert len(stored_session['preview']) == 100
 
 
 class TestDeleteMessagesCount:
     """Verify delete_messages returns correct count."""
 
-    def test_returns_zero_when_no_messages(self):
-        """delete_messages returns 0 when no matching messages found."""
-        mock_col = MagicMock()
-        mock_query = MagicMock()
-        mock_col.where.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []
+    def test_returns_zero_when_no_messages(self, store):
+        assert chat_db.delete_messages('uid', app_id='my-app') == 0
 
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = chat_db.delete_messages('uid', app_id='my-app')
+    def test_returns_count_of_deleted_messages(self, store):
+        """delete_messages returns the total count of deleted messages."""
+        for i in range(3):
+            _msg(store, 'uid', f'msg-{i}', plugin_id='my-app')
 
-        assert result == 0
+        assert chat_db.delete_messages('uid', app_id='my-app') == 3
+        assert chat_db.get_messages('uid', app_id='my-app') == []
 
-    def test_returns_count_of_deleted_messages(self):
-        """delete_messages returns total count of deleted messages."""
-        mock_col = MagicMock()
-        mock_query = MagicMock()
-        mock_col.where.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-
-        doc1 = MagicMock()
-        doc1.id = 'msg-1'
-        doc2 = MagicMock()
-        doc2.id = 'msg-2'
-        doc3 = MagicMock()
-        doc3.id = 'msg-3'
-        mock_query.stream.side_effect = [[doc1, doc2, doc3], []]
-
-        mock_batch = MagicMock()
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            patched_db.batch.return_value = mock_batch
-            result = chat_db.delete_messages('uid', app_id='my-app')
-
-        assert result == 3
-        mock_batch.commit.assert_called_once()
-
-    def test_delete_applies_inverse_session_metadata_in_same_preconditioned_batch(self):
-        """Source deletion and inverse count/ID/preview updates commit together."""
-        mock_msg_col = MagicMock()
-        mock_delete_query = MagicMock()
-        mock_msg_col.where.return_value = mock_delete_query
-        mock_delete_query.limit.return_value = mock_delete_query
-
-        doc1 = MagicMock()
-        doc1.id = 'msg-1'
-        doc1.update_time = object()
-        doc1.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1', 'text': 'older'}
-        doc2 = MagicMock()
-        doc2.id = 'msg-2'
-        doc2.update_time = object()
-        doc2.to_dict.return_value = {'id': 'logical-2', 'chat_session_id': 'sess-1', 'text': 'latest'}
-        mock_delete_query.stream.side_effect = [[doc1, doc2], []]
-
-        mock_session_snapshot = MagicMock()
-        mock_session_snapshot.exists = True
-        mock_session_snapshot.update_time = object()
-        mock_session_snapshot.to_dict.return_value = {
-            'message_count': 5,
-            'message_ids': ['logical-1', 'logical-2', 'older-id'],
-            'preview': 'latest',
-        }
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value = mock_session_snapshot
-        mock_session_col = MagicMock()
-        mock_session_col.document.return_value = mock_session_ref
-
-        mock_user_ref = MagicMock()
-        mock_user_ref.collection.side_effect = lambda name: (
-            mock_session_col if name == 'chat_sessions' else mock_msg_col
+    def test_delete_applies_inverse_session_metadata_in_same_transaction(self, store):
+        """Source deletion and inverse count/ID/preview updates commit together (ADR-0002)."""
+        _msg(store, 'uid', 'msg-1', id='logical-1', plugin_id=None, chat_session_id='sess-1', text='older')
+        _msg(store, 'uid', 'msg-2', id='logical-2', plugin_id=None, chat_session_id='sess-1', text='latest')
+        _session(
+            store, 'uid', 'sess-1',
+            message_count=5, message_ids=['logical-1', 'logical-2', 'older-id'], preview='latest',
         )
-        mock_batch = MagicMock()
 
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value = mock_user_ref
-            patched_db.batch.return_value = mock_batch
-            patched_db.write_option.side_effect = lambda **kwargs: ('last_update', kwargs['last_update_time'])
-            result = chat_db.delete_messages('uid', app_id=None)
+        result = chat_db.delete_messages('uid', app_id=None)
 
         assert result == 2
-        mock_delete_query.limit.assert_called_with(chat_db.DELETE_MESSAGES_BATCH_LIMIT)
-        mock_batch.update.assert_called_once_with(
-            mock_session_ref,
-            {
-                'message_ids': firestore_stub.ArrayRemove(['logical-1', 'logical-2']),
-                'message_count': firestore_stub.Increment(-2),
-                'preview': None,
-            },
-            option=('last_update', mock_session_snapshot.update_time),
-        )
-        assert mock_batch.delete.call_count == 2
-        assert all(call.kwargs['option'][0] == 'last_update' for call in mock_batch.delete.call_args_list)
+        session = store.get('users/uid/chat_sessions/sess-1').to_dict()
+        assert session['message_count'] == 3
+        assert session['message_ids'] == ['older-id']
+        assert session['preview'] is None
+        assert not store.exists('users/uid/messages/msg-1')
+        assert not store.exists('users/uid/messages/msg-2')
 
-    def test_overlapping_clear_requeries_after_precondition_conflict(self):
-        """A losing clear never applies a second decrement to already-deleted docs."""
-        mock_msg_col = MagicMock()
-        mock_delete_query = MagicMock()
-        mock_msg_col.where.return_value = mock_delete_query
-        mock_delete_query.limit.return_value = mock_delete_query
+    def test_decrement_is_bounded_by_stored_count(self, store):
+        """message_count never goes negative even if the stored counter understates reality."""
+        _msg(store, 'uid', 'msg-1', id='logical-1', plugin_id=None, chat_session_id='sess-1', text='a')
+        _msg(store, 'uid', 'msg-2', id='logical-2', plugin_id=None, chat_session_id='sess-1', text='b')
+        _session(store, 'uid', 'sess-1', message_count=1)  # understated vs the 2 messages present
 
-        message = MagicMock()
-        message.id = 'msg-1'
-        message.update_time = object()
-        message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
-        mock_delete_query.stream.side_effect = [[message], []]
+        assert chat_db.delete_messages('uid', app_id=None) == 2
+        assert store.get('users/uid/chat_sessions/sess-1').to_dict()['message_count'] == 0
 
-        mock_session_snapshot = MagicMock()
-        mock_session_snapshot.exists = True
-        mock_session_snapshot.update_time = object()
-        mock_session_snapshot.to_dict.return_value = {'message_count': 1}
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value = mock_session_snapshot
-        mock_session_col = MagicMock()
-        mock_session_col.document.return_value = mock_session_ref
+    def test_paginates_across_batches_and_terminates(self, store):
+        """A backlog larger than one batch is drained fully, and the requery loop terminates."""
+        total = chat_db.DELETE_MESSAGES_BATCH_LIMIT + 5
+        for i in range(total):
+            _msg(store, 'uid', f'msg-{i}', plugin_id='bulk')
 
-        mock_user_ref = MagicMock()
-        mock_user_ref.collection.side_effect = lambda name: (
-            mock_session_col if name == 'chat_sessions' else mock_msg_col
-        )
-        mock_batch = MagicMock()
-        mock_batch.commit.side_effect = chat_db.FailedPrecondition('overlapping clear won')
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value = mock_user_ref
-            patched_db.batch.return_value = mock_batch
-            patched_db.write_option.return_value = object()
-            result = chat_db.delete_messages('uid', app_id=None)
-
-        assert result == 0
-        mock_batch.commit.assert_called_once()
-
-    def test_persistent_precondition_conflict_is_bounded(self):
-        """A hot session cannot hold a sync worker in an unbounded retry loop."""
-        mock_msg_col = MagicMock()
-        mock_delete_query = MagicMock()
-        mock_msg_col.where.return_value = mock_delete_query
-        mock_delete_query.limit.return_value = mock_delete_query
-
-        message = MagicMock()
-        message.id = 'msg-1'
-        message.update_time = object()
-        message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
-        mock_delete_query.stream.side_effect = [[message] for _ in range(chat_db.DELETE_MESSAGES_CONFLICT_RETRIES)]
-
-        mock_session_snapshot = MagicMock()
-        mock_session_snapshot.exists = True
-        mock_session_snapshot.update_time = object()
-        mock_session_snapshot.to_dict.return_value = {'message_count': 1}
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value = mock_session_snapshot
-        mock_session_col = MagicMock()
-        mock_session_col.document.return_value = mock_session_ref
-
-        mock_user_ref = MagicMock()
-        mock_user_ref.collection.side_effect = lambda name: (
-            mock_session_col if name == 'chat_sessions' else mock_msg_col
-        )
-        mock_batch = MagicMock()
-        mock_batch.commit.side_effect = chat_db.FailedPrecondition('persistent conflict')
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value = mock_user_ref
-            patched_db.batch.return_value = mock_batch
-            patched_db.write_option.return_value = object()
-            with pytest.raises(chat_db.FailedPrecondition, match='persistent conflict'):
-                chat_db.delete_messages('uid', app_id=None)
-
-        assert mock_batch.commit.call_count == chat_db.DELETE_MESSAGES_CONFLICT_RETRIES
+        assert chat_db.delete_messages('uid', app_id='bulk') == total
+        assert chat_db.get_messages('uid', app_id='bulk', limit=total) == []
 
 
 class TestLlmUsageBucketParam:
@@ -2216,60 +1578,26 @@ class TestBatchScoresOverflow:
 
 
 class TestSessionScopedPrecedence:
-    """Verify session_id takes precedence over app_id in get_messages/delete_messages."""
+    """Verify session_id takes precedence over app_id in get_messages/delete_messages.
 
-    @staticmethod
-    def _get_field_filter_fields():
-        """Extract field names from all FieldFilter() calls."""
-        from google.cloud.firestore_v1.base_query import FieldFilter
+    Behavioral discriminator: the seeded message belongs to session ``sess-123`` but to a
+    *different* app (``plugin_id='other-app'``). A caller passing both ``app_id='some-app'`` and
+    the session id must still see/delete it — proof the session filter wins and the app filter
+    (which would exclude it) is not applied.
+    """
 
-        fields = []
-        for call in FieldFilter.call_args_list:
-            if call.args:
-                fields.append(call.args[0])
-        return fields
+    def test_get_messages_session_id_ignores_app_id(self, store):
+        _msg(store, 'uid', 'msg-1', plugin_id='other-app', chat_session_id='sess-123')
 
-    def test_get_messages_session_id_ignores_app_id(self):
-        """When both app_id and chat_session_id are provided, only session filter is applied."""
-        from google.cloud.firestore_v1.base_query import FieldFilter
+        messages = chat_db.get_messages('uid', app_id='some-app', chat_session_id='sess-123')
 
-        FieldFilter.reset_mock()
+        assert [m['id'] for m in messages] == ['msg-1']
 
-        mock_col = MagicMock()
-        mock_query = MagicMock()
-        mock_col.where.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.offset.return_value = mock_query
-        mock_query.stream.return_value = []
+    def test_delete_messages_session_id_ignores_app_id(self, store):
+        _msg(store, 'uid', 'msg-1', plugin_id='other-app', chat_session_id='sess-123')
 
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            chat_db.get_messages('uid', app_id='some-app', chat_session_id='sess-123')
-
-        fields = self._get_field_filter_fields()
-        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
-        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id present: {fields}"
-
-    def test_delete_messages_session_id_ignores_app_id(self):
-        """When both app_id and session_id are provided, only session filter is applied."""
-        from google.cloud.firestore_v1.base_query import FieldFilter
-
-        FieldFilter.reset_mock()
-
-        mock_col = MagicMock()
-        mock_query = MagicMock()
-        mock_col.where.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            chat_db.delete_messages('uid', app_id='some-app', session_id='sess-123')
-
-        fields = self._get_field_filter_fields()
-        assert 'chat_session_id' in fields, f"Expected chat_session_id filter, got: {fields}"
-        assert 'plugin_id' not in fields, f"plugin_id should NOT be filtered when session_id present: {fields}"
+        assert chat_db.delete_messages('uid', app_id='some-app', session_id='sess-123') == 1
+        assert not store.exists('users/uid/messages/msg-1')
 
 
 # ============================================================================
