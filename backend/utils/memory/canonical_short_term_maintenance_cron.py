@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 from collections.abc import Callable
 from typing import Any, Optional
 
-from database._client import db as default_db_client
 from models.product_memory import MemoryItem
 from utils.executors import db_executor, run_blocking
 from utils.observability.fallback import record_fallback
@@ -120,7 +119,6 @@ def run_canonical_short_term_maintenance_for_cohort(
         )
         return CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=0)
 
-    client = db_client if db_client is not None else default_db_client
     uids = list_canonical_cohort_uids()
 
     summary = CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=len(uids))
@@ -134,7 +132,7 @@ def run_canonical_short_term_maintenance_for_cohort(
         try:
             report = run_canonical_short_term_maintenance(
                 uid,
-                db_client=client,
+                db_client=db_client,
                 now=current_time,
                 run_id=effective_run_id,
                 recurrence_signal_sink=recurrence_signal_persister,
@@ -157,7 +155,7 @@ def run_canonical_short_term_maintenance_for_cohort(
                 summary.recurrence_candidates_total += recurrence_signal_consumer(
                     uid,
                     report.consolidation.recurrence_signals,
-                    firestore_client=client,
+                    firestore_client=db_client,
                 )
             except Exception as exc:
                 message = f"uid={uid}: recurrence_consumer:{type(exc).__name__}"

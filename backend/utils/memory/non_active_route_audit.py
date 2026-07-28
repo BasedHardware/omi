@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from database._client import db
+from database import firestore_paths
 from database.memory_collections import MemoryCollections
 from database.memory_non_active_routes import NonActiveRoute, PersistedNonActiveRouteOutcome
 
@@ -160,7 +160,7 @@ def fetch_non_active_route_audit_report(
     *,
     run_id: Optional[str] = None,
     expected_source_ids: Optional[Iterable[str]] = None,
-    db_client: Any = db,
+    db_client: Any = None,
 ) -> NonActiveRouteAuditReport:
     """Fetch route-store docs and build the memory non-active no-silent-loss audit report."""
 
@@ -170,7 +170,8 @@ def fetch_non_active_route_audit_report(
 
 def _fetch_non_active_route_docs(uid: str, *, run_id: Optional[str], db_client: Any) -> List[Dict[str, Any]]:
     collection_path = MemoryCollections(uid=uid).non_active_memory_routes
-    query = db_client.collection(collection_path)
     if run_id:
-        query = query.where("run_id", "==", run_id)
-    return [snapshot.to_dict() or {} for snapshot in query.stream()]
+        snapshots = firestore_paths.stream_collection_where(db_client, collection_path, "run_id", "==", run_id)
+    else:
+        snapshots = firestore_paths.stream_collection(db_client, collection_path)
+    return [snapshot.to_dict() or {} for snapshot in snapshots]

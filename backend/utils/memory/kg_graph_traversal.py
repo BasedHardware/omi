@@ -12,7 +12,6 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
 
-from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
 from utils.memory.atom_keyword_index import is_indexable_long_term_atom
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
@@ -176,7 +175,6 @@ def traverse_knowledge_graph(
     graph: Optional[Dict[str, Any]] = None,
 ) -> TraversalResult:
     """Read-only BFS neighborhood expansion capped at ``MAX_TRAVERSAL_HOPS``."""
-    client = db_client if db_client is not None else default_db_client
     effective_hops, hops_capped = _normalize_hops(hops)
     result = TraversalResult(
         entity_query=entity_query,
@@ -185,11 +183,11 @@ def traverse_knowledge_graph(
         hops_capped=hops_capped,
     )
 
-    if not user_allows_kg_traversal(uid, db_client=client):
+    if not user_allows_kg_traversal(uid, db_client=db_client):
         result.skipped_reason = "not_canonical_cohort"
         return result
 
-    allowed_memory_ids = _long_term_memory_ids(uid, db_client=client)
+    allowed_memory_ids = _long_term_memory_ids(uid, db_client=db_client)
     if graph is None:
         get_knowledge_graph = cast(Callable[[str], Dict[str, Any]], getattr(kg_db, "get_knowledge_graph"))
         graph = get_knowledge_graph(uid)
@@ -256,7 +254,7 @@ def traverse_knowledge_graph(
 
     if cited_ids:
         items_by_id = {
-            item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+            item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
         }
         for memory_id in cited_ids:
             item = items_by_id.get(memory_id)
