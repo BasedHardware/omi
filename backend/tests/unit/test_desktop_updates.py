@@ -16,6 +16,7 @@ from routers.updates import (
     _get_installer_download_url,
     _get_sparkle_zip_download_url,
     _get_windows_installer_download_url,
+    _get_windows_update_feed_url,
     _parse_changelog_to_changes,
     _parse_desktop_version,
     _preview_download_landing_html,
@@ -289,6 +290,23 @@ class TestAssetHelpers:
         }
         assert _get_windows_installer_download_url(release) is None
 
+    def test_windows_update_feed_uses_immutable_release_directory(self):
+        release = {
+            "tag_name": "v1.0.19-windows",
+            "assets": [{"name": "latest.yml", "browser_download_url": "https://untrusted.example/latest.yml"}],
+        }
+        assert (
+            _get_windows_update_feed_url(release)
+            == "https://github.com/BasedHardware/omi/releases/download/v1.0.19-windows/"
+        )
+
+    def test_windows_update_feed_requires_windows_tag_and_metadata(self):
+        assert _get_windows_update_feed_url({"tag_name": "v1.0.19-windows", "assets": []}) is None
+        assert (
+            _get_windows_update_feed_url({"tag_name": "v0.12.123+12123-macos", "assets": [{"name": "latest.yml"}]})
+            is None
+        )
+
     def test_installer_dispatch_by_platform(self):
         release = {
             "assets": [
@@ -363,6 +381,10 @@ def _dmg_asset(url="https://example.com/omi.dmg"):
 
 def _exe_asset(url="https://example.com/omi-setup.exe"):
     return {"name": "omi-setup.exe", "browser_download_url": url}
+
+
+def _update_feed_asset(url="https://example.com/latest.yml"):
+    return {"name": "latest.yml", "browser_download_url": url}
 
 
 # --- _get_legacy_live_desktop_releases ---
@@ -901,6 +923,112 @@ class TestDownloadEndpoint:
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?platform=windows&channel=stable")
         assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_windows_update_feed_is_platform_and_stable_channel_scoped(self):
+        mock_releases = [
+            {
+                "channel": "beta",
+                "version_info": {"version": "1.0.19", "build": "0"},
+                "release": {
+                    "tag_name": "v1.0.19-windows",
+                    "assets": [_update_feed_asset()],
+                },
+            },
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {
+                    "tag_name": "v1.0.1-windows",
+                    "assets": [_update_feed_asset()],
+                },
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/update-feed/windows")
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-store"
+        assert resp.json() == {
+            "requested_channel": "stable",
+            "served_channel": "stable",
+            "version": "1.0.1",
+            "feed_url": "https://github.com/BasedHardware/omi/releases/download/v1.0.1-windows/",
+        }
+
+    @pytest.mark.asyncio
+    async def test_windows_update_feed_beta_prefers_prerelease_channel(self):
+        mock_releases = [
+            {
+                "channel": "beta",
+                "version_info": {"version": "1.0.19", "build": "0"},
+                "release": {
+                    "tag_name": "v1.0.19-windows",
+                    "assets": [_update_feed_asset()],
+                },
+            },
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {
+                    "tag_name": "v1.0.1-windows",
+                    "assets": [_update_feed_asset()],
+                },
+            },
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/update-feed/windows?channel=beta")
+        assert resp.status_code == 200
+        assert resp.json()["served_channel"] == "beta"
+        assert resp.json()["feed_url"].endswith("/v1.0.19-windows/")
+
+    @pytest.mark.asyncio
+    async def test_windows_update_feed_beta_falls_back_to_stable(self):
+        mock_releases = [
+            {
+                "channel": "stable",
+                "version_info": {"version": "1.0.1", "build": "0"},
+                "release": {
+                    "tag_name": "v1.0.1-windows",
+                    "assets": [_update_feed_asset()],
+                },
+            },
+        ]
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases),
+            patch("routers.updates.record_fallback") as mock_fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/update-feed/windows?channel=beta")
+        assert resp.status_code == 200
+        assert resp.json()["served_channel"] == "stable"
+        assert resp.json()["feed_url"].endswith("/v1.0.1-windows/")
+        mock_fallback.assert_called_once()
+        assert mock_fallback.call_args.kwargs["outcome"] == "recovered"
+
+    @pytest.mark.asyncio
+    async def test_windows_update_feed_stable_never_falls_through_to_beta(self):
+        mock_releases = [
+            {
+                "channel": "beta",
+                "version_info": {"version": "1.0.19", "build": "0"},
+                "release": {
+                    "tag_name": "v1.0.19-windows",
+                    "assets": [_update_feed_asset()],
+                },
+            },
+        ]
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases),
+            patch("routers.updates.record_fallback") as mock_fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/update-feed/windows?channel=stable")
+        assert resp.status_code == 404
+        assert resp.headers["cache-control"] == "no-store"
+        assert "channel: stable" in resp.json()["detail"]
+        mock_fallback.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_windows_convenience_route_defaults_to_stable(self):
