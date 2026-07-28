@@ -193,6 +193,25 @@ export function isUserInteractionTool(toolName: unknown): boolean {
   return bare !== null && USER_INTERACTION_TOOLS.has(bare);
 }
 
+/** How long the tool relay waits for an executor before giving up on it. */
+export const RELAY_TOOL_TIMEOUT_MS = 120_000;
+
+/**
+ * The relay deadline for one tool, or null when it must not have one.
+ *
+ * A tool whose whole job is to wait for a person has no deadline the relay can
+ * choose. Two minutes is an ordinary pause for someone reading a question and
+ * deciding, and expiring it throws away the answer they were in the middle of
+ * giving: the card stays on screen, the user picks, and nothing is listening.
+ *
+ * Untimed is not unbounded. These end when the user answers or cancels, when
+ * the turn is cancelled, or when the runtime restarts and terminalizes pending
+ * dispatches — the contract elicitation already documents.
+ */
+export function relayToolTimeoutMs(toolName: unknown): number | null {
+  return isUserInteractionTool(toolName) ? null : RELAY_TOOL_TIMEOUT_MS;
+}
+
 /**
  * Decide whether an ACP permission request may resolve without the user.
  *

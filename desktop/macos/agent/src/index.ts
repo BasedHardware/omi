@@ -85,6 +85,7 @@ import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapters/acp.js";
 import { askUser, createKernelElicitationResolver } from "./runtime/desktop-elicitation-resolver.js";
 import type { KernelElicitationDeps } from "./runtime/desktop-elicitation-resolver.js";
+import { relayToolTimeoutMs } from "./runtime/desktop-elicitation.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
@@ -288,7 +289,8 @@ const pendingToolCalls = new Map<
     client: Socket;
     callId: string;
     invocation: AuthorizedRunToolInvocation;
-    timeout: ReturnType<typeof setTimeout>;
+    /** Absent for a tool that waits on a person; those end by answer or cancel. */
+    timeout?: ReturnType<typeof setTimeout>;
   }
 >();
 
@@ -819,23 +821,28 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
-              const timeout = setTimeout(() => {
-                const pending = pendingToolCalls.get(pendingKey);
-                if (!pending) return;
-                pendingToolCalls.delete(pendingKey);
-                try {
-                  runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, "swift_tool_timeout");
-                } catch (error) {
-                  logErr(`Failed to mark timed-out tool invocation outcome unknown: ${error}`);
-                }
-                writeRelayToolResult(
-                  pending.client,
-                  pending.callId,
-                  relayError("swift_tool_timeout", "Timed out waiting for the Swift tool executor"),
-                  pending.invocation,
-                  "failed",
-                );
-              }, 120_000);
+              // null for a tool that waits on a person: the turn's own
+              // cancellation path ends it, not a clock the relay picked.
+              const relayTimeoutMs = relayToolTimeoutMs(msg.name);
+              const timeout = relayTimeoutMs === null
+                ? undefined
+                : setTimeout(() => {
+                  const pending = pendingToolCalls.get(pendingKey);
+                  if (!pending) return;
+                  pendingToolCalls.delete(pendingKey);
+                  try {
+                    runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, "swift_tool_timeout");
+                  } catch (error) {
+                    logErr(`Failed to mark timed-out tool invocation outcome unknown: ${error}`);
+                  }
+                  writeRelayToolResult(
+                    pending.client,
+                    pending.callId,
+                    relayError("swift_tool_timeout", "Timed out waiting for the Swift tool executor"),
+                    pending.invocation,
+                    "failed",
+                  );
+                }, relayTimeoutMs);
               pendingToolCalls.set(pendingKey, {
                 client,
                 callId,

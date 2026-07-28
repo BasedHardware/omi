@@ -330,6 +330,41 @@ describe("ask_user normalization", () => {
   });
 });
 
+describe("the relay does not put a clock on a question", () => {
+  it("gives ask_user no deadline, under every name the relay sees", async () => {
+    const { relayToolTimeoutMs, RELAY_TOOL_TIMEOUT_MS } = await import(
+      "../src/runtime/desktop-elicitation.js"
+    );
+
+    // These are the exact shapes that arrive on the relay: bare, and MCP
+    // prefixed by each server-name spelling in use.
+    for (const name of ["ask_user", "mcp__omi-tools__ask_user", "mcp__omi_tools__ask_user"]) {
+      expect(relayToolTimeoutMs(name), name).toBeNull();
+    }
+
+    // A person reading a question and deciding routinely takes longer than the
+    // relay's two-minute budget; expiring it discards an answer the user is
+    // still in the middle of giving.
+    expect(RELAY_TOOL_TIMEOUT_MS).toBe(120_000);
+  });
+
+  it("leaves every other tool on the relay deadline", async () => {
+    const { relayToolTimeoutMs, RELAY_TOOL_TIMEOUT_MS } = await import(
+      "../src/runtime/desktop-elicitation.js"
+    );
+
+    for (const name of [
+      "execute_sql",
+      "mcp__omi_tools__get_memories",
+      "spawn_agent",
+      "ask_user_details",
+      "",
+    ]) {
+      expect(relayToolTimeoutMs(name), name).toBe(RELAY_TOOL_TIMEOUT_MS);
+    }
+  });
+});
+
 describe("dispatch kind mapping", () => {
   it("records approvals and questions as existing dispatch kinds", () => {
     const permission = normalizeAcpPermission({
