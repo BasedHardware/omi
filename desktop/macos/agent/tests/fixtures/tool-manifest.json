@@ -1326,8 +1326,7 @@
       "kind": "runtimeControl"
     },
     "surfaces": [
-      "desktop_chat",
-      "realtime_voice"
+      "desktop_chat"
     ],
     "capabilityDoc": {
       "title": "Ask User",

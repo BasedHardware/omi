@@ -436,8 +436,15 @@ Do not use it for onboarding steps; ask_followup owns that flow. Do not use it t
       ],
     ),
     latency: "async background",
-    surfaces: ["desktopChat", "realtimeHub"],
+    // Desktop chat only. The card renders in the chat composer and the floating
+    // bar has no elicitation surface, so realtime never exposed this as a
+    // callable tool. It did claim it as a capability, which put a tool the
+    // realtime model could not call into its own capability model. Declaring
+    // the surface it actually has keeps that claim honest, and means a future
+    // floating-bar card is what re-opens it rather than a silent mismatch.
+    surfaces: ["desktopChat"],
     ...agentControlManagePolicy,
+    allowedSurfaces: ["desktopChat"],
     runtimePreconditions: [
       "Records a routing_choice dispatch scoped to the calling session's owner.",
       "Blocks until the user answers or the turn is cancelled; a runtime restart cancels it.",

@@ -182,7 +182,7 @@ enum GeneratedToolCapabilities {
       toolName: "ask_user",
       title: "Ask User",
       latency: .asyncBackground,
-      surfaces: Set([.desktopChat, .realtimeHub]),
+      surfaces: Set([.desktopChat]),
       summary: "Ask the user one or more questions mid-run and wait for their answers.",
       bullets: [
       "Use when the work cannot proceed without a decision only the user can make.",
