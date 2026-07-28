@@ -5,8 +5,8 @@ are restricted local/dev artifacts and must never be committed.
 
 ## Dev capture gate
 
-Future capture callers must instantiate `CaptureWhitelist.from_environ()` and
-call `allows(principal_id)` before serializing any cassette bytes. It defaults to
+`CaptureTap` uses `CaptureWhitelist.from_environ()` and calls
+`allows(principal_id)` before serializing any cassette bytes. It defaults to
 deny. A capture is permitted only with all three settings:
 
 ```bash
@@ -20,6 +20,21 @@ fingerprints are SHA-256 digests of canonical redacted request structure; auth,
 cookies, keys, signed URL parameters, and best-effort email/phone strings are
 removed or masked before the digest is generated. Do not put raw request data in
 manifests, reports, or Git.
+
+`CaptureTap.start()` creates one invocation under that anonymous identity. Its
+`observe()` boundary records client, outbound provider, and inbound provider
+wire observations using relative milliseconds. A whitelist miss writes no
+cassette bytes and retains only bounded lane/reason metadata.
+
+## Replay players
+
+`STTCassettePlayer` and `LLMCassettePlayer` are callback-oriented loopback
+adapters for the wire-oracle fakes. Give both the shared ordered
+`InvocationTopology`; `play()` verifies complete identity and canonical
+redacted request fingerprint, then yields recorded events and relative
+`dt_ms`. `assert_complete()` fails unused cassettes; a mismatch, wrong order,
+or an extra call fails immediately. Cassettes remain restricted local/dev
+inputs and must not be committed.
 
 ## Layout
 
