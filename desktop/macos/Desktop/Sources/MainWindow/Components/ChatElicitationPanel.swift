@@ -524,6 +524,11 @@ struct ChatElicitationPanel: View {
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.xs)
     .background(RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous).fill(fill))
+    // A `.plain` button's hit region is its rendered content, and a background
+    // is decoration rather than content. Without this only the glyphs answer a
+    // click, so the pill that reads as the button is inert everywhere else and
+    // the action appears to work only from its keyboard shortcut.
+    .contentShape(RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous))
   }
 
   private var answeredCount: Int {
