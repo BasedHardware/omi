@@ -56,6 +56,12 @@ export interface ElicitationRequest {
   context: string | null;
   options: readonly ElicitationOption[];
   allowsFreeText: boolean;
+  /**
+   * Whether several options may be chosen at once. Always false for a
+   * permission: an ACP response names exactly one `optionId`, so offering more
+   * would build an answer the protocol cannot carry.
+   */
+  allowsMultiple: boolean;
   recommendedDefault: string | null;
 }
 
@@ -163,6 +169,7 @@ export function normalizeAcpPermission(input: AcpPermissionParams): ElicitationR
     context: locations === subject ? null : locations,
     options,
     allowsFreeText: false,
+    allowsMultiple: false,
     recommendedDefault: recommended?.optionId ?? null,
   };
 }
@@ -367,6 +374,9 @@ export function normalizeAskUser(input: AskUserArgs): ElicitationRequest[] {
       context: null,
       options: normalizeAskUserOptions(record?.options),
       allowsFreeText: record?.allow_free_text !== false,
+      // Only meaningful when there is a list to pick from; a multi-select with
+      // no options is just a free-text question.
+      allowsMultiple: record?.allow_multiple === true,
       recommendedDefault: null,
     });
   }
@@ -384,7 +394,12 @@ export function dispatchKindFor(request: ElicitationRequest): "approval" | "rout
 }
 
 export type ElicitationOutcome =
-  | { kind: "selected"; optionId: string }
+  /**
+   * One or more options the user chose. A permission always carries exactly
+   * one, because that is all its protocol can answer with; a multi-select
+   * question may carry several, in the order they appear on the card.
+   */
+  | { kind: "selected"; optionIds: readonly string[] }
   | { kind: "answered"; text: string }
   | { kind: "cancelled"; reason: string };
 
@@ -415,6 +430,6 @@ export function failClosedOutcome(request: ElicitationRequest, reason: string): 
     request.options.find((option) => option.effect === "reject_once")
     ?? request.options.find((option) => option.effect === "reject_always");
   return rejection
-    ? { kind: "selected", optionId: rejection.optionId }
+    ? { kind: "selected", optionIds: [rejection.optionId] }
     : { kind: "cancelled", reason };
 }

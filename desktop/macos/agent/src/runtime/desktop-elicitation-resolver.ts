@@ -23,6 +23,7 @@ import type { AgentEvent, DesktopCoordinatorDispatch, NewDesktopCoordinatorDispa
  */
 export interface ElicitationResolutionPayload {
   optionId?: unknown;
+  optionIds?: unknown;
   text?: unknown;
 }
 
@@ -83,9 +84,21 @@ export function outcomeFromResolution(
   if (status !== "resolved") {
     return { kind: "cancelled", reason: typeof status === "string" ? status : "cancelled" };
   }
-  const optionId = resolution?.optionId;
-  if (typeof optionId === "string" && request.options.some((option) => option.optionId === optionId)) {
-    return { kind: "selected", optionId };
+  // Only ids the request actually offered are accepted, so a stale or malformed
+  // resolution can never manufacture an answer the user was not shown.
+  const offered = new Set(request.options.map((option) => option.optionId));
+  const claimed = Array.isArray(resolution?.optionIds)
+    ? resolution.optionIds
+    : typeof resolution?.optionId === "string"
+      ? [resolution.optionId]
+      : [];
+  const selected = claimed.filter(
+    (id): id is string => typeof id === "string" && offered.has(id),
+  );
+  if (selected.length > 0) {
+    // A permission answers with exactly one option whatever the surface sent;
+    // the protocol has no way to carry a second.
+    return { kind: "selected", optionIds: request.allowsMultiple ? selected : [selected[0]!] };
   }
   const text = resolution?.text;
   if (request.allowsFreeText && typeof text === "string" && text.trim().length > 0) {

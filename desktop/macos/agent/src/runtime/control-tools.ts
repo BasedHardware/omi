@@ -199,6 +199,7 @@ const askUserQuestionSchema = strictObject({
   // `normalizeAskUser` drops blank labels, so the card never renders one.
   options: z.array(z.string()).max(ASK_USER_MAX_OPTIONS_PER_QUESTION).optional(),
   allow_free_text: z.boolean().optional(),
+  allow_multiple: z.boolean().optional(),
 });
 
 const askUserSchema = strictObject({

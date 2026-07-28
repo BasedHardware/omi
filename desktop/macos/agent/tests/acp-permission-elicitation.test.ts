@@ -71,7 +71,7 @@ describe("ACP permission requests reach a person", () => {
     const seen: ElicitationRequest[] = [];
     const resolver: ElicitationResolver = async (request) => {
       seen.push(request);
-      return { kind: "selected", optionId: "always" };
+      return { kind: "selected", optionIds: ["always"] };
     };
     const h = harness({ resolver });
 
@@ -93,7 +93,7 @@ describe("ACP permission requests reach a person", () => {
   it("asks even on a read-shaped tool when the only grant offered is permanent", async () => {
     const resolver = vi.fn<ElicitationResolver>(async () => ({
       kind: "selected" as const,
-      optionId: "always",
+      optionIds: ["always"],
     }));
     const h = harness({ resolver });
 
@@ -111,7 +111,7 @@ describe("ACP permission requests reach a person", () => {
     await settle();
     expect(h.responses()).toEqual([]);
 
-    release!({ kind: "selected", optionId: "no" });
+    release!({ kind: "selected", optionIds: ["no"] });
     await settle();
     expect(h.responses()).toHaveLength(1);
   });
@@ -218,7 +218,7 @@ describe("pending ACP permission requests are answerable to cancellation", () =>
 
     (h.adapter as any).cancelPendingPermissions("sess-1", "turn_cancelled");
     await settle();
-    release!({ kind: "selected", optionId: "always" });
+    release!({ kind: "selected", optionIds: ["always"] });
     await settle();
 
     expect(h.responses()).toEqual([
@@ -231,7 +231,7 @@ describe("external adapters are no longer dead-ended", () => {
   it("asks the user instead of returning a protocol error for permanent-only options", async () => {
     const resolver = vi.fn<ElicitationResolver>(async () => ({
       kind: "selected" as const,
-      optionId: "always",
+      optionIds: ["always"],
     }));
     const h = harness({ adapterId: "hermes", resolver });
 

@@ -785,7 +785,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const classification = classifyAcpPermission(request, toolCall?.kind, toolCall?.title);
     if (classification.decision === "auto") {
       this.log(`${this.adapterId} ACP permission auto-resolved: ${classification.reason}`);
-      this.writePermissionOutcome(id, { kind: "selected", optionId: classification.optionId });
+      this.writePermissionOutcome(id, { kind: "selected", optionIds: [classification.optionId] });
       return;
     }
 
@@ -861,8 +861,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     if (outcome.kind === "answered") {
       this.log(`${this.adapterId} ACP permission received free text; answering cancelled`);
     }
-    const result = outcome.kind === "selected"
-      ? { outcome: { outcome: "selected", optionId: outcome.optionId } }
+    // ACP carries exactly one option. Normalization never marks a permission
+    // multi-select, so this is the whole answer rather than a truncation.
+    const result = outcome.kind === "selected" && outcome.optionIds.length > 0
+      ? { outcome: { outcome: "selected", optionId: outcome.optionIds[0] } }
       : { outcome: { outcome: "cancelled" } };
     this.stdinWriter?.(JSON.stringify({ jsonrpc: "2.0", id, result }));
   }

@@ -87,7 +87,7 @@ describe("elicitation dispatch creation", () => {
     });
 
     stub.emitResolution({ dispatchId: "disp-1", status: "resolved", resolution: { optionId: "once" } });
-    await expect(pending).resolves.toEqual({ kind: "selected", optionId: "once" });
+    await expect(pending).resolves.toEqual({ kind: "selected", optionIds: ["once"] });
   });
 
   it("records a question as a routing_choice carrying its options", async () => {
@@ -138,7 +138,7 @@ describe("elicitation dispatch creation", () => {
     expect(settled).toBe(false);
 
     stub.emitResolution({ dispatchId: "disp-1", status: "resolved", resolution: { optionId: "once" } });
-    await expect(pending).resolves.toEqual({ kind: "selected", optionId: "once" });
+    await expect(pending).resolves.toEqual({ kind: "selected", optionIds: ["once"] });
   });
 });
 
@@ -227,7 +227,7 @@ describe("elicitation fails closed when no person is reachable", () => {
     const stub = kernelStub({ sessionForAdapterNativeSession: vi.fn(() => null) });
     const resolver = createKernelElicitationResolver({ kernel: stub.kernel as any, log: () => {} });
 
-    await expect(resolver(permissionRequest)).resolves.toEqual({ kind: "selected", optionId: "no" });
+    await expect(resolver(permissionRequest)).resolves.toEqual({ kind: "selected", optionIds: ["no"] });
     expect(stub.kernel.createDesktopDispatch).not.toHaveBeenCalled();
   });
 
@@ -237,7 +237,7 @@ describe("elicitation fails closed when no person is reachable", () => {
 
     await expect(
       resolver({ ...permissionRequest, externalSessionId: null }),
-    ).resolves.toEqual({ kind: "selected", optionId: "no" });
+    ).resolves.toEqual({ kind: "selected", optionIds: ["no"] });
   });
 
   it("denies when the dispatch cannot be recorded", async () => {
@@ -246,14 +246,14 @@ describe("elicitation fails closed when no person is reachable", () => {
     });
     const resolver = createKernelElicitationResolver({ kernel: stub.kernel as any, log: () => {} });
 
-    await expect(resolver(permissionRequest)).resolves.toEqual({ kind: "selected", optionId: "no" });
+    await expect(resolver(permissionRequest)).resolves.toEqual({ kind: "selected", optionIds: ["no"] });
   });
 });
 
 describe("resolution mapping", () => {
   it("accepts only an option the agent actually offered", () => {
     expect(outcomeFromResolution(permissionRequest, "resolved", { optionId: "once" }))
-      .toEqual({ kind: "selected", optionId: "once" });
+      .toEqual({ kind: "selected", optionIds: ["once"] });
     expect(outcomeFromResolution(permissionRequest, "resolved", { optionId: "smuggled" }))
       .toMatchObject({ kind: "cancelled" });
   });
@@ -275,6 +275,35 @@ describe("resolution mapping", () => {
       .toEqual({ kind: "cancelled", reason: "cancelled" });
     expect(outcomeFromResolution(permissionRequest, "expired", null))
       .toEqual({ kind: "cancelled", reason: "expired" });
+  });
+});
+
+describe("multi-select answers", () => {
+  it("keeps every chosen option for a multi-select question", () => {
+    const [multi] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [{ question: "Constraints?", options: ["a", "b", "c"], allow_multiple: true }],
+      },
+    });
+
+    expect(outcomeFromResolution(multi, "resolved", { optionIds: ["a", "c"] }))
+      .toEqual({ kind: "selected", optionIds: ["a", "c"] });
+    // Ids that were never offered cannot be smuggled in alongside real ones.
+    expect(outcomeFromResolution(multi, "resolved", { optionIds: ["a", "nope"] }))
+      .toEqual({ kind: "selected", optionIds: ["a"] });
+  });
+
+  it("keeps a single-select question single even when several ids arrive", () => {
+    const [single] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: { questions: [{ question: "Stack?", options: ["a", "b"] }] },
+    });
+
+    expect(outcomeFromResolution(single, "resolved", { optionIds: ["a", "b"] }))
+      .toEqual({ kind: "selected", optionIds: ["a"] });
   });
 });
 

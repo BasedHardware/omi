@@ -189,7 +189,7 @@ enum GeneratedToolCapabilities {
       "Carries the whole set of questions in one call; blocks the run until the user answers or cancels.",
       "Use when the work genuinely cannot proceed without a decision only the user can make.",
       "Put every question that decision needs into one call; they are answered as one set.",
-      "Prefer options the user can click; set allow_free_text when an unlisted answer is reasonable.",
+      "Prefer options the user can click; set allow_free_text when an unlisted answer is reasonable, and allow_multiple when the answers combine rather than exclude.",
       "Do not use for onboarding steps; ask_followup owns that flow.",
       "The run blocks until the user answers or cancels, so ask the full set once and act on the answers."
     ]

@@ -383,6 +383,29 @@ describe("ask_user normalization", () => {
     ]);
   });
 
+  it("carries allow_multiple per question and never onto a permission", () => {
+    const requests = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [
+          { question: "Any constraints?", options: ["offline", "realtime"], allow_multiple: true },
+          { question: "Which stack?", options: ["Next.js", "SwiftUI"] },
+        ],
+      },
+    });
+    expect(requests.map((request) => request.allowsMultiple)).toEqual([true, false]);
+
+    // An ACP response names exactly one optionId, so a permission can never be
+    // multi-select regardless of what any surface asks for.
+    const permission = normalizeAcpPermission({
+      adapterId: "hermes",
+      agentLabel: "Hermes",
+      params: acpParams(),
+    })!;
+    expect(permission.allowsMultiple).toBe(false);
+  });
+
   it("drops a duplicate option rather than offering the same answer twice", () => {
     const [request] = normalizeAskUser({
       adapterId: "acp",
