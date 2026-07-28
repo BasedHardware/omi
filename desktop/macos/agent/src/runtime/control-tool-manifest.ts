@@ -395,8 +395,20 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
   {
     name: "ask_user",
     label: "Ask User",
-    description:
-      "Ask the user a question mid-run and wait for their answer. Distinct from ask_followup, which drives the onboarding flow's own quick-reply UI and is available only during onboarding.",
+    // The model sees this description and nothing else: promptGuidelines are not
+    // projected into MCP tool definitions. So the "when" has to live here, or the
+    // tool only ever fires when the user names it out loud.
+    description: `Ask the user a question and wait for their answer before continuing.
+
+Use this instead of guessing whenever the next step depends on something only the user can decide:
+- their request is ambiguous and the readings lead to different work
+- a required detail is missing and you would otherwise pick one
+- there are several reasonable paths and the choice is theirs
+- you are about to do something significant and irreversible
+
+Prefer this over asking in plain prose: a plain question ends your turn and the user has to retype an answer, while this pauses the run and resumes with what they chose. Pass options when you can name the likely answers. Ask once, then act on the answer.
+
+Do not use it for onboarding steps; ask_followup owns that flow. Do not use it to confirm something you already know, or to ask permission for a tool that already has its own approval.`,
     promptSnippet: "ask_user - Ask the user a question and wait for the answer",
     promptGuidelines: [
       "Use when the work genuinely cannot proceed without a decision only the user can make.",

@@ -1234,7 +1234,7 @@
   {
     "name": "ask_user",
     "label": "Ask User",
-    "description": "Ask the user a question mid-run and wait for their answer. Distinct from ask_followup, which drives the onboarding flow's own quick-reply UI and is available only during onboarding.",
+    "description": "Ask the user a question and wait for their answer before continuing.\n\nUse this instead of guessing whenever the next step depends on something only the user can decide:\n- their request is ambiguous and the readings lead to different work\n- a required detail is missing and you would otherwise pick one\n- there are several reasonable paths and the choice is theirs\n- you are about to do something significant and irreversible\n\nPrefer this over asking in plain prose: a plain question ends your turn and the user has to retype an answer, while this pauses the run and resumes with what they chose. Pass options when you can name the likely answers. Ask once, then act on the answer.\n\nDo not use it for onboarding steps; ask_followup owns that flow. Do not use it to confirm something you already know, or to ask permission for a tool that already has its own approval.",
     "promptSnippet": "ask_user - Ask the user a question and wait for the answer",
     "promptGuidelines": [
       "Use when the work genuinely cannot proceed without a decision only the user can make.",

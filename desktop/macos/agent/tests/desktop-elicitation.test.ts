@@ -253,3 +253,26 @@ describe("dispatch kind mapping", () => {
     expect(dispatchKindFor(question)).toBe("routing_choice");
   });
 });
+
+describe("ask_user is discoverable without being named", () => {
+  it("tells the model when to reach for it, not just what it is", async () => {
+    const { mcpToolDefinitionsForAdapter } = await import("../src/runtime/omi-tool-manifest.js");
+    const askUser = mcpToolDefinitionsForAdapter("omi-tools-stdio", {}).find(
+      (tool) => tool.name === "ask_user",
+    );
+
+    expect(askUser).toBeDefined();
+    // MCP tool definitions carry `description` only — promptGuidelines are not
+    // projected — so a description that omits the trigger conditions leaves the
+    // tool firing only when a user names it out loud.
+    const description = askUser!.description.toLowerCase();
+    expect(description).toContain("ambiguous");
+    expect(description).toContain("instead of guessing");
+    expect(description).toContain("ask_followup");
+  });
+
+  it("is offered to the surfaces that can render the card", async () => {
+    const { toolNamesForAdapter } = await import("../src/runtime/omi-tool-manifest.js");
+    expect(toolNamesForAdapter("omi-tools-stdio")).toContain("ask_user");
+  });
+});
