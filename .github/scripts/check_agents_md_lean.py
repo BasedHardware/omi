@@ -20,6 +20,7 @@ that is cheaper than the file you are editing.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -67,10 +68,32 @@ def check_file(path: Path, budget: tuple[int, int], label: str) -> list[str]:
 
 
 def discover(repo: Path) -> list[Path]:
-    return sorted(
-        p for p in repo.rglob("AGENTS.md")
-        if not SKIP_PARTS.intersection(p.parts)
-    )
+    """Every AGENTS.md that would land in a commit.
+
+    Git-ignored working directories are excluded. A guide only costs agent context once
+    it is in the repository, and an ignored local scratch directory is a sanctioned
+    pattern — walking the filesystem instead of the index reported those as unbudgeted
+    guides and failed the gate on files CI can never see. Untracked-but-committable files
+    are still discovered, so a newly written guide cannot slip in unbudgeted.
+    """
+    candidates = _git_committable_agents_md(repo)
+    if candidates is None:
+        candidates = repo.rglob("AGENTS.md")
+    return sorted(p for p in candidates if p.name == "AGENTS.md" and not SKIP_PARTS.intersection(p.parts))
+
+
+def _git_committable_agents_md(repo: Path) -> list[Path] | None:
+    """Tracked plus untracked-not-ignored AGENTS.md paths, or None outside a work tree."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "*AGENTS.md"],
+            cwd=repo,
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return [repo / rel for rel in result.stdout.decode().split("\0") if rel]
 
 
 def self_test() -> None:
