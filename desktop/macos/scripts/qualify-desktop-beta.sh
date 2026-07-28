@@ -890,7 +890,7 @@ if [[ "$AUTOMATIC" -eq 1 ]]; then
 fi
 
 # After signed-artifact + static + Tier-2 + fault gates pass, runner-hygiene
-# cleanup is best-effort. (tip-bump after gitmodules fix so source tree has no orphan submodule) A green behavioral run must not be fenced solely by
+# cleanup is best-effort. (tip-bump after libopus gitlink removal so M1 checkout cannot hang) A green behavioral run must not be fenced solely by
 # lease-lineage cleanup failures (incident #10779 / v0.12.142). Still attempt
 # cleanup and record phase status; residual leases are reclaimed on next acquire.
 phase_begin "final-cleanup" "runner-hygiene-cleanup"
