@@ -30,6 +30,13 @@ pub struct ChatCompletionRequest {
     // via the `x-omi-reasoning-effort` header (see routes/chat/route.rs).
     #[serde(default)]
     pub reasoning_effort: Option<String>,
+    // Omi extension: explicit public-web opt-in. Web search injection normally
+    // requires a non-empty client tool list (the agentic-turn heuristic), which
+    // wrongly starves tool-less callers like the PTT ask_higher_model
+    // escalation of live lookups. `true` injects the server web_search tool
+    // even with no client tools; the private/no-web prompt boundary still wins.
+    #[serde(default)]
+    pub omi_web_search: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

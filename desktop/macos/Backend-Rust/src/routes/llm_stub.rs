@@ -626,6 +626,7 @@ mod tests {
             tools: Some(tools.iter().map(|name| tool_definition(name)).collect()),
             tool_choice: None,
             reasoning_effort: None,
+            omi_web_search: None,
         }
     }
 
@@ -655,6 +656,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             reasoning_effort: None,
+            omi_web_search: None,
         };
         let lines = fixture_lines(&extract_latest_user_text(&req), DEFAULT_FIXTURE);
         assert!(lines.iter().any(|line| line.contains("desk-core-e2e")));
@@ -1028,6 +1030,7 @@ Warm reuse probe 3. Reply with exactly WARM_REUSE_3."#;
             tools: None,
             tool_choice: None,
             reasoning_effort: None,
+            omi_web_search: None,
         };
         let lines = fixture_lines(&extract_latest_user_text(&req), DEFAULT_FIXTURE);
         let payload = lines.join("\n");

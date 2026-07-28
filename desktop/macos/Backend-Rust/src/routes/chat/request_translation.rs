@@ -307,8 +307,9 @@ pub(super) fn translate_request_inner(
     let web_search_supported = enable_web_search && !upstream_model.starts_with("claude-haiku");
     let client_tools = req.tools.as_deref().unwrap_or(&[]);
     let public_web_prohibited = public_web_is_prohibited(&req.messages);
-    let inject_web_search =
-        web_search_supported && !public_web_prohibited && !client_tools.is_empty();
+    let inject_web_search = web_search_supported
+        && !public_web_prohibited
+        && (!client_tools.is_empty() || req.omi_web_search == Some(true));
     let anthropic_tools = if client_tools.is_empty() && !inject_web_search {
         req.tools.as_ref().map(|_| Vec::new())
     } else {
