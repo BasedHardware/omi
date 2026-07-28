@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-import socket
 from collections.abc import Callable, Iterator
+
+from testing.hermetic_network import BlockedNetworkError, block_outbound_network
 
 
 class UnexpectedEgress(AssertionError):
@@ -30,17 +31,17 @@ class FakeHitRegistry:
 
 @contextmanager
 def deny_network() -> Iterator[None]:
-    """Deny TCP socket creation during a unit replay; always restore on cleanup."""
-    original = socket.create_connection
+    """Deny outbound network during a unit replay; always restore on cleanup.
 
-    def denied(*_args: object, **_kwargs: object) -> socket.socket:
-        raise UnexpectedEgress("parity-pack runner denied network egress")
-
-    socket.create_connection = denied
+    Delegates to the repository's validated :func:`block_outbound_network`
+    guard so that low-level ``socket.connect``, ``connect_ex``, and DNS
+    resolution are also blocked — not just ``socket.create_connection``.
+    """
     try:
-        yield
-    finally:
-        socket.create_connection = original
+        with block_outbound_network():
+            yield
+    except BlockedNetworkError as exc:
+        raise UnexpectedEgress(str(exc)) from exc
 
 
 @contextmanager
