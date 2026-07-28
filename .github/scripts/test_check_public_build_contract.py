@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import importlib.util
+import io
 import json
 import sys
 import tempfile
@@ -716,6 +718,7 @@ jobs:
         self.assertIn("Fail closed for a production first create", deploy)
         self.assertIn("refusing to create a public Cloud Run service outside development", deploy)
         self.assertIn("first_create: ${{ steps.runtime-preflight.outputs.service_exists != 'true' }}", deploy)
+        self.assertIn("inputs.environment == 'development' && '--allow-unauthenticated' || ''", deploy)
         self.assertIn("first_create", promotion)
         self.assertIn("confirm first-create traffic", promotion)
 
@@ -1022,6 +1025,27 @@ jobs:
             SMOKE.render_candidate = original
 
         self.assertTrue(True)
+
+    def test_browser_smoke_prints_a_sanitized_reason(self) -> None:
+        original = SMOKE.smoke
+
+        def fail_smoke(**_kwargs) -> None:
+            raise SMOKE.BrowserSmokeError("client public-build canary did not become ready")
+
+        SMOKE.smoke = fail_smoke
+        stderr = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(stderr):
+                result = SMOKE.main(["--target", "fake", "--base-url", "https://candidate.example"])
+        finally:
+            SMOKE.smoke = original
+
+        self.assertEqual(result, 1)
+        self.assertIn("reason=client public-build canary did not become ready", stderr.getvalue())
+        self.assertEqual(
+            SMOKE.sanitized_browser_smoke_reason(SMOKE.BrowserSmokeError("secret=not-for-logs")),
+            "unspecified browser smoke failure",
+        )
 
 
 if __name__ == "__main__":

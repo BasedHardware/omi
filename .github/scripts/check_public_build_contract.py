@@ -543,6 +543,7 @@ def validate_shared_actions(root: Path) -> list[str]:
             "no_traffic: ${{ steps.runtime-preflight.outputs.service_exists == 'true' }}",
             "--revision-suffix=",
             "--tag=",
+            "inputs.environment == 'development' && '--allow-unauthenticated' || ''",
             "--remove-secrets=",
             "require_gateway_url",
             "OMI_LLM_GATEWAY_URL must be a non-empty HTTP(S) URL",

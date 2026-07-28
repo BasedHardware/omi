@@ -171,6 +171,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.candidate.outputs.revision_suffix }}
           --tag=${{ steps.candidate.outputs.tag }}
+          ${{ inputs.environment == 'development' && '--allow-unauthenticated' || '' }}
           ${{ inputs.service_account != '' && format('--service-account={0}', inputs.service_account) || '' }}
           ${{ inputs.network != '' && format('--network={0}', inputs.network) || '' }}
           ${{ inputs.subnet != '' && format('--subnet={0}', inputs.subnet) || '' }}
