@@ -185,6 +185,14 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('account_generation'), _asc('status'), _asc('__name__')),
     ),
+    # get_action_items orders a due-date range soonest-first, so a completed== read of
+    # that range needs the ascending pair — the descending twin serves the reverse order.
+    FirestoreIndexRequirement(
+        'action_items_completed_due_at',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _asc('due_at'), _asc('__name__')),
+    ),
 )
 
 

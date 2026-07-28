@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from google.cloud.firestore_v1 import FieldFilter
 
+import database.action_items as action_items_db
 import database.task_recommendations as task_recommendations_db
 import routers.task_recommendations as task_recommendations_router
 from database.firestore_index_registry import ACTIVE_ATTENTION_OVERRIDE_QUERY, firebase_index_manifest
@@ -218,6 +219,89 @@ def test_query_coverage_baseline_tracks_current_raw_and_unsupported_debt():
     report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
 
     assert firestore_query_coverage.check_ratchet(report, committed) == []
+
+
+class _StreamRecordingQuery:
+    """One Firestore query chain that records itself when production code streams it."""
+
+    def __init__(self, recorder, filters=(), orders=()):
+        self._recorder = recorder
+        self._filters = tuple(filters)
+        self._orders = tuple(orders)
+
+    def where(self, *, filter):
+        return _StreamRecordingQuery(
+            self._recorder, (*self._filters, (filter.field_path, filter.op_string)), self._orders
+        )
+
+    def order_by(self, field_path, direction):
+        return _StreamRecordingQuery(self._recorder, self._filters, (*self._orders, (field_path, direction)))
+
+    def stream(self):
+        self._recorder.append((self._filters, self._orders))
+        return []
+
+
+class _StreamRecordingUserRef:
+    def __init__(self, recorder):
+        self._recorder = recorder
+
+    def collection(self, name):
+        assert name == 'action_items'
+        return _StreamRecordingQuery(self._recorder)
+
+
+class _StreamRecordingFirestore:
+    def __init__(self, recorder):
+        self._recorder = recorder
+
+    def collection(self, name):
+        assert name == 'users'
+        return SimpleNamespace(document=lambda _uid: _StreamRecordingUserRef(self._recorder))
+
+
+def _required_index_signature(collection_group, filters, orders):
+    """The composite index Firestore requires for one equality-plus-ordering chain."""
+    fields = [(field_path, 'ASCENDING') for field_path, operator in filters if operator == '==']
+    fields.extend(orders)
+    fields.append(('__name__', orders[-1][1]))
+    return (collection_group, 'COLLECTION', tuple(fields))
+
+
+def _declared_index_signatures():
+    return {
+        (
+            index['collectionGroup'],
+            index['queryScope'],
+            tuple((field['fieldPath'], field.get('order') or field.get('arrayConfig')) for field in index['fields']),
+        )
+        for index in firebase_index_manifest()['indexes']
+    }
+
+
+@pytest.mark.parametrize('completed', [None, False, True])
+def test_due_date_filtered_action_item_reads_have_a_declared_composite_index(monkeypatch, completed):
+    """A due-range read orders due_at ascending; without the matching index prod 500s.
+
+    Regression for #10777: chat's get_action_items tool and GET /v1/action-items both
+    raised FailedPrecondition because only (completed ASC, due_at DESC) was deployed.
+    """
+    recorder = []
+    monkeypatch.setattr(action_items_db, 'db', _StreamRecordingFirestore(recorder))
+
+    action_items_db.get_action_items(
+        'index-contract-user',
+        completed=completed,
+        due_start_date=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        due_end_date=datetime(2026, 7, 31, tzinfo=timezone.utc),
+        limit=50,
+    )
+
+    compound = [(filters, orders) for filters, orders in recorder if orders and any(op == '==' for _, op in filters)]
+    assert compound, 'due-date filtered reads no longer build an equality + ordering chain'
+    declared = _declared_index_signatures()
+    for filters, orders in compound:
+        assert _required_index_signature('action_items', filters, orders) in declared
 
 
 def test_query_source_paths_are_posix_canonical_on_every_host_platform():
