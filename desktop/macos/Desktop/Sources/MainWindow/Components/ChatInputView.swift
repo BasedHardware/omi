@@ -74,12 +74,10 @@ struct ChatInputView: View {
   /// Called when the user removes a staged attachment chip.
   var onAttachmentRemoved: ((String) -> Void)? = nil
 
-  /// While set, the composer is replaced by the question rather than extended
-  /// with it: there is nothing to type into until it is answered, so leaving an
-  /// inert input row on screen would only offer a dead control.
-  var elicitation: PendingElicitation? = nil
-  var elicitationWaitingCount: Int = 0
-  var onElicitationAnswer: ((ElicitationAnswer) -> Void)? = nil
+  /// The shared question queue. Required and observed directly rather than
+  /// passed as optional pieces: a composer that silently renders no card when a
+  /// caller forgets to wire it is the exact defect this shape prevents.
+  @ObservedObject var elicitations: ElicitationStore
 
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @Environment(\.fontScale) private var fontScale
@@ -103,11 +101,11 @@ struct ChatInputView: View {
 
   var body: some View {
     Group {
-      if let elicitation {
+      if let elicitation = elicitations.current {
         ChatElicitationPanel(
           elicitation: elicitation,
-          waitingCount: elicitationWaitingCount,
-          onAnswer: { onElicitationAnswer?($0) },
+          waitingCount: elicitations.waitingCount,
+          onAnswer: { elicitations.answer(elicitation, with: $0) },
           onStopRun: { onStop?() }
         )
         // Keyed by dispatch id so advancing the queue crossfades between two
@@ -128,8 +126,8 @@ struct ChatInputView: View {
         .stroke(dropStrokeColor, lineWidth: isDropTargeted ? 1.5 : 0)
     }
     .fixedSize(horizontal: false, vertical: true)
-    .omiAnimation(SBMotion.standard, value: elicitation?.id)
-    .onChange(of: elicitation?.id) { _, newValue in
+    .omiAnimation(SBMotion.standard, value: elicitations.current?.id)
+    .onChange(of: elicitations.current?.id) { _, newValue in
       if newValue != nil {
         // Park the draft, then clear the field so the returning composer is not
         // holding text the user typed before the question arrived.

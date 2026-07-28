@@ -495,12 +495,7 @@ struct ChatPage: View {
       onAttachmentRemoved: { id in
         chatProvider.removePendingAttachment(id: id)
       },
-      elicitation: chatProvider.elicitations.current,
-      elicitationWaitingCount: chatProvider.elicitations.waitingCount,
-      onElicitationAnswer: { answer in
-        guard let pending = chatProvider.elicitations.current else { return }
-        chatProvider.elicitations.answer(pending, with: answer)
-      }
+      elicitations: chatProvider.elicitations
     )
     .padding(.horizontal, ChatComposerLayout.pageMargin)
     .padding(.bottom, ChatComposerLayout.pageMargin)
