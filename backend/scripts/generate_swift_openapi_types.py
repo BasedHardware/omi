@@ -59,6 +59,8 @@ TARGET_SCHEMAS = (
     'GoalUpdate',
     'GoalType',
     'GoalDetailProjection',
+    'ProjectionResponse',
+    'ProjectionsResponse',
     'GoalProgressEvent',
     'CandidateRecord',
     'CandidateListResponse',
