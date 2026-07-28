@@ -11,6 +11,8 @@ import SwiftUI
 /// If a second screen ever seems necessary, the product has drifted.
 struct StatusView: View {
     @ObservedObject private var engine = Engine.shared
+    @ObservedObject private var auth = OmiAuth.shared
+    @ObservedObject private var uploads = ConversationUploader.shared
 
     @State private var claude: (claudeCode: Bool, claudeDesktop: Bool) = (false, false)
     @State private var claudeNote: String?
@@ -27,6 +29,7 @@ struct StatusView: View {
             capabilityRows
             hairline
             claudeLine
+            accountLine
             footer
         }
         .padding(.horizontal, 16)
@@ -177,6 +180,49 @@ struct StatusView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// Which Omi account the recordings land in, and whether anything is stuck on the way there.
+    /// A recorder that is quietly not syncing looks identical to one that is, which is why the
+    /// backlog is on screen rather than in a log.
+    private var accountLine: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(accountSummary)
+                    .inkStyle(.statusLabel)
+                    .foregroundStyle(auth.isSignedIn ? Ink.creamHint : Ink.creamDim)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let note = uploadNote {
+                    Text(note)
+                        .inkStyle(.statusLabel)
+                        .foregroundStyle(uploads.lastError == nil ? Ink.creamDim : Ink.errorRed)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if auth.isSignedIn {
+                Button("Sign out") { auth.signOut() }
+                    .buttonStyle(.plain)
+                    .inkStyle(.statusLabel)
+                    .foregroundStyle(Ink.creamDim)
+            }
+        }
+    }
+
+    private var accountSummary: String {
+        guard auth.isSignedIn else { return "Not signed in — nothing is reaching your Omi account" }
+        return "Syncing to \(auth.email ?? "your Omi account")"
+    }
+
+    private var uploadNote: String? {
+        if let error = uploads.lastError { return error }
+        if uploads.pendingCount > 0 {
+            return "\(uploads.pendingCount) conversation\(uploads.pendingCount == 1 ? "" : "s") waiting to upload"
+        }
+        return nil
     }
 
     private var isConnected: Bool { claude.claudeCode || claude.claudeDesktop }

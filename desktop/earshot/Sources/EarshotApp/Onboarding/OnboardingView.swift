@@ -2,16 +2,26 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// Four screens, one thought each: who I am, what I need, who I tell, and where I live.
+/// Five screens, one thought each: who I am, whose account this is, what I need, who I tell, and
+/// where I live.
+///
+/// `@MainActor` on the whole view, not on the handful of members that read `OmiAuth`: `body` is
+/// already main-actor isolated, so every computed screen and every step function is reached from
+/// the main actor anyway, and annotating them one at a time only invites the next one to be missed.
+@MainActor
 struct OnboardingView: View {
-    /// Three screens, and only the first one asks anything of the user. `setup` runs itself.
+    /// Four screens, and only the first two ask anything of the user. `setup` runs itself.
     private enum Step {
-        case intro, setup, done
+        case intro, signIn, setup, done
     }
 
     /// Fixed order. Microphone first because it is the one people expect; the system tap second
     /// because it only makes sense once the mic has been explained.
     private let capabilities: [Capability] = [.microphone, .systemAudio, .screen]
+
+    /// Owned by the auth layer, observed here. Everything Earshot records lands in this account, so
+    /// the step machine asks it who the user is before it asks macOS for a microphone.
+    @ObservedObject private var auth = OmiAuth.shared
 
     @State private var step: Step = .intro
     @State private var settled = false
@@ -30,6 +40,13 @@ struct OnboardingView: View {
     @State private var openedScreenSettings = false
     @State private var cueDrift = false
     @State private var finale = false
+
+    /// Whatever the sign-in attempt threw, shown as-is. A preamble in front of it would be a
+    /// sentence that says nothing the error does not.
+    @State private var signInError: String?
+    /// The user pressed Cancel while the browser round trip was still open. There is no way to
+    /// call the round trip off — the browser has it — so this only puts the buttons back.
+    @State private var abandonedWait = false
 
     var body: some View {
         Backdrop(working: working, settled: settled) {
@@ -51,6 +68,9 @@ struct OnboardingView: View {
                 }
             }
         }
+        // `Engine.start()` has already called `OmiAuth.restore()` by the time this window is
+        // presented, so a reinstall arrives here knowing whose account it is. Nothing restores it a
+        // second time here — observing `auth` covers a session that lands late anyway.
         .onAppear { beginStep() }
     }
 
@@ -66,6 +86,7 @@ struct OnboardingView: View {
     private var content: some View {
         switch step {
         case .intro: intro
+        case .signIn: signIn
         case .setup: setup
         case .done: done
         }
@@ -77,12 +98,11 @@ struct OnboardingView: View {
         VStack(spacing: 24) {
             RandomizedText(
                 segments: [
-                    ("Hi, I’m Earshot. I sit quietly in the background and give ", .plain),
+                    ("Hi, I’m Earshot. I keep ", .plain),
                     ("Claude", .bold),
-                    (" everything you’ve ", .plain),
-                    ("seen and said", .italic),
-                    ("—so it stops asking, and just ", .plain),
-                    ("knows.", .bold),
+                    (" caught up on what you ", .plain),
+                    ("see and say", .bold),
+                    (".", .plain),
                 ],
                 style: .introHero
             )
@@ -92,13 +112,82 @@ struct OnboardingView: View {
 
             // The button arrives after the last word does; offering it mid-sentence invites a
             // click before the sentence has been read.
-            InkButton("Turn me on") { go(to: .setup) }
+            InkButton("Turn me on") { go(to: firstAsk) }
                 .opacity(settled ? 1 : 0)
                 .animation(stepAnimation, value: settled)
         }
     }
 
-    // MARK: - 2. Setup — one click, then it runs itself
+    // MARK: - 2. Sign in — before anything is recorded, not after
+
+    /// The one screen with a real choice on it. It exists because everything Earshot hears lands in
+    /// an Omi account, and starting to record before knowing which account that is would be wrong.
+    private var signIn: some View {
+        VStack(spacing: 14) {
+            Text("Which account is this?")
+                .inkStyle(.stepHeadline)
+                .foregroundStyle(Ink.cream)
+
+            Text("Everything I hear and see goes into your Omi account — nowhere else.")
+                .inkStyle(.prose)
+                .foregroundStyle(Ink.creamHint)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if isWaitingForBrowser {
+                VStack(spacing: 12) {
+                    Text("Waiting for your browser…")
+                        .inkStyle(.statusLabel)
+                        .foregroundStyle(Ink.creamDim)
+
+                    InkButton("Cancel", kind: .secondary) { abandonedWait = true }
+                }
+                .padding(.top, 4)
+            } else {
+                if let signInError {
+                    Text(signInError)
+                        .inkStyle(.rowCopy)
+                        .foregroundStyle(Ink.errorRed)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 12) {
+                    InkButton("Continue with Google") { beginSignIn(with: .google) }
+                    InkButton("Continue with Apple", kind: .secondary) { beginSignIn(with: .apple) }
+                }
+                .padding(.top, 4)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .animation(stepAnimation, value: isWaitingForBrowser)
+    }
+
+    /// The buttons are gone only while the round trip is genuinely open and the user has not asked
+    /// for them back.
+    private var isWaitingForBrowser: Bool {
+        auth.isSigningIn && !abandonedWait
+    }
+
+    /// Opens the browser and waits. A press while a round trip is already open cannot start a
+    /// second one — it puts the waiting line back, which is the only honest answer to it.
+    private func beginSignIn(with provider: OmiAuthProvider) {
+        signInError = nil
+        abandonedWait = false
+        guard !auth.isSigningIn else { return }
+
+        Task { @MainActor in
+            do {
+                try await auth.signIn(provider: provider)
+                guard step == .signIn else { return }
+                go(to: .setup)
+            } catch {
+                guard step == .signIn else { return }
+                signInError = error.localizedDescription
+            }
+        }
+    }
+
+    // MARK: - 3. Setup — one click, then it runs itself
 
     private var setup: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -136,7 +225,9 @@ struct OnboardingView: View {
     }
 
     private var setupTitle: String {
-        if !granting { return "First…" }
+        // "First…" only survives for a run that never signed in; once the account is known, the
+        // permissions are no longer the first thing being asked for.
+        if !granting { return auth.isSignedIn ? "Now the permissions." : "First…" }
         return "Say yes and I\u{2019}m yours."
     }
 
@@ -149,7 +240,7 @@ struct OnboardingView: View {
                 .foregroundStyle(Ink.cream)
 
             Text(isGranted(.screen)
-                 ? "I live up here."
+                 ? homeLine
                  : "Switch me on under Screen Recording — I just opened it for you. I’ll take it from there.")
                 .inkStyle(.prose)
                 .foregroundStyle(Ink.creamHint)
@@ -164,6 +255,12 @@ struct OnboardingView: View {
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
+    }
+
+    /// Where I live, and — once there is an account — where the recordings go. Said once, here,
+    /// because it is the last thing on screen and the only place it is still news.
+    private var homeLine: String {
+        auth.isSignedIn ? "I live up here, and everything lands in your Omi account." : "I live up here."
     }
 
     /// The window sits inside `visibleFrame`, so its top-trailing corner is directly beneath the
@@ -208,9 +305,20 @@ struct OnboardingView: View {
     }
     private var columnAlignment: Alignment { step == .setup ? .leading : .center }
 
-    /// The backdrop drifts only while something is genuinely happening.
+    /// What the single button on the first screen actually starts. A restored session skips the
+    /// question entirely, so a reinstall stays one click.
+    private var firstAsk: Step {
+        auth.isSignedIn ? .setup : .signIn
+    }
+
+    /// The backdrop drifts only while something is genuinely happening. Waiting on a browser counts,
+    /// and it keeps drifting through a cancelled wait, because the round trip is still open.
     private var working: Bool {
-        step == .setup && (granting || warmingModels)
+        switch step {
+        case .signIn: return auth.isSigningIn
+        case .setup: return granting || warmingModels
+        case .intro, .done: return false
+        }
     }
 
     private var stepAnimation: Animation? {
@@ -233,6 +341,8 @@ struct OnboardingView: View {
         case .intro:
             // The word-by-word reveal runs for 1200 ms; the step is not settled until it lands.
             scheduleSettle(after: 1.2)
+        case .signIn:
+            scheduleSettle(after: 0.34)
         case .setup:
             refreshPermissions()
             runSetup()

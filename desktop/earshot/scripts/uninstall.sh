@@ -24,9 +24,9 @@ INSTALL_PATH="/Applications/$APP_NAME.app"
 DATA_DIR="$HOME/Library/Application Support/Earshot"
 PURGE_DATA=0
 
-log()  { printf '\033[1m[ambient]\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[ambient]\033[0m %s\n' "$*" >&2; }
-die()  { printf '\033[1;31m[ambient]\033[0m %s\n' "$*" >&2; exit 1; }
+log()  { printf '\033[1m[earshot]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[earshot]\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31m[earshot]\033[0m %s\n' "$*" >&2; exit 1; }
 
 assert_not_production() {
     local what="$1" value="$2"
