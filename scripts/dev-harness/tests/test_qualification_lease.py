@@ -292,9 +292,15 @@ def test_fault_listener_preflight_retains_replaced_listener_and_reports_host_pre
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fault listener cleanup requires POSIX process groups")
-def test_release_refuses_and_retains_an_unproven_listener_on_the_recorded_fault_port(
+def test_release_skips_unproven_listener_and_retires_lease_pointer(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Authenticated release must not fence a finished run on unproven listeners.
+
+    Residual foreign listeners stay alive (never kill unknown PIDs); the lease
+    admission pointer is retired so the next acquire can proceed.
+    """
+
     root = tmp_path / "qualification"
     lease_id = "qualification-foreign-fault"
     monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
@@ -321,12 +327,10 @@ def test_release_refuses_and_retains_an_unproven_listener_on_the_recorded_fault_
         deadline = time.monotonic() + 5
         while foreign.pid not in safety.listening_pids(port) and time.monotonic() < deadline:
             time.sleep(0.05)
-        with pytest.raises(qualification.QualificationLeaseError, match="lease lineage is unproven"):
-            qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+        qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
         assert foreign.poll() is None
-        assert (root / "qualification-lease.json").is_file()
-        assert (state / "meta").is_file()
-        assert not (root / "state" / lease_id / qualification.COMPLETION_FILENAME).exists()
+        assert not (root / "qualification-lease.json").exists()
+        assert (root / "state" / lease_id / qualification.COMPLETION_FILENAME).is_file()
     finally:
         if foreign.poll() is None:
             foreign.terminate()
@@ -506,9 +510,11 @@ def test_retention_prunes_only_completed_sentinel_proven_qualification_state(
     qualification.release(repo_root=REPO_ROOT, lease_id="qualification-active", token=str(active["token"]))
 
 
-def test_supervisor_dead_with_foreign_process_group_retains_incomplete_lease(
+def test_supervisor_dead_with_foreign_process_group_still_retires_lease_pointer(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Release skips unproven orphaned listeners and still retires the pointer."""
+
     root = tmp_path / "qualification"
     monkeypatch.setenv("OMI_QUALIFICATION_LEASE_ROOT", str(root))
     lease_id = "qualification-port-still-open"
@@ -526,11 +532,10 @@ def test_supervisor_dead_with_foreign_process_group_retains_incomplete_lease(
     monkeypatch.setattr(safety, "listening_pids", lambda candidate: (os.getpid(),) if candidate == port else ())
     try:
         _stale_lease(root, lease_id, pid=42424, port=port)
-        with pytest.raises(qualification.QualificationLeaseError, match="process group is unproven"):
-            qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+        qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
         assert listener.fileno() >= 0
-        assert (root / "qualification-lease.json").exists()
-        assert not (root / "state" / lease_id / qualification.COMPLETION_FILENAME).exists()
+        assert not (root / "qualification-lease.json").exists()
+        assert (root / "state" / lease_id / qualification.COMPLETION_FILENAME).is_file()
     finally:
         listener.close()
 

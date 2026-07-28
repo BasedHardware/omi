@@ -232,6 +232,7 @@ jobs:
           echo "qualified=true" >> "$GITHUB_OUTPUT"
       - name: Finalize only this authenticated qualification lease
         if: always()
+        continue-on-error: true
         working-directory: ${{ runner.temp }}
         env:
           QUALIFICATION_STAGE: ${{ runner.temp }}/desktop-beta-qualification/${{ github.run_id }}-${{ github.run_attempt }}
@@ -251,9 +252,24 @@ jobs:
             cache_owner_pid=$(jq -r .cache_owner_pid "$context"); cache_token=$(jq -r .cache_token "$context")
             echo "::add-mask::$token"
             echo "::add-mask::$cache_token"
-            OMI_HARNESS_OWNERSHIP_TOKEN="$token" "$worktree/desktop/macos/scripts/qualification-lease-command.sh" release "$worktree" "$lease_id" "$token" "$retained" "$age"
-            "$worktree/desktop/macos/scripts/qualification-swift-cache.sh" release "$cache_sha" "$cache_lease_id" "$cache_owner_pid" "$cache_token"
-            jq -n --arg lease_id "$lease_id" '{lease_id: $lease_id, cleanup_status: "released"}' > "$cleanup"
+            # Best-effort: authenticated release now skips unproven listeners rather
+            # than failing the job after green behavioral qualification (#10779).
+            if OMI_HARNESS_OWNERSHIP_TOKEN="$token" "$worktree/desktop/macos/scripts/qualification-lease-command.sh" release "$worktree" "$lease_id" "$token" "$retained" "$age"; then
+              release_status=released
+            else
+              release_status=release-failed
+              echo "lease finalize release failed (non-gating): status=$release_status" >&2
+            fi
+            if "$worktree/desktop/macos/scripts/qualification-swift-cache.sh" release "$cache_sha" "$cache_lease_id" "$cache_owner_pid" "$cache_token"; then
+              :
+            else
+              echo "cache finalize release failed (non-gating)" >&2
+              if [ "$release_status" = released ]; then
+                release_status=cache-release-failed
+              fi
+            fi
+            jq -n --arg lease_id "$lease_id" --arg cleanup_status "$release_status" \
+              '{lease_id: $lease_id, cleanup_status: $cleanup_status}' > "$cleanup"
           else
             printf '%s\n' '{"cleanup_status":"no-lease-acquired"}' > "$cleanup"
           fi
