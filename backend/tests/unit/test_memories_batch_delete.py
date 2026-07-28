@@ -252,42 +252,22 @@ class TestBatchDeleteCanonicalCohort:
                 uid='u1',
             )
 
-    def test_atomic_adapter_reads_entire_batch_before_queuing_writes(self, monkeypatch):
-        class Snapshot:
-            def __init__(self, payload=None):
-                self.exists = payload is not None
-                self._payload = payload
-
-            def to_dict(self):
-                return self._payload
-
-        class Document:
-            def __init__(self, path):
-                self.path = path
-
-            def get(self, transaction=None):
-                payload = _canonical_item('valid').model_dump(mode='json') if self.path.endswith('/valid') else None
-                return Snapshot(payload)
-
-        transaction = MagicMock()
+    def test_atomic_adapter_validates_entire_batch_before_store_call(self, monkeypatch):
         client = MagicMock()
-        client.transaction.return_value = transaction
-        client.document.side_effect = Document
-
-        def transactional_for_test(function):
-            def run(txn):
-                result = function(txn)
-                txn.commit()
-                return result
-
-            return run
-
-        monkeypatch.setattr(canonical_adapter, 'transactional', transactional_for_test)
+        control = SimpleNamespace(
+            head_commit_id='c1',
+            account_generation=1,
+            source_generation=1,
+            commit_sequence=1,
+        )
+        tombstone_store = MagicMock()
+        monkeypatch.setattr(canonical_adapter, '_read_replacement_control', lambda *args, **kwargs: control)
         monkeypatch.setattr(
             canonical_adapter,
-            'read_memory_v3_trusted_account_generation',
-            lambda **kwargs: SimpleNamespace(read_error_reason=None, account_generation=1, head_commit_id='c1'),
+            'fetch_authoritative_product_memory_items',
+            lambda **kwargs: [_canonical_item('valid')],
         )
+        monkeypatch.setattr(canonical_adapter, 'tombstone_memory_items_firestore', tombstone_store)
 
         with pytest.raises(ValueError, match='canonical memory not found: missing'):
             canonical_adapter.delete_canonical_memories_batch(
@@ -296,18 +276,18 @@ class TestBatchDeleteCanonicalCohort:
                 db_client=client,
             )
 
-        transaction.set.assert_not_called()
-        transaction.commit.assert_not_called()
+        tombstone_store.assert_not_called()
 
 
 class TestBatchDeleteRequestModel:
     def test_accepts_up_to_max(self):
-        max_len = mem_mod.MEMORIES_BATCH_MAX
+        max_len = mem_mod.MEMORIES_BATCH_DELETE_MAX
+        assert max_len == 100
         req = mem_mod.BatchDeleteMemoriesRequest(memory_ids=[f'm{i}' for i in range(max_len)])
         assert len(req.memory_ids) == max_len
 
     def test_rejects_over_max(self):
-        max_len = mem_mod.MEMORIES_BATCH_MAX
+        max_len = mem_mod.MEMORIES_BATCH_DELETE_MAX
         with pytest.raises(ValidationError):
             mem_mod.BatchDeleteMemoriesRequest(memory_ids=[f'm{i}' for i in range(max_len + 1)])
 
@@ -375,6 +355,21 @@ def test_delete_after_read_cutover_leaves_legacy_alone(monkeypatch):
     assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
 
     legacy_delete.assert_not_called()
+
+
+def test_single_delete_reports_atomic_lineage_limit_as_413(monkeypatch):
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *args, **kwargs: True)
+
+    def delete(_uid, _memory_id):
+        raise canonical_adapter.CanonicalBatchMutationLimitError("lineage exceeds transaction limit")
+
+    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete=delete))
+
+    with pytest.raises(HTTPException) as exc_info:
+        mem_mod.delete_memory('mem-large-lineage', uid='u1')
+
+    assert exc_info.value.status_code == 413
+    assert exc_info.value.detail == 'Memory lineage is too large to delete atomically'
 
 
 def _canonical_delete_all_stage(monkeypatch, *, read_cutover_done: bool):
