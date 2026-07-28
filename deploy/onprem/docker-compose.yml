@@ -41,6 +41,30 @@ services:
     networks: [omi]
     restart: unless-stopped
 
+  # Alternate storage backend (ADR-0002/0004). Opt-in via the `mongo` profile so the default
+  # on-prem baseline stays Firestore-only (ADR-0003). To use it:
+  #   STORAGE_BACKEND=mongo + MONGO_URI in backend.env, then:
+  #   docker compose --profile mongo up -d --build
+  # Single-node replica set: transactions (used by the deletion/speech-sample paths) require one.
+  mongo:
+    image: mongo:latest
+    profiles: ["mongo"]
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    healthcheck:
+      # Initiate the one-member replica set on first probe, then report healthy once primary.
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval "try { rs.status() } catch (e) {
+          rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}) }
+          db.hello().isWritablePrimary" | grep -q true
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks: [omi]
+    restart: unless-stopped
+
   backend:
     build:
       context: ../../
