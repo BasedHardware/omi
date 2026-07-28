@@ -210,6 +210,16 @@ def test_run_transaction_commits_read_modify_write(store, uid):
     assert store.get(f"users/{uid}").to_dict()["samples"] == ["s1", "s2"]
 
 
+def test_updated_at_revision_is_populated_and_advances(store, uid):
+    store.set(f"users/{uid}", {"n": 1})
+    first = store.get(f"users/{uid}").updated_at
+    assert isinstance(first, datetime)
+    store.update(f"users/{uid}", {"n": 2})
+    second = store.get(f"users/{uid}").updated_at
+    assert isinstance(second, datetime)
+    assert second >= first  # a later write reports a not-earlier revision
+
+
 def test_create_succeeds_then_conflicts(store, uid):
     store.create(f"users/{uid}", {"name": "Ada"})
     assert store.get(f"users/{uid}").to_dict() == {"name": "Ada"}

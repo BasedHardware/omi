@@ -13,7 +13,8 @@ not real atomicity — parity/atomicity is covered by the live contract test).
 from __future__ import annotations
 
 import copy
-from datetime import datetime, timezone
+import itertools
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from database.store.errors import AlreadyExists
@@ -120,6 +121,12 @@ class FakeDocumentStore:
 
     def __init__(self) -> None:
         self._docs: Dict[str, Dict[str, Any]] = {}
+        self._updated: Dict[str, datetime] = {}
+        # Strictly-increasing stamps (base + counter) so a later write always has a greater revision.
+        self._clock = itertools.count()
+
+    def _stamp(self, path: str) -> None:
+        self._updated[path] = datetime.now(timezone.utc) + timedelta(microseconds=next(self._clock))
 
     def get(self, path: str, *, fields: Optional[Sequence[str]] = None) -> StoredDocument:
         if path not in self._docs:
@@ -127,7 +134,7 @@ class FakeDocumentStore:
         data = copy.deepcopy(self._docs[path])
         if fields is not None:
             data = {k: v for k, v in data.items() if k in set(fields)}
-        return StoredDocument.present(path, data)
+        return StoredDocument.present(path, data, updated_at=self._updated.get(path))
 
     def exists(self, path: str) -> bool:
         return path in self._docs
@@ -138,6 +145,7 @@ class FakeDocumentStore:
         target = self._docs[path] if (merge and path in self._docs) else {}
         _apply(target, copy.deepcopy(data))
         self._docs[path] = target
+        self._stamp(path)
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
         if path in self._docs:
@@ -145,13 +153,16 @@ class FakeDocumentStore:
         document: Dict[str, Any] = {}
         _apply(document, copy.deepcopy(data))
         self._docs[path] = document
+        self._stamp(path)
 
     def update(self, path: str, data: Dict[str, Any]) -> None:
         self._docs.setdefault(path, {})
         _apply(self._docs[path], copy.deepcopy(data))
+        self._stamp(path)
 
     def delete(self, path: str) -> None:
         self._docs.pop(path, None)
+        self._updated.pop(path, None)
 
     def query(
         self,
@@ -177,14 +188,18 @@ class FakeDocumentStore:
         if fields is not None:
             keep = set(fields)
             rows = [(p, {k: v for k, v in d.items() if k in keep}) for p, d in rows]
-        return [StoredDocument.present(p, copy.deepcopy(d)) for p, d in rows]
+        return [StoredDocument.present(p, copy.deepcopy(d), updated_at=self._updated.get(p)) for p, d in rows]
 
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]:
         result = []
         for doc_id in ids:
             path = f"{collection}/{doc_id}"
             if path in self._docs:
-                result.append(StoredDocument.present(path, copy.deepcopy(self._docs[path])))
+                result.append(
+                    StoredDocument.present(
+                        path, copy.deepcopy(self._docs[path]), updated_at=self._updated.get(path)
+                    )
+                )
         return result
 
     def list_ids(self, collection: str) -> List[str]:
@@ -197,6 +212,7 @@ class FakeDocumentStore:
     def delete_recursive(self, path: str) -> None:
         for key in [k for k in self._docs if k == path or k.startswith(path + "/")]:
             del self._docs[key]
+            self._updated.pop(key, None)
 
     def run_transaction(self, fn: Callable[[_FakeTransaction], Any], *, attempts: int = 3) -> Any:
         return fn(_FakeTransaction(self))

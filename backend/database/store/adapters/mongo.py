@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from pymongo import ASCENDING, DESCENDING, DeleteOne, MongoClient, ReplaceOne, UpdateOne
@@ -39,6 +40,10 @@ from ..sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Incre
 from ..ports import Filter
 
 _OP = {"<": "$lt", "<=": "$lte", ">": "$gt", ">=": "$gte", "in": "$in", "==": "$eq"}
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _is_sentinel(value: Any) -> bool:
@@ -82,7 +87,13 @@ def _build_update_ops(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 
 def _to_record(doc: Dict[str, Any], path: str) -> StoredDocument:
-    return StoredDocument(id=doc.get("_key", path.split("/")[-1]), path=path, exists=True, data=doc.get("d", {}))
+    return StoredDocument(
+        id=doc.get("_key", path.split("/")[-1]),
+        path=path,
+        exists=True,
+        data=doc.get("d", {}),
+        updated_at=doc.get("_updated_at"),
+    )
 
 
 class _MongoBatch:
@@ -96,16 +107,19 @@ class _MongoBatch:
         collection_name, parent, key = _doc_meta(path)
         if merge:
             update: Dict[str, Any] = _build_update_ops(data)
+            update.setdefault("$set", {})["_updated_at"] = _now()
             update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key})
             self._ops.append((collection_name, UpdateOne({"_id": path}, update, upsert=True)))
         else:
             plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
-            document = {"_id": path, "_parent": parent, "_key": key, "d": plain}
+            document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": _now(), "d": plain}
             self._ops.append((collection_name, ReplaceOne({"_id": path}, document, upsert=True)))
 
     def update(self, path: str, data: Dict[str, Any]) -> None:
         collection_name, _, _ = _doc_meta(path)
-        self._ops.append((collection_name, UpdateOne({"_id": path}, _build_update_ops(data))))
+        update = _build_update_ops(data)
+        update.setdefault("$set", {})["_updated_at"] = _now()
+        self._ops.append((collection_name, UpdateOne({"_id": path}, update)))
 
     def delete(self, path: str) -> None:
         collection_name, _, _ = _doc_meta(path)
@@ -161,13 +175,14 @@ class MongoDocumentStore:
         collection = self._db[collection_name]
         if merge:
             update: Dict[str, Any] = _build_update_ops(data)
+            update.setdefault("$set", {})["_updated_at"] = _now()
             update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key})
             collection.update_one({"_id": path}, update, upsert=True, session=session)
             return
         # merge=False -> full document replace. Plain fields form the payload; any transforms
         # (rare on a non-merge set) are applied right after so their semantics still hold.
         plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
-        document = {"_id": path, "_parent": parent, "_key": key, "d": plain}
+        document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": _now(), "d": plain}
         collection.replace_one({"_id": path}, document, upsert=True, session=session)
         transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
         if transforms:
@@ -175,7 +190,9 @@ class MongoDocumentStore:
 
     def _update(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
-        self._db[collection_name].update_one({"_id": path}, _build_update_ops(data), session=session)
+        update = _build_update_ops(data)
+        update.setdefault("$set", {})["_updated_at"] = _now()
+        self._db[collection_name].update_one({"_id": path}, update, session=session)
 
     def _delete(self, path: str, *, session: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
@@ -198,7 +215,7 @@ class MongoDocumentStore:
     def create(self, path: str, data: Dict[str, Any]) -> None:
         collection_name, parent, key = _doc_meta(path)
         plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
-        document = {"_id": path, "_parent": parent, "_key": key, "d": plain}
+        document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": _now(), "d": plain}
         try:
             self._db[collection_name].insert_one(document)
         except DuplicateKeyError as exc:

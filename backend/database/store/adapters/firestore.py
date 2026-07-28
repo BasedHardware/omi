@@ -14,6 +14,7 @@ translated to their Firestore equivalents at this boundary and nowhere else.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from google.cloud import firestore
@@ -57,16 +58,26 @@ def _translate(data: Dict[str, Any]) -> Dict[str, Any]:
     return {key: _to_firestore_value(value) for key, value in data.items()}
 
 
+def _revision(snapshot: Any) -> Any:
+    """Neutral last-write revision from the Firestore snapshot ``update_time`` (a datetime subclass)."""
+    update_time = getattr(snapshot, "update_time", None)
+    return update_time if isinstance(update_time, datetime) else None
+
+
 def _snapshot_to_record(snapshot: Any, path: str) -> StoredDocument:
     if not getattr(snapshot, "exists", False):
         return StoredDocument.missing(path)
-    return StoredDocument(id=snapshot.id, path=path, exists=True, data=snapshot.to_dict())
+    return StoredDocument(
+        id=snapshot.id, path=path, exists=True, data=snapshot.to_dict(), updated_at=_revision(snapshot)
+    )
 
 
 def _record_from_query(snapshot: Any) -> StoredDocument:
     reference = getattr(snapshot, "reference", None)
     path = getattr(reference, "path", None) or snapshot.id
-    return StoredDocument(id=snapshot.id, path=path, exists=True, data=snapshot.to_dict())
+    return StoredDocument(
+        id=snapshot.id, path=path, exists=True, data=snapshot.to_dict(), updated_at=_revision(snapshot)
+    )
 
 
 class _FirestoreBatch:
