@@ -1,0 +1,223 @@
+"""Dual-backend contract test for the neutral storage port (WP2, ADR-0002/0004).
+
+The SAME assertions run against BOTH adapters — the Firestore reference adapter (against the
+Firestore emulator) and the Mongo adapter (against a real single-node replica set). Parity here is
+the proof that ``database.store`` abstracts the backend rather than leaking one: a domain module
+written to the port behaves identically whichever ``STORAGE_BACKEND`` is configured.
+
+Live services required (both provided by the offline harness — see docs/BACKLOG.md §Handoff):
+  * ``FIRESTORE_EMULATOR_HOST`` — the emulator (image ``omi-onprem-firestore-emulator``).
+  * ``MONGO_URI`` — a Mongo replica set (image ``mongo``); transactions require the replica set.
+A backend whose env is absent is skipped, so the file is safe to collect anywhere. It is NOT a
+hermetic unit test (it needs live services) and is not run by ``backend/test.sh``.
+"""
+
+from __future__ import annotations
+
+import os
+import uuid
+from datetime import datetime
+
+import pytest
+
+from database.store.records import StoredDocument
+from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
+
+
+@pytest.fixture(params=["firestore", "mongo"])
+def store(request):
+    """Yield each configured adapter in turn; skip a backend whose service isn't wired."""
+    backend = request.param
+    if backend == "firestore":
+        if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
+            pytest.skip("FIRESTORE_EMULATOR_HOST not set")
+        from database.store.adapters.firestore import FirestoreDocumentStore
+
+        return FirestoreDocumentStore()
+    uri = os.environ.get("MONGO_URI")
+    if not uri:
+        pytest.skip("MONGO_URI not set")
+    from database.store.adapters.mongo import MongoDocumentStore
+
+    return MongoDocumentStore(uri=uri, db_name="omi_contract")
+
+
+@pytest.fixture
+def uid() -> str:
+    """A unique user id so tests never collide within a shared backend."""
+    return f"u_{uuid.uuid4().hex}"
+
+
+# --- point ops ---------------------------------------------------------------
+
+
+def test_get_missing_is_absent(store, uid):
+    doc = store.get(f"users/{uid}")
+    assert doc.exists is False
+    assert doc.to_dict() is None
+    assert doc.id == uid
+
+
+def test_set_and_get_roundtrip(store, uid):
+    payload = {"name": "Ada", "n": 3, "ratio": 1.5, "on": True, "tags": ["a", "b"], "nested": {"k": "v"}}
+    store.set(f"users/{uid}", payload)
+    doc = store.get(f"users/{uid}")
+    assert doc.exists is True
+    assert doc.id == uid
+    assert doc.to_dict() == payload
+
+
+def test_set_merge_writes_and_preserves(store, uid):
+    store.set(f"users/{uid}", {"a": 1, "b": 2})
+    store.set(f"users/{uid}", {"b": 20, "c": 3}, merge=True)
+    data = store.get(f"users/{uid}").to_dict()
+    assert data == {"a": 1, "b": 20, "c": 3}
+
+
+def test_set_no_merge_replaces_whole_document(store, uid):
+    store.set(f"users/{uid}", {"a": 1, "b": 2})
+    store.set(f"users/{uid}", {"c": 3})
+    assert store.get(f"users/{uid}").to_dict() == {"c": 3}
+
+
+def test_exists(store, uid):
+    assert store.exists(f"users/{uid}") is False
+    store.set(f"users/{uid}", {"a": 1})
+    assert store.exists(f"users/{uid}") is True
+
+
+def test_delete(store, uid):
+    store.set(f"users/{uid}", {"a": 1})
+    store.delete(f"users/{uid}")
+    assert store.exists(f"users/{uid}") is False
+
+
+def test_get_projection(store, uid):
+    store.set(f"users/{uid}", {"language": "en", "secret": "hidden", "n": 1})
+    doc = store.get(f"users/{uid}", fields=["language"])
+    data = doc.to_dict()
+    assert data.get("language") == "en"
+    assert "secret" not in data  # projection excludes unrequested fields
+
+
+# --- update: dotted keys + neutral sentinels ---------------------------------
+
+
+def test_update_dotted_key_merges_nested_map(store, uid):
+    store.set(f"users/{uid}", {"prefs": {"lang": "en", "keep": "me"}})
+    store.update(f"users/{uid}", {"prefs.lang": "it"})
+    assert store.get(f"users/{uid}").to_dict()["prefs"] == {"lang": "it", "keep": "me"}
+
+
+def test_update_delete_sentinel_removes_field(store, uid):
+    store.set(f"users/{uid}", {"a": 1, "b": 2})
+    store.update(f"users/{uid}", {"b": DELETE})
+    assert store.get(f"users/{uid}").to_dict() == {"a": 1}
+
+
+def test_update_increment_sentinel(store, uid):
+    store.set(f"users/{uid}", {"count": 10})
+    store.update(f"users/{uid}", {"count": Increment(5)})
+    assert store.get(f"users/{uid}").to_dict()["count"] == 15
+
+
+def test_update_array_union_and_remove(store, uid):
+    store.set(f"users/{uid}", {"tags": ["a"]})
+    store.update(f"users/{uid}", {"tags": ArrayUnion(["a", "b"])})  # "a" already present -> not duplicated
+    assert sorted(store.get(f"users/{uid}").to_dict()["tags"]) == ["a", "b"]
+    store.update(f"users/{uid}", {"tags": ArrayRemove(["a"])})
+    assert store.get(f"users/{uid}").to_dict()["tags"] == ["b"]
+
+
+def test_update_server_timestamp_sets_a_datetime(store, uid):
+    store.set(f"users/{uid}", {"a": 1})
+    store.update(f"users/{uid}", {"touched_at": SERVER_TIMESTAMP})
+    assert isinstance(store.get(f"users/{uid}").to_dict()["touched_at"], datetime)
+
+
+# --- collection ops ----------------------------------------------------------
+
+
+def test_query_equality_order_and_limit(store, uid):
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1", "team": "x", "rank": 3})
+    store.set(f"{base}/p2", {"name": "p2", "team": "x", "rank": 1})
+    store.set(f"{base}/p3", {"name": "p3", "team": "y", "rank": 2})
+
+    team_x = store.query(base, filters=[("team", "==", "x")])
+    assert {d.id for d in team_x} == {"p1", "p2"}
+
+    ordered = store.query(base, order_by="rank", direction="asc")
+    assert [d.id for d in ordered] == ["p2", "p3", "p1"]
+
+    limited = store.query(base, order_by="rank", direction="asc", limit=1)
+    assert [d.id for d in limited] == ["p2"]
+
+
+def test_query_is_scoped_to_the_collection(store, uid):
+    other = f"u_{uuid.uuid4().hex}"
+    store.set(f"users/{uid}/people/p1", {"name": "mine"})
+    store.set(f"users/{other}/people/p1", {"name": "theirs"})
+    result = store.query(f"users/{uid}/people")
+    assert [d.to_dict()["name"] for d in result] == ["mine"]  # never leaks the other user's subcollection
+
+
+def test_get_many_returns_existing_in_id_order(store, uid):
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1"})
+    store.set(f"{base}/p3", {"name": "p3"})
+    result = store.get_many(base, ["p1", "p2", "p3"])  # p2 missing
+    assert [d.id for d in result] == ["p1", "p3"]
+    assert all(isinstance(d, StoredDocument) and d.exists for d in result)
+
+
+def test_list_ids(store, uid):
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1"})
+    store.set(f"{base}/p2", {"name": "p2"})
+    assert sorted(store.list_ids(base)) == ["p1", "p2"]
+
+
+def test_delete_recursive_removes_document_and_subtree(store, uid):
+    store.set(f"users/{uid}", {"root": True})
+    store.set(f"users/{uid}/people/p1", {"name": "p1"})
+    store.set(f"users/{uid}/people/p2", {"name": "p2"})
+    store.set(f"users/{uid}/integrations/asana", {"token": "t"})
+
+    store.delete_recursive(f"users/{uid}")
+
+    assert store.exists(f"users/{uid}") is False
+    assert store.list_ids(f"users/{uid}/people") == []
+    assert store.list_ids(f"users/{uid}/integrations") == []
+
+
+# --- transactions ------------------------------------------------------------
+
+
+def test_run_transaction_commits_read_modify_write(store, uid):
+    store.set(f"users/{uid}", {"samples": ["s1"]})
+
+    def append_sample(tx):
+        doc = tx.get(f"users/{uid}")
+        samples = list(doc.to_dict()["samples"])
+        samples.append("s2")
+        tx.update(f"users/{uid}", {"samples": samples})
+        return len(samples)
+
+    result = store.run_transaction(append_sample)
+    assert result == 2
+    assert store.get(f"users/{uid}").to_dict()["samples"] == ["s1", "s2"]
+
+
+def test_run_transaction_aborts_on_exception(store, uid):
+    store.set(f"users/{uid}", {"samples": ["s1"]})
+
+    def failing(tx):
+        tx.update(f"users/{uid}", {"samples": ["s1", "s2"]})
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        store.run_transaction(failing)
+
+    # The aborted write must not have been committed.
+    assert store.get(f"users/{uid}").to_dict()["samples"] == ["s1"]
