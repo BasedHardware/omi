@@ -1,5 +1,6 @@
 import XCTest
 
+// Keep Desktop/Tests in the releasable path set so ordinary macOS Beta planning can bind a post-exemption source SHA after internal qualification infra merges.
 @testable import Omi_Computer
 
 // MARK: - Request-capturing protocol for routing verification
