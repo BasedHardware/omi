@@ -4719,7 +4719,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Немаэ канфігураванага спецыфічнага доступу да дадзеных.';
 
   @override
-  String get basicPlanDescription => '1 200 прэміум мін + неабмежавана на прыладзе';
+  String get basicPlanDescription => '300 прэміум мін + неабмежавана на прыладзе';
 
   @override
   String get minutes => 'хвіліны';
