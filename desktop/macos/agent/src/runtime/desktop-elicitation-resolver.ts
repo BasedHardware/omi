@@ -70,6 +70,23 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 /**
+ * Build the stored resolution for an answer arriving from the desktop surface.
+ *
+ * The surface and this module have to agree on key names, and nothing used to
+ * hold them together: the surface began sending `optionIds` while the runtime
+ * still read `optionId`, so every answer was recorded empty and came back to
+ * the model as "no valid answer was registered". Both sides go through here now.
+ */
+export function elicitationResolution(
+  input: { optionIds?: readonly string[]; text?: string | null },
+): ElicitationResolutionPayload {
+  return {
+    optionIds: [...(input.optionIds ?? [])],
+    text: input.text ?? null,
+  };
+}
+
+/**
  * Map a resolution payload onto an outcome.
  *
  * A permission request may only be answered with an option the agent offered,

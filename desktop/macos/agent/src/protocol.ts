@@ -449,7 +449,9 @@ export interface ResolveElicitationMessage {
   ownerId: string;
   dispatchId: string;
   decision: "answer" | "cancel";
-  optionId?: string;
+  /** Every option the user chose. A pick-one question carries exactly one. */
+  optionIds?: string[];
+  /** The user's own words, which may accompany chosen options. */
   text?: string;
 }
 

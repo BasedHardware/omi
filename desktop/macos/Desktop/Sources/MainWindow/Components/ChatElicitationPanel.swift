@@ -548,9 +548,14 @@ struct ChatElicitationPanel: View {
   /// too large and the card carries a little slack. The previous fixed cap
   /// clipped instead, which put options permanently out of reach.
   private var optionListMaxHeight: CGFloat {
-    let rows = CGFloat(elicitation.options.count)
-    let natural = rows * optionRowHeight + max(0, rows - 1) * OmiSpacing.xs
-    return min(natural, halfTheWindow)
+    let stride = optionRowHeight + OmiSpacing.xs
+    let natural = CGFloat(elicitation.options.count) * stride - OmiSpacing.xs
+    guard natural > halfTheWindow else { return natural }
+    // Snap the cap to whole rows. Cutting one in half looks like a rendering
+    // fault rather than a list that scrolls, and a row sliced at the boundary
+    // gives the eye no reason to try scrolling it.
+    let wholeRows = max(1, floor((halfTheWindow + OmiSpacing.xs) / stride))
+    return wholeRows * stride - OmiSpacing.xs
   }
 
   /// Half the window, and never more.

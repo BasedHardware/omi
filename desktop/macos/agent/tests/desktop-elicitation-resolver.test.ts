@@ -286,6 +286,32 @@ describe("resolution mapping", () => {
   });
 });
 
+describe("the surface and the runtime agree on the answer's shape", () => {
+  it("round-trips exactly what the card sends", async () => {
+    const { elicitationResolution } = await import(
+      "../src/runtime/desktop-elicitation-resolver.js"
+    );
+    const [question] = normalizeAskUser({
+      adapterId: "acp",
+      agentLabel: "Omi",
+      args: {
+        questions: [{ question: "Constraints?", options: ["a", "b"], allow_multiple: true }],
+      },
+    });
+
+    // These are the exact keys ElicitationWire.resolvePayload puts on the wire.
+    // They drifted once -- the card sent optionIds while the runtime read
+    // optionId -- and every answer was recorded empty.
+    const stored = elicitationResolution({ optionIds: ["a", "b"], text: "and this" });
+    expect(outcomeFromResolution(question, "resolved", stored))
+      .toEqual({ kind: "selected", optionIds: ["a", "b"], text: "and this" });
+
+    const cancelled = elicitationResolution({});
+    expect(outcomeFromResolution(question, "resolved", cancelled))
+      .toMatchObject({ kind: "cancelled" });
+  });
+});
+
 describe("a question does not outlive its run", () => {
   it("releases the card when the run it belongs to ends", async () => {
     const stub = kernelStub();

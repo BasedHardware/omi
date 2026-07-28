@@ -83,7 +83,12 @@ import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapters/acp.js";
-import { askUser, createKernelElicitationResolver, humanIsBeingAsked } from "./runtime/desktop-elicitation-resolver.js";
+import {
+  askUser,
+  createKernelElicitationResolver,
+  elicitationResolution,
+  humanIsBeingAsked,
+} from "./runtime/desktop-elicitation-resolver.js";
 import type { KernelElicitationDeps } from "./runtime/desktop-elicitation-resolver.js";
 import { relayToolTimeoutMs } from "./runtime/desktop-elicitation.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
@@ -3058,10 +3063,11 @@ async function main(): Promise<void> {
           ownerId: request.ownerId,
           status: request.decision === "answer" ? "resolved" : "cancelled",
           resolvedBy: "user",
-          resolutionJson: JSON.stringify({
-            optionId: request.optionId ?? null,
-            text: request.text ?? null,
-          }),
+          // Both parts travel: a pick-many question is answered with options
+          // and, when it allows them, the user's own words alongside.
+          resolutionJson: JSON.stringify(
+            elicitationResolution({ optionIds: request.optionIds, text: request.text }),
+          ),
         });
         break;
       }
