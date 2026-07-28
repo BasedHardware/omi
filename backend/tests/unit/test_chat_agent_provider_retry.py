@@ -116,7 +116,7 @@ class TestShouldRetryProviderError:
             'max_attempts': 3,
             'text_already_streamed': False,
             'seconds_remaining': 150.0,
-            'seconds_per_attempt': 45.0,
+            'min_headroom_seconds': 45.0,
         }
         kwargs.update(overrides)
         return should_retry_provider_error(error or ReadTimeout(), **kwargs)
@@ -132,8 +132,8 @@ class TestShouldRetryProviderError:
         assert self._decide(attempts_made=3, max_attempts=3) is False
 
     def test_no_retry_that_cannot_finish_in_the_remaining_time(self):
-        assert self._decide(seconds_remaining=44.0, seconds_per_attempt=45.0) is False
-        assert self._decide(seconds_remaining=45.0, seconds_per_attempt=45.0) is True
+        assert self._decide(seconds_remaining=44.0, min_headroom_seconds=45.0) is False
+        assert self._decide(seconds_remaining=45.0, min_headroom_seconds=45.0) is True
 
     def test_non_transient_failure_is_not_retried(self):
         assert self._decide(error=BadRequestError()) is False
@@ -289,17 +289,16 @@ async def test_retries_are_bounded_by_the_attempt_budget(agentic_mod, monkeypatc
     assert recorded.call_count == 0, 'nothing was recovered'
 
 
-async def test_each_attempt_carries_an_idle_timeout_that_leaves_room_to_retry(agentic_mod):
-    """The client default (120s) exceeded the whole turn budget, so a stall left no second chance."""
+async def test_the_transport_silent_interval_bound_is_not_overridden(agentic_mod):
+    """In prod these calls go through the gateway client, whose httpx.Timeout(read=15s) is the
+    silent-interval policy the gateway's own observability is built around. A per-request
+    timeout= would silently replace it for this one caller."""
     streams = [FakeStream(response=_final(), events=[_text_delta('hi')])]
     go, calls, _full_response = _run(agentic_mod, streams)
 
     await go()
 
-    assert calls[0]['timeout'] == agentic_mod.AGENT_STREAM_PROVIDER_IDLE_TIMEOUT_SECONDS
-    assert (
-        agentic_mod.AGENT_STREAM_PROVIDER_IDLE_TIMEOUT_SECONDS * 2 <= agentic_mod.AGENT_STREAM_MAX_DURATION_SECONDS
-    ), 'one attempt must fit the turn budget at least twice or a retry can never run'
+    assert 'timeout' not in calls[0]
 
 
 async def test_tool_loop_still_reaches_a_second_iteration(agentic_mod):
