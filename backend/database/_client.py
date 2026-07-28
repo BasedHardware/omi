@@ -22,6 +22,61 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+
+def _run_query_retry(transport: Any) -> Any:
+    """The RunQuery retry policy, resolved from wherever the transport exposes it.
+
+    ``transport.run_query`` is the RAW gRPC stub (``_UnaryStreamMultiCallable``); the
+    policy lives on the wrapped method the transport built for it.
+    """
+    gapic_callable = transport.run_query
+    retry = getattr(gapic_callable, '_retry', None)
+    if retry is not None:
+        return retry
+    wrapped = getattr(transport, '_wrapped_methods', {}).get(gapic_callable)
+    return getattr(wrapped, '_retry', None)
+
+
+def _retry_query_after_exception(self: Any, exc: BaseException, retry: Any, transaction: Any) -> bool:
+    """Decide whether a query stream resumes after a retryable error.
+
+    Replaces ``Query._retry_query_after_exception``, which reads the retry policy off
+    ``transport.run_query`` — the raw stub, which carries no ``_retry``. Every
+    mid-stream ``ServiceUnavailable``/``DeadlineExceeded`` therefore died with
+    ``AttributeError: '_UnaryStreamMultiCallable' object has no attribute '_retry'``
+    instead of resuming, surfacing as a 500 on any read that streams a collection.
+    """
+    from google.api_core import gapic_v1
+
+    if transaction is not None:  # no snapshot-based retry inside a transaction
+        return False
+    if retry is gapic_v1.method.DEFAULT:
+        retry = _run_query_retry(self._client._firestore_api._transport)
+        if retry is None:
+            # No policy to consult: let the original provider error surface intact.
+            return False
+    return bool(retry._predicate(exc))
+
+
+def _install_query_stream_retry_compat() -> None:
+    """Bind the replacement onto the SDK's Query class.
+
+    ``firestore_v1.query`` and ``gapic_v1`` are imported here, not at module scope:
+    both pull in ``google.auth``, which unit-test harnesses that stub the ``google``
+    namespace package (``testing.import_isolation.stub_modules``) cannot resolve.
+    Under those stubs there is no real Query to patch, so skipping is correct.
+    """
+    try:
+        from google.cloud.firestore_v1.query import Query
+    except ImportError:
+        return
+    # setattr, not attribute assignment: the SDK hook is a protected member, and
+    # binding it by name keeps the type checker's private-usage rule intact.
+    setattr(Query, '_retry_query_after_exception', _retry_query_after_exception)
+
+
+_install_query_stream_retry_compat()
+
 _firestore_client = None
 _firestore_client_lock = Lock()
 
