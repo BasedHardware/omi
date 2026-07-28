@@ -7,6 +7,8 @@ ARG UV_VERSION
 
 RUN python -m venv /opt/venv
 RUN python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
+# pyogg is locked from a Git source, so uv needs git available while syncing.
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 COPY backend/pylock.runtime.toml /tmp/pylock.runtime.toml
 RUN uv pip sync /tmp/pylock.runtime.toml --python /opt/venv/bin/python --compile-bytecode
 
