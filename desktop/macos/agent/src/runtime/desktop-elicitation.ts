@@ -274,86 +274,82 @@ export interface AskUserArgs {
   args: unknown;
 }
 
-/**
- * Keys a model plausibly uses for the human-readable part of an option, in the
- * order we trust them. `label` is what the tool documents; the rest are what
- * models actually send.
- */
+/** Keys that hold a label when the model sends an object. Tried in order. */
 const OPTION_LABEL_KEYS = ["label", "description", "title", "name", "text", "value"] as const;
 
-function labelFromOptionRecord(record: Record<string, unknown>): string | null {
-  for (const key of OPTION_LABEL_KEYS) {
-    const label = asNonEmptyString(record[key]);
-    if (label) return label;
+/** Trailing markup a model leaves on a label, e.g. `"Other</item>"`. */
+const TRAILING_MARKUP = /<\/[A-Za-z][\w-]*>\s*$/;
+
+/**
+ * Find the human-readable label inside whatever one option turned out to be.
+ *
+ * Models send options as plain strings, as objects keyed half a dozen
+ * different ways, as JSON encoded into a string, and wrapped in arrays --
+ * sometimes several of those at once. Enumerating shapes grew a special case
+ * per bug report, so this looks for the first usable string anywhere inside
+ * the value instead, and handles the next shape nobody has sent yet.
+ */
+function labelFrom(value: unknown, depth = 0): string | null {
+  if (depth > 8) return null;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    // A string that is really an encoded object; a label that merely starts
+    // with a brace falls through to itself when the parse fails.
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        return labelFrom(JSON.parse(trimmed), depth + 1);
+      } catch {
+        return trimmed;
+      }
+    }
+    return trimmed;
   }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const label = labelFrom(entry, depth + 1);
+      if (label) return label;
+    }
+    return null;
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of OPTION_LABEL_KEYS) {
+      const label = labelFrom(record[key], depth + 1);
+      if (label) return label;
+    }
+    // Unknown key: any string the object carries beats dropping the option.
+    for (const entry of Object.values(record)) {
+      if (typeof entry !== "string") continue;
+      const label = labelFrom(entry, depth + 1);
+      if (label) return label;
+    }
+  }
+
   return null;
 }
 
 /**
- * Pull the human-readable label out of one option entry.
+ * One entry per option, however deeply the list was wrapped.
  *
- * Models send this three ways: a plain string, an object, and — the one that
- * bit us — an object serialized to a JSON string. Taking a string verbatim
- * rendered `{"description": "..."}` on the card as though it were the answer
- * text, so a string that parses to an object is unwrapped before it is trusted
- * as a label.
+ * Distinct from `labelFrom`: an array *of* options must become several
+ * options, while an array *inside* one option is just where its label is
+ * hiding.
  */
-function labelFromOptionEntry(entry: unknown): string | null {
-  const record = asRecord(entry);
-  if (record) return labelFromOptionRecord(record);
-
-  const direct = asNonEmptyString(entry);
-  if (!direct) return null;
-
-  const trimmed = direct.trim();
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    try {
-      const parsed: unknown = JSON.parse(trimmed);
-      const parsedRecord = asRecord(parsed);
-      if (parsedRecord) return labelFromOptionRecord(parsedRecord) ?? null;
-      const parsedString = asNonEmptyString(parsed);
-      if (parsedString) return parsedString;
-      // Parsed to something with no readable label — an array, a number. The
-      // raw JSON is not an answer a person can choose, so drop it rather than
-      // print it.
-      return null;
-    } catch {
-      // Not JSON after all; a question can legitimately offer a label that
-      // merely starts with a brace.
-      return direct;
-    }
-  }
-  return direct;
-}
-
-/**
- * Trailing markup a model sometimes leaves on a label, e.g.
- * `"Other (I'll specify)</item>"`. Stripped so the closing tag does not read as
- * part of the answer.
- */
-const TRAILING_MARKUP = /<\/[A-Za-z][\w-]*>\s*$/;
-
-/**
- * Flatten an options list that arrived wrapped in arrays.
- *
- * Observed live as `[[[[[["Other"]]]]]]`. Every entry was an array, arrays are
- * neither a record nor a string, so every option was dropped and a pick-many
- * question rendered with nothing to pick. Depth is bounded because a runaway
- * structure should cost a dropped option, not the process.
- */
-function flattenOptionEntries(value: unknown, depth = 0): unknown[] {
-  if (!Array.isArray(value)) return [value];
-  if (depth >= 8) return [];
-  return value.flatMap((entry) => flattenOptionEntries(entry, depth + 1));
+function optionEntries(value: unknown, depth = 0): unknown[] {
+  if (!Array.isArray(value) || depth >= 8) return [value];
+  return value.flatMap((entry) => optionEntries(entry, depth + 1));
 }
 
 function normalizeAskUserOptions(rawOptions: unknown): ElicitationOption[] {
   if (!Array.isArray(rawOptions)) return [];
   const options: ElicitationOption[] = [];
   const seen = new Set<string>();
-  for (const entry of flattenOptionEntries(rawOptions)) {
-    const raw = labelFromOptionEntry(entry);
-    const label = raw?.replace(TRAILING_MARKUP, "").trim();
+  for (const entry of optionEntries(rawOptions)) {
+    const label = labelFrom(entry)?.replace(TRAILING_MARKUP, "").trim();
     if (!label) continue;
     const optionId = asNonEmptyString(asRecord(entry)?.id) ?? label;
     // Two identical ids would make the answer ambiguous, and a duplicate row is
