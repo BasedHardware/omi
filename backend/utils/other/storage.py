@@ -87,6 +87,7 @@ omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
+projection_images_bucket = (os.getenv('BUCKET_PROJECTION_IMAGES') or '').strip() or None
 
 _did_warn_missing_speech_profiles_bucket = False
 
@@ -1499,6 +1500,15 @@ def upload_app_logo(file_path: str, app_id: str):
     blob.cache_control = 'public, no-cache'
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{omi_apps_bucket}/{path}'
+
+
+def upload_projection_image(file_path: str, projection_id: str) -> str:
+    bucket = _get_storage_client().bucket(projection_images_bucket)
+    path = f'{projection_id}.png'
+    blob = bucket.blob(path)
+    blob.cache_control = 'public, no-cache'
+    blob.upload_from_filename(file_path)
+    return f'https://storage.googleapis.com/{projection_images_bucket}/{path}'
 
 
 def delete_app_logo(img_url: str):

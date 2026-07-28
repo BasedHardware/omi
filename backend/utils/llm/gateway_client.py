@@ -467,23 +467,32 @@ def generate_image_via_gateway(
     size: str,
     quality: str,
     n: int,
-    response_format: str,
+    response_format: str | None = None,
     timeout_seconds: float = 120.0,
+    feature: str = 'app_generator',
 ) -> Mapping[str, object]:
-    """Call the gateway-owned image generation surface."""
+    """Call the gateway-owned image generation surface.
+
+    `response_format` is omitted when None: `gpt-image-1` rejects the parameter outright
+    (`unknown_parameter`) and always answers with base64, while `dall-e-3` requires it to
+    return base64 rather than a URL.
+    """
+
+    payload: JsonDict = {
+        'model': model,
+        'prompt': prompt,
+        'size': size,
+        'quality': quality,
+        'n': n,
+    }
+    if response_format is not None:
+        payload['response_format'] = response_format
 
     with httpx.Client(timeout=timeout_seconds) as client:
         response = client.post(
             f'{get_llm_gateway_base_url()}/v1/images/generations',
-            headers=_gateway_headers(feature='app_generator'),
-            json={
-                'model': model,
-                'prompt': prompt,
-                'size': size,
-                'quality': quality,
-                'n': n,
-                'response_format': response_format,
-            },
+            headers=_gateway_headers(feature=feature),
+            json=payload,
         )
         response.raise_for_status()
         body = response.json()
