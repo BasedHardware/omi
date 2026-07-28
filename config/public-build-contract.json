@@ -123,6 +123,7 @@
       "service": "omi-web",
       "dockerfile": "web/personas-open-source/Dockerfile",
       "workflow": ".github/workflows/gcp_personas.yml",
+      "gateway_required": true,
       "deployment": {
         "region": "us-central1",
         "build_context": ".",
@@ -145,6 +146,7 @@
         },
         "remove_runtime_secrets": [
           "LINKEDIN_API_HOST",
+          "NEXT_PUBLIC_LINKEDIN_API_HOST",
           "NEXT_PUBLIC_FIREBASE_API_KEY",
           "NEXT_PUBLIC_FIREBASE_APP_ID",
           "NEXT_PUBLIC_FIREBASE_VAPID_KEY",

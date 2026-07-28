@@ -68,6 +68,7 @@ class Target:
     service: str
     dockerfile: str
     workflow: str
+    gateway_required: bool
     deployment: Deployment
     canary_component: str
     inputs: tuple[PublicInput, ...]
@@ -240,11 +241,15 @@ def load_contract(path: Path) -> Contract:
             raise ValueError(f"{path}: target {target_name} candidate command is invalid")
         if "{base_url}" not in command:
             raise ValueError(f"{path}: target {target_name} candidate command must use {{base_url}}")
+        gateway_required = raw_target.get("gateway_required", False)
+        if not isinstance(gateway_required, bool):
+            raise ValueError(f"target {target_name} gateway_required must be boolean")
         targets[target_name] = Target(
             name=target_name,
             service=_require_string(raw_target.get("service"), field=f"target {target_name} service"),
             dockerfile=_require_string(raw_target.get("dockerfile"), field=f"target {target_name} dockerfile"),
             workflow=_require_string(raw_target.get("workflow"), field=f"target {target_name} workflow"),
+            gateway_required=gateway_required,
             deployment=_parse_deployment(raw_target.get("deployment"), target_name=target_name),
             canary_component=_require_string(
                 raw_target.get("canary_component"), field=f"target {target_name} canary_component"
@@ -399,6 +404,13 @@ def validate_target(
     workflow = workflow_path.read_text(encoding="utf-8")
     if DEPLOY_ACTION not in workflow:
         errors.append(f"{target.workflow}: missing centralized public-build deployment {DEPLOY_ACTION!r}")
+    if target.gateway_required:
+        if "runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}" not in workflow:
+            errors.append(
+                f"{target.workflow}: gateway-required target must source OMI_LLM_GATEWAY_URL from GitHub environment vars"
+            )
+        if "require_gateway_url: true" not in workflow:
+            errors.append(f"{target.workflow}: gateway-required target must reject an empty OMI_LLM_GATEWAY_URL")
     for name in sorted(names):
         if f"vars.{name}" in workflow:
             errors.append(f"{target.workflow}: input {name} bypasses repository_config via GitHub vars")
@@ -457,6 +469,8 @@ def validate_shared_actions(root: Path) -> list[str]:
             "--revision-suffix=",
             "--tag=",
             "--remove-secrets=",
+            "require_gateway_url",
+            "OMI_LLM_GATEWAY_URL must be a non-empty HTTP(S) URL",
             "env_vars_update_strategy: merge",
             "secrets_update_strategy: merge",
             PROMOTION_ACTION,
