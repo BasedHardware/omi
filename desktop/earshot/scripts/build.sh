@@ -101,8 +101,27 @@ assert_not_production "Info.plist CFBundleIdentifier" "$TEMPLATE_ID"
 [[ "$TEMPLATE_ID" == "$BUNDLE_ID" ]] \
     || die "Info.plist CFBundleIdentifier is '$TEMPLATE_ID', expected '$BUNDLE_ID'"
 
-security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_IDENTITY" \
-    || die "signing identity '$SIGN_IDENTITY' not found in the keychain. Never ad-hoc sign ('-'): it resets Screen Recording consent for every Omi app on this machine."
+if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_IDENTITY"; then
+  # Any self-signed codesigning certificate works. What must not happen is ad-hoc signing: the
+  # signature changes on every build, so macOS treats each build as a new app and Screen Recording
+  # and microphone consent are revoked every time — for every Omi app on the machine, not just this
+  # one. A stable identity is what makes the grants stick.
+  die "signing identity '$SIGN_IDENTITY' is not in your keychain.
+
+Create one once (30 seconds, no Apple Developer account needed):
+  1. Open Keychain Access → menu Keychain Access → Certificate Assistant →
+     Create a Certificate…
+  2. Name: $SIGN_IDENTITY
+     Identity Type: Self Signed Root
+     Certificate Type: Code Signing
+  3. Create, then re-run this script.
+
+Or point at a certificate you already have:
+  EARSHOT_SIGN_IDENTITY='Your Identity Name' $0
+
+Do not ad-hoc sign ('-'): the signature changes every build, so macOS revokes
+Screen Recording and microphone consent each time."
+fi
 
 # ---------------------------------------------------------------------------------------------
 # Clean
@@ -149,7 +168,10 @@ cp -f "$INFO_PLIST_TEMPLATE" "$APP_BUNDLE/Contents/Info.plist"
 # actual credential is the OAuth code they get in the browser. It is injected at build time rather
 # than committed to this package so there is exactly one copy of it on disk, in the Omi checkout
 # that already ships it.
-GS_PLIST="${OMI_GOOGLE_SERVICE_PLIST:-/Users/architlal/Documents/omi/desktop/macos/Desktop/Sources/GoogleService-Info.plist}"
+# Found relative to this checkout: Earshot lives at desktop/earshot inside the Omi repo, and the
+# plist ships at desktop/macos. `OMI_GOOGLE_SERVICE_PLIST` overrides it for a checkout laid out
+# differently. An absolute path to somebody's home directory would build only on their machine.
+GS_PLIST="${OMI_GOOGLE_SERVICE_PLIST:-$PKG_DIR/../macos/Desktop/Sources/GoogleService-Info.plist}"
 if [[ -f "$GS_PLIST" ]]; then
   FB_KEY="$(/usr/libexec/PlistBuddy -c 'Print :API_KEY' "$GS_PLIST" 2>/dev/null || true)"
   if [[ -n "$FB_KEY" ]]; then
