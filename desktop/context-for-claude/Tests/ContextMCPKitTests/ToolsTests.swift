@@ -523,6 +523,176 @@ final class ToolsTests: XCTestCase {
             "status did not tell the reader what the lag means: \(text)")
     }
 
+    // MARK: - A guess must not read as a fact
+    //
+    // The dogfooding failure these pin: the microphone picked up music playing in the room, the
+    // recogniser wrote the lyrics out as first-person speech, and this layer printed them as `*me*`
+    // — the same shape, the same authority, the same page as things the user had really said. The
+    // fix has to keep the line visible (hiding it makes the record look cleaner than it is) while
+    // making it impossible to read as a quote.
+
+    /// The whole pipeline, from a stored score to what the model actually reads: one line the
+    /// transcriber was unsure of, one from before scores were kept, one it was confident about.
+    func testTranscriptMarksTheUncertainLineAndOnlyTheUncertainLine() throws {
+        let fixture = try confidenceStore()
+
+        let text = try Tools.call(
+            name: "transcript",
+            arguments: ["session_id": .number(Double(fixture.sessionId))],
+            store: fixture.store)
+
+        // Marked, not hidden: a filtered transcript is a tidier lie, not a truer record.
+        XCTAssertTrue(text.contains("MUSIC-LYRIC"), "the low-confidence line was dropped: \(text)")
+        XCTAssertTrue(
+            line(containing: "MUSIC-LYRIC", in: text).contains(Tools.uncertainTranscriptMarker),
+            "a line the transcriber doubted was rendered as fact: \(text)")
+
+        // Unknown is not doubtful. Every line recorded before the column existed has a nil score,
+        // and marking those would back-date doubt onto the whole archive and mean nothing.
+        XCTAssertFalse(
+            line(containing: "PRE-COLUMN", in: text).contains(Tools.uncertainTranscriptMarker),
+            "an unscored line was rendered as low confidence: \(text)")
+
+        XCTAssertFalse(
+            line(containing: "REAL-SPEECH", in: text).contains(Tools.uncertainTranscriptMarker),
+            "a confident line was hedged: \(text)")
+    }
+
+    /// The decision itself, at the seam, including the two scores that must not be read as doubt.
+    func testTheConfidenceBarMarksBelowItselfAndNothingElse() {
+        let floor = Tools.transcriptConfidenceFloor
+
+        XCTAssertTrue(Tools.isUncertainTranscript(speech("music", confidence: floor - 0.01)))
+        XCTAssertTrue(Tools.isUncertainTranscript(speech("music", confidence: 0.0)))
+        XCTAssertFalse(Tools.isUncertainTranscript(speech("real", confidence: floor)))
+        XCTAssertFalse(Tools.isUncertainTranscript(speech("real", confidence: 0.99)))
+        XCTAssertFalse(
+            Tools.isUncertainTranscript(speech("older than the column", confidence: nil)),
+            "nil confidence is unknown, not doubtful")
+
+        // Not a probability on the scale this layer reads — a log-probability, say — so it says
+        // nothing. Reading it as doubt would mark every line in the database at once.
+        XCTAssertFalse(Tools.isUncertainTranscript(speech("log prob", confidence: -3.2)))
+        XCTAssertFalse(Tools.isUncertainTranscript(speech("out of range", confidence: 12)))
+
+        // The bar belongs to `Hit`; a second copy of the number in the rendering layer is how two
+        // layers start disagreeing about which lines are doubtful.
+        XCTAssertEqual(floor, Hit.lowConfidenceFloor)
+    }
+
+    /// OCR confidence is a different measurement of a different thing, and `Queries` carries a
+    /// collapsed hit's score through rather than defaulting it — so a screen row could arrive here
+    /// with a number attached. It must never wear a "may be background audio" mark.
+    func testAScreenHitIsNeverMarkedWithSpeechUncertainty() {
+        let frame = Hit(
+            kind: "screen", at: base, text: "OCR-TEXT", app: "Safari", window: "Notes", confidence: 0.1)
+
+        XCTAssertFalse(Tools.isUncertainTranscript(frame))
+        XCTAssertFalse(
+            Tools.renderHitsOnly([frame], order: .oldestFirst).contains(Tools.uncertainTranscriptMarker),
+            "a screen row was marked with transcription doubt")
+    }
+
+    /// A marker met cold is a decoration. The convention is stated once, above the first line that
+    /// uses it, so a model reading a page of results knows what it means before it needs to.
+    func testTheUncertaintyConventionIsStatedOnceAboveTheFirstMarkedLine() throws {
+        let text = Tools.renderHitsOnly(
+            [
+                speech("LYRIC-ONE", at: base, confidence: 0.2),
+                speech("LYRIC-TWO", at: base + 60, confidence: 0.3),
+            ],
+            order: .oldestFirst)
+
+        XCTAssertEqual(
+            text.components(separatedBy: "Confidence: a line marked").count - 1, 1,
+            "the convention was stated more or less than once: \(text)")
+        let legendAt = try XCTUnwrap(offset(of: "Confidence: a line marked", in: text))
+        let firstMarkedAt = try XCTUnwrap(offset(of: "LYRIC-ONE", in: text))
+        XCTAssertLessThan(
+            legendAt, firstMarkedAt,
+            "the convention arrived after the line that needed it: \(text)")
+
+        // And a page with nothing to doubt says nothing about doubt — a legend printed over clean
+        // results teaches a reader to distrust everything, which is its own kind of noise.
+        let clean = Tools.renderHitsOnly([speech("REAL-SPEECH", at: base, confidence: 0.95)], order: .oldestFirst)
+        XCTAssertFalse(clean.contains("Confidence: a line marked"), clean)
+        XCTAssertFalse(clean.contains(Tools.uncertainTranscriptMarker), clean)
+    }
+
+    // MARK: - The sync watermark, carried on the answer
+
+    /// A caller who asks `screen` for "the last hour" gets nothing from the Omi half whether or not
+    /// the user was at their screen, because that half runs hours behind. Finding out which used to
+    /// take a second `status` call — so the answer now carries the watermark itself.
+    func testScreenCarriesTheSyncWatermarkWithoutASecondStatusCall() throws {
+        let store = try screenStore()
+
+        let populated = try Tools.call(name: "screen", arguments: [:], store: store)
+        XCTAssertTrue(
+            populated.contains("Screen synced through:"),
+            "screen did not say how far the account's screen history has synced: \(populated)")
+
+        // The empty answer is where it decides the meaning, so it must be there too.
+        let empty = try Tools.call(
+            name: "screen",
+            arguments: [
+                "since": .number(screenBase - 10 * 86_400),
+                "until": .number(screenBase - 9 * 86_400),
+            ],
+            store: store)
+        XCTAssertFalse(empty.contains("ALPHA-OLDEST"), "the fixture window was not empty: \(empty)")
+        XCTAssertTrue(
+            empty.contains("Screen synced through:"),
+            "an empty screen answer left the reader to infer the watermark: \(empty)")
+    }
+
+    func testRecallCarriesTheSyncWatermarkToo() throws {
+        let store = try seededStore()
+
+        let text = try Tools.call(name: "recall", arguments: ["query": "pricing"], store: store)
+
+        XCTAssertTrue(text.contains("Screen synced through:"), text)
+    }
+
+    /// The three states are three different amounts of evidence, and only one of them is a
+    /// measurement. An estimate dressed up as a timestamp is exactly the failure the rest of this
+    /// file exists to prevent, one level down.
+    func testAnEstimatedWatermarkSaysSoAndAnUnreadAccountPrintsNoTimeAtAll() {
+        let now = ContextTime.now
+
+        let observed = Tools.screenWatermark(
+            newestOmiScreenRow: now - 3 * 3_600, accountRead: true,
+            notReadClause: "", estimateReason: "", now: now)
+        XCTAssertEqual(observed, .observed(now - 3 * 3_600))
+        let observedText = Tools.screenWatermarkSentence(observed)
+        XCTAssertTrue(observedText.contains(ContextTime.describe(now - 3 * 3_600)), observedText)
+        XCTAssertTrue(
+            observedText.contains("at least"),
+            "a proven row is a floor, not the instant sync stopped: \(observedText)")
+
+        let estimated = Tools.screenWatermark(
+            newestOmiScreenRow: nil, accountRead: true,
+            notReadClause: "", estimateReason: "no dated screen row came back", now: now)
+        XCTAssertEqual(estimated, .estimated(now - Tools.omiScreenSyncLag, "no dated screen row came back"))
+        let estimatedText = Tools.screenWatermarkSentence(estimated)
+        XCTAssertTrue(estimatedText.contains("estimate"), estimatedText)
+        XCTAssertTrue(
+            estimatedText.contains(":00"),
+            "an estimate was printed to the minute, which reads as a measurement: \(estimatedText)")
+
+        // Nobody looked, so there is nothing to state — and an estimate of an unread account would
+        // be a number with no evidence behind it at all.
+        let unread = Tools.screenWatermark(
+            newestOmiScreenRow: nil, accountRead: false,
+            notReadClause: "no Omi MCP API key is configured", estimateReason: "", now: now)
+        XCTAssertEqual(unread, .unavailable("no Omi MCP API key is configured"))
+        let unreadText = Tools.screenWatermarkSentence(unread)
+        XCTAssertTrue(unreadText.contains("unknown"), unreadText)
+        XCTAssertFalse(
+            unreadText.contains(where: \.isNumber),
+            "a watermark nobody could read printed a time anyway: \(unreadText)")
+    }
+
     // MARK: - Invalid arguments
 
     func testInvalidArgumentsAreToolErrors() throws {
@@ -648,6 +818,71 @@ final class ToolsTests: XCTestCase {
         return store
     }
 
+    /// 2025-10-09T08:53:20Z, fixed — a test that reads the wall clock fails on a Tuesday.
+    private let base: Double = 1_760_000_000
+
+    private func speech(
+        _ text: String,
+        at: Double? = nil,
+        confidence: Double?,
+        kind: String = "said"
+    ) -> Hit {
+        // Through the initializer rather than by assignment: `Hit` derives its own low-confidence
+        // flag there, and a hit whose flag disagreed with its score would test nothing real.
+        Hit(kind: kind, at: at ?? base, text: text, confidence: confidence)
+    }
+
+    /// The rendered line carrying `marker`, so an assertion is about *that* line rather than about
+    /// the page — the legend also names the marker, and a page-wide `contains` would pass on it.
+    private func line(
+        containing marker: String,
+        in text: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> String {
+        guard let found = text.split(separator: "\n").first(where: { $0.contains(marker) }) else {
+            XCTFail("no rendered line contained \(marker): \(text)", file: file, line: line)
+            return ""
+        }
+        return String(found)
+    }
+
+    private func offset(of needle: String, in text: String) -> Int? {
+        text.range(of: needle).map { text.distance(from: text.startIndex, to: $0.lowerBound) }
+    }
+
+    /// One conversation of three lines: a song the microphone heard as the user's own speech (0.57,
+    /// the score from the session that prompted this), a line from before scores were stored at all,
+    /// and an ordinary confident sentence.
+    private func confidenceStore() throws -> (store: ContextStore, sessionId: Int64) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ambient-confidence-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+
+        let store = try ContextStore(url: root.appendingPathComponent("context.db"))
+        let sessionId = try store.openSession(at: base, appHint: "Spotify")
+        try store.closeSession(sessionId, at: base + 300)
+
+        let lines: [(String, Double?)] = [
+            ("MUSIC-LYRIC and I will always love you", 0.57),
+            ("PRE-COLUMN recorded before confidence was stored", nil),
+            ("REAL-SPEECH we ship the pricing change on Friday", 0.96),
+        ]
+        for (index, entry) in lines.enumerated() {
+            let at = base + Double(10 + index * 10)
+            _ = try store.insertSegment(
+                Segment(
+                    sessionId: sessionId,
+                    startedAt: at,
+                    endedAt: at + 4,
+                    source: .mic,
+                    text: entry.0,
+                    confidence: entry.1))
+        }
+        return (store, sessionId)
+    }
+
     /// A fixed local-midnight epoch for a `yyyy-MM-dd` day.
     private func epoch(_ day: String) -> Double {
         let formatter = DateFormatter()
@@ -665,9 +900,6 @@ final class ToolsTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
 
         let store = try ContextStore(url: root.appendingPathComponent("context.db"))
-        // 2025-10-09T08:53:20Z, fixed: a test that reads the wall clock is a test that fails on a
-        // Tuesday for no reason.
-        let base: Double = 1_760_000_000
         let sessionId = try store.openSession(at: base, appHint: "zoom.us")
         try store.closeSession(sessionId, at: base + 600)
         _ = try store.insertSegment(

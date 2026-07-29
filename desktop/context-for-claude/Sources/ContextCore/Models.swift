@@ -52,6 +52,13 @@ public struct Segment: Codable, Sendable, Identifiable, FetchableRecord, Mutable
     /// "me" or "them".
     public var speaker: String
     public var text: String
+    /// The transcriber's own confidence in this line, 0–1.
+    ///
+    /// Optional because it is unknowable for every row written before it was recorded, and because
+    /// an absent score must never read as a low one: nil means "nobody asked the model", not "the
+    /// model was unsure". A default of 0 here would turn a year of perfectly good transcript into
+    /// evidence that the app never understood a word.
+    public var confidence: Double?
 
     public init(
         id: Int64? = nil,
@@ -59,7 +66,8 @@ public struct Segment: Codable, Sendable, Identifiable, FetchableRecord, Mutable
         startedAt: Double,
         endedAt: Double,
         source: SegmentSource,
-        text: String
+        text: String,
+        confidence: Double? = nil
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -68,6 +76,7 @@ public struct Segment: Codable, Sendable, Identifiable, FetchableRecord, Mutable
         self.source = source.rawValue
         self.speaker = source.speaker
         self.text = text
+        self.confidence = confidence
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
@@ -113,6 +122,22 @@ public struct Frame: Codable, Sendable, Identifiable, FetchableRecord, MutablePe
 
 /// A single dated, attributed piece of context. The one shape every search returns.
 public struct Hit: Codable, Sendable, Equatable {
+    /// The score at or below which a transcript line is *marked* uncertain. Nothing is ever dropped
+    /// for being under it.
+    ///
+    /// Per-window confidence in this app's logs runs from about 0.5 to 0.99, and the failure that
+    /// prompted this — background music transcribed through the microphone as the user's own
+    /// first-person speech — sat at the bottom of that band (0.57 in the dogfooding session). 0.65
+    /// is roughly the lowest third of the observed range: above the band those lines occupy, and
+    /// below where ordinary clean speech lands, so the mark stays rare enough to still mean
+    /// something. A bar set where everything trips it says nothing at all.
+    ///
+    /// This is a marking bar, not a filter, which is exactly what makes the precise number safe to
+    /// be wrong about in either direction: the raw score travels on every hit, so a consuming model
+    /// that wants a stricter or a looser one can apply it. Hiding a line the user really said is
+    /// the only unrecoverable choice, so it is the one never made here.
+    public static let lowConfidenceFloor: Double = 0.65
+
     /// "said" (you), "heard" (someone else), or "screen".
     public var kind: String
     /// Unix epoch seconds.
@@ -123,6 +148,14 @@ public struct Hit: Codable, Sendable, Equatable {
     public var app: String?
     public var window: String?
     public var sessionId: Int64?
+    /// How sure the transcriber was of this line, 0–1. Nil for screen hits, which have no such
+    /// score, and for speech captured before the score was kept — never a stand-in for "low".
+    public var confidence: Double?
+    /// True only when a score exists and sits below `Hit.lowConfidenceFloor`.
+    ///
+    /// The point of a separate flag is that the reader does not have to know the bar to honour it,
+    /// and that an unscored line cannot be mistaken for a doubtful one.
+    public var isLowConfidence: Bool
 
     public init(
         kind: String,
@@ -130,7 +163,8 @@ public struct Hit: Codable, Sendable, Equatable {
         text: String,
         app: String? = nil,
         window: String? = nil,
-        sessionId: Int64? = nil
+        sessionId: Int64? = nil,
+        confidence: Double? = nil
     ) {
         self.kind = kind
         self.at = at
@@ -139,6 +173,10 @@ public struct Hit: Codable, Sendable, Equatable {
         self.app = app
         self.window = window
         self.sessionId = sessionId
+        self.confidence = confidence
+        // Derived here rather than at the call sites: a hit whose flag disagreed with its own score
+        // would be worse than carrying no flag at all.
+        self.isLowConfidence = confidence.map { $0 < Hit.lowConfidenceFloor } ?? false
     }
 }
 

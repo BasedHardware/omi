@@ -386,6 +386,25 @@ public final class ContextStore: @unchecked Sendable {
             }
         }
 
+        // Per-line transcription confidence. The model scores every line it emits and the app used
+        // to throw that away, so a line it was barely sure of — background music heard as the
+        // user's own speech — was stored, searched and rendered exactly like one it was certain of.
+        //
+        // `"v3-"` rather than `"v2"`: `UploadQueue.migrationIdentifier` is `"v2-uploads"`, registered
+        // outside this migrator and written into the same `grdb_migrations` ledger. GRDB skips any
+        // identifier already in that ledger and ignores unregistered ones, so the two never collide
+        // — but reusing the number would leave the schema history unreadable.
+        //
+        // Nullable and with no default, so every row captured before today keeps a NULL: an unknown
+        // score has to stay distinguishable from a bad one all the way up to the reader. Nothing is
+        // indexed on it — it is never a search key, it just rides along with rows already fetched —
+        // and the FTS index covers `text` alone, so a new column leaves the sync triggers untouched.
+        migrator.registerMigration("v3-segment-confidence") { db in
+            try db.alter(table: "segments") { t in
+                t.add(column: "confidence", .double)
+            }
+        }
+
         return migrator
     }
 

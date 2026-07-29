@@ -18,6 +18,22 @@ public enum Queries {
     /// Anything shorter is a glance, and a day made of glances is noise rather than a shape.
     private static let activityMinimumSeconds: Double = 15
 
+    // MARK: - Confidence
+    //
+    // Every speech hit carries the transcriber's own score for the line, and every hit under
+    // `Hit.lowConfidenceFloor` comes back **marked** (`isLowConfidence`) rather than removed. The
+    // bar itself, and the reasoning for the number, live on `Hit` — the reader of a hit has to be
+    // able to see them without reaching into the query layer.
+    //
+    // Filtering by confidence is deliberately not offered, not even as an option that defaults off.
+    // The argument this app makes is that it says what it does and does not know; a result set with
+    // the uncertain lines quietly missing looks *more* reliable than the record actually is, which
+    // is the same lie as presenting a 0.5 line as fact, told in the other direction. A reader that
+    // wants a stricter bar has the raw number and can apply it — and can still see what it excluded.
+    //
+    // Screen hits have no score at all: OCR is a different pipeline with a different failure mode,
+    // and inventing a confidence for it would be worse than admitting there is none.
+
     // MARK: - Recall ranking
     //
     // `recall` used to OR every query term together and then sort purely by recency. Searching
@@ -330,7 +346,7 @@ public enum Queries {
             try Row.fetchAll(
                 db,
                 sql: """
-                    SELECT startedAt AS at, source, text, sessionId
+                    SELECT startedAt AS at, source, text, sessionId, confidence
                     FROM segments
                     WHERE sessionId = ?
                     ORDER BY startedAt ASC, id ASC
@@ -470,6 +486,7 @@ public enum Queries {
     ) throws -> [Candidate] {
         var sql = """
             SELECT s.startedAt AS at, s.source AS source, s.text AS text, s.sessionId AS sessionId,
+                   s.confidence AS confidence,
                    bm25(segments_fts) AS bm25Score
             FROM segments_fts
             JOIN segments s ON s.rowid = segments_fts.rowid
@@ -546,7 +563,7 @@ public enum Queries {
 
     private static func segmentRows(_ db: Database, since: Double?, until: Double?, limit: Int) throws -> [Row] {
         var sql = """
-            SELECT startedAt AS at, source, text, sessionId
+            SELECT startedAt AS at, source, text, sessionId, confidence
             FROM segments
             """
         var args: [(any DatabaseValueConvertible)?] = []
@@ -1012,7 +1029,10 @@ public enum Queries {
             text: prefix + truncate(representative.text, to: max(1, screenTextLimit - prefix.count)),
             app: representative.app,
             window: representative.window,
-            sessionId: representative.sessionId
+            sessionId: representative.sessionId,
+            // Nil in practice — only frames are collapsed — but carried rather than defaulted, so a
+            // rebuilt hit can never quietly lose what the one it stands for knew.
+            confidence: representative.confidence
         )
     }
 
@@ -1043,8 +1063,13 @@ public enum Queries {
         let source: String? = row["source"]
         let text: String? = row["text"]
         let sessionId: Int64? = row["sessionId"]
+        // Nil for a line stored before scores were kept, and for any caller whose SELECT does not
+        // ask for the column. Both mean "unknown", which is what a nil confidence says — the one
+        // reading it must never be allowed to decay into "low".
+        let confidence: Double? = row["confidence"]
         let kind = SegmentSource(rawValue: source ?? "") == .mic ? "said" : "heard"
-        return Hit(kind: kind, at: at ?? 0, text: text ?? "", sessionId: sessionId)
+        return Hit(
+            kind: kind, at: at ?? 0, text: text ?? "", sessionId: sessionId, confidence: confidence)
     }
 
     private static func frameHit(_ row: Row) -> Hit {

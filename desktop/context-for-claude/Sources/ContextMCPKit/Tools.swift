@@ -166,10 +166,12 @@ extension Tools {
 
     Results are newest-first, grouped by day, each line timed and labelled with where it came from: \
     `live` is Context for Claude's capture on this Mac (*me* is the user speaking, *them* is the other side of \
-    a call, *screen* is text on their display), `omi` is the account's own history. Facts Omi \
-    remembers carry no date and are listed separately. Bound the search with `since` / `until` when \
-    the user anchors it in time. If it comes back empty, check `status` before saying it never \
-    happened.
+    a call, *screen* is text on their display), `omi` is the account's own history. A spoken line \
+    marked `(uncertain — may be background audio, not speech)` scored below the transcriber's \
+    confidence floor: it is shown rather than hidden, but it may be music or a video written out as \
+    speech, so do not quote it or attribute it to anyone. Facts Omi remembers carry no date and are \
+    listed separately. Bound the search with `since` / `until` when the user anchors it in time. If \
+    it comes back empty, check `status` before saying it never happened.
     """
 
     static let recentDescription = """
@@ -211,7 +213,8 @@ extension Tools {
     `session_id` takes either id shape exactly as printed: an Omi conversation id (a UUID) or a \
     local Context for Claude conversation number. Quote from the transcript when details matter — it is speech \
     recognition, so names and rare words can be misheard; read around a line before treating it as \
-    exact.
+    exact. A line marked `(uncertain — may be background audio, not speech)` is one the recogniser \
+    itself was unsure of — it may not be speech at all — so never quote that one.
     """
 
     static let screenDescription = """
@@ -229,7 +232,8 @@ extension Tools {
     One freshness rule matters here: the Omi account's screen history is uploaded in batches and \
     runs hours behind this Mac's own capture, so the last couple of hours come from the `live` half \
     only. A gap there means "not synced yet", not "not on screen" — `recent` is the tool for the \
-    current session.
+    current session. Every answer states how far that half has synced ("Screen synced through: …"), \
+    so you never need a separate `status` call to tell an unsynced window from an idle one.
     """
 
     static let activityDescription = """
@@ -417,6 +421,20 @@ extension Tools {
         merged = dedupe(merged)
         merged = Array(merged.prefix(limit))
 
+        // `recall` reaches the account's conversations and memories but not its screen history, so
+        // its screen rows are this Mac's alone. The watermark is what stops a reader concluding
+        // anything from that — carried here rather than left to a second `status` call. It cannot be
+        // observed on this path (no screen row is fetched), so it is honestly an estimate.
+        let watermark = screenWatermark(
+            newestOmiScreenRow: nil,
+            accountRead: omiSearched(omi.failures),
+            notReadClause: omiNotSearchedClause(omi.failures),
+            estimateReason: """
+            `recall` reads the account's conversations and memories, not its screen history — only \
+            `screen` reads that
+            """
+        )
+
         let memories = Array(omi.memories.prefix(20))
         guard !merged.isEmpty || !memories.isEmpty else {
             return emptyMessage(
@@ -427,7 +445,9 @@ extension Tools {
                     omiSearched: omiSearched(omi.failures),
                     omiClause: omiNotSearchedClause(omi.failures)
                 )
-            ) + footerBlock(omi.failures, notes, localSearched: local.searched)
+            )
+                + "\n\n" + screenWatermarkSentence(watermark)
+                + footerBlock(omi.failures, notes, localSearched: local.searched)
         }
 
         var out = header(
@@ -444,6 +464,10 @@ extension Tools {
         if !memories.isEmpty {
             out += "\n\n" + renderMemories(memories)
         }
+        // With the other provenance material rather than above the results: unlike `screen`, screen
+        // rows are a minority of this answer, and the freshness note belongs beside the footer that
+        // already says where each half came from.
+        out += "\n\n" + screenWatermarkSentence(watermark)
         return out + footerBlock(omi.failures, notes, localSearched: local.searched)
     }
 
@@ -678,6 +702,15 @@ extension Tools {
         let backend = OmiBackend.shared.screenActivity(since: since, until: until, app: app, limit: limit)
         let failures = backend.failure.map { ["screen history: \($0.reason)"] } ?? []
 
+        // Derived from the rows this answer already holds, so the caller learns the account's screen
+        // freshness without a second `status` call and without a second request being spent on it.
+        let watermark = screenWatermark(
+            newestOmiScreenRow: (backend.value ?? []).compactMap(\.at).max(),
+            accountRead: omiSearched(failures),
+            notReadClause: omiNotSearchedClause(failures),
+            estimateReason: "the account returned no dated screen row for this query"
+        )
+
         var merged = local.rows.map(liveHit)
         merged += (backend.value ?? []).map(omiScreenHit)
         merged = dedupe(merged)
@@ -721,6 +754,10 @@ extension Tools {
                     omiClause: omiNotSearchedClause(failures)
                 )
             )
+            // The empty answer is exactly where the watermark decides the meaning: a window inside
+            // the unsynced tail returns nothing from the account whether or not the user was at
+            // their screen, and only the watermark tells those two apart.
+            out += "\n\n" + screenWatermarkSentence(watermark)
             if let lag = omiScreenLagCaveat(until: until) { out += "\n\n" + lag }
             return out + footerBlock(failures, notes, localSearched: local.searched)
         }
@@ -729,7 +766,9 @@ extension Tools {
         **\(plural(merged.count, "screen observation"))\(appSuffix)\(rangeSuffix(since, until))**, \
         newest first
         """
-        var out = header + "\n\n" + renderMerged(merged, order: .newestFirst)
+        // Above the rows, because on this tool freshness decides how the whole list should be read.
+        var out = header + "\n\n" + screenWatermarkSentence(watermark)
+            + "\n\n" + renderMerged(merged, order: .newestFirst)
         if available > merged.count {
             out += "\n\n" + """
             _These are the \(number(merged.count)) newest of at least \(number(available)) \
@@ -872,6 +911,78 @@ extension Tools {
         """
     }
 
+    /// How far the Omi account's screen history has actually synced, as this response can honestly
+    /// state it.
+    ///
+    /// `screenLagSentence` says the account is *behind*; it never says *how far, as of when*. A
+    /// caller asking `screen` for "the last hour" therefore had to make a second `status` call to
+    /// find out whether an empty answer meant "nothing was on screen" or "not uploaded yet" — and a
+    /// caller who skipped that call read a sync gap as a fact about the user. The watermark is that
+    /// missing fact, carried on the answer itself.
+    ///
+    /// Three cases, because they are three different amounts of evidence and only the first is a
+    /// measurement. None of them costs an extra request: a `status`-style probe on every `recall`
+    /// would spend the account's 300-reads-an-hour budget to restate what the response already knows.
+    enum ScreenWatermark: Equatable {
+        /// Proven by a dated row the account actually returned here. A floor, never a ceiling — this
+        /// query's own `until` and `app` filters cap what could come back — so it is printed as
+        /// "at least".
+        case observed(Double)
+        /// No dated screen row came back, so the only thing available is the measured batch lag.
+        /// Carries *why* it is only an estimate, because "estimated" without a reason invites a
+        /// reader to round it up to "known".
+        case estimated(Double, String)
+        /// The account was not read at all. An estimate of something nobody looked at is a number
+        /// with no evidence behind it, so this case prints no time whatsoever.
+        case unavailable(String)
+    }
+
+    static func screenWatermark(
+        newestOmiScreenRow: Double?,
+        accountRead: Bool,
+        notReadClause: String,
+        estimateReason: String,
+        now: Double = ContextTime.now
+    ) -> ScreenWatermark {
+        guard accountRead else { return .unavailable(notReadClause) }
+        if let at = newestOmiScreenRow, at > 0 { return .observed(at) }
+        return .estimated(now - omiScreenSyncLag, estimateReason)
+    }
+
+    static func screenWatermarkSentence(_ watermark: ScreenWatermark) -> String {
+        switch watermark {
+        case let .observed(at):
+            return """
+            _Screen synced through: **at least \(ContextTime.describe(at))** — the newest screen row \
+            the Omi account returned for this query. That is a floor rather than a ceiling, since \
+            this query's own filters cap what could come back. Anything after it may exist only in \
+            the `live` rows captured on this Mac, so read a gap there as "not synced to Omi yet", \
+            never as "not on screen"._
+            """
+        case let .estimated(at, reason):
+            return """
+            _Screen synced through: **not confirmed — estimated at about \(approximateTime(at))**, \
+            i.e. now minus the \(duration(omiScreenSyncLag)) batch lag measured against a live \
+            account (\(reason)). It is an estimate from that lag, not a time Omi reported, which is \
+            why it is stated to the hour: do not quote it back as the sync time. Treat anything after \
+            it as "may not have synced yet" rather than as absent, and use `recent` for the current \
+            session._
+            """
+        case let .unavailable(clause):
+            return """
+            _Screen synced through: **unknown** — the Omi account's screen history was not read for \
+            this answer (\(clause)), so nothing here establishes how far it has synced. A missing \
+            screen record is therefore not evidence that nothing was on screen._
+            """
+        }
+    }
+
+    /// An estimate rendered to the hour. A guess printed to the minute reads as a measurement, and
+    /// this one is only ever as good as a lag measured once against one account.
+    private static func approximateTime(_ epoch: Double) -> String {
+        ContextTime.describe((epoch / 3_600).rounded(.down) * 3_600)
+    }
+
     /// The same fact, said in `status`, where a model goes to find out what these tools can see.
     static var screenLagStatusLine: String {
         """
@@ -882,6 +993,66 @@ extension Tools {
         read that gap as "it was not on screen".
         """
     }
+}
+
+// MARK: - Transcription confidence
+//
+// A transcript line is a guess with a probability attached, and this layer used to render every one
+// of them as a fact. Music playing in the room reached the microphone and the recogniser turned the
+// lyrics into first-person speech: the song was printed as *me*, in the user's own voice, beside
+// things they had genuinely said and typographically identical to them. Nothing in the page let a
+// reader doubt it, so the fabrication was inherited whole by whatever was written next.
+//
+// The fix is *not* to drop the line. Filtering low-confidence speech would make the record look
+// cleaner than it is — the same lie facing the other way, and a quieter one, because the reader
+// would see a tidy transcript and never learn the recogniser had been guessing. Mark it, keep it,
+// and say once what the mark means.
+
+extension Tools {
+    /// The parenthetical every uncertain line carries. Written to be read by a model rather than
+    /// decorated for a person: it names the doubt *and* its likeliest cause, so the mark still does
+    /// its job in a page of results pasted somewhere the legend did not follow.
+    static let uncertainTranscriptMarker = "(uncertain — may be background audio, not speech)"
+
+    /// The bar this layer renders against, which is **not this layer's to choose**: `Hit` owns the
+    /// number and the reasoning behind it, and a second copy of it here would let the query layer
+    /// and the rendering layer disagree about which lines are doubtful while both looked right.
+    static var transcriptConfidenceFloor: Double { Hit.lowConfidenceFloor }
+
+    /// Whether this line is rendered with the marker.
+    ///
+    /// Recomputed from the score rather than read off `Hit.isLowConfidence`, which is derived at
+    /// init: `confidence` is a `var`, so a hit rebuilt or adjusted after construction can carry a
+    /// flag that no longer matches its own number, and the direction that failure takes is silent
+    /// under-marking. The floor is still `Hit`'s.
+    ///
+    /// Three things are deliberately *not* marked:
+    /// - `nil` confidence — every line recorded before the column existed. Unknown is not doubtful,
+    ///   and back-dating doubt onto the whole archive would empty the marker of meaning.
+    /// - screen hits — OCR confidence measures a different thing and is a separate problem; this
+    ///   field is transcription-only, and a screen row must never wear a "background audio" mark.
+    ///   `Queries` carries a collapsed hit's score through rather than defaulting it, so this guard
+    ///   is what keeps that from ever reaching the page as speech doubt.
+    /// - a score outside 0...1 — not a probability on the scale this layer reads, so it says
+    ///   nothing at all. Treating an unreadable number as doubt would mark every line in the
+    ///   database the day an upstream layer started storing log-probabilities.
+    static func isUncertainTranscript(_ hit: Hit) -> Bool {
+        guard hit.kind == "said" || hit.kind == "heard" else { return false }
+        guard let confidence = hit.confidence, (0...1).contains(confidence) else { return false }
+        return confidence < transcriptConfidenceFloor
+    }
+
+    /// The convention, stated once per response and above the first line that uses it. A marker met
+    /// cold is a decoration; a marker whose meaning arrived first is evidence about the evidence.
+    static let uncertainTranscriptLegend = """
+    _Confidence: a line marked \(uncertainTranscriptMarker) scored below the transcriber's \
+    confidence floor of \(String(format: "%.2f", transcriptConfidenceFloor)) — the recogniser was \
+    not sure it was hearing speech at all, and what it writes in that state is often music, a video, \
+    or room noise rendered as if the user had said it. Marked lines are kept rather than dropped, but \
+    do not quote one, attribute it to anybody, or act on it without corroboration elsewhere. Lines \
+    without the mark are not certified correct — most predate confidence scoring — and the mark is \
+    never applied to screen text, whose accuracy is a separate question._
+    """
 }
 
 // MARK: - Identifiers
@@ -926,6 +1097,18 @@ private struct MergedHit {
     /// Speech before the screen it was said in front of, on an exact tie.
     let rank: Int
     let line: String
+    /// True when `line` carries the low-confidence marker. Tracked rather than scraped back out of
+    /// the rendered text, so the legend is printed exactly when a marked line survives the budget.
+    let uncertain: Bool
+
+    init(at: Double, origin: Origin, key: String, rank: Int, line: String, uncertain: Bool = false) {
+        self.at = at
+        self.origin = origin
+        self.key = key
+        self.rank = rank
+        self.line = line
+        self.uncertain = uncertain
+    }
 }
 
 /// What enforcing the caller's window actually cost, so the tool can say it rather than hide it.
@@ -938,7 +1121,7 @@ private struct RangedHits {
 }
 
 extension Tools {
-    fileprivate enum HitOrder { case oldestFirst, newestFirst }
+    enum HitOrder { case oldestFirst, newestFirst }
 
     /// Whether a record may be shown under the range the header prints.
     ///
@@ -989,7 +1172,8 @@ extension Tools {
             origin: .live,
             key: fingerprint(hit.text, at: hit.at),
             rank: hit.kind == "screen" ? 1 : 0,
-            line: hitLine(hit, origin: .live)
+            line: hitLine(hit, origin: .live),
+            uncertain: isUncertainTranscript(hit)
         )
     }
 
@@ -1060,10 +1244,20 @@ extension Tools {
 
     // MARK: Rendering
 
-    private static func renderHitsOnly(_ hits: [Hit], order: HitOrder) -> String {
+    /// Internal like the other honesty seams in this file: this is the exact path `recent` and
+    /// `transcript` render through, so a test of what a marked line looks like is a test of what the
+    /// user's model will actually read.
+    static func renderHitsOnly(_ hits: [Hit], order: HitOrder) -> String {
         renderMerged(
             hits.map {
-                MergedHit(at: $0.at, origin: .live, key: "", rank: 0, line: hitLine($0, origin: nil))
+                MergedHit(
+                    at: $0.at,
+                    origin: .live,
+                    key: "",
+                    rank: 0,
+                    line: hitLine($0, origin: nil),
+                    uncertain: isUncertainTranscript($0)
+                )
             },
             order: order,
             deduped: true
@@ -1096,6 +1290,13 @@ extension Tools {
 
         let display = order == .oldestFirst ? kept.sorted { $0.at < $1.at } : kept.sorted { $0.at > $1.at }
         var out: [String] = []
+        // Said once, before the first line that uses it, and only when one survived the budget: a
+        // reader who meets the marker cold has no reason to weigh it, and a legend printed over a
+        // page with nothing marked teaches them to expect doubt everywhere.
+        if kept.contains(where: \.uncertain) {
+            out.append(uncertainTranscriptLegend)
+            out.append("")
+        }
         var currentDay: Date?
         var undated: [String] = []
         let calendar = Calendar.current
@@ -1136,11 +1337,14 @@ extension Tools {
             : "undated"
         let tag = origin.map { " · \($0.tag)" } ?? ""
         let text = collapse(hit.text)
+        // Before the text, never after it: the doubt has to reach the reader in the same glance as
+        // the words, not as a footnote they meet once they have already believed the sentence.
+        let doubt = isUncertainTranscript(hit) ? " \(uncertainTranscriptMarker)" : ""
         switch hit.kind {
         case "said":
-            return "- **\(time)** · *me*\(tag): \(text)"
+            return "- **\(time)** · *me*\(tag)\(doubt): \(text)"
         case "heard":
-            return "- **\(time)** · *them*\(tag): \(text)"
+            return "- **\(time)** · *them*\(tag)\(doubt): \(text)"
         case "screen":
             let app = hit.app.flatMap(nonEmpty)
             // Window titles are quoted, so a title of its own quotes ("Re: "the plan"") would read
