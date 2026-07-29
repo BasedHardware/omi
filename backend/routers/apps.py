@@ -2079,6 +2079,20 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 # ******************************************************
 
 
+def _setup_completed_from_response(res: httpx.Response) -> bool:
+    """Read `is_setup_completed` from a third-party setup_completed_url response.
+
+    The body is developer-controlled, so it may be non-JSON or a JSON scalar/array
+    rather than the documented object. Anything that is not an object carrying a
+    truthy `is_setup_completed` means setup is not completed.
+    """
+    try:
+        payload: object = res.json()
+    except ValueError:
+        return False
+    return isinstance(payload, dict) and bool(payload.get('is_setup_completed', False))
+
+
 @router.post('/v1/apps/enable', response_model=AppMutationResponse)
 async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
@@ -2097,7 +2111,7 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
         client = get_webhook_client()
         res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
         logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
-        if res.status_code != 200 or not res.json().get('is_setup_completed', False):
+        if res.status_code != 200 or not _setup_completed_from_response(res):
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
     # Check payment status

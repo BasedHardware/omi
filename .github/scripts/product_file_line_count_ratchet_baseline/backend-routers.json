@@ -1,6 +1,6 @@
 {
   "files": {
-    "backend/routers/apps.py": 2373,
+    "backend/routers/apps.py": 2387,
     "backend/routers/chat.py": 1588,
     "backend/routers/developer.py": 2263,
     "backend/routers/mcp_sse.py": 1865,
@@ -8,7 +8,7 @@
     "backend/routers/users.py": 2076
   },
   "raise_justifications": {
-    "backend/routers/apps.py": "The owner-migration route validates a source-bound Firebase anonymous-token proof before its existing database write and tracked background work, keeping the authorization decision at the HTTP mutation boundary.",
+    "backend/routers/apps.py": "POST /v1/apps/enable reads is_setup_completed through _setup_completed_from_response so a developer-controlled body that is non-JSON or not an object returns the intended 400 instead of a 500 (46 prod occurrences Jul 21-28); the guard stays in the route that owns the enable response contract.",
     "backend/routers/chat.py": "Merging the Windows-port chat surface with main combined the stream-error fallback (answered guard) with mains journey/attempt observability in the same SSE generators; +11 lines of combined guard flow, no new route.",
     "backend/routers/developer.py": "GET /v1/dev/user/memories and /vector/search both serve the authoritative legacy memories collection for legacy-cohort accounts with no rollout state (#9892/#10203), keeping the narrow deny/legacy-fallback decision in the route that owns the read contract.",
     "backend/routers/mcp_sse.py": "MCP SSE memory reads route their legacy-fallback decision through the shared mcp_legacy_read_authorized helper (#9892); one import line. +7 so a refused memory read reports its reason instead of an empty success (#10735): the classification and wire shape live in utils/mcp_memories.mcp_denied_read_payload, leaving only the raise at the two tool branches that own the response contract.",
