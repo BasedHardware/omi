@@ -21,13 +21,19 @@ if(NOT CONTEXT_FOR_CLAUDE_SWIFTC_EXECUTABLE)
         "Install the Windows toolchain recommended by swift-winrt, then rerun CMake.")
 endif()
 
+find_program(CONTEXT_FOR_CLAUDE_SWIFT_EXECUTABLE NAMES swift)
+if(NOT CONTEXT_FOR_CLAUDE_SWIFT_EXECUTABLE)
+    message(FATAL_ERROR
+        "Context for Claude's Windows host requires the Swift driver on PATH. "
+        "Install the Windows toolchain recommended by swift-winrt, then rerun CMake.")
+endif()
+
 execute_process(
     COMMAND "${CONTEXT_FOR_CLAUDE_SWIFTC_EXECUTABLE}" --version
     RESULT_VARIABLE CONTEXT_FOR_CLAUDE_SWIFTC_RESULT
 )
 if(NOT CONTEXT_FOR_CLAUDE_SWIFTC_RESULT EQUAL 0)
-    message(FATAL_ERROR
-        "swiftc was found but could not run. Repair the Windows Swift toolchain, then rerun CMake.")
+    message(FATAL_ERROR "swiftc was found but could not run. Repair the Windows Swift toolchain, then rerun CMake.")
 endif()
 
 include(CheckIncludeFileCXX)
@@ -38,10 +44,29 @@ if(NOT CONTEXT_FOR_CLAUDE_HAS_WINDOWS_SDK)
         "through the Visual Studio Installer, then rerun CMake from a Developer PowerShell.")
 endif()
 
-include(CTest)
+# Swift/WinRT consumes Windows metadata, not C headers. Resolve the SDK metadata
+# before fetching it so a missing SDK stops with a useful diagnostic.
+set(CONTEXT_FOR_CLAUDE_WINDOWS_SDK_VERSION "${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
+if(NOT CONTEXT_FOR_CLAUDE_WINDOWS_SDK_VERSION)
+    set(CONTEXT_FOR_CLAUDE_WINDOWS_SDK_VERSION "$ENV{WindowsSDKVersion}")
+endif()
+string(REGEX REPLACE "[\\\\/]$" "" CONTEXT_FOR_CLAUDE_WINDOWS_SDK_VERSION "${CONTEXT_FOR_CLAUDE_WINDOWS_SDK_VERSION}")
 
+set(CONTEXT_FOR_CLAUDE_WINDOWS_SDK_ROOT "$ENV{WindowsSdkDir}")
+set(CONTEXT_FOR_CLAUDE_WINDOWS_WINMD
+    "${CONTEXT_FOR_CLAUDE_WINDOWS_SDK_ROOT}/UnionMetadata/${CONTEXT_FOR_CLAUDE_WINDOWS_SDK_VERSION}/Windows.winmd")
+if(NOT CONTEXT_FOR_CLAUDE_WINDOWS_SDK_VERSION OR NOT EXISTS "${CONTEXT_FOR_CLAUDE_WINDOWS_WINMD}")
+    message(FATAL_ERROR
+        "Windows SDK metadata was not found at '${CONTEXT_FOR_CLAUDE_WINDOWS_WINMD}'. "
+        "Run from a Visual Studio Developer PowerShell with WindowsSdkDir and WindowsSDKVersion set.")
+endif()
+
+include(CTest)
 add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../core" "${CMAKE_CURRENT_BINARY_DIR}/core")
 
+# Build the real upstream generator at a reproducible revision. Its output is
+# Swift bindings for Windows metadata; Context core remains a separate C ABI
+# static library that a future Windows Swift host imports through a module map.
 include(FetchContent)
 FetchContent_Declare(
     swift_winrt
@@ -52,10 +77,48 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(swift_winrt)
 
+# Use Windows.Foundation as the smallest real Windows API namespace that every
+# WinRT host needs. The response-file shape follows swift-winrt's own tests.
+set(CONTEXT_FOR_CLAUDE_WINRT_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/windows-foundation")
+file(MAKE_DIRECTORY "${CONTEXT_FOR_CLAUDE_WINRT_OUTPUT_DIR}")
+set(CONTEXT_FOR_CLAUDE_SWIFTWINRT_RESPONSE_FILE
+    "${CMAKE_CURRENT_BINARY_DIR}/ContextForClaudeWindowsFoundation.rsp")
+file(WRITE "${CONTEXT_FOR_CLAUDE_SWIFTWINRT_RESPONSE_FILE}"
+    "-include\nWindows.Foundation\n"
+    "-input\n${CONTEXT_FOR_CLAUDE_WINDOWS_WINMD}\n"
+    "-reference\n${CONTEXT_FOR_CLAUDE_WINDOWS_SDK_VERSION}\n"
+    "-output\n${CONTEXT_FOR_CLAUDE_WINRT_OUTPUT_DIR}\n")
+
+add_custom_target(generate_windows_foundation_projection
+    COMMAND $<TARGET_FILE:swiftwinrt> "@${CONTEXT_FOR_CLAUDE_SWIFTWINRT_RESPONSE_FILE}"
+    DEPENDS swiftwinrt
+    COMMENT "Generating Windows.Foundation Swift bindings with upstream swift-winrt"
+    VERBATIM
+)
+
+add_custom_target(context_for_claude_swift_host_tests
+    COMMAND "${CONTEXT_FOR_CLAUDE_SWIFT_EXECUTABLE}" test
+        -Xlinker "/LIBPATH:$<TARGET_FILE_DIR:context_core>"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/swift-host"
+    DEPENDS context_core
+    COMMENT "Testing Swift wrappers against the separately linked Context core C ABI"
+    VERBATIM
+)
+
 add_executable(context_for_claude_windows_core_smoke src/core_smoke.cpp)
 target_link_libraries(context_for_claude_windows_core_smoke PRIVATE ContextForClaude::core)
 target_compile_features(context_for_claude_windows_core_smoke PRIVATE cxx_std_17)
 target_compile_options(context_for_claude_windows_core_smoke PRIVATE /W4 /WX /permissive-)
-add_dependencies(context_for_claude_windows_core_smoke swiftwinrt)
-
 add_test(NAME context_for_claude_windows_core_smoke COMMAND context_for_claude_windows_core_smoke)
+
+add_executable(context_for_claude_windows_session_host src/session_host.cpp)
+target_link_libraries(context_for_claude_windows_session_host PRIVATE ContextForClaude::core)
+target_compile_features(context_for_claude_windows_session_host PRIVATE cxx_std_17)
+target_compile_options(context_for_claude_windows_session_host PRIVATE /W4 /WX /permissive-)
+add_test(NAME context_for_claude_windows_session_host COMMAND context_for_claude_windows_session_host)
+
+add_executable(context_for_claude_windows_pcm_host src/pcm_host.cpp)
+target_link_libraries(context_for_claude_windows_pcm_host PRIVATE ContextForClaude::core)
+target_compile_features(context_for_claude_windows_pcm_host PRIVATE cxx_std_17)
+target_compile_options(context_for_claude_windows_pcm_host PRIVATE /W4 /WX /permissive-)
+add_test(NAME context_for_claude_windows_pcm_host COMMAND context_for_claude_windows_pcm_host)
