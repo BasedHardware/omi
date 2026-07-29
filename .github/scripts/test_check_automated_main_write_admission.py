@@ -103,6 +103,25 @@ class CheckWorkflowTests(unittest.TestCase):
             f"guard missed the squashed automated merge: {errors}",
         )
 
+    def test_rejects_a_rebased_automated_merge(self):
+        rebase = FIXED.replace("gh pr merge --merge", "gh pr merge --rebase")
+        errors = self._errors_for(rebase)
+        self.assertTrue(
+            any("--merge" in error for error in errors),
+            f"guard missed the non-revertible rebase merge: {errors}",
+        )
+
+    def test_rejects_a_non_app_token(self):
+        non_app_token = FIXED.replace(
+            "${{ steps.app-token.outputs.token }}",
+            "${{ secrets.AUTOMATION_TOKEN }}",
+        )
+        errors = self._errors_for(non_app_token)
+        self.assertTrue(
+            any("app-identity contract" in error for error in errors),
+            f"guard missed a non-app PR token: {errors}",
+        )
+
     def test_ignores_a_commented_out_merge_line(self):
         commented = FIXED.replace(
             'gh pr merge --merge --delete-branch --admin "$PR_URL"',

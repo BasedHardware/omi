@@ -40,6 +40,7 @@ APP_TOKEN_ACTION = "actions/create-github-app-token"
 # spacing GitHub Actions accepts.
 GITHUB_TOKEN_INPUT = re.compile(r"token:\s*\$\{\{\s*secrets\.GITHUB_TOKEN\s*\}\}")
 GITHUB_CONTEXT_TOKEN_INPUT = re.compile(r"token:\s*\$\{\{\s*github\.token\s*\}\}")
+APP_TOKEN_OUTPUT = re.compile(r"\$\{\{\s*steps\.([A-Za-z0-9_-]+)\.outputs\.token\s*\}\}")
 
 
 def _self_merging_workflows() -> list[Path]:
@@ -66,6 +67,17 @@ def _create_pr_token(step: str) -> str | None:
     return None
 
 
+def _app_token_step_ids(text: str) -> set[str]:
+    step_ids: set[str] = set()
+    for step in re.split(r"(?m)^(?=\s*-\s)", text):
+        if APP_TOKEN_ACTION not in step:
+            continue
+        match = re.search(r"(?m)^\s*id:\s*([A-Za-z0-9_-]+)\s*$", step)
+        if match:
+            step_ids.add(match.group(1))
+    return step_ids
+
+
 def check_workflow(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
     rel = path.relative_to(ROOT)
@@ -74,6 +86,7 @@ def check_workflow(path: Path) -> list[str]:
     create_pr_tokens = [
         _create_pr_token(step) for step in re.split(r"(?m)^(?=\s*-\s)", text) if CREATE_PR_ACTION in step
     ]
+    app_token_step_ids = _app_token_step_ids(text)
 
     if any(
         token is not None
@@ -91,7 +104,15 @@ def check_workflow(path: Path) -> list[str]:
             f"so {CREATE_PR_ACTION} falls back to GitHub's default token and no "
             f"pull_request checks fire (#10535)."
         )
-    if APP_TOKEN_ACTION not in text:
+    elif any(
+        not (match := APP_TOKEN_OUTPUT.fullmatch(token or '')) or match.group(1) not in app_token_step_ids
+        for token in create_pr_tokens
+    ):
+        errors.append(
+            f"{rel}: opens its own auto-merged PR with a token that is not an output of an "
+            f"{APP_TOKEN_ACTION} step, so the checkable app-identity contract is not proven (#10535)."
+        )
+    if not app_token_step_ids:
         errors.append(
             f"{rel}: opens its own auto-merged PR without an {APP_TOKEN_ACTION} step, "
             f"so the PR cannot run pull_request checks (#10535)."
@@ -101,9 +122,9 @@ def check_workflow(path: Path) -> list[str]:
         stripped = line.strip()
         if stripped.startswith("#") or GH_PR_MERGE not in stripped:
             continue
-        if "--squash" in stripped:
+        if "--merge" not in stripped:
             errors.append(
-                f"{rel}: merges an automated PR with --squash. AGENTS.md requires "
+                f"{rel}: merges an automated PR without --merge ({stripped}). AGENTS.md requires "
                 f"'Merge, never squash' so main stays revertible with "
                 f"git revert -m 1; use --merge (#10535)."
             )
