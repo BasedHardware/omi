@@ -1,0 +1,487 @@
+.github/checks-manifest.yaml
+  s_b5d52d5f05403b::t_04b842b74eb639 44,97-111
+.github/failure-classes/FC-client-model-outside-proxy-allowlist.json
+  s_b5d52d5f05403b::t_57d3b59c7fd947 1-17
+.github/failure-classes/FC-firestore-readiness-project-mismatch.json
+  s_b5d52d5f05403b::t_9f24e84b6e9755 1-17
+.github/failure-classes/FC-in-band-auth-await-stall.json
+  s_b5d52d5f05403b::t_32e55f8659ad1a 1-9
+.github/failure-classes/FC-media-track-output-liveness.json
+  s_b5d52d5f05403b::t_2858e776fc60ca 1-14
+.github/failure-classes/FC-peer-close-aborts-owed-write.json
+  s_b5d52d5f05403b::t_30082e2de9dda3 1-17
+.github/failure-classes/FC-ptt-owner-boundary-bootstrap-hang.json
+  s_b5d52d5f05403b::t_0c34ee368c2c7a 1-12
+.github/failure-classes/FC-serving-index-missing-filter-field.json
+  s_b5d52d5f05403b::t_aa63bbe0b1ee5f 1-16
+.github/scripts/check_failure_class_guard_ratchet.py
+  s_b5d52d5f05403b::t_5b095bf723a197 68
+.github/scripts/check_pr_scope.py
+  s_b5d52d5f05403b::t_438957ab27763d 1-148
+.github/scripts/product_file_line_count_ratchet_baseline/backend-database.json
+  s_b5d52d5f05403b::t_ecbf8a4d0af1b0 3,8
+.github/scripts/product_file_line_count_ratchet_baseline/backend-routers.json
+  s_b5d52d5f05403b::t_a91f90b5308223 3
+.github/scripts/product_file_line_count_ratchet_baseline/backend-utils.json
+  s_b5d52d5f05403b::t_b0fed4e656093b 4,15,19
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-appstate.json
+  s_b5d52d5f05403b::t_1cc644e84c2fd2 1-9
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_b5d52d5f05403b::t_625fea107fb62a 5
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_b5d52d5f05403b::t_ae64edc6745f01 4,7,18
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-onboarding.json
+  s_b5d52d5f05403b::t_81fc251db31add 4,8
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-proactiveassistants.json
+  s_b5d52d5f05403b::t_552140d71cc5ad 4,8
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-providers.json
+  s_b5d52d5f05403b::t_f1401934ee253f 4,8
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-rewind.json
+  s_b5d52d5f05403b::t_c48a1acdc4406b 3,8-9
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_b5d52d5f05403b::t_c9a565b07e02c0 6,13
+.github/scripts/test_check_failure_class_guard_ratchet.py
+  s_b5d52d5f05403b::t_76b0240823472b 11,19-20,32-43,74-83,224-225,238-239
+.github/scripts/test_check_pr_scope.py
+  s_b5d52d5f05403b::t_696fd317c0112b 1-102
+.github/scripts/test_desktop_backend_candidate_probe.py
+  s_b5d52d5f05403b::t_2b74fd04039fdc 7,187-190,217-220,226
+.github/scripts/test_plan_desktop_release.py
+  s_b5d52d5f05403b::t_54c088fa801c43 472-475,478-481,523-532
+.github/scripts/test_pr_preflight.py
+  s_b5d52d5f05403b::t_c30e520c30a14b 291
+.github/workflows/desktop-swift-ci.yml
+  s_b5d52d5f05403b::t_acf690c8557b1d 189
+.github/workflows/desktop_auto_release.yml
+  s_b5d52d5f05403b::t_f0beb9b20a01a5 4-7
+.github/workflows/desktop_windows_release.yml
+  s_b5d52d5f05403b::t_6e2a5a04b90d80 3-5,7-11
+.github/workflows/gcp_backend_auto_dev.yml
+  s_b5d52d5f05403b::t_b9096172c8b60d 203-217
+.github/workflows/gcp_backend_pusher_auto_deploy.yml
+  s_b5d52d5f05403b::t_40bd59d8162fd3 18
+.github/workflows/parakeet_gpu_tests.yml
+  s_b5d52d5f05403b::t_5d4ba2c2719dd3 35,84,199-205,213-216,266,268
+AGENTS.md
+  s_b5d52d5f05403b::t_9951d1182a0837 2,7,9,44,56-58,63-66,70,75,98-109,120-122,128,136,143-148
+app/lib/providers/memories_provider.dart
+  s_b5d52d5f05403b::t_a8a59a465ec065 19-20,37-42,243,254-256,262,350-352,358-363,366-377
+app/test/providers/memories_provider_deletion_test.dart
+  s_b5d52d5f05403b::t_c40838a8139a01 1-49
+backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
+  s_b5d52d5f05403b::t_b1b4854bb92441 396-397
+backend/charts/pusher/dev_omi_pusher_values.yaml
+  s_b5d52d5f05403b::t_2ac5e1d4745119 37,60-66,293
+backend/charts/pusher/prod_omi_pusher_values.yaml
+  s_b5d52d5f05403b::t_717623c79b0848 38,58-64
+backend/charts/pusher/templates/deployment.yaml
+  s_b5d52d5f05403b::t_26c058d1463fb4 40
+backend/database/conversations.py
+  s_b5d52d5f05403b::t_8134afd8018b4b 381-383,385,388-395,455-457,459,462-469
+backend/database/folders.py
+  s_b5d52d5f05403b::t_410a6db4ee1e4e 324-327,366
+backend/deploy/runtime_env.yaml
+  s_b5d52d5f05403b::t_009d544f7b5b29 230-232
+backend/pusher/Dockerfile
+  s_b5d52d5f05403b::t_6dcce758bb5c68 7,25-28,52-57,85
+backend/pyrightconfig.json
+  s_b5d52d5f05403b::t_44ea38ad317fd4 195-201
+backend/routers/apps.py
+  s_b5d52d5f05403b::t_9cc762003d358e 17,705-707
+backend/routers/conversations.py
+  s_b5d52d5f05403b::t_b7eaffe2004044 55-59,1211-1218
+backend/routers/desktop_proxy.py
+  s_b5d52d5f05403b::t_73627da99b541a 21-22
+backend/routers/listen/runtime.py
+  s_b5d52d5f05403b::t_75e8856d5dc6b6 165-169
+backend/routers/listen/transcripts.py
+  s_b5d52d5f05403b::t_129d8809214747 13-14,248-264,334-335
+backend/routers/pusher.py
+  s_b5d52d5f05403b::t_d70a7b7dfa2bce 5,13-30,48,50-53,55,95-96,98-100,102-105,122-125,163-165,170,172,183,188,191,204,254,259,263-265,316-317,357,361,382,393-394,421,442-443,448-451,464,467-470,480-484,489,495-509,517,532,536-543,550-551,557-558,571,573,581-586,594-595,600-603,615-616,621-624,634-635,640-643,649-651,667-668,673-676,680
+backend/scripts/check_unit_test_discovery.py
+  s_b5d52d5f05403b::t_be1b4f992732a5 1-217
+backend/scripts/needs-typecheck.sh
+  s_b5d52d5f05403b::t_b53fd4f5423000 18-19,28
+backend/scripts/validate_rendered_deployment_contract.py
+  s_b5d52d5f05403b::t_21308628e85272 66-71
+backend/testing/shell.py
+  s_b5d52d5f05403b::t_976354ded3a5a7 1-64
+backend/tests/test_replay_harness_lc3_frame_timing.py
+  s_b5d52d5f05403b::t_fccec324143f4f 10-11,31,39,42-48
+backend/tests/unit/test_agent_vm_reaper.py
+  s_b5d52d5f05403b::t_023991fa174d62 14-15,237
+backend/tests/unit/test_agent_vm_startup.py
+  s_b5d52d5f05403b::t_5d6ee14d69fd83 5-6,27-29,31-41
+backend/tests/unit/test_app_review_score_clamp.py
+  s_b5d52d5f05403b::t_1ecff616e1f053 53-148
+backend/tests/unit/test_async_http_infrastructure.py
+  s_b5d52d5f05403b::t_1aefc9228db72f 560
+backend/tests/unit/test_auto_dev_backend_scope.py
+  s_b5d52d5f05403b::t_07e42f9fa501f1 12-13,79-101,103,105,111,135-145
+backend/tests/unit/test_backend_test_runner.py
+  s_b5d52d5f05403b::t_d4b4ddbc7e1d06 8-9,14-18,21,24-25,34-35,39,58,62-63,66-69,75-76,78,94,114,138,144-145,148,172,176-177,179,205,209-210,228,232-233
+backend/tests/unit/test_backend_typecheck_predicate.py
+  s_b5d52d5f05403b::t_63216f3aa7ddbd 6-10,15-16,20
+backend/tests/unit/test_backend_unit_ci_runner.py
+  s_b5d52d5f05403b::t_0dac9a2a3a6dc2 9-10,35,62,70,85,89-94,96,108,119-120,123-124
+backend/tests/unit/test_changed_files_script.py
+  s_b5d52d5f05403b::t_7a55b85f60d962 4-5,45-51
+backend/tests/unit/test_check_unit_test_discovery.py
+  s_b5d52d5f05403b::t_18d174750ace6d 1-133
+backend/tests/unit/test_conversation_folder_assignment.py
+  s_b5d52d5f05403b::t_01b0b7f55db9d1 1-63
+backend/tests/unit/test_conversation_hybrid_search.py
+  s_b5d52d5f05403b::t_6193ee471518a5 151-154,168,170,177
+backend/tests/unit/test_conversation_revision_contract.py
+  s_b5d52d5f05403b::t_9fe89f395654d2 151-185,366-458
+backend/tests/unit/test_conversation_search_date_validation.py
+  s_b5d52d5f05403b::t_396953522adf1d 310-395
+backend/tests/unit/test_conversation_search_speaker_filter.py
+  s_b5d52d5f05403b::t_16e93f5972f629 1-122
+backend/tests/unit/test_conversation_structure_timezone.py
+  s_b5d52d5f05403b::t_d1cc448a113c4e 294-307,317
+backend/tests/unit/test_desktop_proxy.py
+  s_b5d52d5f05403b::t_6cd374d17bd82d 3,49-77
+backend/tests/unit/test_listen_finalization_cloud_tasks.py
+  s_b5d52d5f05403b::t_08bd94016ff8ef 22-23,687,706,773,776,778,812,820,822,833,840,847,849,862,866,868,880,887,889,892,914,921-922,924,929,946,952-953,955,960,975,982
+backend/tests/unit/test_listen_runtime_regressions.py
+  s_b5d52d5f05403b::t_2b0cfd6a3ce989 306-328,357,372-374,396,401-415,420-452
+backend/tests/unit/test_llm_gateway_deploy_contract.py
+  s_b5d52d5f05403b::t_350c515a8382d0 11-12,322,326-327,329,332,350,353-354
+backend/tests/unit/test_process_conversation_usage_context.py
+  s_b5d52d5f05403b::t_b8e10398a5b18d 1214-1266
+backend/tests/unit/test_pusher_auto_deploy_paths.py
+  s_b5d52d5f05403b::t_00105b4d40e270 27
+backend/tests/unit/test_pusher_circuit_breaker.py
+  s_b5d52d5f05403b::t_3f59163760db33 27,81,174,300-376,403
+backend/tests/unit/test_pusher_runtime_protocol.py
+  s_b5d52d5f05403b::t_d0d5923b79fb06 1-143
+backend/tests/unit/test_pusher_transcript_dispatch.py
+  s_b5d52d5f05403b::t_325a400f7ee0c8 1-41
+backend/tests/unit/test_rendered_deployment_contract.py
+  s_b5d52d5f05403b::t_5e09fefb57cb4f 176-194
+backend/tests/unit/test_task_sync_cloud_export_dedup.py
+  s_b5d52d5f05403b::t_ab34010e2d251d 1-120
+backend/tests/unit/test_verify_backend_release_vector.py
+  s_b5d52d5f05403b::t_2b7f8a68e651d1 411-427
+backend/tests/unit/test_verify_pusher_config_references.py
+  s_b5d52d5f05403b::t_d41007bf819fd4 182
+backend/tests/unit/test_verify_pusher_source_closure.py
+  s_b5d52d5f05403b::t_d4a3ae29fb6684 92-105
+backend/tests/unit/utils/test_listen_pusher_session.py
+  s_b5d52d5f05403b::t_ea99d4f160abd2 16,19,24-27,252-346
+backend/utils/conversations/process_conversation.py
+  s_b5d52d5f05403b::t_2c12b07c2a111c 132-145,156-157,170-171,232,283,320
+backend/utils/conversations/search.py
+  s_b5d52d5f05403b::t_632ee39bd1e829 102-123,161-168
+backend/utils/listen_pusher_session.py
+  s_b5d52d5f05403b::t_3d9bb9f14776fd 10,14-18,85-86,182-199,201-212,218,231-252,254-257,259-281,287,391-392,561,563,568,588,590-592,594
+backend/utils/llm/conversation_folder.py
+  s_b5d52d5f05403b::t_3e85ef1b389a73 138-141
+backend/utils/llm/conversation_processing.py
+  s_b5d52d5f05403b::t_83c285273f0973 1208
+backend/utils/metrics.py
+  s_b5d52d5f05403b::t_66a2a71e085052 14-30
+backend/utils/pusher.py
+  s_b5d52d5f05403b::t_5cb9688f5f63b6 7-8,98-100,157,159-162,183-199,201
+backend/utils/pusher_finalization.py
+  s_b5d52d5f05403b::t_77b5ba23659d96 1-59,62-97,99-105,107-138,140-144,147-152,154-164,166-173,175-214
+backend/utils/pusher_protocol.py
+  s_b5d52d5f05403b::t_600f9dc5596340 1-123
+backend/utils/sync/pipeline.py
+  s_b5d52d5f05403b::t_261025ad048100 22,36,448,450-452,1301,1416,1591,1621,2074
+backend/utils/task_sync.py
+  s_b5d52d5f05403b::t_94fa3e6ee31be2 59-68
+desktop/macos/Desktop/Sources/AppState.swift
+  s_b5d52d5f05403b::t_7399f4acc1f256 357-360
+desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift
+  s_b5d52d5f05403b::t_686d97692fdf3c 2
+desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  s_b5d52d5f05403b::t_5f1726b96aa799 21,326-329,336,664-694,1189
+desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
+  s_b5d52d5f05403b::t_f62695b2ed70a2 1-22
+desktop/macos/Desktop/Sources/CloudConnectorGuidanceOverlay.swift
+  s_b5d52d5f05403b::t_cd28ed8b931128 81-84,115,175,228,233,235-239,246,249-250,320-321,323-324,326,328-352,354-386,390-394,402,433,559,564-600,777-801,804,806,808,927-953,965-975,987,990,995-998,1000
+desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift
+  s_b5d52d5f05403b::t_df00d997e1c2a6 440-455,1364,1390-1391
+desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift
+  s_b5d52d5f05403b::t_d8c034acf8471e 70-72,168-172,175,208,226-227,229,233,238,262-263,265,285,348-349
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarPresentation.swift
+  s_b5d52d5f05403b::t_d674a940a8d34b 3-18,25-37,42,45-46,75-85
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
+  s_b5d52d5f05403b::t_795c9d2204001a 285,287-290,292,305-306,308,310
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_b5d52d5f05403b::t_608fb90e95232f 3172,3177
+desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
+  s_b5d52d5f05403b::t_7da3d41cad6ea6 295-303
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  s_b5d52d5f05403b::t_6043f59067daef 210,277
+desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
+  s_b5d52d5f05403b::t_b4125e06c71790 14-17,27,30,33,36-42,45,49-58,72-73
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_b5d52d5f05403b::t_078aca2b93af56 412,501,535
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_b5d52d5f05403b::t_7b858a0c933d04 22,35-41,50-92,154,260,269-401
+desktop/macos/Desktop/Sources/MainWindow/DesktopWindowLayoutPolicy.swift
+  s_b5d52d5f05403b::t_82834b7c5c1dab 1-10
+desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPageHeaderControls.swift
+  s_b5d52d5f05403b::t_ee8dcd71bb16b8 6,35-38,47,57-70
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportRunner.swift
+  s_b5d52d5f05403b::t_22103f95f9bc97 80-83,97,112,119,153-154,164,184
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  s_b5d52d5f05403b::t_c169261820725b 222,431-437,1325,1365,1383,1391-1393,1399-1400,1402-1406,1411-1417,1419,1430
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/AppRuleEditorView.swift
+  s_b5d52d5f05403b::t_655ecda1b8991e 9,21-25,47-48,72-76,79,91,121-122,128,142,145-147,164,167-169,213
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
+  s_b5d52d5f05403b::t_5ce69506286dff 7-15,154-160,450,456,476,482,484
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+AccountBilling.swift
+  s_b5d52d5f05403b::t_a7dbdb504378c8 72,351
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Advanced.swift
+  s_b5d52d5f05403b::t_b18c77f3cb3ca7 156-158,176-189
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+DeveloperKeys.swift
+  s_b5d52d5f05403b::t_8c98bd2333c72f 7-16,54-57,59,83-98
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+FloatingBarAndChat.swift
+  s_b5d52d5f05403b::t_0405bd2c77ab69 483-484,488,493,554
+desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  s_b5d52d5f05403b::t_2ecbb29d86d31b 322-327,419,556-558
+desktop/macos/Desktop/Sources/Onboarding/OnboardingAnswerWriteGate.swift
+  s_b5d52d5f05403b::t_ba199a49feed03 1-31
+desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift
+  s_b5d52d5f05403b::t_d1b893ea475810 661,686
+desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarDemoView.swift
+  s_b5d52d5f05403b::t_a7129c8edaada1 52-75,78-88,92-101,104-123,126
+desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarShortcutStepView.swift
+  s_b5d52d5f05403b::t_a20f83f34065fd 55-68,70-84,86-87,92-93,114
+desktop/macos/Desktop/Sources/Onboarding/OnboardingImportEvidenceService.swift
+  s_b5d52d5f05403b::t_53395aafd6e92e 5-8,13-34,50,55,64,73,76,85,122,129,136-137,179-183,208,212,219,225,228,244,251-254,294-298
+desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift
+  s_b5d52d5f05403b::t_5b50d00434ef8b 7-31,647-660,793,798,827-832,835-839,859-864,866-867,925-927,1511-1516,1519-1521,1525-1530,1534-1536,1540-1554,1564,1566,1601-1602,1604,1611-1613
+desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
+  s_b5d52d5f05403b::t_4890e7ef6560a3 55-106
+desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
+  s_b5d52d5f05403b::t_ae1764454f17a8 131
+desktop/macos/Desktop/Sources/Onboarding/OnboardingVoiceDemoView.swift
+  s_b5d52d5f05403b::t_e78af467e8fa09 48-49,51-59,61-67,69-77,81-87,89-107,110,123,128,135
+desktop/macos/Desktop/Sources/Onboarding/OnboardingVoiceShortcutStepView.swift
+  s_b5d52d5f05403b::t_82fba459f845e1 49-62,64-78,80-81,86-87,108,117
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  s_b5d52d5f05403b::t_d011fa26649225 10-18,132-141,143-146,150,276-326,368-373,412-420,422-423,510,514,540-541,545-556,559-594,606-607,612-613,617,759-776,780-790,795-816,829-832,853-856,873-874,877-878,925-1018,1025-1036
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_b5d52d5f05403b::t_1a7dbb4c84ebf1 5-14,26-43,63-78,89,91,102,118-121,136-143,146,159-166,169-170,183-222,225-226,269,427-444,448-452,459-471,480,482-489,505-507,514,517-519,527-528,530-532,540-546,550,576-578,677-679
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_b5d52d5f05403b::t_3b019f166a081b 9-21,45-50,71-76,79-87,99,160-191,235,298,311-315,317,327-329,373-376,443-494,594-603,606-622,762,764-769,772,774,776-778,791,796,800,802-803
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
+  s_b5d52d5f05403b::t_be5a126995b915 416-427
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistantSettings.swift
+  s_b5d52d5f05403b::t_4df438bf974f00 404-408
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/CapturedFrame.swift
+  s_b5d52d5f05403b::t_bf95a2e94ebecd 1,3,5-6,14-15,24,31-91
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveAssistantOrchestrationPolicy.swift
+  s_b5d52d5f05403b::t_a0997f017e610c 295-685
+desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  s_b5d52d5f05403b::t_3efd3ed0ec8944 2,50,157-181,441,501-503,508-510,539,661-666,670,673,710-712,716-725,767-776,848-894,939-949,951-952,958-963,967,1019-1021,1027-1028
+desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  s_b5d52d5f05403b::t_d0f0af547d681d 1556,1558
+desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  s_b5d52d5f05403b::t_5757b9c38f47fb 3,2203-2206,2215-2220,2267,2294-2304,2314
+desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift
+  s_b5d52d5f05403b::t_025c86ff19608d 1566-1590
+desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift
+  s_b5d52d5f05403b::t_a863e4c4ac7b63 4-25,777-778,780-794,796-798,801-817,819-832,834,836-839
+desktop/macos/Desktop/Sources/ScreenCaptureService.swift
+  s_b5d52d5f05403b::t_9a1087dce4af30 8,880-882,956-958,967,1055-1056
+desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
+  s_b5d52d5f05403b::t_aa435a01a7fdc5 434,436,438,445,448,450,453,641-647,656,660-666,671-675
+desktop/macos/Desktop/Sources/Services/RecurringTaskScheduler.swift
+  s_b5d52d5f05403b::t_5a355ae36185e6 5-7,55,60-65
+desktop/macos/Desktop/Sources/SignInView.swift
+  s_b5d52d5f05403b::t_58c6d73351f1ea 94-98,117-118,131
+desktop/macos/Desktop/Sources/Startup/StartupWarmupPolicy.swift
+  s_b5d52d5f05403b::t_97344fdcb195f4 112-124,126
+desktop/macos/Desktop/Sources/StartupWarmupCoordinator.swift
+  s_b5d52d5f05403b::t_28b5f11c23f742 10-16,27-28,35-39,66,69
+desktop/macos/Desktop/Sources/Theme/OmiButtonStyle.swift
+  s_b5d52d5f05403b::t_df26f1498fae0a 4-6,11,43-62,64-91,94,99,107
+desktop/macos/Desktop/Sources/ViewModelContainer.swift
+  s_b5d52d5f05403b::t_36045ad80320fc 9-12,32-33
+desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift
+  s_b5d52d5f05403b::t_c82ad588dc8b16 1688-1692
+desktop/macos/Desktop/Tests/AppsHeaderRowLayoutTests.swift
+  s_b5d52d5f05403b::t_dade3da51a294e 35-58,104-111,121-126
+desktop/macos/Desktop/Tests/BYOKIncompleteHintTests.swift
+  s_b5d52d5f05403b::t_270e26fcfcb638 1-18
+desktop/macos/Desktop/Tests/BrowserGoogleSessionTests.swift
+  s_b5d52d5f05403b::t_c84f4831ad865d 80-103
+desktop/macos/Desktop/Tests/ChatTimelineContinuityTests.swift
+  s_b5d52d5f05403b::t_0ebd820635d495 1-2,1300,1304-1305,1327-1331,1334-1336,1344-1391
+desktop/macos/Desktop/Tests/DesktopWindowLayoutPolicyTests.swift
+  s_b5d52d5f05403b::t_0aa055d6844c4f 1-15
+desktop/macos/Desktop/Tests/FileIndexerServiceTests.swift
+  s_b5d52d5f05403b::t_f863a4887a3da7 105-118,136-152
+desktop/macos/Desktop/Tests/FloatingBarLaunchPolicyTests.swift
+  s_b5d52d5f05403b::t_5c1ee7dbed067a 31-39
+desktop/macos/Desktop/Tests/IntegrationConnectTelemetryTests.swift
+  s_b5d52d5f05403b::t_8ad71f7ea7d9f8 321,323-336,338-340,343-355,357-362
+desktop/macos/Desktop/Tests/MemoryAtlasPerformanceHarnessTests.swift
+  s_b5d52d5f05403b::t_fd56f0094c4bb0 404-406,408
+desktop/macos/Desktop/Tests/MemoryLocalIdentityMutationTests.swift
+  s_b5d52d5f05403b::t_d2d7ea783af631 1-114
+desktop/macos/Desktop/Tests/OnboardingAnswerWriteGateTests.swift
+  s_b5d52d5f05403b::t_d03d93951276f0 1-51
+desktop/macos/Desktop/Tests/OnboardingFlowTests.swift
+  s_b5d52d5f05403b::t_0bfea0847dbc42 415,428-445
+desktop/macos/Desktop/Tests/OnboardingGoogleInsightGateTests.swift
+  s_b5d52d5f05403b::t_610a8455079858 1-62
+desktop/macos/Desktop/Tests/OnboardingPermissionToolTests.swift
+  s_b5d52d5f05403b::t_7060e674634161 6-20,92-181
+desktop/macos/Desktop/Tests/OnboardingPinnedActionsLayoutTests.swift
+  s_b5d52d5f05403b::t_e404a9b01c205c 1-62
+desktop/macos/Desktop/Tests/ProactiveAssistantOrchestrationPolicyTests.swift
+  s_b5d52d5f05403b::t_7f88fe447ab2cf 414-633
+desktop/macos/Desktop/Tests/RecurringTaskSchedulerGateTests.swift
+  s_b5d52d5f05403b::t_20ac411dd6e67e 1-34
+desktop/macos/Desktop/Tests/SBOnboardingBackNavigationTests.swift
+  s_b5d52d5f05403b::t_104bd8ac47c2bf 1-96
+desktop/macos/Desktop/Tests/SBOnboardingCaptureSelectionTests.swift
+  s_b5d52d5f05403b::t_75a3a66f19b041 1-20
+desktop/macos/Desktop/Tests/SBOnboardingCloudContextStateTests.swift
+  s_b5d52d5f05403b::t_f56fd2c0734515 59-60,112-115,119,122-131,135-209
+desktop/macos/Desktop/Tests/SBOnboardingLanguageCopyTests.swift
+  s_b5d52d5f05403b::t_b94f414d737d50 1-33
+desktop/macos/Desktop/Tests/SBOnboardingLayoutTests.swift
+  s_b5d52d5f05403b::t_9e1c6ed07cbae1 1-23
+desktop/macos/Desktop/Tests/ScreenRecordingPermissionPolicyTests.swift
+  s_b5d52d5f05403b::t_81893fc5b817b0 145-147,149-153,156-163,166-167,169-182,220,223
+desktop/macos/Desktop/Tests/SettingsSidebarItemLayoutTests.swift
+  s_b5d52d5f05403b::t_d9b494e1c09871 1-83
+desktop/macos/Desktop/Tests/SharedCaptureSilentMicRecoveryPolicyTests.swift
+  s_b5d52d5f05403b::t_79e209dc63d46b 1-24
+desktop/macos/Desktop/Tests/StartupWarmupPolicyTests.swift
+  s_b5d52d5f05403b::t_7cbc939d8c4e40 71-86
+desktop/macos/Desktop/Tests/SubscriptionPlanPresentationTests.swift
+  s_b5d52d5f05403b::t_01a0d21d54bc9b 1-20
+desktop/macos/Desktop/Tests/TaskAssistantPromptTests.swift
+  s_b5d52d5f05403b::t_d8adcf00c3e411 6-14
+desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift
+  s_b5d52d5f05403b::t_d39d0235824600 1-159
+desktop/macos/Desktop/Tests/VoiceTurnCoordinatorTests.swift
+  s_b5d52d5f05403b::t_c359aef7e7b286 182-185,189-192
+desktop/macos/agent/src/adapters/acp.ts
+  s_b5d52d5f05403b::t_4f7c773bc3e5e2 157-192
+desktop/macos/agent/src/adapters/pi-mono.ts
+  s_b5d52d5f05403b::t_e8ce4275bcf665 946-977,1073-1076
+desktop/macos/agent/src/index.ts
+  s_b5d52d5f05403b::t_06736c9ac4af6a 84-89,1064-1073
+desktop/macos/agent/tests/acp-init-auth-nonblocking.test.ts
+  s_b5d52d5f05403b::t_f5f312b7cec2aa 1-76
+desktop/macos/agent/tests/pi-mono-adapter.test.ts
+  s_b5d52d5f05403b::t_baf90fa5cb786d 833-870,913,925
+desktop/macos/changelog/unreleased/20260711-byok-incomplete-keys-hint.json
+  s_b5d52d5f05403b::t_dfaa8d05d896e9 1-3
+desktop/macos/changelog/unreleased/20260711-post-onboarding-data-lag.json
+  s_b5d52d5f05403b::t_9c0bcabdb0d457 1-3
+desktop/macos/changelog/unreleased/20260711-swiftui-settings-corrections.json
+  s_b5d52d5f05403b::t_49063f97247700 1-3
+desktop/macos/changelog/unreleased/20260712-recurring-task-investigation-dedup.json
+  s_b5d52d5f05403b::t_3d209e140a5854 1-3
+desktop/macos/changelog/unreleased/20260720-rewind-capture-policy-optimization.json
+  s_b5d52d5f05403b::t_9955b9b8508da1 1-3
+desktop/macos/changelog/unreleased/20260724-acp-cold-start-auth-fast-fail.json
+  s_b5d52d5f05403b::t_0868959a67fd33 1-3
+desktop/macos/changelog/unreleased/20260728-onboarding-feedback.json
+  s_b5d52d5f05403b::t_a1cce39698f8f2 1-3
+desktop/macos/changelog/unreleased/20260728-recover-silent-microphone.json
+  s_b5d52d5f05403b::t_4473e78d629e18 1-3
+desktop/macos/changelog/unreleased/20260729-clarify-onboarding-language-picker.json
+  s_b5d52d5f05403b::t_8544ca6586f152 1-3
+desktop/macos/changelog/unreleased/20260729-local-memory-delete.json
+  s_b5d52d5f05403b::t_8496c02e041cab 1-3
+desktop/macos/changelog/unreleased/20260729-meeting-recording-onboarding.json
+  s_b5d52d5f05403b::t_dc1d02fa21f57e 1-3
+desktop/macos/changelog/unreleased/20260729-onboarding-permissions-and-local-files.json
+  s_b5d52d5f05403b::t_e3877c8dbc6a5b 1-3
+desktop/macos/changelog/unreleased/20260729-onboarding-ptt-demo.json
+  s_b5d52d5f05403b::t_fdc4b90a23192d 1-3
+desktop/macos/changelog/unreleased/20260729-pi-mono-headless-no-user-extensions.json
+  s_b5d52d5f05403b::t_44eadf1edf8280 1-3
+desktop/macos/changelog/unreleased/20260729-responsive-layouts.json
+  s_b5d52d5f05403b::t_9c5ca0e4e6d0fa 1-3
+desktop/macos/changelog/unreleased/20260729-selectable-chat-messages.json
+  s_b5d52d5f05403b::t_5792c5bedf889e 1-3
+desktop/macos/changelog/unreleased/20260729-settings-style-consistency.json
+  s_b5d52d5f05403b::t_a1f8edac8d34de 1-3
+desktop/macos/e2e/flows/capture-lifecycle.yaml
+  s_b5d52d5f05403b::t_5f374926737fd5 8
+desktop/macos/e2e/flows/connector-import.yaml
+  s_b5d52d5f05403b::t_6a9f6fdef53f3e 8,11
+desktop/macos/e2e/flows/delete-account.yaml
+  s_b5d52d5f05403b::t_a46fb18a76a8e1 8
+desktop/macos/e2e/flows/harness-smoke.yaml
+  s_b5d52d5f05403b::t_93329a26e321bf 28
+desktop/macos/e2e/flows/home.yaml
+  s_b5d52d5f05403b::t_1f060ba84bc5cf 9
+desktop/macos/e2e/flows/onboarding-flow.yaml
+  s_b5d52d5f05403b::t_c0559e476a085d 28
+desktop/macos/e2e/flows/screen-recording-permission.yaml
+  s_b5d52d5f05403b::t_e6d2adab1bc866 23
+desktop/macos/e2e/flows/settings-basic.yaml
+  s_b5d52d5f05403b::t_a69f8a6497cc2d 7,9
+desktop/macos/scripts/prepare-swiftlint-baseline.py
+  s_b5d52d5f05403b::t_5d1001bece6d88 15,29-30
+desktop/macos/scripts/qualify-desktop-beta.sh
+  s_b5d52d5f05403b::t_a5c5321b176612 793-799,803-818,823
+desktop/windows/package.json
+  s_b5d52d5f05403b::t_7ec159fc0af0b8 3
+desktop/windows/src/main/agentKernel/controlTools.test.ts
+  s_b5d52d5f05403b::t_45f5289b8d3cb1 505-534
+desktop/windows/src/main/agentKernel/controlTools.ts
+  s_b5d52d5f05403b::t_fd15ba4bcd17f1 212
+desktop/windows/src/main/agentKernel/store.test.ts
+  s_b5d52d5f05403b::t_d7e2dbd55201f1 29-47,62,92-231,1633,1635-1639,1641-1643,1749-1836
+desktop/windows/src/main/agentKernel/store.ts
+  s_b5d52d5f05403b::t_ac51146caed965 81-83,161,356,436,522-524,877,879,1699-1710,2241-2417
+desktop/windows/src/main/agentKernel/types.ts
+  s_b5d52d5f05403b::t_a16e277ac61b50 71-72
+desktop/windows/src/main/ipc/dbRecovery.test.ts
+  s_b5d52d5f05403b::t_f9ee3001cbdeb3 196-199,214
+desktop/windows/src/renderer/src/components/rewind/RewindCaptureHost.test.tsx
+  s_b5d52d5f05403b::t_1be8cf516a47ff 7-8,18,97,126-169
+desktop/windows/src/renderer/src/components/rewind/RewindCaptureHost.tsx
+  s_b5d52d5f05403b::t_d21bc57c6f653b 97-98,100-108,119,182-185,191-197
+desktop/windows/src/renderer/src/pages/Apps.errorToast.test.tsx
+  s_b5d52d5f05403b::t_3991b00fbd2699 5,13-17,66,83,118
+docs/doc/developer/agent-control-plane.mdx
+  s_b5d52d5f05403b::t_1b2e221de9bb3b 492,503-507,1188
+docs/doc/developer/agent-grants-approval-ux.mdx
+  s_b5d52d5f05403b::t_0dc432399e460c 20,26,58-61,132,140
+docs/doc/developer/backend/listen_pusher_pipeline.mdx
+  s_b5d52d5f05403b::t_68fc3428e90e63 9,15-28
+scripts/dev-harness/dev_harness/cli.py
+  s_b5d52d5f05403b::t_0cdd143f1f5054 920-926,928-929
+scripts/dev-harness/dev_harness/qualification.py
+  s_b5d52d5f05403b::t_be2b79a91cbdc9 609
+scripts/dev-harness/tests/test_qualification_lease.py
+  s_b5d52d5f05403b::t_931e9aa63d18e0 131-132,142,144,146
+scripts/repair-git-primary-worktree.sh
+  s_b5d52d5f05403b::t_58e03d2199b582 1-22
+scripts/setup-refresh-main.sh
+  s_b5d52d5f05403b::t_117a258fcbe1b5 5-6
+scripts/test-make-setup.sh
+  s_b5d52d5f05403b::t_2572fc9b8b0156 126-131,139-144,151-186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "426f33820c0c9946a011f439f66a4e99b727d0b2",
+  "prompts": {},
+  "sessions": {
+    "s_b5d52d5f05403b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82d7239f-7b04-40bc-b1d8-8737cb48399a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
