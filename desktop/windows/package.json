@@ -109,7 +109,7 @@
     "koffi": "^3.0.2",
     "lucide-react": "^1.16.0",
     "onnxruntime-web": "1.27.0",
-    "react-router-dom": "^7.15.1",
+    "react-router-dom": "~7.18.2",
     "tailwind-merge": "^3.6.0",
     "three": "^0.184.0",
     "three-instanced-uniforms-mesh": "^0.52.4",
@@ -153,17 +153,5 @@
     "typescript": "^5.9.3",
     "vite": "^7.2.6",
     "vitest": "^3.2.4"
-  },
-  "overrides": {
-    "@hono/node-server": "~2.0.5",
-    "app-builder-lib": "~26.15.0",
-    "axios": "~1.18.0",
-    "brace-expansion": "~5.0.8",
-    "builder-util-runtime": "~9.7.0",
-    "fast-uri": "~3.1.4",
-    "js-yaml": "~4.3.0",
-    "postcss": "~8.5.18",
-    "react-router": "~8.3.0",
-    "tar": "~7.5.18"
   }
 }
