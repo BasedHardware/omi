@@ -7,6 +7,15 @@ import Foundation
 
 extension SBOnboardingModel {
   func requestPerm(_ key: String) {
+    // The user may have changed a grant in System Settings while this step was
+    // onscreen. Re-check it before opening another pane or asking macOS again.
+    refreshPermCheck(key)
+    if isGranted(key) {
+      setPermOn(key)
+      autoAdvanceIfCurrent(key)
+      return
+    }
+
     switch key {
     case "microphone":
       micState = .waiting
@@ -115,26 +124,30 @@ extension SBOnboardingModel {
     pollTasks["system_audio"]?.cancel()
     pollTasks["system_audio"] = Task { [weak self] in
       for _ in 0..<40 {  // ~20s
-        try? await Task.sleep(nanoseconds: 500_000_000)
         guard let self, !Task.isCancelled else { return }
         // Skipping this step is an explicit choice not to surface its consent.
         // Never let a late Screen Recording grant trigger the modal elsewhere.
         guard self.step == .systemAudio else { return }
         self.appState.checkScreenRecordingPermission()
-        guard self.appState.hasScreenRecordingPermission else { continue }
+        if self.appState.hasScreenRecordingPermission {
+          // A real process-tap attempt is the only truthful preflight for
+          // system audio. It completes without another prompt when consent was
+          // already granted, so reconcile it before asking the user again.
+          let granted = await self.appState.primeSystemAudioPermission()
+          guard !Task.isCancelled else { return }
+          guard granted else {
+            self.resetPermToAsk("system_audio")
+            return
+          }
 
-        let granted = await self.appState.primeSystemAudioPermission()
-        guard !Task.isCancelled else { return }
-        guard granted else {
-          self.resetPermToAsk("system_audio")
+          self.setPermOn("system_audio")
+          try? await Task.sleep(nanoseconds: 600_000_000)
+          guard !Task.isCancelled else { return }
+          self.autoAdvanceIfCurrent("system_audio")
           return
         }
 
-        self.setPermOn("system_audio")
-        try? await Task.sleep(nanoseconds: 600_000_000)
-        guard !Task.isCancelled else { return }
-        self.autoAdvanceIfCurrent("system_audio")
-        return
+        try? await Task.sleep(nanoseconds: 500_000_000)
       }
 
       guard let self, !Task.isCancelled else { return }
@@ -260,7 +273,53 @@ extension SBOnboardingModel {
   func answerMic() { advance(userAnswer: micState == .on ? "Allowed" : "Skip", to: .systemAudio) }
   func answerSystemAudio() { advance(userAnswer: sysState == .on ? "Allowed" : "Skip", to: .screen) }
   func answerScreen() { advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files) }
-  func answerFiles() { advance(userAnswer: fdaState == .on ? "Allowed" : "Skip", to: .accessibility) }
+  /// Restores the legacy Files-stage contract: scan what is readable after the
+  /// Full Disk Access choice, then form the aggregate local-file memories
+  /// before moving on. A skipped FDA grant still scans folders macOS permits.
+  func answerFiles() {
+    switch localFileProfileState {
+    case .idle:
+      thread.append(Msg(isOmi: false, text: fdaState == .on ? "Allowed" : "Skip"))
+      startLocalFileScan()
+    case .scanning:
+      break
+    case .complete, .failed:
+      finishFilesStep()
+    }
+  }
+
+  func startLocalFileScan() {
+    guard case .idle = localFileProfileState, localFileScanTask == nil else { return }
+    localFileProfileState = .scanning
+    let taskID = UUID()
+    localFileScanID = taskID
+    localFileScanTask = Task { [weak self] in
+      guard let self else { return }
+      defer {
+        if self.localFileScanID == taskID {
+          self.localFileScanTask = nil
+          self.localFileScanID = nil
+        }
+      }
+      let result = await self.fileScanRunner(self.appState)
+      guard !Task.isCancelled, self.step == .files, self.localFileScanID == taskID else { return }
+      self.localFileProfileState = result
+      if case .complete = result {
+        UserDefaults.standard.set(true, forKey: DefaultsKey.hasCompletedFileIndexing.rawValue)
+      }
+    }
+  }
+
+  func retryLocalFileScan() {
+    guard case .failed = localFileProfileState else { return }
+    localFileProfileState = .idle
+    startLocalFileScan()
+  }
+
+  func finishFilesStep() {
+    guard localFileProfileState.isTerminal else { return }
+    advance(userAnswer: nil, to: .accessibility)
+  }
   func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
   func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
 
@@ -302,6 +361,12 @@ extension SBOnboardingModel {
     var step = target
     while let key = permissionKey(for: step) {
       refreshPermCheck(key)
+      // A pre-granted FDA permission must still visit Files once so this flow
+      // performs the required scan and aggregate-memory formation.
+      if step == .files, isGranted(key), !localFileProfileState.isTerminal {
+        setPermOn(key)
+        break
+      }
       guard isGranted(key), let next = Step(rawValue: step.rawValue + 1) else { break }
       setPermOn(key)
       step = next
