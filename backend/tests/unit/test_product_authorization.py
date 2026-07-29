@@ -378,8 +378,8 @@ class _GrantStateRead:
 def test_external_default_memory_composition_reads_stored_app_key_grant_and_allows_without_archive():
     calls = []
 
-    def read_grants(*, uid, db_client):
-        calls.append((uid, db_client))
+    def read_grants(*, uid):
+        calls.append(uid)
         return _GrantStateRead()
 
     db_client = _Db()
@@ -395,14 +395,14 @@ def test_external_default_memory_composition_reads_stored_app_key_grant_and_allo
     assert decision.policy.app_has_default_memory_grant is True
     assert decision.policy.archive_capability is False
     assert decision.observability['grant_state_reason'] == 'ok'
-    assert calls == [('u1', db_client)]
+    assert calls == ['u1']
 
 
 def test_external_default_memory_composition_denies_missing_scope_or_missing_stored_grant():
     wrong_scope = authorize_memory_external_default_memory_read(
         _external_context(scopes=('conversations.read',)),
         db_client=_Db(),
-        read_app_key_grants_state=lambda *, uid, db_client: _GrantStateRead(),
+        read_app_key_grants_state=lambda *, uid: _GrantStateRead(),
     )
     assert wrong_scope.allowed is False
     assert wrong_scope.reason == 'missing_authenticated_scope_memories.read'
@@ -411,7 +411,7 @@ def test_external_default_memory_composition_denies_missing_scope_or_missing_sto
     missing_grant = authorize_memory_external_default_memory_read(
         _external_context(key_id='missing-key'),
         db_client=_Db(),
-        read_app_key_grants_state=lambda *, uid, db_client: _GrantStateRead(),
+        read_app_key_grants_state=lambda *, uid: _GrantStateRead(),
     )
     assert missing_grant.allowed is False
     assert missing_grant.reason == 'missing_app_key_scope_grant'

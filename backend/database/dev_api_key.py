@@ -99,7 +99,6 @@ def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) 
             key_id,
             default_read=grant_default_read,
             write=grant_write,
-            db_client=firestore_client,
         )
 
     api_key_data = DevApiKey(
@@ -178,7 +177,7 @@ def delete_dev_key(user_id: str, key_id: str):
             key_ref.delete()
             # Remove the persisted app/key memory grant for this key so a
             # deleted key can no longer pass the memory grant gate.
-            remove_developer_api_key_memory_grant(user_id, key_id, db_client=firestore_client)
+            remove_developer_api_key_memory_grant(user_id, key_id)
 
 
 def get_user_id_by_api_key(api_key: str) -> Optional[str]:

@@ -364,7 +364,6 @@ def persist_recurrence_signals_for_maintenance(
                 uid,
                 signal,
                 account_generation=control.account_generation,
-                firestore_client=firestore_client,
             )
             persisted += 1
         except Exception:
@@ -396,7 +395,6 @@ def drain_recurrence_inbox_for_maintenance(
     receipts = list_pending(
         uid,
         account_generation=control.account_generation,
-        firestore_client=firestore_client,
     )
     for receipt in receipts:
         try:
@@ -411,7 +409,6 @@ def drain_recurrence_inbox_for_maintenance(
                 receipt.receipt_id,
                 outcome=result.outcome,
                 account_generation=receipt.account_generation,
-                firestore_client=firestore_client,
             )
             created += int(result.outcome == RecurrenceOutcomeKind.candidate_created)
         except recurrence_inbox_db.RecurrenceGenerationMismatchError:
@@ -422,7 +419,6 @@ def drain_recurrence_inbox_for_maintenance(
                 receipt.receipt_id,
                 error_code=type(exc).__name__,
                 account_generation=receipt.account_generation,
-                firestore_client=firestore_client,
             )
             record_fallback(
                 component='other',

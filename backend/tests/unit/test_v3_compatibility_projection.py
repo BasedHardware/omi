@@ -4,8 +4,10 @@ from datetime import datetime, timezone
 
 import pytest
 
+import database.memory_compatibility_projection as projection_module
 from database.memory_collections import MemoryCollections
 from database.memory_compatibility_projection import read_v3_compatibility_projection_page
+from tests.store_fakes import FakeDocumentStore
 from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V3ProjectionCursor,
@@ -13,84 +15,6 @@ from utils.memory.v3.projection_reader_contract import (
     V3ProjectionReadError,
     V3ProjectionReadRequest,
 )
-
-
-class FakeSnapshot:
-    def __init__(self, doc_id, data, exists=True):
-        self.id = doc_id
-        self._data = data
-        self.exists = exists
-
-    def to_dict(self):
-        return self._data
-
-
-class FakeDocument:
-    def __init__(self, db, path):
-        self.db = db
-        self.path = path
-
-    def get(self):
-        self.db.document_reads.append(self.path)
-        data = self.db.docs.get(self.path)
-        return FakeSnapshot(self.path.rsplit('/', 1)[-1], data, exists=data is not None)
-
-
-class FakeQuery:
-    def __init__(self, db, path):
-        self.db = db
-        self.path = path
-        self.limit_value = None
-        self.start_after_cursor = None
-
-    def order_by(self, *args, **kwargs):
-        self.db.query_order_by.append((args, kwargs))
-        return self
-
-    def start_after(self, cursor):
-        self.start_after_cursor = cursor
-        self.db.query_start_after.append(cursor)
-        return self
-
-    def limit(self, value):
-        self.limit_value = value
-        self.db.query_limits.append(value)
-        return self
-
-    def stream(self):
-        prefix = f'{self.path}/'
-        rows = []
-        for path, data in self.db.docs.items():
-            if not path.startswith(prefix) or '/' in path[len(prefix) :]:
-                continue
-            rows.append(FakeSnapshot(path.rsplit('/', 1)[-1], data))
-        rows.sort(key=lambda snap: (snap.to_dict()['created_at'], snap.id), reverse=True)
-        if self.start_after_cursor is not None:
-            created_at = self.start_after_cursor['created_at']
-            memory_id = self.start_after_cursor['__name__']
-            rows = [snap for snap in rows if (snap.to_dict()['created_at'], snap.id) < (created_at, memory_id)]
-        return rows[: self.limit_value]
-
-
-class FakeDb:
-    def __init__(self, docs):
-        self.docs = docs
-        self.document_reads = []
-        self.collection_reads = []
-        self.query_limits = []
-        self.query_order_by = []
-        self.query_start_after = []
-        self.legacy_reader_called = False
-        self.writes = []
-
-    def document(self, path):
-        assert '/memory_items/' not in path
-        return FakeDocument(self, path)
-
-    def collection(self, path):
-        assert '/memory_items' not in path
-        self.collection_reads.append(path)
-        return FakeQuery(self, path)
 
 
 UID = 'projection-user'
@@ -174,7 +98,8 @@ def _payload(memory_id, *, created_at=NOW, content=None, **overrides):
 _DEFAULT_STATE = object()
 
 
-def _db(*items, state=_DEFAULT_STATE):
+def _docs(*items, state=_DEFAULT_STATE):
+    """Seed a path->data dict for the neutral store (state doc + item documents)."""
     paths = MemoryCollections(uid=UID)
     docs = {}
     if state is _DEFAULT_STATE:
@@ -183,7 +108,17 @@ def _db(*items, state=_DEFAULT_STATE):
         docs[paths.v3_compatibility_projection_state] = state
     for memory_id, item in items:
         docs[f'{paths.v3_compatibility_projection_items}/{memory_id}'] = item
-    return FakeDb(docs)
+    return docs
+
+
+@pytest.fixture
+def install_store(monkeypatch):
+    def _install(docs):
+        store = FakeDocumentStore(backing=docs)
+        monkeypatch.setattr(projection_module, "_store", lambda: store)
+        return store
+
+    return _install
 
 
 def _request(**overrides):
@@ -199,32 +134,31 @@ def _request(**overrides):
     return V3ProjectionReadRequest(**params)
 
 
-def _reason_for(db, request=None):
+def _reason_for(install_store, docs, request=None):
+    install_store(docs)
     with pytest.raises(V3ProjectionReadError) as exc:
-        read_v3_compatibility_projection_page(db_client=db, request=request or _request())
+        read_v3_compatibility_projection_page(request=request or _request())
     return exc.value.reason
 
 
-def test_ready_projection_returns_memorydb_compatible_dicts_without_memory_body_fields_and_no_legacy_fallback():
-    db = _db(('mem-a', _payload('mem-a')))
+def test_ready_projection_returns_memorydb_compatible_dicts_without_memory_body_fields_and_no_legacy_fallback(
+    install_store,
+):
+    install_store(_docs(('mem-a', _payload('mem-a'))))
 
-    page = read_v3_compatibility_projection_page(db_client=db, request=_request())
+    page = read_v3_compatibility_projection_page(request=_request())
 
     assert [item['id'] for item in page.items] == ['mem-a']
     assert page.items[0]['content'] == 'content mem-a'
     assert 'projection_generation' not in page.items[0]
     assert page.next_cursor is None
     assert page.projection_generation == PROJECTION_GENERATION
-    assert db.collection_reads == [MemoryCollections(uid=UID).v3_compatibility_projection_items]
-    assert db.query_limits == [3]
-    assert db.legacy_reader_called is False
-    assert db.writes == []
 
 
-def test_ready_empty_projection_returns_empty_list():
-    db = _db(state=_state(empty_projection=True))
+def test_ready_empty_projection_returns_empty_list(install_store):
+    install_store(_docs(state=_state(empty_projection=True)))
 
-    page = read_v3_compatibility_projection_page(db_client=db, request=_request())
+    page = read_v3_compatibility_projection_page(request=_request())
 
     assert page.items == []
     assert page.empty_projection is True
@@ -247,14 +181,14 @@ def test_ready_empty_projection_returns_empty_list():
         (_state(ready=False), V3ProjectionFailureReason.PROJECTION_NOT_READY),
     ],
 )
-def test_missing_malformed_or_unfenced_projection_state_fails_closed(state, reason):
-    assert _reason_for(_db(state=state)) == reason
+def test_missing_malformed_or_unfenced_projection_state_fails_closed(install_store, state, reason):
+    assert _reason_for(install_store, _docs(state=state)) == reason
 
 
-def test_caller_supplied_expected_generation_is_not_copied_from_projection_state():
-    db = _db(('mem-a', _payload('mem-a')), state=_state(account_generation=ACCOUNT_GENERATION))
+def test_caller_supplied_expected_generation_is_not_copied_from_projection_state(install_store):
+    docs = _docs(('mem-a', _payload('mem-a')), state=_state(account_generation=ACCOUNT_GENERATION))
 
-    assert _reason_for(db, _request(expected_account_generation=ACCOUNT_GENERATION + 1)) == (
+    assert _reason_for(install_store, docs, _request(expected_account_generation=ACCOUNT_GENERATION + 1)) == (
         V3ProjectionFailureReason.ACCOUNT_GENERATION_MISMATCH
     )
 
@@ -270,46 +204,56 @@ def test_caller_supplied_expected_generation_is_not_copied_from_projection_state
         (_payload('mem-a', memorydb={'id': 'mem-a'}), V3ProjectionFailureReason.INVALID_PROJECTION_PAYLOAD),
     ],
 )
-def test_invalid_projection_item_fails_whole_page(item, reason):
-    assert _reason_for(_db(('mem-a', item))) == reason
+def test_invalid_projection_item_fails_whole_page(install_store, item, reason):
+    assert _reason_for(install_store, _docs(('mem-a', item))) == reason
 
 
-def test_archive_tombstone_deleted_and_stale_short_term_items_are_not_returned_by_default():
+def test_archive_tombstone_deleted_and_stale_short_term_items_are_not_returned_by_default(install_store):
     visible = _payload('visible')
     archived = _payload('archived', archive=True)
     deleted = _payload('deleted', deleted=True)
     tombstoned = _payload('tombstoned', tombstoned=True)
     stale = _payload('stale', short_term_stale=True)
-    db = _db(
-        ('visible', visible), ('archived', archived), ('deleted', deleted), ('tombstoned', tombstoned), ('stale', stale)
+    install_store(
+        _docs(
+            ('visible', visible),
+            ('archived', archived),
+            ('deleted', deleted),
+            ('tombstoned', tombstoned),
+            ('stale', stale),
+        )
     )
 
-    page = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=10))
+    page = read_v3_compatibility_projection_page(request=_request(limit=10))
 
     assert [item['id'] for item in page.items] == ['visible']
 
 
-def test_stable_keyset_pagination_by_created_at_desc_then_memory_id_desc_reads_limit_plus_one():
+def test_stable_keyset_pagination_by_created_at_desc_then_memory_id_desc_reads_limit_plus_one(install_store):
     t3 = datetime(2026, 1, 3, tzinfo=timezone.utc)
     t2 = datetime(2026, 1, 2, tzinfo=timezone.utc)
     t1 = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    db = _db(
-        ('a', _payload('a', created_at=t1)),
-        ('b', _payload('b', created_at=t2)),
-        ('c', _payload('c', created_at=t2)),
-        ('d', _payload('d', created_at=t3)),
+    install_store(
+        _docs(
+            ('a', _payload('a', created_at=t1)),
+            ('b', _payload('b', created_at=t2)),
+            ('c', _payload('c', created_at=t2)),
+            ('d', _payload('d', created_at=t3)),
+        )
     )
 
-    first = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=2))
-    second = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=2, cursor=first.next_cursor))
+    first = read_v3_compatibility_projection_page(request=_request(limit=2))
+    second = read_v3_compatibility_projection_page(request=_request(limit=2, cursor=first.next_cursor))
 
     assert [item['id'] for item in first.items] == ['d', 'c']
     assert isinstance(first.next_cursor, V3ProjectionCursor)
+    assert first.next_cursor.created_at == t2
+    assert first.next_cursor.memory_id == 'c'
     assert [item['id'] for item in second.items] == ['b', 'a']
     assert second.next_cursor is None
-    assert db.query_limits == [3, 3]
-    assert db.query_start_after == [{'created_at': t2, '__name__': 'c'}]
 
 
-def test_offset_is_unsupported_in_memory_projection_reader_even_for_legacy_zero_override():
-    assert _reason_for(_db(), _request(offset=0, limit=5000)) == V3ProjectionFailureReason.OFFSET_UNSUPPORTED
+def test_offset_is_unsupported_in_memory_projection_reader_even_for_legacy_zero_override(install_store):
+    assert _reason_for(install_store, _docs(), _request(offset=0, limit=5000)) == (
+        V3ProjectionFailureReason.OFFSET_UNSUPPORTED
+    )

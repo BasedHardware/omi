@@ -176,7 +176,7 @@ def _assert_live_content_prevents_cleanup(
     conversation = snapshot.to_dict() or {}
     if conversation.get('has_content') is not True:
         raise AssertionError('content write did not persist the durable has_content marker')
-    session = recording_sessions_db.get_recording_session(uid, recording_session_id, firestore_client=client)
+    session = recording_sessions_db.get_recording_session(uid, recording_session_id)
     if session is None or session['lifecycle_phase'] != 'in_progress':
         raise AssertionError('cleanup terminalized the recording session after content committed')
     return conversation_ref

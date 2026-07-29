@@ -11,6 +11,7 @@ try:
 except Exception as exc:  # pragma: no cover - system pytest env without backend deps
     pytest.skip(f'FastAPI/TestClient route proof requires backend venv dependencies: {exc}', allow_module_level=True)
 
+import database.memory_compatibility_projection as projection_module
 from config.memory_rollout import MemoryRolloutMode
 from database import document_store
 from database.memory_collections import MemoryCollections
@@ -102,17 +103,29 @@ class _RecordingStore(FakeDocumentStore):
     def __init__(self, *, backing):
         super().__init__(backing=backing)
         self.reads = []
+        self.queries = []
 
     def get(self, path, *, fields=None):
         self.reads.append(path)
         return super().get(path, fields=fields)
 
+    def query(self, collection, **kwargs):
+        self.queries.append((collection, kwargs.get('limit')))
+        return super().query(collection, **kwargs)
+
 
 def _install_store(monkeypatch, db):
     """Route ``document_store`` reads/writes through the SAME dict as the injected ``db_client`` fake."""
+    # The projection reader now reads through the neutral store too; fold the Firestore-shaped
+    # collection seeds into the shared path->data backing so a collection query sees them.
+    for collection, entries in db.collections.items():
+        for doc_id, data in entries:
+            db.docs.setdefault(f'{collection}/{doc_id}', data)
     store = _RecordingStore(backing=db.docs)
     monkeypatch.setattr(document_store, '_store', lambda: store)
+    monkeypatch.setattr(projection_module, '_store', lambda: store)
     db.doc_reads = store.reads
+    db.store_queries = store.queries
     return store
 
 
@@ -310,7 +323,7 @@ def test_real_router_uses_actual_builder_for_enrolled_memory_read_and_never_call
     assert response.headers['x-omi-memory-device-scope-supported'] == 'true'
     assert legacy_calls == []
     assert 'users/uid-a/memory_state/head' in db.doc_reads
-    assert db.streams == [('users/uid-a/v3_compatibility_projection_items', 12)]
+    assert db.store_queries == [('users/uid-a/v3_compatibility_projection_items', 12)]
     assert db.writes == []
 
 
@@ -437,8 +450,8 @@ def test_whitelisted_ready_user_uses_real_memory_projection_and_never_writes(mon
     assert db.writes == []
     assert 'users/uid-a/memory_control/state' in db.doc_reads
     assert 'users/uid-a/memory_state/head' in db.doc_reads
-    assert any(path == 'users/uid-a/v3_compatibility_projection/state' for path, _ in db.reads)
-    assert db.streams == [('users/uid-a/v3_compatibility_projection_items', 12)]
+    assert 'users/uid-a/v3_compatibility_projection/state' in db.doc_reads
+    assert db.store_queries == [('users/uid-a/v3_compatibility_projection_items', 12)]
 
 
 def test_trusted_state_head_mismatch_fails_before_projection_item_query(monkeypatch):

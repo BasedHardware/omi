@@ -419,7 +419,7 @@ def authorize_memory_external_default_memory_read(
     Archive capability.
     """
 
-    grant_state_read = read_app_key_grants_state(uid=context.uid, db_client=db_client)
+    grant_state_read = read_app_key_grants_state(uid=context.uid)
     decision = authorize_app_key_scope_memory_grant(
         context,
         persisted_grant_state=getattr(grant_state_read, 'state', {}),
@@ -447,7 +447,7 @@ def authorize_memory_external_default_memory_write(
     memories before any external-memory service call.
     """
 
-    grant_state_read = read_app_key_grants_state(uid=context.uid, db_client=db_client)
+    grant_state_read = read_app_key_grants_state(uid=context.uid)
     decision = authorize_app_key_scope_memory_grant(
         context,
         persisted_grant_state=getattr(grant_state_read, 'state', {}),

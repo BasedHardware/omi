@@ -64,7 +64,7 @@ _MEMORY_SOURCE = 'memory_compatibility_projection'
 
 
 class ProjectionReader(Protocol):
-    def __call__(self, *, db_client: object, request: V3ProjectionReadRequest) -> V3ProjectionPage: ...
+    def __call__(self, *, request: V3ProjectionReadRequest) -> V3ProjectionPage: ...
 
 
 _projection_reader = cast(ProjectionReader, getattr(projection_db, 'read_v3_compatibility_projection_page'))
@@ -212,7 +212,6 @@ class _ProductionV3Adapters:
         budget_ms: int,
     ) -> V3ComposedProjectionPage:
         projection_page = _projection_reader(
-            db_client=self.config.db_client,
             request=V3ProjectionReadRequest(
                 uid=context.subject_uid,
                 limit=limit,

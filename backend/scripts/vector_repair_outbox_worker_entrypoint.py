@@ -65,7 +65,6 @@ class VectorRepairOutboxEntrypointConfig:
 
 @dataclass(frozen=True)
 class VectorRepairOutboxProductionDependencies:
-    db_client: Any
     authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]]
     vector_deleter: Callable[[Dict[str, Any]], Any]
     vector_repairer: Callable[[Dict[str, Any], Any], Any]
@@ -74,7 +73,6 @@ class VectorRepairOutboxProductionDependencies:
 def run_vector_repair_outbox_worker_entrypoint(
     *,
     env: Mapping[str, str],
-    db_client: Any,
     authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]],
     vector_deleter: Callable[[Dict[str, Any]], Any],
     vector_repairer: Callable[[Dict[str, Any], Any], Any],
@@ -113,7 +111,6 @@ def run_vector_repair_outbox_worker_entrypoint(
 
     try:
         summary = tick_runner(
-            db_client=db_client,
             uid=entrypoint_config.uid,
             config=entrypoint_config.tick_config,
             authoritative_item_loader=authoritative_item_loader,
@@ -187,7 +184,6 @@ def build_vector_repair_outbox_production_dependencies(
     embeddings = llm_clients_module.embeddings
 
     return VectorRepairOutboxProductionDependencies(
-        db_client=db_client,
         authoritative_item_loader=make_authoritative_item_loader(db_client=db_client),
         vector_deleter=make_pinecone_vector_deleter(
             delete_vectors=pinecone_index.delete,
@@ -253,7 +249,6 @@ def run_vector_repair_outbox_worker_http_tick(
 
     try:
         summary = tick_runner(
-            db_client=dependencies.db_client,
             uid=entrypoint_config.uid,
             config=entrypoint_config.tick_config,
             authoritative_item_loader=dependencies.authoritative_item_loader,
@@ -336,7 +331,6 @@ def main(
 
     return run_vector_repair_outbox_worker_entrypoint(
         env=effective_env,
-        db_client=dependencies.db_client,
         authoritative_item_loader=dependencies.authoritative_item_loader,
         vector_deleter=dependencies.vector_deleter,
         vector_repairer=dependencies.vector_repairer,

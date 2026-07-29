@@ -20,6 +20,14 @@ class _Delete:
     def __repr__(self) -> str:  # pragma: no cover - trivial
         return "DELETE"
 
+    # Stateless singleton: copying must preserve identity so ``value is DELETE`` holds after a
+    # (deep)copy of a write payload — adapters and fakes match this sentinel by identity.
+    def __copy__(self) -> "_Delete":
+        return self
+
+    def __deepcopy__(self, memo: Any) -> "_Delete":
+        return self
+
 
 class _ServerTimestamp:
     """Server-side timestamp. Adapter maps to Firestore SERVER_TIMESTAMP / Mongo $currentDate."""
@@ -28,6 +36,13 @@ class _ServerTimestamp:
 
     def __repr__(self) -> str:  # pragma: no cover - trivial
         return "SERVER_TIMESTAMP"
+
+    # Stateless singleton: copying must preserve identity (see ``_Delete``).
+    def __copy__(self) -> "_ServerTimestamp":
+        return self
+
+    def __deepcopy__(self, memo: Any) -> "_ServerTimestamp":
+        return self
 
 
 @dataclass(frozen=True)

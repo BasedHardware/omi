@@ -9,6 +9,7 @@ import database.action_items as action_items_db
 import database.goals as goals_db
 import database.recurrence_inbox as recurrence_inbox_db
 import database.workstreams as workstreams_db
+from tests.store_fakes import FakeDocumentStore
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.candidate import CandidateCreate, CandidateRecord, CandidateStatus
 from models.goal import (
@@ -168,7 +169,6 @@ def fake_db(monkeypatch):
 
     monkeypatch.setattr(goals_db.firestore, 'transactional', transactional)
     monkeypatch.setattr(workstreams_db.firestore, 'transactional', transactional)
-    monkeypatch.setattr(recurrence_inbox_db.firestore, 'transactional', transactional)
     monkeypatch.setattr(action_items_db.firestore, 'transactional', transactional)
     monkeypatch.setattr(action_items_db, 'db', database)
     return database
@@ -580,8 +580,17 @@ def seed_workstream(fake_db, workstream_id='w1', latest_sequence=0, generation=3
     }
 
 
-def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(fake_db):
-    seed_control(fake_db, generation=3)
+def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(monkeypatch):
+    store = FakeDocumentStore()
+    monkeypatch.setattr(recurrence_inbox_db, '_store', lambda: store)
+
+    def seed_control(generation):
+        store.set(
+            'users/u1/task_intelligence_control/state',
+            {'workflow_mode': 'read', 'account_generation': generation},
+        )
+
+    seed_control(generation=3)
     now = datetime.now(timezone.utc)
     signal = CanonicalRecurrenceSignal(
         signal_id='observation-1',
@@ -596,24 +605,19 @@ def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(fake_db):
         last_seen_at=now,
         evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id='memory-1', scope=EvidenceScope.canonical)],
     )
-    first = recurrence_inbox_db.enqueue_recurrence_signal('u1', signal, account_generation=3, firestore_client=fake_db)
+    first = recurrence_inbox_db.enqueue_recurrence_signal('u1', signal, account_generation=3)
     replay = recurrence_inbox_db.enqueue_recurrence_signal(
         'u1',
         signal.model_copy(update={'signal_id': 'observation-2'}),
         account_generation=3,
-        firestore_client=fake_db,
     )
-    seed_control(fake_db, generation=4)
-    next_generation = recurrence_inbox_db.enqueue_recurrence_signal(
-        'u1', signal, account_generation=4, firestore_client=fake_db
-    )
+    seed_control(generation=4)
+    next_generation = recurrence_inbox_db.enqueue_recurrence_signal('u1', signal, account_generation=4)
 
     assert replay.receipt_id == first.receipt_id
     assert replay.signal.signal_id == 'observation-1'
     assert next_generation.receipt_id != first.receipt_id
-    assert recurrence_inbox_db.list_pending_recurrence_receipts(
-        'u1', account_generation=3, firestore_client=fake_db
-    ) == [replay]
+    assert recurrence_inbox_db.list_pending_recurrence_receipts('u1', account_generation=3) == [replay]
 
     with pytest.raises(recurrence_inbox_db.RecurrenceGenerationMismatchError):
         recurrence_inbox_db.complete_recurrence_receipt(
@@ -621,11 +625,8 @@ def test_recurrence_inbox_is_durable_idempotent_and_generation_scoped(fake_db):
             first.receipt_id,
             outcome=RecurrenceOutcomeKind.candidate_created,
             account_generation=3,
-            firestore_client=fake_db,
         )
-    assert recurrence_inbox_db.list_pending_recurrence_receipts(
-        'u1', account_generation=3, firestore_client=fake_db
-    ) == [replay]
+    assert recurrence_inbox_db.list_pending_recurrence_receipts('u1', account_generation=3) == [replay]
 
 
 def test_journal_artifact_versions_and_checkpoints_preserve_structured_continuity(fake_db):

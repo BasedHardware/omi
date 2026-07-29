@@ -13,9 +13,8 @@ class _GrantStateRead:
         self.source_path = 'users/u1/memory_control/app_key_memory_grants'
 
 
-def _grant_reader(*, uid, db_client):
+def _grant_reader(*, uid):
     assert uid == 'u1'
-    assert db_client == 'fake-db'
     return _GrantStateRead(
         {
             'grants': {

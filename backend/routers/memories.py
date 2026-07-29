@@ -676,7 +676,7 @@ async def create_memory_import_batch(
         raise HTTPException(status_code=503, detail="memory_import_canonical_not_ready")
 
     try:
-        result = await run_blocking(db_executor, ingest_memory_import_batch, uid, request, db_client=db_client)
+        result = await run_blocking(db_executor, ingest_memory_import_batch, uid, request)
     except Exception:
         logger.exception("Memory import ingest failed uid=%s source_type=%s", uid, request.source_type)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")

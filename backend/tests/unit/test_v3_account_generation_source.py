@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+import database.memory_compatibility_projection as projection_module
 from database import document_store
 from database.memory_compatibility_projection import read_v3_compatibility_projection_page
 from tests.store_fakes import FakeDocumentStore
@@ -49,6 +50,8 @@ class _RecordingDocumentStore(FakeDocumentStore):
 def _install_document_store(monkeypatch, db):
     store = _RecordingDocumentStore(backing=db.docs)
     monkeypatch.setattr(document_store, "_store", lambda: store)
+    # The projection reader reads through its own neutral-store seam; share the same backing dict.
+    monkeypatch.setattr(projection_module, "_store", lambda: store)
     return store
 
 
@@ -167,7 +170,6 @@ def test_projection_expected_generation_must_come_from_trusted_head_not_control_
 
     with pytest.raises(V3ProjectionReadError) as exc:
         read_v3_compatibility_projection_page(
-            db_client=db,
             request=V3ProjectionReadRequest(
                 uid="u1",
                 limit=10,
@@ -192,7 +194,6 @@ def test_trusted_head_control_projection_and_cursor_generations_can_be_compared_
 
     trusted = read_memory_v3_trusted_account_generation(uid="u1", db_client=db)
     page = read_v3_compatibility_projection_page(
-        db_client=db,
         request=V3ProjectionReadRequest(
             uid="u1",
             limit=10,
