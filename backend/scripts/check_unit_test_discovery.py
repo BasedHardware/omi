@@ -39,6 +39,7 @@ from scripts.select_backend_unit_tests import LEGACY_UNLISTED_TESTS, discover_un
 WORKFLOW_COVERED_PREFIXES = {
     'testing/e2e/': ('backend-hermetic-e2e.yml', 'directory'),
     'testing/contracts/': ('desktop-backend-contracts.yml', 'directory'),
+    'testing/desktop_beta_admission/': ('desktop_beta_admission_control.yml', 'directory'),
     'tests/container/': ('parakeet_gpu_tests.yml', 'explicit'),
 }
 
