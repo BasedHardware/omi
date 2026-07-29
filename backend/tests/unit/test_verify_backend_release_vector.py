@@ -408,6 +408,23 @@ def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> Non
         assert 'needs: firestore_readiness' in text
 
 
+def test_dev_firestore_readiness_requires_read_only_credentials_for_the_runtime_project() -> None:
+    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml'
+    text = workflow.read_text(encoding='utf-8')
+    readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
+
+    assert 'Verify read-only Firestore credentials target the development runtime project' in readiness
+    assert 'RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}' in readiness
+    assert 'credential_project="$(gcloud config get-value project 2>/dev/null)"' in readiness
+    assert '"$credential_project" != "$RUNTIME_GCP_PROJECT_ID"' in readiness
+    assert readiness.index('Google Auth for read-only Firestore inventory') < readiness.index(
+        'Verify read-only Firestore credentials target the development runtime project'
+    )
+    assert readiness.index(
+        'Verify read-only Firestore credentials target the development runtime project'
+    ) < readiness.index('Verify serving Firestore indexes')
+
+
 def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_only_credentials_are_missing() -> None:
     workflows = (
         BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
