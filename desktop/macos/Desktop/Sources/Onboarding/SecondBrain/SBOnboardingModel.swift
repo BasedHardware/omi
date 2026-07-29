@@ -285,7 +285,7 @@ final class SBOnboardingModel: ObservableObject {
     case .automation:
       return "Turn on Automation, so I can help with tasks in the apps you choose."
     case .shortcutOpen:
-      return "How do you want to open me? Just press one of these to set it."
+      return "How do you want to open me? Just press any key, or one of these to set it."
     case .shortcutTalk:
       return "And to talk to me hands-free? Press one of these to set it."
     case .screenDemo:
