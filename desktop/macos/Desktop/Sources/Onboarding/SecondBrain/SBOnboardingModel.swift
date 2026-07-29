@@ -594,6 +594,5 @@ final class SBOnboardingModel: ObservableObject {
     pollTasks.removeAll()
     disarmShortcutSummon()
     teardownVoiceDemo()
-    FloatingControlBarManager.shared.hide()
   }
 }

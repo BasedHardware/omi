@@ -30,6 +30,15 @@ final class FloatingBarLaunchPolicyTests: XCTestCase {
     )
   }
 
+  func testOnboardingDemoPreservesFloatingBarPreference() {
+    XCTAssertNil(FloatingBarPreferenceMutation.preserve.persistedEnabledValue)
+  }
+
+  func testUserVisibilityActionsStillUpdateFloatingBarPreference() {
+    XCTAssertEqual(FloatingBarPreferenceMutation.setEnabled(true).persistedEnabledValue, true)
+    XCTAssertEqual(FloatingBarPreferenceMutation.setEnabled(false).persistedEnabledValue, false)
+  }
+
   func testNormalSignedInLaunchShowsEnabledFloatingBarEvenOnNotchedDisplays() {
     XCTAssertEqual(
       FloatingBarLaunchPolicy.presentation(
