@@ -2,10 +2,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { initializeAcpWithDetachedAuth } from "../src/acp-initialize-auth.js";
 import { AcpError, isAcpProviderAuthFailure } from "../src/adapters/acp.js";
 import type { OutboundMessageDraft, QueryMessage } from "../src/protocol.js";
+import { failureFromError } from "../src/runtime/failures.js";
 import { JsonlTransport } from "../src/runtime/jsonl-transport.js";
 import { createKernelHarness } from "./kernel-fakes.js";
 
@@ -64,7 +66,86 @@ function query(sessionId: string, overrides: Partial<QueryMessage> = {}): QueryM
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("ACP provider auth terminalize-first (T1/T2)", () => {
+  it("terminalizes initialize auth-required before OAuth completes, then reinitializes after success", async () => {
+    const oauth = deferred<void>();
+    const authRequired = new AcpError("Authentication required", -32000);
+    const signalAuthRequired = vi.fn();
+    const reinitialize = vi.fn(async () => {});
+    const log = vi.fn();
+    const sent: OutboundMessageDraft[] = [];
+
+    await (async () => {
+      try {
+        await initializeAcpWithDetachedAuth({
+          initialize: async () => {
+            throw authRequired;
+          },
+          onAuthRequired: () => {},
+          signalAuthRequired,
+          startAuthFlow: () => oauth.promise,
+          reinitialize,
+          log,
+        });
+      } catch (error) {
+        const failure = failureFromError(error, {
+          code: "runtime_error",
+          source: "runtime",
+          retryable: false,
+        });
+        sent.push({ type: "error", message: failure.userMessage, failure });
+      }
+    })();
+
+    expect(signalAuthRequired).toHaveBeenCalledOnce();
+    expect(sent).toMatchObject([{
+      type: "error",
+      failure: { failureCode: "authentication" },
+    }]);
+    expect(reinitialize).not.toHaveBeenCalled();
+
+    oauth.resolve();
+    await Promise.resolve();
+
+    expect(reinitialize).toHaveBeenCalledOnce();
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("logs a detached OAuth failure after terminalizing initialize auth-required", async () => {
+    const oauth = deferred<void>();
+    const authRequired = new AcpError("Authentication required", -32000);
+    const log = vi.fn();
+
+    await expect(
+      initializeAcpWithDetachedAuth({
+        initialize: async () => {
+          throw authRequired;
+        },
+        onAuthRequired: () => {},
+        signalAuthRequired: () => {},
+        startAuthFlow: () => oauth.promise,
+        reinitialize: async () => {},
+        log,
+      }),
+    ).rejects.toBe(authRequired);
+
+    oauth.reject(new Error("OAuth callback timed out"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(log).toHaveBeenCalledWith("ACP authentication retry failed: Error: OAuth callback timed out");
+  });
+
   it("T1: -32000 auth failure terminalizes immediately without OAuth retry", async () => {
     const { store, adapter, session, sent, logs, transport, authSignals } = acpAuthFixture();
     adapter.failNextExecutionError = new AcpError("Authentication required", -32000);

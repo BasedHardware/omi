@@ -79,6 +79,7 @@ import {
   journalTerminalizationDisposition,
 } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
+import { initializeAcpWithDetachedAuth } from "./acp-initialize-auth.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapters/acp.js";
@@ -204,14 +205,13 @@ function send(msg: OutboundMessageDraft): void {
 }
 
 function runtimeErrorEnvelope(error: unknown): { message: string; failure: ReturnType<typeof failureFromError> } {
-  const message = sanitizeProcessDiagnostic(error instanceof Error ? error.message : String(error))
-    || "Runtime request rejected";
-  const failure = {
+  const failure = failureFromError(error, {
     code: "runtime_error",
     source: "runtime" as const,
     retryable: false,
-    userMessage: message,
-  };
+    userMessage: sanitizeProcessDiagnostic(error instanceof Error ? error.message : String(error))
+      || "Runtime request rejected",
+  });
   return { message: failure.userMessage, failure };
 }
 
@@ -1001,45 +1001,11 @@ async function startAuthFlow(): Promise<void> {
 async function initializeAcp(): Promise<void> {
   if (isInitialized) return;
 
-  try {
-    const result = (await acpRequest("initialize", {
+  const result = (await initializeAcpWithDetachedAuth({
+    initialize: () => acpRequest("initialize", {
       protocolVersion: 1,
-    })) as {
-      protocolVersion: number;
-      agentCapabilities?: Record<string, unknown>;
-      agentInfo?: { name: string; version: string };
-      authMethods?: Array<{
-        id: string;
-        name: string;
-        description?: string;
-        type?: string;
-        args?: string[];
-        env?: Record<string, string>;
-      }>;
-    };
-
-    logErr(
-      `ACP initialized: protocol=${result.protocolVersion}, capabilities=${JSON.stringify(result.agentCapabilities)}`
-    );
-
-    // Store auth methods for potential later use
-    if (result.authMethods && result.authMethods.length > 0) {
-      authMethods = result.authMethods.map((m) => ({
-        id: m.id,
-        type: (m.type ?? "agent_auth") as AuthMethod["type"],
-        displayName: m.name || m.description || m.id,
-        args: m.args,
-        env: m.env,
-      }));
-      logErr(
-        `Auth methods: ${authMethods.map((m) => `${m.id}(${m.displayName})`).join(", ")}`
-      );
-    }
-
-    isInitialized = true;
-  } catch (err) {
-    if (err instanceof AcpError && err.code === -32000) {
-      // AUTH_REQUIRED
+    }),
+    onAuthRequired: (err) => {
       const data = err.data as {
         authMethods?: Array<{
           id: string;
@@ -1056,14 +1022,44 @@ async function initializeAcp(): Promise<void> {
         }));
       }
       logErr(`ACP requires authentication: ${JSON.stringify(authMethods)}`);
-      await startAuthFlow();
+    },
+    signalAuthRequired: signalProviderAuthRequired,
+    startAuthFlow,
+    reinitialize: initializeAcp,
+    log: logErr,
+  })) as {
+    protocolVersion: number;
+    agentCapabilities?: Record<string, unknown>;
+    agentInfo?: { name: string; version: string };
+    authMethods?: Array<{
+      id: string;
+      name: string;
+      description?: string;
+      type?: string;
+      args?: string[];
+      env?: Record<string, string>;
+    }>;
+  };
 
-      // Retry initialization after auth (ACP subprocess already restarted)
-      await initializeAcp();
-      return;
-    }
-    throw err;
+  logErr(
+    `ACP initialized: protocol=${result.protocolVersion}, capabilities=${JSON.stringify(result.agentCapabilities)}`
+  );
+
+  // Store auth methods for potential later use
+  if (result.authMethods && result.authMethods.length > 0) {
+    authMethods = result.authMethods.map((m) => ({
+      id: m.id,
+      type: (m.type ?? "agent_auth") as AuthMethod["type"],
+      displayName: m.name || m.description || m.id,
+      args: m.args,
+      env: m.env,
+    }));
+    logErr(
+      `Auth methods: ${authMethods.map((m) => `${m.id}(${m.displayName})`).join(", ")}`
+    );
   }
+
+  isInitialized = true;
 }
 
 // --- MCP server config builder ---
