@@ -192,4 +192,41 @@ printf collision > "$OMI_QUALIFICATION_SWIFT_CACHE_ROOT/$SHA_C"
 expect_rejected collision "exact-SHA cache destination collision" \
   "$CACHE_HELPER" prepare "$SHA_C" "$REPO_A" cache-collision "$$"
 
+# Origin-fetch path (Actions partial/promisor clone fallback; incident #10809).
+ORIGIN_UPSTREAM="$TMP_ROOT/origin-upstream"
+ORIGIN_BARE="$TMP_ROOT/origin-upstream.git"
+ORIGIN_CLIENT="$TMP_ROOT/origin-client"
+make_repo "$ORIGIN_UPSTREAM"
+git -C "$ORIGIN_UPSTREAM" clone --quiet --bare "$ORIGIN_UPSTREAM" "$ORIGIN_BARE"
+git -C "$ORIGIN_UPSTREAM" remote remove origin 2>/dev/null || true
+rm -rf "$ORIGIN_CLIENT"
+git clone --quiet "$ORIGIN_BARE" "$ORIGIN_CLIENT"
+# Point client origin at the bare full object store (file:// avoids local hardlink tricks).
+git -C "$ORIGIN_CLIENT" remote set-url origin "file://$ORIGIN_BARE"
+ORIGIN_SHA="$(git -C "$ORIGIN_CLIENT" rev-parse HEAD)"
+ORIGIN_CACHE="$TMP_ROOT/origin-cache"
+origin_source="$(
+  env OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$ORIGIN_CACHE" \
+    OMI_QUALIFICATION_SWIFT_CACHE_CLONE_MODE=origin \
+    "$CACHE_HELPER" prepare "$ORIGIN_SHA" "$ORIGIN_CLIENT" cache-origin-mode "$$" \
+    2>"$TMP_ROOT/origin-mode.err" | source_from_json
+)"
+grep -Fq 'materializing exact source via origin fetch' "$TMP_ROOT/origin-mode.err" \
+  || fail "origin clone mode did not use origin fetch: $(cat "$TMP_ROOT/origin-mode.err")"
+[[ "$(git -C "$origin_source" rev-parse HEAD)" == "$ORIGIN_SHA" ]] \
+  || fail "origin clone mode did not detach at exact SHA"
+[[ -f "$origin_source/desktop/macos/Desktop/Package.swift" ]] \
+  || fail "origin clone mode missing package identity files"
+
+# Forced local mode must still work against a full local object store.
+LOCAL_ONLY_CACHE="$TMP_ROOT/local-only-cache"
+local_source="$(
+  env OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$LOCAL_ONLY_CACHE" \
+    OMI_QUALIFICATION_SWIFT_CACHE_CLONE_MODE=local \
+    "$CACHE_HELPER" prepare "$SHA_A" "$REPO_A" cache-local-mode "$$" \
+    2>"$TMP_ROOT/local-mode.err" | source_from_json
+)"
+[[ "$(git -C "$local_source" rev-parse HEAD)" == "$SHA_A" ]] \
+  || fail "local clone mode failed on full object store"
+
 echo "qualification Swift cache tests passed"
