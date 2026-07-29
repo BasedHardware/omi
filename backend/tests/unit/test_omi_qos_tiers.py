@@ -24,6 +24,17 @@ def _llm_api_keys(monkeypatch):
     monkeypatch.setenv('ANTHROPIC_API_KEY', os.environ.get('ANTHROPIC_API_KEY') or 'sk-ant-test-fake-key')
 
 
+@pytest.fixture(scope='module', autouse=True)
+def _warm_client_construction():
+    """Pay the one-time real-``ChatOpenAI`` build cost in setup, not in the first test's call.
+
+    Constructing the first ``ChatOpenAI`` compiles its Pydantic schema (~0.2s CPU). That is
+    per-process shared setup, and the fast-unit duration guard measures the call phase only,
+    so charging it to whichever test happens to run first reads as a per-test regression.
+    """
+    get_llm('conv_action_items')
+
+
 def _clients_subprocess_script(assertion: str) -> str:
     lines = [
         "import os",

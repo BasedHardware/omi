@@ -114,3 +114,4 @@ tests/unit/test_translation_optimization.py
 tests/routers/test_users.py
 tests/unit/v3_router_probes/fastapi_route_contract.py
 tests/unit/test_desktop_transcribe.py
+tests/unit/test_omi_qos_tiers.py
