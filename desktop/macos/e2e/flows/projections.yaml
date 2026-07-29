@@ -5,6 +5,8 @@ description: Projection loading, result, provenance, empty state, and main error
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationVisualWindowResolver.swift
+  - desktop/macos/Desktop/Sources/ProjectionAutomationHarness.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ProjectionPage.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Projections.swift
 preconditions:
