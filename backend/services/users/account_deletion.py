@@ -204,11 +204,7 @@ def _emit_deletion_telemetry(uid: str, event: str, properties: dict[str, object]
     )
     # Drop any accidental uid-bearing keys; person processing is disabled so
     # completion/failure cannot recreate a profile for the deleted account.
-    safe_properties = {
-        key: value
-        for key, value in properties.items()
-        if key not in {'uid', 'user_id', 'distinct_id'}
-    }
+    safe_properties = {key: value for key, value in properties.items() if key not in {'uid', 'user_id', 'distinct_id'}}
     safe_properties['$process_person_profile'] = False
     emit_posthog_event(_ACCOUNT_DELETION_TELEMETRY_DISTINCT_ID, event, safe_properties)
 
