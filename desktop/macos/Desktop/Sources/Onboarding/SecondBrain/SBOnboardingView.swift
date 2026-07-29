@@ -172,6 +172,7 @@ struct SBOnboardingView: View {
       }
       .buttonStyle(.plain)
       .help("Go back and change an earlier answer")
+      .padding(.trailing, 12)
     }
   }
 
