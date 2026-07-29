@@ -10,6 +10,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 
+#include "lib/core/rtc_elapsed_recovery.h"
 #include "lib/core/settings.h"
 #include "rtc.h"
 
@@ -35,10 +36,15 @@ LOG_MODULE_REGISTER(imu, CONFIG_LOG_DEFAULT_LEVEL);
  * - TIMER_HR = 0: 1 LSB = 6.4 ms (default)
  * - TIMER_HR = 1: 1 LSB = 25 us
  */
-#define LSM6DS_TIMESTAMP_TICK_US_6P4MS 6400ULL
-
 /* Allow sensor time to boot after enabling its power pin. */
 #define LSM6DS_POWER_ON_DELAY_MS 50
+
+/*
+ * A system-off interval has no independent upper bound, while the 24-bit IMU
+ * counter wraps after about 29 h 49 m. Zero keeps elapsed restore disabled
+ * rather than treating a modulo counter sample as current time.
+ */
+#define RTC_IMU_MAX_TRUSTED_ELAPSED_MS UINT64_C(0)
 
 static int lsm6dsl_power_ensure_on(void);
 
@@ -114,30 +120,6 @@ static int lsm6dsl_timestamp_enable(void)
     return 0;
 }
 
-static int lsm6dsl_timestamp_disable(void)
-{
-    if (!device_is_ready(lsm6dsl_i2c.bus)) {
-        LOG_WRN("lsm6dso i2c bus not ready");
-        return -ENODEV;
-    }
-
-    uint8_t ctrl10;
-    int err = i2c_reg_read_byte_dt(&lsm6dsl_i2c, LSM6DS_REG_CTRL10_C, &ctrl10);
-    if (err) {
-        return err;
-    }
-
-    ctrl10 &= (uint8_t) ~LSM6DS_CTRL10_TIMER_EN;
-    err = i2c_reg_write_byte_dt(&lsm6dsl_i2c, LSM6DS_REG_CTRL10_C, ctrl10);
-    if (err) {
-        LOG_WRN("Failed to write CTRL10_C timer_en=0 (err %d)", err);
-        return err;
-    }
-
-    LOG_DBG("Timestamp disabled (CTRL10_C=0x%02x)", ctrl10);
-    return 0;
-}
-
 static int lsm6dsl_timestamp_reset(void)
 {
     /* LSM6DS3TR-C datasheet: to reset the timestamp timer, store 0xAA in TIMESTAMP2 (0x42). */
@@ -206,119 +188,108 @@ static int lsm6dsl_timestamp_read(uint32_t *ts)
     return 0;
 }
 
-void lsm6dsl_time_prepare_for_system_off(void)
+static int rtc_elapsed_load_marker(rtc_elapsed_marker_t *marker, void *context)
 {
-    /* Requires a valid UTC epoch to be meaningful. */
-    if (!rtc_is_valid()) {
-        LOG_INF("system_off prep: skip (RTC not valid)");
-        return;
-    }
-
-    LOG_INF("system_off prep: begin");
-
-    int err = lsm6dsl_power_ensure_on();
-    if (err) {
-        LOG_WRN("system_off prep: IMU power ensure failed (err %d)", err);
-    }
-    lsm6dsl_force_minimal_run_mode();
-    err = lsm6dsl_timestamp_set_resolution_6p4ms();
-    if (err) {
-        LOG_WRN("system_off prep: set timestamp res failed (err %d)", err);
-    }
-    err = lsm6dsl_timestamp_enable();
-    if (err) {
-        LOG_WRN("system_off prep: timestamp enable failed (err %d)", err);
-    }
-
-    /* Reset timestamp so it starts near 0 */
-    err = lsm6dsl_timestamp_reset();
-    if (err) {
-        LOG_WRN("system_off prep: timestamp reset failed (err %d)", err);
-    }
-
-    uint32_t ts;
-    err = lsm6dsl_timestamp_read(&ts);
-    if (err != 0) {
-        LOG_WRN("system_off prep: timestamp read failed (err %d)", err);
-        return;
-    }
-    LOG_INF("system_off prep: imu ts=0x%06x", ts & 0x00FFFFFFu);
-
-    uint64_t epoch_s = (uint64_t) get_utc_time();
-    if (epoch_s == 0) {
-        LOG_WRN("system_off prep: get_utc_time() returned 0 despite rtc_is_valid");
-        return;
-    }
-    LOG_INF("system_off prep: epoch_s=%llu", epoch_s);
-
-    err = app_settings_save_lsm6dsl_time_base(epoch_s, ts);
-    if (err) {
-        LOG_WRN("system_off prep: failed to save base (err %d)", err);
-    } else {
-        LOG_INF("system_off prep: saved base OK");
-    }
+    ARG_UNUSED(context);
+    return app_settings_get_lsm6dsl_time_base(&marker->epoch_s, &marker->counter);
 }
 
-int lsm6dsl_time_boot_adjust_rtc(void)
+static int rtc_elapsed_clear_marker(void *context)
 {
-    uint64_t base_epoch_s;
-    uint32_t base_ts;
-    int err = app_settings_get_lsm6dsl_time_base(&base_epoch_s, &base_ts);
-    if (err) {
-        LOG_WRN("boot adjust: failed to read saved base (err %d)", err);
-        return err;
+    ARG_UNUSED(context);
+    return app_settings_save_lsm6dsl_time_base(0U, 0U);
+}
+
+static int rtc_elapsed_save_marker(const rtc_elapsed_marker_t *marker, void *context)
+{
+    ARG_UNUSED(context);
+    return app_settings_save_lsm6dsl_time_base(marker->epoch_s, marker->counter);
+}
+
+static int rtc_elapsed_power_on(void *context)
+{
+    ARG_UNUSED(context);
+    int err = lsm6dsl_power_ensure_on();
+    if (!err) {
+        lsm6dsl_force_minimal_run_mode();
     }
-    if (base_epoch_s == 0) {
-        LOG_DBG("boot adjust: no saved base");
+    return err;
+}
+
+static int rtc_elapsed_set_counter_resolution(void *context)
+{
+    ARG_UNUSED(context);
+    return lsm6dsl_timestamp_set_resolution_6p4ms();
+}
+
+static int rtc_elapsed_enable_counter(void *context)
+{
+    ARG_UNUSED(context);
+    return lsm6dsl_timestamp_enable();
+}
+
+static int rtc_elapsed_reset_counter(void *context)
+{
+    ARG_UNUSED(context);
+    return lsm6dsl_timestamp_reset();
+}
+
+static int rtc_elapsed_read_counter(uint32_t *counter, void *context)
+{
+    ARG_UNUSED(context);
+    return lsm6dsl_timestamp_read(counter);
+}
+
+static int rtc_elapsed_apply_disabled(uint64_t epoch_ms, void *context)
+{
+    ARG_UNUSED(epoch_ms);
+    ARG_UNUSED(context);
+    return -ENOTSUP;
+}
+
+static const rtc_elapsed_recovery_ops_t rtc_elapsed_ops = {
+    .load_marker = rtc_elapsed_load_marker,
+    .clear_marker = rtc_elapsed_clear_marker,
+    .save_marker = rtc_elapsed_save_marker,
+    .power_on = rtc_elapsed_power_on,
+    .set_counter_resolution = rtc_elapsed_set_counter_resolution,
+    .enable_counter = rtc_elapsed_enable_counter,
+    .reset_counter = rtc_elapsed_reset_counter,
+    .read_counter = rtc_elapsed_read_counter,
+    .apply_current_epoch_ms = rtc_elapsed_apply_disabled,
+};
+
+int lsm6dsl_time_prepare_for_system_off(void)
+{
+    uint64_t epoch_s = rtc_is_valid() ? (uint64_t) get_utc_time() : 0U;
+    int err = rtc_elapsed_recovery_prepare(epoch_s, RTC_IMU_MAX_TRUSTED_ELAPSED_MS, &rtc_elapsed_ops, NULL);
+    if (err == -ENOTSUP) {
+        LOG_INF("system_off prep: IMU elapsed restore disabled (unbounded 24-bit counter); stale marker cleared");
         return 0;
     }
-    LOG_INF("boot adjust: base_epoch_s=%llu base_ts=0x%06x", base_epoch_s, base_ts & 0x00FFFFFFu);
-
-    err = lsm6dsl_power_ensure_on();
     if (err) {
-        LOG_WRN("boot adjust: IMU power ensure failed (err %d)", err);
-    }
-    err = lsm6dsl_timestamp_set_resolution_6p4ms();
-    if (err) {
-        LOG_WRN("boot adjust: set timestamp res failed (err %d)", err);
-    }
-    err = lsm6dsl_timestamp_enable();
-    if (err) {
-        LOG_WRN("boot adjust: timestamp enable failed (err %d)", err);
-    }
-
-    uint32_t ts_now;
-    err = lsm6dsl_timestamp_read(&ts_now);
-    if (err) {
-        LOG_WRN("boot adjust: timestamp read failed (err %d)", err);
+        LOG_WRN("system_off prep: failed closed (err %d)", err);
         return err;
     }
-    LOG_INF("boot adjust: ts_now=0x%06x", ts_now & 0x00FFFFFFu);
 
-    /* Unsigned subtraction handles wraparound modulo 2^32. */
-    /* Timestamp is 24-bit, so compute delta modulo 2^24 to handle wrap. */
-    uint32_t delta_ticks = (ts_now - base_ts) & 0x00FFFFFFu;
-    uint64_t delta_us = (uint64_t) delta_ticks * LSM6DS_TIMESTAMP_TICK_US_6P4MS;
-    uint64_t delta_ms = delta_us / 1000ULL;
-    LOG_INF("boot adjust: delta_ticks=%u delta_ms=%llu", delta_ticks, delta_ms);
+    LOG_INF("system_off prep: one-shot elapsed marker saved");
+    return 0;
+}
 
-    uint64_t new_epoch_ms = (base_epoch_s * 1000ULL) + delta_ms;
-    if (new_epoch_ms == 0) {
+int lsm6dsl_time_boot_adjust_rtc(bool verified_system_off_wake)
+{
+    int result =
+        rtc_elapsed_recovery_attempt(verified_system_off_wake, RTC_IMU_MAX_TRUSTED_ELAPSED_MS, &rtc_elapsed_ops, NULL);
+    if (result == -ENOTSUP) {
+        LOG_WRN("boot adjust: consumed marker but left RTC invalid; elapsed interval has no sound sub-wrap bound");
         return 0;
     }
-
-    err = rtc_set_utc_time_ms(new_epoch_ms);
-    if (err) {
-        LOG_WRN("boot adjust: rtc_set_utc_time_ms failed (err %d)", err);
-        return err;
+    if (result < 0) {
+        LOG_WRN("boot adjust: failed closed (err %d)", result);
+        return result;
     }
-
-    /* Clear the base so we don't reapply on every reboot. */
-    err = app_settings_save_lsm6dsl_time_base(0, 0);
-    if (err) {
-        LOG_WRN("boot adjust: failed to clear base (err %d)", err);
+    if (!verified_system_off_wake) {
+        LOG_INF("boot adjust: ordinary reset provenance; stale marker consumed");
     }
-
-    LOG_INF("Applied IMU timestamp delta: +%llu ms", delta_ms);
-    return 1;
+    return result;
 }

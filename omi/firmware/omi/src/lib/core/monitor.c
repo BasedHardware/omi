@@ -11,6 +11,7 @@ static uint32_t broadcast_audio_count = 0;
 static uint32_t broadcast_audio_failed_count = 0;
 static uint32_t write_to_tx_queue_count = 0;
 static uint32_t storage_write_count = 0;
+static uint32_t storage_write_failed_count = 0;
 
 int monitor_init(void)
 {
@@ -49,15 +50,22 @@ void monitor_inc_storage_write(void)
     storage_write_count++;
 }
 
+void monitor_inc_storage_write_failed(void)
+{
+    storage_write_failed_count++;
+}
+
 void monitor_log_metrics(void)
 {
-    LOG_INF("Metrics: Mic buffers: %u, GATT notify: %u, Broadcast: %u, Broadcast failed: %u, TX queue: %u, Storage: %u",
+    LOG_INF("Metrics: Mic buffers: %u, GATT notify: %u, Broadcast: %u, Broadcast failed: %u, TX queue: %u, "
+            "Storage: %u, Storage rejected: %u",
             total_mic_buffer_bytes,
             gatt_notify_count,
             broadcast_audio_count,
             broadcast_audio_failed_count,
             write_to_tx_queue_count,
-            storage_write_count);
+            storage_write_count,
+            storage_write_failed_count);
 }
 
 void monitor_reset(void)
@@ -68,5 +76,6 @@ void monitor_reset(void)
     broadcast_audio_failed_count = 0;
     write_to_tx_queue_count = 0;
     storage_write_count = 0;
+    storage_write_failed_count = 0;
     LOG_DBG("All metrics reset");
 }

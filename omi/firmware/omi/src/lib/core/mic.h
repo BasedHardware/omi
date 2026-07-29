@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef void (*mix_handler)(int16_t *);
+typedef int (*mix_handler)(int16_t *);
 
 /**
  * @brief Initialize the Microphone
@@ -18,8 +18,10 @@ void set_mic_callback(mix_handler _callback);
 
 void mic_off();
 void mic_on();
-void mic_pause();
+int mic_pause();
 void mic_resume();
+int mic_prepare_shutdown(void);
+void mic_cancel_shutdown(void);
 bool mic_is_running();
 void mic_set_gain(uint8_t gain_level);
 

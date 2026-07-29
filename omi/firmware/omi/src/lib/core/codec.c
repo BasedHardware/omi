@@ -1,9 +1,12 @@
 #include "codec.h"
 
+#include <errno.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
 
+#include "codec_input_capacity.h"
 #include "config.h"
 #include "utils.h"
 #ifdef CODEC_OPUS
@@ -30,13 +33,19 @@ void set_codec_callback(codec_callback callback)
 uint8_t codec_ring_buffer_data[AUDIO_BUFFER_SAMPLES * 2]; // 2 bytes per sample
 struct ring_buf codec_ring_buf;
 K_SEM_DEFINE(codec_data_sem, 0, NETWORK_RING_BUF_SIZE);
+K_SEM_DEFINE(codec_drained_sem, 0, 1);
+static atomic_t codec_drain_requested;
 int codec_receive_pcm(int16_t *data, size_t len) // this gets called after mic data is finished
 {
+    size_t frame_bytes = len * sizeof(*data);
+    if (!codec_pcm_frame_fits(ring_buf_space_get(&codec_ring_buf), len)) {
+        return -ENOSPC;
+    }
 
-    int written = ring_buf_put(&codec_ring_buf, (uint8_t *) data, len * 2);
-    if (written != len * 2) {
-        LOG_ERR("Failed to write %d bytes to codec ring buffer", len * 2);
-        return -1;
+    uint32_t written = ring_buf_put(&codec_ring_buf, (uint8_t *) data, frame_bytes);
+    if (written != frame_bytes) {
+        LOG_ERR("Failed to write %zu bytes to codec ring buffer", frame_bytes);
+        return -ENOSPC;
     }
 
     k_sem_give(&codec_data_sem);
@@ -68,24 +77,51 @@ static OpusEncoder *const m_opus_state = (OpusEncoder *) m_opus_encoder;
 
 void codec_entry()
 {
-
-    uint16_t output_size;
     while (1) {
         k_sem_take(&codec_data_sem, K_FOREVER);
 
-        while (ring_buf_size_get(&codec_ring_buf) >= CODEC_PACKAGE_SAMPLES * 2) {
+        while (1) {
+            uint32_t available = ring_buf_size_get(&codec_ring_buf);
+            bool drain_partial = atomic_get(&codec_drain_requested) && available > 0U;
+            if (available < CODEC_PACKAGE_SAMPLES * 2U && !drain_partial) {
+                break;
+            }
+
             // Read package
-            ring_buf_get(&codec_ring_buf, (uint8_t *) codec_input_samples, CODEC_PACKAGE_SAMPLES * 2);
+            memset(codec_input_samples, 0, sizeof(codec_input_samples));
+            ring_buf_get(&codec_ring_buf,
+                         (uint8_t *) codec_input_samples,
+                         MIN(available, (uint32_t) sizeof(codec_input_samples)));
 
             // Run Codec
-            output_size = execute_codec();
+            uint16_t output_size = execute_codec();
 
             // Notify
             if (_callback) {
                 _callback(codec_output_bytes, output_size);
             }
         }
+
+        if (atomic_cas(&codec_drain_requested, 1, 0)) {
+            k_sem_give(&codec_drained_sem);
+        }
     }
+}
+
+int codec_drain(uint32_t timeout_ms)
+{
+    if (timeout_ms == 0U) {
+        return -EINVAL;
+    }
+
+    k_sem_reset(&codec_drained_sem);
+    atomic_set(&codec_drain_requested, 1);
+    k_sem_give(&codec_data_sem);
+    if (k_sem_take(&codec_drained_sem, K_MSEC(timeout_ms)) != 0) {
+        atomic_clear(&codec_drain_requested);
+        return -ETIMEDOUT;
+    }
+    return 0;
 }
 
 int codec_start()

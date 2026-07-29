@@ -6,13 +6,17 @@
 
 #include "lib/core/mic.h"
 
+#include <errno.h>
 #include <nrfx_pdm.h>
+#include <string.h>
 #include <zephyr/audio/dmic.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 
+#include "lib/core/config.h"
 #include "lib/core/settings.h"
+#include "lib/core/voice_activity_gate.h"
 
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
 #include <zephyr/devicetree.h>
@@ -60,6 +64,32 @@ static atomic_t mic_stop_req = ATOMIC_INIT(0);
 #define MAX_FRAMES (MAX_SAMPLE_RATE / 10)
 static int16_t mono_buffer[MAX_FRAMES];
 
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+BUILD_ASSERT(CONFIG_OMI_VAD_PREROLL_FRAMES *MAX_BLOCK_SIZE / CHANNELS <= AUDIO_BUFFER_SAMPLES * BYTES_PER_SAMPLE,
+             "VAD pre-roll must fit in the codec input ring");
+
+static voice_activity_gate_t voice_gate;
+static int16_t vad_preroll[CONFIG_OMI_VAD_PREROLL_FRAMES][MAX_FRAMES];
+static uint8_t vad_preroll_write;
+static uint8_t vad_preroll_count;
+
+static void reset_voice_gate(void)
+{
+    voice_activity_gate_init(&voice_gate);
+    vad_preroll_write = 0U;
+    vad_preroll_count = 0U;
+}
+
+static void store_vad_preroll(const int16_t *buffer)
+{
+    memcpy(vad_preroll[vad_preroll_write], buffer, sizeof(vad_preroll[0]));
+    vad_preroll_write = (vad_preroll_write + 1U) % CONFIG_OMI_VAD_PREROLL_FRAMES;
+    if (vad_preroll_count < CONFIG_OMI_VAD_PREROLL_FRAMES) {
+        vad_preroll_count++;
+    }
+}
+#endif
+
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
 /*
  * Hardware AAD (T5838): during silence the mic is clocked into AAD sleep
@@ -83,10 +113,107 @@ static atomic_t aad_wake_pending = ATOMIC_INIT(0); /* WAKE edge seen by ISR */
 static atomic_t aad_woke = ATOMIC_INIT(0);         /* tell mic ctx it just woke */
 static atomic_t aad_in_sleep = ATOMIC_INIT(0);     /* mic is in hardware AAD sleep */
 static atomic_t aad_req_sleep = ATOMIC_INIT(0);    /* silence timer asked to sleep */
+static atomic_t aad_shutdown_quiesced = ATOMIC_INIT(0);
+static K_MUTEX_DEFINE(aad_transition_mutex);
+static bool shutdown_was_in_aad_sleep;
+static bool aad_conversation_active;
 static int64_t aad_last_voice_ms;
 
-static void aad_track_silence(const int16_t *buf, size_t n);
+static void aad_track_activity(bool frame_active);
 static int aad_hw_start(void);
+static void aad_wake_irq(bool enable);
+#endif
+
+static uint32_t avg_abs_amplitude(const int16_t *buf, size_t n)
+{
+    if (n == 0U) {
+        return 0U;
+    }
+    uint64_t sum = 0U;
+    for (size_t i = 0U; i < n; i++) {
+        int32_t sample = buf[i];
+        sum += (uint32_t) (sample < 0 ? -sample : sample);
+    }
+    return (uint32_t) (sum / n);
+}
+
+static bool forward_mic_frame(int16_t *buffer)
+{
+    if (!callback_func) {
+        return true;
+    }
+
+    /*
+     * A newly opened gate emits at most 800 ms of pre-roll into a one-second
+     * codec ring. A short retry absorbs concurrent codec drain scheduling
+     * without silently dropping the beginning of speech.
+     */
+    for (uint8_t attempt = 0U; attempt < 50U; attempt++) {
+        if (callback_func(buffer) == 0) {
+            return true;
+        }
+        k_sleep(K_MSEC(2));
+    }
+
+    LOG_ERR("Voice gate could not forward PCM frame after bounded retry");
+    return false;
+}
+
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+static void process_voice_gated_buffer(int16_t *buffer, size_t frames)
+{
+    static const voice_activity_gate_config_t voice_gate_config = {
+        .minimum_threshold = CONFIG_OMI_VAD_ABS_THRESHOLD,
+        .noise_margin = CONFIG_OMI_VAD_NOISE_MARGIN,
+        .noise_rise_shift = CONFIG_OMI_VAD_NOISE_RISE_SHIFT,
+        .noise_fall_shift = CONFIG_OMI_VAD_NOISE_FALL_SHIFT,
+        .debounce_frames = CONFIG_OMI_VAD_DEBOUNCE_FRAMES,
+        .hold_ms = CONFIG_OMI_VAD_HOLD_MS,
+    };
+
+    uint32_t amplitude = avg_abs_amplitude(buffer, frames);
+    bool was_open = voice_gate.is_open;
+    voice_activity_gate_action_t action =
+        voice_activity_gate_process(&voice_gate, amplitude, k_uptime_get(), &voice_gate_config);
+
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    aad_track_activity(voice_gate.frame_active);
+#endif
+
+    if (action == VOICE_ACTIVITY_GATE_BUFFER) {
+        if (was_open) {
+            LOG_INF("Voice gate closed: amplitude=%u floor=%u threshold=%u",
+                    amplitude,
+                    voice_gate.noise_floor,
+                    voice_gate.active_threshold);
+        }
+        store_vad_preroll(buffer);
+        return;
+    }
+    if (action == VOICE_ACTIVITY_GATE_FORWARD) {
+        (void) forward_mic_frame(buffer);
+        return;
+    }
+
+    store_vad_preroll(buffer);
+    uint8_t start =
+        (vad_preroll_write + CONFIG_OMI_VAD_PREROLL_FRAMES - vad_preroll_count) % CONFIG_OMI_VAD_PREROLL_FRAMES;
+    uint8_t emitted = 0U;
+    for (; emitted < vad_preroll_count; emitted++) {
+        uint8_t index = (start + emitted) % CONFIG_OMI_VAD_PREROLL_FRAMES;
+        if (!forward_mic_frame(vad_preroll[index])) {
+            break;
+        }
+    }
+    LOG_INF("Voice gate opened: amplitude=%u floor=%u threshold=%u emitted=%u/%u pre-roll frame(s)",
+            amplitude,
+            voice_gate.noise_floor,
+            voice_gate.active_threshold,
+            emitted,
+            vad_preroll_count);
+    vad_preroll_write = 0U;
+    vad_preroll_count = 0U;
+}
 #endif
 
 static inline void
@@ -122,13 +249,11 @@ static void process_audio_buffer(void *buffer, uint32_t size)
 
     interleaved_stereo_to_mono(inter, frames, mono_buffer);
 
-#ifdef CONFIG_OMI_ENABLE_T5838_AAD
-    aad_track_silence(mono_buffer, frames);
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+    process_voice_gated_buffer(mono_buffer, frames);
+#else
+    (void) forward_mic_frame(mono_buffer);
 #endif
-
-    if (callback_func) {
-        callback_func(mono_buffer);
-    }
 
     k_mem_slab_free(&mem_slab, buffer);
 }
@@ -153,7 +278,12 @@ static void mic_thread_function(void *p1, void *p2, void *p3)
          * STOP never interrupts an in-flight dmic_read. */
         if (atomic_get(&mic_stop_req)) {
             if (ret == 0 && buffer) {
-                k_mem_slab_free(&mem_slab, buffer);
+                /*
+                 * Preserve the final completed capture block. The shutdown
+                 * caller waits for this callback before draining the codec, so
+                 * freeing it here would create a deterministic tail gap.
+                 */
+                process_audio_buffer(buffer, size);
             }
             (void) dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
             mic_running = false;
@@ -174,15 +304,26 @@ static void mic_thread_function(void *p1, void *p2, void *p3)
 
 #define MIC_THREAD_STACK_SIZE 2048
 #define MIC_THREAD_PRIORITY 5
-K_THREAD_DEFINE(mic_thread_id,
-                MIC_THREAD_STACK_SIZE,
-                mic_thread_function,
-                NULL,
-                NULL,
-                NULL,
-                MIC_THREAD_PRIORITY,
-                0,
-                -1);
+static K_THREAD_STACK_DEFINE(mic_thread_stack, MIC_THREAD_STACK_SIZE);
+static struct k_thread mic_thread_data;
+static k_tid_t mic_thread_id;
+static bool mic_thread_started;
+
+static void start_mic_thread(void)
+{
+    mic_thread_id = k_thread_create(&mic_thread_data,
+                                    mic_thread_stack,
+                                    K_THREAD_STACK_SIZEOF(mic_thread_stack),
+                                    mic_thread_function,
+                                    NULL,
+                                    NULL,
+                                    NULL,
+                                    MIC_THREAD_PRIORITY,
+                                    0,
+                                    K_NO_WAIT);
+    k_thread_name_set(mic_thread_id, "mic");
+    mic_thread_started = true;
+}
 
 int mic_start()
 {
@@ -246,6 +387,10 @@ int mic_start()
     uint8_t saved_gain = app_settings_get_mic_gain();
     mic_set_gain(saved_gain);
 
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+    reset_voice_gate();
+#endif
+
     ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
     if (ret < 0) {
         LOG_ERR("START trigger failed: %d", ret);
@@ -253,7 +398,7 @@ int mic_start()
     }
 
     mic_running = true;
-    k_thread_start(mic_thread_id);
+    start_mic_thread();
 
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
     ret = aad_hw_start(); /* WAKE pin ISR + hardware-AAD thread */
@@ -273,10 +418,10 @@ void set_mic_callback(mix_handler callback)
     callback_func = callback;
 }
 
-void mic_pause()
+int mic_pause()
 {
     if (!mic_running) {
-        return;
+        return 0;
     }
     LOG_INF("Pausing microphone");
 
@@ -286,23 +431,95 @@ void mic_pause()
     atomic_set(&mic_stop_req, 1);
     if (k_sem_take(&mic_stopped_sem, K_MSEC(READ_TIMEOUT + 200)) != 0) {
         LOG_WRN("mic pause timed out; forcing stop");
-        atomic_clear(&mic_stop_req);
         (void) dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
-        mic_running = false;
+        if (k_sem_take(&mic_stopped_sem, K_MSEC(500)) != 0) {
+            /*
+             * The peripheral has been stopped, but the worker did not
+             * acknowledge it. Recreate the worker on resume rather than
+             * reporting active capture while the hardware remains stopped.
+             */
+            if (mic_thread_started) {
+                k_thread_abort(mic_thread_id);
+                mic_thread_started = false;
+            }
+            mic_running = false;
+            atomic_clear(&mic_stop_req);
+            LOG_ERR("mic thread did not quiesce after forced stop; worker reset");
+            return -ETIMEDOUT;
+        }
     }
+    return 0;
 }
 
 void mic_resume()
 {
     LOG_INF("Resuming microphone");
+    atomic_clear(&mic_stop_req);
     if (!mic_running) {
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+        reset_voice_gate();
+#endif
         int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
         if (ret < 0) {
             LOG_ERR("START trigger failed: %d", ret);
             return;
         }
         mic_running = true;
+        if (!mic_thread_started) {
+            start_mic_thread();
+        }
     }
+}
+
+int mic_prepare_shutdown(void)
+{
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    /*
+     * Serialize with AAD sleep/wake transitions before pausing capture. Once
+     * quiesced, neither the silence detector nor WAKE worker can restart PDM
+     * while the codec and transport tails are being committed.
+     */
+    k_mutex_lock(&aad_transition_mutex, K_FOREVER);
+    atomic_set(&aad_shutdown_quiesced, 1);
+    shutdown_was_in_aad_sleep = atomic_get(&aad_in_sleep) != 0;
+    aad_wake_irq(false);
+    atomic_clear(&aad_req_sleep);
+    atomic_clear(&aad_wake_pending);
+    k_sem_reset(&aad_sem);
+    k_mutex_unlock(&aad_transition_mutex);
+
+    if (shutdown_was_in_aad_sleep) {
+        return 0;
+    }
+#endif
+
+    return mic_pause();
+}
+
+void mic_cancel_shutdown(void)
+{
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    k_mutex_lock(&aad_transition_mutex, K_FOREVER);
+    bool restore_aad_sleep = shutdown_was_in_aad_sleep && atomic_get(&aad_in_sleep);
+    shutdown_was_in_aad_sleep = false;
+    atomic_clear(&aad_shutdown_quiesced);
+
+    if (restore_aad_sleep) {
+        atomic_clear(&aad_wake_pending);
+        aad_wake_irq(true);
+        if (gpio_pin_get_dt(&aad_wake)) {
+            atomic_set(&aad_wake_pending, 1);
+            k_sem_give(&aad_sem);
+        }
+    }
+    k_mutex_unlock(&aad_transition_mutex);
+
+    if (restore_aad_sleep) {
+        return;
+    }
+#endif
+
+    mic_resume();
 }
 
 bool mic_is_running()
@@ -332,19 +549,6 @@ static void pdm_hw_disable(void)
 #endif
 }
 
-static uint32_t avg_abs_amplitude(const int16_t *buf, size_t n)
-{
-    if (n == 0) {
-        return 0;
-    }
-    uint64_t sum = 0;
-    for (size_t i = 0; i < n; i++) {
-        int32_t s = buf[i];
-        sum += (uint32_t) (s < 0 ? -s : s);
-    }
-    return (uint32_t) (sum / n);
-}
-
 static void aad_wake_irq(bool enable)
 {
     gpio_pin_interrupt_configure_dt(&aad_wake, enable ? GPIO_INT_EDGE_RISING : GPIO_INT_DISABLE);
@@ -360,10 +564,22 @@ static void aad_wake_isr(const struct device *dev, struct gpio_callback *cb, uin
 }
 
 /* Drop the mic into T5838 hardware AAD sleep (aad thread context). */
-static void enter_hw_aad(void)
+static int enter_hw_aad(void)
 {
-    aad_wake_irq(false); /* mask WAKE during config bit-bang */
-    mic_pause();         /* stop PDM peripheral */
+    aad_wake_irq(false);   /* mask WAKE during config bit-bang */
+    int ret = mic_pause(); /* stop PDM peripheral */
+    if (ret < 0) {
+        /*
+         * Never touch PDM registers or bit-bang CLK while a read may still be
+         * in flight. Restore active-capture state and defer the sleep attempt.
+         */
+        atomic_clear(&aad_in_sleep);
+        atomic_clear(&aad_req_sleep);
+        aad_last_voice_ms = k_uptime_get();
+        mic_resume();
+        LOG_ERR("AAD: refusing sleep because microphone did not pause (%d)", ret);
+        return ret;
+    }
     k_msleep(AAD_PDM_SETTLE_MS);
     pdm_hw_disable();                   /* fully release the CLK pin for bit-banging */
     t5838_aad_enter();                  /* program AAD mode-A + clock into sleep */
@@ -390,6 +606,7 @@ static void enter_hw_aad(void)
         k_sem_give(&aad_sem);
     }
     LOG_INF("AAD: hardware sleep (mic off)");
+    return 0;
 }
 
 /* Bring the mic back online (aad thread context). */
@@ -416,8 +633,16 @@ static void aad_thread_fn(void *p1, void *p2, void *p3)
          * stays asleep and adds no idle CPU wakeups. */
         k_sem_take(&aad_sem, K_FOREVER);
 
+        k_mutex_lock(&aad_transition_mutex, K_FOREVER);
+        if (atomic_get(&aad_shutdown_quiesced)) {
+            atomic_clear(&aad_req_sleep);
+            atomic_clear(&aad_wake_pending);
+            k_mutex_unlock(&aad_transition_mutex);
+            continue;
+        }
+
         if (atomic_cas(&aad_req_sleep, 1, 0) && !atomic_get(&aad_in_sleep)) {
-            enter_hw_aad();
+            (void) enter_hw_aad();
         }
 
         if (atomic_cas(&aad_wake_pending, 1, 0)) {
@@ -425,26 +650,33 @@ static void aad_thread_fn(void *p1, void *p2, void *p3)
                 exit_hw_aad();
             }
         }
+        k_mutex_unlock(&aad_transition_mutex);
     }
 }
 
-/* Called per mic frame: track silence and request AAD sleep after a hold. */
-static void aad_track_silence(const int16_t *buf, size_t n)
+/* Called per mic frame after the adaptive gate classifies the current input. */
+static void aad_track_activity(bool frame_active)
 {
     int64_t now = k_uptime_get();
 
     if (atomic_cas(&aad_woke, 1, 0)) {
         aad_last_voice_ms = now;
+        aad_conversation_active = false;
     }
-    if (avg_abs_amplitude(buf, n) >= CONFIG_OMI_VAD_ABS_THRESHOLD) {
+    if (frame_active) {
         aad_last_voice_ms = now;
+        aad_conversation_active = true;
     }
-    /* Sleep after a long silence whether online or offline. When connected, the
-     * BLE link stays up (only the mic + PDM sleep); sound resumes streaming.
-     * BUT never sleep while a BLE sync transfer is running: the AAD entry +
-     * conn-param low-power would stall the sync. Defer sleep until it finishes. */
-    if (!atomic_get(&aad_in_sleep) && !storage_transfer_active() &&
-        (now - aad_last_voice_ms) >= CONFIG_OMI_VAD_HOLD_MS) {
+    uint32_t hold_ms = aad_conversation_active ? CONFIG_OMI_AAD_CONVERSATION_HOLD_MS : CONFIG_OMI_AAD_IDLE_HOLD_MS;
+    /*
+     * Before speech, return quickly to hardware AAD after an acoustic false
+     * wake. After speech, keep only the mic/software detector available for
+     * the app's two-minute conversation window. Opus and SD remain gated.
+     * Never sleep while a BLE sync transfer is active because the AAD entry
+     * transition would stall the transfer.
+     */
+    if (!atomic_get(&aad_shutdown_quiesced) && !atomic_get(&aad_in_sleep) && !storage_transfer_active() &&
+        (now - aad_last_voice_ms) >= hold_ms) {
         atomic_set(&aad_req_sleep, 1);
         k_sem_give(&aad_sem);
     }
@@ -473,6 +705,7 @@ static int aad_hw_start(void)
     (void) gpio_pin_interrupt_configure_dt(&aad_wake, GPIO_INT_DISABLE); /* armed on first sleep */
 
     aad_last_voice_ms = k_uptime_get();
+    aad_conversation_active = false;
     k_thread_create(&aad_thread_data,
                     aad_stack,
                     K_THREAD_STACK_SIZEOF(aad_stack),
@@ -485,10 +718,11 @@ static int aad_hw_start(void)
                     K_NO_WAIT);
     k_thread_name_set(&aad_thread_data, "aad");
     aad_thread_started = true;
-    LOG_INF("AAD (hardware) started: WAKE=P1.%d thr=%d hold=%dms settle=%dms",
+    LOG_INF("AAD (hardware) started: WAKE=P1.%d min_thr=%d idle=%dms conversation=%dms settle=%dms",
             aad_wake.pin,
             CONFIG_OMI_VAD_ABS_THRESHOLD,
-            CONFIG_OMI_VAD_HOLD_MS,
+            CONFIG_OMI_AAD_IDLE_HOLD_MS,
+            CONFIG_OMI_AAD_CONVERSATION_HOLD_MS,
             CONFIG_OMI_AAD_SETTLE_MS);
     return 0;
 }
@@ -497,10 +731,25 @@ static int aad_hw_start(void)
 
 void mic_off()
 {
-    if (mic_running) {
-        mic_running = false;
-        k_thread_abort(mic_thread_id);
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    /*
+     * Exclude an in-progress AAD transition before stopping the mic thread.
+     * Aborting that thread while enter_hw_aad() is waiting for its cooperative
+     * pause would strand the AAD worker in the pause timeout path.
+     */
+    atomic_set(&aad_shutdown_quiesced, 1);
+    aad_wake_irq(false);
+    k_mutex_lock(&aad_transition_mutex, K_FOREVER);
+#endif
 
+    bool was_running = mic_running;
+    mic_running = false;
+    atomic_clear(&mic_stop_req);
+    if (mic_thread_started) {
+        k_thread_abort(mic_thread_id);
+        mic_thread_started = false;
+    }
+    if (was_running) {
         int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
         if (ret < 0) {
             LOG_ERR("STOP trigger failed: %d", ret);
@@ -514,12 +763,12 @@ void mic_off()
      * pins or the rail) after we cut power. Mask WAKE, then drop PDM_EN so the
      * T5838 + TXS0104 level-shifter lose power (otherwise the shifter's pull-ups
      * keep leaking ~1 mA through system-off). mic_off is the power-down path. */
-    aad_wake_irq(false);
     if (aad_thread_started) {
         k_thread_abort(&aad_thread_data);
         aad_thread_started = false;
     }
     t5838_aad_power(false);
+    k_mutex_unlock(&aad_transition_mutex);
 #endif
 }
 
@@ -532,6 +781,9 @@ void mic_on()
         t5838_aad_power(true);
         k_msleep(AAD_PDM_SETTLE_MS);
 #endif
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+        reset_voice_gate();
+#endif
         int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
         if (ret < 0) {
             LOG_ERR("START trigger failed: %d", ret);
@@ -539,7 +791,9 @@ void mic_on()
         }
 
         mic_running = true;
-        k_thread_start(mic_thread_id);
+        if (!mic_thread_started) {
+            start_mic_thread();
+        }
 
         LOG_INF("Microphone restarted");
     }

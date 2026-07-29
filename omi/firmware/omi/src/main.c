@@ -38,7 +38,7 @@ bool is_charging = false;
 bool is_off = false;
 bool blink_toggle = false;
 
-static void print_reset_reason(void)
+static uint32_t take_and_print_reset_reason(void)
 {
     uint32_t reas;
 
@@ -60,6 +60,7 @@ static void print_reset_reason(void)
     } else {
         printk("Power-on-reset\n");
     }
+    return reas;
 }
 
 static void codec_handler(uint8_t *data, size_t len)
@@ -75,19 +76,15 @@ static void codec_handler(uint8_t *data, size_t len)
     }
 }
 
-static void mic_handler(int16_t *buffer)
+static int mic_handler(int16_t *buffer)
 {
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     // Track total bytes processed (each sample is 2 bytes)
     monitor_inc_mic_buffer();
 #endif
 
-    // Hardware AAD (T5838) is handled inside mic.c; the mic callback only
-    // forwards audio to the codec here.
-    int err = codec_receive_pcm(buffer, MIC_BUFFER_SAMPLES);
-    if (err) {
-        LOG_ERR("Failed to process PCM data: %d", err);
-    }
+    // Hardware AAD and the software voice gate are handled inside mic.c.
+    return codec_receive_pcm(buffer, MIC_BUFFER_SAMPLES);
 }
 
 static void boot_led_sequence(void)
@@ -190,8 +187,8 @@ int main(void)
     int ret;
     printk("Starting omi ...\n");
 
-    // print reset reason at startup
-    print_reset_reason();
+    // Capture reset provenance before clearing the hardware latch.
+    uint32_t reset_reason = take_and_print_reset_reason();
 
     // Initialize watchdog first to catch any early freezes
     ret = watchdog_init();
@@ -245,7 +242,12 @@ int main(void)
         LOG_WRN("UTC time not synchronized yet");
     }
 
-    (void) lsm6dsl_time_boot_adjust_rtc();
+    /*
+     * Mixed reset causes are not trusted. A watchdog/soft/pin reset that also
+     * inherited OFF must fail closed and wait for live synchronization.
+     */
+    bool verified_system_off_wake = reset_reason == NRF_RESET_RESETREAS_OFF_MASK;
+    (void) lsm6dsl_time_boot_adjust_rtc(verified_system_off_wake);
 
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     // Initialize monitoring system
