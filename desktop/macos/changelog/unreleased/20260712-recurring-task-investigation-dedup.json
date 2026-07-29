@@ -1,3 +1,0 @@
-{
-  "change": "Fixed recurring tasks repeatedly re-triggering background agent investigations every minute"
-}

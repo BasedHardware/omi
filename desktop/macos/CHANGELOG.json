@@ -2,6 +2,29 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.145",
+      "date": "2026-07-29",
+      "changes": [
+        "Added a hint under the developer key fields listing which keys are still missing, so entering a single key makes it clear all four are required at the same time",
+        "Anchored post-interactive startup warmups to process launch so conversations, tasks, and memories load immediately when the main UI appears long after launch (e.g. right after onboarding)",
+        "Improved settings accessibility and made skill and keyword filtering more reliable",
+        "Fixed recurring tasks repeatedly re-triggering background agent investigations every minute",
+        "Optimized Rewind capture policy with per-app heartbeat profiles, preview similarity skip, lazy JPEG encoding for assistants, and screen lock/sleep pause handling",
+        "Fixed the first chat message hanging when Claude sign-in had expired: it now fails fast and prompts you to reconnect instead of waiting on the sign-in window",
+        "Improved onboarding navigation, permission guidance, voice setup, and Gmail and Calendar connections.",
+        "Fixed desktop recordings that could stay active while USB or built-in microphones delivered no audio.",
+        "Clarified that the onboarding language picker controls how Omi listens and replies",
+        "Fixed locally saved memories reappearing after deletion",
+        "Made meeting-only recording the default onboarding choice and clarified the capture options",
+        "Fixed onboarding permission detection and restored local file scanning and profile memories",
+        "Fixed the onboarding push-to-talk demo waveform and preserved Floating Bar settings after the demo.",
+        "Fixed text chat hanging forever when personal pi packages request unavailable headless UI dialogs",
+        "Fixed desktop navigation, settings, and onboarding layouts so controls stay usable on compact screens.",
+        "Added standard mouse drag selection for completed chat messages",
+        "Improved macOS settings controls with consistent provider, account, and plan selection styling"
+      ]
+    },
+    {
       "version": "0.12.144",
       "date": "2026-07-29",
       "changes": [
