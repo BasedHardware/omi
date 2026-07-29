@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -183,6 +184,10 @@ class CandidateProbeTests(unittest.TestCase):
             path = Path(directory) / "token"
             path.write_text("abc.def.ghi", encoding="utf-8")
             path.chmod(0o600)
+            if os.name == "nt":
+                with self.assertRaisesRegex(PROBE.ProbeError, "mode-0600"):
+                    PROBE._valid_token(path)
+                return
             self.assertEqual(PROBE._valid_token(path), "abc.def.ghi")
             path.chmod(0o644)
             with self.assertRaisesRegex(PROBE.ProbeError, "mode-0600"):
@@ -210,10 +215,15 @@ class CandidateProbeTests(unittest.TestCase):
             ]
             with mock.patch.object(sys, "argv", argv), mock.patch.object(
                 PROBE,
+                "_valid_token",
+                return_value="abc.def.ghi",
+            ) as valid_token, mock.patch.object(
+                PROBE,
                 "probe_candidate",
                 return_value={"status": "passed"},
             ) as candidate:
                 self.assertEqual(PROBE.main(), 0)
+            valid_token.assert_called_once_with(token)
             self.assertEqual(candidate.call_args.kwargs["expected_revision"], "desktop-backend-abc")
             self.assertEqual(candidate.call_args.kwargs["workflow_run_id"], "123")
 
@@ -240,7 +250,7 @@ class CandidateProbeTests(unittest.TestCase):
                 {"base_url", "expected_sha", "expected_channel", "expected_contract_version"},
             )
 
-    def test_candidate_requires_web_then_plain_follow_up(self) -> None:
+    def test_candidate_requires_two_terminal_usage_turns(self) -> None:
         health = {
             "status": "healthy",
             "service": "omi-desktop-backend",
@@ -250,8 +260,8 @@ class CandidateProbeTests(unittest.TestCase):
         }
         readiness = {"status": "ready", "redis": {"status": "ready"}}
         chat_results = [
-            PROBE.ChatResult("web answer", 1.2, 0.2, True, 1),
-            PROBE.ChatResult("plain answer", 0.8, 0.1, True, 0),
+            PROBE.ChatResult("first answer", 1.2, 0.2, True, 0),
+            PROBE.ChatResult("follow-up answer", 0.8, 0.1, True, 0),
         ]
         with mock.patch.object(PROBE, "_request_json", side_effect=[health, readiness]), mock.patch.object(
             PROBE, "_require_firestore_read", return_value={"status": "passed"}
@@ -268,10 +278,11 @@ class CandidateProbeTests(unittest.TestCase):
                 workflow_run_id="123",
             )
         self.assertEqual(chat.call_count, 2)
-        self.assertEqual(evidence["chat"]["public_web_turn_web_search_requests"], 1)
+        self.assertEqual(evidence["chat"]["initial_turn"], "passed")
+        self.assertEqual(evidence["chat"]["ordinary_follow_up"], "passed")
         self.assertEqual(evidence["target"]["revision"], "desktop-backend-abc")
 
-    def test_candidate_rejects_model_only_web_answer(self) -> None:
+    def test_candidate_rejects_missing_initial_terminal_usage(self) -> None:
         health = {
             "status": "healthy",
             "service": "omi-desktop-backend",
@@ -285,9 +296,9 @@ class CandidateProbeTests(unittest.TestCase):
         ), mock.patch.object(
             PROBE,
             "_chat_request",
-            return_value=PROBE.ChatResult("hallucinated answer", 0.5, 0.1, True, 0),
+            return_value=PROBE.ChatResult("answer", 0.5, 0.1, False, 0),
         ):
-            with self.assertRaisesRegex(PROBE.ProbeError, "did not report a web search"):
+            with self.assertRaisesRegex(PROBE.ProbeError, "initial_turn: provider did not report terminal usage"):
                 PROBE.probe_candidate(
                     base_url="https://candidate.example",
                     token="token",

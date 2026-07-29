@@ -21,6 +21,32 @@ All must be true:
 - No behavior-affecting code/dependency/config/index/IAM/schema changes occurred since Gate 2; otherwise Gate 2 rerun or explicit reviewer waiver is required.
 - Production owner, change window, rollback owner, monitoring owner, and approval artifact are named.
 
+## Scheduler contract before any production deploy
+
+The manual memory-maintenance deploy workflow does not create or mutate Cloud
+Scheduler or IAM. It updates the Cloud Run Job and then fails unless the
+existing `memory-maintenance-hourly` trigger is:
+
+- `projects/<prod-project>/locations/us-central1/jobs/memory-maintenance-hourly`;
+- targeted exactly at
+  `https://run.googleapis.com/v2/projects/<prod-project>/locations/us-central1/jobs/memory-maintenance-job:run`;
+- `POST`, `0 * * * *`, `Etc/UTC`, and `ENABLED`; and
+- configured with a nonempty OAuth service-account email.
+
+Provisioning or repairing this production resource is a separately approved
+production write and must happen before dispatching the deploy workflow. The
+workflow only runs `gcloud scheduler jobs describe` plus the pure checked-in
+validator. If validation fails, the GitHub deployment gate is red even though
+the preceding Cloud Run Job update may already have completed.
+
+The enabled Scheduler trigger does not itself activate canonical production
+memory. While the checked-in prod job has `MEMORY_MODE=off`, an empty
+`MEMORY_ENABLED_USERS`, and
+`MEMORY_CANONICAL_MAINTENANCE_ENABLED=false`, each hourly execution exits
+without processing a user. Gate 3 still requires an explicit, approved runtime
+gate change; do not pause or delete the Scheduler to represent product
+disablement.
+
 ## Production-only evidence required
 
 | Artifact | Acceptance condition |
@@ -48,9 +74,19 @@ All must be true:
    - exact `MEMORY_MODE=read` only when approved;
    - one/small approved allowlist entry only;
    - required server-owned control/grant/head/projection docs only through approved production path;
-   - **required:** flip the same `MEMORY_*` values on `cloud_run.jobs.memory-maintenance-job` (cron + fast-track + allowlist) — ST→LT is **not** hosted by `notifications-job`;
-   - deploy `memory-maintenance-job` via `.github/workflows/gcp_memory_maintenance_job.yml` (`environment=prod`) and confirm live job env;
-   - create/update Cloud Scheduler → Run Job Execute hourly for prod `memory-maintenance-job` (same pattern as the [dev runbook](memory-v3-dev-cloud-proof.md)).
+   - **required:** flip the same `MEMORY_*` values on
+     `cloud_run.jobs.memory-maintenance-job`
+     (`MEMORY_CANONICAL_MAINTENANCE_ENABLED=true`,
+     the allowlist, and the already-validated hourly Cloud Scheduler cadence) —
+     canonical terminal routing is **not** hosted by `notifications-job`;
+   - after separately approved Scheduler provisioning/repair, deploy
+     `memory-maintenance-job` via
+     `.github/workflows/gcp_memory_maintenance_job.yml`
+     (`environment=prod`) and require its post-deploy Scheduler validation to
+     pass;
+   - confirm live job env and separately verify that an hourly execution can
+     invoke `memory-maintenance-job` (same pattern as the
+     [dev runbook](memory-v3-dev-cloud-proof.md)).
 8. Run tiny canary:
    - confirm the canary UID has known pending short-term work (or seed one);
    - capture a pre-execution baseline (pending ST count / watermark fields only — no raw content);

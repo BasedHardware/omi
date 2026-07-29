@@ -39,6 +39,7 @@ env:
   PRODUCTION_DESKTOP_BACKEND_URL: https://desktop-backend-hhibjajaja-uc.a.run.app
   CANDIDATE_TAG: desktop-prod-candidate
   CHAT_CONTRACT_VERSION: '1'
+  AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}
 
 jobs:
   deploy:
@@ -213,8 +214,8 @@ jobs:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           set -euo pipefail
-          # Temporary bridge pending Rust -> Python backend consolidation.
           for secret in \
+            SERVICE_ACCOUNT_JSON \
             DESKTOP_GEMINI_API_KEY \
             DESKTOP_FIREBASE_API_KEY \
             DESKTOP_REDIS_DB_PASSWORD \
@@ -256,12 +257,26 @@ jobs:
         id: build-image
         uses: docker/build-push-action@v7
         with:
-          context: ./desktop/macos/Backend-Rust
-          file: ./desktop/macos/Backend-Rust/Dockerfile
+          context: .
+          file: ./backend/Dockerfile.desktop_backend
           push: true
           tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.admitted-source.outputs.image_tag }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+
+      - name: Build and publish Agent VM image
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$AGENT_GCS_BUCKET"
+          agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.admitted-source.outputs.image_tag }}"
+          docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
+          docker push "$agent_image"
+          AGENT_VM_IMAGE="$agent_image" envsubst < backend/agent_vm/startup.sh \
+            | gcloud storage cp - "gs://$AGENT_GCS_BUCKET/startup.sh"
 
       - name: Deploy production candidate at zero traffic
         id: deploy-candidate
@@ -276,14 +291,17 @@ jobs:
             --allow-unauthenticated
             --revision-suffix=${{ steps.admitted-source.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
-            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
+            --remove-env-vars=OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
             --remove-secrets=PINECONE_API_KEY,PINECONE_HOST
           env_vars: |
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
+            GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=production
+            AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}
           secrets: |
+            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest

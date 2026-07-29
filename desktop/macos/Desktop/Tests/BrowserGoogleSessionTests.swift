@@ -77,6 +77,30 @@ final class BrowserGoogleSessionTests: XCTestCase {
     XCTAssertEqual(query[kSecReturnData as String] as? Bool, true)
   }
 
+  func testSuccessfulSharedSafeStorageGrantIsReadOnceAcrossGoogleConsumers() {
+    // This is the exact shared Chrome Safe Storage identity Calendar and Gmail
+    // derive through `BrowserKeychainCache.password(for:account:)`; prefix it
+    // only to keep the test isolated from a real user credential.
+    let cacheKey = "BrowserGoogleSessionTests.\(UUID().uuidString)\u{0}Chrome Safe Storage\u{0}Chrome"
+    var keychainReads = 0
+
+    let calendarPassword = BrowserKeychainCache.shared.password(for: cacheKey) {
+      keychainReads += 1
+      return "granted"
+    }
+    let gmailPassword = BrowserKeychainCache.shared.password(for: cacheKey) {
+      keychainReads += 1
+      return "granted"
+    }
+
+    XCTAssertEqual(calendarPassword, "granted")
+    XCTAssertEqual(gmailPassword, "granted")
+    // A second loader would be a second Keychain authorization request. Both
+    // consumers must reuse the original successful grant and exact secret.
+    XCTAssertEqual(keychainReads, 1)
+    BrowserKeychainCache.shared.invalidate(cacheKey: cacheKey)
+  }
+
   func testUnknownVersionCookieBlobIsSkippedInsteadOfEmittedAsPlaintext() throws {
     let databasePath = tempRoot.appendingPathComponent("Cookies").path
     let script =

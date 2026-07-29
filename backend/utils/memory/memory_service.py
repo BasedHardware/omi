@@ -18,6 +18,7 @@ from utils.memory.canonical_memory_adapter import (
     memory_item_to_memorydb,
     read_canonical_memory_item,
     read_canonical_memories,
+    replace_conversation_sourced_memories,
     retract_conversation_sourced_memories,
     search_canonical_memories,
     search_result_to_memorydb,
@@ -568,6 +569,21 @@ class MemoryService:
         if backend is self._legacy:
             return None
         return retract_conversation_sourced_memories(uid, conversation_id)
+
+    def replace_conversation_memories(
+        self,
+        uid: str,
+        conversation_id: str,
+        items: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        backend = self._resolve_mutation_backend(uid)
+        if backend is self._legacy:
+            raise RuntimeError("atomic conversation replacement requires canonical memory")
+        return replace_conversation_sourced_memories(
+            uid,
+            conversation_id,
+            items,
+        )
 
     def create_external_memory(
         self,

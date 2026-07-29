@@ -78,6 +78,9 @@ const CONVERSATION_TURNS_MIGRATION_VERSION = 11
 const BINDING_TURN_DELIVERY_MIGRATION_VERSION = 12
 const WORKSTREAM_CONTINUITY_MIGRATION_VERSION = 13
 const SESSION_EXECUTION_POLICY_MIGRATION_VERSION = 14
+// 15-28 are already occupied by the canonical macOS runtime. Keep this shared
+// migration namespace collision-free so Windows can port those steps later.
+const LEGACY_IDENTITY_CLEANUP_MIGRATION_VERSION = 29
 
 const ACTIVE_ATTEMPT_STATUSES = [
   'queued',
@@ -148,9 +151,6 @@ CREATE TABLE sessions (
   surface_kind TEXT NOT NULL,
   external_ref_kind TEXT,
   external_ref_id TEXT,
-  -- TODO(#10240 desktop-agent-platonic-gap-closure G6): drop legacy_client_scope + legacy_session_key two desktop releases after platonic ships.
-  legacy_client_scope TEXT,
-  legacy_session_key TEXT,
   default_adapter_id TEXT NOT NULL,
   default_cwd TEXT,
   model_profile TEXT,
@@ -158,17 +158,12 @@ CREATE TABLE sessions (
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL,
   last_activity_at_ms INTEGER NOT NULL,
-  CHECK ((external_ref_kind IS NULL) = (external_ref_id IS NULL)),
-  CHECK ((legacy_client_scope IS NULL) = (legacy_session_key IS NULL))
+  CHECK ((external_ref_kind IS NULL) = (external_ref_id IS NULL))
 ) STRICT;
 
 CREATE UNIQUE INDEX sessions_external_ref_uq
   ON sessions(owner_id, external_ref_kind, external_ref_id)
   WHERE external_ref_kind IS NOT NULL;
-
-CREATE UNIQUE INDEX sessions_legacy_alias_uq
-  ON sessions(owner_id, legacy_client_scope, legacy_session_key)
-  WHERE legacy_client_scope IS NOT NULL;
 
 CREATE INDEX sessions_recent_idx
   ON sessions(owner_id, last_activity_at_ms DESC);
@@ -358,8 +353,7 @@ CREATE TABLE grants (
   operation TEXT NOT NULL,
   resource_pattern TEXT NOT NULL,
   effect TEXT NOT NULL CHECK (effect IN ('allow', 'deny')),
-  -- TODO(#10240 desktop-agent-platonic-gap-closure G6): drop legacy_default from CHECK after ship+2 releases post-platonic.
-  source TEXT NOT NULL CHECK (source IN ('legacy_default', 'policy', 'user', 'system')),
+  source TEXT NOT NULL CHECK (source IN ('policy', 'user', 'system')),
   constraints_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(constraints_json)),
   created_at_ms INTEGER NOT NULL,
   expires_at_ms INTEGER,
@@ -439,6 +433,7 @@ export function probeSqliteRuntime(options: SqliteProbeOptions = {}): void {
     runBindingTurnDeliveryMigration(db, Date.now())
     runWorkstreamContinuityMigration(db, Date.now())
     runSessionExecutionPolicyMigration(db, Date.now())
+    runLegacyIdentityCleanupMigration(db, Date.now())
     runTransaction(db, () => {
       db?.prepare(
         'INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
@@ -523,6 +518,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(SESSION_EXECUTION_POLICY_MIGRATION_VERSION)) {
       runSessionExecutionPolicyMigration(this.db, this.nowMs())
+    }
+    if (!this.hasMigration(LEGACY_IDENTITY_CLEANUP_MIGRATION_VERSION)) {
+      runLegacyIdentityCleanupMigration(this.db, this.nowMs())
     }
   }
 
@@ -876,10 +874,9 @@ export class SqliteAgentStore implements AgentStore {
       .prepare(
         `INSERT INTO sessions (
         session_id, owner_id, agent_definition_id, title, status, surface_kind, execution_role, provider_boundary,
-        external_ref_kind, external_ref_id, legacy_client_scope, legacy_session_key,
-        default_adapter_id, default_cwd, model_profile, metadata_json,
+        external_ref_kind, external_ref_id, default_adapter_id, default_cwd, model_profile, metadata_json,
         created_at_ms, updated_at_ms, last_activity_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(...sessionValues(session))
     return session
@@ -1699,6 +1696,18 @@ function tableHasColumn(db: KernelDatabase, tableName: string, columnName: strin
   return rows.some((row) => String(row.name) === columnName)
 }
 
+function tableDefinitionSql(db: KernelDatabase, tableName: string): string {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName) as Row | undefined
+  return typeof row?.sql === 'string' ? row.sql : ''
+}
+
+function foreignKeysEnabled(db: KernelDatabase): boolean {
+  const row = db.prepare('PRAGMA foreign_keys').get() as Row | undefined
+  return Number(row?.foreign_keys) === 1
+}
+
 function runDesktopContextPacketsMigration(db: KernelDatabase, appliedAtMs: number): void {
   runTransaction(db, () => {
     db.exec(`
@@ -2229,6 +2238,183 @@ function runSessionExecutionPolicyMigration(db: KernelDatabase, appliedAtMs: num
   })
 }
 
+/**
+ * Burn down the two-release compatibility shims tracked by #10240. Rebuilding
+ * the parent sessions table requires foreign-key enforcement to be disabled
+ * before the transaction starts; the in-transaction foreign_key_check is the
+ * guard that prevents committing a broken child graph.
+ */
+function runLegacyIdentityCleanupMigration(db: KernelDatabase, appliedAtMs: number): void {
+  const rebuildSessions =
+    tableHasColumn(db, 'sessions', 'legacy_client_scope') ||
+    tableHasColumn(db, 'sessions', 'legacy_session_key')
+  const rebuildGrants = tableDefinitionSql(db, 'grants').includes('legacy_default')
+  const preserveCurrentProfileGeneration = tableHasColumn(
+    db,
+    'sessions',
+    'current_profile_generation'
+  )
+  const profileColumnDefinition = preserveCurrentProfileGeneration
+    ? `,
+            current_profile_generation INTEGER NOT NULL DEFAULT 1
+              CHECK (current_profile_generation > 0)`
+    : ''
+  const profileColumnProjection = preserveCurrentProfileGeneration
+    ? ', current_profile_generation'
+    : ''
+
+  if (!rebuildSessions && !rebuildGrants) {
+    db.prepare('INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)').run(
+      LEGACY_IDENTITY_CLEANUP_MIGRATION_VERSION,
+      appliedAtMs
+    )
+    return
+  }
+
+  db.exec('PRAGMA foreign_keys = OFF')
+  if (foreignKeysEnabled(db)) {
+    throw new Error('Legacy identity cleanup must run outside an active transaction')
+  }
+  let migrationFailure: { error: unknown } | undefined
+  try {
+    runTransaction(db, () => {
+      if (rebuildSessions) {
+        db.exec(`
+          CREATE TABLE sessions_v29 (
+            session_id TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            agent_definition_id TEXT NOT NULL DEFAULT 'omi.generalist@1',
+            title TEXT,
+            status TEXT NOT NULL CHECK (status IN ('open', 'archived', 'closed')),
+            surface_kind TEXT NOT NULL,
+            external_ref_kind TEXT,
+            external_ref_id TEXT,
+            default_adapter_id TEXT NOT NULL,
+            default_cwd TEXT,
+            model_profile TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(metadata_json)),
+            created_at_ms INTEGER NOT NULL,
+            updated_at_ms INTEGER NOT NULL,
+            last_activity_at_ms INTEGER NOT NULL,
+            execution_role TEXT NOT NULL DEFAULT 'coordinator'
+              CHECK (execution_role IN ('coordinator', 'leaf')),
+            provider_boundary TEXT NOT NULL DEFAULT 'local_user:acp'${profileColumnDefinition},
+            CHECK ((external_ref_kind IS NULL) = (external_ref_id IS NULL))
+          ) STRICT;
+
+          INSERT INTO sessions_v29 (
+            session_id, owner_id, agent_definition_id, title, status, surface_kind,
+            external_ref_kind, external_ref_id, default_adapter_id, default_cwd,
+            model_profile, metadata_json, created_at_ms, updated_at_ms,
+            last_activity_at_ms, execution_role, provider_boundary${profileColumnProjection}
+          )
+          SELECT
+            session_id, owner_id, agent_definition_id, title, status, surface_kind,
+            external_ref_kind, external_ref_id, default_adapter_id, default_cwd,
+            model_profile, metadata_json, created_at_ms, updated_at_ms,
+            last_activity_at_ms, execution_role, provider_boundary${profileColumnProjection}
+          FROM sessions;
+
+          DROP TABLE sessions;
+          ALTER TABLE sessions_v29 RENAME TO sessions;
+
+          CREATE UNIQUE INDEX sessions_external_ref_uq
+            ON sessions(owner_id, external_ref_kind, external_ref_id)
+            WHERE external_ref_kind IS NOT NULL;
+          CREATE INDEX sessions_recent_idx
+            ON sessions(owner_id, last_activity_at_ms DESC);
+        `)
+      }
+
+      if (rebuildGrants) {
+        db.exec(`
+          CREATE TABLE grants_v29 (
+            grant_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+            run_id TEXT REFERENCES runs(run_id) ON DELETE CASCADE,
+            capability TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            resource_pattern TEXT NOT NULL,
+            effect TEXT NOT NULL CHECK (effect IN ('allow', 'deny')),
+            source TEXT NOT NULL CHECK (source IN ('policy', 'user', 'system')),
+            constraints_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(constraints_json)),
+            created_at_ms INTEGER NOT NULL,
+            expires_at_ms INTEGER,
+            revoked_at_ms INTEGER
+          ) STRICT;
+        `)
+        db.prepare(
+          `
+          INSERT INTO grants_v29 (
+            grant_id, session_id, run_id, capability, operation, resource_pattern,
+            effect, source, constraints_json, created_at_ms, expires_at_ms, revoked_at_ms
+          )
+          SELECT
+            grant_id, session_id, run_id, capability, operation, resource_pattern,
+            effect,
+            CASE source WHEN 'legacy_default' THEN 'system' ELSE source END,
+            CASE source
+              WHEN 'legacy_default' THEN json_object(
+                '_omiLegacyIdentityCleanup',
+                json_object('originalSource', 'legacy_default', 'action', 'revoked', 'version', 29),
+                'originalConstraints',
+                json(constraints_json)
+              )
+              ELSE constraints_json
+            END,
+            created_at_ms,
+            expires_at_ms,
+            CASE source
+              WHEN 'legacy_default' THEN COALESCE(revoked_at_ms, ?)
+              ELSE revoked_at_ms
+            END
+          FROM grants;
+        `
+        ).run(appliedAtMs)
+        db.exec(`
+          DROP TABLE grants;
+          ALTER TABLE grants_v29 RENAME TO grants;
+          CREATE INDEX grants_lookup_idx
+            ON grants(session_id, run_id, capability, operation, created_at_ms DESC);
+        `)
+      }
+
+      const foreignKeyViolations = db.prepare('PRAGMA foreign_key_check').all() as Row[]
+      if (foreignKeyViolations.length > 0) {
+        const summary = foreignKeyViolations
+          .slice(0, 3)
+          .map((row) => `${String(row.table)}:${String(row.rowid)}->${String(row.parent)}`)
+          .join(', ')
+        throw new Error(`Legacy identity cleanup would break foreign keys: ${summary}`)
+      }
+
+      db.prepare('INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)').run(
+        LEGACY_IDENTITY_CLEANUP_MIGRATION_VERSION,
+        appliedAtMs
+      )
+    })
+  } catch (error) {
+    migrationFailure = { error }
+  }
+
+  let foreignKeyRestoreFailure: { error: unknown } | undefined
+  try {
+    db.exec('PRAGMA foreign_keys = ON')
+    if (!foreignKeysEnabled(db)) {
+      throw new Error('Legacy identity cleanup could not restore foreign-key enforcement')
+    }
+  } catch (error) {
+    foreignKeyRestoreFailure = { error }
+  }
+
+  if (migrationFailure) {
+    throw migrationFailure.error
+  }
+  if (foreignKeyRestoreFailure) {
+    throw foreignKeyRestoreFailure.error
+  }
+}
+
 // Migration/probe-level transaction helper. Distinct from the store's
 // `withTransaction` (hand-tracked depth): migrations run at construction time,
 // never nested and never inside `withTransaction`, so a best-effort open-tx check
@@ -2291,8 +2477,6 @@ function sessionValues(session: AgentSession): SqlBind[] {
     session.providerBoundary,
     session.externalRefKind,
     session.externalRefId,
-    null,
-    null,
     session.defaultAdapterId,
     session.defaultCwd,
     session.modelProfile,

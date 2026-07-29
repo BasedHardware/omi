@@ -179,10 +179,17 @@ import XCTest
 
       let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
       let barState = FloatingControlBarState()
-      coordinator.configure(barState: barState)
+      var resizeRequests: [Bool] = []
+      coordinator.configure(barState: barState) { expanded in
+        resizeRequests.append(expanded)
+      }
       let turnID = coordinator.begin(intent: .hold)
       XCTAssertTrue(barState.isVoiceListening)
       XCTAssertFalse(barState.isThinking)
+      XCTAssertEqual(
+        resizeRequests,
+        [true],
+        "PTT must expand its surface even while the onboarding demo is active")
 
       coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
       coordinator.publish(.finalize(turnID: turnID))

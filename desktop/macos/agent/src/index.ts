@@ -2,8 +2,8 @@
  * ACP Bridge — translates between OMI's JSON-lines protocol and the
  * Agent Client Protocol (ACP) used by claude-code-acp.
  *
- * THIS IS THE DESKTOP APP FLOW. It is unrelated to the VM/agent-cloud flow
- * (agent-cloud/agent.mjs), which runs Claude Code SDK on a remote VM for
+ * THIS IS THE DESKTOP APP FLOW. It is unrelated to the VM agent flow, which
+ * runs the Claude Agent SDK on a remote VM for
  * the Omi Agent feature. This bridge runs locally on the user's Mac.
  *
  * Session lifecycle:
@@ -81,7 +81,12 @@ import {
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
-import { AcpError, AcpRuntimeAdapter, isAcpProviderAuthFailure } from "./adapters/acp.js";
+import {
+  AcpError,
+  AcpRuntimeAdapter,
+  beginProviderAuthWithoutBlocking,
+  isAcpProviderAuthFailure,
+} from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
@@ -1056,10 +1061,16 @@ async function initializeAcp(): Promise<void> {
         }));
       }
       logErr(`ACP requires authentication: ${JSON.stringify(authMethods)}`);
-      await startAuthFlow();
-
-      // Retry initialization after auth (ACP subprocess already restarted)
-      await initializeAcp();
+      // Terminalize-first, same contract the active turn already follows: signal
+      // Swift and return instead of awaiting OAuth in-band. `isInitialized` stays
+      // false, so the pending send reaches the ACP request, hits the same -32000,
+      // and terminalizes as `authentication` via the kernel's recoverable-error
+      // path rather than hanging behind this init (#10407).
+      beginProviderAuthWithoutBlocking({
+        signalAuthRequired: signalProviderAuthRequired,
+        startAuthFlow,
+        logErr,
+      });
       return;
     }
     throw err;

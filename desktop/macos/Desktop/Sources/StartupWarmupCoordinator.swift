@@ -7,6 +7,13 @@ final class StartupWarmupCoordinator {
   private let appProvider: AppProvider
   private let chatProvider: ChatProvider
   private let retryDatabaseInit: () async -> Bool
+  /// Warmup delays protect the busy launch window, so they count down from
+  /// launch — not from when the warmup is scheduled. When the main content
+  /// first appears long after launch (onboarding just completed, account
+  /// switch), the window has already elapsed and warmups run immediately
+  /// instead of leaving conversations/tasks/memories stale for seconds.
+  /// Deliberately never reset by reset(): it anchors to process launch.
+  private let launchAnchor: Date
 
   private var scheduleState = StartupWarmupScheduleState()
   private var sessionTasks: [StartupWarmupTaskID: Task<Void, Never>] = [:]
@@ -17,13 +24,19 @@ final class StartupWarmupCoordinator {
     dashboardViewModel: DashboardViewModel,
     appProvider: AppProvider,
     chatProvider: ChatProvider,
-    retryDatabaseInit: @escaping () async -> Bool
+    retryDatabaseInit: @escaping () async -> Bool,
+    launchAnchor: Date = Date()
   ) {
     self.tasksStore = tasksStore
     self.dashboardViewModel = dashboardViewModel
     self.appProvider = appProvider
     self.chatProvider = chatProvider
     self.retryDatabaseInit = retryDatabaseInit
+    self.launchAnchor = launchAnchor
+  }
+
+  func remainingStartupDelay(_ delay: TimeInterval, now: Date = Date()) -> TimeInterval {
+    StartupWarmupPolicy.remainingDelay(delay, elapsedSinceLaunch: now.timeIntervalSince(launchAnchor))
   }
 
   func cancel() {
@@ -50,9 +63,10 @@ final class StartupWarmupCoordinator {
     sessionTasks[id]?.cancel()
     let token = UUID()
     sessionTaskTokens[id] = token
+    let effectiveDelay = remainingStartupDelay(delay)
     sessionTasks[id] = Task { [weak self] in
       guard let self else { return }
-      guard await self.sleepForStartupDelay(delay) else {
+      guard await self.sleepForStartupDelay(effectiveDelay) else {
         await MainActor.run { onCancel?() }
         return
       }

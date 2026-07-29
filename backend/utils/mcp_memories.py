@@ -139,6 +139,32 @@ def mcp_legacy_read_authorized(result: 'McpMemorySearchResult | McpMemoryListRes
     return False
 
 
+MCP_MEMORY_READ_DENIED_FALLBACK_REASON = 'memory_read_denied'
+
+
+def mcp_denied_read_payload(result: 'McpMemorySearchResult | McpMemoryListResult') -> Optional[Dict[str, Any]]:
+    """Client-visible payload for a refused MCP memory read, or None to serve an empty result.
+
+    Callers reach this only after `mcp_legacy_read_authorized` has refused the legacy
+    surface. Every such state is an authorization or indeterminate-rollout condition the
+    caller cannot see or act on, so it must be reported rather than rendered as an empty
+    account — an empty success is indistinguishable from "you have no memories", which is
+    the reading most likely to make a user believe their data was deleted. The payload
+    mirrors the existing grant-denial shape so both refusals read the same to a client.
+
+    SHADOW_ONLY is the one exception and returns None. It is not a denial: during shadow
+    mode legacy remains authoritative, so reporting it as an authorization error would be
+    wrong in the other direction. It keeps its existing empty result.
+
+    Returning the whole payload rather than a bare reason keeps both the classification and
+    the wire shape here, so each surface adds only its own raise.
+    """
+    if result.read_decision == MemoryReadDecision.SHADOW_ONLY:
+        return None
+    reason = result.fallback_reason or MCP_MEMORY_READ_DENIED_FALLBACK_REASON
+    return {'enabled': False, 'reason': reason, 'consumer': 'mcp'}
+
+
 def _mcp_search_result(result: DefaultReadSearchResult) -> McpMemorySearchResult:
     return McpMemorySearchResult(
         memories=result.items,

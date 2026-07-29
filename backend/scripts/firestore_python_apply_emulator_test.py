@@ -87,12 +87,11 @@ def main() -> int:
 
     db_client.document(collections.memory_apply_control_state).set(_stored_model(control))
     db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}").set(_stored_model(evidence))
-    db_client.document(f"{collections.memory_operations}/{operation.operation_id}").set(_stored_model(operation))
-
     result = apply_long_term_patch_firestore(
         uid=uid,
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
+        proposed_operation=operation,
     )
     if result.status != ApplyStatus.committed:
         raise AssertionError(f"expected committed apply result, got {result.status}: {result.reason}")

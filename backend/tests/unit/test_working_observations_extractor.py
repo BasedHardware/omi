@@ -1,13 +1,21 @@
+import json
 import os
 
 os.environ.setdefault("FIRESTORE_EMULATOR_HOST", "localhost:8787")
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test")
 
+import pytest
 from langchain_core.messages import AIMessage
 
-from models.memory_contracts import L1MemoryArchiveItem
+from models.memory_contracts import L1MemoryArchiveClass, L1MemoryArchiveItem
+from models.transcript_segment import TranscriptSegment
 from utils.llm import working_observations
-from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
+from utils.llm.memories import extract_canonical_l1_memory_candidates
+from utils.llm.working_observations import (
+    MAX_WORKING_OBSERVATION_ITEMS,
+    WorkingObservationExtractionError,
+    extract_l1_memory_archive_items_from_text,
+)
 from utils.llm.usage_tracker import get_current_context
 
 
@@ -21,6 +29,134 @@ class FakeLLM:
         self.calls.append(messages)
         self.usage_contexts.append(get_current_context())
         return AIMessage(content=self.content)
+
+
+class FailingLLM:
+    def invoke(self, messages):
+        raise RuntimeError("provider unavailable")
+
+
+def test_canonical_l1_wrapper_keeps_broad_source_aware_candidates_out_of_archive_routes(monkeypatch):
+    extracted = [
+        L1MemoryArchiveItem(
+            text=f"Candidate {index}",
+            evidence_quotes=[f"exact quote {index}"],
+            speaker_label="speaker_0" if index != 2 else "speaker_1",
+            about="the user" if index != 2 else "unidentified non-primary speaker (speaker_1)",
+            archive_class="sensitive" if index == 2 else "general",
+        )
+        for index in range(4)
+    ]
+    captured = {}
+
+    def fake_extract(**kwargs):
+        captured.update(kwargs)
+        return extracted
+
+    monkeypatch.setattr(working_observations, "extract_l1_memory_archive_items_from_text", fake_extract)
+    segments = [
+        TranscriptSegment(
+            id="segment-user",
+            text="I like coffee, plan to travel, and prefer concise updates.",
+            speaker="SPEAKER_00",
+            is_user=True,
+            start=0.0,
+            end=4.0,
+        ),
+        TranscriptSegment(
+            id="segment-other",
+            text="I am preparing the launch deck for Friday.",
+            speaker="SPEAKER_01",
+            is_user=False,
+            start=4.0,
+            end=8.0,
+        ),
+    ]
+
+    candidates = extract_canonical_l1_memory_candidates(
+        "user_1",
+        "conversation_1",
+        segments,
+        user_name="David",
+        language="en",
+    )
+
+    assert len(candidates) == 4
+    assert [candidate.evidence_quotes for candidate in candidates] == [
+        ["exact quote 0"],
+        ["exact quote 1"],
+        ["exact quote 2"],
+        ["exact quote 3"],
+    ]
+    assert candidates[2].about == "unidentified non-primary speaker (speaker_1)"
+    assert candidates[2].archive_class == L1MemoryArchiveClass.sensitive
+    assert captured["source_type"] == "voice_transcript"
+    assert captured["persist_route_outcomes"] is False
+    assert "David:" in captured["text"]
+    assert "Speaker 1:" in captured["text"]
+
+
+def test_canonical_l1_wrapper_sends_short_voice_transcript_to_broad_extractor(monkeypatch):
+    captured = {}
+
+    def fake_extract(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(working_observations, "extract_l1_memory_archive_items_from_text", fake_extract)
+    segments = [
+        TranscriptSegment(
+            id="segment-short",
+            text="Call Mom",
+            speaker="SPEAKER_00",
+            is_user=True,
+            start=0.0,
+            end=1.0,
+        )
+    ]
+
+    assert (
+        extract_canonical_l1_memory_candidates(
+            "user_short",
+            "conversation_short",
+            segments,
+            user_name="D",
+            language="en",
+        )
+        == []
+    )
+
+    assert captured["source_type"] == "voice_transcript"
+    assert captured["text"].strip()
+    assert len(captured["text"]) < 25
+
+
+def test_canonical_l1_wrapper_skips_whitespace_transcript_before_rendering_speaker_labels(monkeypatch):
+    def fake_extract(**kwargs):
+        pytest.fail(f"whitespace transcript reached extractor: {kwargs}")
+
+    monkeypatch.setattr(working_observations, "extract_l1_memory_archive_items_from_text", fake_extract)
+    segments = [
+        TranscriptSegment(
+            id="segment-blank",
+            text=" \n\t ",
+            speaker="SPEAKER_00",
+            is_user=True,
+            start=0.0,
+            end=1.0,
+        )
+    ]
+
+    assert (
+        extract_canonical_l1_memory_candidates(
+            "user_blank",
+            "conversation_blank",
+            segments,
+            user_name="D",
+            language="en",
+        )
+        == []
+    )
 
 
 def test_l1_archive_extractor_emits_general_archive_items_without_lifecycle_routes():
@@ -154,6 +290,92 @@ def test_l1_archive_extractor_skips_tiny_sources_without_llm_call():
     assert fake_llm.calls == []
 
 
+def test_l1_archive_extractor_accepts_short_voice_transcript():
+    fake_llm = FakeLLM("""
+        {
+          "items": [
+            {
+              "text": "The user needs to call Mom.",
+              "class": "general",
+              "evidence_quotes": ["Call Mom"],
+              "speaker_label": "speaker_0",
+              "about": "the user"
+            }
+          ]
+        }
+        """)
+
+    items = extract_l1_memory_archive_items_from_text(
+        uid="user_short",
+        source_id="source_short",
+        source_type="voice_transcript",
+        text="Call Mom",
+        user_name="D",
+        persist_route_outcomes=False,
+        llm=fake_llm,
+    )
+
+    assert [item.text for item in items] == ["The user needs to call Mom."]
+    assert len(fake_llm.calls) == 1
+
+
+def test_l1_archive_extractor_skips_whitespace_voice_source_without_llm_call():
+    fake_llm = FakeLLM('{"items": []}')
+
+    items = extract_l1_memory_archive_items_from_text(
+        uid="user_short",
+        source_id="source_blank",
+        source_type="voice_transcript",
+        text=" \n\t ",
+        user_name="D",
+        persist_route_outcomes=False,
+        llm=fake_llm,
+    )
+
+    assert items == []
+    assert fake_llm.calls == []
+
+
+@pytest.mark.parametrize(
+    ("llm", "stage"),
+    [
+        (FailingLLM(), "invoke"),
+        (FakeLLM("not-json"), "parse"),
+    ],
+)
+def test_l1_archive_extractor_strict_mode_distinguishes_failures_from_valid_empty(llm, stage):
+    kwargs = {
+        "uid": "user_1",
+        "source_id": "source_1",
+        "source_type": "voice_transcript",
+        "text": "This source is long enough to invoke the memory extractor.",
+        "user_name": None,
+        "persist_route_outcomes": False,
+        "llm": llm,
+    }
+
+    with pytest.raises(WorkingObservationExtractionError) as exc_info:
+        extract_l1_memory_archive_items_from_text(**kwargs, strict=True)
+
+    assert exc_info.value.stage == stage
+    assert extract_l1_memory_archive_items_from_text(**kwargs) == []
+
+
+def test_l1_archive_extractor_strict_mode_accepts_valid_empty_batch():
+    items = extract_l1_memory_archive_items_from_text(
+        uid="user_1",
+        source_id="source_1",
+        source_type="voice_transcript",
+        text="This source is long enough to invoke the memory extractor.",
+        user_name=None,
+        persist_route_outcomes=False,
+        llm=FakeLLM('{"items": []}'),
+        strict=True,
+    )
+
+    assert items == []
+
+
 def test_l1_archive_extractor_accepts_short_security_relevant_sources():
     fake_llm = FakeLLM("""
         {
@@ -181,3 +403,82 @@ def test_l1_archive_extractor_accepts_short_security_relevant_sources():
     assert len(items) == 1
     assert items[0].archive_class.value == "sensitive"
     assert len(fake_llm.calls) == 1  # should have called LLM even for short security-relevant text
+
+
+def test_l1_archive_extractor_deterministically_bounds_dense_provider_output():
+    provider_items = [
+        {
+            "text": f"Distinct observation {index}",
+            "class": "general",
+            "evidence_quotes": [f"exact source quote {index}"],
+            "confidence": "high",
+        }
+        for index in range(60)
+    ]
+    fake_llm = FakeLLM(json.dumps({"items": provider_items}))
+    kwargs = {
+        "uid": "user_dense",
+        "source_id": "source_dense",
+        "source_type": "voice_transcript",
+        "text": "A dense source with enough durable details to exercise bounded extraction.",
+        "user_name": "David",
+        "persist_route_outcomes": False,
+        "llm": fake_llm,
+        "strict": True,
+    }
+
+    first = extract_l1_memory_archive_items_from_text(**kwargs)
+    second = extract_l1_memory_archive_items_from_text(**kwargs)
+
+    assert len(first) == MAX_WORKING_OBSERVATION_ITEMS
+    assert [item.text for item in first] == [
+        f"Distinct observation {index}" for index in range(MAX_WORKING_OBSERVATION_ITEMS)
+    ]
+    assert [item.archive_id for item in second] == [item.archive_id for item in first]
+    assert f"at most {MAX_WORKING_OBSERVATION_ITEMS} distinct items" in fake_llm.calls[0][0][1].lower()
+
+
+def test_l1_archive_extractor_deduplicates_within_subject_without_collapsing_other_speakers():
+    fake_llm = FakeLLM("""
+        {
+          "items": [
+            {
+              "text": "Prefers tea",
+              "class": "general",
+              "evidence_quotes": ["Alice prefers tea"],
+              "speaker_label": "speaker_0",
+              "about": "Alice"
+            },
+            {
+              "text": "  PREFERS   TEA  ",
+              "class": "general",
+              "evidence_quotes": ["Alice prefers tea"],
+              "speaker_label": "SPEAKER_0",
+              "about": "alice"
+            },
+            {
+              "text": "Prefers tea",
+              "class": "general",
+              "evidence_quotes": ["Bob prefers tea"],
+              "speaker_label": "speaker_1",
+              "about": "Bob"
+            }
+          ]
+        }
+        """)
+
+    items = extract_l1_memory_archive_items_from_text(
+        uid="user_subjects",
+        source_id="source_subjects",
+        source_type="voice_transcript",
+        text="Alice prefers tea. Bob prefers tea.",
+        user_name="D",
+        persist_route_outcomes=False,
+        llm=fake_llm,
+    )
+
+    assert [(item.about, item.speaker_label) for item in items] == [
+        ("Alice", "speaker_0"),
+        ("Bob", "speaker_1"),
+    ]
+    assert len({item.archive_id for item in items}) == 2

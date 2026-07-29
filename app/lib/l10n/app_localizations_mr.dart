@@ -4716,7 +4716,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'कोणतेही विशिष्ट डेटा प्रवेश कॉन्फ़िगर केलेला नाही.';
 
   @override
-  String get basicPlanDescription => '१,२०० प्रीमियम मिनिटे + डिव्हाइसवर अनलिमिटेड';
+  String get basicPlanDescription => '३०० प्रीमियम मिनिटे + डिव्हाइसवर अनलिमिटेड';
 
   @override
   String get minutes => 'मिनिटे';

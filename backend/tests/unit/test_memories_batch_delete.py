@@ -262,9 +262,11 @@ class TestBatchDeleteCanonicalCohort:
         monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=docs))
         monkeypatch.setattr(
             canonical_adapter,
-            'read_memory_v3_trusted_account_generation',
-            lambda **kwargs: SimpleNamespace(read_error_reason=None, account_generation=1, head_commit_id='c1'),
+            'fetch_authoritative_product_memory_items',
+            lambda **kwargs: [_canonical_item('valid')],
         )
+        tombstone_store = MagicMock()
+        monkeypatch.setattr(canonical_adapter, 'tombstone_memory_items_firestore', tombstone_store)
 
         with pytest.raises(ValueError, match='canonical memory not found: missing'):
             canonical_adapter.delete_canonical_memories_batch(
@@ -272,7 +274,9 @@ class TestBatchDeleteCanonicalCohort:
                 ['valid', 'missing'],
             )
 
-        # The earlier valid id must be left untouched (still active, content intact):
+        # The atomic store write must never fire when validation rejects the batch...
+        tombstone_store.assert_not_called()
+        # ...and the earlier valid id must be left untouched (still active, content intact):
         # if the batch wrote as it read, "valid" would already be tombstoned here.
         assert docs[valid_path]['status'] == MemoryItemStatus.active.value
         assert docs[valid_path]['content'] == 'fact valid'
@@ -280,12 +284,13 @@ class TestBatchDeleteCanonicalCohort:
 
 class TestBatchDeleteRequestModel:
     def test_accepts_up_to_max(self):
-        max_len = mem_mod.MEMORIES_BATCH_MAX
+        max_len = mem_mod.MEMORIES_BATCH_DELETE_MAX
+        assert max_len == 100
         req = mem_mod.BatchDeleteMemoriesRequest(memory_ids=[f'm{i}' for i in range(max_len)])
         assert len(req.memory_ids) == max_len
 
     def test_rejects_over_max(self):
-        max_len = mem_mod.MEMORIES_BATCH_MAX
+        max_len = mem_mod.MEMORIES_BATCH_DELETE_MAX
         with pytest.raises(ValidationError):
             mem_mod.BatchDeleteMemoriesRequest(memory_ids=[f'm{i}' for i in range(max_len + 1)])
 
@@ -353,6 +358,21 @@ def test_delete_after_read_cutover_leaves_legacy_alone(monkeypatch):
     assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
 
     legacy_delete.assert_not_called()
+
+
+def test_single_delete_reports_atomic_lineage_limit_as_413(monkeypatch):
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *args, **kwargs: True)
+
+    def delete(_uid, _memory_id):
+        raise canonical_adapter.CanonicalBatchMutationLimitError("lineage exceeds transaction limit")
+
+    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete=delete))
+
+    with pytest.raises(HTTPException) as exc_info:
+        mem_mod.delete_memory('mem-large-lineage', uid='u1')
+
+    assert exc_info.value.status_code == 413
+    assert exc_info.value.detail == 'Memory lineage is too large to delete atomically'
 
 
 def _canonical_delete_all_stage(monkeypatch, *, read_cutover_done: bool):

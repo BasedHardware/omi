@@ -522,8 +522,16 @@ def _validated_signal(
     port_manifest: Path,
     sig: signal.Signals,
     lease_id: str | None = None,
-) -> None:
-    """Signal only a current supervisor whose listener children still prove lease lineage."""
+    *,
+    allow_unproven_listener_skip: bool = False,
+) -> bool:
+    """Signal only a current supervisor whose listener children still prove lease lineage.
+
+    Returns True when a signal was sent. When ``allow_unproven_listener_skip`` is
+    set and a live listener cannot prove process-group descent, returns False
+    without signaling so callers can retire the lease pointer without killing
+    unknown processes (release path after green behavioral gates).
+    """
 
     pid = int(record["pid"])
     service = str(record["service"])
@@ -538,6 +546,8 @@ def _validated_signal(
     if listeners and not _is_exact_typesense_docker_proxy(record, lease_id):
         for listener_pid in listeners:
             if getpgid(listener_pid) != process_group or not safety.is_descendant_of(listener_pid, pid):
+                if allow_unproven_listener_skip:
+                    return False
                 raise QualificationLeaseError(
                     "Refusing to signal a qualification listener whose lease lineage is unproven"
                 )
@@ -545,6 +555,7 @@ def _validated_signal(
         killpg(process_group, sig)
     except (ProcessLookupError, PermissionError) as exc:
         raise QualificationLeaseError(f"Cannot signal recorded qualification process group: {exc}") from exc
+    return True
 
 
 def _orphaned_record_cleanup_mode(
@@ -595,7 +606,7 @@ def _stop_exact_typesense_container(record: dict[str, object], lease_id: str, si
     if not _is_exact_typesense_docker_proxy(record, lease_id):
         raise QualificationLeaseError("Refusing to stop a Typesense container whose exact lease binding is unproven")
     container = f"omi-dev-harness-{lease_id}-typesense"
-    command = ["docker", "kill", container] if sig == signal.SIGKILL else ["docker", "stop", "--time", "10", container]
+    command = ["docker", "kill", container] if sig.name == "SIGKILL" else ["docker", "stop", "--time", "10", container]
     try:
         stopped = subprocess.run(
             command,
@@ -638,15 +649,36 @@ def _wait_for_ports_to_close(
 
 
 def _stop_owned_records(
-    records: list[dict[str, object]], process_manifest: Path, port_manifest: Path, lease_id: str
+    records: list[dict[str, object]],
+    process_manifest: Path,
+    port_manifest: Path,
+    lease_id: str,
+    *,
+    allow_unproven_listener_skip: bool = False,
 ) -> None:
+    skipped_unproven = False
     for sig, wait_seconds in STOP_PHASES:
         for record in records:
             pid = int(record["pid"])
             if safety.process_exists(pid):
-                _validated_signal(record, process_manifest, port_manifest, sig, lease_id)
+                signaled = _validated_signal(
+                    record,
+                    process_manifest,
+                    port_manifest,
+                    sig,
+                    lease_id,
+                    allow_unproven_listener_skip=allow_unproven_listener_skip,
+                )
+                if not signaled:
+                    skipped_unproven = True
                 continue
-            cleanup_mode = _orphaned_record_cleanup_mode(record, process_manifest, port_manifest, lease_id)
+            try:
+                cleanup_mode = _orphaned_record_cleanup_mode(record, process_manifest, port_manifest, lease_id)
+            except QualificationLeaseError:
+                if allow_unproven_listener_skip:
+                    skipped_unproven = True
+                    continue
+                raise
             if cleanup_mode == "process-group":
                 _getpgid, killpg = _posix_process_group_api()
                 try:
@@ -657,6 +689,9 @@ def _stop_owned_records(
                 _stop_exact_typesense_container(record, lease_id, sig)
         open_ports = _wait_for_ports_to_close(records, wait_seconds)
         if not open_ports:
+            return
+        if allow_unproven_listener_skip and skipped_unproven:
+            # Leave residual listeners; release still retires the admission pointer.
             return
     details = ", ".join(
         f"{service}:{port} (listeners {','.join(map(str, pids))})" for service, port, pids in open_ports
@@ -893,9 +928,22 @@ def release(
         records, process_manifest, port_manifest = _validated_owned_records(
             state_root, recorded_repo, recorded_id, recorded_token
         )
-        fault_record = _validated_fault_record(state_root, recorded_token)
-        _stop_owned_fault_record(fault_record)
-        _stop_owned_records(records, process_manifest, port_manifest, recorded_id)
+        # Authenticated release after a completed run must retire the admission
+        # pointer even when a residual listener fails lineage proof. Never kill
+        # unproven processes; skip them and leave residual ports for next acquire
+        # quarantine/reclaim. This is the 142 final-cleanup failure class.
+        try:
+            fault_record = _validated_fault_record(state_root, recorded_token)
+            _stop_owned_fault_record(fault_record)
+        except QualificationLeaseError:
+            fault_record = None
+        _stop_owned_records(
+            records,
+            process_manifest,
+            port_manifest,
+            recorded_id,
+            allow_unproven_listener_skip=True,
+        )
         path.unlink(missing_ok=True)
         _mark_completed(state_root, recorded_repo, recorded_id, recorded_token)
         _prune(

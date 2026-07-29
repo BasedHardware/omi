@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+@preconcurrency import ApplicationServices
 import Combine
 import SwiftUI
 @preconcurrency import UserNotifications
@@ -565,9 +566,8 @@ extension AppState {
       "ACCESSIBILITY_TRIGGER: User clicked Grant Access — bundleId=\(bundleId), macOS \(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
     )
 
-    // This will prompt the user if not already trusted
     let options =
-      [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+      ["AXTrustedCheckOptionPrompt": true] as CFDictionary
     let trusted = AXIsProcessTrustedWithOptions(options)
     if trusted {
       hasAccessibilityPermission = true

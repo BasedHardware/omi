@@ -1,6 +1,9 @@
 """Review-queue and extractor schema tests (legacy consolidation stack removed in O-W6)."""
 
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+import pytest
 
 from database import review_queue
 from tests.store_fakes import FakeDocumentStore
@@ -133,6 +136,62 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
     assert stored_update['resolution_commit_id'] == 'commit-review'
     assert corrections[0]['decision'] == 'accept'
     assert marked_short_term == [('st-new', 'commit-review')]
+
+
+def test_canonical_review_resolution_uses_canonical_authority_and_redacts_projection(monkeypatch):
+    item = {
+        'review_id': 'review-canonical',
+        'fact_id': 'mem-canonical',
+        'candidate': {'id': 'mem-canonical', 'content': 'Private candidate text'},
+        'conflict_with': ['mem-old'],
+        'source_short_term_id': 'mem-canonical',
+        'authority': 'canonical_memory',
+        'status': 'pending',
+    }
+    docs: dict = {}
+
+    resolved_item = {
+        **item,
+        'status': 'accepted',
+        'decision': 'accept',
+        'candidate': {'id': 'mem-canonical'},
+        'permitted_uses': [],
+        'resolution_commit_id': 'canonical-commit',
+    }
+    monkeypatch.setattr(review_queue, 'get_review_conflict', MagicMock(side_effect=[item, resolved_item]))
+    monkeypatch.setattr(review_queue, '_store', lambda: FakeDocumentStore(backing=docs))
+    canonical_commit = MagicMock(return_value={'commit': {'commit_id': 'canonical-commit'}})
+    monkeypatch.setattr(review_queue, '_append_canonical_resolution_commit', canonical_commit)
+    monkeypatch.setattr(
+        review_queue,
+        'append_resolution_commit',
+        lambda *_args, **_kwargs: pytest.fail('canonical review wrote legacy memory authority'),
+    )
+    monkeypatch.setattr(
+        review_queue,
+        'record_correction',
+        lambda *_args, **_kwargs: pytest.fail('canonical review retained a legacy correction record'),
+    )
+    monkeypatch.setattr(
+        review_queue.short_term_db,
+        'mark_consolidated',
+        lambda *_args, **_kwargs: pytest.fail('canonical review touched the legacy short-term store'),
+    )
+
+    result = review_queue.resolve_review_conflict(
+        'uid-1',
+        'review-canonical',
+        'accept',
+        reason='confirmed',
+    )
+
+    canonical_commit.assert_called_once_with('uid-1', item, 'accept', None, 'confirmed')
+    assert result['commit']['commit_id'] == 'canonical-commit'
+    assert result['correction'] is None
+    assert result['item']['candidate'] == {'id': 'mem-canonical'}
+    # Canonical review routes through its sole mutation authority and never writes the legacy
+    # review-doc projection through the neutral store.
+    assert docs == {}
 
 
 def test_review_queue_reject_uses_projection_writer(monkeypatch):

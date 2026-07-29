@@ -4718,7 +4718,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Конкретный доступ к данным не настроен.';
 
   @override
-  String get basicPlanDescription => '1 200 премиум минут + неограниченно на устройстве';
+  String get basicPlanDescription => '300 премиум минут + неограниченно на устройстве';
 
   @override
   String get minutes => 'минут';
@@ -6011,7 +6011,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 премиум-минут в месяц. Вкладка \"На устройстве\" предлагает неограниченную бесплатную транскрипцию.';
+      '300 премиум-минут в месяц. Вкладка \"На устройстве\" предлагает неограниченную бесплатную транскрипцию.';
 
   @override
   String get viewUsage => 'Посмотреть использование';

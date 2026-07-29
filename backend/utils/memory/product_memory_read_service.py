@@ -1,22 +1,32 @@
-from __future__ import annotations
-
-from database import document_store
-
 """Canonical product memory read service module (WS-G8a).
 
 Neutral ``product_memory_read_service`` is the source of truth. Legacy ``product_memory_read_service`` remains an importable alias.
 """
 
+from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, Iterable, List, Optional, cast
 
+from database import document_store
+from database.firestore_index_registry import (
+    CONVERSATION_SOURCE_MEMORY_QUERY,
+    SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
+    SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
+)
 from database.memory_collections import MemoryCollections
-from models.product_memory import MemoryAccessPolicy, MemoryItem
+from database.store import get_document_store
+from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.memory_read_api import query_archive_product_memory_items, query_default_product_memory_items
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
 MAX_PRODUCT_MEMORY_READ_LIMIT = 500
+SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT = 100
+FIRESTORE_IN_QUERY_MAX_VALUES = 30
+
+
+def _store() -> Any:
+    return get_document_store()
 
 
 def fetch_default_product_memory_search(
@@ -104,6 +114,111 @@ def fetch_authoritative_product_memory_items(uid: str) -> List[MemoryItem]:
             raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
         items.append(item)
     return sorted(items, key=_memory_item_sort_key)
+
+
+def fetch_authoritative_product_memory_items_for_source(
+    uid: str,
+    source_id: str,
+    *,
+    page_size: int = SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT,
+) -> List[MemoryItem]:
+    """Load one complete source cohort through the indexed, cursor-paged boundary."""
+
+    if not source_id or not source_id.strip():
+        raise ValueError('source_id must not be blank')
+    collection_path = MemoryCollections(uid=uid).memory_items
+    filters = _neutral_filters(CONVERSATION_SOURCE_MEMORY_QUERY, {'source_id': source_id})
+    return _fetch_authoritative_memory_query_pages(
+        uid,
+        collection=collection_path,
+        filters=filters,
+        page_size=page_size,
+    )
+
+
+def fetch_authoritative_superseded_memory_items_for_targets(
+    uid: str,
+    target_memory_ids: Iterable[str],
+    *,
+    page_size: int = SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT,
+) -> List[MemoryItem]:
+    """Load superseded aliases of target rows, including the pre-canonical edge."""
+
+    normalized_target_ids = sorted(
+        {memory_id.strip() for memory_id in target_memory_ids if memory_id and memory_id.strip()}
+    )
+    if not normalized_target_ids:
+        return []
+
+    collection_path = MemoryCollections(uid=uid).memory_items
+    items_by_id: Dict[str, MemoryItem] = {}
+    for offset in range(0, len(normalized_target_ids), FIRESTORE_IN_QUERY_MAX_VALUES):
+        target_chunk = normalized_target_ids[offset : offset + FIRESTORE_IN_QUERY_MAX_VALUES]
+        for spec in (
+            SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
+            SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
+        ):
+            filters = _neutral_filters(
+                spec,
+                {
+                    'status': MemoryItemStatus.superseded.value,
+                    'target_memory_ids': target_chunk,
+                },
+            )
+            for item in _fetch_authoritative_memory_query_pages(
+                uid,
+                collection=collection_path,
+                filters=filters,
+                page_size=page_size,
+            ):
+                items_by_id[item.memory_id] = item
+    return sorted(items_by_id.values(), key=lambda item: item.memory_id)
+
+
+def _neutral_filters(spec: Any, values: Dict[str, Any]) -> List[tuple]:
+    """Resolve a registered query spec's declared filters into neutral ``(field, op, value)`` tuples.
+
+    Mirrors ``FirestoreQuerySpec.build``'s value resolution, but targets the storage port instead of a
+    raw Firestore collection so the same indexed shape runs on Firestore or Mongo (ADR-0022/0028).
+    """
+
+    filters: List[tuple] = []
+    for query_filter in spec.filters:
+        try:
+            value = values[query_filter.value_name]
+        except KeyError as exc:
+            raise ValueError(f'{spec.identifier} requires {query_filter.value_name!r}') from exc
+        filters.append((query_filter.field_path, query_filter.operator, value))
+    return filters
+
+
+def _fetch_authoritative_memory_query_pages(
+    uid: str,
+    *,
+    collection: str,
+    filters: List[tuple],
+    page_size: int,
+) -> List[MemoryItem]:
+    if page_size < 1 or page_size > SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT:
+        raise ValueError(f'page_size must be between 1 and {SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT}')
+
+    items: List[MemoryItem] = []
+    offset = 0
+    while True:
+        # No explicit order_by: the port returns documents in document-name order (the portable
+        # equivalent of Firestore's implicit ``__name__`` ordering), so offset paging is stable.
+        page = _store().query(collection, filters=filters, limit=page_size, offset=offset)
+        for record in page:
+            raw_payload: object = record.to_dict()
+            payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
+            item = MemoryItem.model_validate(payload)
+            if item.uid != uid:
+                raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
+            items.append(item)
+        if len(page) < page_size:
+            break
+        offset += page_size
+    return items
 
 
 def _memory_item_sort_key(item: MemoryItem) -> tuple[float, str]:

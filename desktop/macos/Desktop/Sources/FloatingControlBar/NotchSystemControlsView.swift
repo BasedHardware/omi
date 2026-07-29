@@ -80,14 +80,16 @@ struct NotchSystemControlsView: View {
   /// legend, not a second route into chat or settings — the duplicate entry points that
   /// used to live here were removed for exactly that reason (FC-split-mutation-authority).
   private var shortcutLegend: some View {
+    // One row per configurable shortcut, named the way Settings advertises it
+    // ("Open Omi Shortcut"). The fixed window-summon chord is deliberately not
+    // listed: two near-identical "open" rows read as a bug, not a feature.
     VStack(alignment: .trailing, spacing: 3) {
       if shortcuts.pttEnabled {
         shortcutRow("Talk", keys: shortcuts.pttShortcut.displayTokens)
       }
       if shortcuts.askOmiEnabled {
-        shortcutRow("Ask", keys: shortcuts.askOmiShortcut.displayTokens)
+        shortcutRow("Open", keys: shortcuts.askOmiShortcut.displayTokens)
       }
-      shortcutRow("Summon", keys: ["⌃", "⌘", "O"])
     }
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Keyboard shortcuts")

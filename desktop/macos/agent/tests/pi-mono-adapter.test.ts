@@ -202,7 +202,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     const fixture = JSON.parse(
       readFileSync(
         fileURLToPath(
-          new URL("../../Backend-Rust/fixtures/public-web-routing-contract.fixture.json", import.meta.url)
+          new URL("../../../../backend/desktop_fixtures/public-web-routing-contract.fixture.json", import.meta.url)
         ),
         "utf8"
       )
@@ -830,6 +830,44 @@ describe("PiMonoAdapter prompt correlation", () => {
     expect(events).toEqual([]);
     expect((adapter as any).pendingRequests.size).toBe(0);
   });
+
+  it("cancels blocking extension_ui_request and ignores fire-and-forget UI events", async () => {
+    const { adapter } = createAdapter();
+    await adapter.start();
+    const stdin = (adapter as any).process.stdin as PassThrough;
+    const chunks: string[] = [];
+    stdin.on("data", (buf: Buffer) => chunks.push(buf.toString("utf8")));
+
+    (adapter as any).handleEvent(
+      JSON.stringify({
+        type: "extension_ui_request",
+        id: "ui-status-1",
+        method: "setStatus",
+        statusKey: "working",
+        statusText: "…",
+      })
+    );
+    (adapter as any).handleEvent(
+      JSON.stringify({
+        type: "extension_ui_request",
+        id: "ui-select-1",
+        method: "select",
+        title: "Pick one",
+        options: ["a", "b"],
+      })
+    );
+
+    await new Promise((r) => setImmediate(r));
+    const written = chunks.join("");
+    expect(written).not.toContain("ui-status-1");
+    expect(written).toContain(
+      JSON.stringify({
+        type: "extension_ui_response",
+        id: "ui-select-1",
+        cancelled: true,
+      })
+    );
+  });
 });
 
 describe("PiMonoAdapter restart lifecycle", () => {
@@ -872,7 +910,7 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     vi.mocked(spawn).mockClear();
   });
 
-  it("does not pass --no-extensions to the subprocess", async () => {
+  it("keeps user extensions enabled while loading the Omi extension", async () => {
     const config: HarnessConfig = {
       authToken: "test-token",
     };
@@ -884,10 +922,9 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     expect(cmd).toBe("/fake/pi");
     expect(args).toContain("--mode");
     expect(args).toContain("rpc");
+    expect(args).not.toContain("--no-extensions");
     expect(args).toContain("-e");
     expect(args).toContain("/fake/ext.ts");
-    // Auto-discovery must be enabled: --no-extensions must NOT be present
-    expect(args).not.toContain("--no-extensions");
 
     await adapter.stop();
   });

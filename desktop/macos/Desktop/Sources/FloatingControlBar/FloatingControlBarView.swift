@@ -225,6 +225,12 @@ struct FloatingControlBarView: View {
     !state.pttHintText.isEmpty
   }
 
+  /// The notch "speaking" state: response audio is playing (or draining), so
+  /// the resting ring pulses like a speaker instead of sitting static.
+  private var showingNotchSpeaking: Bool {
+    state.isVoiceResponseGlowActive && !state.isVoiceListening
+  }
+
   private var unifiedFloatingSurface: some View {
     VStack(spacing: 0) {
       if state.usesNotchIsland || state.showingAIConversation {
@@ -540,7 +546,8 @@ struct FloatingControlBarView: View {
           manager: agentPills,
           barWindow: window,
           isVoiceListening: showingNotchWaveform,
-          isThinking: showingNotchThinking
+          isThinking: showingNotchThinking,
+          isSpeaking: showingNotchSpeaking
         )
         .scaleEffect(notchLogoHovering ? 1.06 : 1.0)
       }
@@ -2190,6 +2197,7 @@ private struct NotchAgentPillsRowView: View {
   weak var barWindow: NSWindow?
   let isVoiceListening: Bool
   let isThinking: Bool
+  let isSpeaking: Bool
   @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
   @State private var pillStatusChangeToken = 0
 
@@ -2204,7 +2212,8 @@ private struct NotchAgentPillsRowView: View {
         NotchAgentStatusGroup(status: $0.status).color
       },
       isListening: isVoiceListening,
-      isThinking: isThinking
+      isThinking: isThinking,
+      isSpeaking: isSpeaking
     )
     // Keep every PTT dot inside the same 21pt identity slot as the resting
     // Omi mark. The slot is frontmost and trails the visible left lobe, so the

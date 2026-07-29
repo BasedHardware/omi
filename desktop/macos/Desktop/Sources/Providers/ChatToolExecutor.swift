@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import AppKit
+@preconcurrency import ApplicationServices
 import Foundation
 @preconcurrency import GRDB
 @preconcurrency import UserNotifications
@@ -2036,7 +2037,7 @@ class ChatToolExecutor {
         expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
     else { return }
-    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
     let granted = AXIsProcessTrustedWithOptions(options)
     if !granted {
       _ = openPermissionPrivacySettings(

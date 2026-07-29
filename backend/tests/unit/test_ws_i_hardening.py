@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import inspect
 import os
-import sys
 import types
 import uuid
 from pathlib import Path
@@ -52,6 +51,7 @@ from database import document_store  # noqa: E402
 import database.memory_apply_store as memory_apply_store  # noqa: E402
 import database.knowledge_graph as knowledge_graph  # noqa: E402
 import database.review_queue as review_queue  # noqa: E402
+import utils.memory.product_memory_read_service as product_memory_read_service  # noqa: E402
 from tests.store_fakes import FakeDocumentStore  # noqa: E402
 from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation  # noqa: E402
 from models.memory_evidence import (  # noqa: E402
@@ -74,7 +74,6 @@ from tests.unit.test_ws_i_write_convergence import (  # noqa: E402
     _fresh_short_term_item,
     _install_heavy_import_stubs,
     _sample_memory_payload,
-    _stored_item,
     _trusted_account_generation,
 )
 
@@ -121,8 +120,8 @@ def test_sequential_source_generation_bumps_are_monotonic(monkeypatch):
     assert db.docs[control_path]["source_generation"] == 3
 
 
-def test_retract_path_bumps_source_generation_via_transaction(monkeypatch):
-    """Two retracts on the same conversation advance generation without lost updates (sequential)."""
+def test_retract_path_is_one_idempotent_atomic_source_replacement(monkeypatch):
+    """A retry replays the committed empty replacement instead of advancing twice."""
     uid = "uid-canonical"
     conversation_id = "conv-hardening"
     content = "User enjoys hiking"
@@ -144,6 +143,7 @@ def test_retract_path_bumps_source_generation_via_transaction(monkeypatch):
     monkeypatch.setattr(memory_apply_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(knowledge_graph, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(review_queue, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(product_memory_read_service, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
@@ -173,12 +173,12 @@ def test_retract_path_bumps_source_generation_via_transaction(monkeypatch):
     second = retract_conversation_sourced_memories(uid, conversation_id)
 
     assert first["source_generation"] == 2
-    assert second["source_generation"] == 3
-    assert db.docs[control_path]["source_generation"] == 3
+    assert second["source_generation"] == 2
+    assert db.docs[control_path]["source_generation"] == 2
 
 
-def test_persist_evidence_preserves_redaction_status_on_reprocess_rewrite(monkeypatch):
-    """Reprocess rewrite preserves redaction on evidence docs through real apply (not mocked)."""
+def test_persist_evidence_preserves_redaction_status_on_active_reprocess_refresh(monkeypatch):
+    """An active reprocess refresh preserves evidence security fields through real apply."""
     uid = "uid-canonical"
     conversation_id = "conv-redaction"
     content = "Sensitive fact"
@@ -204,8 +204,7 @@ def test_persist_evidence_preserves_redaction_status_on_reprocess_rewrite(monkey
                 redaction_status=RedactionStatus.redacted,
                 provenance_visibility=ProvenanceVisibility.redacted,
                 encryption_or_redaction_status=RedactionStatus.redacted,
-                source_state=SourceState.tombstoned,
-                source_state_reason=SourceStateReason.deleted_by_user,
+                source_state=SourceState.active,
             ).model_dump(mode="json"),
         }
     )
@@ -237,6 +236,85 @@ def test_persist_evidence_preserves_redaction_status_on_reprocess_rewrite(monkey
     assert item_path in db.docs
     assert db.docs[item_path]["status"] == MemoryItemStatus.active.value
     assert db.docs[item_path]["content"] == content
+
+
+@pytest.mark.parametrize(
+    ("source_state", "source_state_reason", "artifact_preservation"),
+    [
+        (
+            SourceState.missing,
+            SourceStateReason.ephemeral_already_missing,
+            ArtifactPreservationState.ephemeral_already_missing,
+        ),
+        (
+            SourceState.tombstoned,
+            SourceStateReason.deleted_by_user,
+            ArtifactPreservationState.deleted_by_user,
+        ),
+        (
+            SourceState.purged,
+            SourceStateReason.account_purged,
+            ArtifactPreservationState.account_purged,
+        ),
+    ],
+)
+def test_persist_evidence_keeps_terminal_state_and_apply_rejects_same_id_replay(
+    monkeypatch,
+    source_state,
+    source_state_reason,
+    artifact_preservation,
+):
+    """Delayed extraction cannot rewrite terminal evidence before the authoritative apply."""
+    uid = "uid-canonical"
+    conversation_id = f"conv-{source_state.value}"
+    content = f"Terminal {source_state.value} fact"
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+    memory_id = payload["id"]
+    evidence_path = f"users/{uid}/memory_evidence/ev_ws_i_1"
+    control_path = f"users/{uid}/memory_state/apply_control"
+    terminal_evidence = MemoryEvidence(
+        evidence_id="ev_ws_i_1",
+        source_type="conversation",
+        source_id=conversation_id,
+        source_version="v1",
+        conversation_id=conversation_id,
+        artifact_preservation=artifact_preservation,
+        redaction_status=RedactionStatus.redacted,
+        provenance_visibility=ProvenanceVisibility.hidden,
+        encryption_or_redaction_status=RedactionStatus.redacted,
+        source_state=source_state,
+        source_state_reason=source_state_reason,
+    ).model_dump(mode="json")
+    db = _FakeDb(
+        {
+            control_path: MemoryControlState(
+                uid=uid,
+                head_commit_id="head0",
+                account_generation=1,
+                source_generation=2,
+            ).model_dump(mode="json"),
+            evidence_path: terminal_evidence,
+        }
+    )
+
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(memory_apply_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    _install_heavy_import_stubs()
+
+    with patch(
+        "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
+        wraps=apply_long_term_patch_firestore,
+    ) as apply_mock:
+        with pytest.raises(RuntimeError, match="source_not_active"):
+            write_canonical_extraction_memory(uid, payload)
+
+    apply_mock.assert_called_once()
+    assert db.docs[evidence_path] == terminal_evidence
+    assert f"users/{uid}/memory_items/{memory_id}" not in db.docs
 
 
 def test_persist_evidence_defaults_redaction_when_no_prior_value(monkeypatch):

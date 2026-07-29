@@ -1184,7 +1184,6 @@ def get_reprocess_transcript_structure(
     started_at: datetime,
     language_code: str,
     tz: str,
-    title: str,
     photos: Optional[List[ConversationPhoto]] = None,
     output_language_code: Optional[str] = None,
 ) -> Structured:
@@ -1206,7 +1205,7 @@ def get_reprocess_transcript_structure(
     prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
     The content language is {language_code}. You MUST respond entirely in {response_language}.
 
-    For the title, use ```{title}```, if it is empty, use the main topic of the content.
+    For the title, generate a concise title from the current content. Do not reuse a previous title.
     For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
@@ -1254,7 +1253,6 @@ def get_reprocess_transcript_structure(
         chain.invoke(
             {
                 'full_context': full_context,
-                'title': title,
                 'format_instructions': parser.get_format_instructions(),
                 'language_code': language_code,
                 'response_language': response_language,

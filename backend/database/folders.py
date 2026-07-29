@@ -312,8 +312,10 @@ def move_conversation_to_folder(
 
     old_folder_id = _typed_doc(conv_doc).get('folder_id')
 
-    # Update the conversation's folder_id
-    _store().update(conv_path, {'folder_id': folder_id})
+    # Update the conversation's folder_id. folder_user_set marks this as an
+    # explicit user decision so processing upserts preserve it even when the
+    # user cleared the folder (folder_id None).
+    _store().update(conv_path, {'folder_id': folder_id, 'folder_user_set': True})
 
     # Update folder counts
     if old_folder_id:
@@ -349,7 +351,7 @@ def bulk_move_conversations_to_folder(
         if old_folder_id:
             affected_folders.add(str(old_folder_id))
 
-        batch.update(conv_doc.path, {'folder_id': folder_id})
+        batch.update(conv_doc.path, {'folder_id': folder_id, 'folder_user_set': True})
         moved += 1
         count += 1
 

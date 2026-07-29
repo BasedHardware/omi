@@ -42,13 +42,17 @@ def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
         chunk = rows[i : i + 500]
         batch = store.batch()
         for row in chunk:
-            doc_id = str(row['id'])
+            doc_id = str(row.get('storageId') or row['id'])
             doc_data = {
                 'timestamp': row['timestamp'],
                 'appName': row.get('appName', ''),
                 'windowTitle': row.get('windowTitle', ''),
                 'ocrText': (row.get('ocrText') or '')[:1000],
             }
+            if row.get('deviceName'):
+                doc_data['deviceName'] = row['deviceName']
+            if row.get('clientDeviceId'):
+                doc_data['clientDeviceId'] = row['clientDeviceId']
             batch.set(f'{collection_path}/{doc_id}', doc_data)
         batch.commit()
         written += len(chunk)

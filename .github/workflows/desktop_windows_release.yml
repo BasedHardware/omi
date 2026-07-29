@@ -1,10 +1,14 @@
 name: Auto Release Desktop (Windows) on Main
 
-# Windows counterpart to desktop_auto_release.yml (macOS). Same SHAPE:
-#   merge to main touching the desktop app -> bump the patch version, tag it,
-#   build the installer, publish it to a prerelease (beta) GitHub Release.
+# Windows counterpart to desktop_auto_release.yml (macOS). Manual release only:
+#   workflow_dispatch -> bump the patch version, tag it, build the installer,
+#   publish it to a prerelease (beta) GitHub Release.
 #
-# Difference from macOS: macOS only tags here and hands the build to Codemagic.
+# Automatic push-to-main tagging was retired: every desktop/windows merge was
+# minting a new v*-windows tag and opening a sync PR. Cut Windows releases
+# deliberately via workflow_dispatch (release_now / force_release / next_version).
+#
+# Difference from macOS: macOS only tags and hands the build to Codemagic.
 # Windows has no external CI, so this workflow ALSO builds + publishes, on a
 # windows-latest runner, using electron-builder (NSIS) + gh.
 #
@@ -20,19 +24,8 @@ name: Auto Release Desktop (Windows) on Main
 # pi-mono asarUnpack closure at pack time. Dropping the flag would silently ship an
 # installer missing that closure and break the coding agent. `pnpm build:win`
 # already carries the flag; the signed path passes it by hand.
-#
-# Loop prevention (the bump must not re-trigger this workflow):
-#   1. Every git write here uses GITHUB_TOKEN, and GitHub does not start new
-#      workflow runs for pushes made with GITHUB_TOKEN. This alone breaks the loop.
-#   2. Belt-and-suspenders: the plan job skips commits whose message is a release
-#      bump, and skips when there is no releasable desktop/windows change since
-#      the latest tag (so an empty/no-op push never cuts a release).
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - 'desktop/windows/**'
   workflow_dispatch:
     inputs:
       release_mode:

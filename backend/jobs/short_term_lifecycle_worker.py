@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Protocol, Tuple, cast
 
 from database.memory_collections import MemoryCollections
-from models.product_memory import MemoryTier, MemoryItem
+from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState
 from utils.memory.short_term_lifecycle import (
     ShortTermDisposition,
     ShortTermLifecycleDecision,
@@ -24,6 +24,8 @@ from utils.memory.short_term_lifecycle import (
 )
 
 JsonDict = Dict[str, Any]
+DEFAULT_SHORT_TERM_MAINTENANCE_SCAN_LIMIT = 250
+MAX_SHORT_TERM_MAINTENANCE_SCAN_LIMIT = 500
 
 
 def _empty_transition_records() -> List["ShortTermLifecycleTransitionRecord"]:
@@ -168,14 +170,16 @@ def _coerce_dispositions(
     return dict(dispositions or {})
 
 
-def fetch_short_term_memory_items_firestore(
-    *, uid: str, limit: Optional[int] = None
+def fetch_expired_short_term_memory_items_firestore(
+    *,
+    uid: str,
+    now: Optional[datetime] = None,
+    limit: Optional[int] = None,
 ) -> List[MemoryItem]:
-    """Fetch authoritative Short-term memory memory_items for a user.
+    """Fetch bounded active, processed, expired Short-term items for a user.
 
-    The lifecycle runner only evaluates `memory_items` in the Short-term tier;
-    Long-term and Archive are intentionally excluded at the Firestore query seam
-    so Archive cannot become default-visible through lifecycle scheduling.
+    Eligibility, expiry ordering, and the cap are all enforced at the Firestore
+    query seam so unrelated rows cannot starve later expired work.
     """
 
     if not uid or not uid.strip():
@@ -183,6 +187,12 @@ def fetch_short_term_memory_items_firestore(
     if limit is not None and limit <= 0:
         raise ValueError('short-term lifecycle firestore fetch limit must be positive')
 
+    current_time = _current_time(now)
+    effective_limit = (
+        DEFAULT_SHORT_TERM_MAINTENANCE_SCAN_LIMIT
+        if limit is None
+        else min(limit, MAX_SHORT_TERM_MAINTENANCE_SCAN_LIMIT)
+    )
     snapshots = document_store.stream_collection_where(
         MemoryCollections(uid=uid).memory_items, 'tier', '==', MemoryTier.short_term.value
     )
@@ -191,12 +201,16 @@ def fetch_short_term_memory_items_firestore(
         item = MemoryItem(**cast(JsonDict, snapshot.to_dict() or {}))
         if item.uid != uid:
             raise ValueError(f'short-term lifecycle firestore fetch uid mismatch for {item.memory_id}')
-        if item.tier == MemoryTier.short_term:
+        if (
+            item.tier == MemoryTier.short_term
+            and item.status == MemoryItemStatus.active
+            and item.processing_state == ProcessingState.processed
+            and item.expires_at is not None
+            and _current_time(item.expires_at) <= current_time
+        ):
             items.append(item)
-    items = sorted(items, key=lambda item: item.memory_id)
-    if limit is not None:
-        return items[:limit]
-    return items
+    items = sorted(items, key=lambda item: (_current_time(cast(datetime, item.expires_at)), item.memory_id))
+    return items[:effective_limit]
 
 
 def run_short_term_lifecycle_firestore(
@@ -207,10 +221,14 @@ def run_short_term_lifecycle_firestore(
     limit: Optional[int] = None,
     dispositions: Optional[Mapping[str, ShortTermDisposition | str]] = None,
 ) -> ShortTermLifecycleWorkerReport:
-    """Concrete Firestore lifecycle runner for authoritative Short-term items."""
+    """Run lifecycle policy for one bounded expired, terminal-eligible query set."""
 
     current_time = _current_time(now)
-    items = fetch_short_term_memory_items_firestore(uid=uid, limit=limit)
+    items = fetch_expired_short_term_memory_items_firestore(
+        uid=uid,
+        now=current_time,
+        limit=limit,
+    )
     store = FirestoreShortTermLifecycleTransitionStore(now=current_time)
     return process_short_term_lifecycle_items(
         items,
@@ -405,7 +423,7 @@ __all__ = [
     "ShortTermLifecycleTransitionStore",
     "ShortTermLifecycleWorkerReport",
     "build_short_term_lifecycle_transition_record",
-    "fetch_short_term_memory_items_firestore",
+    "fetch_expired_short_term_memory_items_firestore",
     "process_short_term_lifecycle_item",
     "process_short_term_lifecycle_items",
     "run_short_term_lifecycle_firestore",

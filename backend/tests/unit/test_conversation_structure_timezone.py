@@ -287,10 +287,23 @@ class TestStructureFunctionsTimezone:
             started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc),
             language_code="en",
             tz="Pacific/Honolulu",
-            title="Lunch",
         )
         assert result["invoke"]["started_at"] == "2025-01-01T13:48:00"
         assert result["invoke"]["tz"] == "Pacific/Honolulu"
+
+    def test_reprocess_regenerates_title_and_emoji_from_current_content(self):
+        result = _capture_structure(
+            conv_proc.get_reprocess_transcript_structure,
+            transcript="The corrected transcript is about a product launch",
+            started_at=datetime(2025, 1, 1, 12, 0, tzinfo=timezone.utc),
+            language_code="en",
+            tz="UTC",
+        )
+
+        assert "generate a concise title from the current content" in result["system_text"]
+        assert "select a single emoji" in result["system_text"]
+        assert "For the title, use" not in result["system_text"]
+        assert "title" not in result["invoke"]
 
     def test_both_prompts_state_local_and_drop_convert_instruction(self):
         # The semantic core of the fix is the prompt wording; pin it so a revert can't pass silently.
@@ -301,7 +314,7 @@ class TestStructureFunctionsTimezone:
             ),
             (
                 conv_proc.get_reprocess_transcript_structure,
-                dict(transcript="x", language_code="en", tz="Pacific/Honolulu", title="t"),
+                dict(transcript="x", language_code="en", tz="Pacific/Honolulu"),
             ),
         ]:
             result = _capture_structure(fn, started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), **kwargs)

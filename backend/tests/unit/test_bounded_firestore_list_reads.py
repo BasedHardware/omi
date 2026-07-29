@@ -119,6 +119,11 @@ def test_knowledge_graph_get_is_bounded(monkeypatch):
     import database.knowledge_graph as kg
     from tests.store_fakes import FakeDocumentStore
 
+    # Small caps make the bounded-scan behavior independent of the production constants.
+    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_NODES', 2)
+    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_EDGES', 3)
+    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_ASSERTIONS', 4)
+
     captured: dict = {}
 
     class _RecordingStore(FakeDocumentStore):
@@ -127,24 +132,24 @@ def test_knowledge_graph_get_is_bounded(monkeypatch):
             return super().query(collection, **kwargs)
 
     fake = _RecordingStore()
-    for i in range(kg.MAX_KNOWLEDGE_GRAPH_NODES + 1):
-        fake._docs[f'users/uid/knowledge_nodes/n{i}'] = {'id': f'n{i}', 'label': f'L{i}'}
-    for i in range(kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1):
-        fake._docs[f'users/uid/knowledge_edges/e{i}'] = {
-            'id': f'e{i}',
-            'source_id': 'x',
-            'target_id': 'y',
-            'label': 'r',
-        }
+    # More nodes than the cap so the reader must bound the scan and mark the graph truncated.
+    for node_id in ('a', 'b', 'c'):
+        fake._docs[f'users/uid/knowledge_nodes/{node_id}'] = {'id': node_id, 'label': f'L{node_id}'}
+    # Distinct-key edges whose endpoints stay inside the bounded node page, so referential
+    # closure keeps them and the edge page fills to the cap.
+    fake._docs['users/uid/knowledge_edges/e0'] = {'id': 'e0', 'source_id': 'a', 'target_id': 'b', 'label': 'r0'}
+    fake._docs['users/uid/knowledge_edges/e1'] = {'id': 'e1', 'source_id': 'a', 'target_id': 'b', 'label': 'r1'}
+    fake._docs['users/uid/knowledge_edges/e2'] = {'id': 'e2', 'source_id': 'b', 'target_id': 'a', 'label': 'r0'}
     monkeypatch.setattr(kg, '_store', lambda: fake)
 
     graph = kg.get_knowledge_graph('uid')
     assert len(graph['nodes']) == kg.MAX_KNOWLEDGE_GRAPH_NODES
     assert len(graph['edges']) == kg.MAX_KNOWLEDGE_GRAPH_EDGES
     assert graph['truncated'] is True
-    # The reader fetches exactly one past the cap to detect truncation without a count().
+    # The reader fetches exactly one past each cap to detect truncation without a count().
     assert captured['knowledge_nodes'] == kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
     assert captured['knowledge_edges'] == kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
+    assert captured['memory_graph_assertions'] == kg.MAX_KNOWLEDGE_GRAPH_ASSERTIONS + 1
 
 
 def test_legacy_get_memories_no_first_page_5000_force():

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPExcept
 from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
-from utils.apps import fetch_app_chat_tools_from_manifest
+from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
 from utils.executors import (
     critical_executor,
     db_executor,
@@ -702,10 +702,9 @@ def search_apps(
 
         # Calculate average from reviews
         reviews = apps_reviews.get(app_dict['id'], {})
-        sorted_reviews = list(reviews.values())
-        rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-        app_dict['rating_avg'] = rating_avg
-        app_dict['rating_count'] = len(sorted_reviews)
+        scores = [_clamp_review_score(x['score']) for x in reviews.values()]
+        app_dict['rating_avg'] = sum(scores) / len(scores) if scores else None
+        app_dict['rating_count'] = len(scores)
 
         # Skip a malformed/legacy app document rather than 500 the whole search page.
         try:
@@ -2079,6 +2078,20 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 # ******************************************************
 
 
+def _setup_completed_from_response(res: httpx.Response) -> bool:
+    """Read `is_setup_completed` from a third-party setup_completed_url response.
+
+    The body is developer-controlled, so it may be non-JSON or a JSON scalar/array
+    rather than the documented object. Anything that is not an object carrying a
+    truthy `is_setup_completed` means setup is not completed.
+    """
+    try:
+        payload: object = res.json()
+    except ValueError:
+        return False
+    return isinstance(payload, dict) and bool(payload.get('is_setup_completed', False))
+
+
 @router.post('/v1/apps/enable', response_model=AppMutationResponse)
 async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
@@ -2097,7 +2110,7 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
         client = get_webhook_client()
         res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
         logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
-        if res.status_code != 200 or not res.json().get('is_setup_completed', False):
+        if res.status_code != 200 or not _setup_completed_from_response(res):
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
     # Check payment status

@@ -1,21 +1,49 @@
 import Foundation
 
+/// Whether a presentation request is allowed to change the user's durable
+/// Floating Bar preference. Onboarding may borrow the real bar for a demo, but
+/// must leave that preference exactly as it found it.
+enum FloatingBarPreferenceMutation: Equatable {
+  case setEnabled(Bool)
+  case preserve
+
+  /// `nil` means the presentation is transient and must not write settings.
+  var persistedEnabledValue: Bool? {
+    switch self {
+    case .setEnabled(let enabled): return enabled
+    case .preserve: return nil
+    }
+  }
+}
+
 /// Shared reveal implementation for persistent settings, temporary snoozes,
 /// and direct Push-to-Talk presentation.
 extension FloatingControlBarManager {
   /// Applies the saved launch preference without overriding a temporary
   /// notification snooze. Push-to-Talk and Settings call `show()` instead.
   func showForLaunch() {
-    present(.background, persistEnabledPreference: false)
+    present(.background, preferenceMutation: .preserve)
+  }
+
+  /// Shows the real Floating Bar for an onboarding voice demo without changing
+  /// the user's saved bar setting.
+  func showForOnboardingDemo() {
+    present(.explicitUserAction, preferenceMutation: .preserve)
+  }
+
+  /// Retracts an onboarding voice demo without changing the user's saved bar
+  /// setting.
+  func hideForOnboardingDemo() {
+    retract(preferenceMutation: .preserve)
   }
 
   func present(
     _ request: FloatingBarPresentationRequest,
-    persistEnabledPreference: Bool
+    preferenceMutation: FloatingBarPreferenceMutation
   ) {
     log("FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)")
-    if persistEnabledPreference {
-      isEnabled = true
+    if let enabled = preferenceMutation.persistedEnabledValue {
+      isEnabled = enabled
     }
     guard FloatingBarPresentationPolicy.shouldPresent(request: request, isSnoozed: isSnoozed) else {
       return
@@ -41,6 +69,17 @@ extension FloatingControlBarManager {
         DispatchQueue.main.async { [weak window] in
           window?.focusInputField()
         }
+      }
+    }
+  }
+
+  func retract(preferenceMutation: FloatingBarPreferenceMutation) {
+    if let enabled = preferenceMutation.persistedEnabledValue {
+      isEnabled = enabled
+    }
+    if let window {
+      window.retractIntoNotch { [weak window] in
+        window?.orderOut(nil)
       }
     }
   }
