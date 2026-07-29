@@ -316,6 +316,7 @@ class TestModelQosProfiles:
             'gpt-4.1-nano',
             'gpt-5.4-mini',
             'claude-sonnet-4-6',
+            'gemini-2.5-flash-lite',
             'gemini-3-flash-preview',
             'sonar-pro',
         }
@@ -1011,10 +1012,10 @@ class TestBYOKProfile:
     """Verify BYOK QoS profile structure and model selections."""
 
     def test_byok_all_openai_except_special(self):
-        """byok routes all features to OpenAI except chat_agent/web_search/wrapped_analysis."""
+        """byok routes all features to OpenAI except provider-specific features."""
         bk = MODEL_QOS_PROFILES['byok']
         for feature, (model, provider) in bk.items():
-            if feature in ('chat_agent', 'web_search', 'wrapped_analysis'):
+            if feature in ('chat_agent', 'web_search', 'wrapped_analysis', 'translation'):
                 continue
             assert provider == 'openai', f'byok {feature} should be openai, got {provider}'
 
@@ -1030,6 +1031,7 @@ class TestBYOKProfile:
             'gpt-4.1-nano',
             'o4-mini',
             'claude-sonnet-4-6',
+            'gemini-2.5-flash-lite',
             'gemini-3-flash-preview',
             'sonar-pro',
         }
@@ -1103,6 +1105,7 @@ class TestStructuredOutputFeatureTracking:
         expected = {
             'chat_extraction',
             'proactive_notification',
+            'translation',
             'conv_app_select',
             'external_structure',
             'trends',
@@ -1116,15 +1119,21 @@ class TestStructuredOutputFeatureTracking:
                 assert feature in profile, f'{feature} missing from {profile_name}'
 
     def test_premium_gemini_structured_output(self):
-        """In premium profile, only 'trends' uses structured_output on Gemini."""
+        """In premium profile, translation and trends use structured output on Gemini."""
         premium = MODEL_QOS_PROFILES['premium']
         gemini_so = {f for f in _STRUCTURED_OUTPUT_FEATURES if premium[f][1] == 'gemini'}
-        assert gemini_so == {'trends'}, f'Expected only trends on Gemini SO in premium, got {gemini_so}'
+        assert gemini_so == {
+            'translation',
+            'trends',
+        }, f'Expected translation and trends on Gemini SO in premium, got {gemini_so}'
 
     def test_byok_no_gemini_structured_output(self):
-        """BYOK profile routes all structured output features to OpenAI (no Gemini compat risk)."""
+        """BYOK routes structured output to OpenAI except managed translation."""
         profile = MODEL_QOS_PROFILES['byok']
         for feature in _STRUCTURED_OUTPUT_FEATURES:
+            if feature == 'translation':
+                assert profile[feature] == ('gemini-2.5-flash-lite', 'gemini')
+                continue
             assert profile[feature][1] == 'openai', f'byok {feature} should be openai, got {profile[feature][1]}'
 
 
