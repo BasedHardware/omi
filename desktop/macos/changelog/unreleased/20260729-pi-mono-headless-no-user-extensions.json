@@ -1,0 +1,3 @@
+{
+  "change": "Fixed text chat hanging forever when personal pi packages (like ponytail) were auto-loaded into the headless desktop agent"
+}
