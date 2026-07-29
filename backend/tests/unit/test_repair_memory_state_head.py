@@ -98,7 +98,7 @@ def test_repair_transaction_preserves_legacy_fields_and_restores_v3_trusted_head
         lambda: FakeDocumentStore(backing={"/".join(k): v for k, v in db.rows.items()}),
     )
 
-    trusted = read_memory_v3_trusted_account_generation(uid="u1", db_client=client)
+    trusted = read_memory_v3_trusted_account_generation(uid="u1")
     assert trusted.read_error_reason is None
     assert trusted.account_generation == 7
 

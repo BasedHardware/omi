@@ -321,7 +321,7 @@ def _use_memory_global_gate(**_kwargs):
 
 
 def _surface_rollout_reader_factory(doc):
-    def _reader(*, uid, db_client, consumer):
+    def _reader(*, uid, consumer):
         return normalize_default_read_rollout_decision(
             uid=uid,
             source_path='users/u1/memory_control/state',
@@ -340,7 +340,6 @@ def test_authorize_surface_route_uses_shared_gate_and_does_not_require_write_con
 
     decision = authorize_memory_product_memory_route(
         context,
-        db_client=None,
         read_global_gate=_use_memory_global_gate,
         read_default_rollout=reader,
         read_archive_rollout=reader,
@@ -364,7 +363,6 @@ def test_authorize_surface_route_denies_when_shared_gate_blocks_on_disabled_read
 
     decision = authorize_memory_product_memory_route(
         context,
-        db_client=None,
         read_global_gate=_use_memory_global_gate,
         read_default_rollout=reader,
         read_archive_rollout=reader,

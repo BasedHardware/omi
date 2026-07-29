@@ -99,7 +99,7 @@ def test_trusted_account_generation_reads_independent_memory_state_head_path(mon
     db = _FakeDb({"users/u1/memory_state/head": _head_doc(account_generation=8)})
     store = _install_document_store(monkeypatch, db)
 
-    result = read_memory_v3_trusted_account_generation(uid="u1", db_client=db)
+    result = read_memory_v3_trusted_account_generation(uid="u1")
 
     assert result.account_generation == 8
     assert result.source_path == "users/u1/memory_state/head"
@@ -144,7 +144,7 @@ def test_trusted_account_generation_reads_independent_memory_state_head_path(mon
 def test_trusted_account_generation_fails_closed_for_missing_malformed_or_untrusted_head(docs, reason, monkeypatch):
     db = _FakeDb(docs)
     _install_document_store(monkeypatch, db)
-    result = read_memory_v3_trusted_account_generation(uid="u1", db_client=db)
+    result = read_memory_v3_trusted_account_generation(uid="u1")
 
     assert result.account_generation is None
     assert result.read_error_reason == reason
@@ -165,7 +165,7 @@ def test_projection_expected_generation_must_come_from_trusted_head_not_control_
     )
     _install_document_store(monkeypatch, db)
 
-    trusted = read_memory_v3_trusted_account_generation(uid="u1", db_client=db)
+    trusted = read_memory_v3_trusted_account_generation(uid="u1")
     assert trusted.account_generation == 9
 
     with pytest.raises(V3ProjectionReadError) as exc:
@@ -192,7 +192,7 @@ def test_trusted_head_control_projection_and_cursor_generations_can_be_compared_
     )
     store = _install_document_store(monkeypatch, db)
 
-    trusted = read_memory_v3_trusted_account_generation(uid="u1", db_client=db)
+    trusted = read_memory_v3_trusted_account_generation(uid="u1")
     page = read_v3_compatibility_projection_page(
         request=V3ProjectionReadRequest(
             uid="u1",

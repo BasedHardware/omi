@@ -29,18 +29,17 @@ def test_rollout_matrix_keeps_workflow_and_memory_axes_independent(mode, memory_
 def test_production_resolver_uses_authoritative_memory_selector(monkeypatch):
     calls = []
 
-    def fake_resolve_memory_system(uid, *, db_client=None):
-        calls.append((uid, db_client))
+    def fake_resolve_memory_system(uid):
+        calls.append(uid)
         return MemorySystem.CANONICAL
 
     monkeypatch.setattr(rollout_module, 'resolve_memory_system', fake_resolve_memory_system)
-    db_client = object()
 
     decision = resolve_task_intelligence_for_user(
-        uid='user-1', workflow_mode='read', account_generation=3, db_client=db_client
+        uid='user-1', workflow_mode='read', account_generation=3
     )
 
-    assert calls == [('user-1', db_client)]
+    assert calls == ['user-1']
     assert decision.memory_cohort_eligible is True
     assert decision.intelligence_product_enabled is True
 

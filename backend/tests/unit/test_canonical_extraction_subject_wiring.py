@@ -112,14 +112,14 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
     monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
-    service = MemoryService(db_client=db)
+    service = MemoryService()
     with patch(
         "utils.memory.memory_service.canonical_write_decision",
         return_value=CanonicalWriteDecision(enabled=True, memory_system=MemorySystem.CANONICAL),
     ):
         service.write(uid, payload)
 
-    items = read_canonical_memories(uid, db_client=db)
+    items = read_canonical_memories(uid)
     assert len(items) == 1
     stored = db.docs[f"users/{uid}/memory_items/{items[0].id}"]
     assert stored["subject_entity_id"] == USER_ENTITY_ID
@@ -143,7 +143,7 @@ def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_
     monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
-    service = MemoryService(db_client=db)
+    service = MemoryService()
 
     with patch(
         "utils.memory.memory_service.canonical_write_decision",
@@ -156,13 +156,11 @@ def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_
 
     current_device = read_canonical_memories(
         uid,
-        db_client=db,
         device_scope_request=DeviceScopeRequest(device_scope="current", client_device_id=device_id),
         include_pending_processing=True,
     )
     another_device = read_canonical_memories(
         uid,
-        db_client=db,
         device_scope_request=DeviceScopeRequest(device_scope="current", client_device_id="ios_deadbeef"),
         include_pending_processing=True,
     )
@@ -187,7 +185,7 @@ def test_write_mode_rollout_doc_does_not_collide_with_apply_control_state(monkey
     monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
-    service = MemoryService(db_client=db)
+    service = MemoryService()
 
     with patch(
         "utils.memory.memory_service.canonical_write_decision",
@@ -245,6 +243,7 @@ def test_kg_promotion_uses_stored_subject_entity_id(monkeypatch_trusted_account)
     )
     with (
         patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_kg_promotion._current_memory_is_user_rejected", return_value=False),
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             return_value={"nodes": [{}], "edges": []},
@@ -294,7 +293,7 @@ def test_write_canonical_extraction_memory_threads_explicit_triple_fields(monkey
             }
         ],
     }
-    write_canonical_extraction_memory(uid, payload, db_client=db)
+    write_canonical_extraction_memory(uid, payload)
     stored = db.docs[f"users/{uid}/memory_items/mem_explicit"]
     assert stored["subject_entity_id"] == USER_ENTITY_ID
     assert stored["predicate"] == "prefers"

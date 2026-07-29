@@ -430,7 +430,7 @@ class MemoryContinuityGauntlet:
             content=f"Gauntlet capture probe {capture_nonce}",
         )
         payload["category"] = MemoryCategory.system.value
-        memory_id = write_canonical_extraction_memory(state.uid, payload, db_client=state.db)
+        memory_id = write_canonical_extraction_memory(state.uid, payload)
         item_ref = state.db.collection("users").document(state.uid).collection("memory_items").document(memory_id)
         snapshot = item_ref.get().to_dict()
         assert snapshot["tier"] == "short_term", snapshot
@@ -463,7 +463,6 @@ class MemoryContinuityGauntlet:
         now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
         maintenance = run_canonical_short_term_maintenance(
             state.uid,
-            db_client=state.db,
             now=now,
             run_id=f"gauntlet-{self.run_id}",
             llm_invoke=scripted_llm,
@@ -489,7 +488,7 @@ class MemoryContinuityGauntlet:
         if state.memory_id is None:
             self.run_promote_hermetic(state)
         now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
-        service = MemoryService(db_client=state.db)
+        service = MemoryService()
         read_ids = {memory.id for memory in service.read(state.uid, limit=50)}
         assert state.memory_id in read_ids, read_ids
         query_token = state.promote_nonce or state.capture_nonce or self.markers["promote"]
@@ -497,7 +496,6 @@ class MemoryContinuityGauntlet:
             uid=state.uid,
             query=query_token,
             limit=10,
-            db_client=state.db,
             now=now,
         )
         assert chat_text is not None, "chat search returned None"
@@ -543,7 +541,7 @@ class MemoryContinuityGauntlet:
 
         policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
         visible = filter_canonical_default_visible_items(
-            fetch_authoritative_product_memory_items(uid=state.uid, db_client=state.db),
+            fetch_authoritative_product_memory_items(uid=state.uid),
             policy=policy,
             now=now,
         )
@@ -607,7 +605,7 @@ class MemoryContinuityGauntlet:
         for item in seeded:
             items_ref.document(item.memory_id).set(stored_item(item))
 
-        rollout = read_default_read_rollout(uid=state.uid, db_client=state.db, consumer="omi_chat")
+        rollout = read_default_read_rollout(uid=state.uid, consumer="omi_chat")
         assert rollout.read_decision == MemoryReadDecision.USE_MEMORY
         policy = MemoryAccessPolicy(
             consumer=MemoryConsumer.omi_chat,
@@ -617,17 +615,16 @@ class MemoryContinuityGauntlet:
 
         surfaces: dict[str, Callable[[], Any]] = {
             "chat_text": lambda: search_memory_default_chat_memories_text(
-                uid=state.uid, query="coffee", limit=10, db_client=state.db, now=now
+                uid=state.uid, query="coffee", limit=10, now=now
             ),
             "chat_list": lambda: list_default_chat_memories_decision_text(
-                uid=state.uid, limit=10, offset=0, db_client=state.db
+                uid=state.uid, limit=10, offset=0
             ).text,
             "developer": lambda: search_memory_default_developer_memories(
                 uid=state.uid,
                 query="coffee",
                 limit=10,
                 offset=0,
-                db_client=state.db,
                 rollout_decision=rollout,
                 now=now,
             ).memories,
@@ -635,7 +632,6 @@ class MemoryContinuityGauntlet:
             "product_search": lambda: fetch_default_product_memory_search(
                 uid=state.uid,
                 query="coffee",
-                db_client=state.db,
                 policy=policy,
                 now=now,
             )["items"],

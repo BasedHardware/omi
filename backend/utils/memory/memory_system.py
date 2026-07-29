@@ -38,7 +38,7 @@ def list_canonical_cohort_uids() -> list[str]:
     return sorted(_canonical_cohort_uids())
 
 
-def resolve_memory_system(uid: str, *, db_client: Any = None) -> MemorySystem:
+def resolve_memory_system(uid: str) -> MemorySystem:
     """Return the server-owned memory cohort for ``uid``.
 
     Precedence (authoritative):
@@ -53,7 +53,6 @@ def resolve_memory_system(uid: str, *, db_client: Any = None) -> MemorySystem:
     branch deployable to dev or prod while requiring each GCP/Firebase
     environment to opt in explicitly through its own runtime env.
     """
-    del db_client  # reserved for callers/tests; cohort is code-defined today
 
     if not uid:
         return MemorySystem.LEGACY

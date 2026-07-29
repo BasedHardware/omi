@@ -133,7 +133,7 @@ def main() -> int:
     for key, value in expected_state_head.items():
         if stored_state_head.get(key) != value:
             raise AssertionError(f"state-head {key} mismatch: {stored_state_head.get(key)!r} != {value!r}")
-    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    trusted = read_memory_v3_trusted_account_generation(uid=uid)
     if trusted.read_error_reason is not None:
         raise AssertionError(f"trusted account-generation reader failed: {trusted.read_error_reason}")
     if trusted.account_generation != result.control_state.account_generation:

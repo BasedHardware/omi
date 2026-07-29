@@ -103,7 +103,6 @@ def _assert_case(db: firestore.Client, case: ProofCase) -> None:
     _write_fixture(db, case)
     result = read_v3_control(
         uid=UID,
-        db_client=db,
         rollout_config=MemoryRolloutConfig(enabled_users={UID}, mode=MemoryRolloutMode.read),
     )
     decision = decide_v3_control_route(case.request, result)

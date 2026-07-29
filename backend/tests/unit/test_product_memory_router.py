@@ -283,7 +283,6 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
             },
         }
     )
-    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
@@ -305,7 +304,6 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
 def test_product_routes_reject_global_kill_switch_before_per_user_rollout_vector_or_memory_reads(monkeypatch):
     db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(enabled=True, kill_switch=True)})
     vector_query = MagicMock()
-    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
@@ -337,7 +335,6 @@ def test_product_routes_reject_global_kill_switch_before_per_user_rollout_vector
 def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vector_or_memory_reads(monkeypatch):
     db_client = _FirestoreFake({'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read'}})
     vector_query = MagicMock()
-    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
@@ -402,7 +399,6 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
 
     for docs, expected_reason in cases:
         db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(), **docs})
-        monkeypatch.setattr(memory_product, "db", db_client)
         monkeypatch.setattr(document_store, "_store", lambda db_client=db_client: FakeDocumentStore(backing=db_client.docs))
         try:
             memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
@@ -505,7 +501,6 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
 
     for docs, expected_reason in cases:
         db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(), **docs})
-        monkeypatch.setattr(memory_product, "db", db_client)
         monkeypatch.setattr(document_store, "_store", lambda db_client=db_client: FakeDocumentStore(backing=db_client.docs))
         try:
             memory_product.search_archive_memory(query='coffee', limit=25, offset=0, include_archive=True, uid='u1')
@@ -543,7 +538,6 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
             },
         }
     )
-    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
@@ -561,7 +555,6 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
 def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memory_item_reads(monkeypatch):
     db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
     vector_query = MagicMock()
-    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
 
     try:
@@ -605,7 +598,6 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
             },
         }
     )
-    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
@@ -666,7 +658,6 @@ def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_fl
             f'users/u1/memory_items/{stale_projection.memory_id}': _stored_item(stale_projection),
         }
     )
-    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     import database.memory_vector_repair_outbox as memory_vector_repair_outbox
     monkeypatch.setattr(memory_vector_repair_outbox, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
@@ -720,7 +711,6 @@ def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(mon
             f'users/u1/memory_items/{stale_projection.memory_id}': _stored_item(stale_projection),
         }
     )
-    monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     import database.memory_vector_repair_outbox as memory_vector_repair_outbox
     monkeypatch.setattr(memory_vector_repair_outbox, "_store", lambda: FakeDocumentStore(backing=db_client.docs))

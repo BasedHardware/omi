@@ -13,7 +13,6 @@ import database.conversations as conversations_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
-from database.persistence import db
 from database.vector_db import search_memories_by_vector, upsert_memory_vectors_batch
 
 from models.folder import Folder
@@ -346,7 +345,7 @@ def get_memories(
     # Grant check must run before the memory-system branch so a canonical-cohort
     # user holding a legacy/read-only Developer key without a persisted default-read
     # grant is denied, instead of listing canonical memories before authorization.
-    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context)
     if not app_key_grant.allowed:
         raise HTTPException(
             status_code=app_key_grant.status_code,
@@ -361,7 +360,7 @@ def get_memories(
             },
         )
 
-    memory_system = pin_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid)
     if memory_system == MemorySystem.CANONICAL:
         # Over-fetch raw pages and let collect_filtered_memories apply category
         # filtering during the scan, so categories=manual&limit=25 always returns
@@ -370,7 +369,7 @@ def get_memories(
             lambda batch_offset, batch_limit: [
                 m.model_dump(mode='json')
                 for m in memorydb_list_with_locked_preview(
-                    MemoryService(db_client=db).read_pinned(uid, memory_system, batch_limit, batch_offset)
+                    MemoryService().read_pinned(uid, memory_system, batch_limit, batch_offset)
                 )
             ],
             limit=limit,
@@ -380,13 +379,12 @@ def get_memories(
         )
         memories = filtered['memories']
         return [CleanerMemory.model_validate(memory) for memory in memories]
-    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
+    memory_rollout = read_default_read_rollout(uid=uid, consumer='developer_api')
     memory_result = search_memory_default_developer_memories(
         uid=uid,
         query='',
         limit=limit,
         offset=offset,
-        db_client=db,
         rollout_decision=memory_rollout,
         categories=[c.value for c in category_list],
     )
@@ -495,7 +493,7 @@ def search_memories_vector(
     # Grant check must run before the memory-system branch so a canonical-cohort
     # user holding a legacy/read-only Developer key without a persisted default-read
     # grant is denied, instead of searching canonical memories before authorization.
-    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context)
     if not app_key_grant.allowed:
         raise HTTPException(
             status_code=app_key_grant.status_code,
@@ -510,9 +508,9 @@ def search_memories_vector(
             },
         )
 
-    memory_system = pin_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid)
     if memory_system == MemorySystem.CANONICAL:
-        matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
+        matches = MemoryService().search(uid, query, limit=min(limit, 20))
         items = []
         for match in matches:
             memory = match.memory
@@ -536,12 +534,11 @@ def search_memories_vector(
             },
         }
 
-    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
+    memory_rollout = read_default_read_rollout(uid=uid, consumer='developer_api')
     memory_result = search_memory_default_developer_memories_vector(
         uid=uid,
         query=query,
         limit=limit,
-        db_client=db,
         rollout_decision=memory_rollout,
     )
     # A legacy-cohort account (explicit USE_LEGACY_SAFE, or an un-enrolled account whose
@@ -610,7 +607,7 @@ def create_memory(
     # grant) must not mutate canonical memories. The canonical branch skips the
     # legacy write guard inside create_external_memory(), so the grant check must
     # run first for both canonical and legacy paths.
-    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    write_grant = authorize_memory_external_default_memory_write(auth_context)
     if not write_grant.allowed:
         raise HTTPException(
             status_code=write_grant.status_code,
@@ -620,7 +617,7 @@ def create_memory(
 
     category = request.category if request.category else identify_category_for_memory(request.content.strip())
 
-    memory_system = pin_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid)
     if memory_system == MemorySystem.CANONICAL:
         memory = Memory(
             content=request.content.strip(),
@@ -629,7 +626,7 @@ def create_memory(
             tags=request.tags,
         )
         memory_db = MemoryDB.from_memory(memory, uid, None, True)
-        memory_db = MemoryService(db_client=db).create_external_memory(
+        memory_db = MemoryService().create_external_memory(
             uid,
             memory_db,
             memory_system=memory_system,
@@ -659,7 +656,7 @@ def create_memory(
         tags=request.tags,
     )
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
-    memory_db = MemoryService(db_client=db).create_external_memory(
+    memory_db = MemoryService().create_external_memory(
         uid,
         memory_db,
         memory_system=memory_system,
@@ -700,7 +697,7 @@ def create_memories_batch(
     # Fail closed: a legacy/read-only Developer key (no persisted memories.write
     # grant) must not mutate canonical memories. Gated before any memory
     # construction so rejected requests build no side effects.
-    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    write_grant = authorize_memory_external_default_memory_write(auth_context)
     if not write_grant.allowed:
         raise HTTPException(
             status_code=write_grant.status_code,
@@ -732,8 +729,8 @@ def create_memories_batch(
         if memory.visibility == 'public':
             has_public = True
 
-    memory_system = pin_memory_system(uid, db_client=db)
-    created_dbs = MemoryService(db_client=db).create_external_memory_batch(
+    memory_system = pin_memory_system(uid)
+    created_dbs = MemoryService().create_external_memory_batch(
         uid,
         memory_dbs,
         memory_system=memory_system,
@@ -778,7 +775,7 @@ def delete_memory(
     """
     # Fail closed: a legacy/read-only Developer key (no persisted memories.write
     # grant) must not mutate canonical memories.
-    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    write_grant = authorize_memory_external_default_memory_write(auth_context)
     if not write_grant.allowed:
         raise HTTPException(
             status_code=write_grant.status_code,
@@ -786,8 +783,8 @@ def delete_memory(
         )
     uid = auth_context.uid
 
-    memory_system = pin_memory_system(uid, db_client=db)
-    MemoryService(db_client=db).delete_external_memory(
+    memory_system = pin_memory_system(uid)
+    MemoryService().delete_external_memory(
         uid,
         memory_id,
         memory_system=memory_system,
@@ -820,7 +817,7 @@ def update_memory(
     """
     # Fail closed: a legacy/read-only Developer key (no persisted memories.write
     # grant) must not mutate canonical memories.
-    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    write_grant = authorize_memory_external_default_memory_write(auth_context)
     if not write_grant.allowed:
         raise HTTPException(
             status_code=write_grant.status_code,
@@ -833,13 +830,13 @@ def update_memory(
             status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided"
         )
 
-    memory_service = MemoryService(db_client=db)
-    memory_system = pin_memory_system(uid, db_client=db)
+    memory_service = MemoryService()
+    memory_system = pin_memory_system(uid)
     if memory_system == MemorySystem.CANONICAL:
         # Validate existence before mutations so a missing memory returns 404
         # (matching legacy) rather than letting the update helpers raise
         # ValueError, which FastAPI surfaces as a 500.
-        if _read_canonical_memory_item(uid, memory_id, db_client=db) is None:
+        if _read_canonical_memory_item(uid, memory_id) is None:
             raise HTTPException(status_code=404, detail="Memory not found")
         if request.content is not None and not request.content.strip():
             raise HTTPException(status_code=422, detail="content must not be empty")
@@ -856,12 +853,12 @@ def update_memory(
                 tags=request.tags,
                 category=request.category.value if request.category is not None else None,
             )
-        item = _read_canonical_memory_item(uid, memory_id, db_client=db)
+        item = _read_canonical_memory_item(uid, memory_id)
         if item is None:
             raise HTTPException(status_code=404, detail="Memory not found")
         return memory_item_to_memorydb(item).model_dump()
 
-    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='update_memory')
+    write_guard = guard_legacy_memory_write(uid, consumer='developer_api', operation='update_memory')
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 

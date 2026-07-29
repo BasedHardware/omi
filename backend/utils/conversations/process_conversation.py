@@ -9,7 +9,6 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from fastapi import HTTPException
 
-from database.persistence import db
 from database import redis_db
 from database.auth import get_user_name
 import database.memories as memories_db
@@ -530,11 +529,11 @@ def _extract_memories(uid: str, conversation: Conversation) -> None:
 
 
 def _extract_memories_canonical(
-    uid: str, conversation: Conversation, *, db_client: Any
+    uid: str, conversation: Conversation
 ) -> ConversationMemoryExtractionResult:
     """Canonical-cohort extraction: extract first, then retract-and-write (Q1/Q7)."""
     source = source_for_conversation(conversation)
-    memory_service = MemoryService(db_client=db_client)
+    memory_service = MemoryService()
 
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
@@ -615,7 +614,6 @@ def _extract_memories_canonical(
                         *memory_refs,
                     ],
                 ),
-                firestore_client=db_client,
             )
         except Exception:
             record_fallback(
@@ -632,10 +630,9 @@ def _extract_memories_canonical(
 
 def _extract_memories_inner(uid: str, conversation: Conversation) -> ConversationMemoryExtractionResult:
     with memory_system_request_scope(uid) as memory_system:
-        db_client = db
         if memory_system == MemorySystem.CANONICAL:
-            MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
-            return _extract_memories_canonical(uid, conversation, db_client=db_client)
+            MemoryService().ensure_canonical_mutation_ready(uid)
+            return _extract_memories_canonical(uid, conversation)
 
         return _extract_memories_legacy(uid, conversation)
 

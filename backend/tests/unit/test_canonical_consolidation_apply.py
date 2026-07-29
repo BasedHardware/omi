@@ -278,7 +278,6 @@ def test_merge_and_add_evidence_update_survivor_in_place(agent_decision: str):
         control=control,
         run_id="run-merge",
         now=NOW,
-        db_client=db,
     )
 
     updated = _stored_item(db, "mem_survivor")
@@ -310,7 +309,6 @@ def test_skip_duplicate_with_corroboration_increments_survivor():
         control=control,
         run_id="run-skip",
         now=NOW,
-        db_client=db,
     )
 
     updated = _stored_item(db, "mem_existing")
@@ -339,7 +337,6 @@ def test_consolidation_apply_is_idempotent_on_operation_retry():
         control=control,
         run_id="run-idem",
         now=NOW,
-        db_client=db,
     )
     after_first = copy.deepcopy(db.docs[f"users/{UID}/memory_items/mem_survivor"])
 
@@ -393,7 +390,6 @@ def test_update_with_supersede_real_apply_excludes_superseded_from_reads():
         control=control,
         run_id="run-supersede-real",
         now=NOW,
-        db_client=db,
     )
 
     old_stored = _stored_item(db, "mem_old")
@@ -446,7 +442,7 @@ def test_partial_supersede_after_survivor_blocks_watermark():
         ),
     ):
         mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-partial", now=NOW, batch_threshold=2)
+        report = run_canonical_consolidation(uid, run_id="run-partial", now=NOW, batch_threshold=2)
 
     assert report.decisions_partial == 1
     assert report.watermark_blocked is True
@@ -476,7 +472,7 @@ def test_watermark_not_advanced_on_parse_failure():
     ):
         mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
         mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="parse_failed:JSONDecodeError")
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-parse-fail", now=NOW, batch_threshold=2)
+        report = run_canonical_consolidation(uid, run_id="run-parse-fail", now=NOW, batch_threshold=2)
 
     assert report.decisions_applied == 0
     assert report.last_consolidation_run_at == control.last_consolidation_run_at
@@ -502,7 +498,7 @@ def test_watermark_advanced_on_clean_empty_run():
     ):
         mock_gather.return_value = MagicMock(uid=uid, pending_items=pending[:10], candidates_by_anchor={})
         mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="no_changes")
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-zero", now=NOW, batch_threshold=2)
+        report = run_canonical_consolidation(uid, run_id="run-zero", now=NOW, batch_threshold=2)
 
     assert report.decisions_applied == 0
     assert report.last_consolidation_run_at == NOW
@@ -544,7 +540,7 @@ def test_consolidation_watermark_persist_preserves_apply_head_fields():
     ):
         mock_gather.return_value = MagicMock(uid=uid, pending_items=pending[:10], candidates_by_anchor={})
         mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="no_changes")
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-zero", now=NOW, batch_threshold=2)
+        report = run_canonical_consolidation(uid, run_id="run-zero", now=NOW, batch_threshold=2)
 
     assert report.last_consolidation_run_at == NOW
     stored_control = MemoryControlState(**db.docs[f"users/{uid}/memory_state/apply_control"])
@@ -570,7 +566,7 @@ def test_batch_cap_limits_pending_items_per_llm_call_and_loops_all_pending():
             uid=uid, pending_items=batch, candidates_by_anchor={}
         )
         mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="no_changes")
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-cap", now=NOW, batch_threshold=10)
+        report = run_canonical_consolidation(uid, run_id="run-cap", now=NOW, batch_threshold=10)
 
     assert mock_gather.call_count == 2
     assert all(len(call.args[1]) <= 10 for call in mock_gather.call_args_list)
@@ -599,7 +595,6 @@ def test_missing_survivor_skips_decision_without_corruption():
             control=control,
             run_id="run-missing-survivor",
             now=NOW,
-            db_client=db,
         )
 
     assert db.docs[f"users/{UID}/memory_items/mem_survivor"] == initial_item
@@ -628,7 +623,6 @@ def test_superseded_survivor_skips_decision():
             control=control,
             run_id="run-superseded-survivor",
             now=NOW,
-            db_client=db,
         )
 
     assert db.docs[f"users/{UID}/memory_items/mem_survivor"] == initial_item
@@ -654,14 +648,13 @@ def test_merged_survivor_stays_short_term_and_reappears_in_pending():
         control=control,
         run_id="run-merge-tier",
         now=NOW,
-        db_client=db,
     )
 
     updated = _stored_item(db, "mem_survivor")
     assert updated.tier == MemoryTier.short_term
 
     jobs_mod.fetch_short_term_memory_items_firestore.return_value = [updated]
-    pending_items = list_pending_consolidation_items(UID, db_client=db, now=NOW)
+    pending_items = list_pending_consolidation_items(UID, now=NOW)
     assert [item.memory_id for item in pending_items] == ["mem_survivor"]
 
 
@@ -710,7 +703,6 @@ def test_batch_skips_hallucinated_evidence_and_applies_valid_decision():
         mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
         report = run_canonical_consolidation(
             uid,
-            db_client=db,
             run_id="run-mixed-batch",
             now=NOW,
             batch_threshold=2,
@@ -757,7 +749,7 @@ def test_partial_apply_halts_subsequent_batches():
             uid=uid, pending_items=batch, candidates_by_anchor={}
         )
         mock_agent.return_value = first_batch_response
-        report = run_canonical_consolidation(uid, db_client=db, run_id="run-partial-halt", now=NOW, batch_threshold=10)
+        report = run_canonical_consolidation(uid, run_id="run-partial-halt", now=NOW, batch_threshold=10)
 
     assert mock_agent.call_count == 1
     assert report.decisions_partial == 1
@@ -788,7 +780,6 @@ def test_invoke_failure_blocks_watermark_and_defers_promotion_gate():
         mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
         report = run_canonical_consolidation(
             uid,
-            db_client=db,
             run_id="run-invoke-fail",
             now=NOW,
             batch_threshold=2,
@@ -809,7 +800,6 @@ def test_invoke_failure_blocks_watermark_and_defers_promotion_gate():
     ):
         promo = run_canonical_short_term_promotion(
             uid,
-            db_client=db,
             run_id="run-invoke-fail-promo",
             now=NOW,
             consolidation_batched_ids=set(),
@@ -841,7 +831,6 @@ def test_corroboration_increment_idempotent_across_runs():
         control=control,
         run_id="run-first",
         now=NOW,
-        db_client=db,
     )
     after_first = _stored_item(db, "mem_survivor")
     assert after_first.corroboration_count == 1
@@ -853,7 +842,6 @@ def test_corroboration_increment_idempotent_across_runs():
         control=_read_control_state_from_db(db),
         run_id="run-retry",
         now=NOW + timedelta(hours=1),
-        db_client=db,
     )
     after_second = _stored_item(db, "mem_survivor")
     assert after_second.corroboration_count == 1

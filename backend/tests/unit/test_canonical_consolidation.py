@@ -180,7 +180,7 @@ def test_gather_excludes_superseded_candidates(monkeypatch):
     query_result = MagicMock(hits=[hit], rejected_count=0)
 
     with patch("utils.memory.canonical_consolidation.query_memory_vector_candidates", return_value=query_result):
-        context = gather_consolidation_candidates(uid, [active], db_client=db)
+        context = gather_consolidation_candidates(uid, [active])
 
     assert context.candidates_by_anchor["mem_a"] == []
 
@@ -246,7 +246,6 @@ def test_supersede_golden_path_with_mock_agent(monkeypatch):
         mock_gather.return_value = ConsolidationContext(uid=uid, pending_items=[old, new], candidates_by_anchor={})
         report = run_canonical_consolidation(
             uid,
-            db_client=db,
             run_id="run-1",
             now=NOW,
             llm_invoke=lambda _p: agent_response.model_dump_json(),
@@ -292,7 +291,6 @@ def test_recurrence_handoff_failure_blocks_watermark_advance(monkeypatch):
         gather.return_value = ConsolidationContext(uid=uid, pending_items=[item], candidates_by_anchor={})
         report = run_canonical_consolidation(
             uid,
-            db_client=db,
             run_id='run-1',
             now=NOW,
             llm_invoke=lambda _prompt: response.model_dump_json(),
@@ -337,7 +335,6 @@ def test_ambiguous_contradiction_escalates_to_review_queue(monkeypatch):
         )
         report = run_canonical_consolidation(
             uid,
-            db_client=db,
             run_id="run-review",
             now=NOW,
             llm_invoke=lambda _p: agent_response.model_dump_json(),

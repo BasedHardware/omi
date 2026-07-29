@@ -189,7 +189,7 @@ __LEGACY_ITEM_BLOCK__
                 self.adapters = adapters
                 for key, value in kwargs.items():
                     setattr(self, key, value)
-        def build_v3_production_runtime(*, uid, db_client, env=None):
+        def build_v3_production_runtime(*, uid, env=None):
             return ProductionV3GetRuntime(enabled=False, source_decision="disabled")
         production_runtime.V3GetRuntime = ProductionV3GetRuntime
         production_runtime.build_v3_production_runtime = build_v3_production_runtime

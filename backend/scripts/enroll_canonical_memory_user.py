@@ -153,7 +153,7 @@ def inspect_existing_docs(db_client: Any, documents: list[RolloutDocumentPlan]) 
 
 def inspect_v3_read_prerequisites(db_client: Any, *, uid: str) -> dict[str, bool]:
     paths = MemoryCollections(uid=uid)
-    trusted_head = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    trusted_head = read_memory_v3_trusted_account_generation(uid=uid)
     return {
         paths.memory_state_head: trusted_head.read_error_reason is None,
         paths.v3_compatibility_projection_state: _snapshot_data(

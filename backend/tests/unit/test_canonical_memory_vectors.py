@@ -476,8 +476,7 @@ def test_write_path_syncs_vector_on_idempotent_skip(monkeypatch):
         return_value=None,
     ):
         returned_id = write_canonical_extraction_memory(
-            uid, _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content), db_client=db
-        )
+            uid, _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content))
 
     assert returned_id == memory_id
     assert len(fake_index.upserts) == 1
@@ -575,7 +574,6 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
             index=0,
             control=control,
             run_id="run-1",
-            db_client=_BackfillDb(),
         )
 
     assert row_result.written is False
@@ -642,7 +640,6 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
             run_id="promo-run",
             trigger_reason="batch_threshold",
             now=now,
-            db_client=_PromotionDb(),
         )
     assert keyword_sync_succeeded is True
 
@@ -683,7 +680,6 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
             run_id="promo-run-2",
             trigger_reason="batch_threshold",
             now=now,
-            db_client=_PromotionDbWithItem(),
         )
     assert keyword_sync_succeeded is True
 
@@ -744,7 +740,7 @@ def test_promotion_vector_sync_failure_increments_report(monkeypatch):
             monkeypatch=monkeypatch,
         )
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=now, run_id="promo-vector-fail")
+    report = run_canonical_short_term_promotion(uid, now=now, run_id="promo-vector-fail")
 
     assert report.trigger_reason == "batch_threshold"
     assert report.promoted_count == threshold

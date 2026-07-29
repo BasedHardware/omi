@@ -57,7 +57,7 @@ def test_mcp_legacy_read_authorized_only_for_explicit_or_unenrolled():
 def _legacy_branch_after_canonical(route_contents: str, *, marker: str | None = None) -> str:
     """Return the legacy rollout/guard branch after the canonical early-return block."""
     if marker is None:
-        marker = "memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')"
+        marker = "memory_rollout = read_default_read_rollout(uid=uid, consumer='mcp')"
     return route_contents[route_contents.index(marker) :]
 
 
@@ -70,9 +70,9 @@ def test_mcp_rest_search_route_wires_app_key_scope_grant_before_memory_vector_ad
     context_dependency = (
         'auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context)'
     )
-    grant_call = 'authorize_memory_external_default_memory_read(auth_context, db_client=db)'
+    grant_call = 'authorize_memory_external_default_memory_read(auth_context)'
     uid_assignment = 'uid = auth_context.uid'
-    rollout_call = "read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')"
+    rollout_call = "read_default_read_rollout(uid=uid, consumer='mcp')"
     vector_adapter_call = 'search_default_mcp_memories_vector('
     legacy_safe_call = 'return memory_service.search_mcp(uid, query, limit=limit)'
     assert context_dependency in search_route
@@ -113,8 +113,8 @@ def test_mcp_sse_search_tool_wires_app_key_scope_grant_before_memory_vector_adap
             'elif tool_name == "search_conversations":'
         )
     ]
-    grant_call = 'authorize_memory_external_default_memory_read(auth_context, db_client=db)'
-    rollout_call = "read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')"
+    grant_call = 'authorize_memory_external_default_memory_read(auth_context)'
+    rollout_call = "read_default_read_rollout(uid=user_id, consumer='mcp')"
     vector_adapter_call = 'search_default_mcp_memories_vector('
     legacy_call = 'vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)'
     assert 'auth_context: Optional[ProductAuthorizationContext] = None' in contents
@@ -135,9 +135,9 @@ def test_mcp_sse_get_memories_tool_wires_app_key_scope_grant_before_canonical_me
     get_tool = contents[
         contents.index('elif tool_name == "get_memories":') : contents.index('elif tool_name == "create_memory":')
     ]
-    grant_call = 'authorize_memory_external_default_memory_read(auth_context, db_client=db)'
+    grant_call = 'authorize_memory_external_default_memory_read(auth_context)'
     canonical_branch = 'if memory_system == MemorySystem.CANONICAL:'
-    legacy_rollout = "read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')"
+    legacy_rollout = "read_default_read_rollout(uid=user_id, consumer='mcp')"
     assert grant_call in get_tool
     assert canonical_branch in get_tool
     assert legacy_rollout in get_tool
@@ -194,7 +194,7 @@ def test_mcp_rest_get_route_only_reaches_legacy_through_authorized_decision():
     assert 'list_default_mcp_memories(' in get_route
     assert 'if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:' in get_route
     assert 'if not mcp_legacy_read_authorized(memory_list_results):' in get_route
-    assert get_route.index("read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')") < get_route.index(
+    assert get_route.index("read_default_read_rollout(uid=uid, consumer='mcp')") < get_route.index(
         'list_default_mcp_memories('
     )
     assert get_route.index('if not mcp_legacy_read_authorized(memory_list_results):') < get_route.index(
@@ -223,7 +223,7 @@ def test_mcp_sse_get_tool_only_reaches_legacy_through_authorized_decision():
     assert 'list_default_mcp_memories(' in get_tool
     assert 'if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:' in get_tool
     assert 'if not mcp_legacy_read_authorized(memory_list_results):' in get_tool
-    assert get_tool.index("read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')") < get_tool.index(
+    assert get_tool.index("read_default_read_rollout(uid=user_id, consumer='mcp')") < get_tool.index(
         'list_default_mcp_memories('
     )
     assert get_tool.index('if not mcp_legacy_read_authorized(memory_list_results):') < get_tool.index(
@@ -236,12 +236,12 @@ def test_mcp_rest_write_routes_guard_legacy_mutation_before_side_effects():
     memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     contents = mcp_py.read_text(encoding='utf-8')
     service_contents = memory_service_py.read_text(encoding='utf-8')
-    guard = 'guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)'
+    guard = 'guard_legacy_memory_write(uid, consumer=consumer, operation=operation)'
     assert guard in service_contents
     create_route = contents[
         contents.index('@router.post("/v1/mcp/memories"') : contents.index('def _validate_mcp_memory')
     ]
-    assert 'pin_memory_system(uid, db_client=db)' in create_route
+    assert 'pin_memory_system(uid)' in create_route
     assert 'create_external_memory(' in create_route
     assert 'operation="mcp_memory_create"' in create_route
     assert create_route.index('pin_memory_system') < create_route.index('create_external_memory')
@@ -267,7 +267,7 @@ def test_mcp_sse_write_tools_guard_legacy_mutation_before_side_effects():
     contents = mcp_sse_py.read_text(encoding='utf-8')
     service_contents = memory_service_py.read_text(encoding='utf-8')
     assert '_canonical_external_write_enabled_or_fail_closed' in service_contents
-    assert 'guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)' in service_contents
+    assert 'guard_legacy_memory_write(uid, consumer=consumer, operation=operation)' in service_contents
     create_tool = contents[
         contents.index('elif tool_name == "create_memory":') : contents.index('elif tool_name == "delete_memory":')
     ]
@@ -325,7 +325,7 @@ def _read_capabilities(uid='u1', *, enabled=True):
 def test_mcp_default_memory_rollout_reader_derives_capability_and_default_grant_from_memory_control_state(monkeypatch):
     db_client = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
     monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
-    decision = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
+    decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert decision.rollout_capabilities.memory_reads_enabled is True
     assert decision.app_has_default_memory_grant is True
     assert decision.archive_capability is False
@@ -342,7 +342,7 @@ def test_mcp_legacy_write_guard_blocks_memory_and_shadow_reads_but_preserves_dis
             state['users/u1/memory_control/state'] = doc
 
     _seed(_enabled_rollout_doc())
-    enabled_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(state), consumer='mcp')
+    enabled_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
         enabled_decision, operation='mcp_memory_create'
     )
@@ -351,7 +351,7 @@ def test_mcp_legacy_write_guard_blocks_memory_and_shadow_reads_but_preserves_dis
     assert blocked.detail['consumer'] == 'mcp'
     assert blocked.detail['read_decision'] == MemoryReadDecision.USE_MEMORY.value
     _seed(None)
-    missing_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(), consumer='mcp')
+    missing_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     missing_blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
         missing_decision, operation='mcp_memory_delete'
     )
@@ -363,7 +363,7 @@ def test_mcp_legacy_write_guard_blocks_memory_and_shadow_reads_but_preserves_dis
         'stage_gates': {MemoryRolloutStageGate.shadow.value: PASSED},
     }
     _seed(shadow_doc)
-    shadow_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(state), consumer='mcp')
+    shadow_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     shadow_blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
         shadow_decision, operation='mcp_memory_edit'
     )
@@ -371,7 +371,7 @@ def test_mcp_legacy_write_guard_blocks_memory_and_shadow_reads_but_preserves_dis
     assert shadow_blocked.allowed is False
     disabled_doc = _enabled_rollout_doc() | {'mode': MemoryRolloutMode.off.value, 'grants': {}}
     _seed(disabled_doc)
-    disabled_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(state), consumer='mcp')
+    disabled_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     allowed = assert_legacy_memory_write_allowed_for_default_read_decision(
         disabled_decision, operation='mcp_memory_edit'
     )
@@ -391,15 +391,15 @@ def test_mcp_default_memory_rollout_reader_fails_closed_for_missing_malformed_or
 
     _seed(None)
     assert (
-        read_default_read_rollout(uid='u1', db_client=_FirestoreFake(), consumer='mcp').memory_default_mcp_enabled
+        read_default_read_rollout(uid='u1', consumer='mcp').memory_default_mcp_enabled
         is False
     )
     _seed({'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'})
-    malformed_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(state), consumer='mcp')
+    malformed_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert malformed_decision.memory_default_mcp_enabled is False
     assert malformed_decision.app_has_default_memory_grant is False
     _seed(_enabled_rollout_doc() | {'grants': {'mcp': {}}})
-    no_grant_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(state), consumer='mcp')
+    no_grant_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert no_grant_decision.rollout_capabilities.memory_reads_enabled is True
     assert no_grant_decision.app_has_default_memory_grant is False
     assert no_grant_decision.memory_default_mcp_enabled is False
@@ -421,7 +421,7 @@ def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout
     )
     monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
     results = search_default_mcp_memories(
-        uid='u1', query='coffee', limit=10, db_client=db_client, rollout_capabilities=_read_capabilities(), now=now
+        uid='u1', query='coffee', limit=10, rollout_capabilities=_read_capabilities(), now=now
     )
     assert [item['id'] for item in results] == ['fresh-short-term', 'long-term']
     assert [item['content'] for item in results] == ['coffee fresh short term', 'coffee long term']
@@ -444,7 +444,7 @@ def test_mcp_default_memory_adapter_excludes_pending_admission_text(monkeypatch)
     monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     results = search_default_mcp_memories(
-        uid='u1', query='coffee', limit=10, db_client=db_client, rollout_capabilities=_read_capabilities(), now=now
+        uid='u1', query='coffee', limit=10, rollout_capabilities=_read_capabilities(), now=now
     )
 
     assert results == []
@@ -459,7 +459,6 @@ def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_
             uid='u1',
             query='coffee',
             limit=10,
-            db_client=db_client,
             rollout_capabilities=_read_capabilities(enabled=False),
             now=now,
         )
@@ -470,7 +469,6 @@ def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_
             uid='u1',
             query='coffee',
             limit=10,
-            db_client=db_client,
             rollout_capabilities=_read_capabilities(),
             app_has_default_memory_grant=False,
             now=now,
@@ -553,7 +551,6 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
         uid='u1',
         query='coffee',
         limit=10,
-        db_client=db_client,
         rollout_capabilities=_read_capabilities(),
         vector_query=vector_query,
         required_projection_commit_id='projection-1',
@@ -585,7 +582,6 @@ def test_mcp_vector_adapter_returns_explicit_denial_before_vector_or_memory_read
         uid='u1',
         query='coffee',
         limit=10,
-        db_client=db_client,
         rollout_capabilities=_read_capabilities(enabled=False),
         vector_query=vector_query,
     )
@@ -593,7 +589,6 @@ def test_mcp_vector_adapter_returns_explicit_denial_before_vector_or_memory_read
         uid='u1',
         query='coffee',
         limit=10,
-        db_client=db_client,
         rollout_capabilities=_read_capabilities(),
         app_has_default_memory_grant=False,
         vector_query=vector_query,
@@ -620,7 +615,6 @@ def test_mcp_vector_adapter_preserves_only_explicit_legacy_safe_classification()
         uid='u1',
         query='coffee',
         limit=10,
-        db_client=db_client,
         rollout_decision=legacy_safe_default_read_rollout_decision(
             uid='u1', source_path='compatibility/mcp', consumer='mcp', reason='legacy_mcp_compatibility'
         ),
@@ -644,15 +638,14 @@ def test_mcp_memory_search_and_list_format_mark_compatibility_derived_category_r
         }
     )
     monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
-    rollout = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
+    rollout = read_default_read_rollout(uid='u1', consumer='mcp')
     list_result = list_default_mcp_memories(
-        uid='u1', limit=10, offset=0, db_client=db_client, rollout_decision=rollout, now=now
+        uid='u1', limit=10, offset=0, rollout_decision=rollout, now=now
     )
     vector_result = search_default_mcp_memories_vector(
         uid='u1',
         query='coffee',
         limit=10,
-        db_client=db_client,
         rollout_decision=rollout,
         vector_query=lambda *args, **kwargs: _VectorCandidateResult(
             [
@@ -691,12 +684,11 @@ def test_mcp_memory_list_adapter_applies_category_review_manual_filters_to_expli
         }
     )
     monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
-    rollout = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
+    rollout = read_default_read_rollout(uid='u1', consumer='mcp')
     matching = list_default_mcp_memories(
         uid='u1',
         limit=10,
         offset=0,
-        db_client=db_client,
         rollout_decision=rollout,
         categories=['other'],
         reviewed=False,
@@ -707,7 +699,6 @@ def test_mcp_memory_list_adapter_applies_category_review_manual_filters_to_expli
         uid='u1',
         limit=10,
         offset=0,
-        db_client=db_client,
         rollout_decision=rollout,
         categories=['personal'],
         reviewed=True,
@@ -763,9 +754,9 @@ def test_mcp_list_adapter_uses_same_rollout_decisions_as_search_and_preserves_de
         }
     )
     monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
-    rollout = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
+    rollout = read_default_read_rollout(uid='u1', consumer='mcp')
     result = list_default_mcp_memories(
-        uid='u1', limit=10, offset=0, db_client=db_client, rollout_decision=rollout, now=now
+        uid='u1', limit=10, offset=0, rollout_decision=rollout, now=now
     )
     assert isinstance(result, McpMemoryListResult)
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
@@ -783,26 +774,14 @@ def test_mcp_list_adapter_denies_malformed_missing_or_no_grant_before_memory_rea
         uid='u1',
         limit=10,
         offset=0,
-        db_client=db_client,
-        rollout_decision=read_default_read_rollout(uid='u1', db_client=_FirestoreFake(), consumer='mcp'),
+        rollout_decision=read_default_read_rollout(uid='u1', consumer='mcp'),
     )
     malformed = list_default_mcp_memories(
         uid='u1',
         limit=10,
         offset=0,
-        db_client=db_client,
         rollout_decision=read_default_read_rollout(
             uid='u1',
-            db_client=_FirestoreFake(
-                {
-                    'users/u1/memory_control/state': {
-                        'schema_version': 1,
-                        'uid': 'u1',
-                        'mode': 'read',
-                        'stage_gates': 'bad',
-                    }
-                }
-            ),
             consumer='mcp',
         ),
     )
@@ -810,12 +789,8 @@ def test_mcp_list_adapter_denies_malformed_missing_or_no_grant_before_memory_rea
         uid='u1',
         limit=10,
         offset=0,
-        db_client=db_client,
         rollout_decision=read_default_read_rollout(
             uid='u1',
-            db_client=_FirestoreFake(
-                {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'mcp': {}}}}
-            ),
             consumer='mcp',
         ),
     )
@@ -823,7 +798,6 @@ def test_mcp_list_adapter_denies_malformed_missing_or_no_grant_before_memory_rea
         uid='u1',
         limit=10,
         offset=0,
-        db_client=db_client,
         rollout_decision=legacy_safe_default_read_rollout_decision(
             uid='u1', source_path='compatibility/mcp', consumer='mcp', reason='legacy_mcp_compatibility'
         ),
@@ -840,9 +814,9 @@ def test_mcp_list_adapter_denies_malformed_missing_or_no_grant_before_memory_rea
 def test_mcp_list_adapter_enabled_empty_returns_empty_memory_result_without_legacy_fallback(monkeypatch):
     backing = {'users/u1/memory_control/state': _enabled_rollout_doc()}
     monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=backing))
-    rollout = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(backing), consumer='mcp')
+    rollout = read_default_read_rollout(uid='u1', consumer='mcp')
     result = list_default_mcp_memories(
-        uid='u1', limit=10, offset=0, db_client=_FirestoreFake(), rollout_decision=rollout
+        uid='u1', limit=10, offset=0, rollout_decision=rollout
     )
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
     assert result.memories == []

@@ -98,7 +98,6 @@ def _promoted_count(report: CanonicalShortTermMaintenanceReport) -> int:
 
 def run_canonical_short_term_maintenance_for_cohort(
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
     recurrence_signal_persister: Optional[Callable[..., int]] = None,
@@ -132,7 +131,6 @@ def run_canonical_short_term_maintenance_for_cohort(
         try:
             report = run_canonical_short_term_maintenance(
                 uid,
-                db_client=db_client,
                 now=current_time,
                 run_id=effective_run_id,
                 recurrence_signal_sink=recurrence_signal_persister,
@@ -155,7 +153,6 @@ def run_canonical_short_term_maintenance_for_cohort(
                 summary.recurrence_candidates_total += recurrence_signal_consumer(
                     uid,
                     report.consolidation.recurrence_signals,
-                    firestore_client=db_client,
                 )
             except Exception as exc:
                 message = f"uid={uid}: recurrence_consumer:{type(exc).__name__}"
@@ -196,7 +193,6 @@ def run_canonical_short_term_maintenance_for_cohort(
 
 async def run_canonical_short_term_maintenance_cron(
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
     recurrence_signal_persister: Optional[Callable[..., int]] = None,
@@ -206,7 +202,6 @@ async def run_canonical_short_term_maintenance_cron(
     return await run_blocking(
         db_executor,
         run_canonical_short_term_maintenance_for_cohort,
-        db_client=db_client,
         now=now,
         run_id=run_id,
         recurrence_signal_persister=recurrence_signal_persister,

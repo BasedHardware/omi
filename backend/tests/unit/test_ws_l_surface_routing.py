@@ -196,14 +196,14 @@ class TestResolveMemorySystemIgnoresMemoryFlags:
                 }
             }
         )
-        assert resolve_memory_system("uid-memory", db_client=db) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-memory") == MemorySystem.LEGACY
 
     def test_canonical_cohort_pins_without_memory_flags(self, monkeypatch):
         from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
         set_canonical_cohort(monkeypatch, "uid-canonical")
-        assert resolve_memory_system("uid-canonical", db_client=_FirestoreFake()) == MemorySystem.CANONICAL
-        assert resolve_memory_system("uid-legacy", db_client=_FirestoreFake()) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-canonical") == MemorySystem.CANONICAL
+        assert resolve_memory_system("uid-legacy") == MemorySystem.LEGACY
 
 
 LEGACY_SSE_UID = "uid-sse-legacy-ws-l"
@@ -232,9 +232,8 @@ class TestMcpSseLegacySearchParity:
         from utils.memory import default_read_rollout as rollout
 
         mcp_sse = _load_mcp_sse_module()
-        firestore_fake = _FirestoreFake()
 
-        assert resolve_memory_system(LEGACY_SSE_UID, db_client=firestore_fake) == MemorySystem.LEGACY
+        assert resolve_memory_system(LEGACY_SSE_UID) == MemorySystem.LEGACY
 
         legacy_rollout = rollout.legacy_safe_default_read_rollout_decision(
             uid=LEGACY_SSE_UID,
@@ -249,7 +248,6 @@ class TestMcpSseLegacySearchParity:
         )
         allowed_auth = SimpleNamespace(allowed=True, observability={})
 
-        monkeypatch.setattr(mcp_sse, "db", firestore_fake)
         monkeypatch.setattr(mcp_sse, "read_default_read_rollout", lambda **_: legacy_rollout)
         monkeypatch.setattr(mcp_sse, "search_default_mcp_memories_vector", lambda **_: legacy_vector)
         monkeypatch.setattr(mcp_sse, "authorize_memory_external_default_memory_read", lambda *_, **__: allowed_auth)

@@ -188,7 +188,6 @@ def test_firestore_lifecycle_transition_store_creates_deterministic_idempotent_r
     db_client = _FirestoreFake()
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     store = FirestoreShortTermLifecycleTransitionStore(
-        db_client=db_client,
         now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
     )
     record = _record()
@@ -220,7 +219,6 @@ def test_firestore_lifecycle_transition_store_rejects_same_key_different_fingerp
     db_client = _FirestoreFake()
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
     store = FirestoreShortTermLifecycleTransitionStore(
-        db_client=db_client,
         now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
     )
     record = _record()
@@ -248,7 +246,7 @@ def test_fetch_short_term_memory_items_firestore_queries_authoritative_short_ter
         f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term),
     }
 
-    items = fetch_short_term_memory_items_firestore(uid='u1', db_client=db_client)
+    items = fetch_short_term_memory_items_firestore(uid='u1')
 
     assert [item.memory_id for item in items] == ['fresh-short-term', 'stale-short-term']
     assert all(item.tier == MemoryTier.short_term for item in items)
@@ -265,7 +263,7 @@ def test_fetch_short_term_memory_items_firestore_applies_bounded_limit_before_ru
         f'users/u1/memory_items/{stale_b.memory_id}': _stored_item(stale_b),
     }
 
-    report = run_short_term_lifecycle_firestore(uid='u1', db_client=db_client, now=now, run_id='runner-1', limit=1)
+    report = run_short_term_lifecycle_firestore(uid='u1', now=now, run_id='runner-1', limit=1)
 
     transition_docs = {
         path: payload
@@ -293,8 +291,8 @@ def test_concrete_firestore_lifecycle_runner_persists_only_required_short_term_t
         f'users/u1/memory_items/{archive.memory_id}': _stored_item(archive),
     }
 
-    first = run_short_term_lifecycle_firestore(uid='u1', db_client=db_client, now=now, run_id='runner-1')
-    second = run_short_term_lifecycle_firestore(uid='u1', db_client=db_client, now=now, run_id='runner-1')
+    first = run_short_term_lifecycle_firestore(uid='u1', now=now, run_id='runner-1')
+    second = run_short_term_lifecycle_firestore(uid='u1', now=now, run_id='runner-1')
 
     transition_docs = {
         path: payload

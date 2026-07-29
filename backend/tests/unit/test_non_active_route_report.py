@@ -65,7 +65,6 @@ def test_fetch_non_active_route_audit_report_fetches_run_docs_and_returns_accoun
         "u1",
         run_id="run-1",
         expected_source_ids=[f"src-{route.value}" for route in NonActiveRoute],
-        db_client=db,
     )
 
     assert store.queried_collections == [_ROUTE_COLLECTION]
@@ -92,7 +91,7 @@ def test_fetch_non_active_route_audit_report_does_not_query_default_long_term_me
     db = _FakeDb(docs)
     store = _seed_store(monkeypatch, docs)
 
-    report = fetch_non_active_route_audit_report("u1", expected_source_ids=["src-context_only"], db_client=db)
+    report = fetch_non_active_route_audit_report("u1", expected_source_ids=["src-context_only"])
 
     assert report.status == "green"
     assert store.queried_collections == [_ROUTE_COLLECTION]

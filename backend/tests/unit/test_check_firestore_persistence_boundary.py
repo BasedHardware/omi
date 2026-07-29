@@ -45,7 +45,6 @@ def test_ignores_blessed_database_ports_and_unrelated_code():
 from database import document_store, sentinels
 from database.firestore_errors import is_document_size_limit_error
 from database.document_ids import document_id_from_seed
-from database.persistence import db
 
 snap = document_store.get_document(db_client, path)
 document_store.set_document(db_client, path, data)

@@ -78,7 +78,7 @@ def test_global_read_gate_allows_reads_only_when_enabled_and_kill_switch_inactiv
     db_client = _FirestoreFake({GLOBAL_READ_GATE_PATH: {'memory_reads_enabled': True, 'kill_switch_active': False}})
     _use_store(monkeypatch, db_client.docs)
 
-    decision = read_global_read_gate(db_client=db_client)
+    decision = read_global_read_gate()
 
     assert decision.read_decision == MemoryReadDecision.USE_MEMORY
     assert decision.fallback_reason is None
@@ -91,7 +91,7 @@ def test_global_read_gate_uses_bounded_timeout_and_fails_closed_for_firestore_tr
     failing_db_client = _FirestoreFake()
     _use_raising_store(monkeypatch, PermissionDenied('permission denied'))
 
-    decision = read_global_read_gate(db_client=failing_db_client)
+    decision = read_global_read_gate()
 
     assert decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert decision.fallback_reason == 'global_read_gate_read_failed'
@@ -121,7 +121,7 @@ def test_global_read_gate_fails_closed_for_missing_disabled_kill_switch_and_malf
     for docs, expected_reason in cases:
         db_client = _FirestoreFake(docs)
         _use_store(monkeypatch, db_client.docs)
-        decision = read_global_read_gate(db_client=db_client)
+        decision = read_global_read_gate()
 
         assert decision.read_decision == MemoryReadDecision.DENY_MEMORY
         assert decision.fallback_reason == expected_reason
@@ -140,7 +140,7 @@ def test_write_convergence_gate_requires_durable_outbox_dual_write_and_delete_re
     )
     _use_store(monkeypatch, db_client.docs)
 
-    policy = read_write_convergence_gate(db_client=db_client)
+    policy = read_write_convergence_gate()
 
     assert policy.ready is True
     assert policy.reason == 'ok'
@@ -153,7 +153,7 @@ def test_write_convergence_gate_uses_bounded_timeout_and_fails_closed_for_firest
     failing_db_client = _FirestoreFake()
     _use_raising_store(monkeypatch, DeadlineExceeded('deadline exceeded'))
 
-    policy = read_write_convergence_gate(db_client=failing_db_client)
+    policy = read_write_convergence_gate()
 
     assert policy.ready is False
     assert policy.reason == 'write_convergence_gate_read_failed'
@@ -189,7 +189,7 @@ def test_write_convergence_gate_fails_closed_for_missing_or_malformed_readiness_
     for docs, expected_reason in cases:
         db_client = _FirestoreFake(docs)
         _use_store(monkeypatch, db_client.docs)
-        policy = read_write_convergence_gate(db_client=db_client)
+        policy = read_write_convergence_gate()
 
         assert policy.ready is False
         assert policy.reason == expected_reason
@@ -198,7 +198,7 @@ def test_write_convergence_gate_fails_closed_for_missing_or_malformed_readiness_
 def test_legacy_write_guard_allows_memory_enabled_write_only_with_ready_convergence_policy(monkeypatch):
     enabled_client = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
     _use_store(monkeypatch, enabled_client.docs)
-    enabled_decision = read_default_read_rollout(uid='u1', db_client=enabled_client, consumer='mcp')
+    enabled_decision = read_default_read_rollout(uid='u1', consumer='mcp')
 
     ready_client = _FirestoreFake(
         {
@@ -211,11 +211,11 @@ def test_legacy_write_guard_allows_memory_enabled_write_only_with_ready_converge
         }
     )
     _use_store(monkeypatch, ready_client.docs)
-    ready_policy = read_write_convergence_gate(db_client=ready_client)
+    ready_policy = read_write_convergence_gate()
 
     missing_client = _FirestoreFake()
     _use_store(monkeypatch, missing_client.docs)
-    missing_policy = read_write_convergence_gate(db_client=missing_client)
+    missing_policy = read_write_convergence_gate()
 
     blocked_without_policy = assert_legacy_memory_write_allowed_for_default_read_decision(
         enabled_decision, operation='create_memory'
@@ -240,8 +240,8 @@ def test_shared_rollout_helper_reads_memory_control_state_for_mcp_and_developer_
     db_client = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
     _use_store(monkeypatch, db_client.docs)
 
-    mcp_decision = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
-    developer_decision = read_default_read_rollout(uid='u1', db_client=db_client, consumer='developer_api')
+    mcp_decision = read_default_read_rollout(uid='u1', consumer='mcp')
+    developer_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
 
     assert mcp_decision.rollout_capabilities.memory_reads_enabled is True
     assert developer_decision.rollout_capabilities.memory_reads_enabled is True
@@ -258,7 +258,7 @@ def test_shared_rollout_helper_reads_memory_control_state_for_mcp_and_developer_
 def test_shared_rollout_helper_fails_closed_for_missing_malformed_uid_mismatch_and_missing_consumer_grant(monkeypatch):
     missing = _FirestoreFake()
     _use_store(monkeypatch, missing.docs)
-    missing_decision = read_default_read_rollout(uid='u1', db_client=missing, consumer='mcp')
+    missing_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert missing_decision.memory_default_mcp_enabled is False
     assert missing_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert missing_decision.fallback_reason == 'missing_rollout_state'
@@ -274,14 +274,14 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_uid_mismatch_a
         }
     )
     _use_store(monkeypatch, malformed.docs)
-    malformed_decision = read_default_read_rollout(uid='u1', db_client=malformed, consumer='developer_api')
+    malformed_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     assert malformed_decision.memory_default_developer_enabled is False
     assert malformed_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert malformed_decision.fallback_reason == 'malformed_rollout_state'
 
     uid_mismatch = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc(uid='other')})
     _use_store(monkeypatch, uid_mismatch.docs)
-    uid_mismatch_decision = read_default_read_rollout(uid='u1', db_client=uid_mismatch, consumer='mcp')
+    uid_mismatch_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert uid_mismatch_decision.memory_default_mcp_enabled is False
     assert uid_mismatch_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert uid_mismatch_decision.fallback_reason == 'uid_mismatch'
@@ -290,7 +290,7 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_uid_mismatch_a
         {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'developer_api': {}}}}
     )
     _use_store(monkeypatch, no_grant.docs)
-    no_grant_decision = read_default_read_rollout(uid='u1', db_client=no_grant, consumer='developer_api')
+    no_grant_decision = read_default_read_rollout(uid='u1', consumer='developer_api')
     assert no_grant_decision.rollout_capabilities.memory_reads_enabled is True
     assert no_grant_decision.app_has_default_memory_grant is False
     assert no_grant_decision.memory_default_developer_enabled is False
@@ -303,7 +303,7 @@ def test_rollout_doc_requires_exact_uid_schema_and_canonical_nested_grant_preced
     missing_uid.pop('uid')
     missing_uid_client = _FirestoreFake({'users/u1/memory_control/state': missing_uid})
     _use_store(monkeypatch, missing_uid_client.docs)
-    missing_uid_decision = read_default_read_rollout(uid='u1', db_client=missing_uid_client, consumer='mcp')
+    missing_uid_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert missing_uid_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert missing_uid_decision.fallback_reason == 'uid_mismatch'
 
@@ -311,7 +311,7 @@ def test_rollout_doc_requires_exact_uid_schema_and_canonical_nested_grant_preced
     missing_schema.pop('schema_version')
     missing_schema_client = _FirestoreFake({'users/u1/memory_control/state': missing_schema})
     _use_store(monkeypatch, missing_schema_client.docs)
-    missing_schema_decision = read_default_read_rollout(uid='u1', db_client=missing_schema_client, consumer='mcp')
+    missing_schema_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert missing_schema_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert missing_schema_decision.fallback_reason == 'unsupported_rollout_schema'
 
@@ -319,7 +319,7 @@ def test_rollout_doc_requires_exact_uid_schema_and_canonical_nested_grant_preced
     unsupported_schema_client = _FirestoreFake({'users/u1/memory_control/state': unsupported_schema})
     _use_store(monkeypatch, unsupported_schema_client.docs)
     unsupported_schema_decision = read_default_read_rollout(
-        uid='u1', db_client=unsupported_schema_client, consumer='mcp'
+        uid='u1', consumer='mcp'
     )
     assert unsupported_schema_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert unsupported_schema_decision.fallback_reason == 'unsupported_rollout_schema'
@@ -330,7 +330,7 @@ def test_rollout_doc_requires_exact_uid_schema_and_canonical_nested_grant_preced
     }
     nested_false_client = _FirestoreFake({'users/u1/memory_control/state': nested_false_with_stale_top_level_true})
     _use_store(monkeypatch, nested_false_client.docs)
-    nested_false_decision = read_default_read_rollout(uid='u1', db_client=nested_false_client, consumer='mcp')
+    nested_false_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert nested_false_decision.app_has_default_memory_grant is False
     assert nested_false_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert nested_false_decision.fallback_reason == 'missing_mcp_default_memory_grant'
@@ -341,7 +341,7 @@ def test_rollout_doc_requires_exact_uid_schema_and_canonical_nested_grant_preced
     }
     nested_absent_client = _FirestoreFake({'users/u1/memory_control/state': nested_absent_with_stale_top_level_true})
     _use_store(monkeypatch, nested_absent_client.docs)
-    nested_absent_decision = read_default_read_rollout(uid='u1', db_client=nested_absent_client, consumer='mcp')
+    nested_absent_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert nested_absent_decision.app_has_default_memory_grant is False
     assert nested_absent_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert nested_absent_decision.fallback_reason == 'missing_mcp_default_memory_grant'
@@ -353,16 +353,16 @@ def test_rollout_reads_use_bounded_timeout_and_fail_closed_for_firestore_transpo
 
     db_client = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
     _use_store(monkeypatch, db_client.docs)
-    decision = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
+    decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert decision.read_decision == MemoryReadDecision.USE_MEMORY
 
     failing_db_client = _FirestoreFake()
     _use_raising_store(monkeypatch, PermissionDenied('permission denied'))
-    failing_decision = read_default_read_rollout(uid='u1', db_client=failing_db_client, consumer='mcp')
+    failing_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     assert failing_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert failing_decision.fallback_reason == 'rollout_read_failed'
 
-    failing_shared_decisions = read_default_read_rollout_decisions(uid='u1', db_client=failing_db_client)
+    failing_shared_decisions = read_default_read_rollout_decisions(uid='u1')
     assert {consumer: decision.fallback_reason for consumer, decision in failing_shared_decisions.items()} == {
         'mcp': 'rollout_read_failed',
         'developer_api': 'rollout_read_failed',
@@ -380,7 +380,7 @@ def test_shared_rollout_helper_distinguishes_shadow_only_and_explicit_legacy_saf
     db_client = _FirestoreFake({'users/u1/memory_control/state': shadow_doc})
     _use_store(monkeypatch, db_client.docs)
 
-    shadow_decision = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
+    shadow_decision = read_default_read_rollout(uid='u1', consumer='mcp')
     legacy_safe_decision = legacy_safe_default_read_rollout_decision(
         uid='u1', source_path='legacy/users/u1/memories', consumer='mcp', reason='explicit_legacy_endpoint'
     )
@@ -401,8 +401,8 @@ def test_shared_rollout_helper_computes_persisted_archive_capability_distinct_fr
     db_client = _FirestoreFake({'users/u1/memory_control/state': rollout_doc})
     _use_store(monkeypatch, db_client.docs)
 
-    default_decision = read_default_read_rollout(uid='u1', db_client=db_client, consumer='omi_chat')
-    archive_decision = read_archive_read_rollout(uid='u1', db_client=db_client, consumer='omi_chat')
+    default_decision = read_default_read_rollout(uid='u1', consumer='omi_chat')
+    archive_decision = read_archive_read_rollout(uid='u1', consumer='omi_chat')
 
     assert default_decision.read_decision == MemoryReadDecision.USE_MEMORY
     assert default_decision.archive_capability is False
@@ -416,7 +416,7 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_disabled_and_n
     missing_archive_client = _FirestoreFake({'users/u1/memory_control/state': missing_archive})
     _use_store(monkeypatch, missing_archive_client.docs)
     missing_archive_decision = read_archive_read_rollout(
-        uid='u1', db_client=missing_archive_client, consumer='omi_chat'
+        uid='u1', consumer='omi_chat'
     )
     assert missing_archive_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert missing_archive_decision.fallback_reason == 'missing_chat_archive_capability'
@@ -426,7 +426,7 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_disabled_and_n
     malformed_archive_client = _FirestoreFake({'users/u1/memory_control/state': malformed_archive})
     _use_store(monkeypatch, malformed_archive_client.docs)
     malformed_archive_decision = read_archive_read_rollout(
-        uid='u1', db_client=malformed_archive_client, consumer='omi_chat'
+        uid='u1', consumer='omi_chat'
     )
     assert malformed_archive_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert malformed_archive_decision.fallback_reason == 'malformed_archive_capability'
@@ -439,7 +439,7 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_disabled_and_n
     disabled_archive_client = _FirestoreFake({'users/u1/memory_control/state': disabled_archive})
     _use_store(monkeypatch, disabled_archive_client.docs)
     disabled_archive_decision = read_archive_read_rollout(
-        uid='u1', db_client=disabled_archive_client, consumer='omi_chat'
+        uid='u1', consumer='omi_chat'
     )
     assert disabled_archive_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert disabled_archive_decision.fallback_reason == 'memory_reads_disabled'
@@ -449,7 +449,7 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_disabled_and_n
     no_default_grant_client = _FirestoreFake({'users/u1/memory_control/state': no_default_grant})
     _use_store(monkeypatch, no_default_grant_client.docs)
     no_default_grant_decision = read_archive_read_rollout(
-        uid='u1', db_client=no_default_grant_client, consumer='omi_chat'
+        uid='u1', consumer='omi_chat'
     )
     assert no_default_grant_decision.read_decision == MemoryReadDecision.DENY_MEMORY
     assert no_default_grant_decision.fallback_reason == 'missing_chat_default_memory_grant'
@@ -467,7 +467,7 @@ def test_shared_rollout_helper_builds_local_audit_events_and_counters_without_me
     db_client = _FirestoreFake({'users/u1/memory_control/state': rollout_doc})
     _use_store(monkeypatch, db_client.docs)
 
-    decisions = read_default_read_rollout_decisions(uid='u1', db_client=db_client)
+    decisions = read_default_read_rollout_decisions(uid='u1')
     audit = build_default_read_rollout_audit_events(decisions)
 
     assert audit == {
@@ -538,7 +538,7 @@ def test_shared_rollout_helper_renders_low_cardinality_prometheus_metrics_withou
     db_client = _FirestoreFake({'users/u1/memory_control/state': rollout_doc})
     _use_store(monkeypatch, db_client.docs)
 
-    decisions = read_default_read_rollout_decisions(uid='u1', db_client=db_client)
+    decisions = read_default_read_rollout_decisions(uid='u1')
     audit = build_default_read_rollout_audit_events(decisions)
     metrics = render_default_read_rollout_metrics(audit['counters'])
 

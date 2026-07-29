@@ -350,7 +350,6 @@ class TestKeywordSearchAndHybrid:
             NEEDLE,
             limit=5,
             vector_query=_empty_vector,
-            db_client=_data_protection_db(),
         )
         assert len(results) == 1
         assert results[0]["memory_id"] == item.memory_id
@@ -380,7 +379,6 @@ class TestKeywordSearchAndHybrid:
             NEEDLE,
             limit=5,
             vector_query=_empty_vector,
-            db_client=_data_protection_db(),
         )
         assert [row["memory_id"] for row in results] == ["mem_active"]
 
@@ -492,7 +490,7 @@ class TestPurgeAndRebuild:
         monkeypatch.setattr("utils.memory.canonical_memory_adapter.kg_db.delete_knowledge_graph", delete_kg)
 
         db_client = MagicMock()
-        result = purge_canonical_derived_user_data(CANONICAL_UID, db_client=db_client)
+        result = purge_canonical_derived_user_data(CANONICAL_UID)
         assert result["purged"] is True
         assert result["keyword_docs_deleted"] >= 0
         assert item.memory_id not in docs_store
@@ -522,7 +520,7 @@ class TestPurgeAndRebuild:
             lambda uid, memory_ids, db_client=None: 0,
         )
 
-        retract_conversation_sourced_memories(CANONICAL_UID, "conv-1", db_client=MagicMock())
+        retract_conversation_sourced_memories(CANONICAL_UID, "conv-1")
         assert item.memory_id not in docs_store
 
     def test_rebuild_reconstructs_index_count_verified(self, mock_typesense, monkeypatch):

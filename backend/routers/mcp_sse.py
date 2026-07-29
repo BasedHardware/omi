@@ -38,7 +38,6 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
-from database.persistence import db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
@@ -781,7 +780,7 @@ def execute_tool(
     auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> Dict[str, Any]:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
-    memory_system = pin_memory_system(user_id, db_client=db)
+    memory_system = pin_memory_system(user_id)
 
     if tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
@@ -823,7 +822,7 @@ def execute_tool(
 
         if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
-        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context)
         if not app_key_grant.allowed:
             raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
 
@@ -831,7 +830,7 @@ def execute_tool(
             filtered = collect_filtered_memories(
                 lambda batch_offset, batch_limit: [
                     m.model_dump(mode='json')
-                    for m in MemoryService(db_client=db).read_pinned(user_id, memory_system, batch_limit, batch_offset)
+                    for m in MemoryService().read_pinned(user_id, memory_system, batch_limit, batch_offset)
                 ],
                 limit=limit,
                 offset=offset,
@@ -850,12 +849,11 @@ def execute_tool(
                     memory['content'] = (content[:70] + '...') if len(content) > 70 else content
             return {"memories": memories}
 
-        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
+        memory_rollout = read_default_read_rollout(uid=user_id, consumer='mcp')
         memory_list_results = list_default_mcp_memories(
             uid=user_id,
             limit=limit,
             offset=offset,
-            db_client=db,
             rollout_decision=memory_rollout,
             categories=valid_categories,
             reviewed=reviewed,
@@ -894,13 +892,12 @@ def execute_tool(
 
         if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
-        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        write_grant = authorize_memory_external_default_memory_write(auth_context)
         if not write_grant.allowed:
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
         try:
             write_context = resolve_external_memory_write_context(
                 user_id,
-                db_client=db,
                 memory_system=memory_system,
                 consumer='mcp',
                 operation="mcp_tool_memory_create",
@@ -913,7 +910,7 @@ def execute_tool(
         memory = Memory(content=content, category=category)
         memory_db = MemoryDB.from_memory(memory, user_id, None, True)
         try:
-            memory_db = MemoryService(db_client=db).create_external_memory(
+            memory_db = MemoryService().create_external_memory(
                 user_id,
                 memory_db,
                 memory_system=write_context.memory_system,
@@ -939,12 +936,12 @@ def execute_tool(
 
         if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
-        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        write_grant = authorize_memory_external_default_memory_write(auth_context)
         if not write_grant.allowed:
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
         try:
-            MemoryService(db_client=db).delete_external_memory(
+            MemoryService().delete_external_memory(
                 user_id,
                 memory_id,
                 memory_system=memory_system,
@@ -964,14 +961,14 @@ def execute_tool(
 
         if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
-        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        write_grant = authorize_memory_external_default_memory_write(auth_context)
         if not write_grant.allowed:
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
         if not content.strip():
             raise ToolExecutionError("content must not be empty", code=-32602)
         try:
-            MemoryService(db_client=db).update_external_memory_content(
+            MemoryService().update_external_memory_content(
                 user_id,
                 memory_id,
                 content,
@@ -1073,20 +1070,19 @@ def execute_tool(
 
         if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
-        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context)
         if not app_key_grant.allowed:
             raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
 
         if memory_system == MemorySystem.CANONICAL:
-            memory_service = MemoryService(db_client=db)
+            memory_service = MemoryService()
             return {"memories": memory_service.search_mcp(user_id, query, limit=limit)}
 
-        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
+        memory_rollout = read_default_read_rollout(uid=user_id, consumer='mcp')
         vector_search_results = search_default_mcp_memories_vector(
             uid=user_id,
             query=query,
             limit=limit,
-            db_client=db,
             rollout_decision=memory_rollout,
         )
         if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:

@@ -126,7 +126,7 @@ def _clear_canonical_cohort(monkeypatch):
 class TestResolveMemorySystem:
     @pytest.mark.parametrize("uid", ["", "uid-a", "uid-b", "memory-dogfood-user"])
     def test_defaults_to_legacy_for_arbitrary_uids(self, uid):
-        assert resolve_memory_system(uid, db_client=_FirestoreFake()) == MemorySystem.LEGACY
+        assert resolve_memory_system(uid) == MemorySystem.LEGACY
 
     def test_memory_control_state_read_mode_still_resolves_legacy(self, monkeypatch):
         monkeypatch.setenv("MEMORY_MODE", "read")
@@ -140,14 +140,14 @@ class TestResolveMemorySystem:
                 }
             }
         )
-        assert resolve_memory_system("uid-memory", db_client=db) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-memory") == MemorySystem.LEGACY
 
     def test_explicit_canonical_cohort_assignment(self, monkeypatch):
         from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
         set_canonical_cohort(monkeypatch, "uid-canonical", "uid-other")
-        assert resolve_memory_system("uid-canonical", db_client=_FirestoreFake()) == MemorySystem.CANONICAL
-        assert resolve_memory_system("uid-not-canonical", db_client=_FirestoreFake()) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-canonical") == MemorySystem.CANONICAL
+        assert resolve_memory_system("uid-not-canonical") == MemorySystem.LEGACY
 
     def test_stale_persisted_canonical_without_whitelist_resolves_legacy(self):
         db = _FirestoreFake(
@@ -157,7 +157,7 @@ class TestResolveMemorySystem:
                 }
             }
         )
-        assert resolve_memory_system("uid-persisted", db_client=db) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-persisted") == MemorySystem.LEGACY
 
     def test_whitelist_removal_reverts_stale_persisted_canonical(self, monkeypatch):
         from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort, set_canonical_cohort
@@ -170,10 +170,10 @@ class TestResolveMemorySystem:
             }
         )
         set_canonical_cohort(monkeypatch, "uid-flip")
-        assert resolve_memory_system("uid-flip", db_client=db) == MemorySystem.CANONICAL
+        assert resolve_memory_system("uid-flip") == MemorySystem.CANONICAL
 
         clear_canonical_cohort(monkeypatch)
-        assert resolve_memory_system("uid-flip", db_client=db) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-flip") == MemorySystem.LEGACY
 
     def test_empty_whitelist_is_global_kill_switch(self, monkeypatch):
         from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
@@ -185,8 +185,8 @@ class TestResolveMemorySystem:
                 "users/uid-b/memory_control/state": {"memory_system": "legacy"},
             }
         )
-        assert resolve_memory_system("uid-a", db_client=db) == MemorySystem.LEGACY
-        assert resolve_memory_system("uid-b", db_client=db) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-a") == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-b") == MemorySystem.LEGACY
 
 
 class TestMemoryServiceParity:
@@ -197,25 +197,12 @@ class TestMemoryServiceParity:
         set_canonical_cohort(monkeypatch, "uid-canonical")
         monkeypatch.setenv("MEMORY_MODE", "not-a-valid-mode")
 
-        decision = canonical_write_decision("uid-canonical", db_client=_FirestoreFake())
+        decision = canonical_write_decision("uid-canonical")
 
         assert decision.enabled is False
         assert decision.memory_system == MemorySystem.CANONICAL
         assert decision.fail_closed is True
         assert decision.reason == "invalid_rollout_config"
-
-    def test_canonical_write_decision_missing_db_fails_closed_for_code_cohort(self, monkeypatch):
-        from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
-        from utils.memory.canonical_activation import canonical_write_decision
-
-        set_canonical_cohort(monkeypatch, "uid-canonical")
-
-        decision = canonical_write_decision("uid-canonical", db_client=None)
-
-        assert decision.enabled is False
-        assert decision.memory_system == MemorySystem.CANONICAL
-        assert decision.fail_closed is True
-        assert decision.reason == "missing_db_client"
 
     def test_read_matches_direct_legacy_helper(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
@@ -277,7 +264,7 @@ class TestMemoryServiceParity:
         )
 
         with pytest.raises(HTTPException) as exc:
-            service_mod.MemoryService(db_client=_FirestoreFake()).create_external_memory(
+            service_mod.MemoryService().create_external_memory(
                 "uid-test",
                 memory_db,
                 memory_system=MemorySystem.CANONICAL,
@@ -300,7 +287,7 @@ class TestMemoryServiceParity:
                 reason="rollout_write_not_ready",
             ),
         )
-        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        service = service_mod.MemoryService()
         legacy = service._legacy
         for method in (
             "write",
@@ -362,7 +349,7 @@ class TestMemoryServiceParity:
         )
         monkeypatch.setattr(service_mod, "read_canonical_memory_item", MagicMock(return_value=None))
 
-        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        service = service_mod.MemoryService()
         service._canonical.write = canonical_write
 
         with pytest.raises(HTTPException) as exc:
@@ -388,7 +375,7 @@ class TestMemoryServiceParity:
             lambda *args, **kwargs: SimpleNamespace(enabled=True, fail_closed=False, reason="ok"),
         )
 
-        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        service = service_mod.MemoryService()
         service._canonical.update_content = MagicMock(side_effect=ValueError("memory not found"))
 
         with pytest.raises(HTTPException) as exc:
@@ -453,7 +440,7 @@ class TestMemoryServiceParity:
         memories = [_sample_memory_dict()]
 
         with patch.object(service_mod.memories_db, "get_memories", return_value=memories):
-            service = service_mod.MemoryService(db_client=_FirestoreFake())
+            service = service_mod.MemoryService()
             result = service.read("uid-test")
 
         assert len(result) == 1
@@ -463,7 +450,7 @@ class TestMemoryServiceParity:
     def test_memory_service_forwards_read_clock_to_selected_backend(self, monkeypatch, canonical_enabled):
         service_mod = _load_memory_service(monkeypatch)
         monkeypatch.setattr(service_mod, "canonical_read_enabled", lambda *args, **kwargs: canonical_enabled)
-        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        service = service_mod.MemoryService()
         service._legacy.read = MagicMock(return_value=[])
         service._canonical.read = MagicMock(return_value=[])
         read_time = datetime(2040, 1, 15, 12, 0, tzinfo=timezone.utc)
@@ -480,7 +467,7 @@ class TestMemoryServiceParity:
         memories = [_sample_tiered_memory_dict()]
 
         with patch.object(service_mod.memories_db, "get_memories", return_value=memories):
-            result = service_mod.MemoryService(db_client=_FirestoreFake()).read("uid-test")
+            result = service_mod.MemoryService().read("uid-test")
 
         assert len(result) == 1
         assert result[0].memory_tier is None
@@ -494,7 +481,7 @@ class TestMemoryServiceParity:
         create_memory = MagicMock()
         monkeypatch.setattr(service_mod.memories_db, "create_memory", create_memory)
 
-        service_mod.MemoryService(db_client=_FirestoreFake()).write("uid-test", _sample_tiered_memory_dict())
+        service_mod.MemoryService().write("uid-test", _sample_tiered_memory_dict())
 
         payload = create_memory.call_args.args[1]
         assert "memory_tier" not in payload
@@ -512,7 +499,7 @@ class TestMemoryServiceParity:
             lambda *args, **kwargs: SimpleNamespace(allowed=True, status_code=200, detail=None),
         )
 
-        result = service_mod.MemoryService(db_client=_FirestoreFake()).create_external_memory(
+        result = service_mod.MemoryService().create_external_memory(
             "uid-test",
             memory_db,
             memory_system=MemorySystem.LEGACY,
@@ -567,7 +554,7 @@ class TestMemoryServiceParity:
             ) as rerank,
         ):
             direct = service_mod._legacy_search_memories_mcp("uid-test", "visible", limit=10)
-            via_service = service_mod.MemoryService(db_client=_FirestoreFake()).search_mcp(
+            via_service = service_mod.MemoryService().search_mcp(
                 "uid-test", "visible", limit=10
             )
 
@@ -600,7 +587,7 @@ class TestMemoryServiceUsesRequestPin:
         from utils.memory.memory_system_pin import pin_memory_system
 
         pin_memory_system(uid)
-        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        service = service_mod.MemoryService()
         service.search_mcp(uid, "query", limit=5)
         service.search_mcp(uid, "query", limit=5)
 

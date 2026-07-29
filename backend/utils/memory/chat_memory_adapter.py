@@ -68,7 +68,6 @@ def search_memory_default_chat_memories_text(
     uid: str,
     query: str,
     limit: int,
-    db_client: Any,
     now: Optional[datetime] = None,
 ) -> Optional[str]:
     """Return LLM-ready default-visible memory product memories for Omi chat.
@@ -79,7 +78,7 @@ def search_memory_default_chat_memories_text(
     grant both pass.
     """
 
-    decision = read_default_read_rollout(uid=uid, db_client=db_client, consumer='omi_chat')
+    decision = read_default_read_rollout(uid=uid, consumer='omi_chat')
     if not decision.rollout_capabilities.memory_reads_enabled:
         return None
     if not decision.app_has_default_memory_grant:
@@ -95,7 +94,6 @@ def search_memory_default_chat_memories_text(
     response = fetch_default_product_memory_search(
         uid=uid,
         query=query,
-        db_client=db_client,
         policy=policy,
         now=now,
         limit=bounded_limit,
@@ -126,7 +124,6 @@ def list_default_chat_memories_decision_text(
     uid: str,
     limit: int,
     offset: int = 0,
-    db_client: Any,
     now: Optional[datetime] = None,
     allow_legacy_safe_fallback: bool = False,
 ) -> ChatMemorySearchResult:
@@ -137,7 +134,7 @@ def list_default_chat_memories_decision_text(
     unless a caller deliberately opts into the legacy-safe compatibility wrapper.
     """
 
-    decision = read_default_read_rollout(uid=uid, db_client=db_client, consumer='omi_chat')
+    decision = read_default_read_rollout(uid=uid, consumer='omi_chat')
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
         if allow_legacy_safe_fallback:
             legacy_safe = legacy_safe_default_read_rollout_decision(
@@ -171,7 +168,6 @@ def list_default_chat_memories_decision_text(
         query='',
         limit=limit,
         offset=offset,
-        db_client=db_client,
         decision=decision,
         consumer=MemoryConsumer.omi_chat,
         now=now,
@@ -201,7 +197,6 @@ def search_memory_default_chat_memories_vector_text(
     uid: str,
     query: str,
     limit: int,
-    db_client: Any,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
     now: Optional[datetime] = None,
@@ -217,7 +212,6 @@ def search_memory_default_chat_memories_vector_text(
         uid=uid,
         query=query,
         limit=limit,
-        db_client=db_client,
         vector_query=vector_query,
         required_projection_commit_id=required_projection_commit_id,
         now=now,
@@ -233,7 +227,6 @@ def search_memory_default_chat_memories_vector_decision_text(
     uid: str,
     query: str,
     limit: int,
-    db_client: Any,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
     now: Optional[datetime] = None,
@@ -248,7 +241,7 @@ def search_memory_default_chat_memories_vector_decision_text(
     reads.
     """
 
-    decision = read_default_read_rollout(uid=uid, db_client=db_client, consumer='omi_chat')
+    decision = read_default_read_rollout(uid=uid, consumer='omi_chat')
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
         if allow_legacy_safe_fallback:
             legacy_safe = legacy_safe_default_read_rollout_decision(
@@ -286,7 +279,6 @@ def search_memory_default_chat_memories_vector_decision_text(
         uid=uid,
         query=query,
         limit=limit,
-        db_client=db_client,
         decision=decision,
         consumer=MemoryConsumer.omi_chat,
         vector_query=vector_query,

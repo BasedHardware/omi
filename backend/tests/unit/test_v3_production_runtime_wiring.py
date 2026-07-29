@@ -251,7 +251,6 @@ def _route_client(monkeypatch, db, legacy_calls):
     monkeypatch.setitem(sys.modules, 'utils.other.storage', fake_storage)
     import routers.memories as memories_router
 
-    monkeypatch.setattr(memories_router, 'db', db)
     _install_store(monkeypatch, db)
 
     def legacy_get(uid, limit, offset):
@@ -371,7 +370,7 @@ def test_default_env_stays_disabled_and_does_not_read_firestore(monkeypatch):
     monkeypatch.delenv('MEMORY_V3_GET_ENABLED', raising=False)
     db = _ready_db()
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
 
     assert runtime.enabled is False
     assert runtime.source_decision == 'disabled'
@@ -384,7 +383,7 @@ def test_route_specific_gate_is_default_false_even_when_global_memory_env_is_rea
     monkeypatch.delenv('MEMORY_V3_GET_ENABLED', raising=False)
     db = _ready_db()
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
 
     assert runtime.enabled is False
     assert runtime.source_decision == 'disabled'
@@ -397,7 +396,7 @@ def test_route_specific_gate_requires_exact_true(monkeypatch):
     monkeypatch.setenv('MEMORY_V3_GET_ENABLED', '1')
     db = _ready_db()
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
 
     assert runtime.enabled is False
     assert runtime.source_decision == 'disabled'
@@ -411,7 +410,7 @@ def test_non_read_modes_and_malformed_mode_do_not_enable_runtime(monkeypatch):
         monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
         db = _ready_db()
 
-        runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+        runtime = build_v3_production_runtime(uid='uid-a')
 
         assert runtime.enabled is False
         assert runtime.source_decision == 'disabled'
@@ -424,7 +423,7 @@ def test_non_enrolled_runtime_is_legacy_primary_without_firestore_read(monkeypat
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'other-user')
     db = _ready_db()
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
 
     assert runtime.enabled is True
     assert runtime.source_decision == 'legacy_primary'
@@ -438,7 +437,7 @@ def test_whitelisted_ready_user_uses_real_memory_projection_and_never_writes(mon
     db = _ready_db()
     _install_store(monkeypatch, db)
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
     response = runtime.service(V3ComposedRequestParams(limit=1, offset=0), runtime.adapters)
 
     assert runtime.enabled is True
@@ -462,7 +461,7 @@ def test_trusted_state_head_mismatch_fails_before_projection_item_query(monkeypa
     db.docs['users/uid-a/memory_state/head'] = _state_head(account_generation=8)
     _install_store(monkeypatch, db)
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
     response = compose_v3_get(V3ComposedRequestParams(limit=1), runtime.adapters)
 
     assert response.http_status == 503
@@ -476,7 +475,7 @@ def test_enrolled_unavailable_db_fails_closed_without_legacy_fallback(monkeypatc
     monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=None)
+    runtime = build_v3_production_runtime(uid='uid-a')
     response = compose_v3_get(V3ComposedRequestParams(limit=1), runtime.adapters)
 
     assert runtime.enabled is True
@@ -493,7 +492,7 @@ def test_missing_global_gate_for_whitelisted_read_mode_fails_closed_no_legacy_fa
     del db.docs['memory_control/global_read_gate']
     _install_store(monkeypatch, db)
 
-    runtime = build_v3_production_runtime(uid='uid-a', db_client=db)
+    runtime = build_v3_production_runtime(uid='uid-a')
     response = compose_v3_get(V3ComposedRequestParams(limit=1), runtime.adapters)
 
     assert runtime.enabled is True

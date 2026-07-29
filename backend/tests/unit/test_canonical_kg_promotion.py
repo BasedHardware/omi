@@ -53,7 +53,7 @@ def test_set_canonical_memory_kg_extracted_missing_doc_is_idempotent(caplog, mon
 
     monkeypatch.setattr(document_store, "_store", lambda: _RaisingStore())
 
-    assert set_canonical_memory_kg_extracted('uid-abc', 'memory-1', db_client=MagicMock()) is False
+    assert set_canonical_memory_kg_extracted('uid-abc', 'memory-1') is False
     assert 'No document to update' not in caplog.text
 
 
@@ -122,10 +122,10 @@ def test_extract_kg_on_promotion(monkeypatch):
         ) as mock_extract,
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted") as mock_flag,
     ):
-        result = extract_kg_for_promoted_memory("uid-canonical", item, db_client=db)
+        result = extract_kg_for_promoted_memory("uid-canonical", item)
         assert result.success is True
         assert result.node_count == 1
-        mock_flag.assert_called_once_with("uid-canonical", "mem_lt", db_client=db)
+        mock_flag.assert_called_once_with("uid-canonical", "mem_lt")
         # extract_knowledge_from_memory no longer takes db_client (storage-port migration).
         mock_extract.assert_called_once_with(
             "uid-canonical",
@@ -154,13 +154,12 @@ def test_extract_kg_can_preserve_item_updated_at(monkeypatch):
         result = extract_kg_for_promoted_memory(
             "uid-canonical",
             item,
-            db_client=db,
             preserve_item_updated_at=True,
         )
 
     assert result.success is True
     mock_touching_flag.assert_not_called()
-    mock_preserving_flag.assert_called_once_with("uid-canonical", "mem_lt", db_client=db)
+    mock_preserving_flag.assert_called_once_with("uid-canonical", "mem_lt")
 
 
 def test_extract_kg_failure_leaves_kg_extracted_false():
@@ -174,7 +173,7 @@ def test_extract_kg_failure_leaves_kg_extracted_false():
         ),
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted") as mock_flag,
     ):
-        result = extract_kg_for_promoted_memory("uid-canonical", item, db_client=db)
+        result = extract_kg_for_promoted_memory("uid-canonical", item)
         assert result.success is False
         assert result.skipped_reason == "exception"
         mock_flag.assert_not_called()
@@ -202,6 +201,7 @@ def test_extract_kg_uses_subject_predicate_prefix():
     )
     with (
         patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_kg_promotion._current_memory_is_user_rejected", return_value=False),
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             return_value={"nodes": [{}], "edges": []},
@@ -221,6 +221,7 @@ def test_extract_kg_includes_arguments_and_predicate_only_prefix():
     )
     with (
         patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_kg_promotion._current_memory_is_user_rejected", return_value=False),
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             return_value={"nodes": [{}], "edges": []},
@@ -262,9 +263,9 @@ def test_update_canonical_memory_content_invalidates_kg_until_reprocessed(monkey
         patch("utils.memory.canonical_memory_adapter.delete_atom_keyword_doc"),
         patch("utils.memory.canonical_memory_adapter.delete_canonical_memory_vector"),
     ):
-        updated = update_canonical_memory_content("uid-canonical", "mem_edit", "Updated content", db_client=db)
+        updated = update_canonical_memory_content("uid-canonical", "mem_edit", "Updated content")
 
-    mock_prune.assert_called_once_with("uid-canonical", ["mem_edit"], db_client=db)
+    mock_prune.assert_called_once_with("uid-canonical", ["mem_edit"])
     mock_extract.assert_not_called()
     assert updated.content == "Updated content"
     assert updated.tier == MemoryTier.short_term

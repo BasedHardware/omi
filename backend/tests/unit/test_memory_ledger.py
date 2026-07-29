@@ -317,7 +317,6 @@ def test_ledger_append_repairs_clobbered_trusted_state_head_from_canonical_apply
 
     trusted = read_memory_v3_trusted_account_generation(
         uid=uid,
-        db_client=FakeFirestore({f"users/{uid}/memory_state/head": state_head}),
     )
     assert trusted.read_error_reason is None
     assert trusted.account_generation == 7

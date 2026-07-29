@@ -164,7 +164,7 @@ def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_o
         "updated_at": result.control_state.updated_at,
     }
 
-    trusted = read_memory_v3_trusted_account_generation(uid="u1", db_client=None)
+    trusted = read_memory_v3_trusted_account_generation(uid="u1")
     assert trusted.read_error_reason is None
     assert trusted.account_generation == result.control_state.account_generation
     assert trusted.head_commit_id == result.control_state.head_commit_id

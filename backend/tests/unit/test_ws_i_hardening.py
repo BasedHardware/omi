@@ -167,10 +167,10 @@ def test_retract_path_bumps_source_generation_via_transaction(monkeypatch):
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
         return_value=apply_result,
     ):
-        write_canonical_extraction_memory(uid, payload, db_client=db)
+        write_canonical_extraction_memory(uid, payload)
 
-    first = retract_conversation_sourced_memories(uid, conversation_id, db_client=db)
-    second = retract_conversation_sourced_memories(uid, conversation_id, db_client=db)
+    first = retract_conversation_sourced_memories(uid, conversation_id)
+    second = retract_conversation_sourced_memories(uid, conversation_id)
 
     assert first["source_generation"] == 2
     assert second["source_generation"] == 3
@@ -222,7 +222,7 @@ def test_persist_evidence_preserves_redaction_status_on_reprocess_rewrite(monkey
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
         wraps=apply_long_term_patch_firestore,
     ) as apply_mock:
-        returned_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+        returned_id = write_canonical_extraction_memory(uid, payload)
 
     apply_mock.assert_called_once()
     assert returned_id == memory_id
@@ -271,7 +271,7 @@ def test_persist_evidence_defaults_redaction_when_no_prior_value(monkeypatch):
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
         wraps=apply_long_term_patch_firestore,
     ) as apply_mock:
-        returned_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+        returned_id = write_canonical_extraction_memory(uid, payload)
 
     apply_mock.assert_called_once()
     assert returned_id == memory_id

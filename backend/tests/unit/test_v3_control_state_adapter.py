@@ -118,7 +118,7 @@ def _ready_docs(uid='uid-a', control_doc=None):
 
 def test_non_enrolled_returns_legacy_eligibility_without_firestore_read():
     db = FakeDb()
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config(enabled_users=()))
+    result = read_v3_control(uid='uid-a', rollout_config=_config(enabled_users=()))
 
     assert result.cohort_enrolled is False
     assert result.source_path == 'users/uid-a/memory_control/state'
@@ -135,7 +135,7 @@ def test_non_enrolled_returns_legacy_eligibility_without_firestore_read():
 def test_enrolled_reads_exact_control_doc_once_with_existing_timeout_and_no_memory_items_touch(monkeypatch):
     db = FakeDb(_ready_docs())
     store = _install_store(monkeypatch, db)
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+    result = read_v3_control(uid='uid-a', rollout_config=_config())
 
     assert result.cohort_enrolled is True
     assert result.source_path == 'users/uid-a/memory_control/state'
@@ -149,7 +149,7 @@ def test_off_shadow_write_map_to_legacy_authoritative_and_do_not_read_global_gat
     for mode in (MemoryRolloutMode.off, MemoryRolloutMode.shadow, MemoryRolloutMode.write):
         db = FakeDb({MemoryCollections(uid='uid-a').memory_control_state: _doc(mode=mode.value)})
         store = _install_store(monkeypatch, db)
-        result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config(mode=MemoryRolloutMode.read))
+        result = read_v3_control(uid='uid-a', rollout_config=_config(mode=MemoryRolloutMode.read))
 
         assert result.state.effective_mode == mode
         assert store.reads == ['users/uid-a/memory_control/state']
@@ -177,7 +177,7 @@ def test_omi_chat_grants_only_enable_default_memory_and_archive_is_strict_boolea
     )
     db = FakeDb(_ready_docs(control_doc=control_doc))
     _install_store(monkeypatch, db)
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+    result = read_v3_control(uid='uid-a', rollout_config=_config())
 
     assert result.state.default_memory_grant is False
     assert result.state.archive_allowed is False
@@ -189,13 +189,13 @@ def test_omi_chat_grants_only_enable_default_memory_and_archive_is_strict_boolea
 def test_global_read_and_convergence_docs_are_read_only_for_effective_read_mode(monkeypatch):
     read_db = FakeDb(_ready_docs())
     read_store = _install_store(monkeypatch, read_db)
-    read_v3_control(uid='uid-a', db_client=read_db, rollout_config=_config())
+    read_v3_control(uid='uid-a', rollout_config=_config())
     assert 'memory_control/global_read_gate' in read_store.reads
     assert 'memory_control/write_convergence_gate' in read_store.reads
 
     write_db = FakeDb({MemoryCollections(uid='uid-a').memory_control_state: _doc(mode='write')})
     write_store = _install_store(monkeypatch, write_db)
-    read_v3_control(uid='uid-a', db_client=write_db, rollout_config=_config())
+    read_v3_control(uid='uid-a', rollout_config=_config())
     assert write_store.reads == ['users/uid-a/memory_control/state']
 
 
@@ -226,7 +226,7 @@ def test_missing_malformed_uid_mismatch_unsupported_schema_and_transport_failure
 
     for db, reason in cases:
         _install_store(monkeypatch, db)
-        result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+        result = read_v3_control(uid='uid-a', rollout_config=_config())
         decision = decide_v3_control_route(V3ControlReaderRequest('uid-a', 50, False, False), result)
         assert decision.route_family == V3ControlRouteFamily.FAIL_CLOSED
         assert decision.reason == reason
@@ -236,7 +236,7 @@ def test_missing_malformed_uid_mismatch_unsupported_schema_and_transport_failure
 def test_mode_epoch_one_with_account_generation_fifty_is_valid_and_not_compared(monkeypatch):
     db = FakeDb(_ready_docs(control_doc=_doc(mode_epoch=1, cutover_epoch=1, account_generation=50)))
     _install_store(monkeypatch, db)
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+    result = read_v3_control(uid='uid-a', rollout_config=_config())
     decision = decide_v3_control_route(V3ControlReaderRequest('uid-a', 50, False, False), result)
 
     assert result.state.mode_epoch == 1
@@ -247,7 +247,7 @@ def test_mode_epoch_one_with_account_generation_fifty_is_valid_and_not_compared(
 def test_archive_defaults_false_strict_boolean_and_archive_denial_is_403(monkeypatch):
     db = FakeDb(_ready_docs(control_doc=_doc(grants={'omi_chat': {'default_memory': True}})))
     _install_store(monkeypatch, db)
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+    result = read_v3_control(uid='uid-a', rollout_config=_config())
 
     assert result.state.archive_allowed is False
     decision = decide_v3_control_route(V3ControlReaderRequest('uid-a', 50, False, False, True), result)
@@ -258,7 +258,7 @@ def test_archive_defaults_false_strict_boolean_and_archive_denial_is_403(monkeyp
 def test_stale_short_term_is_absent_from_adapter_state(monkeypatch):
     db = FakeDb(_ready_docs())
     _install_store(monkeypatch, db)
-    result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
+    result = read_v3_control(uid='uid-a', rollout_config=_config())
 
     assert result.state is not None
     assert not hasattr(result.state, 'short_term_freshness_default_visible')

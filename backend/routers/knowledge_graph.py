@@ -7,7 +7,6 @@ from typing import List, Dict, Any, Callable, cast
 
 from database import knowledge_graph as kg_db
 from database import memories as memories_db
-from database.persistence import db as firestore_db
 from database.auth import get_user_name
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -82,9 +81,9 @@ def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
 
 
 def _rebuild_graph_task(uid: str, user_name: str):
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    memory_system = pin_memory_system(uid)
     if memory_system == MemorySystem.CANONICAL:
-        memory_objects = MemoryService(db_client=firestore_db).read(uid, limit=500)
+        memory_objects = MemoryService().read(uid, limit=500)
         memories: MemoryPayloads = [
             {"id": memory.id, "content": memory.content}
             for memory in memory_objects

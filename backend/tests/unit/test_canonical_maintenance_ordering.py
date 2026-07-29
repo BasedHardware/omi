@@ -79,7 +79,7 @@ def test_maintenance_runs_consolidation_before_promotion():
             )[1],
         ) as mock_promotion,
     ):
-        run_canonical_short_term_maintenance(uid, db_client=MagicMock(), run_id="run-order-test")
+        run_canonical_short_term_maintenance(uid, run_id="run-order-test")
 
     assert call_order == ["required_processing", "lifecycle", "consolidation", "promotion"]
     assert mock_promotion.call_args.kwargs["consolidation_batched_ids"] == {"mem_a"}
@@ -112,7 +112,7 @@ def test_maintenance_defers_promotion_when_consolidation_watermark_blocked():
             return_value=ShortTermPromotionReport(uid=uid),
         ) as mock_promotion,
     ):
-        run_canonical_short_term_maintenance(uid, db_client=MagicMock(), run_id="run-blocked")
+        run_canonical_short_term_maintenance(uid, run_id="run-blocked")
 
     assert mock_promotion.call_args.kwargs["consolidation_batched_ids"] == set()
 
@@ -139,7 +139,7 @@ def test_maintenance_no_promotion_gate_when_consolidation_not_due():
             return_value=ShortTermPromotionReport(uid=uid),
         ) as mock_promotion,
     ):
-        run_canonical_short_term_maintenance(uid, db_client=MagicMock(), run_id="run-not-due")
+        run_canonical_short_term_maintenance(uid, run_id="run-not-due")
 
     assert mock_promotion.call_args.kwargs["consolidation_batched_ids"] is None
 
@@ -217,7 +217,7 @@ def test_partial_apply_pass_does_not_promote_stale_or_survivor():
         patch("utils.memory.short_term_promotion._persist_control_state"),
     ):
         mock_control.return_value = MagicMock(last_promotion_run_at=None)
-        report = run_canonical_short_term_maintenance(uid, db_client=MagicMock(), run_id="run-partial-promo")
+        report = run_canonical_short_term_maintenance(uid, run_id="run-partial-promo")
 
     assert report.promotion.skipped_reason == "consolidation_watermark_blocked"
     mock_promote.assert_not_called()
@@ -279,7 +279,6 @@ def test_promotion_defers_items_not_in_consolidation_batch():
 
         run_canonical_short_term_promotion(
             uid,
-            db_client=MagicMock(),
             run_id="run-gate",
             now=NOW,
             batch_threshold=10,
@@ -321,7 +320,6 @@ def test_fast_track_respects_consolidation_batch_gate():
 
         report = run_canonical_short_term_promotion(
             uid,
-            db_client=MagicMock(),
             run_id="run-fast-track-gate",
             now=NOW,
             consolidation_batched_ids={"mem_batched"},

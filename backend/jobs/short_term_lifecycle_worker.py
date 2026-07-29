@@ -123,8 +123,7 @@ class FirestoreShortTermLifecycleTransitionStore:
     drift fails closed before writing.
     """
 
-    def __init__(self, *, db_client: Any, now: Optional[datetime] = None) -> None:
-        self._db_client = db_client
+    def __init__(self, *, now: Optional[datetime] = None) -> None:
         self._now = now
 
     def persist_short_term_lifecycle_transition(
@@ -170,7 +169,7 @@ def _coerce_dispositions(
 
 
 def fetch_short_term_memory_items_firestore(
-    *, uid: str, db_client: Any, limit: Optional[int] = None
+    *, uid: str, limit: Optional[int] = None
 ) -> List[MemoryItem]:
     """Fetch authoritative Short-term memory memory_items for a user.
 
@@ -203,7 +202,6 @@ def fetch_short_term_memory_items_firestore(
 def run_short_term_lifecycle_firestore(
     *,
     uid: str,
-    db_client: Any,
     run_id: str,
     now: Optional[datetime] = None,
     limit: Optional[int] = None,
@@ -212,8 +210,8 @@ def run_short_term_lifecycle_firestore(
     """Concrete Firestore lifecycle runner for authoritative Short-term items."""
 
     current_time = _current_time(now)
-    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=db_client, limit=limit)
-    store = FirestoreShortTermLifecycleTransitionStore(db_client=db_client, now=current_time)
+    items = fetch_short_term_memory_items_firestore(uid=uid, limit=limit)
+    store = FirestoreShortTermLifecycleTransitionStore(now=current_time)
     return process_short_term_lifecycle_items(
         items,
         store=store,

@@ -151,7 +151,7 @@ def test_canonical_reextract_failure_preserves_existing_memories(extractor_side_
 
     # Intercept the MemoryService created inside _extract_memories_canonical
     mock_service = MagicMock()
-    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryService", lambda: mock_service)
 
     monkeypatch.setattr(
         pc,

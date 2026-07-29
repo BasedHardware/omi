@@ -23,7 +23,6 @@ def fetch_default_product_memory_search(
     uid: str,
     query: str,
     *,
-    db_client: Any,
     policy: MemoryAccessPolicy,
     now: Optional[datetime] = None,
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
@@ -40,7 +39,7 @@ def fetch_default_product_memory_search(
 
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid)
     results = query_default_product_memory_items(query, items, policy=policy, now=now)
     total_count = len(results)
     paged_items = results[bounded_offset : bounded_offset + bounded_limit]
@@ -60,7 +59,6 @@ def fetch_archive_product_memory_search(
     uid: str,
     query: str,
     *,
-    db_client: Any,
     policy: MemoryAccessPolicy,
     now: Optional[datetime] = None,
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
@@ -75,7 +73,7 @@ def fetch_archive_product_memory_search(
 
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid)
     results = query_archive_product_memory_items(query, items, policy=policy, now=now)
     total_count = len(results)
     paged_items = results[bounded_offset : bounded_offset + bounded_limit]
@@ -93,7 +91,7 @@ def fetch_archive_product_memory_search(
     }
 
 
-def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> List[MemoryItem]:
+def fetch_authoritative_product_memory_items(uid: str) -> List[MemoryItem]:
     """Load and coerce all authoritative memory product memory item docs for one user."""
 
     collection_path = MemoryCollections(uid=uid).memory_items

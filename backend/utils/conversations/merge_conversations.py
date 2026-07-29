@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 import database.conversations as conversations_db
-from database.persistence import db as firestore_db
 from database.vector_db import delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation
@@ -550,9 +549,9 @@ def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> Non
 
     memory_system: MemorySystem | None = None
     try:
-        memory_system = pin_memory_system(uid, db_client=firestore_db)
+        memory_system = pin_memory_system(uid)
         if memory_system == MemorySystem.CANONICAL:
-            MemoryService(db_client=firestore_db).retract_conversation_memories(uid, conversation_id)
+            MemoryService().retract_conversation_memories(uid, conversation_id)
         else:
             memories_db.delete_memories_for_conversation(uid, conversation_id)
     except Exception as e:

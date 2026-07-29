@@ -19,7 +19,7 @@ from utils.memory.memory_system import MemorySystem, resolve_memory_system
 logger = logging.getLogger(__name__)
 
 
-def _current_memory_is_user_rejected(uid: str, memory_id: str, *, db_client: Any) -> bool:
+def _current_memory_is_user_rejected(uid: str, memory_id: str) -> bool:
     snapshot = document_store.get_document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}")
     if not getattr(snapshot, "exists", False):
         return False
@@ -69,7 +69,7 @@ def _content_for_kg_extraction(item: MemoryItem) -> str:
     return content
 
 
-def set_canonical_memory_kg_extracted(uid: str, memory_id: str, *, db_client: Any = None) -> bool:
+def set_canonical_memory_kg_extracted(uid: str, memory_id: str) -> bool:
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     try:
         document_store.update_document(path, {"kg_extracted": True, "updated_at": datetime.now(timezone.utc)})
@@ -83,8 +83,7 @@ def set_canonical_memory_kg_extracted(uid: str, memory_id: str, *, db_client: An
 
 
 def set_canonical_memory_kg_extracted_without_touching_updated_at(
-    uid: str, memory_id: str, *, db_client: Any = None
-) -> bool:
+    uid: str, memory_id: str) -> bool:
     """Mark KG extraction complete without changing the product-memory timestamp."""
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     try:
@@ -103,11 +102,10 @@ def extract_kg_for_promoted_memory(
     item: MemoryItem,
     *,
     user_name: str = "User",
-    db_client: Any = None,
     preserve_item_updated_at: bool = False,
 ) -> CanonicalKgPromotionResult:
     """Extract KG nodes/edges for a newly promoted long_term memory."""
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return CanonicalKgPromotionResult(skipped_reason="not_canonical_cohort")
     if item.tier != MemoryLayer.long_term:
         return CanonicalKgPromotionResult(skipped_reason="not_long_term")
@@ -134,15 +132,14 @@ def extract_kg_for_promoted_memory(
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="exception")
     if result is None:
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="extractor_failed")
-    race_check_enabled = db_client is not None
-    if race_check_enabled and _current_memory_is_user_rejected(uid, item.memory_id, db_client=db_client):
+    if _current_memory_is_user_rejected(uid, item.memory_id):
         _remove_rejected_kg_projection(uid, item.memory_id)
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="user_rejected")
     if preserve_item_updated_at:
-        set_canonical_memory_kg_extracted_without_touching_updated_at(uid, item.memory_id, db_client=db_client)
+        set_canonical_memory_kg_extracted_without_touching_updated_at(uid, item.memory_id)
     else:
-        set_canonical_memory_kg_extracted(uid, item.memory_id, db_client=db_client)
-    if race_check_enabled and _current_memory_is_user_rejected(uid, item.memory_id, db_client=db_client):
+        set_canonical_memory_kg_extracted(uid, item.memory_id)
+    if _current_memory_is_user_rejected(uid, item.memory_id):
         _remove_rejected_kg_projection(uid, item.memory_id)
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="user_rejected")
     node_count = len(result.get("nodes") or [])

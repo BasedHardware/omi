@@ -86,11 +86,11 @@ def neutral_vector_id_for_memory(memory_id: str) -> str:
     return memory_id
 
 
-def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str], *, db_client: Any = None) -> None:
+def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str]) -> None:
     """Prune retracted/superseded memory citations from the user's KG."""
     if not memory_ids:
         return
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return
     pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids)
     logger.info(
@@ -201,7 +201,6 @@ def read_canonical_memories(
     *,
     limit: int = 100,
     offset: int = 0,
-    db_client: Any = None,
     device_scope_request: Optional[DeviceScopeRequest] = None,
     include_pending_processing: bool = False,
     now: Optional[datetime] = None,
@@ -214,7 +213,7 @@ def read_canonical_memories(
     """
     device_scope = device_scope_request.device_scope if device_scope_request else "all"
     client_device_id = device_scope_request.client_device_id if device_scope_request else None
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid)
     current_time = now or datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
     visible = filter_canonical_default_visible_items(items, policy=policy, now=current_time)
@@ -248,7 +247,6 @@ def search_canonical_memories(
     query: str,
     *,
     limit: int = 5,
-    db_client: Any = None,
     vector_query: Any = None,
     device_scope_request: Optional[DeviceScopeRequest] = None,
 ) -> List[Dict[str, Any]]:
@@ -260,7 +258,7 @@ def search_canonical_memories(
     normalized_query = (query or "").strip()
 
     if not normalized_query:
-        memories = read_canonical_memories(uid, limit=capped_limit, offset=0, db_client=db_client)
+        memories = read_canonical_memories(uid, limit=capped_limit, offset=0)
         return [
             {
                 "memory_id": memory.id,
@@ -272,7 +270,7 @@ def search_canonical_memories(
             for memory in memories[:capped_limit]
         ]
 
-    keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit, db_client=db_client)
+    keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit)
     if vector_query is None:
         from database.vector_db import query_memory_vector_candidates
 
@@ -287,7 +285,7 @@ def search_canonical_memories(
 
     now = datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
-    all_items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    all_items = fetch_authoritative_product_memory_items(uid=uid)
     visible_items = filter_canonical_default_visible_items(all_items, policy=policy, now=now)
     items_by_id = {item.memory_id: item for item in visible_items}
     vector_scores = {hit.memory_id: float(hit.score or 0.0) for hit in vector_result.hits}
@@ -332,7 +330,7 @@ def search_canonical_memories(
     return results
 
 
-def _ensure_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
+def _ensure_control_state(uid: str) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
     path = collections.memory_apply_control_state
     snapshot = document_store.get_document(path)
@@ -425,7 +423,7 @@ def _preserved_evidence_security_fields(existing_data: Dict[str, Any]) -> Dict[s
     return preserved
 
 
-def _persist_evidence(uid: str, evidence: MemoryEvidence, *, db_client: Any) -> None:
+def _persist_evidence(uid: str, evidence: MemoryEvidence) -> None:
     collections = MemoryCollections(uid=uid)
     path = f"{collections.memory_evidence}/{evidence.evidence_id}"
     snapshot = document_store.get_document(path)
@@ -500,7 +498,7 @@ def _validate_memory_item_for_write(item: MemoryItem) -> MemoryItem:
     return item
 
 
-def _persist_memory_item(uid: str, item: MemoryItem, *, db_client: Any) -> None:
+def _persist_memory_item(uid: str, item: MemoryItem) -> None:
     item = _validate_memory_item_for_write(item)
     path = f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}"
     document_store.set_document(path, item.model_dump(mode="json"))
@@ -545,7 +543,7 @@ def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
     return [_legacy_evidence_to_memory(evidence.dict(), conversation_id=conversation_id)]
 
 
-def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
+def _read_canonical_memory_item(uid: str, memory_id: str) -> Optional[MemoryItem]:
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     snapshot = document_store.get_document(path)
     if not getattr(snapshot, "exists", False):
@@ -558,12 +556,12 @@ def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any) -> 
     return item
 
 
-def read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any = None) -> Optional[MemoryItem]:
+def read_canonical_memory_item(uid: str, memory_id: str) -> Optional[MemoryItem]:
     """Read one active canonical memory item from the authoritative product store."""
-    return _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+    return _read_canonical_memory_item(uid, memory_id)
 
 
-def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
+def write_canonical_extraction_memory(uid: str, data: Dict[str, Any]) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     content = (data.get("content") or "").strip()
     if not content:
@@ -579,9 +577,9 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
 
     evidence_items = _evidence_items_from_payload(data)
 
-    control = _ensure_control_state(uid, db_client=db_client)
+    control = _ensure_control_state(uid)
     for evidence in evidence_items:
-        _persist_evidence(uid, evidence, db_client=db_client)
+        _persist_evidence(uid, evidence)
 
     logical_payload = {
         "decision": "add",
@@ -653,7 +651,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         product_metadata = _product_metadata_from_payload(data)
         if product_metadata:
             item = _apply_product_metadata(item, product_metadata)
-            _persist_memory_item(uid, item, db_client=db_client)
+            _persist_memory_item(uid, item)
         assert_legal_state(
             DomainMemoryLayer(item.tier.value),
             physical_status_to_record_status(item.status.value),
@@ -679,19 +677,19 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
                 }
             )
         if item.processing_state == ProcessingState.processed:
-            sync_atom_keyword_index_for_item(item, db_client=db_client)
+            sync_atom_keyword_index_for_item(item)
             sync_canonical_memory_vector(item)
 
     return committed_id
 
 
-def write_canonical_external_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
+def write_canonical_external_memory(uid: str, data: Dict[str, Any]) -> str:
     """Persist a manual/API/integration memory via the canonical apply path."""
-    return write_canonical_extraction_memory(uid, data, db_client=db_client)
+    return write_canonical_extraction_memory(uid, data)
 
 
-def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, db_client: Any = None) -> MemoryItem:
-    item = _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+def update_canonical_memory_content(uid: str, memory_id: str, content: str) -> MemoryItem:
+    item = _read_canonical_memory_item(uid, memory_id)
     if item is None:
         raise ValueError(f"canonical memory not found: {memory_id}")
     trimmed = (content or "").strip()
@@ -730,8 +728,8 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
         }
     )
     if item.tier == MemoryLayer.long_term:
-        invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=db_client)
-        delete_atom_keyword_doc(uid, memory_id, db_client=db_client)
+        invalidate_kg_for_memory_retraction(uid, [memory_id])
+        delete_atom_keyword_doc(uid, memory_id)
         delete_canonical_memory_vector(uid, memory_id)
     updated = _validated_memory_item_copy(
         item,
@@ -749,33 +747,32 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
             "kg_extracted": False,
         },
     )
-    _persist_memory_item(uid, updated, db_client=db_client)
+    _persist_memory_item(uid, updated)
     return updated
 
 
 def update_canonical_memory_visibility(
-    uid: str, memory_id: str, visibility: str, *, db_client: Any = None
-) -> MemoryItem:
-    item = _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+    uid: str, memory_id: str, visibility: str) -> MemoryItem:
+    item = _read_canonical_memory_item(uid, memory_id)
     if item is None:
         raise ValueError(f"canonical memory not found: {memory_id}")
     now = datetime.now(timezone.utc)
     updated = _validated_memory_item_copy(item, {"visibility": visibility, "updated_at": now})
-    _persist_memory_item(uid, updated, db_client=db_client)
-    sync_atom_keyword_index_for_item(updated, db_client=db_client)
+    _persist_memory_item(uid, updated)
+    sync_atom_keyword_index_for_item(updated)
     sync_canonical_memory_vector(updated)
     return updated
 
 
-def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_client: Any = None) -> MemoryItem:
+def update_canonical_memory_review(uid: str, memory_id: str, value: bool) -> MemoryItem:
     updated: Optional[MemoryItem] = None
     should_prune_kg = False
     for _attempt in range(3):
-        item = _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+        item = _read_canonical_memory_item(uid, memory_id)
         if item is None:
             raise ValueError(f"canonical memory not found: {memory_id}")
         should_prune_kg = item.tier == MemoryLayer.long_term or item.kg_extracted
-        control = _ensure_control_state(uid, db_client=db_client)
+        control = _ensure_control_state(uid)
         promotion = dict(item.promotion or {})
         promotion["reviewed"] = True
         promotion["user_review"] = value
@@ -831,7 +828,7 @@ def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_
             updated = (
                 result.memory_items[0]
                 if result.memory_items
-                else _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+                else _read_canonical_memory_item(uid, memory_id)
             )
             break
         if result.status == ApplyStatus.retryable_head_mismatch or (
@@ -842,12 +839,12 @@ def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_
     if updated is None:
         raise RuntimeError("canonical memory review conflicted repeatedly")
     if not value:
-        delete_atom_keyword_doc(uid, memory_id, db_client=db_client)
+        delete_atom_keyword_doc(uid, memory_id)
         delete_canonical_memory_vector(uid, memory_id)
         if should_prune_kg:
-            invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=db_client)
+            invalidate_kg_for_memory_retraction(uid, [memory_id])
     elif updated.processing_state == ProcessingState.processed:
-        sync_atom_keyword_index_for_item(updated, db_client=db_client)
+        sync_atom_keyword_index_for_item(updated)
         sync_canonical_memory_vector(updated)
     return updated
 
@@ -858,9 +855,8 @@ def update_canonical_memory_product_fields(
     *,
     tags: Optional[List[str]] = None,
     category: Optional[str] = None,
-    db_client: Any = None,
 ) -> MemoryItem:
-    item = _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+    item = _read_canonical_memory_item(uid, memory_id)
     if item is None:
         raise ValueError(f"canonical memory not found: {memory_id}")
     metadata: Dict[str, Any] = {}
@@ -872,7 +868,7 @@ def update_canonical_memory_product_fields(
         return item
     now = datetime.now(timezone.utc)
     updated = _validated_memory_item_copy(_apply_product_metadata(item, metadata), {"updated_at": now})
-    _persist_memory_item(uid, updated, db_client=db_client)
+    _persist_memory_item(uid, updated)
     return updated
 
 
@@ -885,10 +881,10 @@ def _item_sourced_from_conversation(item: MemoryItem, conversation_id: str) -> b
     return False
 
 
-def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client: Any, reason: str) -> None:
+def _tombstone_memory_item(uid: str, item: MemoryItem, *, reason: str) -> None:
     collections = MemoryCollections(uid=uid)
     now = datetime.now(timezone.utc)
-    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    trusted = read_memory_v3_trusted_account_generation(uid=uid)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
     projection_commit_id = trusted.head_commit_id or "head0"
 
@@ -915,7 +911,7 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client: Any, reason
             "updated_at": now,
         },
     )
-    _persist_memory_item(uid, updated_item, db_client=db_client)
+    _persist_memory_item(uid, updated_item)
 
     purge_candidates = [
         {
@@ -931,13 +927,13 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client: Any, reason
         document_store.set_document(record["outbox_path"], record)
 
     delete_canonical_memory_vector(uid, item.memory_id)
-    delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
+    delete_atom_keyword_doc(uid, item.memory_id)
     purge_stale_review_conflicts_for_memories(uid, [item.memory_id], reason=reason)
 
 
-def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_client: Any = None) -> Dict[str, Any]:
+def retract_conversation_sourced_memories(uid: str, conversation_id: str) -> Dict[str, Any]:
     """Full retract for reprocess: tombstone items, purge vectors, bump source_generation."""
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid)
     retracted_ids: List[str] = []
 
     for item in items:
@@ -945,11 +941,11 @@ def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_
             continue
         if not _item_sourced_from_conversation(item, conversation_id):
             continue
-        _tombstone_memory_item(uid, item, db_client=db_client, reason="conversation_reprocess_retract")
+        _tombstone_memory_item(uid, item, reason="conversation_reprocess_retract")
         retracted_ids.append(item.memory_id)
 
     bumped_control = _bump_source_generation(uid)
-    invalidate_kg_for_memory_retraction(uid, retracted_ids, db_client=db_client)
+    invalidate_kg_for_memory_retraction(uid, retracted_ids)
 
     return {
         "retracted_memory_ids": retracted_ids,
@@ -959,15 +955,15 @@ def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_
     }
 
 
-def delete_canonical_memory(uid: str, memory_id: str, *, db_client: Any = None) -> None:
-    item = _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+def delete_canonical_memory(uid: str, memory_id: str) -> None:
+    item = _read_canonical_memory_item(uid, memory_id)
     if item is None:
         raise ValueError(f"canonical memory not found: {memory_id}")
-    _tombstone_memory_item(uid, item, db_client=db_client, reason="canonical_memory_delete")
-    invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=db_client)
+    _tombstone_memory_item(uid, item, reason="canonical_memory_delete")
+    invalidate_kg_for_memory_retraction(uid, [memory_id])
 
 
-def delete_canonical_memories_batch(uid: str, memory_ids: List[str], *, db_client: Any = None) -> None:
+def delete_canonical_memories_batch(uid: str, memory_ids: List[str]) -> None:
     """Atomically tombstone a bounded set of active canonical memories.
 
     Firestore transactions retry when any read document changes, so a concurrent
@@ -979,7 +975,7 @@ def delete_canonical_memories_batch(uid: str, memory_ids: List[str], *, db_clien
         return
 
     collections = MemoryCollections(uid=uid)
-    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    trusted = read_memory_v3_trusted_account_generation(uid=uid)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
     projection_commit_id = trusted.head_commit_id or "head0"
     def apply_batch(write_transaction: Any) -> None:
@@ -1042,33 +1038,32 @@ def delete_canonical_memories_batch(uid: str, memory_ids: List[str], *, db_clien
     for memory_id in memory_ids:
         try:
             delete_canonical_memory_vector(uid, memory_id)
-            delete_atom_keyword_doc(uid, memory_id, db_client=db_client)
+            delete_atom_keyword_doc(uid, memory_id)
             purge_stale_review_conflicts_for_memories(
                 uid,
                 [memory_id],
                 reason="canonical_memory_delete_batch",
-                db_client=db_client,
             )
         except Exception:
             logger.exception("canonical batch derived cleanup failed uid=%s memory_id=%s", uid, memory_id)
     try:
-        invalidate_kg_for_memory_retraction(uid, memory_ids, db_client=db_client)
+        invalidate_kg_for_memory_retraction(uid, memory_ids)
     except Exception:
         logger.exception("canonical batch KG cleanup failed uid=%s count=%d", uid, len(memory_ids))
 
 
-def delete_all_canonical_memories(uid: str, *, db_client: Any = None) -> None:
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+def delete_all_canonical_memories(uid: str) -> None:
+    items = fetch_authoritative_product_memory_items(uid=uid)
     deleted_ids: List[str] = []
     for item in items:
         if item.status == MemoryItemStatus.active:
-            _tombstone_memory_item(uid, item, db_client=db_client, reason="canonical_memory_delete_all")
+            _tombstone_memory_item(uid, item, reason="canonical_memory_delete_all")
             deleted_ids.append(item.memory_id)
     if deleted_ids:
-        invalidate_kg_for_memory_retraction(uid, deleted_ids, db_client=db_client)
+        invalidate_kg_for_memory_retraction(uid, deleted_ids)
 
 
-def purge_canonical_derived_user_data(uid: str, *, db_client: Any = None) -> Dict[str, Any]:
+def purge_canonical_derived_user_data(uid: str) -> Dict[str, Any]:
     """Best-effort purge of canonical Pinecone vectors, keyword index, and KG data.
 
     Purges based on existing canonical artifacts (memory_items docs) rather than
@@ -1077,7 +1072,7 @@ def purge_canonical_derived_user_data(uid: str, *, db_client: Any = None) -> Dic
     still has their derived data cleaned up. Legacy users have no canonical
     memory_items docs, so the purge is inert for them.
     """
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid)
     if not items:
         return {"purged": False, "reason": "not_canonical_cohort", "vector_ids": [], "memory_ids": []}
 
@@ -1091,10 +1086,10 @@ def purge_canonical_derived_user_data(uid: str, *, db_client: Any = None) -> Dic
         if vector_deleted < len(vector_ids):
             raise RuntimeError(f"canonical vector purge only deleted {vector_deleted}/{len(vector_ids)} vectors")
 
-    keyword_deleted = purge_user_atom_keyword_index(uid, db_client=db_client, force=True, raise_on_failure=True)
+    keyword_deleted = purge_user_atom_keyword_index(uid, force=True, raise_on_failure=True)
     kg_db.delete_knowledge_graph(uid)
 
-    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    trusted = read_memory_v3_trusted_account_generation(uid=uid)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
     projection_commit_id = trusted.head_commit_id or "head0"
     for item in items:

@@ -268,7 +268,7 @@ def _patch_cohort_resolver(monkeypatch, system: MemorySystem):
 
 
 def test_arbitrary_uid_defaults_to_legacy():
-    assert resolve_memory_system("uid-random", db_client=_FakeDb()) == MemorySystem.LEGACY
+    assert resolve_memory_system("uid-random") == MemorySystem.LEGACY
 
 
 def test_canonical_write_uses_apply_and_not_legacy_save(monkeypatch):
@@ -305,7 +305,7 @@ def test_canonical_write_uses_apply_and_not_legacy_save(monkeypatch):
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
         wraps=apply_long_term_patch_firestore,
     ) as apply_mock:
-        returned_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+        returned_id = write_canonical_extraction_memory(uid, payload)
 
     assert returned_id == memory_id
     apply_mock.assert_called_once()
@@ -325,7 +325,7 @@ def test_canonical_write_uses_apply_and_not_legacy_save(monkeypatch):
     assert evidence_path in db.docs
     assert db.docs[evidence_path]["source_id"] == conversation_id
 
-    memories = read_canonical_memories(uid, db_client=db)
+    memories = read_canonical_memories(uid)
     assert len(memories) == 1
     assert memories[0].id == memory_id
     assert memories[0].content == content
@@ -343,7 +343,7 @@ def test_canonical_read_returns_default_visible_items(monkeypatch):
     monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
 
-    memories = read_canonical_memories(uid, db_client=db)
+    memories = read_canonical_memories(uid)
     assert len(memories) == 1
     assert memories[0].id == memory_id
     assert memories[0].content == content
@@ -363,7 +363,7 @@ def test_canonical_read_hides_restricted_sensitivity(monkeypatch):
     monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
 
-    assert read_canonical_memories(uid, db_client=db) == []
+    assert read_canonical_memories(uid) == []
 
 
 def test_legacy_extract_path_unchanged_for_non_canonical():
@@ -402,7 +402,7 @@ def test_canonical_extract_uses_memory_service_not_legacy_save():
     start = source.index("def _extract_memories_canonical")
     end = source.index("\ndef _extract_memories_inner", start)
     canonical_body = source[start:end]
-    assert "MemoryService(db_client=db_client)" in canonical_body
+    assert "MemoryService()" in canonical_body
     assert "retract_conversation_memories" in canonical_body
     assert "memory_service.write" in canonical_body
     assert "memories_db.delete_memories_for_conversation" not in canonical_body
@@ -436,31 +436,31 @@ def test_reprocess_retract_then_rewrite_restores_active_memory(monkeypatch):
         raising=False,
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=db)
-    first_read = read_canonical_memories(uid, db_client=db)
+    write_canonical_extraction_memory(uid, payload)
+    first_read = read_canonical_memories(uid)
     assert len(first_read) == 1
     assert first_read[0].id == memory_id
     assert first_read[0].content == content
 
-    retract_result = retract_conversation_sourced_memories(uid, conversation_id, db_client=db)
+    retract_result = retract_conversation_sourced_memories(uid, conversation_id)
     assert retract_result["retracted_memory_ids"] == [memory_id]
     assert retract_result["source_generation"] == 2
     tombstoned = db.docs[f"users/{uid}/memory_items/{memory_id}"]
     assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
 
-    mid_read = read_canonical_memories(uid, db_client=db)
+    mid_read = read_canonical_memories(uid)
     assert mid_read == []
 
-    write_canonical_extraction_memory(uid, payload, db_client=db)
-    restored = read_canonical_memories(uid, db_client=db)
+    write_canonical_extraction_memory(uid, payload)
+    restored = read_canonical_memories(uid)
     assert len(restored) == 1
     assert restored[0].id == memory_id
     assert restored[0].content == content
     assert db.docs[f"users/{uid}/memory_items/{memory_id}"]["status"] == MemoryItemStatus.active.value
 
     # Second rewrite with identical content must not duplicate.
-    write_canonical_extraction_memory(uid, payload, db_client=db)
-    assert len(read_canonical_memories(uid, db_client=db)) == 1
+    write_canonical_extraction_memory(uid, payload)
+    assert len(read_canonical_memories(uid)) == 1
 
 
 def test_extract_memories_inner_legacy_calls_save_memories(monkeypatch):
@@ -731,7 +731,7 @@ def test_canonical_external_write_preserves_public_visibility_and_manual_flag(mo
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
         wraps=apply_long_term_patch_firestore,
     ) as apply_mock:
-        memory_id = write_canonical_external_memory(uid, payload, db_client=db)
+        memory_id = write_canonical_external_memory(uid, payload)
 
     assert memory_id == "mem_public_manual"
     apply_mock.assert_called_once()
@@ -755,7 +755,7 @@ def test_canonical_external_write_preserves_public_visibility_and_manual_flag(mo
     assert mapped.tags == ["user-note"]
     assert mapped.memory_tier == MemoryTier.short_term
 
-    memories = read_canonical_memories(uid, db_client=db)
+    memories = read_canonical_memories(uid)
     assert len(memories) == 1
     assert memories[0].visibility == "public"
     assert memories[0].manually_added is True
@@ -865,7 +865,7 @@ def test_offline_rag_script_excluded_from_live_writer_guard():
 
 def test_memories_router_routes_canonical_create_through_memory_service():
     source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
-    assert "_canonical_write_enabled_or_fail_closed(uid, db_client=db_client)" in source
+    assert "_canonical_write_enabled_or_fail_closed(uid)" in source
     assert "memory_service.create_external_memory" in source
     assert "require_canonical_promotion=True" in source
     create_section = source.split("async def create_memory", 1)[1].split("@router.post", 1)[0]
@@ -878,7 +878,7 @@ def test_memories_router_routes_canonical_create_through_memory_service():
 def test_review_memory_routes_canonical_cohort_through_memory_service():
     source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
     section = source.split("def review_memory", 1)[1].split("@router.patch", 1)[0]
-    assert "_canonical_write_enabled_or_fail_closed(uid, db_client=db_client)" in section
+    assert "_canonical_write_enabled_or_fail_closed(uid)" in section
     assert ".review(uid, memory_id, value)" in section
     canonical_pos = section.find("_canonical_write_enabled_or_fail_closed")
     legacy_pos = section.find("memories_db.review_memory")
@@ -888,8 +888,8 @@ def test_review_memory_routes_canonical_cohort_through_memory_service():
 
 def test_preference_tools_routes_canonical_cohort_through_memory_service():
     source = (BACKEND_DIR / "utils" / "retrieval" / "tools" / "preference_tools.py").read_text(encoding="utf-8")
-    assert "resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL" in source
-    assert "MemoryService(db_client=db).create_external_memory(" in source
+    assert "resolve_memory_system(uid) == MemorySystem.CANONICAL" in source
+    assert "MemoryService().create_external_memory(" in source
     assert "require_canonical_promotion=True" in source
     canonical_pos = source.find("MemorySystem.CANONICAL")
     legacy_pos = source.find("memory_db.create_memory")

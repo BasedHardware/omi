@@ -288,7 +288,7 @@ def _seed_canonical_short_term(
     )
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
     payload["evidence"][0]["evidence_id"] = evidence_id
-    return write_canonical_extraction_memory(uid, payload, db_client=db)
+    return write_canonical_extraction_memory(uid, payload)
 
 
 def _set_canonical_cohort(monkeypatch, *uids: str) -> None:
@@ -301,7 +301,6 @@ def _process_required(db: _PromotionFakeDb, uid: str, memory_id: str, *, content
     result = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(
             content=content,
             subject_entity_id="user",
@@ -356,7 +355,7 @@ def test_promotion_fires_on_batch_threshold_via_apply(monkeypatch):
             )
         )
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-batch-1")
+    report = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-batch-1")
 
     assert report.skipped_reason is None
     assert report.trigger_reason == "batch_threshold"
@@ -395,7 +394,7 @@ def test_promotion_fires_on_daily_elapsed_below_batch_threshold(monkeypatch):
         monkeypatch=monkeypatch,
     )
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-daily-1")
+    report = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-daily-1")
 
     assert report.trigger_reason == "daily_elapsed"
     assert report.promoted_count == 1
@@ -423,7 +422,7 @@ def test_promotion_does_not_fire_when_neither_condition_met(monkeypatch):
         monkeypatch=monkeypatch,
     )
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-hold-1")
+    report = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-hold-1")
 
     assert report.skipped_reason == "promotion_not_due"
     assert report.promoted_count == 0
@@ -444,15 +443,15 @@ def test_promoted_item_readable_and_idempotent_on_second_run(monkeypatch):
             monkeypatch=monkeypatch,
         )
 
-    first = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-idem-1")
+    first = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-idem-1")
     assert first.promoted_count == threshold
-    memories = read_canonical_memories(uid, db_client=db)
+    memories = read_canonical_memories(uid)
     assert len(memories) == threshold
     assert all(memory.memory_tier == MemoryTier.long_term for memory in memories)
 
-    second = run_canonical_short_term_promotion(uid, db_client=db, now=NOW + timedelta(hours=1), run_id="promo-idem-2")
+    second = run_canonical_short_term_promotion(uid, now=NOW + timedelta(hours=1), run_id="promo-idem-2")
     assert second.promoted_count == 0
-    assert len(read_canonical_memories(uid, db_client=db)) == threshold
+    assert len(read_canonical_memories(uid)) == threshold
 
 
 def test_expired_short_term_hidden_from_default_reads(monkeypatch):
@@ -473,10 +472,10 @@ def test_expired_short_term_hidden_from_default_reads(monkeypatch):
     stored["expires_at"] = (NOW - timedelta(days=1)).isoformat()
     db.docs[f"users/{uid}/memory_items/{memory_id}"] = stored
 
-    ttl_report = run_canonical_short_term_ttl_lifecycle(uid, db_client=db, now=NOW, run_id="ttl-1")
+    ttl_report = run_canonical_short_term_ttl_lifecycle(uid, now=NOW, run_id="ttl-1")
     assert ttl_report.skipped_reason is None
     assert ttl_report.lifecycle_created_count >= 1
-    assert read_canonical_memories(uid, db_client=db) == []
+    assert read_canonical_memories(uid) == []
 
 
 def test_canonical_read_uses_explicit_time_for_short_term_visibility(monkeypatch):
@@ -498,8 +497,8 @@ def test_canonical_read_uses_explicit_time_for_short_term_visibility(monkeypatch
         "expires_at": (read_time + timedelta(hours=1)).isoformat(),
     }
 
-    visible = read_canonical_memories(uid, db_client=db, now=read_time)
-    expired = read_canonical_memories(uid, db_client=db, now=read_time + timedelta(hours=1))
+    visible = read_canonical_memories(uid, now=read_time)
+    expired = read_canonical_memories(uid, now=read_time + timedelta(hours=1))
 
     assert [memory.id for memory in visible] == [memory_id]
     assert expired == []
@@ -507,10 +506,10 @@ def test_canonical_read_uses_explicit_time_for_short_term_visibility(monkeypatch
 
 def test_legacy_uid_promotion_and_lifecycle_are_noop(monkeypatch):
     uid = "uid-legacy"
-    assert resolve_memory_system(uid, db_client=_PromotionFakeDb()) == MemorySystem.LEGACY
+    assert resolve_memory_system(uid) == MemorySystem.LEGACY
     db = _canonical_db_with_control(uid)
-    promotion = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="legacy-promo")
-    lifecycle = run_canonical_short_term_ttl_lifecycle(uid, db_client=db, now=NOW, run_id="legacy-ttl")
+    promotion = run_canonical_short_term_promotion(uid, now=NOW, run_id="legacy-promo")
+    lifecycle = run_canonical_short_term_ttl_lifecycle(uid, now=NOW, run_id="legacy-ttl")
     assert promotion.skipped_reason == "not_canonical_cohort"
     assert lifecycle.skipped_reason == "not_canonical_cohort"
 
@@ -566,7 +565,7 @@ def test_promotion_does_not_fire_on_first_run_below_batch_threshold(monkeypatch)
         monkeypatch=monkeypatch,
     )
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-first-tick")
+    report = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-first-tick")
 
     assert report.skipped_reason == "promotion_not_due"
     assert report.promoted_count == 0
@@ -590,7 +589,7 @@ def test_required_promotion_manual_write_starts_short_term(monkeypatch):
         },
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
     stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
 
     assert stored["tier"] == MemoryTier.short_term.value
@@ -601,8 +600,8 @@ def test_required_promotion_manual_write_starts_short_term(monkeypatch):
     assert stored["promotion"]["processing_status"] == "pending_processing"
     assert stored["promotion"]["source_surface"] == "mcp"
     assert not any(path.startswith(f"users/{uid}/memory_outbox/") for path in db.docs)
-    assert read_canonical_memories(uid, db_client=db) == []
-    visible = read_canonical_memories(uid, db_client=db, include_pending_processing=True)
+    assert read_canonical_memories(uid) == []
+    visible = read_canonical_memories(uid, include_pending_processing=True)
     assert [memory.id for memory in visible] == [memory_id]
     assert visible[0].memory_tier == MemoryTier.short_term
 
@@ -644,9 +643,9 @@ def test_required_promotion_waits_for_processing_receipt(monkeypatch):
         },
         source_surface="developer_api",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-1")
+    report = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-required-1")
     stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
 
     assert report.skipped_reason == "promotion_not_due"
@@ -670,7 +669,7 @@ def test_required_processing_receipt_unlocks_durable_promotion(monkeypatch):
         {"id": "manual-required-processed", "content": "remember that I like tea", "manually_added": True},
         source_surface="plugin:notes",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
 
     _process_required(db, uid, memory_id, content="The user prefers tea.")
     processed = db.docs[f"users/{uid}/memory_items/{memory_id}"]
@@ -678,7 +677,7 @@ def test_required_processing_receipt_unlocks_durable_promotion(monkeypatch):
     assert processed["promotion"]["processing_status"] == "processed"
     assert processed["promotion"]["processing_receipt"]["source_submission_id"] == "manual-required-processed"
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-processed")
+    report = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-required-processed")
     stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
     assert report.promoted_memory_ids == [memory_id]
     assert stored["tier"] == MemoryTier.long_term.value
@@ -697,7 +696,7 @@ def test_required_processing_does_not_extend_persisted_expiry_when_delayed(monke
         {"id": "manual-required-delayed-processing", "content": "Remember tea", "manually_added": True},
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
     item_path = f"users/{uid}/memory_items/{memory_id}"
     captured_at = db.docs[item_path]["captured_at"]
     original_expires_at = db.docs[item_path]["expires_at"]
@@ -705,7 +704,6 @@ def test_required_processing_does_not_extend_persisted_expiry_when_delayed(monke
     result = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(content="The user prefers tea."),
         now=captured_at + timedelta(days=10),
     )
@@ -726,7 +724,7 @@ def test_required_processing_preserves_expiry_when_clock_precedes_capture(monkey
         {"id": "manual-required-clock-skew", "content": "Remember tea", "manually_added": True},
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
     item_path = f"users/{uid}/memory_items/{memory_id}"
     captured_at = db.docs[item_path]["captured_at"]
     original_expires_at = db.docs[item_path]["expires_at"]
@@ -734,7 +732,6 @@ def test_required_processing_preserves_expiry_when_clock_precedes_capture(monkey
     result = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(content="The user prefers tea."),
         now=captured_at - timedelta(days=31),
     )
@@ -755,14 +752,13 @@ def test_required_processing_receipt_time_does_not_predate_capture(monkeypatch):
         {"id": "manual-required-receipt-clock-skew", "content": "Remember tea", "manually_added": True},
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
     item_path = f"users/{uid}/memory_items/{memory_id}"
     captured_at = db.docs[item_path]["captured_at"]
 
     result = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(content="The user prefers tea."),
         now=captured_at - timedelta(days=31),
     )
@@ -784,12 +780,12 @@ def test_required_processing_receipt_is_bound_to_current_content_and_revision(mo
         {"id": "manual-stale-receipt", "content": "Remember tea", "manually_added": True},
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
     _process_required(db, uid, memory_id, content="The user prefers tea.")
     item_path = f"users/{uid}/memory_items/{memory_id}"
     db.docs[item_path]["content"] = "Tampered content"
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-stale-receipt")
+    report = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-stale-receipt")
 
     assert report.promoted_memory_ids == []
     assert report.skipped_reason == "promotion_not_due"
@@ -808,10 +804,10 @@ def test_inflight_processor_cannot_overwrite_newer_user_edit(monkeypatch):
         {"id": "manual-edit-race", "content": "Old preference", "manually_added": True},
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
 
     def edit_then_return(_item):
-        update_canonical_memory_content(uid, memory_id, "New preference", db_client=db)
+        update_canonical_memory_content(uid, memory_id, "New preference")
         return ProcessedRequiredMemory(
             content="Old normalized preference",
             subject_entity_id="user",
@@ -819,7 +815,7 @@ def test_inflight_processor_cannot_overwrite_newer_user_edit(monkeypatch):
             arguments={"statement": "Old normalized preference"},
         )
 
-    result = process_required_memory_item(uid, memory_id, db_client=db, processor=edit_then_return, now=NOW)
+    result = process_required_memory_item(uid, memory_id, processor=edit_then_return, now=NOW)
     stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
 
     assert result.processed is False
@@ -840,26 +836,25 @@ def test_negative_user_review_blocks_processing_and_promotion(monkeypatch):
         {"id": "manual-rejected", "content": "Do not keep this", "manually_added": True},
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
     item_path = f"users/{uid}/memory_items/{memory_id}"
     initial_revision = db.docs[item_path]["item_revision"]
-    rejected = update_canonical_memory_review(uid, memory_id, False, db_client=db)
+    rejected = update_canonical_memory_review(uid, memory_id, False)
 
     assert rejected.item_revision == initial_revision + 1
     assert rejected.processing_state == ProcessingState.pending
-    restored = update_canonical_memory_review(uid, memory_id, True, db_client=db)
+    restored = update_canonical_memory_review(uid, memory_id, True)
     assert restored.processing_state == ProcessingState.pending
     assert restored.promotion["processing_status"] == "pending_processing"
-    update_canonical_memory_review(uid, memory_id, False, db_client=db)
+    update_canonical_memory_review(uid, memory_id, False)
 
     processed = process_required_memory_item(
         uid,
         memory_id,
-        db_client=db,
         processor=lambda _item: ProcessedRequiredMemory(content="Should not run"),
         now=NOW,
     )
-    promotion = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-rejected")
+    promotion = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-rejected")
 
     assert processed.skipped_reason == "not_pending_required_processing"
     assert promotion.promoted_memory_ids == []
@@ -878,10 +873,10 @@ def test_inflight_processor_cannot_overwrite_negative_user_review(monkeypatch):
         {"id": "manual-review-race", "content": "Stale preference", "manually_added": True},
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
 
     def reject_then_return(_item):
-        update_canonical_memory_review(uid, memory_id, False, db_client=db)
+        update_canonical_memory_review(uid, memory_id, False)
         return ProcessedRequiredMemory(
             content="Stale normalized preference",
             subject_entity_id="user",
@@ -889,7 +884,7 @@ def test_inflight_processor_cannot_overwrite_negative_user_review(monkeypatch):
             arguments={"statement": "Stale normalized preference"},
         )
 
-    result = process_required_memory_item(uid, memory_id, db_client=db, processor=reject_then_return, now=NOW)
+    result = process_required_memory_item(uid, memory_id, processor=reject_then_return, now=NOW)
     stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
 
     assert result.processed is False
@@ -910,7 +905,7 @@ def test_required_processor_retry_rebases_operation_after_unrelated_head_advance
         {"id": "manual-head-retry", "content": "Remember the retry", "manually_added": True},
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
     processor = lambda _item: ProcessedRequiredMemory(
         content="The user remembers the retry.",
         subject_entity_id="user",
@@ -930,8 +925,8 @@ def test_required_processor_retry_rebases_operation_after_unrelated_head_advance
         return real_apply(**kwargs)
 
     with patch.dict(processor_globals, {"apply_long_term_patch_firestore": advance_head_once}):
-        first = process_required_memory_item(uid, memory_id, db_client=db, processor=processor, now=NOW)
-        second = process_required_memory_item(uid, memory_id, db_client=db, processor=processor, now=NOW)
+        first = process_required_memory_item(uid, memory_id, processor=processor, now=NOW)
+        second = process_required_memory_item(uid, memory_id, processor=processor, now=NOW)
 
     assert first.error_code == "apply_retryable_head_mismatch"
     assert second.processed is True
@@ -950,7 +945,7 @@ def test_user_review_retry_rebases_operation_after_unrelated_head_advance(monkey
         {"id": "manual-review-head-retry", "content": "Review this", "manually_added": True},
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
     review_globals = update_canonical_memory_review.__globals__
     real_apply = review_globals["apply_long_term_patch_firestore"]
     call_count = {"value": 0}
@@ -964,7 +959,7 @@ def test_user_review_retry_rebases_operation_after_unrelated_head_advance(monkey
         return real_apply(**kwargs)
 
     with patch.dict(review_globals, {"apply_long_term_patch_firestore": advance_head_once}):
-        reviewed = update_canonical_memory_review(uid, memory_id, False, db_client=db)
+        reviewed = update_canonical_memory_review(uid, memory_id, False)
 
     assert reviewed.promotion["user_review"] is False
     assert reviewed.processing_state == ProcessingState.pending
@@ -983,12 +978,12 @@ def test_inflight_promotion_cannot_overwrite_negative_user_review(monkeypatch):
         {"id": "manual-promotion-review-race", "content": "Keep a preference", "manually_added": True},
         source_surface="mcp",
     )
-    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    memory_id = write_canonical_extraction_memory(uid, payload)
     _process_required(db, uid, memory_id, content="The user keeps a preference.")
     item_path = f"users/{uid}/memory_items/{memory_id}"
     stale_item = MemoryItem(**db.docs[item_path])
 
-    update_canonical_memory_review(uid, memory_id, False, db_client=db)
+    update_canonical_memory_review(uid, memory_id, False)
     control = MemoryControlState(**db.docs[f"users/{uid}/memory_state/apply_control"])
 
     with pytest.raises(RuntimeError, match="promotion apply failed"):
@@ -999,7 +994,6 @@ def test_inflight_promotion_cannot_overwrite_negative_user_review(monkeypatch):
             run_id="stale-promotion-review",
             trigger_reason="required_user_assertion",
             now=NOW,
-            db_client=db,
         )
 
     stored = db.docs[item_path]
@@ -1027,7 +1021,7 @@ def test_required_promotion_merges_exact_existing_long_term(monkeypatch):
         "manually_added": False,
         "memory_tier": MemoryTier.long_term.value,
     }
-    existing_id = write_canonical_extraction_memory(uid, existing_payload, db_client=db)
+    existing_id = write_canonical_extraction_memory(uid, existing_payload)
     _make_existing_long_term(db, uid, existing_id)
     required_payload = required_promotion_payload(
         {
@@ -1037,12 +1031,12 @@ def test_required_promotion_merges_exact_existing_long_term(monkeypatch):
         },
         source_surface="mcp",
     )
-    short_id = write_canonical_extraction_memory(uid, required_payload, db_client=db)
+    short_id = write_canonical_extraction_memory(uid, required_payload)
     _process_required(db, uid, short_id, content="User prefers launch checklists")
     initial_existing_commit = db.docs[f"users/{uid}/memory_items/{existing_id}"]["ledger_commit_id"]
     initial_short_commit = db.docs[f"users/{uid}/memory_items/{short_id}"]["ledger_commit_id"]
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-merge")
+    report = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-required-merge")
     existing_stored = db.docs[f"users/{uid}/memory_items/{existing_id}"]
     short_stored = db.docs[f"users/{uid}/memory_items/{short_id}"]
 
@@ -1076,7 +1070,6 @@ def test_required_promotion_merges_multiple_sources_in_same_run(monkeypatch):
             "content": "User prefers launch checklists",
             "memory_tier": MemoryTier.long_term.value,
         },
-        db_client=db,
     )
     _make_existing_long_term(db, uid, existing_id)
     short_ids = []
@@ -1089,11 +1082,11 @@ def test_required_promotion_merges_multiple_sources_in_same_run(monkeypatch):
             },
             source_surface="mcp",
         )
-        short_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+        short_id = write_canonical_extraction_memory(uid, payload)
         _process_required(db, uid, short_id, content="User prefers launch checklists")
         short_ids.append(short_id)
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-multi")
+    report = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-required-multi")
     existing_stored = db.docs[f"users/{uid}/memory_items/{existing_id}"]
 
     assert report.trigger_reason == "required_promotion"
@@ -1123,7 +1116,6 @@ def test_required_promotion_retry_after_supersede_failure_is_idempotent_across_r
             "content": "User prefers launch checklists",
             "memory_tier": MemoryTier.long_term.value,
         },
-        db_client=db,
     )
     _make_existing_long_term(db, uid, existing_id)
     required_payload = required_promotion_payload(
@@ -1134,7 +1126,7 @@ def test_required_promotion_retry_after_supersede_failure_is_idempotent_across_r
         },
         source_surface="mcp",
     )
-    short_id = write_canonical_extraction_memory(uid, required_payload, db_client=db)
+    short_id = write_canonical_extraction_memory(uid, required_payload)
     _process_required(db, uid, short_id, content="User prefers launch checklists")
 
     promotion_globals = run_canonical_short_term_promotion.__globals__
@@ -1155,7 +1147,7 @@ def test_required_promotion_retry_after_supersede_failure_is_idempotent_across_r
 
     with patch.dict(promotion_globals, {"apply_long_term_patch_firestore": flaky_apply}):
         with pytest.raises(RuntimeError, match="injected supersede failure"):
-            run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-retry-1")
+            run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-required-retry-1")
 
     existing_after_failure = db.docs[f"users/{uid}/memory_items/{existing_id}"]
     short_after_failure = db.docs[f"users/{uid}/memory_items/{short_id}"]
@@ -1164,7 +1156,6 @@ def test_required_promotion_retry_after_supersede_failure_is_idempotent_across_r
 
     retry = run_canonical_short_term_promotion(
         uid,
-        db_client=db,
         now=NOW + timedelta(hours=1),
         run_id="promo-required-retry-2",
     )
@@ -1192,7 +1183,7 @@ def test_promotion_daily_cadence_applies_after_first_successful_run(monkeypatch)
             monkeypatch=monkeypatch,
         )
 
-    first = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-first-run")
+    first = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-first-run")
     assert first.trigger_reason == "batch_threshold"
     assert first.promoted_count == threshold
     assert db.docs[f"users/{uid}/memory_state/apply_control"]["last_promotion_run_at"] is not None
@@ -1207,7 +1198,6 @@ def test_promotion_daily_cadence_applies_after_first_successful_run(monkeypatch)
 
     hold = run_canonical_short_term_promotion(
         uid,
-        db_client=db,
         now=NOW + timedelta(hours=1),
         run_id="promo-hold-after-first",
     )
@@ -1216,7 +1206,6 @@ def test_promotion_daily_cadence_applies_after_first_successful_run(monkeypatch)
 
     daily = run_canonical_short_term_promotion(
         uid,
-        db_client=db,
         now=NOW + timedelta(hours=25),
         run_id="promo-daily-after-first",
     )
@@ -1284,7 +1273,7 @@ def test_expired_and_pending_short_term_not_promoted_when_batch_threshold_met(mo
     pending_stored["processing_state"] = ProcessingState.pending.value
     db.docs[f"users/{uid}/memory_items/{pending_id}"] = pending_stored
 
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-negative-1")
+    report = run_canonical_short_term_promotion(uid, now=NOW, run_id="promo-negative-1")
 
     assert report.trigger_reason == "batch_threshold"
     assert report.promoted_count == threshold

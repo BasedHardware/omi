@@ -214,7 +214,6 @@ def test_default_memory_vector_search_hydrates_authoritative_items_and_filters_s
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=10,
@@ -250,7 +249,6 @@ def test_default_memory_vector_search_rejects_missing_freshness_fence_before_vec
         fetch_default_vector_memory_search(
             uid='u1',
             query='coffee',
-            db_client=_FirestoreFake(),
             policy=MemoryAccessPolicy.for_omi_chat(),
             vector_query=fake_vector_query,
             repair_purge_callback=lambda candidates: repair_batches.append(candidates),
@@ -289,7 +287,6 @@ def test_default_memory_vector_search_rejects_hits_missing_mandatory_freshness_f
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=5,
@@ -317,7 +314,6 @@ def test_default_memory_vector_search_rejects_vectors_from_purged_account_genera
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=5,
@@ -365,7 +361,6 @@ def test_default_memory_vector_search_dispatches_repair_purge_candidates_for_hyd
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         repair_purge_callback=lambda candidates: repair_batches.append(candidates),
@@ -415,7 +410,6 @@ def test_default_memory_vector_search_writes_deterministic_repair_purge_outbox_r
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         repair_purge_outbox_writer=lambda records: writer_batches.append(records),
@@ -490,7 +484,6 @@ def test_default_memory_vector_search_does_not_write_outbox_for_no_candidates_or
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         repair_purge_outbox_writer=lambda records: writer_batches.append(records),
@@ -508,7 +501,6 @@ def test_default_memory_vector_search_does_not_write_outbox_for_no_candidates_or
         fetch_default_vector_memory_search(
             uid='u1',
             query='coffee',
-            db_client=db_client,
             policy=MemoryAccessPolicy.for_omi_chat(),
             vector_query=fake_vector_query,
             repair_purge_outbox_writer=lambda records: writer_batches.append(records),
@@ -551,7 +543,6 @@ def test_default_memory_vector_search_preserves_vector_ranking_after_authoritati
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=5,
@@ -599,7 +590,6 @@ def test_default_memory_vector_search_overfetches_and_refills_when_early_candida
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=3,
@@ -664,7 +654,6 @@ def test_default_memory_vector_search_stops_at_candidate_budget_without_unbounde
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=3,
@@ -709,7 +698,6 @@ def test_default_memory_vector_search_emits_low_cardinality_telemetry_without_id
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee raw query text',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         telemetry_emitter=lambda payload: emitted.append(payload),
@@ -761,7 +749,6 @@ def test_default_memory_vector_search_telemetry_failure_is_recorded_without_mask
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         telemetry_emitter=failing_emitter,
@@ -808,7 +795,6 @@ def test_default_memory_vector_search_stops_refill_at_vector_query_budget_and_re
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=2,
@@ -853,7 +839,6 @@ def test_default_memory_vector_search_stops_hydration_at_read_budget_without_unb
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=db_client,
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         limit=3,
@@ -889,7 +874,6 @@ def test_default_memory_vector_search_uses_injected_clock_to_timeout_before_vect
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee',
-        db_client=_FirestoreFake(),
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=fake_vector_query,
         timeout_seconds=0.1,
@@ -915,7 +899,6 @@ def test_default_memory_vector_search_telemetry_includes_bounded_timeout_and_bud
     response = fetch_default_vector_memory_search(
         uid='u1',
         query='coffee raw query text',
-        db_client=_FirestoreFake(),
         policy=MemoryAccessPolicy.for_omi_chat(),
         vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(hits=[], rejected_count=0),
         telemetry_emitter=lambda payload: emitted.append(payload),

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any
 
 from config.memory_rollout import MemoryRolloutConfig, MemoryRolloutMode
 from utils.memory.memory_system import MemorySystem, list_canonical_cohort_uids
@@ -29,23 +28,8 @@ class CanonicalWriteDecision:
     reason: str = "ok"
 
 
-def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecision:
+def canonical_write_decision(uid: str) -> CanonicalWriteDecision:
     """Resolve canonical write readiness without collapsing enrolled failures into legacy fallback."""
-
-    if db_client is None:
-        if uid in set(list_canonical_cohort_uids()):
-            return CanonicalWriteDecision(
-                enabled=False,
-                memory_system=MemorySystem.CANONICAL,
-                fail_closed=True,
-                reason="missing_db_client",
-            )
-        return CanonicalWriteDecision(
-            enabled=False,
-            memory_system=MemorySystem.LEGACY,
-            fail_closed=False,
-            reason="missing_db_client",
-        )
 
     try:
         rollout_config = MemoryRolloutConfig.from_env()
@@ -64,7 +48,7 @@ def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecis
             reason="invalid_rollout_config",
         )
 
-    memory_system = pin_memory_system(uid, db_client=db_client)
+    memory_system = pin_memory_system(uid)
     if memory_system != MemorySystem.CANONICAL:
         return CanonicalWriteDecision(enabled=False, memory_system=memory_system, reason="not_canonical")
     if rollout_config.mode not in {MemoryRolloutMode.write, MemoryRolloutMode.read}:
@@ -75,7 +59,7 @@ def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecis
             reason=f"mode_{rollout_config.mode.value}_not_writable",
         )
 
-    control = read_v3_control(uid=uid, db_client=db_client, rollout_config=rollout_config)
+    control = read_v3_control(uid=uid, rollout_config=rollout_config)
     if not control.cohort_enrolled or control.state is None:
         reason = control.read_error_reason or "missing_state"
         logger.info("canonical_write disabled uid=%s reason=%s", uid, reason)
@@ -96,15 +80,14 @@ def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecis
     return CanonicalWriteDecision(enabled=True, memory_system=memory_system)
 
 
-def canonical_write_enabled(uid: str, *, db_client: Any) -> bool:
+def canonical_write_enabled(uid: str) -> bool:
     """Return true only when the user is in cohort and write gates are ready."""
-    return canonical_write_decision(uid, db_client=db_client).enabled
+    return canonical_write_decision(uid).enabled
 
 
 def canonical_read_enabled(
     uid: str,
     *,
-    db_client: Any,
     source_decision: str | None = None,
     cursor_memory_read_requested: bool = False,
     archive_requested: bool = False,
@@ -114,9 +97,7 @@ def canonical_read_enabled(
 
     if source_decision is not None and source_decision != "memory_read":
         return False
-    if db_client is None:
-        return False
-    if pin_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if pin_memory_system(uid) != MemorySystem.CANONICAL:
         return False
 
     try:
@@ -126,8 +107,8 @@ def canonical_read_enabled(
     if rollout_config.mode != MemoryRolloutMode.read:
         return False
 
-    control = read_v3_control(uid=uid, db_client=db_client, rollout_config=rollout_config)
-    trusted_generation = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    control = read_v3_control(uid=uid, rollout_config=rollout_config)
+    trusted_generation = read_memory_v3_trusted_account_generation(uid=uid)
     effective_env = env if env is not None else os.environ
     decision = decide_v3_control_route(
         V3ControlReaderRequest(

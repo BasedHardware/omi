@@ -160,15 +160,14 @@ def fetch_non_active_route_audit_report(
     *,
     run_id: Optional[str] = None,
     expected_source_ids: Optional[Iterable[str]] = None,
-    db_client: Any = None,
 ) -> NonActiveRouteAuditReport:
     """Fetch route-store docs and build the memory non-active no-silent-loss audit report."""
 
-    route_docs = _fetch_non_active_route_docs(uid, run_id=run_id, db_client=db_client)
+    route_docs = _fetch_non_active_route_docs(uid, run_id=run_id)
     return build_non_active_route_audit_report(uid, route_docs, expected_source_ids=expected_source_ids)
 
 
-def _fetch_non_active_route_docs(uid: str, *, run_id: Optional[str], db_client: Any) -> List[Dict[str, Any]]:
+def _fetch_non_active_route_docs(uid: str, *, run_id: Optional[str]) -> List[Dict[str, Any]]:
     collection_path = MemoryCollections(uid=uid).non_active_memory_routes
     if run_id:
         snapshots = document_store.stream_collection_where(collection_path, "run_id", "==", run_id)

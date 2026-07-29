@@ -140,11 +140,10 @@ def is_promotable_short_term_item(item: MemoryItem, *, now: datetime) -> bool:
 def list_promotable_short_term_items(
     uid: str,
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
 ) -> List[MemoryItem]:
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
-    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=db_client)
+    items = fetch_short_term_memory_items_firestore(uid=uid)
     promotable = [item for item in items if is_promotable_short_term_item(item, now=current_time)]
     return sorted(promotable, key=lambda item: item.memory_id)
 
@@ -177,7 +176,7 @@ def _normalized_text(value: Optional[str]) -> str:
     return " ".join((value or "").strip().lower().split())
 
 
-def _exact_long_term_duplicate(uid: str, item: MemoryItem, *, db_client: Any) -> Optional[MemoryItem]:
+def _exact_long_term_duplicate(uid: str, item: MemoryItem) -> Optional[MemoryItem]:
     normalized_content = _normalized_text(item.content)
     if not normalized_content:
         return None
@@ -212,7 +211,6 @@ def _merge_required_promotion_duplicate(
     run_id: str,
     trigger_reason: str,
     now: datetime,
-    db_client: Any,
 ) -> tuple[MemoryItem, bool]:
     evidence_by_id = {evidence.evidence_id: evidence for evidence in existing.evidence}
     for evidence in item.evidence:
@@ -234,7 +232,6 @@ def _merge_required_promotion_duplicate(
         },
         control=control,
         source_packet_id=f"promotion_merge_{merge_idempotency_key}",
-        db_client=db_client,
     )
     merge_result = apply_long_term_patch_firestore(
         uid=uid,
@@ -265,7 +262,6 @@ def _merge_required_promotion_duplicate(
         else _read_memory_item(
             uid,
             existing.memory_id,
-            db_client=db_client,
         )
     )
     if merged_existing is None:
@@ -280,7 +276,7 @@ def _merge_required_promotion_duplicate(
             "trigger_reason": trigger_reason,
         }
     )
-    supersede_control = _read_control_state(uid, db_client=db_client)
+    supersede_control = _read_control_state(uid)
     supersede_idempotency_key = deterministic_contract_id(
         "canonical-required-promotion-duplicate-supersede",
         {"uid": uid, "source_memory_id": item.memory_id, "target_memory_id": existing.memory_id},
@@ -296,7 +292,6 @@ def _merge_required_promotion_duplicate(
         },
         control=supersede_control,
         source_packet_id=f"promotion_merge_supersede_{supersede_idempotency_key}",
-        db_client=db_client,
     )
     supersede_result = apply_long_term_patch_firestore(
         uid=uid,
@@ -321,7 +316,7 @@ def _merge_required_promotion_duplicate(
             f"required-promotion duplicate supersede failed for {item.memory_id}: "
             f"{supersede_result.status} ({supersede_result.reason})"
         )
-    keyword_sync_succeeded = sync_atom_keyword_index_for_item(merged_existing, db_client=db_client)
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(merged_existing)
     return merged_existing, keyword_sync_succeeded
 
 
@@ -333,7 +328,6 @@ def _ensure_required_promotion_update_operation(
     logical_payload: Payload,
     control: MemoryControlState,
     source_packet_id: str,
-    db_client: Any,
 ) -> MemoryOperation:
     operation = MemoryOperation.new(
         uid=uid,
@@ -352,7 +346,7 @@ def _ensure_required_promotion_update_operation(
     return operation
 
 
-def _read_memory_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
+def _read_memory_item(uid: str, memory_id: str) -> Optional[MemoryItem]:
     payload = _snapshot_payload(document_store.get_document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"))
     if not payload:
         return None
@@ -362,13 +356,12 @@ def _read_memory_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[M
 def list_fast_track_promotable_items(
     uid: str,
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
 ) -> List[MemoryItem]:
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     return [
         item
-        for item in list_promotable_short_term_items(uid, db_client=db_client, now=current_time)
+        for item in list_promotable_short_term_items(uid, now=current_time)
         if is_fast_track_promotable(item)
     ]
 
@@ -401,7 +394,7 @@ def promotion_trigger_reason(
     return None
 
 
-def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
+def _read_control_state(uid: str) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
     path = collections.memory_apply_control_state
     payload = _snapshot_payload(document_store.get_document(path))
@@ -412,7 +405,7 @@ def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
     return control
 
 
-def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
+def _persist_control_state(control: MemoryControlState) -> None:
     # Write only the two fields promotion owns, with merge=True. A full-document
     # .set() overwrote the entire control doc from a non-transactional read snapshot,
     # so a concurrent apply_long_term_patch_firestore transaction landing between that
@@ -437,7 +430,6 @@ def _ensure_promotion_operation(
     item: MemoryItem,
     control: MemoryControlState,
     run_id: str,
-    db_client: Any,
 ) -> MemoryOperation:
     logical_payload: Payload = {
         "decision": DurablePatchDecision.update.value,
@@ -470,7 +462,6 @@ def promote_short_term_item_via_apply(
     run_id: str,
     trigger_reason: str,
     now: datetime,
-    db_client: Any = None,
 ) -> tuple[MemoryItem, bool, CanonicalKgPromotionResult, bool]:
     """Promote one short_term item to long_term through the authoritative apply path.
 
@@ -483,11 +474,11 @@ def promote_short_term_item_via_apply(
     if not is_promotable_short_term_item(item, now=now):
         raise ValueError(f"memory item {item.memory_id} is not promotable")
 
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         raise ValueError(f"promotion refused for non-canonical cohort uid={uid}")
     current_time = _coerce_aware_utc(now)
     if is_required_promotion_item(item):
-        existing_duplicate = _exact_long_term_duplicate(uid, item, db_client=db_client)
+        existing_duplicate = _exact_long_term_duplicate(uid, item)
         if existing_duplicate is not None:
             merged_item, keyword_sync_succeeded = _merge_required_promotion_duplicate(
                 uid,
@@ -497,7 +488,6 @@ def promote_short_term_item_via_apply(
                 run_id=run_id,
                 trigger_reason=trigger_reason,
                 now=current_time,
-                db_client=db_client,
             )
             return (
                 merged_item,
@@ -505,7 +495,7 @@ def promote_short_term_item_via_apply(
                 CanonicalKgPromotionResult(skipped_reason="merged_into_existing"),
                 keyword_sync_succeeded,
             )
-    operation = _ensure_promotion_operation(uid=uid, item=item, control=control, run_id=run_id, db_client=db_client)
+    operation = _ensure_promotion_operation(uid=uid, item=item, control=control, run_id=run_id)
     idempotency_key = deterministic_contract_id(
         "canonical-short-term-promotion",
         {"uid": uid, "memory_id": item.memory_id, "from_layer": MemoryLayer.short_term.value},
@@ -563,7 +553,7 @@ def promote_short_term_item_via_apply(
     )
     if promoted.tier != MemoryLayer.long_term:
         raise RuntimeError(f"promotion did not land long_term for {item.memory_id}")
-    keyword_sync_succeeded = sync_atom_keyword_index_for_item(promoted, db_client=db_client)
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(promoted)
     vector_sync_failed = False
 
     def _record_vector_sync_failure() -> None:
@@ -571,7 +561,7 @@ def promote_short_term_item_via_apply(
         vector_sync_failed = True
 
     sync_canonical_memory_vector(promoted, on_hard_failure=_record_vector_sync_failure)
-    kg_result = extract_kg_for_promoted_memory(uid, promoted, db_client=db_client)
+    kg_result = extract_kg_for_promoted_memory(uid, promoted)
     return promoted, vector_sync_failed, kg_result, keyword_sync_succeeded
 
 
@@ -634,7 +624,6 @@ class CanonicalShortTermMaintenanceReport:
 def run_canonical_short_term_promotion(
     uid: str,
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     batch_threshold: Optional[int] = None,
@@ -650,10 +639,10 @@ def run_canonical_short_term_promotion(
     """
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return ShortTermPromotionReport(uid=uid, skipped_reason="not_canonical_cohort")
 
-    promotable = list_promotable_short_term_items(uid, db_client=db_client, now=current_time)
+    promotable = list_promotable_short_term_items(uid, now=current_time)
     allowed: Optional[Set[str]] = None
     if consolidation_batched_ids is not None:
         if not consolidation_batched_ids:
@@ -661,13 +650,13 @@ def run_canonical_short_term_promotion(
                 uid=uid,
                 skipped_reason="consolidation_watermark_blocked",
                 promotable_count=len(promotable),
-                last_promotion_run_at=_read_control_state(uid, db_client=db_client).last_promotion_run_at,
+                last_promotion_run_at=_read_control_state(uid).last_promotion_run_at,
             )
         allowed = set(consolidation_batched_ids)
         promotable = [item for item in promotable if item.memory_id in allowed]
-    fast_track = list_fast_track_promotable_items(uid, db_client=db_client, now=current_time)
+    fast_track = list_fast_track_promotable_items(uid, now=current_time)
     required_promotion = list_required_promotion_items(promotable)
-    control = _read_control_state(uid, db_client=db_client)
+    control = _read_control_state(uid)
     trigger = promotion_trigger_reason(
         promotable_count=len(promotable),
         last_promotion_run_at=control.last_promotion_run_at,
@@ -697,10 +686,10 @@ def run_canonical_short_term_promotion(
         promotable_count=len(promotable),
         last_promotion_run_at=control.last_promotion_run_at,
     )
-    transition_store = FirestoreShortTermLifecycleTransitionStore(db_client=db_client, now=current_time)
+    transition_store = FirestoreShortTermLifecycleTransitionStore(now=current_time)
 
     for item in promotable:
-        control = _read_control_state(uid, db_client=db_client)
+        control = _read_control_state(uid)
         promoted, vector_sync_failed, kg_result, keyword_sync_succeeded = promote_short_term_item_via_apply(
             uid,
             item,
@@ -708,7 +697,6 @@ def run_canonical_short_term_promotion(
             run_id=run_id,
             trigger_reason=trigger,
             now=current_time,
-            db_client=db_client,
         )
         if vector_sync_failed:
             report.vector_sync_failures += 1
@@ -725,10 +713,10 @@ def run_canonical_short_term_promotion(
             _audit_promotion_transition(item, store=transition_store, run_id=run_id, now=current_time)
         )
 
-    updated_control = _read_control_state(uid, db_client=db_client).model_copy(
+    updated_control = _read_control_state(uid).model_copy(
         update={"last_promotion_run_at": current_time, "updated_at": current_time}
     )
-    _persist_control_state(updated_control, db_client=db_client)
+    _persist_control_state(updated_control)
     report.last_promotion_run_at = current_time
     return report
 
@@ -736,7 +724,6 @@ def run_canonical_short_term_promotion(
 def run_canonical_short_term_ttl_lifecycle(
     uid: str,
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     limit: Optional[int] = None,
@@ -744,11 +731,11 @@ def run_canonical_short_term_ttl_lifecycle(
     """TTL/decay audit for canonical short_term via the existing lifecycle worker."""
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return CanonicalShortTermLifecycleReport(uid=uid, skipped_reason="not_canonical_cohort")
 
-    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=db_client, limit=limit)
-    store = FirestoreShortTermLifecycleTransitionStore(db_client=db_client, now=current_time)
+    items = fetch_short_term_memory_items_firestore(uid=uid, limit=limit)
+    store = FirestoreShortTermLifecycleTransitionStore(now=current_time)
     created = 0
     existing = 0
     for item in items:
@@ -779,7 +766,6 @@ def run_canonical_short_term_ttl_lifecycle(
 def run_canonical_short_term_maintenance(
     uid: str,
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
@@ -787,20 +773,18 @@ def run_canonical_short_term_maintenance(
     required_processor: Optional[RequiredMemoryProcessor] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Canonical-only wrapper: required processing → TTL → consolidation → promotion."""
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return CanonicalShortTermMaintenanceReport(uid=uid, skipped_reason="not_canonical_cohort")
 
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     required_processing = run_required_memory_processing(
         uid,
-        db_client=db_client,
         processor=required_processor,
         now=current_time,
     )
-    lifecycle = run_canonical_short_term_ttl_lifecycle(uid, db_client=db_client, now=current_time, run_id=run_id)
+    lifecycle = run_canonical_short_term_ttl_lifecycle(uid, now=current_time, run_id=run_id)
     consolidation = run_canonical_consolidation(
         uid,
-        db_client=db_client,
         now=current_time,
         run_id=run_id,
         llm_invoke=llm_invoke,
@@ -817,7 +801,6 @@ def run_canonical_short_term_maintenance(
 
     promotion = run_canonical_short_term_promotion(
         uid,
-        db_client=db_client,
         now=current_time,
         run_id=run_id,
         consolidation_batched_ids=promotion_batched_ids,
@@ -831,5 +814,5 @@ def run_canonical_short_term_maintenance(
     )
 
 
-def count_promotable_short_term_items(uid: str, *, db_client: Any = None, now: Optional[datetime] = None) -> int:
-    return len(list_promotable_short_term_items(uid, db_client=db_client, now=now))
+def count_promotable_short_term_items(uid: str, *, now: Optional[datetime] = None) -> int:
+    return len(list_promotable_short_term_items(uid, now=now))

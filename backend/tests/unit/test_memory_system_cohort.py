@@ -34,15 +34,15 @@ def _empty_cohort(monkeypatch):
 
 class TestCanonicalCohortFailClosed:
     def test_unknown_uid_resolves_legacy(self):
-        assert resolve_memory_system("uid-not-in-cohort", db_client=_FirestoreFake()) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-not-in-cohort") == MemorySystem.LEGACY
 
     @pytest.mark.parametrize("uid", ["", None])
     def test_empty_uid_resolves_legacy(self, uid):
-        assert resolve_memory_system(uid, db_client=_FirestoreFake()) == MemorySystem.LEGACY
+        assert resolve_memory_system(uid) == MemorySystem.LEGACY
 
     def test_cohort_member_resolves_canonical(self, monkeypatch):
         set_canonical_cohort(monkeypatch, "uid-test-canonical")
-        assert resolve_memory_system("uid-test-canonical", db_client=_FirestoreFake()) == MemorySystem.CANONICAL
+        assert resolve_memory_system("uid-test-canonical") == MemorySystem.CANONICAL
 
     def test_list_canonical_cohort_uids_reflects_code_set_only(self, monkeypatch):
         set_canonical_cohort(monkeypatch, "uid-b", "uid-a")
@@ -77,7 +77,7 @@ class TestResolveMemorySystemIgnoresMemoryFlags:
 
                 return _DocumentRef(self, path)
 
-        assert resolve_memory_system("uid-memory-dogfood", db_client=_Db(db_docs)) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-memory-dogfood") == MemorySystem.LEGACY
 
 
 _EXPECTED_CANONICAL_COHORT_UIDS = frozenset(

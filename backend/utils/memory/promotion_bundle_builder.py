@@ -60,7 +60,6 @@ class DefaultVectorSearchService(Protocol):
         uid: str,
         query: str,
         *,
-        db_client: Any,
         policy: MemoryAccessPolicy,
         limit: int,
         required_projection_commit_id: str,
@@ -277,19 +276,17 @@ def vector_seed_from_durable_facts(query: str, durable_facts: Iterable[Payload],
 
 def make_vector_seed_fetcher(
     *,
-    db_client: Any = None,
     policy: Optional[MemoryAccessPolicy] = None,
     required_projection_commit_id: Optional[str] = None,
     required_account_generation: int = 0,
 ) -> VectorSeedFetcher:
     def fetch(uid: str, query: str, limit: int) -> PayloadList:
         vector_search = _default_vector_search_service()
-        if vector_search is None or db_client is None or policy is None or not required_projection_commit_id:
+        if vector_search is None or policy is None or not required_projection_commit_id:
             return vector_seed_from_durable_facts(query, fetch_durable_facts_from_ledger(uid), limit)
         response = vector_search(
             uid,
             query,
-            db_client=db_client,
             policy=policy,
             limit=limit,
             required_projection_commit_id=required_projection_commit_id,

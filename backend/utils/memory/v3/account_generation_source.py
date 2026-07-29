@@ -67,7 +67,7 @@ def _fail(*, uid: str, source_path: str, reason: V3AccountGenerationFailureReaso
     return V3TrustedAccountGenerationResult(uid=uid, source_path=source_path, read_error_reason=reason)
 
 
-def read_memory_v3_trusted_account_generation(*, uid: str, db_client: Any) -> V3TrustedAccountGenerationResult:
+def read_memory_v3_trusted_account_generation(*, uid: str) -> V3TrustedAccountGenerationResult:
     """Read and validate the independent account-generation state-head source.
 
     Future `/v3` GET wiring must feed this returned generation into projection

@@ -64,7 +64,7 @@ def _force_canonical(monkeypatch, *, existing_ids):
     monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: True)
     existing = set(existing_ids)
 
-    def delete_batch(uid, memory_ids, db_client=None):
+    def delete_batch(uid, memory_ids):
         if any(memory_id not in existing for memory_id in memory_ids):
             raise canonical_adapter.CanonicalMemoryNotFoundError("canonical memory not found")
 
@@ -202,7 +202,7 @@ class TestBatchDeleteCanonicalCohort:
         monkeypatch.setattr(mem_mod.memories_db, 'delete_memories_batch', delete_mock)
 
         mem_mod.delete_memories_batch(data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=['a', 'b']), uid='u1')
-        atomic_delete_mock.assert_called_once_with('u1', ['a', 'b'], db_client=mem_mod.db)
+        atomic_delete_mock.assert_called_once_with('u1', ['a', 'b'])
         get_mock.assert_not_called()
         delete_mock.assert_not_called()
 
@@ -226,7 +226,6 @@ class TestBatchDeleteCanonicalCohort:
         atomic_delete_mock.assert_called_once_with(
             'u1',
             ['valid', 'missing'],
-            db_client=mem_mod.db,
         )
 
     def test_canonical_batch_adapter_failure_never_falls_back_to_per_id_delete(self, monkeypatch):
@@ -271,7 +270,6 @@ class TestBatchDeleteCanonicalCohort:
             canonical_adapter.delete_canonical_memories_batch(
                 'u1',
                 ['valid', 'missing'],
-                db_client=mem_mod.db,
             )
 
         # The earlier valid id must be left untouched (still active, content intact):

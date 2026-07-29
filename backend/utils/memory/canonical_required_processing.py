@@ -110,7 +110,7 @@ def _snapshot_payload(snapshot: Any) -> Dict[str, Any]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
+def _read_control_state(uid: str) -> MemoryControlState:
     path = MemoryCollections(uid=uid).memory_apply_control_state
     snapshot = document_store.get_document(path)
     if getattr(snapshot, "exists", False):
@@ -136,7 +136,6 @@ def _is_pending_required_processing(item: MemoryItem) -> bool:
 def list_pending_required_processing_items(
     uid: str,
     *,
-    db_client: Any = None,
     limit: int = 25,
 ) -> List[MemoryItem]:
     snapshots = document_store.stream_collection(MemoryCollections(uid=uid).memory_items)
@@ -206,14 +205,14 @@ def _processing_receipt(
     }
 
 
-def _read_current_item(item: MemoryItem, *, db_client: Any) -> Optional[MemoryItem]:
+def _read_current_item(item: MemoryItem) -> Optional[MemoryItem]:
     snapshot = document_store.get_document(f"{MemoryCollections(uid=item.uid).memory_items}/{item.memory_id}")
     payload = _snapshot_payload(snapshot)
     return MemoryItem(**payload) if payload else None
 
 
-def _completed_or_replaced_result(item: MemoryItem, *, db_client: Any) -> Optional[RequiredMemoryProcessingResult]:
-    current = _read_current_item(item, db_client=db_client)
+def _completed_or_replaced_result(item: MemoryItem) -> Optional[RequiredMemoryProcessingResult]:
+    current = _read_current_item(item)
     if current is None:
         return RequiredMemoryProcessingResult(memory_id=item.memory_id, skipped_reason="memory_not_found")
     promotion = current.promotion or {}
@@ -236,10 +235,9 @@ def _apply_processed_result(
     item: MemoryItem,
     processed: ProcessedRequiredMemory,
     *,
-    db_client: Any,
     now: datetime,
 ) -> ApplyStatus:
-    control = _read_control_state(item.uid, db_client=db_client)
+    control = _read_control_state(item.uid)
     evidence_ids = [evidence.evidence_id for evidence in item.evidence]
     logical_payload = {
         "decision": DurablePatchDecision.update.value,
@@ -311,11 +309,10 @@ def process_required_memory_item(
     uid: str,
     memory_id: str,
     *,
-    db_client: Any = None,
     processor: Optional[RequiredMemoryProcessor] = None,
     now: Optional[datetime] = None,
 ) -> RequiredMemoryProcessingResult:
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_canonical_cohort")
     snapshot = document_store.get_document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}")
     payload = _snapshot_payload(snapshot)
@@ -330,9 +327,9 @@ def process_required_memory_item(
     current_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     try:
         processed = processor(item)
-        status = _apply_processed_result(item, processed, db_client=db_client, now=current_time)
+        status = _apply_processed_result(item, processed, now=current_time)
     except Exception as exc:
-        race_result = _completed_or_replaced_result(item, db_client=db_client)
+        race_result = _completed_or_replaced_result(item)
         if race_result is not None:
             return race_result
         error_code = type(exc).__name__
@@ -344,7 +341,7 @@ def process_required_memory_item(
         )
         return RequiredMemoryProcessingResult(memory_id=memory_id, error_code=error_code)
     if status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
-        race_result = _completed_or_replaced_result(item, db_client=db_client)
+        race_result = _completed_or_replaced_result(item)
         if race_result is not None:
             return race_result
         error_code = f"apply_{status.value}"
@@ -355,19 +352,17 @@ def process_required_memory_item(
 def run_required_memory_processing(
     uid: str,
     *,
-    db_client: Any = None,
     processor: Optional[RequiredMemoryProcessor] = None,
     now: Optional[datetime] = None,
     limit: int = 25,
 ) -> RequiredMemoryProcessingReport:
     report = RequiredMemoryProcessingReport(uid=uid)
-    items = list_pending_required_processing_items(uid, db_client=db_client, limit=limit)
+    items = list_pending_required_processing_items(uid, limit=limit)
     for item in items:
         report.attempted_count += 1
         result = process_required_memory_item(
             uid,
             item.memory_id,
-            db_client=db_client,
             processor=processor,
             now=now,
         )

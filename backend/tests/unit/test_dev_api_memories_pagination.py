@@ -231,7 +231,6 @@ def _build():
         return_value=ProductAuthorizationDecision(
             allowed=True,
             context=auth_context,
-            db_client=None,
             read_decision=developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
             reason='test_legacy_safe',
             observability={'enabled': True},

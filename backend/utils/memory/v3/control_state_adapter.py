@@ -88,7 +88,7 @@ def _rollout_state_from_data(*, uid: str, data: dict[str, Any]) -> MemoryRollout
 
 
 def read_v3_control(
-    *, uid: str, db_client: Any, rollout_config: MemoryRolloutConfig, consumer: str = V3_DEFAULT_CONSUMER
+    *, uid: str, rollout_config: MemoryRolloutConfig, consumer: str = V3_DEFAULT_CONSUMER
 ) -> V3ControlReadResult:
     """Read canonical memory rollout state and derive the `/v3` control contract.
 
@@ -102,7 +102,7 @@ def read_v3_control(
     if uid not in rollout_config.enabled_users:
         return V3ControlReadResult(cohort_enrolled=False, source_path=source_path)
 
-    source_path, data, read_error = read_rollout_state_doc(uid=uid, db_client=db_client)
+    source_path, data, read_error = read_rollout_state_doc(uid=uid)
     if read_error is not None:
         return V3ControlReadResult(
             cohort_enrolled=True,
@@ -153,8 +153,8 @@ def read_v3_control(
     global_read_gate_open = False
     write_convergence_ready = False
     if effective_mode == MemoryRolloutMode.read:
-        global_gate = read_global_read_gate(db_client=db_client)
-        write_gate = read_write_convergence_gate(db_client=db_client)
+        global_gate = read_global_read_gate()
+        write_gate = read_write_convergence_gate()
         global_read_gate_open = global_gate.read_decision == MemoryReadDecision.USE_MEMORY
         write_convergence_ready = write_gate.ready
 

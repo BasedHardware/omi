@@ -120,7 +120,6 @@ def test_fetch_default_product_memory_search_reads_authoritative_items_and_filte
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(),
         now=now,
-        db_client=db_client,
     )
 
     assert [item['memory_id'] for item in response['items']] == ['fresh-short-term', 'long-term']
@@ -149,7 +148,6 @@ def test_fetch_default_product_memory_search_excludes_pending_short_term_text(mo
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(),
         now=now,
-        db_client=db_client,
     )
 
     assert response['items'] == []
@@ -178,7 +176,6 @@ def test_fetch_default_product_memory_search_paginates_after_filtering_with_dete
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(),
         now=now,
-        db_client=db_client,
         limit=2,
         offset=1,
     )
@@ -202,7 +199,6 @@ def test_fetch_default_product_memory_search_rejects_uid_mismatches(monkeypatch)
             query='coffee',
             policy=MemoryAccessPolicy.for_omi_chat(),
             now=now,
-            db_client=db_client,
         )
 
 
@@ -224,21 +220,18 @@ def test_fetch_archive_product_memory_search_requires_archive_capability_and_kee
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
         now=now,
-        db_client=db_client,
     )
     allowed = fetch_archive_product_memory_search(
         uid='u1',
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(archive_capability=True),
         now=now,
-        db_client=db_client,
     )
     default = fetch_default_product_memory_search(
         uid='u1',
         query='coffee',
         policy=MemoryAccessPolicy.for_omi_chat(),
         now=now,
-        db_client=db_client,
     )
 
     assert denied['archive_capability_required'] is True

@@ -82,9 +82,9 @@ def is_indexable_long_term_atom(item: MemoryItem) -> bool:
     )
 
 
-def user_allows_atom_keyword_index(uid: str, *, db_client: Any = None) -> bool:
+def user_allows_atom_keyword_index(uid: str) -> bool:
     """Canonical cohort + conversation-Typesense-compatible data protection."""
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return False
     user_doc: Any = document_store.get_document(f"users/{uid}")
     user_data = _payload_or_empty(user_doc.to_dict() if getattr(user_doc, "exists", False) else {})
@@ -182,9 +182,9 @@ def ensure_memories_collection() -> None:
         )
 
 
-def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
+def upsert_atom_keyword_doc(item: MemoryItem) -> bool:
     """Upsert one long-term atom when indexable; no-op otherwise."""
-    if not user_allows_atom_keyword_index(item.uid, db_client=db_client):
+    if not user_allows_atom_keyword_index(item.uid):
         return False
     if not is_indexable_long_term_atom(item):
         return False
@@ -203,9 +203,9 @@ def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
         return False
 
 
-def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client: Any = None) -> None:
+def delete_atom_keyword_doc(uid: str, memory_id: str) -> None:
     """Remove one keyword doc. Canonical-gated; legacy users are no-ops."""
-    if not user_allows_atom_keyword_index(uid, db_client=db_client):
+    if not user_allows_atom_keyword_index(uid):
         return
     if not memory_id:
         return
@@ -216,10 +216,10 @@ def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client: Any = None) 
 
 
 def purge_user_atom_keyword_index(
-    uid: str, *, db_client: Any = None, force: bool = False, raise_on_failure: bool = False
+    uid: str, *, force: bool = False, raise_on_failure: bool = False
 ) -> int:
     """Delete all keyword docs for a canonical user. Returns deleted count when available."""
-    if not force and not user_allows_atom_keyword_index(uid, db_client=db_client):
+    if not force and not user_allows_atom_keyword_index(uid):
         return 0
     try:
         result = _payload_or_empty(
@@ -235,13 +235,13 @@ def purge_user_atom_keyword_index(
         return 0
 
 
-def sync_atom_keyword_index_for_item(item: MemoryItem, *, db_client: Any = None) -> bool:
+def sync_atom_keyword_index_for_item(item: MemoryItem) -> bool:
     """Index or purge one atom based on its current authoritative state."""
-    if not user_allows_atom_keyword_index(item.uid, db_client=db_client):
+    if not user_allows_atom_keyword_index(item.uid):
         return True
     if is_indexable_long_term_atom(item):
-        return upsert_atom_keyword_doc(item, db_client=db_client)
-    delete_atom_keyword_doc(item.uid, item.memory_id, db_client=db_client)
+        return upsert_atom_keyword_doc(item)
+    delete_atom_keyword_doc(item.uid, item.memory_id)
     return True
 
 
@@ -252,13 +252,12 @@ def keyword_search_memory_ids(
     limit: int = 5,
     start_date: Optional[int] = None,
     end_date: Optional[int] = None,
-    db_client: Any = None,
 ) -> List[str]:
     """Typesense keyword search returning memory ids for hybrid retrieval.
 
     Fail-open: any search error returns [] so callers can fall back to vector-only results.
     """
-    if not user_allows_atom_keyword_index(uid, db_client=db_client):
+    if not user_allows_atom_keyword_index(uid):
         return []
     if not (query or "").strip():
         return []
@@ -295,18 +294,18 @@ def keyword_search_memory_ids(
         return []
 
 
-def rebuild_atom_keyword_index(uid: str, *, db_client: Any = None) -> AtomKeywordRebuildReport:
+def rebuild_atom_keyword_index(uid: str) -> AtomKeywordRebuildReport:
     """Rebuild the keyword index for one user from the canonical store (idempotent)."""
-    if not user_allows_atom_keyword_index(uid, db_client=db_client):
+    if not user_allows_atom_keyword_index(uid):
         return AtomKeywordRebuildReport(uid=uid, skipped_reason="not_indexable_user")
 
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid)
     indexable = [item for item in items if is_indexable_long_term_atom(item)]
 
-    purge_user_atom_keyword_index(uid, db_client=db_client)
+    purge_user_atom_keyword_index(uid)
     indexed = 0
     for item in indexable:
-        if upsert_atom_keyword_doc(item, db_client=db_client):
+        if upsert_atom_keyword_doc(item):
             indexed += 1
 
     expected = len(indexable)

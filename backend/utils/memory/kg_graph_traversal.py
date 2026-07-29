@@ -69,13 +69,13 @@ class TraversalResult:
     skipped_reason: Optional[str] = None
 
 
-def user_allows_kg_traversal(uid: str, *, db_client: Any = None) -> bool:
+def user_allows_kg_traversal(uid: str) -> bool:
     """Traversal is meaningful only for the canonical memory cohort."""
-    return resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
+    return resolve_memory_system(uid) == MemorySystem.CANONICAL
 
 
-def _long_term_memory_ids(uid: str, *, db_client: Any) -> Set[str]:
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+def _long_term_memory_ids(uid: str) -> Set[str]:
+    items = fetch_authoritative_product_memory_items(uid=uid)
     return {item.memory_id for item in items if is_indexable_long_term_atom(item)}
 
 
@@ -171,7 +171,6 @@ def traverse_knowledge_graph(
     entity_query: str,
     *,
     hops: int = 1,
-    db_client: Any = None,
     graph: Optional[Dict[str, Any]] = None,
 ) -> TraversalResult:
     """Read-only BFS neighborhood expansion capped at ``MAX_TRAVERSAL_HOPS``."""
@@ -183,11 +182,11 @@ def traverse_knowledge_graph(
         hops_capped=hops_capped,
     )
 
-    if not user_allows_kg_traversal(uid, db_client=db_client):
+    if not user_allows_kg_traversal(uid):
         result.skipped_reason = "not_canonical_cohort"
         return result
 
-    allowed_memory_ids = _long_term_memory_ids(uid, db_client=db_client)
+    allowed_memory_ids = _long_term_memory_ids(uid)
     if graph is None:
         get_knowledge_graph = cast(Callable[[str], Dict[str, Any]], getattr(kg_db, "get_knowledge_graph"))
         graph = get_knowledge_graph(uid)
@@ -254,7 +253,7 @@ def traverse_knowledge_graph(
 
     if cited_ids:
         items_by_id = {
-            item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+            item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=uid)
         }
         for memory_id in cited_ids:
             item = items_by_id.get(memory_id)

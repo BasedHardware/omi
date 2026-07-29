@@ -90,7 +90,6 @@ class V3GetRuntime:
 @dataclass(frozen=True)
 class _RuntimeConfig:
     uid: str
-    db_client: object
     rollout_config: MemoryRolloutConfig
     cursor_secret: bytes | None
     cursor_policy_version: str
@@ -119,7 +118,6 @@ class _ProductionV3Adapters:
     def decide_dependency(self, request: V3ComposedRequest, budget_ms: int) -> V3ComposedDependencyDecision:
         control = read_v3_control(
             uid=self.config.uid,
-            db_client=self.config.db_client,
             rollout_config=self.config.rollout_config,
         )
         if not control.cohort_enrolled:
@@ -127,7 +125,7 @@ class _ProductionV3Adapters:
             self._last_trusted_generation = None
             return V3ComposedDependencyDecision.legacy(self.config.uid)
         trusted_generation = read_memory_v3_trusted_account_generation(
-            uid=self.config.uid, db_client=self.config.db_client
+            uid=self.config.uid
         )
         expected_generation = trusted_generation.account_generation
         route_decision = decide_v3_control_route(
@@ -158,7 +156,7 @@ class _ProductionV3Adapters:
             return V3ComposedSnapshotDecision.fail('infrastructure_failure', 503)
         control_state = self._last_control.state
         projection_state_data = _read_doc_dict(
-            self.config.db_client, f'users/{subject_uid}/v3_compatibility_projection/state'
+            f'users/{subject_uid}/v3_compatibility_projection/state'
         )
         if not isinstance(projection_state_data, dict):
             return V3ComposedSnapshotDecision.fail('infrastructure_failure', 503)
@@ -268,7 +266,7 @@ class _ProductionV3Adapters:
         )
 
 
-def _read_doc_dict(db_client: Any, path: str) -> MemoryDbItem | None:
+def _read_doc_dict(path: str) -> MemoryDbItem | None:
     snapshot: Any = document_store.get_document(path)
     if getattr(snapshot, 'exists', False) is False:
         return None
@@ -393,11 +391,11 @@ def _rollout_config_from_env(env: EnvMapping) -> MemoryRolloutConfig:
 
 
 def _source_decision_for_uid(
-    *, uid: str, db_client: object, rollout_config: MemoryRolloutConfig
+    *, uid: str, rollout_config: MemoryRolloutConfig
 ) -> V3GetSourceDecision:
     if not _runtime_enabled(rollout_config):
         return 'disabled'
-    control = read_v3_control(uid=uid, db_client=db_client, rollout_config=rollout_config)
+    control = read_v3_control(uid=uid, rollout_config=rollout_config)
     if not control.cohort_enrolled:
         return 'legacy_primary'
     if control.state is not None and control.state.effective_mode != MemoryRolloutMode.read:
@@ -405,7 +403,7 @@ def _source_decision_for_uid(
     return 'memory_read'
 
 
-def build_v3_production_runtime(*, uid: str, db_client: object, env: EnvMapping | None = None) -> V3GetRuntime:
+def build_v3_production_runtime(*, uid: str, env: EnvMapping | None = None) -> V3GetRuntime:
     effective_env = env if env is not None else os.environ
     if not _v3_get_route_enabled(effective_env):
         return V3GetRuntime(enabled=False, source_decision='disabled')
@@ -413,13 +411,12 @@ def build_v3_production_runtime(*, uid: str, db_client: object, env: EnvMapping 
     if not _runtime_enabled(rollout_config):
         return V3GetRuntime(enabled=False, source_decision='disabled')
 
-    source_decision = _source_decision_for_uid(uid=uid, db_client=db_client, rollout_config=rollout_config)
+    source_decision = _source_decision_for_uid(uid=uid, rollout_config=rollout_config)
     if source_decision == 'legacy_primary':
         return V3GetRuntime(enabled=True, source_decision='legacy_primary')
 
     config = _RuntimeConfig(
         uid=uid,
-        db_client=db_client,
         rollout_config=rollout_config,
         cursor_secret=_cursor_secret_from_env(effective_env),
         cursor_policy_version=effective_env.get('MEMORY_V3_CURSOR_POLICY_VERSION') or _DEFAULT_CURSOR_POLICY_VERSION,

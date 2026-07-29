@@ -166,7 +166,7 @@ def test_cohort_runner_invokes_maintenance_for_each_canonical_uid_only(monkeypat
         _recording_maintenance,
     )
 
-    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-test-1")
+    summary = run_canonical_short_term_maintenance_for_cohort( now=NOW, run_id="cron-test-1")
 
     assert invoked == [CANONICAL_A, CANONICAL_B]
     assert LEGACY_UID not in invoked
@@ -186,7 +186,7 @@ def test_cohort_runner_uses_real_maintenance_with_fake_firestore(monkeypatch):
     monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
 
-    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-test-2")
+    summary = run_canonical_short_term_maintenance_for_cohort( now=NOW, run_id="cron-test-2")
 
     assert summary.user_count == 1
     assert summary.promoted_total == 0
@@ -211,7 +211,7 @@ def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch
         monkeypatch=monkeypatch,
     )
 
-    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-first-tick")
+    summary = run_canonical_short_term_maintenance_for_cohort( now=NOW, run_id="cron-first-tick")
 
     assert summary.promoted_total == 0
     assert summary.skipped_users == 1
@@ -247,7 +247,7 @@ def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch, _consolidation
             monkeypatch=monkeypatch,
         )
 
-    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-batch")
+    summary = run_canonical_short_term_maintenance_for_cohort( now=NOW, run_id="cron-batch")
 
     assert summary.promoted_total == threshold
     assert summary.skipped_users == 0
@@ -272,7 +272,7 @@ def test_daily_cadence_after_first_promotion_run(monkeypatch, _consolidation_dis
             monkeypatch=monkeypatch,
         )
 
-    first = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-daily-seed")
+    first = run_canonical_short_term_maintenance_for_cohort( now=NOW, run_id="cron-daily-seed")
     assert first.promoted_total == threshold
 
     daily_memory_id = _seed_canonical_short_term(
@@ -284,7 +284,6 @@ def test_daily_cadence_after_first_promotion_run(monkeypatch, _consolidation_dis
     )
 
     hold = run_canonical_short_term_maintenance_for_cohort(
-        db_client=db,
         now=NOW + timedelta(hours=1),
         run_id="cron-daily-hold",
     )
@@ -292,7 +291,6 @@ def test_daily_cadence_after_first_promotion_run(monkeypatch, _consolidation_dis
     assert db.docs[f"users/{CANONICAL_A}/memory_items/{daily_memory_id}"]["tier"] == MemoryTier.short_term.value
 
     daily = run_canonical_short_term_maintenance_for_cohort(
-        db_client=db,
         now=NOW + timedelta(hours=25),
         run_id="cron-daily-fire",
     )

@@ -38,7 +38,6 @@ def fetch_default_vector_memory_search(
     uid: str,
     query: str,
     *,
-    db_client: Any,
     policy: MemoryAccessPolicy,
     vector_query: Optional[Callable[..., Any]] = None,
     repair_purge_callback: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
@@ -117,7 +116,6 @@ def fetch_default_vector_memory_search(
         all_hits = list(candidate_result.hits)[:candidate_budget]
         hydration_result = _hydrate_vector_candidate_items_by_id(
             uid=uid,
-            db_client=db_client,
             hits=all_hits,
             hydrated_items=hydrated_items,
             missing_authoritative_memory_ids=missing_authoritative_memory_ids,
@@ -307,7 +305,6 @@ def _validate_freshness_fence(*, required_projection_commit_id: Any, required_ac
 def _hydrate_vector_candidate_items_by_id(
     *,
     uid: str,
-    db_client: Any,
     hits: List[SearchVectorHit],
     hydrated_items: Dict[str, MemoryItem],
     missing_authoritative_memory_ids: Set[str],

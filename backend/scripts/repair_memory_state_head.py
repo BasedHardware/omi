@@ -152,7 +152,7 @@ def main() -> int:
         raise RuntimeError(f"state-head repair blocked: {plan.status}")
     trusted_after_apply = None
     if args.apply and plan.status in {"repair_required", "already_trusted"}:
-        trusted_after_apply = read_memory_v3_trusted_account_generation(uid=args.uid, db_client=db_client)
+        trusted_after_apply = read_memory_v3_trusted_account_generation(uid=args.uid)
         if trusted_after_apply.read_error_reason is not None:
             raise RuntimeError(
                 f"state-head repair did not satisfy V3 trust contract: {trusted_after_apply.read_error_reason.value}"

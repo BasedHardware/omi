@@ -82,7 +82,7 @@ def _coerce_aware_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
+def _read_control_state(uid: str) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
     path = collections.memory_apply_control_state
     snapshot = document_store.get_document(path)
@@ -94,7 +94,7 @@ def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
     return control
 
 
-def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
+def _persist_control_state(control: MemoryControlState) -> None:
     document_store.set_document(
         MemoryCollections(uid=control.uid).memory_apply_control_state,
         {
@@ -171,12 +171,11 @@ def _is_active_consolidation_item(item: MemoryItem) -> bool:
 def list_pending_consolidation_items(
     uid: str,
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
 ) -> List[MemoryItem]:
     """Active processed short_term items eligible for batched consolidation."""
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
-    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=db_client)
+    items = fetch_short_term_memory_items_firestore(uid=uid)
     pending = [
         item
         for item in items
@@ -233,7 +232,7 @@ class ConsolidationContext:
 
 
 def _hydrate_memory_item(
-    uid: str, memory_id: str, *, db_client: Any, cache: Dict[str, Optional[MemoryItem]]
+    uid: str, memory_id: str, *, cache: Dict[str, Optional[MemoryItem]]
 ) -> Optional[MemoryItem]:
     if memory_id in cache:
         return cache[memory_id]
@@ -254,7 +253,6 @@ def gather_consolidation_candidates(
     uid: str,
     pending_items: List[MemoryItem],
     *,
-    db_client: Any = None,
     candidate_limit: Optional[int] = None,
 ) -> ConsolidationContext:
     """Vector-search similar memories and hydrate active items (deterministic only)."""
@@ -273,7 +271,7 @@ def gather_consolidation_candidates(
         for hit in query_result.hits:
             if hit.memory_id == anchor.memory_id or hit.memory_id in seen:
                 continue
-            item = _hydrate_memory_item(uid, hit.memory_id, db_client=db_client, cache=cache)
+            item = _hydrate_memory_item(uid, hit.memory_id, cache=cache)
             if item is None:
                 continue
             seen.add(hit.memory_id)
@@ -519,7 +517,6 @@ def _ensure_consolidation_operation(
     control: MemoryControlState,
     run_id: str,
     evidence_ids: List[str],
-    db_client: Any,
 ) -> MemoryOperation:
     apply_decision = _consolidation_apply_decision(decision)
     logical_payload: Payload = {
@@ -557,7 +554,6 @@ def _apply_superseded_item(
     superseded_by: str,
     control: MemoryControlState,
     run_id: str,
-    db_client: Any,
 ) -> None:
     idempotency_key = deterministic_contract_id(
         "canonical-consolidation-supersede",
@@ -613,9 +609,9 @@ def _apply_superseded_item(
         if payload:
             item = MemoryItem(**payload)
     if item is not None and item.tier == MemoryLayer.long_term:
-        delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
+        delete_atom_keyword_doc(uid, item.memory_id)
     delete_canonical_memory_vector(uid, memory_id)
-    invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=db_client)
+    invalidate_kg_for_memory_retraction(uid, [memory_id])
     purge_stale_review_conflicts_for_memories(uid, [memory_id], reason="memory_superseded")
 
 
@@ -654,7 +650,6 @@ def _load_survivor_item(
     memory_id: str,
     *,
     pending_by_id: Dict[str, MemoryItem],
-    db_client: Any,
 ) -> Optional[MemoryItem]:
     if memory_id in pending_by_id:
         return pending_by_id[memory_id]
@@ -680,13 +675,12 @@ def _validate_supersede_targets(
     supersedes: List[str],
     survivor_memory_id: str,
     pending_by_id: Dict[str, MemoryItem],
-    db_client: Any,
 ) -> None:
     """Fail-closed before survivor mutation when any supersede target is missing/inactive."""
     for memory_id in supersedes:
         if memory_id == survivor_memory_id:
             continue
-        item = _load_survivor_item(uid, memory_id, pending_by_id=pending_by_id, db_client=db_client)
+        item = _load_survivor_item(uid, memory_id, pending_by_id=pending_by_id)
         _validate_consolidation_survivor(item, memory_id=memory_id)
 
 
@@ -698,10 +692,9 @@ def apply_consolidation_decision(
     control: MemoryControlState,
     run_id: str,
     now: datetime,
-    db_client: Any,
 ) -> List[str]:
     """Apply one agent decision via durable patch apply + supersede side effects."""
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         raise ConsolidationApplySkipped("not_canonical_cohort")
     if decision.decision == "review" or decision.review_required:
         survivor = pending_by_id.get(decision.survivor_memory_id)
@@ -718,7 +711,6 @@ def apply_consolidation_decision(
         uid,
         decision.survivor_memory_id,
         pending_by_id=pending_by_id,
-        db_client=db_client,
     )
     _validate_consolidation_survivor(survivor, memory_id=decision.survivor_memory_id)
     _validate_supersede_targets(
@@ -726,7 +718,6 @@ def apply_consolidation_decision(
         supersedes=decision.supersedes,
         survivor_memory_id=decision.survivor_memory_id,
         pending_by_id=pending_by_id,
-        db_client=db_client,
     )
     evidence_ids = _dedupe_evidence_ids(
         *(decision.evidence_ids or []),
@@ -751,7 +742,6 @@ def apply_consolidation_decision(
         control=control,
         run_id=run_id,
         evidence_ids=evidence_ids,
-        db_client=db_client,
     )
     idempotency_key = deterministic_contract_id(
         "canonical-consolidation-decision",
@@ -791,7 +781,7 @@ def apply_consolidation_decision(
         )
 
     applied: List[str] = [decision.survivor_memory_id]
-    control = _read_control_state(uid, db_client=db_client)
+    control = _read_control_state(uid)
     for superseded_id in decision.supersedes:
         if superseded_id == decision.survivor_memory_id:
             continue
@@ -802,7 +792,6 @@ def apply_consolidation_decision(
                 superseded_by=decision.survivor_memory_id,
                 control=control,
                 run_id=run_id,
-                db_client=db_client,
             )
         except ConsolidationApplySkipped as exc:
             # Survivor already committed — partial apply must retry; do not advance watermark.
@@ -816,7 +805,7 @@ def apply_consolidation_decision(
                 f"supersede {superseded_id} failed: {exc}"
             ) from exc
         applied.append(superseded_id)
-        control = _read_control_state(uid, db_client=db_client)
+        control = _read_control_state(uid)
     return applied
 
 
@@ -840,7 +829,6 @@ class ConsolidationReport:
 def run_canonical_consolidation(
     uid: str,
     *,
-    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
@@ -850,13 +838,13 @@ def run_canonical_consolidation(
     """Batched consolidation entry point for one canonical user."""
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         return ConsolidationReport(uid=uid, skipped_reason="not_canonical_cohort")
     if not consolidation_enabled():
         return ConsolidationReport(uid=uid, skipped_reason="consolidation_disabled")
 
-    pending = list_pending_consolidation_items(uid, db_client=db_client, now=current_time)
-    control = _read_control_state(uid, db_client=db_client)
+    pending = list_pending_consolidation_items(uid, now=current_time)
+    control = _read_control_state(uid)
     trigger = consolidation_trigger_reason(
         pending_count=len(pending),
         last_consolidation_run_at=control.last_consolidation_run_at,
@@ -894,7 +882,7 @@ def run_canonical_consolidation(
         if not pending_batch:
             break
 
-        context = gather_consolidation_candidates(uid, pending_batch, db_client=db_client)
+        context = gather_consolidation_candidates(uid, pending_batch)
         agent_batch = invoke_consolidation_agent(context, llm_invoke=llm_invoke)
         last_agent_batch = agent_batch
         pending_by_id = {item.memory_id: item for item in pending_batch}
@@ -910,7 +898,6 @@ def run_canonical_consolidation(
                 recurrence_signal_sink(
                     uid,
                     agent_batch.recurrence_signals,
-                    firestore_client=db_client,
                 )
             except Exception as exc:
                 watermark_blocked = True
@@ -928,7 +915,7 @@ def run_canonical_consolidation(
                     _escalate_to_review_queue(uid, decision=decision, survivor=survivor)
                     report.review_escalations += 1
                 continue
-            control = _read_control_state(uid, db_client=db_client)
+            control = _read_control_state(uid)
             try:
                 applied_ids = apply_consolidation_decision(
                     uid,
@@ -937,7 +924,6 @@ def run_canonical_consolidation(
                     control=control,
                     run_id=run_id,
                     now=current_time,
-                    db_client=db_client,
                 )
             except ConsolidationPartialApply as exc:
                 report.decisions_partial += 1
@@ -980,10 +966,10 @@ def run_canonical_consolidation(
     if last_agent_batch is not None and _should_advance_consolidation_watermark(
         last_agent_batch, watermark_blocked=watermark_blocked
     ):
-        updated_control = _read_control_state(uid, db_client=db_client).model_copy(
+        updated_control = _read_control_state(uid).model_copy(
             update={"last_consolidation_run_at": current_time, "updated_at": current_time}
         )
-        _persist_control_state(updated_control, db_client=db_client)
+        _persist_control_state(updated_control)
         report.last_consolidation_run_at = current_time
     else:
         report.last_consolidation_run_at = control.last_consolidation_run_at

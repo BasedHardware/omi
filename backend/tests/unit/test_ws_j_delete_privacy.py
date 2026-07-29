@@ -340,12 +340,12 @@ def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch,
         delete_graph,
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    write_canonical_extraction_memory(uid, payload)
     memory_id = payload["id"]
     item_path = f"users/{uid}/memory_items/{memory_id}"
     assert canonical_db.docs[item_path]["status"] == MemoryItemStatus.active.value
 
-    result = purge_canonical_derived_user_data(uid, db_client=canonical_db)
+    result = purge_canonical_derived_user_data(uid)
     assert result["purged"] is True
     assert memory_id in result["memory_ids"]
     expected_vector_id = neutral_vector_id_for_memory(memory_id)
@@ -383,10 +383,10 @@ def test_canonical_account_delete_purge_raises_on_partial_vector_delete(monkeypa
         raising=False,
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    write_canonical_extraction_memory(uid, payload)
 
     with pytest.raises(RuntimeError, match="canonical vector purge only deleted 0/1 vectors"):
-        purge_canonical_derived_user_data(uid, db_client=canonical_db)
+        purge_canonical_derived_user_data(uid)
 
 
 def test_legacy_account_delete_purge_skips_canonical_path(monkeypatch):
@@ -395,7 +395,7 @@ def test_legacy_account_delete_purge_skips_canonical_path(monkeypatch):
     monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
-    assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY
+    assert resolve_memory_system(LEGACY_UID) == MemorySystem.LEGACY
 
     delete_by_id = MagicMock()
     monkeypatch.setattr(
@@ -405,7 +405,7 @@ def test_legacy_account_delete_purge_skips_canonical_path(monkeypatch):
     )
     before = set(db.docs.keys())
 
-    result = purge_canonical_derived_user_data(LEGACY_UID, db_client=db)
+    result = purge_canonical_derived_user_data(LEGACY_UID)
 
     assert result["purged"] is False
     assert result["reason"] == "not_canonical_cohort"
@@ -421,7 +421,7 @@ def test_legacy_purge_derived_user_data_still_purges_legacy_vectors(monkeypatch)
     monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
-    assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY
+    assert resolve_memory_system(LEGACY_UID) == MemorySystem.LEGACY
 
     delete_by_id = MagicMock()
     legacy_batch = MagicMock()
@@ -437,7 +437,7 @@ def test_legacy_purge_derived_user_data_still_purges_legacy_vectors(monkeypatch)
     )
     before = set(db.docs.keys())
 
-    purge_canonical_derived_user_data(LEGACY_UID, db_client=db)
+    purge_canonical_derived_user_data(LEGACY_UID)
 
     delete_by_id.assert_not_called()
     assert set(db.docs.keys()) == before
@@ -450,10 +450,10 @@ def test_legacy_purge_derived_user_data_still_purges_legacy_vectors(monkeypatch)
 
 def test_memory_service_retract_conversation_memories_is_noop_for_legacy():
     db = _legacy_db_with_control()
-    assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY
+    assert resolve_memory_system(LEGACY_UID) == MemorySystem.LEGACY
     before = set(db.docs.keys())
 
-    result = MemoryService(db_client=db).retract_conversation_memories(LEGACY_UID, "conv-x")
+    result = MemoryService().retract_conversation_memories(LEGACY_UID, "conv-x")
 
     assert result is None
     assert set(db.docs.keys()) == before
@@ -472,8 +472,8 @@ def test_conversation_delete_cascade_tombstones_canonical_and_emits_vector_purge
         lambda **_: _trusted_account_generation(),
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
-    retract_result = retract_conversation_sourced_memories(uid, conversation_id, db_client=canonical_db)
+    write_canonical_extraction_memory(uid, payload)
+    retract_result = retract_conversation_sourced_memories(uid, conversation_id)
 
     assert retract_result["retracted_memory_ids"] == [memory_id]
     tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
@@ -507,8 +507,8 @@ def test_conversation_delete_cascade_deletes_canonical_vector_immediately(monkey
         lambda u, mid: deleted_vectors.append((u, mid)),
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
-    retract_conversation_sourced_memories(uid, conversation_id, db_client=canonical_db)
+    write_canonical_extraction_memory(uid, payload)
+    retract_conversation_sourced_memories(uid, conversation_id)
 
     assert deleted_vectors == [(uid, memory_id)]
 
@@ -525,15 +525,14 @@ def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     kg_calls = []
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
-        lambda u, ids, **kwargs: kg_calls.append((u, list(ids), kwargs.get("db_client"))),
+        lambda u, ids, **kwargs: kg_calls.append((u, list(ids))),
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
-    retract_conversation_sourced_memories(uid, conversation_id, db_client=canonical_db)
+    write_canonical_extraction_memory(uid, payload)
+    retract_conversation_sourced_memories(uid, conversation_id)
     assert kg_calls
     assert kg_calls[0][0] == uid
     assert payload["id"] in kg_calls[0][1]
-    assert kg_calls[0][2] is canonical_db
 
 
 def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonical_db):
@@ -557,8 +556,8 @@ def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonic
         lambda u, mid: deleted_vectors.append((u, mid)),
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
-    delete_canonical_memory(uid, memory_id, db_client=canonical_db)
+    write_canonical_extraction_memory(uid, payload)
+    delete_canonical_memory(uid, memory_id)
 
     assert kg_calls == [(uid, [memory_id])]
     assert deleted_vectors == [(uid, memory_id)]
@@ -576,12 +575,12 @@ def test_update_canonical_visibility_validates_before_persisting(monkeypatch, ca
         lambda **_: _trusted_account_generation(),
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    write_canonical_extraction_memory(uid, payload)
     item_path = f"users/{uid}/memory_items/{memory_id}"
     before = dict(canonical_db.docs[item_path])
 
     with pytest.raises(ValueError, match="visibility"):
-        update_canonical_memory_visibility(uid, memory_id, "friends", db_client=canonical_db)
+        update_canonical_memory_visibility(uid, memory_id, "friends")
 
     assert canonical_db.docs[item_path] == before
 
@@ -597,7 +596,7 @@ def test_update_canonical_visibility_resyncs_keyword_and_vector_side_effects(mon
         lambda **_: _trusted_account_generation(),
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    write_canonical_extraction_memory(uid, payload)
 
     keyword_syncs = []
     vector_syncs = []
@@ -610,7 +609,7 @@ def test_update_canonical_visibility_resyncs_keyword_and_vector_side_effects(mon
         lambda item, **kwargs: vector_syncs.append((item.memory_id, item.visibility)) or True,
     )
 
-    updated = update_canonical_memory_visibility(uid, memory_id, "public", db_client=canonical_db)
+    updated = update_canonical_memory_visibility(uid, memory_id, "public")
 
     assert updated.visibility == "public"
     assert canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]["visibility"] == "public"
@@ -628,12 +627,12 @@ def test_update_canonical_content_fails_on_document_memory_id_mismatch(monkeypat
         lambda **_: _trusted_account_generation(),
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    write_canonical_extraction_memory(uid, payload)
     item_path = f"users/{uid}/memory_items/{memory_id}"
     canonical_db.docs[item_path] = {**canonical_db.docs[item_path], "memory_id": "different-memory-id"}
 
     with pytest.raises(ValueError, match="memory id mismatch"):
-        update_canonical_memory_content(uid, memory_id, "Updated fact", db_client=canonical_db)
+        update_canonical_memory_content(uid, memory_id, "Updated fact")
 
     assert canonical_db.docs[item_path]["content"] == "Original fact"
 
@@ -658,7 +657,7 @@ def test_update_canonical_content_invalidates_kg_and_returns_to_pending(monkeypa
         lambda *_, **__: SimpleNamespace(success=False),
     )
 
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    write_canonical_extraction_memory(uid, payload)
     item_path = f"users/{uid}/memory_items/{memory_id}"
     canonical_db.docs[item_path].update(
         {
@@ -672,7 +671,7 @@ def test_update_canonical_content_invalidates_kg_and_returns_to_pending(monkeypa
         }
     )
 
-    updated = update_canonical_memory_content(uid, memory_id, "Updated KG fact", db_client=canonical_db)
+    updated = update_canonical_memory_content(uid, memory_id, "Updated KG fact")
 
     assert updated.kg_extracted is False
     assert updated.tier == MemoryTier.short_term
@@ -701,10 +700,10 @@ def test_delete_all_canonical_memories_batches_kg_invalidation(monkeypatch, cano
 
     memory_ids = []
     for payload in payloads:
-        write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+        write_canonical_extraction_memory(uid, payload)
         memory_ids.append(payload["id"])
 
-    delete_all_canonical_memories(uid, db_client=canonical_db)
+    delete_all_canonical_memories(uid)
 
     assert len(kg_calls) == 1
     assert kg_calls[0][0] == uid

@@ -88,7 +88,7 @@ def test_persist_control_state_preserves_concurrently_advanced_head(monkeypatch)
 
     promo.MemoryCollections = _StubCollections
     try:
-        _persist_control_state(stale_control, db_client=db)
+        _persist_control_state(stale_control)
     finally:
         promo.MemoryCollections = original
 

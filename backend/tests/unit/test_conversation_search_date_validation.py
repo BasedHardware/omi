@@ -40,7 +40,6 @@ _stubs = [
     'pinecone',
     'typesense',
     'database._client',
-    'database.persistence',
     'database.conversations',
     'database.action_items',
     'database.memories',

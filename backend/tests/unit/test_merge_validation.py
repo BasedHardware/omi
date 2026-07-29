@@ -40,9 +40,6 @@ def merge():
 
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
-    # database.persistence re-exports db (WP1 DI handle); merge_conversations imports it.
-    persistence_stub = ModuleType("database.persistence")
-    persistence_stub.db = client_stub.db
 
     conversations_stub = ModuleType("database.conversations")
     conversations_stub.get_conversation = MagicMock(return_value=None)
@@ -113,7 +110,6 @@ def merge():
     fakes: dict[str, ModuleType] = {
         "database": database_pkg,
         "database._client": client_stub,
-        "database.persistence": persistence_stub,
         "database.conversations": conversations_stub,
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,

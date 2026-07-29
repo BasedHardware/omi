@@ -157,7 +157,7 @@ def test_old_mcp_key_doc_still_authenticates_uid_only_and_has_no_verified_scopes
         )
     )
     decision = authorize_memory_external_default_memory_read(
-        context, db_client='fake-db', read_app_key_grants_state=_grant_reader
+        context, read_app_key_grants_state=_grant_reader
     )
     assert decision.allowed is False
     assert decision.reason == 'missing_app_key_scope_grant'
@@ -190,7 +190,7 @@ def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_arch
         McpVerifiedAuth(uid=auth['user_id'], app_id=auth['app_id'], key_id=auth['key_id'], scopes=tuple(auth['scopes']))
     )
     decision = authorize_memory_external_default_memory_read(
-        context, db_client='fake-db', read_app_key_grants_state=_grant_reader
+        context, read_app_key_grants_state=_grant_reader
     )
 
     assert decision.allowed is True

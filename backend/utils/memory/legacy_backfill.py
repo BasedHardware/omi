@@ -275,13 +275,12 @@ def assert_canonical_cohort_for_backfill(
     allow_admin_override: bool = False,
     acknowledge_non_canonical_uid: bool = False,
     operator_context: Optional[str] = None,
-    db_client: Any = None,
 ) -> None:
     """Require ``uid`` to be in the canonical whitelist before backfill runs."""
     if allow_admin_override:
         if not acknowledge_non_canonical_uid:
             raise BackfillCohortGateError(COHORT_OVERRIDE_ACK_REQUIRED_REASON)
-        memory_system = resolve_memory_system(uid, db_client=db_client)
+        memory_system = resolve_memory_system(uid)
         if memory_system != MemorySystem.CANONICAL:
             logger.warning(
                 "legacy backfill cohort override",
@@ -293,7 +292,7 @@ def assert_canonical_cohort_for_backfill(
                 },
             )
         return
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    if resolve_memory_system(uid) != MemorySystem.CANONICAL:
         raise BackfillCohortGateError(COHORT_GATE_REASON)
 
 
@@ -326,7 +325,7 @@ def semantic_materialization_key(*, uid: str, legacy_row: LegacyRow) -> Optional
     return f"semantic:{source_id}:{content}"
 
 
-def _load_canonical_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
+def _load_canonical_item(uid: str, memory_id: str) -> Optional[MemoryItem]:
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     payload = _snapshot_payload(document_store.get_document(path))
     if not payload:
@@ -363,12 +362,12 @@ def _is_active_backfill_destination(item: MemoryItem) -> bool:
     )
 
 
-def both_store_canonical_duplicate_exists(*, uid: str, legacy_row: LegacyRow, db_client: Any) -> bool:
+def both_store_canonical_duplicate_exists(*, uid: str, legacy_row: LegacyRow) -> bool:
     """True when a live canonical write already materialized this legacy row under a different id."""
     live_id = live_extraction_memory_id_for_legacy_row(uid=uid, legacy_row=legacy_row)
     if live_id is None:
         return False
-    existing = _load_canonical_item(uid, live_id, db_client=db_client)
+    existing = _load_canonical_item(uid, live_id)
     return existing is not None and _is_active_processed_canonical_item(existing)
 
 
@@ -500,7 +499,6 @@ def classify_legacy_backfill_remediation(item: MemoryItem) -> LegacyBackfillReme
 def build_legacy_backfill_remediation_plan(
     uid: str,
     *,
-    db_client: Any = None,
     sample_size: int = 5,
 ) -> LegacyBackfillRemediationPlan:
     """Build a metadata-only, read-only remediation plan for historical imports.
@@ -516,7 +514,7 @@ def build_legacy_backfill_remediation_plan(
     }
     candidates = [
         item
-        for item in fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+        for item in fetch_authoritative_product_memory_items(uid=uid)
         if item.tier == MemoryLayer.long_term
         and item.status == MemoryItemStatus.active
         and _is_legacy_backfill_item(item)
@@ -534,12 +532,12 @@ def build_legacy_backfill_remediation_plan(
     )
 
 
-def _archive_remediation_candidates(uid: str, *, db_client: Any) -> List[MemoryItem]:
+def _archive_remediation_candidates(uid: str) -> List[MemoryItem]:
     """Return only active, explicitly attributed rows the deterministic planner archives."""
 
     return [
         item
-        for item in fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+        for item in fetch_authoritative_product_memory_items(uid=uid)
         if item.tier == MemoryLayer.long_term
         and item.status == MemoryItemStatus.active
         and _is_legacy_backfill_item(item)
@@ -553,7 +551,6 @@ def _archive_legacy_backfill_item_via_apply(
     item: MemoryItem,
     control: MemoryControlState,
     run_id: str,
-    db_client: Any,
 ) -> LegacyBackfillRemediationArchiveResult:
     """Archive one planner-approved item through the canonical apply ledger.
 
@@ -627,7 +624,7 @@ def _archive_legacy_backfill_item_via_apply(
     archived = (
         result.memory_items[0]
         if result.memory_items
-        else _load_canonical_item(uid, item.memory_id, db_client=db_client)
+        else _load_canonical_item(uid, item.memory_id)
     )
     # archive_explicit postcondition: default readers must no longer see this item.
     if archived is None or archived.tier != MemoryLayer.archive:
@@ -639,7 +636,7 @@ def _archive_legacy_backfill_item_via_apply(
         nonlocal vector_sync_failed
         vector_sync_failed = True
 
-    keyword_sync_succeeded = sync_atom_keyword_index_for_item(archived, db_client=db_client)
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(archived)
     # The existing long-term vector is eligible for default retrieval. Remove it
     # before publishing the archive vector so an upsert failure fails closed for
     # default access rather than leaving stale long-term metadata queryable.
@@ -649,7 +646,7 @@ def _archive_legacy_backfill_item_via_apply(
         _record_vector_sync_failure()
     kg_invalidation_failed = False
     try:
-        invalidate_kg_for_memory_retraction(uid, [archived.memory_id], db_client=db_client)
+        invalidate_kg_for_memory_retraction(uid, [archived.memory_id])
     except Exception:
         kg_invalidation_failed = True
         logger.exception(
@@ -674,7 +671,6 @@ def apply_legacy_backfill_remediation_archives(
     allow_admin_override: bool = False,
     acknowledge_non_canonical_uid: bool = False,
     operator_context: Optional[str] = None,
-    db_client: Any = None,
 ) -> LegacyBackfillRemediationApplyReport:
     """Archive only the deterministic planner's legacy-backfill noise recommendations.
 
@@ -689,7 +685,6 @@ def apply_legacy_backfill_remediation_archives(
             allow_admin_override=allow_admin_override,
             acknowledge_non_canonical_uid=acknowledge_non_canonical_uid,
             operator_context=operator_context,
-            db_client=db_client,
         )
     except BackfillCohortGateError as exc:
         return LegacyBackfillRemediationApplyReport(
@@ -706,7 +701,7 @@ def apply_legacy_backfill_remediation_archives(
             errors=[str(exc)],
         )
 
-    candidates = _archive_remediation_candidates(uid, db_client=db_client)
+    candidates = _archive_remediation_candidates(uid)
     candidate_count = len(candidates)
     if not dry_run and expected_archive_count is None:
         raise ValueError("expected_archive_count is required for an archive remediation apply")
@@ -738,7 +733,7 @@ def apply_legacy_backfill_remediation_archives(
             kg_invalidation_failures=0,
         )
 
-    control = _read_control_state(uid, db_client=db_client, create_if_missing=False)
+    control = _read_control_state(uid, create_if_missing=False)
     effective_run_id = run_id or f"legacy_backfill_remediation_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     archived_count = 0
     idempotent_count = 0
@@ -753,7 +748,6 @@ def apply_legacy_backfill_remediation_archives(
                 item=item,
                 control=control,
                 run_id=effective_run_id,
-                db_client=db_client,
             )
             control = result.control
             archived_count += int(result.archived)
@@ -812,7 +806,6 @@ def _bucket_counts_and_samples(
 def _fetch_active_legacy_memories(
     uid: str,
     *,
-    db_client: Any,
     get_non_filtered_memories_fn: LegacyReader,
     scan_page_size: int = LEGACY_SCAN_PAGE_SIZE,
 ) -> List[LegacyRow]:
@@ -826,14 +819,7 @@ def _fetch_active_legacy_memories(
     offset = 0
     page_size = scan_page_size
     while True:
-        try:
-            page: List[LegacyRow] = get_non_filtered_memories_fn(
-                uid, limit=page_size, offset=offset, firestore_client=db_client
-            )
-        except TypeError as exc:
-            if "firestore_client" not in str(exc):
-                raise
-            page = get_non_filtered_memories_fn(uid, limit=page_size, offset=offset)
+        page: List[LegacyRow] = get_non_filtered_memories_fn(uid, limit=page_size, offset=offset)
         if not page:
             break
         for row in page:
@@ -845,7 +831,7 @@ def _fetch_active_legacy_memories(
     return sorted(all_rows, key=lambda row: _row_str(row, "id"))
 
 
-def _read_control_state(uid: str, *, db_client: Any, create_if_missing: bool = True) -> MemoryControlState:
+def _read_control_state(uid: str, *, create_if_missing: bool = True) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
     path = collections.memory_apply_control_state
     payload = _snapshot_payload(document_store.get_document(path))
@@ -857,7 +843,7 @@ def _read_control_state(uid: str, *, db_client: Any, create_if_missing: bool = T
     return control
 
 
-def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
+def _persist_control_state(control: MemoryControlState) -> None:
     document_store.set_document(
         MemoryCollections(uid=control.uid).memory_apply_control_state,
         control.model_dump(mode="json"),
@@ -909,7 +895,7 @@ def _build_backfill_evidence(
     )
 
 
-def _persist_evidence(uid: str, evidence: MemoryEvidence, *, db_client: Any) -> None:
+def _persist_evidence(uid: str, evidence: MemoryEvidence) -> None:
     collections = MemoryCollections(uid=uid)
     path = f"{collections.memory_evidence}/{evidence.evidence_id}"
     if not document_store.document_exists(path):
@@ -924,7 +910,6 @@ def _ensure_backfill_operation(
     control: MemoryControlState,
     run_id: str,
     evidence_ids: List[str],
-    db_client: Any,
     bucket: Optional[LegacyBackfillBucket] = None,
 ) -> MemoryOperation:
     legacy_id = _row_str(legacy_row, "id", canonical_memory_id)
@@ -961,7 +946,6 @@ def _upgrade_pending_admission_candidate(
     bucket: LegacyBackfillBucket,
     control: MemoryControlState,
     run_id: str,
-    db_client: Any,
 ) -> LegacyBackfillRowResult:
     promotion = dict(item.promotion or {})
     submission = dict(promotion.get("submission") or {})
@@ -1053,7 +1037,6 @@ def _apply_one_legacy_row(
     index: int,
     control: MemoryControlState,
     run_id: str,
-    db_client: Any,
     bucket: Optional[LegacyBackfillBucket] = None,
 ) -> LegacyBackfillRowResult:
     """Write one canonical item. Returns control, write status, and side-effect status."""
@@ -1071,7 +1054,7 @@ def _apply_one_legacy_row(
     }
 
     canonical_memory_id = legacy_backfill_memory_id(uid=uid, legacy_memory_id=legacy_id)
-    existing = _load_canonical_item(uid, canonical_memory_id, db_client=db_client)
+    existing = _load_canonical_item(uid, canonical_memory_id)
     if existing is not None and _is_active_backfill_destination(existing):
         existing_promotion = existing.promotion or {}
         if (
@@ -1086,7 +1069,6 @@ def _apply_one_legacy_row(
                 bucket=classified_bucket,
                 control=control,
                 run_id=run_id,
-                db_client=db_client,
             )
         vector_sync_failed = False
         keyword_sync_succeeded = True
@@ -1095,7 +1077,6 @@ def _apply_one_legacy_row(
             vector_sync_failed, keyword_sync_succeeded, kg_extraction_failed = _sync_backfill_side_effects(
                 uid=uid,
                 item=existing,
-                db_client=db_client,
             )
         return LegacyBackfillRowResult(
             control=control,
@@ -1106,11 +1087,11 @@ def _apply_one_legacy_row(
             kg_extraction_failed=kg_extraction_failed,
         )
 
-    if both_store_canonical_duplicate_exists(uid=uid, legacy_row=legacy_row, db_client=db_client):
+    if both_store_canonical_duplicate_exists(uid=uid, legacy_row=legacy_row):
         return LegacyBackfillRowResult(control=control, written=False, skip_reason="both_store_duplicate")
 
     evidence = _build_backfill_evidence(uid=uid, legacy_row=legacy_row, index=index)
-    _persist_evidence(uid, evidence, db_client=db_client)
+    _persist_evidence(uid, evidence)
 
     operation = _ensure_backfill_operation(
         uid=uid,
@@ -1119,7 +1100,6 @@ def _apply_one_legacy_row(
         control=control,
         run_id=run_id,
         evidence_ids=[evidence.evidence_id],
-        db_client=db_client,
         bucket=bucket,
     )
 
@@ -1222,7 +1202,6 @@ def _apply_one_legacy_row(
         row_vector_sync_failed, row_keyword_sync_succeeded, row_kg_extraction_failed = _sync_backfill_side_effects(
             uid=uid,
             item=item,
-            db_client=db_client,
             on_vector_hard_failure=_record_vector_sync_failure,
         )
 
@@ -1241,7 +1220,6 @@ def _sync_backfill_side_effects(
     *,
     uid: str,
     item: MemoryItem,
-    db_client: Any,
     on_vector_hard_failure: Optional[Callable[[], None]] = None,
 ) -> tuple[bool, bool, bool]:
     """Reconcile indexes and KG for a materialized backfill item.
@@ -1264,12 +1242,12 @@ def _sync_backfill_side_effects(
         if on_vector_hard_failure is not None:
             on_vector_hard_failure()
 
-    keyword_sync_succeeded = sync_atom_keyword_index_for_item(item, db_client=db_client)
+    keyword_sync_succeeded = sync_atom_keyword_index_for_item(item)
     sync_canonical_memory_vector(item, on_hard_failure=_record_vector_sync_failure)
 
     kg_extraction_failed = False
     if item.tier == MemoryLayer.long_term:
-        kg_result = extract_kg_for_promoted_memory(uid, item, db_client=db_client, preserve_item_updated_at=True)
+        kg_result = extract_kg_for_promoted_memory(uid, item, preserve_item_updated_at=True)
         kg_extraction_failed = kg_result.attempted and not kg_result.success
 
     return vector_sync_failed, keyword_sync_succeeded, kg_extraction_failed
@@ -1279,7 +1257,6 @@ def _reconcile_backfill_side_effects_for_rows(
     *,
     uid: str,
     legacy_rows: Sequence[LegacyRow],
-    db_client: Any,
 ) -> tuple[int, int, int]:
     vector_sync_failures = 0
     keyword_sync_failures = 0
@@ -1289,13 +1266,12 @@ def _reconcile_backfill_side_effects_for_rows(
         if not legacy_id or not _row_content(legacy_row):
             continue
         canonical_memory_id = legacy_backfill_memory_id(uid=uid, legacy_memory_id=legacy_id)
-        item = _load_canonical_item(uid, canonical_memory_id, db_client=db_client)
+        item = _load_canonical_item(uid, canonical_memory_id)
         if item is None or not _is_active_processed_canonical_item(item):
             continue
         row_vector_sync_failed, row_keyword_sync_succeeded, row_kg_extraction_failed = _sync_backfill_side_effects(
             uid=uid,
             item=item,
-            db_client=db_client,
         )
         if row_vector_sync_failed:
             vector_sync_failures += 1
@@ -1355,12 +1331,11 @@ def _legacy_row_has_any_canonical_destination(
 def _count_any_destination_backfill_items(
     uid: str,
     legacy_rows: Sequence[LegacyRow],
-    *,
-    db_client: Any,
+    
 ) -> int:
     if not legacy_rows:
         return 0
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid)
     items_by_id = {item.memory_id: item for item in items}
     return sum(
         1
@@ -1372,12 +1347,11 @@ def _count_any_destination_backfill_items(
 def _count_destination_backfill_items(
     uid: str,
     legacy_rows: Sequence[LegacyRow],
-    *,
-    db_client: Any,
+    
 ) -> int:
     if not legacy_rows:
         return 0
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid)
     items_by_id = {item.memory_id: item for item in items}
     count = 0
     for row in legacy_rows:
@@ -1389,13 +1363,12 @@ def _count_destination_backfill_items(
 def reconcile_backfill_counts(
     uid: str,
     legacy_rows: Sequence[LegacyRow],
-    *,
-    db_client: Any = None,
+    
 ) -> tuple[int, int, bool, Optional[str]]:
     """Return (source_count, destination_count, verified, discrepancy)."""
     eligible_rows = [row for row in legacy_rows if _row_content(row)]
     source_count = len(eligible_rows)
-    destination_count = _count_destination_backfill_items(uid, eligible_rows, db_client=db_client)
+    destination_count = _count_destination_backfill_items(uid, eligible_rows)
     verified = source_count == destination_count
     discrepancy = None
     if not verified:
@@ -1434,7 +1407,6 @@ def backfill_user_bucketed(
     allow_admin_override: bool = False,
     acknowledge_non_canonical_uid: bool = False,
     operator_context: Optional[str] = None,
-    db_client: Any = None,
     get_non_filtered_memories_fn: LegacyReader = get_non_filtered_memories,
     run_id: Optional[str] = None,
 ) -> BackfillReport:
@@ -1450,7 +1422,6 @@ def backfill_user_bucketed(
             allow_admin_override=allow_admin_override,
             acknowledge_non_canonical_uid=acknowledge_non_canonical_uid,
             operator_context=operator_context,
-            db_client=db_client,
         )
     except BackfillCohortGateError as exc:
         report = _cohort_gated_report(uid, dry_run=dry_run, reason=str(exc))
@@ -1459,7 +1430,6 @@ def backfill_user_bucketed(
     effective_run_id = run_id or f"legacy_bucket_backfill_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     legacy_rows = _fetch_active_legacy_memories(
         uid,
-        db_client=db_client,
         get_non_filtered_memories_fn=get_non_filtered_memories_fn,
     )
     eligible_rows = [row for row in legacy_rows if _row_content(row)]
@@ -1510,7 +1480,7 @@ def backfill_user_bucketed(
             skipped_bucket_not_writable=len(selected_rows),
         )
 
-    destination_count = _count_any_destination_backfill_items(uid, selected_rows, db_client=db_client)
+    destination_count = _count_any_destination_backfill_items(uid, selected_rows)
     if dry_run:
         return BackfillReport(
             uid=uid,
@@ -1535,7 +1505,7 @@ def backfill_user_bucketed(
             skipped_bucket_not_selected=skipped_bucket_not_selected,
         )
 
-    control = _read_control_state(uid, db_client=db_client)
+    control = _read_control_state(uid)
     written_count = 0
     skipped_already_present = 0
     skipped_both_store_duplicate = 0
@@ -1558,7 +1528,6 @@ def backfill_user_bucketed(
                 index=index,
                 control=control,
                 run_id=effective_run_id,
-                db_client=db_client,
                 bucket=selected_bucket,
             )
             control = row_result.control
@@ -1583,7 +1552,7 @@ def backfill_user_bucketed(
             errors.append(f"{safe_legacy_id}: {sanitize(exc)}")
             break
 
-    destination_count = _count_any_destination_backfill_items(uid, selected_rows, db_client=db_client)
+    destination_count = _count_any_destination_backfill_items(uid, selected_rows)
     verified = destination_count == len(selected_rows)
     return BackfillReport(
         uid=uid,
@@ -1619,7 +1588,6 @@ def backfill_user(
     allow_admin_override: bool = False,
     acknowledge_non_canonical_uid: bool = False,
     operator_context: Optional[str] = None,
-    db_client: Any = None,
     get_non_filtered_memories_fn: LegacyReader = get_non_filtered_memories,
     run_id: Optional[str] = None,
 ) -> BackfillReport:
@@ -1635,7 +1603,6 @@ def backfill_user(
             allow_admin_override=allow_admin_override,
             acknowledge_non_canonical_uid=acknowledge_non_canonical_uid,
             operator_context=operator_context,
-            db_client=db_client,
         )
     except BackfillCohortGateError as exc:
         return _cohort_gated_report(uid, dry_run=dry_run, reason=str(exc))
@@ -1643,7 +1610,6 @@ def backfill_user(
     effective_run_id = run_id or f"legacy_backfill_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     legacy_rows = _fetch_active_legacy_memories(
         uid,
-        db_client=db_client,
         get_non_filtered_memories_fn=get_non_filtered_memories_fn,
     )
     eligible_rows = [row for row in legacy_rows if _row_content(row)]
@@ -1653,12 +1619,12 @@ def backfill_user(
     source_count = len(eligible_rows)
 
     if dry_run:
-        control = _read_control_state(uid, db_client=db_client, create_if_missing=False)
+        control = _read_control_state(uid, create_if_missing=False)
         start_index = 0
         if resume and control.legacy_backfill_source_fingerprint == fingerprint:
             start_index = min(control.legacy_backfill_processed_count, len(admissible_rows))
         intended_count = max(0, len(admissible_rows) - start_index)
-        _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows, db_client=db_client)
+        _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows)
         return BackfillReport(
             uid=uid,
             dry_run=True,
@@ -1678,7 +1644,7 @@ def backfill_user(
             admissible_count=len(admissible_rows),
         )
 
-    control = _read_control_state(uid, db_client=db_client)
+    control = _read_control_state(uid)
     start_index = 0
     if resume and control.legacy_backfill_source_fingerprint == fingerprint:
         start_index = min(control.legacy_backfill_processed_count, len(admissible_rows))
@@ -1706,7 +1672,6 @@ def backfill_user(
         vector_sync_failures, keyword_sync_failures, kg_extraction_failures = _reconcile_backfill_side_effects_for_rows(
             uid=uid,
             legacy_rows=admissible_rows,
-            db_client=db_client,
         )
 
     processed_index = start_index
@@ -1723,7 +1688,7 @@ def backfill_user(
                     "updated_at": datetime.now(timezone.utc),
                 }
             )
-            _persist_control_state(control, db_client=db_client)
+            _persist_control_state(control)
             continue
         try:
             row_result = _apply_one_legacy_row(
@@ -1732,7 +1697,6 @@ def backfill_user(
                 index=processed_index,
                 control=control,
                 run_id=effective_run_id,
-                db_client=db_client,
             )
             control = row_result.control
             if row_result.written:
@@ -1764,7 +1728,7 @@ def backfill_user(
                 "updated_at": datetime.now(timezone.utc),
             }
         )
-        _persist_control_state(control, db_client=db_client)
+        _persist_control_state(control)
 
         if batch_size > 0 and (processed_index - start_index) % max(1, batch_size) == 0:
             logger.debug("legacy backfill checkpoint for %s at %s/%s", uid, processed_index, len(admissible_rows))
@@ -1779,9 +1743,9 @@ def backfill_user(
                 "updated_at": datetime.now(timezone.utc),
             }
         )
-        _persist_control_state(control, db_client=db_client)
+        _persist_control_state(control)
 
-    _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows, db_client=db_client)
+    _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows)
 
     return BackfillReport(
         uid=uid,
