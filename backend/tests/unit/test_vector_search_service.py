@@ -446,7 +446,7 @@ def test_default_memory_vector_search_writes_deterministic_repair_purge_outbox_r
     assert [record['record_id'] for record in rebuilt] == [record['record_id']]
 
 
-def test_memory_vector_repair_purge_outbox_persistence_sets_stable_user_outbox_path_idempotently():
+def test_memory_vector_repair_purge_outbox_persistence_sets_stable_user_outbox_path_idempotently(monkeypatch):
     candidate = {
         'vector_id': 'memvec:stale-projection',
         'memory_id': 'stale-projection',
@@ -456,20 +456,23 @@ def test_memory_vector_repair_purge_outbox_persistence_sets_stable_user_outbox_p
         'required_account_generation': 3,
     }
     records = build_vector_repair_purge_outbox_records(uid='u1', candidates=[candidate])
-    db_client = _FirestoreFake()
 
-    first_write = write_vector_repair_purge_outbox_records(db_client=db_client, records=records)
-    second_write = write_vector_repair_purge_outbox_records(db_client=db_client, records=records)
+    import database.memory_vector_repair_outbox as outbox_mod
+    docs: dict = {}
+    monkeypatch.setattr(outbox_mod, '_store', lambda: FakeDocumentStore(backing=docs))
+
+    first_write = write_vector_repair_purge_outbox_records(records=records)
+    second_write = write_vector_repair_purge_outbox_records(records=records)
 
     record = records[0]
     expected_path = f"users/u1/memory_outbox/{record['record_id']}"
     assert first_write == records
     assert second_write == records
     assert record['outbox_path'] == expected_path
-    assert db_client.document_paths == [expected_path, expected_path]
-    assert db_client.set_paths == [expected_path, expected_path]
-    assert db_client.docs[expected_path]['record_id'] == record['record_id']
-    assert db_client.docs[expected_path]['idempotency_key'] == record['record_id']
+    # idempotent: both writes resolve to the same single stable path
+    assert list(docs.keys()) == [expected_path]
+    assert docs[expected_path]['record_id'] == record['record_id']
+    assert docs[expected_path]['idempotency_key'] == record['record_id']
 
 
 def test_default_memory_vector_search_does_not_write_outbox_for_no_candidates_or_missing_fence(monkeypatch):

@@ -668,6 +668,8 @@ def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_fl
     )
     monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
+    import database.memory_vector_repair_outbox as memory_vector_repair_outbox
+    monkeypatch.setattr(memory_vector_repair_outbox, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
 
     def fake_vector_query(uid, query, *, mode, limit):
         assert mode == SearchMode.default
@@ -720,6 +722,8 @@ def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(mon
     )
     monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
+    import database.memory_vector_repair_outbox as memory_vector_repair_outbox
+    monkeypatch.setattr(memory_vector_repair_outbox, "_store", lambda: FakeDocumentStore(backing=db_client.docs))
 
     def fake_vector_query(uid, query, *, mode, limit):
         assert mode == SearchMode.default

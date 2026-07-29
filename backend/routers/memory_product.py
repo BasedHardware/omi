@@ -69,7 +69,7 @@ def _policy_payload(policy: MemoryAccessPolicy) -> dict:
 
 
 def _write_vector_repair_purge_outbox_records(records: list[dict]) -> list[dict]:
-    return write_vector_repair_purge_outbox_records(db_client=db, records=records)
+    return write_vector_repair_purge_outbox_records(records=records)
 
 
 def _global_read_gate_observability(gate) -> dict:
