@@ -1,34 +1,34 @@
 # OMI Desktop
 
-macOS app for OMI — always-on AI companion. Swift/SwiftUI frontend, Rust backend.
+macOS app for OMI — always-on AI companion. Swift/SwiftUI frontend, Python backend.
 
 ## Structure
 
 ```
 Desktop/          Swift/SwiftUI macOS app (SPM package)
-Backend-Rust/     Rust API server (Firestore, Redis, auth, LLM)
+../../backend/    Python API server (Firestore, Redis, auth, LLM)
 agent/            Agent runtime for multi-provider chat (TypeScript)
-agent-cloud/      Cloud agent service
+../../backend/agent_vm/  Cloud agent service
 dmg-assets/       DMG installer resources
 ```
 
 ## Development
 
-Requires macOS 14.0+, Rust toolchain, and code signing with an Apple Developer ID.
+Requires macOS 14.0+, Python 3.11 with uv, and code signing with an Apple Developer ID.
 
 ```bash
-# Run (builds Swift app, starts Rust backend, launches app)
+# Run (builds Swift app, starts Python backend, launches app)
 ./run.sh
 
 # Run an isolated named bundle for parallel testing
 OMI_APP_NAME="omi-subagent-test" ./run.sh
 
-# Run with the dev backend (skips local Rust + tunnel)
+# Run with the dev backend (skips local Python + tunnel)
 ./run.sh --yolo
 
 # Keep one explicit focused regression test running after each save
 ./scripts/dev-feedback.py --watch swift 'ChatTests/testSendsMessage'
-./scripts/dev-feedback.py --watch rust 'handles_timeout'
+./scripts/dev-feedback.py --watch python 'tests/unit/test_desktop_chat.py'
 
 # Relaunch an already-built named app without holding the terminal open.
 # Supply a harness/external backend; --no-wait deliberately does not own one.
@@ -44,7 +44,7 @@ OMI_SKIP_BACKEND=1 OMI_APP_NAME="omi-subagent-test" ./run.sh --yolo --fast-only 
 
 After a successful full launch, `run.sh` automatically uses its fast lane for ordinary Swift-only edits: it incrementally builds Swift, patches the already-installed app executable plus the current desktop API URL, re-signs it, and relaunches. Named local-harness profiles are eligible too; their current disposable `.env` is refreshed on every fast patch rather than cached. Changing package metadata, bundled resources, agent/runtime inputs, entitlements, or persistent launch configuration safely falls back to the complete packaging path. Use `./run.sh --full` (or `OMI_FORCE_FULL_BUNDLE=1`) to force that path; set `OMI_SCAN_STALE_BUNDLES=1` only when recovering from stale LaunchServices registrations.
 
-`dev-feedback.py` is the fast test loop: pass an explicit XCTest or Cargo filter, use `--once` for one check or `--watch` to rerun after relevant saves. It never guesses coverage and never replaces `./test.sh`, which remains the full component/PR suite. That suite runs isolated Swift suites with four workers locally; CI pins one worker because its filtered `--skip-build` processes share a SwiftPM build directory. Use `OMI_SWIFT_TEST_SUITE_WORKERS=1` when diagnosing concurrency-sensitive behavior. For a direct local Rust backend, `run.sh` now uses Cargo debug builds and reuses a healthy worktree-owned backend on Swift-only relaunches. Set `OMI_DESKTOP_BACKEND_RELEASE=1` only when locally checking optimized backend behavior. Add `--no-wait` only when a harness or other external backend owns the API; it returns after the app launch instead of holding the terminal for launcher-managed processes.
+`dev-feedback.py` is the fast test loop: pass an explicit XCTest filter or pytest path, use `--once` for one check or `--watch` to rerun after relevant saves. It never guesses coverage and never replaces `./test.sh`, which remains the full component/PR suite. That suite runs isolated Swift suites with four workers locally; CI pins one worker because its filtered `--skip-build` processes share a SwiftPM build directory. Use `OMI_SWIFT_TEST_SUITE_WORKERS=1` when diagnosing concurrency-sensitive behavior. `run.sh` reuses a healthy worktree-owned Python backend on Swift-only relaunches. Add `--no-wait` only when a harness or other external backend owns the API; it returns after the app launch instead of holding the terminal for launcher-managed processes.
 
 `git push` is the bounded desktop acceptance gate: desktop source changes run only the fast `xcrun swift build -c debug --package-path Desktop` check on the installed Xcode. This is intentionally less than CI: the serial, isolated Swift suite, clean release compile, and pinned `/Applications/Xcode_16.4.app` (Xcode 16.4 build 16F6) belong to GitHub Actions. Do not move those CI jobs into pre-push; preserving push-time budget keeps normal iteration fast. Use `dev-feedback.py --watch` while editing.
 

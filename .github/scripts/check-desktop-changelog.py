@@ -48,13 +48,11 @@ EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/scripts/desktop-flow-lint.py",
     "desktop/macos/scripts/desktop_flow_contract.py",
 }
-# Server-side Rust backend changes are internal reliability work, not user-facing app notes.
 # Test and release-infra changes are likewise never user-facing app notes; the
 # `no-changelog-needed` PR label only satisfies the PR run, so post-merge push
 # runs of this gate must exempt these paths by path or they redden main
 # (qualify-desktop-beta.sh timeout bump #10374 tripped tests/ on the merge push).
 EXEMPT_DESKTOP_PATH_PREFIXES = (
-    "desktop/macos/Backend-Rust/",
     "desktop/macos/tests/",
     "desktop/macos/Desktop/Tests/",
     # Generated Swift (e.g. Sources/Generated/OmiApi.generated.swift) is

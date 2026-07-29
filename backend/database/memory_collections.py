@@ -24,6 +24,10 @@ class MemoryCollections:
         return f"{self.user_root}/memory_operations"
 
     @property
+    def memory_source_replacements(self) -> str:
+        return f"{self.user_root}/memory_source_replacements"
+
+    @property
     def memory_outbox(self) -> str:
         return f"{self.user_root}/memory_outbox"
 
@@ -42,6 +46,14 @@ class MemoryCollections:
     @property
     def memory_evidence(self) -> str:
         return f"{self.user_root}/memory_evidence"
+
+    @property
+    def memory_graph_assertions(self) -> str:
+        return f"{self.user_root}/memory_graph_assertions"
+
+    @property
+    def memory_review_queue(self) -> str:
+        return f"{self.user_root}/memory_review_queue"
 
     @property
     def memory_runs(self) -> str:
@@ -95,9 +107,12 @@ class MemoryCollections:
         return [
             self.memory_items,
             self.memory_operations,
+            self.memory_source_replacements,
             self.memory_outbox,
             self.memory_lineage,
             self.memory_evidence,
+            self.memory_graph_assertions,
+            self.memory_review_queue,
             self.memory_runs,
             self.memory_import_runs,
             self.memory_import_artifacts,

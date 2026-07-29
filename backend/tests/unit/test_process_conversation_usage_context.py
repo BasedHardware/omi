@@ -277,7 +277,12 @@ def _build_fakes() -> dict[str, ModuleType]:
     )
 
     llm_memories = add("utils.llm.memories", AutoMockModule("utils.llm.memories"))
-    for attr in ["resolve_memory_conflict", "extract_memories_from_text", "new_memories_extractor"]:
+    for attr in [
+        "resolve_memory_conflict",
+        "extract_canonical_l1_memory_candidates",
+        "extract_memories_from_text",
+        "new_memories_extractor",
+    ]:
         setattr(llm_memories, attr, MagicMock())
 
     llm_external = add("utils.llm.external_integrations", AutoMockModule("utils.llm.external_integrations"))

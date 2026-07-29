@@ -66,7 +66,8 @@ require_text 'lsof -nP -iTCP:"$AUTOMATION_PORT" -sTCP:LISTEN'
 require_text 'qualification automation port remains bound after owned app cleanup'
 require_text 'kill -KILL "$pid"'
 require_text 'refusing unproven qualification app cleanup'
-require_text 'cleanup failed; preserving qualification lease and preventing success evidence'
+require_text 'cleanup failed (non-gating after behavioral pass); continuing to evidence registration'
+require_text 'cleanup failed (non-gating on EXIT); preserving residual lease for later reclaim'
 if grep -Eq 'osascript|pkill|kill_process_tree|quit app id' "$QUALIFIER"; then
   echo "FAIL: qualification cleanup must not use broad app-name or bundle-id termination" >&2
   exit 1
@@ -108,6 +109,9 @@ require_text "--format='%(refname:strip=2)' 'refs/tags/v*-macos'"
 
 # Acceleration changes bootstrap only. The signed-artifact, static self-check,
 # Tier-2, fault-suite, evidence, and newest-candidate gates remain mandatory.
+# Runner-hygiene final-cleanup is best-effort after those behavioral gates
+# (must not fence a green T2+fault solely on lease-lineage cleanup).
+require_text 'non-gating after behavioral pass'
 require_text 'python3 "$KEYVALUE_PY" preflight-release'
 require_text './scripts/desktop-core-harness.sh --self-check --skip-backend-contracts'
 require_text './scripts/desktop-core-harness.sh --tier 2 --bundle "$BUNDLE" --port "$AUTOMATION_PORT" --keep-stack'

@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+import json
 import os
+import runpy
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 HARNESS_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = HARNESS_ROOT.parents[1]
 RESOLVER = HARNESS_ROOT / "_resolve_python.sh"
-MAKEFILE = HARNESS_ROOT.parents[1] / "Makefile"
+MAKEFILE = REPO_ROOT / "Makefile"
 
 
 def _bash_command() -> str:
@@ -157,7 +164,7 @@ def test_make_harness_targets_run_resolved_python_from_checkout_with_spaces(tmp_
         ("list-memory-scenarios", []),
         ("seed-memory-scenario", ["SCENARIO=sample"]),
         ("reset-memory-scenario", ["SCENARIO=sample"]),
-        ("run-canonical-promotion", ["PROMOTION_USER=alice"]),
+        ("run-canonical-maintenance", ["MAINTENANCE_USER=alice"]),
     )
     for target, variables in targets:
         result = subprocess.run(
@@ -175,8 +182,130 @@ def test_make_harness_targets_run_resolved_python_from_checkout_with_spaces(tmp_
         "scripts/dev-harness/list-memory-scenarios.py",
         "scripts/dev-harness/seed-memory-scenario.py sample",
         "scripts/dev-harness/reset-memory-scenario.py sample",
-        "scripts/dev-harness/run-canonical-promotion.py alice",
+        "scripts/dev-harness/run-canonical-maintenance.py alice",
     ]
+
+
+def test_canonical_maintenance_harness_activates_synthetic_uid_only_in_emulator(monkeypatch) -> None:
+    module = runpy.run_path(
+        str(REPO_ROOT / "scripts/dev-harness/run-canonical-maintenance.py"),
+        run_name="run_canonical_maintenance_test",
+    )
+    from utils.memory import memory_system
+
+    original_cohort = memory_system._canonical_cohort_uids
+    try:
+        monkeypatch.setenv("FIRESTORE_EMULATOR_HOST", "127.0.0.1:18080")
+        monkeypatch.setenv("ENVIRONMENT", "local-dev-harness")
+        module["_activate_local_canonical_cohort"]("synthetic-alice")
+
+        assert memory_system.resolve_memory_system("synthetic-alice") == memory_system.MemorySystem.CANONICAL
+        assert memory_system.resolve_memory_system("someone-else") == memory_system.MemorySystem.LEGACY
+    finally:
+        memory_system._canonical_cohort_uids = original_cohort
+
+
+def test_canonical_maintenance_harness_replaces_ambient_environment(monkeypatch) -> None:
+    module = runpy.run_path(
+        str(REPO_ROOT / "scripts/dev-harness/run-canonical-maintenance.py"),
+        run_name="run_canonical_maintenance_env_test",
+    )
+    original_env = os.environ.copy()
+    child_env = {
+        "ENVIRONMENT": "local-dev-harness",
+        "FIRESTORE_EMULATOR_HOST": "127.0.0.1:18080",
+        "PATH": original_env.get("PATH", ""),
+    }
+    monkeypatch.setattr(module["config"], "child_env_for", lambda _cfg: child_env)
+    try:
+        os.environ["PINECONE_API_KEY"] = "ambient-production-secret"
+        os.environ["PINECONE_INDEX_NAME"] = "ambient-production-index"
+
+        module["_apply_harness_env"](object())
+
+        assert dict(os.environ) == child_env
+        assert "PINECONE_API_KEY" not in os.environ
+        assert "PINECONE_INDEX_NAME" not in os.environ
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
+
+
+def test_canonical_maintenance_harness_serializes_recurrence_signals() -> None:
+    pytest.importorskip("pydantic")
+    module = runpy.run_path(
+        str(REPO_ROOT / "scripts/dev-harness/run-canonical-maintenance.py"),
+        run_name="run_canonical_maintenance_serialization_test",
+    )
+    from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
+    from models.memory_recurrence import CanonicalRecurrenceSignal
+
+    now = datetime(2026, 7, 28, 12, 0, tzinfo=timezone.utc)
+    signal = CanonicalRecurrenceSignal(
+        signal_id="loop-investor-update",
+        title="Investor update",
+        objective="Send the revised investor update",
+        anchor_task_description="Prepare the investor email",
+        occurrence_count=2,
+        distinct_day_count=2,
+        unresolved=True,
+        confidence=0.9,
+        first_seen_at=now - timedelta(days=1),
+        last_seen_at=now,
+        evidence_refs=[
+            EvidenceRef(
+                kind=EvidenceKind.memory_item,
+                id="mem-investor-update",
+                scope=EvidenceScope.canonical,
+            )
+        ],
+    )
+
+    @dataclass
+    class _Report:
+        recurrence_signals: list[CanonicalRecurrenceSignal]
+
+    payload = module["_jsonable"](_Report(recurrence_signals=[signal]))
+
+    assert json.loads(json.dumps(payload))["recurrence_signals"][0]["signal_id"] == signal.signal_id
+
+
+def test_canonical_maintenance_harness_fails_on_outbox_delivery_errors(monkeypatch, capsys) -> None:
+    module = runpy.run_path(
+        str(REPO_ROOT / "scripts/dev-harness/run-canonical-maintenance.py"),
+        run_name="run_canonical_maintenance_outbox_test",
+    )
+    main_globals = module["main"].__globals__
+    monkeypatch.setattr(main_globals["config"], "load_config", lambda *_args, **_kwargs: object())
+    monkeypatch.setitem(main_globals, "_apply_harness_env", lambda _cfg: None)
+    monkeypatch.setitem(main_globals, "_resolve_uid", lambda _cfg, _user: "synthetic-alice")
+    monkeypatch.setitem(main_globals, "_activate_local_canonical_cohort", lambda _uid: None)
+
+    @dataclass
+    class _MaintenanceReport:
+        uid: str
+        outbox: dict[str, object]
+        skipped_reason: str | None = None
+        promoted_count: int = 0
+
+    report = _MaintenanceReport(
+        uid="synthetic-alice",
+        outbox={
+            "retryable_failure_count": 2,
+            "dead_letter_count": 1,
+            "ack_failed_count": 3,
+            "errors": [{"detail": "private provider response must not reach stderr"}],
+        },
+    )
+    maintenance_module = ModuleType("utils.memory.short_term_promotion")
+    maintenance_module.run_canonical_short_term_maintenance = lambda *_args, **_kwargs: report
+    monkeypatch.setitem(sys.modules, maintenance_module.__name__, maintenance_module)
+
+    assert module["main"](["alice", "--run-id", "outbox-failure"]) == 2
+
+    captured = capsys.readouterr()
+    assert ("canonical maintenance outbox delivery failed: " "retryable=2 dead_letter=1 ack=3 errors=1") in captured.err
+    assert "private provider response" not in captured.err
 
 
 def test_make_harness_does_not_execute_checkout_name_and_resolves_python(tmp_path: Path) -> None:

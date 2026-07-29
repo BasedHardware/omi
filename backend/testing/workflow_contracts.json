@@ -11,23 +11,8 @@
         },
         {
           "path": "backend/utils/memory/legacy_backfill.py",
-          "function": "_sync_backfill_side_effects",
-          "reason": "Legacy contract from issue 8786; covered by backfill contract tests until migrated."
-        },
-        {
-          "path": "backend/utils/memory/legacy_backfill.py",
-          "function": "_reconcile_backfill_side_effects_for_rows",
-          "reason": "Legacy contract from issue 8786; covered by backfill contract tests until migrated."
-        },
-        {
-          "path": "backend/utils/memory/legacy_backfill.py",
           "function": "reconcile_backfill_counts",
           "reason": "Legacy contract from issue 8786; covered by backfill contract tests until migrated."
-        },
-        {
-          "path": "backend/utils/memory/short_term_promotion.py",
-          "function": "promote_short_term_item_via_apply",
-          "reason": "Existing promotion apply contract; covered by short-term promotion contract tests until migrated."
         },
         {
           "path": "backend/utils/memory/product_authorization.py",
@@ -326,33 +311,30 @@
       "id": "short_term_lifecycle",
       "risk": "high",
       "sources": [
+        "backend/database/memory_apply_store.py",
+        "backend/database/memory_outbox_worker.py",
+        "backend/models/memory_apply.py",
+        "backend/models/memory_promotion.py",
+        "backend/utils/memory/canonical_consolidation.py",
         "backend/jobs/short_term_lifecycle_worker.py",
         "backend/utils/memory/short_term_promotion.py",
         "backend/utils/memory/canonical_short_term_maintenance_cron.py"
       ],
       "tests": [
+        "tests/unit/test_atomic_apply.py",
+        "tests/unit/test_canonical_consolidation.py",
+        "tests/unit/test_canonical_consolidation_apply.py",
         "tests/unit/test_short_term_lifecycle_firestore_store.py",
         "tests/unit/test_ws_b_short_term_lifecycle.py",
-        "tests/unit/test_canonical_short_term_maintenance_cron.py"
+        "tests/unit/test_canonical_short_term_maintenance_cron.py",
+        "tests/unit/test_memory_outbox_worker.py"
       ],
       "checks": ["no_large_tuple_results"],
       "invariants": [
-        "promotion and maintenance reruns are idempotent",
-        "derived side-effect failures are accounted for"
-      ]
-    },
-    {
-      "id": "l2_promotion_worker",
-      "risk": "high",
-      "sources": ["backend/jobs/l2_promotion_worker.py", "backend/jobs/l2_promotion_orchestrator.py"],
-      "tests": [
-        "tests/unit/test_l2_promotion_agent_v2.py",
-        "tests/unit/test_l2_promotion_worker.py"
-      ],
-      "checks": [],
-      "invariants": [
-        "forward and backfill modes have explicit gates",
-        "per-item failures are reported without corrupting later work"
+        "every eligible short-term item receives exactly one terminal L2 route",
+        "long-term admission and its graph assertion commit atomically against one exact short-term revision",
+        "maintenance reruns are idempotent and never invoke a generic promotion pass",
+        "projection delivery is leased, generation and revision fenced, retryable, and dead-letter bounded"
       ]
     },
     {
@@ -547,6 +529,7 @@
         "backend/scripts/firebase_release_probe_token.py",
         "backend/scripts/transcription_capability_probe.py",
         "backend/scripts/pre-deploy-check.sh",
+        "backend/scripts/validate_memory_maintenance_scheduler.py",
         "backend/scripts/validate-backend-runtime-env.py"
       ],
       "tests": [
@@ -563,6 +546,7 @@
         "tests/unit/test_sync_two_lane.py",
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
+        "tests/unit/test_validate_memory_maintenance_scheduler.py",
         "tests/unit/test_verify_sync_ledger_fence_transition.py"
       ],
       "checks": [],
@@ -574,6 +558,7 @@
         "spec.traffic mismatches are repaired or block deploy with an explicit command",
         "normal deploys cannot change the serving sync ledger fence mode",
         "production backend traffic shifts only after the Cloud Run-only candidate vector passes, then rolls back if the post-promotion serving route or known-audio smoke fails",
+        "memory-maintenance job deploys fail unless the exact enabled hourly OAuth Scheduler trigger targets that deployed job",
         "gateway-first serving cannot be promoted until the ready workload, EndpointSlice, ingress/ILB attachment, and authenticated Cloud Run VPC route all pass"
       ]
     },

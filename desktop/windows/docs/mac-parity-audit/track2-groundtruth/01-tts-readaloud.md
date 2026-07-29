@@ -140,9 +140,9 @@ Since `useChat.ts` (Track-1-owned) already does the speaking for `fromVoice` tur
 
 ## 5. Backend `/v1/tts/synthesize` contract + platform recognition
 
-**Correction:** the endpoint Windows actually calls is NOT the Python backend's route. `tts.ts`'s `desktopApi` client (`src/renderer/src/lib/apiClient.ts` line 143) targets `VITE_OMI_DESKTOP_API_BASE` (`.env.example` line 13: `https://desktop-backend-hhibjajaja-uc.a.run.app`) — the same Rust "desktop-backend" Cloud Run service macOS's `desktop/macos/Backend-Rust` deploys (confirmed by the shared route path and matching 4096-char/voice-allowlist contract). It is **not** `backend/routers/tts.py`, which is a completely different Python/ElevenLabs route mounted at `/v2/tts/synthesize` (not `/v1/`).
+**Correction:** the endpoint Windows calls through `VITE_OMI_DESKTOP_API_BASE` is the Python desktop backend's `/v1/tts/synthesize` route in `backend/routers/desktop_tts_updates.py`.
 
-### `/v1/tts/synthesize` (Rust — `desktop/macos/Backend-Rust/src/routes/tts.rs`, shared by macOS and Windows clients)
+### `/v1/tts/synthesize` (Python — `backend/routers/desktop_tts_updates.py`, shared by macOS and Windows clients)
 
 - **Method:** `POST /v1/tts/synthesize` (route registration line 298).
 - **Auth:** `PaywalledAuthUser` extractor (Firebase-authenticated + paywall-checked) — no platform header is read or checked anywhere in this handler.
@@ -153,6 +153,6 @@ Since `useChat.ts` (Track-1-owned) already does the speaking for `fromVoice` tur
 - **Upstream call:** OpenAI `POST https://api.openai.com/v1/audio/speech`, `model: "gpt-4o-mini-tts"`, `response_format: "mp3"`, bearer-authed with the resolved key. Retries transient statuses (`408, 425, 429, 500, 502, 503, 504, 529`) up to 3 attempts total with `300ms * attempt` backoff (lines 27-34, 152-190); non-transient upstream errors (e.g. 401/400) return immediately as `TtsProxyError::Upstream(status, body)` (body truncated to 500 chars).
 - **Response:** whole-blob, NOT streamed — `Body::from(bytes)` after `upstream.bytes().await` fully buffers the OpenAI response (line 196-217), `content-type: audio/mpeg`, status 200.
 - **Error shapes:** JSON `{ "error": "<message>" }` with the corresponding HTTP status — 400 (bad request: empty/too-long text, unsupported voice), 503 (`MissingApiKey` or `RateLimitUnavailable`), 429 (`RateLimited`, message either "TTS burst rate limit exceeded" or "TTS daily character limit exceeded"), upstream status passthrough with `"OpenAI TTS request failed: {body}"` message, or 502 (`BadGateway`, network/transport failure to OpenAI).
-- **Platform recognition:** none. The handler has zero references to `X-App-Platform`, platform enums, or any Windows/macOS branching — it is fully platform-agnostic (confirmed by grep across `Backend-Rust/src` — the only platform-string references anywhere in that crate are in `routes/updates.rs`, which hardcodes `"macos"` for the Sparkle appcast feed and is unrelated to TTS). Windows and macOS clients hit the identical endpoint/contract with no server-side platform differentiation, so there is no "windows not recognized" risk on this specific route — unlike the general platform-catalog bug documented separately in `platform-variant-divergence-rule` (memory), this endpoint doesn't branch on platform at all.
+- **Platform recognition:** none. Windows and macOS hit the identical endpoint and contract with no server-side platform differentiation.
 
 The Python backend's `/v2/tts/synthesize` (`backend/routers/tts.py`) is a distinct, unrelated route (ElevenLabs-backed, `model_id`/`output_format`/`voice_settings` request shape, streaming `StreamingResponse`, 5000-char cap, different rate limits) that neither client currently calls for this feature — noted only to avoid confusion with the brief's assumption that the Python backend hosts `/v1/tts/synthesize`.

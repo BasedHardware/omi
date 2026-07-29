@@ -2,13 +2,13 @@
   "schema_version": 1,
   "id": "FC-public-web-routing-parity",
   "violated_contract": "Compatibility projections of public-web routing must make the same routing decision as the authoritative gateway policy.",
-  "canonical_prevention": "Keep the Rust gateway authoritative and run every compatibility projection against one shared behavioral routing corpus.",
+  "canonical_prevention": "Keep the Python gateway authoritative and run every compatibility projection against one shared behavioral routing corpus.",
   "canonical_prevention_artifact": [
-    "desktop/macos/Backend-Rust/fixtures/public-web-routing-contract.fixture.json"
+    "backend/desktop_fixtures/public-web-routing-contract.fixture.json"
   ],
   "evidence_prs": [10422],
   "scope_hints": [
-    "desktop/macos/Backend-Rust/src/routes/retrieval_policy.rs",
+    "backend/routers/desktop_core.py",
     "desktop/macos/agent/src/adapters/**"
   ],
   "status": "open"

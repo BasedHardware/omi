@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
@@ -33,6 +34,7 @@ from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
+monotonic = time.monotonic
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,7 @@ async def execute_chat_completion(
     serving_route = _select_serving_route(resolved_route)
     serving_is_lkg = serving_route is resolved_route.last_known_good_route
     _validate_credential_mode(serving_route, credential_context)
+    deadline_monotonic = monotonic() + serving_route.timeouts.request_ms / 1000.0
 
     first_failure: FailureClass | None = None
     last_error: GatewayError | None = None
@@ -98,6 +101,7 @@ async def execute_chat_completion(
             is_lkg=serving_is_lkg,
             fallback_reason=None,
             attempt_trace=attempt_trace,
+            deadline_monotonic=deadline_monotonic,
         )
     except GatewayError as exc:
         first_failure = exc.failure_class
@@ -118,6 +122,7 @@ async def execute_chat_completion(
                 is_lkg=True,
                 fallback_reason=first_failure,
                 attempt_trace=attempt_trace,
+                deadline_monotonic=deadline_monotonic,
             )
         except GatewayError as exc:
             last_error = exc
@@ -209,6 +214,7 @@ async def _execute_route(
     is_lkg: bool,
     fallback_reason: FailureClass | None,
     attempt_trace: AttemptTrace | None,
+    deadline_monotonic: float,
 ) -> ExecutorResult:
     refs = [route.primary, *route.fallbacks]
     last_error: GatewayError | None = None
@@ -235,6 +241,7 @@ async def _execute_route(
                 credential_context,
                 attempt_trace=attempt_trace,
                 fallback_reason=current_fallback_reason,
+                deadline_monotonic=deadline_monotonic,
             )
             if error is None:
                 if response is None:
@@ -271,6 +278,7 @@ async def _attempt_provider(
     *,
     attempt_trace: AttemptTrace | None,
     fallback_reason: FailureClass | None,
+    deadline_monotonic: float,
 ) -> tuple[ProviderResponse | None, GatewayError | None]:
     """Try a single provider up to ``route.retry.max_attempts`` times.
 
@@ -280,12 +288,18 @@ async def _attempt_provider(
     max_attempts = max(route.retry.max_attempts, 1)
     error: GatewayError | None = None
     for retry_ordinal in range(1, max_attempts + 1):
+        timeout_ms = int((deadline_monotonic - monotonic()) * 1000)
+        if timeout_ms <= 0:
+            return None, GatewayProviderFailureError(
+                'provider request deadline exhausted',
+                failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
+            )
         try:
             response = await provider.create_chat_completion(
                 _provider_request(resolved_route, provider_ref, route=route),
                 provider_ref=provider_ref,
                 credentials=credential_context,
-                timeout_ms=route.timeouts.request_ms,
+                timeout_ms=timeout_ms,
             )
             if attempt_trace is not None:
                 attempt_trace.record(

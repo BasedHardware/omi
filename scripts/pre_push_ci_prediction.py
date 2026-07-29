@@ -33,7 +33,6 @@ PHASE_ORDER = (
     "app-analysis-tests",
     "app-compile-smoke",
     "desktop-agent-runtime",
-    "desktop-rust",
     "desktop-swift-tests",
     "desktop-swift-release-compile",
     "desktop-swift-notification-release-regression",
@@ -209,7 +208,7 @@ def _is_app_compile_smoke_input(path: str) -> bool:
 
 
 def _is_releasable_desktop_path(path: str) -> bool:
-    if path.startswith(("desktop/macos/Backend-Rust/", "desktop/macos/changelog/")):
+    if path.startswith("desktop/macos/changelog/"):
         return False
     if path in {"desktop/macos/CHANGELOG.json", "desktop/macos/AGENTS.md"}:
         return False
@@ -298,8 +297,6 @@ def resolve_impact(
                 selected.add("desktop-swift-tests")
             if _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
-            if path.startswith("desktop/macos/Backend-Rust/"):
-                selected.add("desktop-rust")
             if _is_desktop_agent_runtime_input(path):
                 selected.add("desktop-agent-runtime")
             if path.startswith("desktop/macos/e2e/") or path in DESKTOP_FLOW_LINT_INPUTS:
@@ -356,7 +353,6 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "has_app_compile_smoke": str(plan.includes("app-compile-smoke")).lower(),
         "has_app_dart": str(plan.includes("app-analysis-tests")).lower(),
         "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),
-        "has_desktop_rust": str(plan.includes("desktop-rust")).lower(),
         "should_run": str(plan.includes("desktop-ci-only")).lower(),
         "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),
         "should_release_compile": str(plan.includes("desktop-swift-release-compile")).lower(),

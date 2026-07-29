@@ -50,7 +50,7 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 ## Repository
 - This is the `desktop/macos/` subfolder of the **OMI monorepo** (`BasedHardware/omi`)
-- macOS Swift app + Rust backend live here
+- macOS Swift app lives here; its shared Python desktop backend lives under `../../backend`
 
 ## Release Pipeline
 
@@ -66,7 +66,7 @@ Beta candidates are cut **on every macOS-affecting merge to `main`** (`push` tri
 3. **Qualification** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication, but executed only by `qualify-m1-studio` (label `omi-qual-m1-studio`). The global non-cancelling `desktop-beta-qualification-m1` lock queues all candidates and never cancels local cleanup. It rebuilds the exact tag, runs hermetic T2 and fault injection, and writes evidence. No Codemagic or M4 path can qualify. See `desktop/macos/docs/qualification-environment.md` for lease, port, retention, and cleanup controls; its local stack reaps only matching lease-token/process-group/port provenance and leaves foreign listeners alone.
 4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — a separate `workflow_run` starts only after successful qualification, derives and validates the immutable `v*-macos` tag against the qualification SHA, then invokes the same internal-only backend admission authority. The backend captures the server-owned Beta admission generation before validating digest-matched evidence, then atomically verifies that the reservation and pause state are unchanged while registering the immutable manifest and advancing the explicit beta pointer. If that handoff fails after qualification, use only `desktop_recover_beta.yml` with the exact tag, `confirm=recover-beta`, and a reason.
 
-The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; it is not the Rust desktop-backend release vector. Development Rust delivery is owned by `desktop_backend_auto_dev.yml`; protected production Rust delivery and retained-revision recovery are owned by `desktop_backend_prod.yml` and `desktop_backend_recover_prod.yml`. Merging desktop code does not deploy either production backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
+The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; `desktop_backend_auto_dev.yml` owns development Python desktop-backend delivery, while `desktop_backend_prod.yml` and `desktop_backend_recover_prod.yml` own protected production delivery and retained-revision recovery. Merging desktop code does not deploy either production backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
 
 Signed artifact smoke scope:
 - Always-on release audit covers bundle identity, version/tag alignment, signing/Keychain entitlements, Sparkle metadata, backend URL leakage, helper/runtime packaging, artifact readability, and local storage package surface.
@@ -78,7 +78,7 @@ Signed artifact smoke scope:
 Stable is manual:
 - Automatic qualification never promotes Stable. `desktop_promote_prod.yml` remains `workflow_dispatch` only and protected by the `prod` environment.
 - Run it with the current qualified Beta `release_tag` and `confirm=promote-stable`. It reads and compare-and-swaps the current Stable pointer itself, advances only that pointer, updates the existing legacy/static bridges, and verifies hashes and feed output.
-- Python backend and Rust desktop-backend deployments remain independent in their named workflows. Stable promotion checks live desktop chat-contract compatibility but does not deploy either backend. Do not manually edit release visibility or pointers outside the promotion workflow.
+- The Python desktop-backend deployment workflows remain independent from desktop release promotion. Stable promotion checks live desktop chat-contract compatibility but does not deploy the backend. Do not manually edit release visibility or pointers outside the promotion workflow.
 
 **Codemagic CLI & API:**
 - Token: `$CODEMAGIC_API_TOKEN` (set in `~/.zshrc`)
@@ -242,11 +242,11 @@ checked in. Ask the user for anything you are missing rather than guessing an en
 ### Building & Running
 - **No Xcode project** — this is a Swift Package Manager project
 - **Build command**: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK version)
-- **Full dev run**: `./run.sh` — builds Swift app, starts Rust backend, starts Cloudflare tunnel, launches app
+- **Full dev run**: `./run.sh` — builds Swift app, starts Python backend, starts Cloudflare tunnel, launches app
 - **Fast default dev run**: after one successful full named-bundle launch, ordinary Swift-only `./run.sh` calls reuse the installed bundle. The fast lane runs incremental SwiftPM, atomically replaces the executable and current desktop API URL, re-signs the app, and relaunches without copying/re-signing static agent/framework assets or resetting LaunchServices/auth. Named local profiles are eligible: their current disposable `.env` is refreshed on each patch and is never cached in the bundle fingerprint. Package metadata, resources, agent/runtime inputs, entitlements, and persistent launch configuration automatically take the full path. Force that path with `./run.sh --full` or `OMI_FORCE_FULL_BUNDLE=1`. `OMI_SCAN_STALE_BUNDLES=1` is an explicit stale-LaunchServices recovery scan; do not enable it in the normal loop.
-- **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... rust '<cargo filter>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
+- **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... python '<pytest path>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
 - **Swift suite throughput**: Local suites default to four workers; CI pins one for the shared `.build` lock. Do not raise it without isolated builds. Set `OMI_SWIFT_TEST_SUITE_WORKERS=1` to diagnose concurrency failures.
-- **Local Rust backend**: direct `./run.sh` development uses Cargo debug output (`target/debug`) by default and reuses a healthy backend that this worktree owns when Rust source/config/profile have not changed. A compile failure leaves that healthy process alive. Use `OMI_DESKTOP_BACKEND_RELEASE=1` only for an explicit optimized local check; release/CI builds remain unchanged.
+- **Local Python backend**: direct `./run.sh` development reuses a healthy backend that this worktree owns when Python source/config have not changed. Sync dependencies with `cd ../../backend && ./scripts/sync-python-deps.sh` before the first local launch.
 - **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are separately shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`), so fresh linked worktrees reuse the download but still validate it before staging.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
@@ -278,7 +278,7 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
 - **Skip the web login:** sign into "Omi Dev" once; named bundles launched by `./run.sh` clone that session before launch.
 - **Jump to a screen without clicking:** the automation bridge auto-enables on non-prod bundles — `./scripts/omi-ctl navigate <screen>` (e.g. `rewind`, `memories`, `settings rewind`). See "Fast-Path for Local Iteration" in `e2e/SKILL.md`.
-- Named/dev bundles default to the development Python and Rust backends unless
+- Named/dev bundles default to the development Python backends unless
   an explicit launch URL overrides them. Before QA, run
   `./scripts/omi-ctl health`; its unauthenticated identity payload reports the
   resolved backend environment/URLs plus the agent-runtime handshake state,
@@ -286,12 +286,12 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
   A protocol-compatible runtime that omits a required capability is rejected at
   startup; health never reports the expected protocol as if it were negotiated.
 - Run `./scripts/agent-logic-harness.sh --cross-surface-smoke` before building a
-  QA bundle. This is the compact Swift/Node/Rust contract gate; reserve full
+  QA bundle. This is the compact Swift/Node/Python contract gate; reserve full
   component suites and the live continuity gauntlet for PR readiness.
 
 ### Run Variants & Parallel Worktrees
 - `./run.sh --yolo` — quick start against the dev backend, no local services. `OMI_SKIP_BACKEND=1` — app only, remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
-- **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (Rust 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped (never the global `omi-desktop-backend` name), and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
+- **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (desktop 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped, and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
 - `Omi Dev` is the canonical shared development profile (reusable permissions, auth seed source). Do not pass `OMI_APP_NAME="Omi Dev"` from a linked worktree; that creates a named bundle displayed as Omi Dev with a different bundle id and breaks permission reuse.
 - Local Python backend (per-worktree port): `cd backend && ./scripts/dev-serve.sh`.
 
@@ -315,13 +315,13 @@ Fast path (skips web login and sidebar click-through):
    - `agent-swift` only for UI the bridge can't reach yet (`click` moves the cursor).
 3. **Read logs to confirm behavior:** app + chat bridge in the exact path from
    `./scripts/omi-ctl log-path` (named dev bundles) or `/private/tmp/omi.log`
-   (production); `./run.sh` prints the isolated local Rust backend log path at
+   (production); `./run.sh` prints the isolated local Python desktop-backend log path at
    launch; per-user issues in Sentry/PostHog.
 4. **Verify the actual behavior**, not just that the app launched — exercise the feature and check the logs/UI reflect the change.
 
 ### Default agent development loop
 
-1. **Edit or diagnose:** run the smallest relevant unit/static harness. For repeated saves, start `./scripts/dev-feedback.py --watch swift '<filter>'` or `... rust '<filter>'`; do not launch the app only to obtain compile evidence.
+1. **Edit or diagnose:** run the smallest relevant unit/static harness. For repeated saves, start `./scripts/dev-feedback.py --watch swift '<filter>'` or `... python '<pytest path>'`; do not launch the app only to obtain compile evidence.
 2. **Swift/UI behavior:** reuse the existing named bundle with `OMI_APP_NAME=omi-<feature> ./run.sh --yolo --fast-only`; add `--no-wait` only with a harness/external backend, then use the local bridge (`omi-ctl action`, `state`, or a semantic snapshot) to assert the changed behavior.
 3. **Package boundary:** use `./run.sh --full` only for the first named launch, resource/entitlement/package/runtime input changes, or when `--fast-only` reports an expected fingerprint mismatch.
 4. **QA, commit, and PR readiness:** run `./scripts/omi-macos-dev doctor`, exercise the real user-facing path, then run the appropriate full component/PR contract.

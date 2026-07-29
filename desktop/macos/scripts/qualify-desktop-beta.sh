@@ -711,8 +711,17 @@ cleanup() {
     phase_begin "final-cleanup" "runner-hygiene-cleanup"
     if ! run_qualification_cleanup; then
       phase_end failed
-      echo "qualification cleanup failed; preserving qualification lease and preventing success evidence" >&2
-      [[ "$exit_code" -ne 0 ]] || exit_code=1
+      # Only fail closed on cleanup when behavioral success was not yet reached.
+      # QUALIFICATION_SUCCESS is set after evidence handoff; before that, a mid-run
+      # abort still treats cleanup failure as fatal so leases are not silently lost
+      # without a reported error. After behavioral gates, main-path cleanup is
+      # non-gating; EXIT-only leftovers must not rewrite a green exit code.
+      if [[ "$QUALIFICATION_SUCCESS" -eq 0 && "$exit_code" -eq 0 ]]; then
+        echo "qualification cleanup failed before success evidence; failing closed" >&2
+        exit_code=1
+      else
+        echo "qualification cleanup failed (non-gating on EXIT); preserving residual lease for later reclaim" >&2
+      fi
     else
       phase_end passed
     fi
@@ -880,15 +889,17 @@ if [[ "$AUTOMATIC" -eq 1 ]]; then
   phase_end passed
 fi
 
-# Cleanup is a qualification gate, not best-effort EXIT housekeeping. Do this
-# before any trusted workflow artifact or release evidence can claim success.
+# After signed-artifact + static + Tier-2 + fault gates pass, runner-hygiene
+# cleanup is best-effort. (tip-bump with changelog consolidate noclobber so retries do not rewrite v0.12.143) A green behavioral run must not be fenced solely by
+# lease-lineage cleanup failures (incident #10779 / v0.12.142). Still attempt
+# cleanup and record phase status; residual leases are reclaimed on next acquire.
 phase_begin "final-cleanup" "runner-hygiene-cleanup"
 if ! run_qualification_cleanup; then
   phase_end failed
-  echo "qualification cleanup failed; preserving qualification lease and preventing success evidence" >&2
-  exit 1
+  echo "qualification cleanup failed (non-gating after behavioral pass); continuing to evidence registration" >&2
+else
+  phase_end passed
 fi
-phase_end passed
 
 if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]; then
   QUALIFICATION_SUCCESS=1
