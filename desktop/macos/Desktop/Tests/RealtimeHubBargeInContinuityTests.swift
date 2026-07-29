@@ -204,6 +204,74 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .init(continuityKey: "voice:matrix-dup", accepted: true))
   }
 
+  func testStreamingJournalProjectionUsesOneStablePairAndSerializesItsLifecycle() async {
+    let projection = RealtimeStreamingJournalProjection(
+      ownerID: "owner-a",
+      continuityKey: "voice:streaming-turn"
+    )
+    let user = projection.userMessage(text: "What changed?")
+    let placeholder = projection.assistantMessage(text: "", isStreaming: true)
+    XCTAssertEqual(
+      user.id,
+      KernelTurnProjection.stableTurnID(continuityKey: "voice:streaming-turn", role: "user")
+    )
+    XCTAssertEqual(
+      placeholder.id,
+      KernelTurnProjection.stableTurnID(continuityKey: "voice:streaming-turn", role: "assistant")
+    )
+    XCTAssertTrue(placeholder.isStreaming)
+
+    let ledger = RealtimeStreamingJournalWriteLedger()
+    var writes: [String] = []
+    XCTAssertTrue(ledger.begin(projection: projection) { projection in
+      writes.append("record:\(projection.userTurnID):\(projection.assistantTurnID)")
+      return true
+    })
+    ledger.enqueueUpdate(continuityKey: projection.continuityKey) { projection in
+      writes.append("delta:\(projection.assistantTurnID)")
+      return true
+    }
+
+    let finalized = await ledger.finalize(continuityKey: projection.continuityKey) { projection in
+      writes.append("complete:\(projection.userTurnID):\(projection.assistantTurnID)")
+      return true
+    }
+
+    XCTAssertEqual(finalized, .completed(true))
+    XCTAssertEqual(
+      writes,
+      [
+        "record:\(projection.userTurnID):\(projection.assistantTurnID)",
+        "delta:\(projection.assistantTurnID)",
+        "complete:\(projection.userTurnID):\(projection.assistantTurnID)",
+      ]
+    )
+    let absent = await ledger.finalize(continuityKey: projection.continuityKey) { _ in true }
+    XCTAssertEqual(absent, .absent)
+  }
+
+  func testStreamingJournalProjectionReportsRejectedAdmissionForFinalOnlyFallback() async {
+    let projection = RealtimeStreamingJournalProjection(
+      ownerID: "owner-a",
+      continuityKey: "voice:streaming-rejected"
+    )
+    let ledger = RealtimeStreamingJournalWriteLedger()
+    var updateRan = false
+    XCTAssertTrue(ledger.begin(projection: projection) { _ in false })
+    ledger.enqueueUpdate(continuityKey: projection.continuityKey) { _ in
+      updateRan = true
+      return true
+    }
+
+    let finalized = await ledger.finalize(continuityKey: projection.continuityKey) { _ in
+      XCTFail("a rejected atomic admission must not terminalize a non-existent row")
+      return true
+    }
+
+    XCTAssertEqual(finalized, .recordRejected)
+    XCTAssertFalse(updateRan)
+  }
+
   func testTurnPersistenceLedgerConsumeIsOnceThenFreshEnqueue() async {
     let ledger = RealtimeTurnPersistenceLedger()
     let gate = SuspendedTurnPersistenceGate()

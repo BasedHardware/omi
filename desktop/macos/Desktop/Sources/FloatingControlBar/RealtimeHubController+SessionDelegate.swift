@@ -780,6 +780,8 @@ extension RealtimeHubController {
     else { return }
     if !text.isEmpty {
       assistantText += text
+      beginStreamingRealtimeProjectionIfNeeded()
+      scheduleStreamingRealtimeProjectionFlush(continuityKey: turnIdempotencyKey)
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
         let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
       {
