@@ -1333,7 +1333,12 @@ def process_segment(
             turnstile.complete(path)
 
 
-def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optional[Callable[[], None]] = None):
+def _reprocess_merged_conversations(
+    uid: str,
+    response: dict,
+    on_fenced: Optional[Callable[[], None]] = None,
+    terminal_target_conversation_id: Optional[str] = None,
+):
     """Regenerate summary/structured data for conversations that gained segments this batch.
 
     The merge path in process_segment only appends transcript segments; without this the
@@ -1352,6 +1357,8 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
             if on_fenced:
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
+            if conversation_id == terminal_target_conversation_id:
+                raise
         except Exception as e:
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
 
@@ -2354,6 +2361,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     uid,
                     response,
                     on_fenced=_checkpoint_fenced_conversations,
+                    terminal_target_conversation_id=target_conversation_id,
                 )
 
             # Persist conversation audio (private-cloud chunks → audio_files) so synced
