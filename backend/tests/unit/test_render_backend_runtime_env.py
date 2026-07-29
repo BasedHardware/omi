@@ -148,12 +148,15 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
+        'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+        'REDIS_DB_PASSWORD',
     }
 
 
 def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setenv('BUCKET_PROJECTION_IMAGES', 'fixture-projection-images')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
     monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
@@ -187,6 +190,7 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
 def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setenv('BUCKET_PROJECTION_IMAGES', 'fixture-projection-images')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
     monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')

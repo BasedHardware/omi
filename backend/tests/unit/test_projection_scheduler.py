@@ -94,8 +94,31 @@ def test_no_grounded_subject_is_a_normal_scheduled_skip(monkeypatch):
     assert persisted == []
 
 
+def test_transient_failure_releases_redis_lease_for_job_retry(monkeypatch):
+    released: list[tuple[str, str]] = []
+    monkeypatch.setattr(scheduler.redis_db, 'try_acquire_projection_generation_lock', lambda uid, key: True)
+    monkeypatch.setattr(scheduler.projections_db, 'get_projection', lambda uid, projection_id: None)
+    monkeypatch.setattr(
+        scheduler.redis_db,
+        'release_projection_generation_lock',
+        lambda uid, key: released.append((uid, key)),
+    )
+    monkeypatch.setattr(
+        scheduler,
+        'generate_projection',
+        lambda uid, *, projection_id, cadence_key: (_ for _ in ()).throw(TimeoutError('gateway timeout')),
+    )
+
+    with pytest.raises(TimeoutError, match='gateway timeout'):
+        scheduler.generate_daily_projection('owner-a', date(2026, 7, 28))
+
+    assert released == [('owner-a', '2026-07-28')]
+
+
 @pytest.mark.asyncio
 async def test_hourly_cron_only_runs_users_at_the_owned_local_hour(monkeypatch):
+    monkeypatch.delenv('K_SERVICE', raising=False)
+    monkeypatch.delenv('KUBERNETES_SERVICE_HOST', raising=False)
     monkeypatch.setenv(scheduler.PROJECTION_ENABLED_USERS_ENV, 'owner-chicago,owner-lisbon,owner-invalid')
     time_zones = {
         'owner-chicago': 'America/Chicago',
@@ -119,3 +142,12 @@ async def test_hourly_cron_only_runs_users_at_the_owned_local_hour(monkeypatch):
 
     assert calls == [('owner-chicago', date(2026, 7, 28))]
     assert result == scheduler.ProjectionCronResult(eligible=1, generated=1, skipped=0, errors=0)
+
+
+@pytest.mark.asyncio
+async def test_hosted_ambient_generation_refuses_local_disk_fallback(monkeypatch):
+    monkeypatch.setenv('K_SERVICE', 'notifications-job')
+    monkeypatch.setattr(scheduler, 'uses_gcs', lambda: False)
+
+    with pytest.raises(RuntimeError, match='BUCKET_PROJECTION_IMAGES'):
+        await scheduler.start_cron_job(now=datetime(2026, 7, 28, 13, 0, tzinfo=timezone.utc))

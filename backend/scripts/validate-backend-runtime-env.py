@@ -1229,6 +1229,11 @@ def _validate_env_entries(
             if actual_value != expected_value:
                 errors.append(ValidationError(scope, f'env {name} value mismatch: expected {expected_value!r}'))
         elif 'env_var' in expected_entry:
+            if expected_entry.get('default') == '':
+                # An explicit empty fallback is a supported off switch for
+                # optional rollout inputs. Cloud Run may serialize that as an
+                # env entry with an empty value or with no `value` key at all.
+                continue
             if not _has_literal_value(actual_entry):
                 errors.append(ValidationError(scope, f'env {name} must have a literal value'))
         elif 'secret' in expected_entry:

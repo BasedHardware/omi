@@ -28,6 +28,8 @@ def test_manual_generation_is_hidden_in_production(monkeypatch):
 
 def test_manual_generation_remains_available_for_demo(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv('K_SERVICE', raising=False)
+    monkeypatch.delenv('KUBERNETES_SERVICE_HOST', raising=False)
     monkeypatch.setattr(
         projections,
         'generate_projection',
@@ -45,3 +47,13 @@ def test_manual_generation_remains_available_for_demo(monkeypatch):
     assert response.status_code == 200
     assert response.json()['id'] == 'projection-1'
     assert persisted == [('owner-a', 'projection-1')]
+
+
+def test_hosted_demo_requires_shared_private_storage(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('K_SERVICE', 'backend-dev')
+    monkeypatch.setattr(projections.projection_storage, 'uses_gcs', lambda: False)
+
+    response = _client().post('/v1/users/projections/test')
+
+    assert response.status_code == 404

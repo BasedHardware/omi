@@ -88,6 +88,19 @@ def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     )
 
 
+def with_backend_projection_env(payload: str) -> str:
+    """Keep offline backend fixtures aligned with owner-private projection delivery."""
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n'
+        r'        {"name": "BASE_API_URL", "value": "https://api.omiapi.com"},\n'
+        r'        {"name": "BUCKET_PROJECTION_IMAGES", "value": "fixture-projection-images"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_sync_ledger_fence_mode(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
     return payload.replace(
@@ -126,9 +139,11 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(
-            with_parity_pack_env(
-                with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+        with_backend_projection_env(
+            with_backend_pusher_env(
+                with_parity_pack_env(
+                    with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+                )
             )
         )
     )
@@ -1572,6 +1587,23 @@ def test_empty_literal_env_matches_cloud_run_entry_without_value():
         scope='cloud_run/backend',
         expected={'MEMORY_ENABLED_USERS': {'value': ''}},
         actual={'MEMORY_ENABLED_USERS': {'name': 'MEMORY_ENABLED_USERS'}},
+        strict_provisional=False,
+    )
+
+    assert errors == []
+
+
+def test_empty_env_var_default_matches_cloud_run_entry_without_value():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/notifications-job',
+        expected={
+            'PROJECTION_ENABLED_USERS': {
+                'env_var': 'PROJECTION_ENABLED_USERS',
+                'default': '',
+            }
+        },
+        actual={'PROJECTION_ENABLED_USERS': {'name': 'PROJECTION_ENABLED_USERS'}},
         strict_provisional=False,
     )
 

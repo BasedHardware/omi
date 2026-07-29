@@ -16,6 +16,7 @@ from database import redis_db
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.projections.errors import NoProjectionSubject
 from utils.projections.generation import generate_projection
+from utils.projections.storage import uses_gcs
 
 logger = logging.getLogger(__name__)
 
@@ -72,21 +73,32 @@ def generate_daily_projection(uid: str, local_date: date) -> bool:
     if not acquired:
         return False
 
-    if projections_db.get_projection(uid, projection_id):
-        return False
-
     try:
+        if projections_db.get_projection(uid, projection_id):
+            return False
         projection = generate_projection(uid, projection_id=projection_id, cadence_key=cadence_key)
+        projections_db.create_projection(uid, projection)
+        return True
     except NoProjectionSubject as error:
         logger.info('scheduled projection skipped uid=%s cadence=%s reason=%s', uid, cadence_key, error)
         return False
-
-    projections_db.create_projection(uid, projection)
-    return True
+    except Exception:
+        try:
+            redis_db.release_projection_generation_lock(uid, cadence_key)
+        except Exception as release_error:
+            logger.warning(
+                'projection lock release failed uid=%s cadence=%s error=%s',
+                uid,
+                cadence_key,
+                release_error,
+            )
+        raise
 
 
 async def start_cron_job(*, now: datetime | None = None) -> ProjectionCronResult:
     """Generate the daily projection for allowlisted users whose local clock is 08:xx."""
+    if (os.getenv('K_SERVICE') or os.getenv('KUBERNETES_SERVICE_HOST')) and not uses_gcs():
+        raise RuntimeError('ambient projection generation requires BUCKET_PROJECTION_IMAGES in hosted runtimes')
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError('projection cron time must be timezone-aware')
