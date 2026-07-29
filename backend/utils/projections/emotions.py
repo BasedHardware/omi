@@ -27,8 +27,9 @@ appraisals worse. That is why this is a dedicated pass and not another field on 
 WHAT IS DELIBERATELY NOT DONE HERE. No colour is named. The evidence supports emotion driving
 lightness and chroma and does not support it driving hue — hue's effect on valence is not
 significant and reverses direction with saturation — so the vector is handed to the image model
-as named charge, and the mapping stays where the evidence leaves it. See
-`research/19-emotion-model.md` in the work ledger.
+as named charge, and the mapping stays where the evidence leaves it. The measurements and
+limitations in this module-level rationale are the complete basis for that boundary; interpreting
+the implementation does not depend on an external work ledger.
 
 UNVERIFIED, and recorded rather than smoothed over: nobody has published GEW-20 rating accuracy
 for an LLM, every rateability figure here is transferred from a differently-shaped task, and a
