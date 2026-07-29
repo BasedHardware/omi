@@ -148,7 +148,10 @@ class TestSpeakerFilteredConversationSearch:
         collection.documents.search = search
         return search, {'conversations': collection}
 
-    def test_named_speaker_filter_combines_with_existing_filters(self):
+    def test_named_speaker_filter_keeps_other_filters_and_stays_out_of_typesense(self):
+        # transcript_segments is not in the Typesense schema, so a speaker clause here made Typesense
+        # reject the whole query (400) and 500 the request. Speaker matching moved to the hydrated
+        # Firestore documents (conversation_matches_speaker); the other filters still go to Typesense.
         search, collections = self._search_mock()
         with patch.object(search_module.client, 'collections', collections, create=True):
             search_conversations(
@@ -162,19 +165,16 @@ class TestSpeakerFilteredConversationSearch:
 
         params = search.call_args.args[0]
         assert params['q'] == 'launch'
-        assert params['filter_by'] == (
-            'userId:=uid1 && discarded:=false && created_at:>=100 && created_at:<=200 '
-            '&& transcript_segments.person_id:=person-1'
-        )
+        assert params['filter_by'] == ('userId:=uid1 && discarded:=false && created_at:>=100 && created_at:<=200')
 
-    def test_user_speaker_filter_uses_is_user_field(self):
+    def test_user_speaker_filter_still_browses_without_a_schema_filter(self):
         search, collections = self._search_mock()
         with patch.object(search_module.client, 'collections', collections, create=True):
             search_conversations(uid='uid1', query='', speaker_id='user')
 
         params = search.call_args.args[0]
         assert params['q'] == '*'
-        assert params['filter_by'] == 'userId:=uid1 && transcript_segments.is_user:=true'
+        assert params['filter_by'] == 'userId:=uid1'
 
     def test_empty_query_without_structured_filter_returns_empty_without_wildcard_search(self):
         search, collections = self._search_mock()

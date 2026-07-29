@@ -469,13 +469,16 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
     def test_workflow_has_no_input_manual_trigger_and_tags_only_the_merged_main_source(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        # workflow_dispatch stays bare (no manual inputs). Continuous deployment:
-        # auto-release fires on macOS-affecting merges to main (push); the schedule
-        # remains a backstop. No `inputs:` may appear in the trigger block.
+        # Manual candidate publication only. Automatic push/schedule tagging was
+        # retired so merges no longer mint a new macOS version tag per CI run.
+        # workflow_dispatch stays bare (no manual inputs). No `inputs:` may appear
+        # in the trigger block.
         self.assertIn("  workflow_dispatch:\n", workflow)
         self.assertNotIn("inputs:", workflow.split("\njobs:", 1)[0])
-        self.assertIn("  push:\n    branches: [main]", workflow)
-        self.assertIn("- cron: '*/15 * * * *'", workflow)
+        trigger = workflow.split("\njobs:", 1)[0]
+        self.assertNotIn("\n  push:", trigger)
+        self.assertNotIn("schedule:", trigger)
+        self.assertNotIn("cron:", trigger)
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
@@ -517,25 +520,16 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("if: always()", tag_release)
         self.assertIn("desktop-pre-tag-readiness", tag_release)
 
-    def test_push_paths_cover_releasable_desktop_paths(self) -> None:
-        # Continuous deployment: every releasable desktop input the planner
-        # recognizes must also be in the workflow's push filter, or a merge
-        # touching only that input would be releasable yet never get the immediate
-        # push trigger (only the schedule backstop would catch it). A directory
-        # entry maps to '<dir>/**'.
-        #
-        # Parse the push filter without PyYAML: this check runs in the `local` and
-        # `ci` lanes across environments that do not all ship PyYAML.
-        branches, push_paths = _parse_push_filter(WORKFLOW.read_text(encoding="utf-8"))
-        self.assertEqual(branches, ["main"])
-        for path in planner.DESKTOP_RELEASE_PATHS:
-            expected = f"{path}/**" if (ROOT / path).is_dir() else path
-            self.assertIn(
-                expected,
-                push_paths,
-                f"releasable desktop path {path!r} (expected push filter {expected!r}) "
-                "is missing from desktop_auto_release.yml push.paths",
-            )
+    def test_auto_release_is_manual_only(self) -> None:
+        # Candidate tags must not fire on push/schedule. The planner may still
+        # gate a manual run; continuous path filters are intentionally gone.
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        trigger = workflow.split("\njobs:", 1)[0]
+        self.assertIn("workflow_dispatch:", trigger)
+        self.assertNotIn("\n  push:", trigger)
+        self.assertNotIn("schedule:", trigger)
+        with self.assertRaises(AssertionError):
+            _parse_push_filter(workflow)
 
 
 if __name__ == "__main__":

@@ -129,7 +129,20 @@ def _calendar_auto_link_enabled() -> bool:
     return os.getenv('GOOGLE_CALENDAR_AUTO_LINK_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-def _fetch_dedup_candidates(uid: str, structured: Structured) -> List[Dict[str, Any]]:
+def _dedup_excluded_conversation_ids(conversation: Any) -> set:
+    """The conversation's own id plus any merge-source ids. Items from these
+    conversations must never be dedup candidates: on reprocess/merge they are
+    this conversation's previous items — the LLM would suppress re-extracting
+    them, and the save step then deletes them, silently losing the tasks."""
+    excluded = {getattr(conversation, 'id', None)}
+    external_data = getattr(conversation, 'external_data', None) or {}
+    merge_metadata = external_data.get('merge_metadata') or {}
+    excluded.update(merge_metadata.get('source_conversation_ids') or [])
+    excluded.discard(None)
+    return excluded
+
+
+def _fetch_dedup_candidates(uid: str, structured: Structured, conversation: Any = None) -> List[Dict[str, Any]]:
     """
     Fetch open action items semantically related to this conversation, active
     in the past week, for the LLM extraction prompt to consider as potential
@@ -139,6 +152,8 @@ def _fetch_dedup_candidates(uid: str, structured: Structured) -> List[Dict[str, 
     """
     if not structured or not structured.overview:
         return []
+
+    excluded_conversation_ids = _dedup_excluded_conversation_ids(conversation) if conversation else set()
 
     try:
         similar = find_similar_action_items(uid, structured.overview, threshold=0.6, limit=10)
@@ -151,6 +166,8 @@ def _fetch_dedup_candidates(uid: str, structured: Structured) -> List[Dict[str, 
         eligible: List[Dict[str, Any]] = []
         for item in items:
             if item.get('completed', False):
+                continue
+            if item.get('conversation_id') in excluded_conversation_ids:
                 continue
             last_active = item.get('updated_at') or item.get('created_at')
             if last_active is None or last_active < cutoff:
@@ -212,7 +229,7 @@ def _get_structured(
                         started_at,
                         language_code,
                         tz_str,
-                        existing_action_items=_fetch_dedup_candidates(uid, structured),
+                        existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
                         task_intelligence_capture=task_intelligence_capture,
@@ -246,7 +263,6 @@ def _get_structured(
         # For re-processing, we don't discard, just re-structure.
         if force_process:
             conv_started_at = cast(datetime, main_conv.started_at)
-            structured_conv = cast(Conversation, main_conv)
             # reprocess endpoint
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                 structured = get_reprocess_transcript_structure(
@@ -254,7 +270,6 @@ def _get_structured(
                     conv_started_at,
                     language_code,
                     tz_str,
-                    structured_conv.structured.title,
                     photos=main_conv.photos,
                     output_language_code=user_language,
                 )
@@ -265,7 +280,7 @@ def _get_structured(
                     language_code,
                     tz_str,
                     photos=main_conv.photos,
-                    existing_action_items=_fetch_dedup_candidates(uid, structured),
+                    existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
                     output_language_code=user_language,
                     task_intelligence_capture=task_intelligence_capture,
                 )
@@ -302,7 +317,7 @@ def _get_structured(
                 language_code,
                 tz_str,
                 photos=main_conv.photos,
-                existing_action_items=_fetch_dedup_candidates(uid, structured),
+                existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
                 task_intelligence_capture=task_intelligence_capture,

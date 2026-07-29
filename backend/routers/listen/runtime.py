@@ -162,6 +162,11 @@ class ListenSessionRuntime:
             return True
         except WebSocketDisconnect:
             self.state.active = False
+        except RuntimeError as error:
+            # The ASGI server refuses a send after close: the socket is gone, so stop
+            # queueing events for it instead of failing once per remaining event.
+            self.state.active = False
+            logger.warning('Listen event delivery after close type=%s', type(error).__name__)
         except Exception as error:
             logger.error('Listen event delivery failed type=%s', type(error).__name__)
         return False

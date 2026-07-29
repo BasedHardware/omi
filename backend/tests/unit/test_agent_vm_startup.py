@@ -2,6 +2,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from testing.shell import bash_command, bash_path
+
 ROOT = Path(__file__).resolve().parents[2]
 STARTUP = ROOT / "agent_vm" / "startup.sh"
 
@@ -22,11 +24,21 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
     environment = {
         **os.environ,
         "AGENT_VM_IMAGE": "gcr.io/project/agent-vm:abcdef0",
-        "AGENT_VM_DATA_DIR": str(tmp_path / "data"),
-        "COMMAND_LOG": str(log),
-        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "AGENT_VM_DATA_DIR": bash_path(tmp_path / "data", cwd=ROOT),
+        "COMMAND_LOG": bash_path(log, cwd=ROOT),
+        "OMI_TEST_FAKE_BIN": bash_path(bin_dir, cwd=ROOT),
     }
-    subprocess.run(["bash", str(STARTUP)], check=True, env=environment)
+    subprocess.run(
+        bash_command(
+            "-c",
+            'export PATH="$OMI_TEST_FAKE_BIN:$PATH"\nexec "$BASH" "$@"',
+            "bash",
+            STARTUP,
+            cwd=ROOT,
+        ),
+        check=True,
+        env=environment,
+    )
 
     commands = log.read_text(encoding="utf-8")
     assert "gcloud secrets versions access latest --secret=DESKTOP_ANTHROPIC_API_KEY" in commands

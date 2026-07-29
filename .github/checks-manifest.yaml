@@ -41,7 +41,7 @@ checks:
     reason: "make setup provisions no app toolchain while .github/checks-manifest.yaml is a ROUTING_INPUTS entry that wakes the Flutter codegen lane, so a docs-only PR hit 'run flutter pub get' with no mention of PRE_PUSH_SKIP_FLUTTER_GENERATED; actionlint's branch had the same omission, and a hatch nobody can find is not a hatch"
   - id: setup-pre-push-prerequisites
     command: ["bash", "scripts/test-make-setup.sh"]
-    triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "backend/scripts/sync-python-deps.sh", "scripts/pre-push", "scripts/repair-git-primary-worktree.sh", "scripts/setup-refresh-main.sh", "scripts/test-make-setup.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
   - id: desktop-release-process-guards
