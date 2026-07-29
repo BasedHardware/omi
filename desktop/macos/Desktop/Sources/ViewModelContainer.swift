@@ -6,6 +6,10 @@ import SwiftUI
 class ViewModelContainer: ObservableObject {
   // Shared stores (single source of truth)
   let tasksStore = TasksStore.shared
+  /// Process-launch anchor for startup warmups. Captured at container init
+  /// (≈ app launch) so post-onboarding / late main-content appearance does
+  /// not re-pay launch-protection delays.
+  private let launchDate = Date()
 
   // ViewModels for each page
   let dashboardViewModel = DashboardViewModel()
@@ -25,7 +29,8 @@ class ViewModelContainer: ObservableObject {
     chatProvider: chatProvider,
     retryDatabaseInit: { [weak self] in
       await self?.retryDatabaseInit() ?? false
-    }
+    },
+    launchAnchor: launchDate
   )
 
   init() {

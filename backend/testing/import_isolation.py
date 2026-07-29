@@ -32,7 +32,6 @@ D3). Do not extend it; migrate its consumers to the mechanisms here.
 from __future__ import annotations
 
 import sys
-import types
 from contextlib import contextmanager
 from types import ModuleType
 from typing import Iterator
@@ -154,6 +153,19 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
             current = sys.modules.get(name)
             if current is not None and current is not original:
                 sys.modules[name] = original
+        # 4. Rebind submodules on the now-restored parent package objects.
+        #
+        # A mapping may replace both ``pkg.child`` and ``pkg`` in that order.
+        # Installing the child first mutates the original ``pkg.child`` attribute;
+        # restoring that attribute before restoring ``pkg`` only repairs the fake
+        # parent and leaves the original parent pointing at the fake child.  String
+        # monkeypatch targets then resolve through the stale parent attribute even
+        # though ``sys.modules["pkg.child"]`` is correct.  Do this final pass only
+        # after every module object is back in ``sys.modules``.
+        for name, original_parent_attr in saved_submodule_attrs.items():
+            _set_parent_attr(name, original_parent_attr)
+        for name, original_parent_attr in saved_parent_attrs.items():
+            _set_parent_attr(name, original_parent_attr)
 
 
 def _get_parent_attr(name: str) -> ModuleType | None:

@@ -95,6 +95,13 @@ class Capabilities(StrictBaseModel):
     streaming: bool
     structured_output: StructuredOutputMode
     tools: bool
+    translation: bool = False
+
+    @model_validator(mode='after')
+    def validate_translation(self):
+        if self.translation and self.structured_output != StructuredOutputMode.JSON_SCHEMA:
+            raise ValueError('translation lanes require json_schema structured output')
+        return self
 
 
 class Objective(StrictBaseModel):

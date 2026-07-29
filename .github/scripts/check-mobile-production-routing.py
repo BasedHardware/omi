@@ -18,15 +18,15 @@ WORKFLOWS = (
 DESKTOP_WORKFLOW = "omi-desktop-swift-release"
 PIN = "https://api.omi.me/"
 DESKTOP_PIN = "https://api.omi.me"
-DESKTOP_RUST_PIN = "https://desktop-backend-hhibjajaja-uc.a.run.app/"
+DESKTOP_BACKEND_PIN = "https://desktop-backend-hhibjajaja-uc.a.run.app/"
 RETIRED_GKE_DESKTOP_BACKEND_CHART_ROOTS = (
     "backend/charts",
-    "desktop/macos/Backend-Rust/charts",
+    "desktop/macos/charts",
 )
 RETIRED_GKE_DESKTOP_BACKEND_WORKFLOW_ROOT = ".github/workflows"
 RETIRED_GKE_DESKTOP_BACKEND_MANIFEST_SUFFIXES = {".tpl", ".yaml", ".yml"}
 RETIRED_GKE_DESKTOP_BACKEND_MARKERS = ("desktop-api.omi.me", "desktop-backend")
-GKE_WORKFLOW_MARKERS = ("gcloud container", "helm ", "kubectl ")
+GKE_WORKFLOW_MARKERS = ("gcloud container clusters", "helm ", "kubectl ")
 LEGACY_BETA_ROUTING_PATHS = (
     "codemagic.yaml",
     "app/lib/env/dev_env.dart",
@@ -118,10 +118,10 @@ def validate(root: Path) -> list[str]:
         errors.append(
             f"{DESKTOP_WORKFLOW} must contain exactly one immutable OMI_PYTHON_API_URL=https://api.omi.me assignment"
         )
-    desktop_rust_assignments = re.findall(
+    desktop_backend_assignments = re.findall(
         r"(?m)^\s*OMI_DESKTOP_API_URL:\s*[\"']?([^\"'\s]+)[\"']?\s*$", desktop_block or ""
     )
-    if desktop_rust_assignments != [DESKTOP_RUST_PIN]:
+    if desktop_backend_assignments != [DESKTOP_BACKEND_PIN]:
         errors.append(
             f"{DESKTOP_WORKFLOW} must contain exactly one immutable "
             "OMI_DESKTOP_API_URL=https://desktop-backend-hhibjajaja-uc.a.run.app/ assignment"

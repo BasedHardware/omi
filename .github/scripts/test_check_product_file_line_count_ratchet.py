@@ -105,7 +105,6 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
             "backend/tests/test_big.py",
             "backend/routers/generated.gen.py",
             "desktop/macos/Desktop/Generated/Big.swift",
-            "desktop/macos/Backend-Rust/vendor/big.rs",
         ]
 
         for relative in excluded:
@@ -140,6 +139,18 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
                     RATCHET.baseline_shard_relative(router): baseline({router: 1600}),
                 }
             )
+
+
+    def test_accepts_a_retired_shard_from_the_merge_base(self) -> None:
+        retired_shard = f"{RATCHET.BASELINE_DIRECTORY_RELATIVE}/desktop-rust.json"
+        retired_source = "desktop/macos/Retired/Large.rs"
+        retired_baseline = baseline({retired_source: 1600})
+
+        self.assertIsNone(RATCHET._expected_shard(retired_shard))
+        self.assertEqual(
+            RATCHET.aggregate_baseline_shards({retired_shard: retired_baseline}),
+            retired_baseline,
+        )
 
     def test_downward_update_writes_only_the_owning_shard(self) -> None:
         router = "backend/routers/large.py"

@@ -277,7 +277,12 @@ def _build_fakes() -> dict[str, ModuleType]:
     )
 
     llm_memories = add("utils.llm.memories", AutoMockModule("utils.llm.memories"))
-    for attr in ["resolve_memory_conflict", "extract_memories_from_text", "new_memories_extractor"]:
+    for attr in [
+        "resolve_memory_conflict",
+        "extract_canonical_l1_memory_candidates",
+        "extract_memories_from_text",
+        "new_memories_extractor",
+    ]:
         setattr(llm_memories, attr, MagicMock())
 
     llm_external = add("utils.llm.external_integrations", AutoMockModule("utils.llm.external_integrations"))
@@ -1206,3 +1211,56 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     assert results[0]['app_id'] == 'app-1'
     assert results[0]['content'] == 'APP SUMMARY'
     assert written.get('suggested_summarization_apps') == ['app-1']
+
+
+def test_dedup_candidates_exclude_own_and_merge_source_items():
+    """Regression: on reprocess/merge, the conversation's own previous action
+    items (and the merge sources') came back as dedup candidates — the LLM
+    suppressed re-extracting them and the save step then deleted them, so
+    tasks silently vanished. Items from the conversation being processed or
+    its merge sources must never be dedup candidates."""
+    import sys
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    now = datetime.now(timezone.utc)
+    items = [
+        {'id': 'own', 'conversation_id': 'conv-1', 'completed': False, 'updated_at': now},
+        {'id': 'merged', 'conversation_id': 'src-conv', 'completed': False, 'updated_at': now},
+        {'id': 'unrelated', 'conversation_id': 'other-conv', 'completed': False, 'updated_at': now},
+    ]
+    similar = [{'action_item_id': item['id'], 'score': 0.9} for item in items]
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items_by_ids = MagicMock(return_value=items)
+
+    conversation = SimpleNamespace(
+        id='conv-1',
+        external_data={'merge_metadata': {'source_conversation_ids': ['src-conv']}},
+    )
+    structured = SimpleNamespace(overview='discussed follow-ups')
+
+    with patch.object(process_conversation, "find_similar_action_items", MagicMock(return_value=similar)):
+        eligible = process_conversation._fetch_dedup_candidates('user-1', structured, conversation)
+
+    assert [item['id'] for item in eligible] == ['unrelated']
+
+
+def test_dedup_candidates_unchanged_without_conversation_context():
+    """Without a conversation (new-conversation path has a fresh id), all open
+    recent items remain candidates."""
+    import sys
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    now = datetime.now(timezone.utc)
+    items = [{'id': 'open-item', 'conversation_id': 'other-conv', 'completed': False, 'updated_at': now}]
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items_by_ids = MagicMock(return_value=items)
+
+    similar = [{'action_item_id': 'open-item', 'score': 0.9}]
+    structured = SimpleNamespace(overview='discussed follow-ups')
+
+    with patch.object(process_conversation, "find_similar_action_items", MagicMock(return_value=similar)):
+        eligible = process_conversation._fetch_dedup_candidates('user-1', structured)
+
+    assert [item['id'] for item in eligible] == ['open-item']

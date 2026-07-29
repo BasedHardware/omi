@@ -6,7 +6,7 @@ struct ExcludedAppRow: View {
   let appName: String
   let onRemove: () -> Void
 
-  @State var isHovered = false
+  @State private var isHovered = false
 
   var body: some View {
     HStack(spacing: OmiSpacing.md) {
@@ -18,12 +18,11 @@ struct ExcludedAppRow: View {
 
       Spacer()
 
-      Button(action: onRemove) {
-        Image(systemName: "xmark.circle.fill")
-          .scaledFont(size: OmiType.subheading)
-          .foregroundColor(isHovered ? OmiColors.error : OmiColors.textTertiary)
-      }
-      .buttonStyle(.plain)
+      Button("Remove \(appName)", systemImage: "xmark.circle.fill", action: onRemove)
+        .labelStyle(.iconOnly)
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(isHovered ? OmiColors.error : OmiColors.textTertiary)
+        .buttonStyle(.plain)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
@@ -45,8 +44,8 @@ struct AppRuleEditorView: View {
   let builtInApps: Set<String>
   let onAdd: (String) -> Void
 
-  @State var newAppName: String = ""
-  @State var runningApps: [String] = []
+  @State private var newAppName: String = ""
+  @State private var runningApps: [String] = []
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -70,17 +69,14 @@ struct AppRuleEditorView: View {
             .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(OmiColors.textTertiary)
           Spacer()
-          Button {
-            refreshRunningApps()
-          } label: {
-            Image(systemName: "arrow.clockwise")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
-          }
-          .buttonStyle(.plain)
+          Button("Refresh running apps", systemImage: "arrow.clockwise", action: refreshRunningApps)
+            .labelStyle(.iconOnly)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(OmiColors.textTertiary)
+            .buttonStyle(.plain)
         }
 
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
           HStack(spacing: OmiSpacing.sm) {
             ForEach(
               runningApps.filter { !existingApps.contains($0) && !builtInApps.contains($0) },
@@ -92,6 +88,7 @@ struct AppRuleEditorView: View {
             }
           }
         }
+        .scrollIndicators(.hidden)
       }
       .padding(.top, OmiSpacing.xxs)
     }
@@ -121,14 +118,14 @@ struct BrowserKeywordListView: View {
   let onAdd: (String) -> Void
   let onRemove: (String) -> Void
 
-  @State var newKeyword: String = ""
-  @State var filterText: String = ""
+  @State private var newKeyword: String = ""
+  @State private var filterText: String = ""
 
   var filteredKeywords: [String] {
     if filterText.isEmpty {
       return keywords
     }
-    return keywords.filter { $0.lowercased().contains(filterText.lowercased()) }
+    return keywords.filter { $0.localizedStandardContains(filterText) }
   }
 
   var body: some View {
@@ -142,13 +139,12 @@ struct BrowserKeywordListView: View {
           .textFieldStyle(.plain)
           .scaledFont(size: OmiType.caption)
         if !filterText.isEmpty {
-          Button {
+          Button("Clear keyword filter", systemImage: "xmark.circle.fill") {
             filterText = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
           }
+          .labelStyle(.iconOnly)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(OmiColors.textTertiary)
           .buttonStyle(.plain)
         }
       }
@@ -165,13 +161,12 @@ struct BrowserKeywordListView: View {
               Text(keyword)
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textPrimary)
-              Button {
+              Button("Remove \(keyword)", systemImage: "xmark") {
                 onRemove(keyword)
-              } label: {
-                Image(systemName: "xmark")
-                  .scaledFont(size: 8, weight: .bold)
-                  .foregroundColor(OmiColors.textTertiary)
               }
+              .labelStyle(.iconOnly)
+              .scaledFont(size: 8, weight: .bold)
+              .foregroundColor(OmiColors.textTertiary)
               .buttonStyle(.plain)
             }
             .padding(.horizontal, OmiSpacing.sm)
@@ -215,7 +210,7 @@ struct RunningAppChip: View {
   let appName: String
   let onTap: () -> Void
 
-  @State var isHovered = false
+  @State private var isHovered = false
 
   var body: some View {
     Button(action: onTap) {

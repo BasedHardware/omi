@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -114,6 +114,13 @@ def ai_mod(monkeypatch):
     return ai, recorded, metrics
 
 
+@pytest.fixture
+def kg_module():
+    import database.knowledge_graph as kg
+
+    return kg
+
+
 def test_get_action_items_active_first_without_full_scan(ai_mod, monkeypatch):
     ai, recorded, metrics = ai_mod
     # Many completed docs first in storage order; actives must still lead the page.
@@ -176,12 +183,16 @@ def test_get_action_items_skips_deleted_in_active_bucket(ai_mod, monkeypatch):
     assert ids[0] == 'a1'
 
 
-def test_knowledge_graph_get_is_bounded(monkeypatch):
-    import database.knowledge_graph as kg
+def test_knowledge_graph_get_is_bounded(monkeypatch, kg_module):
+    kg = kg_module
+    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_NODES', 2)
+    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_EDGES', 3)
+    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_ASSERTIONS', 4)
 
     class _StreamColl:
-        def __init__(self, n):
+        def __init__(self, n, *, edge=False):
             self.n = n
+            self.edge = edge
             self.limit_n = None
 
         def limit(self, n):
@@ -189,13 +200,30 @@ def test_knowledge_graph_get_is_bounded(monkeypatch):
             return self
 
         def stream(self):
-            for i in range(self.limit_n if self.limit_n is not None else self.n):
-                yield SimpleNamespace(to_dict=lambda i=i: {'id': f'n{i}', 'label': f'L{i}'})
+            count = min(self.n, self.limit_n) if self.limit_n is not None else self.n
+            for i in range(count):
+                payload = (
+                    {
+                        'id': f'e{i}',
+                        'source_id': 'n0',
+                        'target_id': 'n1',
+                        'label': f'L{i}',
+                    }
+                    if self.edge
+                    else {'id': f'n{i}', 'label': f'L{i}'}
+                )
+                yield SimpleNamespace(to_dict=lambda payload=payload: payload)
 
-    nodes = _StreamColl(10000)
-    edges = _StreamColl(10000)
+    nodes = _StreamColl(10)
+    edges = _StreamColl(10, edge=True)
+    assertions = _StreamColl(0)
 
-    user_ref = SimpleNamespace(collection=lambda name: nodes if name == kg.knowledge_nodes_collection else edges)
+    collections = {
+        kg.knowledge_nodes_collection: nodes,
+        kg.knowledge_edges_collection: edges,
+        kg.memory_graph_assertions_collection: assertions,
+    }
+    user_ref = SimpleNamespace(collection=lambda name: collections[name])
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
 
     graph = kg.get_knowledge_graph('uid', db_client=client)
@@ -204,6 +232,7 @@ def test_knowledge_graph_get_is_bounded(monkeypatch):
     assert graph['truncated'] is True
     assert nodes.limit_n == kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
     assert edges.limit_n == kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
+    assert assertions.limit_n == kg.MAX_KNOWLEDGE_GRAPH_ASSERTIONS + 1
 
 
 def test_legacy_get_memories_no_first_page_5000_force():

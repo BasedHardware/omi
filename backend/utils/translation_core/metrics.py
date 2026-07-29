@@ -161,7 +161,7 @@ def _bounded(value: str) -> str:
 
 def _bounded_provider(value: str) -> str:
     normalized = _bounded(value)
-    return normalized if normalized in {'google', 'nllb', 'cache'} else 'other'
+    return normalized if normalized in {'google', 'gemini', 'nllb', 'cache'} else 'other'
 
 
 def _bounded_language(value: str) -> str:

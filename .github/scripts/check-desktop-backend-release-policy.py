@@ -19,13 +19,21 @@ def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[st
     return []
 
 
-def _validate_production_secret_bridge(text: str, *, workflow: str) -> list[str]:
+def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str]:
     errors: list[str] = []
+    retired_desktop_context = "./desktop/macos/" + "Backend" + "-Rust"
     for fragment in (
         "Preflight production desktop secret resource names",
-        "# Temporary bridge pending Rust -> Python backend consolidation.",
         'gcloud secrets describe "$secret"',
         "--format='none'",
+        "SERVICE_ACCOUNT_JSON",
+        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+        "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
+        "AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}",
+        "AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}",
+        "Build and publish Agent VM image",
+        "backend/agent_vm/Dockerfile",
+        "gs://$AGENT_GCS_BUCKET/startup.sh",
         "GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest",
         "FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest",
         "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest",
@@ -34,8 +42,13 @@ def _validate_production_secret_bridge(text: str, *, workflow: str) -> list[str]
         "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST",
     ):
         if fragment not in text:
-            errors.append(f"{workflow}: missing temporary production secret bridge {fragment!r}")
+            errors.append(f"{workflow}: missing Python production runtime contract {fragment!r}")
     for forbidden in (
+        "Rust -> Python",
+        "Rust → Python",
+        "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS",
+        f"context: {retired_desktop_context}",
+        f"file: {retired_desktop_context}/Dockerfile",
         "GEMINI_API_KEY=GEMINI_API_KEY:latest",
         "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
         "REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest",
@@ -45,13 +58,14 @@ def _validate_production_secret_bridge(text: str, *, workflow: str) -> list[str]
         "PINECONE_HOST=",
     ):
         if forbidden in text:
-            errors.append(f"{workflow}: forbidden production secret binding {forbidden!r}")
+            errors.append(f"{workflow}: forbidden production runtime configuration {forbidden!r}")
     errors.extend(
         _ordered(
             text,
             (
                 "Preflight production desktop secret resource names",
                 "Build and push immutable Docker image",
+                "Build and publish Agent VM image",
             ),
             workflow=workflow,
         )
@@ -63,6 +77,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
     workflow = "desktop_backend_prod.yml" if production else "desktop_backend_auto_dev.yml"
     errors: list[str] = []
     required = (
+        "with:\n          context: .\n          file: ./backend/Dockerfile.desktop_backend",
         "no_traffic: true",
         "desktop_backend_candidate_probe.py",
         "verify_desktop_backend_image_lineage.py",
@@ -150,7 +165,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 errors.append(
                     f"{workflow}: desktop-backend must remain outside the Python backend vector: {forbidden!r}"
                 )
-        errors.extend(_validate_production_secret_bridge(text, workflow=workflow))
+        errors.extend(_validate_production_python_runtime(text, workflow=workflow))
     else:
         for fragment in (
             "group: desktop-backend-auto-dev",
@@ -233,14 +248,25 @@ def validate_recovery_workflow(text: str) -> list[str]:
     return errors
 
 
-def validate_contract_sources(*, dockerfile: str, rust_chat: str, pi_extension: str) -> list[str]:
+def validate_contract_sources(*, dockerfile: str, python_health: str, python_chat: str) -> list[str]:
     errors: list[str] = []
     if "COPY google-credentials.json" in dockerfile:
         errors.append("Dockerfile: runtime credentials must not be copied into immutable image layers")
-    rust_contract = 'CHAT_CONTRACT_VERSION: &str = "1"'
-    pi_contract = 'OMI_CHAT_CONTRACT_VERSION = "1"'
-    if rust_contract not in rust_chat or pi_contract not in pi_extension:
-        errors.append("desktop chat contract version must remain aligned across Rust and Pi")
+    for fragment in (
+        '"status": "healthy"',
+        '"service": DESKTOP_BACKEND_SERVICE',
+        '("backend_release_sha", "OMI_DESKTOP_BACKEND_RELEASE_SHA")',
+        '("backend_release_channel", "OMI_DESKTOP_BACKEND_RELEASE_CHANNEL")',
+        '"chat_contract_version": CHAT_CONTRACT_VERSION',
+    ):
+        if fragment not in python_health:
+            errors.append(f"desktop health contract missing {fragment!r}")
+    for fragment in (
+        "x_omi_chat_contract_version not in {None, '1'}",
+        "'X-Omi-Chat-Contract-Version': '1'",
+    ):
+        if fragment not in python_chat:
+            errors.append(f"desktop chat contract missing {fragment!r}")
     return errors
 
 
@@ -252,8 +278,8 @@ def validate_all(
     stable: str,
     recovery: str,
     dockerfile: str,
-    rust_chat: str,
-    pi_extension: str,
+    python_health: str,
+    python_chat: str,
 ) -> list[str]:
     return [
         *validate_deploy_workflow(dev, production=False),
@@ -262,8 +288,8 @@ def validate_all(
         *validate_recovery_workflow(recovery),
         *validate_contract_sources(
             dockerfile=dockerfile,
-            rust_chat=rust_chat,
-            pi_extension=pi_extension,
+            python_health=python_health,
+            python_chat=python_chat,
         ),
     ]
 
@@ -275,9 +301,9 @@ def main() -> int:
         qualification=(WORKFLOWS / "desktop_qualify_beta.yml").read_text(encoding="utf-8"),
         stable=(WORKFLOWS / "desktop_promote_prod.yml").read_text(encoding="utf-8"),
         recovery=(WORKFLOWS / "desktop_backend_recover_prod.yml").read_text(encoding="utf-8"),
-        dockerfile=(ROOT / "desktop/macos/Backend-Rust/Dockerfile").read_text(encoding="utf-8"),
-        rust_chat=(ROOT / "desktop/macos/Backend-Rust/src/routes/chat/mod.rs").read_text(encoding="utf-8"),
-        pi_extension=(ROOT / "desktop/macos/pi-mono-extension/index.ts").read_text(encoding="utf-8"),
+        dockerfile=(ROOT / "backend/Dockerfile.desktop_backend").read_text(encoding="utf-8"),
+        python_health=(ROOT / "backend/routers/desktop_core.py").read_text(encoding="utf-8"),
+        python_chat=(ROOT / "backend/routers/desktop_chat.py").read_text(encoding="utf-8"),
     )
     if errors:
         for error in errors:

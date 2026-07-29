@@ -67,8 +67,8 @@ Swift desktop client
   deliverable to Desktop. Explicit external-delivery reports remain a narrow
   compatibility import path and are copied into the managed directory.
 - Pi's public-web prompt routing is a rollout compatibility projection, not a
-  second policy owner. Its positive decisions must match the Rust gateway cases
-  in `../../Backend-Rust/fixtures/public-web-routing-contract.fixture.json`;
+  second policy owner. Its positive decisions must match the Python gateway cases
+  in `../../../../backend/desktop_fixtures/public-web-routing-contract.fixture.json`;
   otherwise the adapter can display synthetic search activity for a lookup the
   gateway never performed.
 - Generated tool manifests and Swift executors are updated together through

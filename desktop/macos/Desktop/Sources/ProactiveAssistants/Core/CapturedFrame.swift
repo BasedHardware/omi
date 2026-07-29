@@ -1,25 +1,17 @@
+import CoreGraphics
 import Foundation
+import ImageIO
 
-/// Represents a captured screen frame that can be analyzed by assistants
-struct CapturedFrame {
-  /// JPEG-encoded image data
-  let jpegData: Data
+struct CapturedFrame: @unchecked Sendable {
+  var jpegData: Data { lazyData.value }
 
-  /// Name of the active application
   let appName: String
-
-  /// Title of the active window (if available)
   let windowTitle: String?
-
-  /// Sequential frame number for ordering
   let frameNumber: Int
-
-  /// Timestamp when the frame was captured
   let captureTime: Date
-
-  /// Optional reference to the screenshot in the Rewind database
-  /// Used to link proactive extractions back to their source screenshot
   let screenshotId: Int64?
+
+  private let lazyData: LazyJPEGData
 
   init(
     jpegData: Data,
@@ -29,11 +21,72 @@ struct CapturedFrame {
     captureTime: Date = Date(),
     screenshotId: Int64? = nil
   ) {
-    self.jpegData = jpegData
+    self.lazyData = LazyJPEGData(jpegData: jpegData)
     self.appName = appName
     self.windowTitle = windowTitle
     self.frameNumber = frameNumber
     self.captureTime = captureTime
     self.screenshotId = screenshotId
+  }
+
+  init(
+    cgImage: CGImage,
+    jpegQuality: CGFloat,
+    appName: String,
+    windowTitle: String? = nil,
+    frameNumber: Int,
+    captureTime: Date = Date(),
+    screenshotId: Int64? = nil
+  ) {
+    self.lazyData = LazyJPEGData(cgImage: cgImage, quality: jpegQuality)
+    self.appName = appName
+    self.windowTitle = windowTitle
+    self.frameNumber = frameNumber
+    self.captureTime = captureTime
+    self.screenshotId = screenshotId
+  }
+
+  private final class LazyJPEGData: @unchecked Sendable {
+    private var cgImage: CGImage?
+    private let quality: CGFloat
+    private var cached: Data?
+    private let lock = NSLock()
+
+    init(jpegData: Data) {
+      self.cached = jpegData
+      self.quality = 0
+    }
+
+    init(cgImage: CGImage, quality: CGFloat) {
+      self.cgImage = cgImage
+      self.quality = quality
+    }
+
+    var value: Data {
+      lock.lock()
+      defer { lock.unlock() }
+      if let cached { return cached }
+      guard let cgImage else { return Data() }
+      let data = Self.encode(cgImage: cgImage, quality: quality)
+      self.cgImage = nil
+      self.cached = data
+      return data
+    }
+
+    private static func encode(cgImage: CGImage, quality: CGFloat) -> Data {
+      autoreleasepool {
+        let data = NSMutableData()
+        guard
+          let destination = CGImageDestinationCreateWithData(
+            data as CFMutableData, "public.jpeg" as CFString, 1, nil)
+        else {
+          return Data()
+        }
+        let options: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: quality]
+        CGImageDestinationAddImage(destination, cgImage, options as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return Data() }
+        return data as Data
+      }
+    }
   }
 }

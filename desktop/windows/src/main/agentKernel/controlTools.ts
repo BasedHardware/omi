@@ -209,7 +209,7 @@ const resolveDesktopDispatchSchema = strictObject({
     operation: z.string().min(1),
     resourcePattern: z.string().min(1),
     effect: z.enum(['allow', 'deny']).default('allow'),
-    source: z.enum(['legacy_default', 'policy', 'user', 'system']).default('user'),
+    source: z.enum(['policy', 'user', 'system']).default('user'),
     constraintsJson: z.string().default('{}'),
     expiresAtMs: z.coerce.number().int().positive().nullable().optional()
   }).optional()

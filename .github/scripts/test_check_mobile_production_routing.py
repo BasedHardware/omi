@@ -27,7 +27,7 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
                 (ROOT / "codemagic.yaml").read_text(encoding="utf-8"), encoding="utf-8"
             )
             for relative_path, manifest in {
-                "desktop/macos/Backend-Rust/charts/desktop-backend/Chart.yaml": "apiVersion: v2\nname: desktop-backend\n",
+                "desktop/macos/charts/desktop-backend/Chart.yaml": "apiVersion: v2\nname: desktop-backend\n",
                 "backend/charts/desktop-backend-v2/Chart.yaml": "apiVersion: v2\nname: desktop-backend\n",
                 ".github/workflows/desktop_backend_prod.yaml": "run: gcloud container clusters get-credentials prod\n# desktop-backend\n",
             }.items():
@@ -47,9 +47,11 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
             (root / "codemagic.yaml").write_text(
                 (ROOT / "codemagic.yaml").read_text(encoding="utf-8"), encoding="utf-8"
             )
-            fixture = root / "desktop/macos/Backend-Rust/fixtures/health.json"
+            fixture = root / ".github/workflows/desktop_backend_images.yml"
             fixture.parent.mkdir(parents=True)
-            fixture.write_text('{"service": "omi-desktop-backend"}\n', encoding="utf-8")
+            fixture.write_text(
+                'run: gcloud container images describe "desktop-backend"\n', encoding="utf-8"
+            )
 
             errors = CHECKER.validate(root)
 

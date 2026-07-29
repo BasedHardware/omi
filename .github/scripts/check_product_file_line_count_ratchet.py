@@ -50,6 +50,9 @@ def _clean_git_env() -> dict[str, str]:
 
 LEGACY_BASELINE_RELATIVE = ".github/scripts/product_file_line_count_ratchet_baseline.json"
 BASELINE_DIRECTORY_RELATIVE = ".github/scripts/product_file_line_count_ratchet_baseline"
+RETIRED_BASELINE_SHARDS = {
+    f"{BASELINE_DIRECTORY_RELATIVE}/desktop-rust.json",
+}
 DESKTOP_ROOT = "desktop/macos/"
 BACKEND_ROOT = "backend/"
 VENDORED_PARTS = {
@@ -110,8 +113,6 @@ def baseline_shard_relative(relative: str) -> str:
         group = parts[1] if len(parts) > 2 and parts[1] in {"database", "routers", "utils"} else "other"
         return f"{BASELINE_DIRECTORY_RELATIVE}/backend-{group}.json"
 
-    if relative.startswith("desktop/macos/Backend-Rust/"):
-        return f"{BASELINE_DIRECTORY_RELATIVE}/desktop-rust.json"
 
     sources_prefix = ("desktop", "macos", "Desktop", "Sources")
     if parts[:4] != sources_prefix:
@@ -166,6 +167,11 @@ def load_baseline_file(path: Path, shard_relative: str | None = None) -> dict[st
         raise ValueError(f"invalid line-count ratchet baseline {path}: {error}") from error
 
 
+def _expected_shard(shard_relative: str) -> str | None:
+    """Keep merge-base-only retired shards valid while their removal is reviewed."""
+    return None if shard_relative in RETIRED_BASELINE_SHARDS else shard_relative
+
+
 def load_baseline_shards(root: Path) -> dict[str, dict[str, Any]]:
     """Load sharded baselines, falling back to the monolith only for migration."""
     directory = baseline_directory(root)
@@ -174,7 +180,9 @@ def load_baseline_shards(root: Path) -> dict[str, dict[str, Any]]:
         if not paths:
             raise ValueError(f"no baseline shards found under {BASELINE_DIRECTORY_RELATIVE}")
         return {
-            path.relative_to(root).as_posix(): load_baseline_file(path, path.relative_to(root).as_posix())
+            path.relative_to(root).as_posix(): load_baseline_file(
+                path, _expected_shard(path.relative_to(root).as_posix())
+            )
             for path in paths
         }
 
@@ -188,7 +196,7 @@ def aggregate_baseline_shards(shards: dict[str, dict[str, Any]]) -> dict[str, An
     """Validate and merge shards into the checker-facing baseline shape."""
     aggregate = empty_baseline()
     for shard_relative, shard in sorted(shards.items()):
-        expected = None if shard_relative == LEGACY_BASELINE_RELATIVE else shard_relative
+        expected = None if shard_relative == LEGACY_BASELINE_RELATIVE else _expected_shard(shard_relative)
         validate_baseline(shard, expected)
         for relative, count in shard["files"].items():
             if relative in aggregate["files"]:
@@ -340,7 +348,9 @@ def baseline_at_ref(root: Path, ref: str) -> dict[str, Any] | None:
             if result.returncode:
                 raise ValueError(f"unable to read baseline shard {shard_relative} at {ref}")
             try:
-                shards[shard_relative] = validate_baseline(json.loads(result.stdout), shard_relative)
+                shards[shard_relative] = validate_baseline(
+                    json.loads(result.stdout), _expected_shard(shard_relative)
+                )
             except (json.JSONDecodeError, ValueError) as error:
                 raise ValueError(f"invalid baseline shard {shard_relative} at {ref}: {error}") from error
         return aggregate_baseline_shards(shards)

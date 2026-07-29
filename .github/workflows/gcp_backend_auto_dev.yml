@@ -445,6 +445,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
+            --remove-env-vars=MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -481,7 +482,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
+            --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: |-
             ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
@@ -515,7 +516,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
+            --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}

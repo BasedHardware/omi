@@ -183,6 +183,7 @@ def test_memory_collections_frozen_path_strings_unchanged():
     assert paths.memory_apply_control_state == "users/uid-test/memory_state/apply_control"
     assert paths.memory_lineage == "users/uid-test/memory_lineage"
     assert paths.memory_evidence == "users/uid-test/memory_evidence"
+    assert paths.memory_graph_assertions == "users/uid-test/memory_graph_assertions"
     assert paths.memory_runs == "users/uid-test/memory_runs"
     assert paths.non_active_memory_routes == "users/uid-test/non_active_memory_routes"
     assert paths.short_term_lifecycle_transitions == "users/uid-test/short_term_lifecycle_transitions"

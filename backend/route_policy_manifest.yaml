@@ -7,6 +7,113 @@ schema_version: 1
 service: backend-main
 routes:
   - route_type: http
+    method: GET
+    path: /
+    policy: &desktop_migration_policy
+      review_status: legacy_unreviewed
+      auth:
+        mechanisms:
+          - unknown
+        placement: unknown
+        scopes: []
+      byok: unknown
+      rate_limit:
+        policy_name: unknown
+        key_subject: unknown
+        enforcement: unknown
+        placement: unknown
+      timeout_class: default_method
+      surface: unknown
+      visibility: unknown
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /.well-known/apple-developer-domain-association.txt
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: GET
+    path: /appcast.xml
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: GET
+    path: /download
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: GET
+    path: /health
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: GET
+    path: /ready
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: GET
+    path: /updates/latest
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: GET
+    path: /v1/config/api-keys
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: GET
+    path: /v1/crisp/unread
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v1/proxy/gemini-stream/{path:path}
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v1/proxy/gemini/{path:path}
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v1/screen-activity/sync
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v1/tts/synthesize
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v1/webhooks/sentry
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v1/webhooks/sentry/poll
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v2/agent/provision
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: GET
+    path: /v2/agent/status
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v2/chat/completions
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v2/realtime/session
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v2/realtime/usage
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /updates/releases
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: PATCH
+    path: /updates/releases/promote
+    policy: *desktop_migration_policy
+  - route_type: http
     method: POST
     path: /v1/conversations/shared/chat
     policy:

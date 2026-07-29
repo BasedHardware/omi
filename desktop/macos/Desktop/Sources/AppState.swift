@@ -354,6 +354,10 @@ class AppState: ObservableObject {
   var captureGateInFlight = false
   var captureReconcilePending = false
   var pendingCoreAudioCaptureRecoveryReason: String?
+  /// Counts CoreAudio rebuilds caused by a zero-sample microphone during one
+  /// transcription session. This lives above `AudioCaptureService` because each
+  /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
+  var silentMicRecoveryAttempts = 0
   var meetingEndFinalizationInProgress = false
   @Published var isAwaitingMeeting = false
 

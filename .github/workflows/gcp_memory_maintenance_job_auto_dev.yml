@@ -10,6 +10,7 @@ on:
 
 env:
   SERVICE: memory-maintenance-job
+  SCHEDULER_JOB: memory-maintenance-hourly
   REGION: us-central1
 
 # Share the lock with manual development deploys of this Cloud Run job.
@@ -109,6 +110,21 @@ jobs:
           flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} ${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}
           env_vars: ${{ steps.runtime-env.outputs.memory_maintenance_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.memory_maintenance_job_secrets }}
+
+      - name: Validate hourly Scheduler trigger
+        run: |
+          scheduler_state_file=$(mktemp)
+          trap 'rm -f "$scheduler_state_file"' EXIT
+          gcloud scheduler jobs describe "$SCHEDULER_JOB" \
+            --location="$REGION" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format=json > "$scheduler_state_file"
+          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
+            --state-file "$scheduler_state_file" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --scheduler-job "$SCHEDULER_JOB" \
+            --cloud-run-job "$SERVICE"
 
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
