@@ -92,6 +92,14 @@ extracted immediately where `source: "desktop"` defers them and opts into a tria
 Detail: `ARCHITECTURE.md`. The interface contracts every file was built against: `CONTRACTS.md`.
 Exact visual values: `docs/design-system.md`.
 
+## Windows portable-core host
+
+The app remains macOS-only. `windows/` is a Windows-only CMake build that proves the portable C++
+decision rules can be called through their C ABI, and builds the pinned swift-winrt generator
+(`79ffa65c`) for future Windows API projection work. It does not add microphone, system-audio,
+screen capture, OCR, storage, MCP, or the macOS UI to Windows. Prerequisites and the exact Windows
+validation commands: `windows/README.md`.
+
 ## Tests
 
 ```bash
