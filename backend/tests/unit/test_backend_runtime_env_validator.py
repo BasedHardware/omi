@@ -106,6 +106,15 @@ def with_listen_finalization_orphan_env(payload: str) -> str:
     )
 
 
+def with_finalization_effect_plan_mode(payload: str) -> str:
+    """Keep offline finalization runtime fixtures on the safe rollout default."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE", "value": "standby"},',
+    )
+
+
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
@@ -114,7 +123,9 @@ GOOGLE_OAUTH_SECRETS = '''\
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
         with_backend_pusher_env(
-            with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+            with_finalization_effect_plan_mode(
+                with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+            )
         )
     )
     return re.sub(
@@ -1588,6 +1599,89 @@ def test_repo_rendered_cloud_run_matches_manifest():
 
     assert validator.validate_runtime_env(env='dev', check_rendered_cloud_run=True) == []
     assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_finalization_effect_plan_mode_defaults_to_standby_on_every_runtime(environment):
+    validator = load_validator()
+    contract = validator.finalization_effect_plan_contract
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    env_config = manifest['environments'][environment]
+    surfaces = [
+        *(env_config['gke'][service]['env'] for service in contract.GKE_SERVICES),
+        *(env_config['cloud_run']['services'][service]['env'] for service in contract.CLOUD_RUN_SERVICES),
+    ]
+
+    assert contract.validate_finalization_effect_plan_mode_contract(environment, env_config) == []
+    assert {surface[contract.MODE_ENV]['value'] for surface in surfaces} == {'standby'}
+
+
+def test_finalization_effect_plan_mode_contract_covers_every_backend_runtime():
+    validator = load_validator()
+    contract = validator.finalization_effect_plan_contract
+
+    assert set(contract.GKE_SERVICES) == {'backend-listen', 'pusher'}
+    assert set(contract.CLOUD_RUN_SERVICES) == {
+        'backend',
+        'backend-sync',
+        'backend-sync-backfill',
+        'backend-integration',
+    }
+
+
+def test_finalization_effect_plan_mode_contract_rejects_missing_worker_binding():
+    validator = load_validator()
+    contract = validator.finalization_effect_plan_contract
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    env_config = manifest['environments']['prod']
+    del env_config['gke']['pusher']['env'][contract.MODE_ENV]
+
+    errors = contract.validate_finalization_effect_plan_mode_contract('prod', env_config)
+
+    assert (
+        validator.ValidationError(
+            'prod/gke/pusher',
+            f'missing {contract.MODE_ENV}',
+        )
+        in errors
+    )
+
+
+def test_finalization_effect_plan_mode_contract_rejects_split_worker_modes():
+    validator = load_validator()
+    contract = validator.finalization_effect_plan_contract
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    env_config = manifest['environments']['dev']
+    env_config['cloud_run']['services']['backend-sync']['env'][contract.MODE_ENV]['value'] = 'active'
+
+    errors = contract.validate_finalization_effect_plan_mode_contract('dev', env_config)
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/backend-sync',
+            f"{contract.MODE_ENV} mismatch: expected 'standby', got 'active'",
+        )
+        in errors
+    )
+
+
+@pytest.mark.parametrize(
+    ('entry', 'message'),
+    [
+        ({'value': 'off', 'category': 'rollout'}, 'must be a literal standby or active value'),
+        ({'value': 'standby', 'category': 'reliability'}, 'must use category rollout'),
+    ],
+)
+def test_finalization_effect_plan_mode_contract_rejects_invalid_binding(entry, message):
+    validator = load_validator()
+    contract = validator.finalization_effect_plan_contract
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    env_config = manifest['environments']['prod']
+    env_config['gke']['pusher']['env'][contract.MODE_ENV] = entry
+
+    errors = contract.validate_finalization_effect_plan_mode_contract('prod', env_config)
+
+    assert validator.ValidationError('prod/gke/pusher', f'{contract.MODE_ENV} {message}') in errors
 
 
 # Every service that deploys the backend image (`uvicorn main:app`) runs the

@@ -11,20 +11,26 @@ from pydub import AudioSegment
 
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.executors import postprocess_executor, storage_executor, submit_with_context
+from utils.other.conversation_playback_storage import (
+    get_conversation_playback_signed_url,
+    get_conversation_playback_unavailable_fingerprint,
+)
 from utils.other.storage import (
     _PRECACHE_FILE_SEM,  # type: ignore[reportPrivateUsage]  # internal semaphore, intentional cross-module use
     compute_audio_files_fingerprint,
     download_audio_chunks_and_merge,
     download_legacy_merged_wav,
     download_playback_artifact,
-    enqueue_conversation_artifact_build,
     enqueue_conversation_audio_merge,
-    get_conversation_playback_signed_url,
-    get_conversation_playback_unavailable_fingerprint,
     get_merged_audio_signed_url,
     get_or_create_merged_audio,
     get_playback_artifact_signed_url,
     is_playback_unavailable,
+)
+from utils.sync.conversation_artifact_protocol import (
+    conversation_finalization_identity,
+    conversation_playback_artifact_generation_id,
+    enqueue_conversation_artifact_build,
 )
 
 logger = logging.getLogger(__name__)
@@ -171,8 +177,17 @@ def _conversation_audio_urls_entry(
     """
     fingerprint = compute_audio_files_fingerprint(audio_files)
     stamp = (conversation or {}).get('conversation_audio') or {}
-    if stamp.get('audio_files_fingerprint') == fingerprint:
-        signed_url = get_conversation_playback_signed_url(uid, conversation_id)
+    finalization_identity = conversation_finalization_identity(conversation)
+    artifact_generation_id = conversation_playback_artifact_generation_id(fingerprint, finalization_identity)
+    if (
+        stamp.get('audio_files_fingerprint') == fingerprint
+        and stamp.get('artifact_generation_id') == artifact_generation_id
+    ):
+        signed_url = get_conversation_playback_signed_url(
+            uid,
+            conversation_id,
+            artifact_generation_id,
+        )
         if signed_url:
             return {
                 "status": "cached",
@@ -182,9 +197,15 @@ def _conversation_audio_urls_entry(
                 "captured_duration": stamp.get('captured_duration'),
                 "spans": stamp.get('spans', []),
             }
-    if get_conversation_playback_unavailable_fingerprint(uid, conversation_id) == fingerprint:
+    if get_conversation_playback_unavailable_fingerprint(uid, conversation_id, artifact_generation_id) == fingerprint:
         return {"status": "unavailable", "signed_url": None, "spans": []}
-    enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller='sync_urls')
+    enqueue_conversation_artifact_build(
+        uid,
+        conversation_id,
+        fingerprint,
+        caller='sync_urls',
+        expected_finalization_identity=finalization_identity,
+    )
     return {"status": "pending", "signed_url": None, "spans": []}
 
 

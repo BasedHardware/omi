@@ -209,13 +209,14 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     Tokens are minted with the same audience as sync tasks so a single
     verify_cloud_tasks_oidc dependency covers both handlers.
 
-    schema_version 2 = conversation-level artifact build: the name embeds the
-    audio_files fingerprint so a rebuild after late chunks gets a fresh name
-    and isn't swallowed by the named-task tombstone. 'amc-' cannot collide with
-    per-part names (audio_file ids are UUIDv4).
+    schema_version 2 = conversation-level artifact build: new callers provide
+    an opaque artifact generation derived from both the audio fingerprint and
+    conversation incarnation. The fingerprint remains the legacy fallback.
+    'amc-' cannot collide with per-part names (audio_file ids are UUIDv4).
     """
     if payload.get('schema_version') == 2:
-        task_id = f"amc-{payload['conversation_id']}-{payload['fingerprint']}"
+        generation = payload.get('artifact_generation_id') or payload['fingerprint']
+        task_id = f"amc-{payload['conversation_id']}-{generation}"
     else:
         task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
     _enqueue_named_task(

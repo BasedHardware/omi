@@ -179,6 +179,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE": "standby",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
         "STT_SERVICE_MODELS": "modulate-velma-2,parakeet",
@@ -247,7 +248,7 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
     base = tmp_path / "base"
     base.mkdir()
     (base / "kustomization.yaml").write_text("resources:\n  - deployment.yaml\n")
-    (base / "deployment.yaml").write_text(textwrap.dedent(f"""\
+    deployment_yaml = f"""\
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -270,12 +271,13 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
                             secretKeyRef:
                               name: {environment}-omi-backend-secrets
                               key: {env_name}
-            """))
+            """
+    (base / "deployment.yaml").write_text(textwrap.dedent(deployment_yaml))
 
     def render(value_from: str) -> dict:
         overlay = tmp_path / f"overlay-{len(list(tmp_path.glob('overlay-*')))}"
         overlay.mkdir()
-        strategic_patch = textwrap.dedent(f"""\
+        strategic_patch_yaml = f"""\
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -288,9 +290,10 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
                       env:
                         - name: {env_name}
                           valueFrom:
-            """)
+            """
+        strategic_patch = textwrap.dedent(strategic_patch_yaml)
         strategic_patch += textwrap.indent(value_from, " " * 16)
-        kustomization = textwrap.dedent("""\
+        kustomization_yaml = """\
             resources:
               - ../base
             patches:
@@ -298,16 +301,18 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
                   kind: Deployment
                   name: pusher
                 patch: |-
-            """)
+            """
+        kustomization = textwrap.dedent(kustomization_yaml)
         (overlay / "kustomization.yaml").write_text(kustomization + textwrap.indent(strategic_patch, " " * 6))
         result = subprocess.run(["kubectl", "kustomize", str(overlay)], check=True, capture_output=True, text=True)
         return yaml.safe_load(result.stdout)
 
-    broken = render(f"""\
+    broken_value_from_yaml = f"""\
 configMapKeyRef:
   name: {environment}-omi-backend-config
   key: {env_name}
-""")
+"""
+    broken = render(broken_value_from_yaml)
     broken_value_from = broken["spec"]["template"]["spec"]["containers"][0]["env"][0]["valueFrom"]
     assert broken_value_from == {
         "configMapKeyRef": {"name": f"{environment}-omi-backend-config", "key": env_name},

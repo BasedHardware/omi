@@ -13,8 +13,10 @@ import os
 import threading
 from datetime import datetime, timezone
 from contextlib import contextmanager
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
+from database import conversation_derived_effects as derived_effects_db
+from database import conversation_finalization_effect_store as effect_store
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
@@ -91,8 +93,7 @@ def create_in_progress_conversation(uid: str, conversation_data: dict[str, Any],
     _require_status(conversation_data, ConversationStatus.in_progress)
     if idempotent:
         return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
-    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
-    return True
+    return bool(conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data))
 
 
 def create_processing_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
@@ -106,8 +107,7 @@ def create_processing_conversation(uid: str, conversation_data: dict[str, Any], 
     conversation_data.setdefault('processing_admitted_at', datetime.now(timezone.utc))
     if idempotent:
         return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
-    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
-    return True
+    return bool(conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data))
 
 
 def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
@@ -115,11 +115,15 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     _require_status(conversation_data, ConversationStatus.completed)
     if idempotent:
         return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
-    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
-    return True
+    return bool(conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data))
 
 
-def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
+def persist_processed_conversation(
+    uid: str,
+    conversation_data: dict[str, Any],
+    *,
+    expected_finalization_identity: tuple[str | None, str | None, int | None] | None = None,
+) -> bool:
     """Persist a processing result and report whether the conversation still exists.
 
     ``False`` means its owner deleted it.  Callers must stop before emitting
@@ -131,7 +135,26 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
         ConversationStatus.completed,
         ConversationStatus.failed,
     )
-    return conversations_db.persist_processing_result_with_lifecycle(uid, conversation_data)
+    return conversations_db.persist_processing_result_with_lifecycle(
+        uid,
+        conversation_data,
+        expected_finalization_identity=expected_finalization_identity,
+    )
+
+
+def finalization_derived_effects_completed(
+    conversation: Mapping[str, Any],
+    expected_finalization_identity: tuple[str | None, str | None, int | None],
+) -> bool:
+    return derived_effects_db.completed(conversation, expected_finalization_identity)
+
+
+def checkpoint_finalization_derived_effects(
+    uid: str,
+    conversation_id: str,
+    expected_finalization_identity: tuple[str | None, str | None, int | None],
+) -> bool:
+    return derived_effects_db.checkpoint(uid, conversation_id, expected_finalization_identity)
 
 
 def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> None:
@@ -241,6 +264,16 @@ def rollback_processing_admission(uid: str, conversation_id: str) -> bool:
     )
 
 
+def rollback_reprocessing_admission(uid: str, conversation_id: str) -> bool:
+    """Restore a completed row when an inline reprocess fails after its claim."""
+    return conversations_db.claim_conversation_status(
+        uid,
+        conversation_id,
+        ConversationStatus.processing,
+        ConversationStatus.completed,
+    )
+
+
 def _processing_lease_renewal_interval() -> float:
     """Seconds between admission-lease renewals for a live synchronous processor.
 
@@ -279,7 +312,14 @@ def _run_processing_lease_heartbeat(
 
 
 @contextmanager
-def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_failure: bool = True):
+def processing_admission_guard(
+    uid: str,
+    conversation_id: str,
+    *,
+    rollback_on_failure: bool = True,
+    renew: Callable[[str, str], bool] | None = None,
+    failure_rollback: Callable[[str, str], bool] | None = None,
+):
     """Guard an inline (in-request) processing run against stranding its admission.
 
     Wrap the synchronous ``process_conversation`` call with this; if it raises,
@@ -302,7 +342,7 @@ def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_fa
         kwargs={
             'stop_event': stop_event,
             'wait': stop_event.wait,
-            'renew': jobs_db.renew_processing_lease,
+            'renew': renew or jobs_db.renew_processing_lease,
             'interval': interval,
         },
         name=f'processing-lease-{conversation_id}',
@@ -314,7 +354,7 @@ def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_fa
     except Exception:
         if rollback_on_failure:
             try:
-                rolled_back = rollback_processing_admission(uid, conversation_id)
+                rolled_back = (failure_rollback or rollback_processing_admission)(uid, conversation_id)
             except Exception:
                 logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
                 rolled_back = False
@@ -644,9 +684,58 @@ def claim_finalization_fanout(
     return jobs_db.claim_finalization_fanout(job_id, dispatch_generation, lease_epoch)
 
 
+def prepare_finalization_effect(
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    effect: str,
+    resource_count: int,
+) -> effect_store.FinalizationEffectBoundaryStatus:
+    """Persist exact, content-free cleanup coordinates before a vector write."""
+    return effect_store.prepare_finalization_effect(job_id, dispatch_generation, lease_epoch, effect, resource_count)
+
+
+def complete_finalization_effect(
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    effect: str,
+    *,
+    persist_effect: bool = True,
+) -> effect_store.FinalizationEffectBoundaryStatus:
+    """Checkpoint one v2 enrichment effect while this finalizer owns the fanout lease."""
+    return effect_store.mark_finalization_effect_completed(
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+        effect,
+        persist_effect=persist_effect,
+    )
+
+
+def complete_finalization_enrichment_cleanup(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
+    """Fence a leased fanout after its deleted conversation's vectors are gone."""
+    return effect_store.mark_finalization_enrichment_cleaned(job_id, dispatch_generation, lease_epoch)
+
+
+def finalization_job_lease_renewal_interval() -> float:
+    """Return the heartbeat cadence for a durable finalization lease."""
+    return max(1.0, jobs_db.DEFAULT_LEASE_SECONDS / 3)
+
+
+def renew_finalization_job_lease(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
+    """Extend a finalization lease only while this worker still owns it."""
+    return jobs_db.renew_finalization_job_lease(job_id, dispatch_generation, lease_epoch)
+
+
 def complete_finalization_fanout(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
     """Persist completion only after the idempotency-keyed fanout succeeds."""
     return jobs_db.mark_finalization_fanout_completed(job_id, dispatch_generation, lease_epoch)
+
+
+def release_finalization_fanout(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
+    """Close a fanout drain handshake after every worker mutation returns."""
+    return effect_store.release_finalization_fanout(job_id, dispatch_generation, lease_epoch)
 
 
 def complete_fenced_finalization(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:

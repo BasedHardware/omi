@@ -11,10 +11,12 @@ import os
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Literal, Mapping, TypedDict
+from uuid import uuid4
 
 from google.cloud import firestore
 
 from database import conversations as conversations_db
+from database import conversation_finalization_effects as finalization_effects
 from database._client import document_id_from_seed, get_firestore_client
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
@@ -28,15 +30,27 @@ FINALIZATION_PROJECTION_COLLECTION = 'conversation_finalization_projection_shard
 FINALIZATION_PROJECTION_GENERATION = 'terminal-outcomes-v1'
 FINALIZATION_PROJECTION_SHARD_COUNT = 16
 
-FinalizationJobStatus = Literal['queued', 'leased', 'completed', 'dead_letter', 'blocked_byok']
+FinalizationJobStatus = Literal['queued', 'leased', 'completed', 'dead_letter', 'blocked_byok', 'dead_letter_cleanup']
 TERMINAL_JOB_STATUSES = frozenset({'completed', 'dead_letter'})
-NONTERMINAL_JOB_STATUSES = frozenset({'queued', 'leased', 'blocked_byok'})
+NONTERMINAL_JOB_STATUSES = frozenset({'queued', 'leased', 'blocked_byok', 'dead_letter_cleanup'})
+DEAD_LETTER_CLEANUP_STATUS = 'dead_letter_cleanup'
+DEAD_LETTER_CLEANUP_EPOCH_FIELD = 'dead_letter_cleanup_lease_epoch'
 DEFAULT_LEASE_SECONDS = 1500
 DEFAULT_RECONCILE_STALE_SECONDS = 300
-# Conservative: the synchronous legacy route admits processing with no durable
-# job, and its request thread is not killed by the HTTP timeout, so the orphan
-# window must exceed any plausible live synchronous process_conversation run.
 DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS = 900
+FINALIZATION_EFFECT_PLAN_MODE_ENV = finalization_effects.FINALIZATION_EFFECT_PLAN_MODE_ENV
+FINALIZATION_FANOUT_PLAN_VERSION = finalization_effects.FINALIZATION_FANOUT_PLAN_VERSION
+REQUIRED_EFFECT_KEYS = finalization_effects.REQUIRED_EFFECT_KEYS
+VECTOR_CLEANUP_PENDING_FIELD = finalization_effects.VECTOR_CLEANUP_PENDING_FIELD
+finalization_effect_plan_mode = finalization_effects.finalization_effect_plan_mode
+_fanout_plan_version = finalization_effects.fanout_plan_version
+_completed_effects = finalization_effects.completed_effects
+_fanout_key = finalization_effects.fanout_key
+_conversation_admits_fanout = finalization_effects.conversation_admits_fanout
+_finalization_incarnation_id = finalization_effects.finalization_incarnation_id
+_finalization_vector_generation_id = finalization_effects.finalization_vector_generation_id
+_transcript_vector_count = finalization_effects.transcript_vector_count
+FinalizationFanoutClaim = finalization_effects.FinalizationFanoutClaim
 
 
 class FinalizationIntent(TypedDict):
@@ -54,13 +68,6 @@ class FinalizationAdmission(TypedDict):
     accepted: bool
     terminal: bool
     reason: str
-    fanout_key: str | None
-
-
-class FinalizationFanoutClaim(TypedDict):
-    """Ownership result for the durable external-integration fanout."""
-
-    status: str
     fanout_key: str | None
 
 
@@ -116,7 +123,7 @@ def _claim_result(
     return {'status': status, 'lease_epoch': lease_epoch, 'attempt_count': attempt_count, 'created_at': created_at}
 
 
-def _is_current_lease(job: dict[str, Any], dispatch_generation: int, lease_epoch: int) -> bool:
+def is_current_finalization_lease(job: dict[str, Any], dispatch_generation: int, lease_epoch: int) -> bool:
     return (
         job.get('status') == 'leased'
         and int(job.get('dispatch_generation') or 1) == dispatch_generation
@@ -163,7 +170,7 @@ def _projection_ref_for_job(projection_collection: Any, job: Mapping[str, Any]) 
     return projection_collection.document(_projection_shard_id(generation, shard))
 
 
-def _record_projection_delta(
+def record_finalization_projection_delta(
     transaction: Any, projection_collection: Any | None, job: Mapping[str, Any], **deltas: int
 ) -> None:
     """Atomically add state deltas for an admitted projection generation.
@@ -187,8 +194,9 @@ def _record_projection_delta(
     transaction.set(shard_ref, fields, merge=True)
 
 
-def _job_id(uid: str, conversation_id: str, revision: int) -> str:
-    return document_id_from_seed(f'listen-finalization:{uid}:{conversation_id}:{revision}')
+def _job_id(uid: str, conversation_id: str, revision: int, incarnation_id: str | None = None) -> str:
+    generation = f':{incarnation_id}' if incarnation_id else ''
+    return document_id_from_seed(f'listen-finalization:{uid}:{conversation_id}{generation}:{revision}')
 
 
 def _intent_from_job(job_id: str, data: dict[str, Any], *, created: bool = False) -> FinalizationIntent:
@@ -248,6 +256,8 @@ def _create_or_get_finalization_intent_txn(
     conversation = conversation_snapshot.to_dict() or {}
     if conversation.get('deferred'):
         return _no_finalization_intent('deferred')
+    if conversation.get(VECTOR_CLEANUP_PENDING_FIELD):
+        return _no_finalization_intent('vector_cleanup_pending')
     if not _conversation_has_finalization_content(uid, conversation, conversation_ref, transaction):
         return _no_finalization_intent('no_content')
 
@@ -270,24 +280,29 @@ def _create_or_get_finalization_intent_txn(
         return _no_finalization_intent(admission['reason'])
 
     revision = int(conversation.get('finalization_revision') or 0) + 1
-    job_id = _job_id(uid, conversation_id, revision)
+    active_plan = finalization_effect_plan_mode() == 'active'
+    incarnation_id = (_finalization_incarnation_id(conversation) or uuid4().hex) if active_plan else None
+    job_id = _job_id(uid, conversation_id, revision, incarnation_id)
     job_ref = jobs_collection.document(job_id)
     job_snapshot = job_ref.get(transaction=transaction)
     if getattr(job_snapshot, 'exists', False):
         job = job_snapshot.to_dict() or {}
-        transaction.update(
-            conversation_ref,
-            {
-                'status': 'processing',
-                'finalization_job_id': job_id,
-                'finalization_revision': revision,
-                'finalization_status': job.get('status', 'queued'),
-            },
-        )
+        existing_updates = {
+            'status': 'processing',
+            'finalization_job_id': job_id,
+            'finalization_revision': revision,
+            'finalization_status': job.get('status', 'queued'),
+        }
+        if incarnation_id is not None:
+            existing_updates['finalization_incarnation_id'] = incarnation_id
+        existing_generation_id = _finalization_vector_generation_id(job)
+        if existing_generation_id is not None:
+            existing_updates['finalization_vector_generation_id'] = existing_generation_id
+        transaction.update(conversation_ref, existing_updates)
         return _intent_from_job(job_id, job)
 
     status: FinalizationJobStatus = 'blocked_byok' if requires_byok else 'queued'
-    job = {
+    job: dict[str, Any] = {
         'schema_version': 1,
         'uid': uid,
         'conversation_id': conversation_id,
@@ -298,7 +313,17 @@ def _create_or_get_finalization_intent_txn(
         # pipeline retains its existing default. Persist the choice with the
         # immutable finalization generation so a replay cannot change it.
         'force_process': force_process,
-        'fanout_key': admission['fanout_key'],
+        'fanout_key': (
+            _fanout_key(
+                {
+                    'conversation_id': conversation_id,
+                    'finalization_revision': revision,
+                    'finalization_incarnation_id': incarnation_id,
+                }
+            )
+            if active_plan
+            else admission['fanout_key']
+        ),
         'fanout_status': 'pending',
         'dispatch_generation': 1,
         'attempt_count': 0,
@@ -309,10 +334,15 @@ def _create_or_get_finalization_intent_txn(
         'updated_at': now,
         'dispatch_requested_at': now,
     }
+    if active_plan:
+        job['fanout_plan_version'] = FINALIZATION_FANOUT_PLAN_VERSION
+        job['completed_effects'] = []
+        job['finalization_incarnation_id'] = incarnation_id
+        job['finalization_vector_generation_id'] = job_id
     if not requires_byok:
         job['reconcile_after_at'] = now + get_finalization_reconcile_stale_after()
     transaction.set(job_ref, job)
-    _record_projection_delta(
+    record_finalization_projection_delta(
         transaction,
         projection_collection,
         job,
@@ -331,6 +361,9 @@ def _create_or_get_finalization_intent_txn(
             'finalization_status': status,
         }
     )
+    if incarnation_id is not None:
+        conversation_updates['finalization_incarnation_id'] = incarnation_id
+        conversation_updates['finalization_vector_generation_id'] = job_id
     transaction.update(conversation_ref, conversation_updates)
     return _intent_from_job(job_id, job, created=True)
 
@@ -402,7 +435,7 @@ def _resume_blocked_byok_job_txn(
                 'reconcile_after_at': firestore.DELETE_FIELD,
             },
         )
-        _record_projection_delta(transaction, projection_collection, job, blocked_byok=-1, queued=1)
+        record_finalization_projection_delta(transaction, projection_collection, job, blocked_byok=-1, queued=1)
         job['status'] = 'queued'
     return _intent_from_job(snapshot.id, job)
 
@@ -449,10 +482,23 @@ def _claim_finalization_job_txn(
         return _claim_result('blocked_byok')
     if int(job.get('dispatch_generation') or 1) != dispatch_generation:
         return _claim_result('stale_generation')
+    recovering_dead_letter_cleanup = False
+    if status == DEAD_LETTER_CLEANUP_STATUS:
+        cleanup_deadline = job.get('lease_expires_at')
+        if not isinstance(cleanup_deadline, datetime) or cleanup_deadline > now:
+            return _claim_result('not_actionable')
+        if not job.get('requires_byok'):
+            return _claim_result('not_actionable')
+        recovering_dead_letter_cleanup = True
+        status = 'leased'
     if status == 'leased':
         lease_expires_at = job.get('lease_expires_at')
-        if isinstance(lease_expires_at, datetime) and lease_expires_at > now:
+        if not recovering_dead_letter_cleanup and isinstance(lease_expires_at, datetime) and lease_expires_at > now:
             return _claim_result('leased')
+        if not recovering_dead_letter_cleanup and job.get('fanout_status') == 'leased':
+            return _claim_result('draining')
+    if status == 'queued' and job.get('fanout_status') == 'leased':
+        return _claim_result('draining')
     if status not in ('queued', 'leased'):
         return _claim_result('not_actionable')
 
@@ -466,18 +512,27 @@ def _claim_finalization_job_txn(
             'status': 'leased',
             'leased_at': now,
             'lease_expires_at': lease_expires_at,
-            # A lease epoch fences a worker that resumes after another worker
-            # has reclaimed its expired lease. Terminal writes must present it.
             'lease_epoch': lease_epoch,
             'reconcile_after_at': (firestore.DELETE_FIELD if bool(job.get('requires_byok')) else lease_expires_at),
             'updated_at': now,
-            # The claimer owns the attempt budget: an inline (pusher) worker has
-            # no Cloud Tasks retry count to fence its terminal attempt with.
             'attempt_count': attempt_count,
+            **(
+                {
+                    'completed_effects': [],
+                    DEAD_LETTER_CLEANUP_EPOCH_FIELD: firestore.DELETE_FIELD,
+                }
+                if recovering_dead_letter_cleanup
+                else {}
+            ),
+            **(
+                {}
+                if job.get('fanout_status') == 'completed'
+                else {'fanout_status': 'leased', 'fanout_lease_epoch': lease_epoch, 'fanout_started_at': now}
+            ),
         },
     )
     if status == 'queued':
-        _record_projection_delta(transaction, projection_collection, job, queued=-1, leased=1)
+        record_finalization_projection_delta(transaction, projection_collection, job, queued=-1, leased=1)
     created_at = job.get('created_at')
     return _claim_result(
         'claimed',
@@ -513,6 +568,32 @@ def claim_finalization_job(
     )
 
 
+def _renew_finalization_job_lease_txn(txn: Any, job_ref: Any, generation: int, epoch: int, now: datetime) -> bool:
+    snapshot = job_ref.get(transaction=txn)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    job = snapshot.to_dict() or {}
+    if not is_current_finalization_lease(job, generation, epoch):
+        return False
+    lease_expires_at = now + timedelta(seconds=DEFAULT_LEASE_SECONDS)
+    txn.update(
+        job_ref,
+        {
+            'lease_expires_at': lease_expires_at,
+            'reconcile_after_at': firestore.DELETE_FIELD if bool(job.get('requires_byok')) else lease_expires_at,
+            'updated_at': now,
+        },
+    )
+    return True
+
+
+def renew_finalization_job_lease(job_id: str, generation: int, epoch: int, *, firestore_client: Any = None) -> bool:
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_renew_finalization_job_lease_txn)
+    return transactional(transaction, _job_ref(client, job_id), generation, epoch, _now())
+
+
 def _mark_finalization_completed_txn(
     transaction: Any,
     job_ref: Any,
@@ -525,9 +606,14 @@ def _mark_finalization_completed_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     job = snapshot.to_dict() or {}
+    plan_version = _fanout_plan_version(job)
+    if plan_version not in (1, FINALIZATION_FANOUT_PLAN_VERSION):
+        return False
+    if plan_version == FINALIZATION_FANOUT_PLAN_VERSION and _completed_effects(job) != REQUIRED_EFFECT_KEYS:
+        return False
     if job.get('status') == 'completed':
         return int(job.get('lease_epoch') or 0) == lease_epoch
-    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+    if not is_current_finalization_lease(job, dispatch_generation, lease_epoch):
         return False
     if job.get('fanout_status') != 'completed':
         return False
@@ -543,7 +629,7 @@ def _mark_finalization_completed_txn(
             'last_failure_code': None,
         },
     )
-    _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, success=1)
+    record_finalization_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, success=1)
     return True
 
 
@@ -584,12 +670,14 @@ def _mark_finalization_fenced_txn(
     job = snapshot.to_dict() or {}
     if job.get('status') == 'completed':
         return job.get('finalization_outcome') == 'fenced' and int(job.get('lease_epoch') or 0) == lease_epoch
-    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+    if not is_current_finalization_lease(job, dispatch_generation, lease_epoch):
         return False
-    if job.get('fanout_status') not in (None, 'pending'):
+    if job.get('fanout_status') == 'leased' and int(job.get('fanout_lease_epoch') or 0) != lease_epoch:
         return False
-    transaction.update(job_ref, _fenced_finalization_update(now))
-    _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
+    if job.get('fanout_status') not in (None, 'pending', 'leased', 'drained'):
+        return False
+    transaction.update(job_ref, fenced_finalization_update(now))
+    record_finalization_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
     return True
 
 
@@ -609,16 +697,7 @@ def mark_finalization_fenced(
     )
 
 
-def _fanout_key(job: dict[str, Any]) -> str:
-    key = job.get('fanout_key')
-    if isinstance(key, str) and key:
-        return key
-    # Backfill jobs created before the durable fanout boundary on their first
-    # retry. The key is deterministic per immutable finalization revision.
-    return f"conversation:{job.get('conversation_id', '')}:finalization:{int(job.get('finalization_revision') or 1)}"
-
-
-def _fenced_finalization_update(now: datetime) -> dict[str, Any]:
+def fenced_finalization_update(now: datetime) -> dict[str, Any]:
     """Return the terminal no-fanout state shared by every fencing boundary."""
     return {
         'status': 'completed',
@@ -634,22 +713,6 @@ def _fenced_finalization_update(now: datetime) -> dict[str, Any]:
     }
 
 
-def _fanout_claim(status: str, fanout_key: str | None) -> FinalizationFanoutClaim:
-    return {'status': status, 'fanout_key': fanout_key}
-
-
-def _conversation_admits_fanout(conversation: Mapping[str, Any], job: Mapping[str, Any], job_id: str) -> bool:
-    """Require the immutable job binding to still name a completed conversation."""
-    if conversation.get('discarded') or conversation.get('status') != 'completed':
-        return False
-    if conversation.get('finalization_job_id') != job_id:
-        return False
-    try:
-        return int(conversation.get('finalization_revision') or 0) == int(job.get('finalization_revision') or 0)
-    except (TypeError, ValueError):
-        return False
-
-
 def _claim_finalization_fanout_txn(
     transaction: Any,
     job_ref: Any,
@@ -659,49 +722,26 @@ def _claim_finalization_fanout_txn(
     conversation_ref_for_job: Callable[[str, str], Any],
     projection_collection: Any | None = None,
 ) -> FinalizationFanoutClaim:
-    """Claim fanout only if this job still owns the completed conversation.
-
-    Reading the conversation in this Firestore transaction makes a concurrent
-    discard or newer finalization revision retry the transaction before the
-    fanout lease can commit.  The losing state is terminally fenced here,
-    rather than leaving a retryable leased job for either worker to replay.
-    """
-    snapshot = job_ref.get(transaction=transaction)
-    if not getattr(snapshot, 'exists', False):
-        return _fanout_claim('missing', None)
-    job = snapshot.to_dict() or {}
-    fanout_key = _fanout_key(job)
-    if job.get('fanout_status') == 'completed':
-        return _fanout_claim('completed', fanout_key)
-    if not _is_current_lease(job, dispatch_generation, lease_epoch):
-        return _fanout_claim('lease_conflict', fanout_key)
-
-    uid = job.get('uid')
-    conversation_id = job.get('conversation_id')
-    if not isinstance(uid, str) or not uid or not isinstance(conversation_id, str) or not conversation_id:
-        transaction.update(job_ref, _fenced_finalization_update(now))
-        _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
-        return _fanout_claim('fenced', fanout_key)
-
-    conversation_ref = conversation_ref_for_job(uid, conversation_id)
-    conversation_snapshot = conversation_ref.get(transaction=transaction)
-    conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
-    if not isinstance(conversation, Mapping) or not _conversation_admits_fanout(conversation, job, job_ref.id):
-        transaction.update(job_ref, _fenced_finalization_update(now))
-        _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
-        return _fanout_claim('fenced', fanout_key)
-
-    transaction.update(
+    """Claim fanout only if this job still owns the completed conversation."""
+    return finalization_effects.claim_fanout_txn(
+        transaction,
         job_ref,
-        {
-            'fanout_key': fanout_key,
-            'fanout_status': 'leased',
-            'fanout_lease_epoch': lease_epoch,
-            'fanout_started_at': now,
-            'updated_at': now,
-        },
+        dispatch_generation,
+        lease_epoch,
+        now,
+        is_current_lease=is_current_finalization_lease,
+        conversation_ref_for_job=conversation_ref_for_job,
+        fenced_update=fenced_finalization_update,
+        record_projection=lambda txn, job: record_finalization_projection_delta(
+            txn,
+            projection_collection,
+            job,
+            leased=-1,
+            completed=1,
+            stale=1,
+        ),
+        delete_field=firestore.DELETE_FIELD,
     )
-    return _fanout_claim('claimed', fanout_key)
 
 
 def claim_finalization_fanout(
@@ -736,9 +776,18 @@ def _mark_finalization_fanout_completed_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     job = snapshot.to_dict() or {}
+    plan_version = _fanout_plan_version(job)
+    if plan_version not in (1, FINALIZATION_FANOUT_PLAN_VERSION):
+        return False
+    if plan_version == FINALIZATION_FANOUT_PLAN_VERSION and _completed_effects(job) != REQUIRED_EFFECT_KEYS:
+        return False
     if job.get('fanout_status') == 'completed':
         return int(job.get('fanout_lease_epoch') or 0) == lease_epoch
-    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+    if not is_current_finalization_lease(job, dispatch_generation, lease_epoch):
+        return False
+    if plan_version == FINALIZATION_FANOUT_PLAN_VERSION and (
+        job.get('fanout_status') != 'leased' or int(job.get('fanout_lease_epoch') or 0) != lease_epoch
+    ):
         return False
     transaction.update(
         job_ref,
@@ -777,23 +826,23 @@ def _mark_finalization_retryable_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     job = snapshot.to_dict() or {}
-    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+    if not is_current_finalization_lease(job, dispatch_generation, lease_epoch):
         return False
-    transaction.update(
-        job_ref,
-        {
-            'status': 'queued',
-            'updated_at': now,
-            'lease_expires_at': now,
-            'reconcile_after_at': (
-                firestore.DELETE_FIELD
-                if bool(job.get('requires_byok'))
-                else now + get_finalization_reconcile_stale_after()
-            ),
-            'last_failure_code': failure_code,
-        },
-    )
-    _record_projection_delta(transaction, projection_collection, job, leased=-1, queued=1)
+    if job.get('fanout_status') == 'leased' and int(job.get('fanout_lease_epoch') or 0) != lease_epoch:
+        return False
+    retry_update: dict[str, Any] = {
+        'status': 'queued',
+        'updated_at': now,
+        'lease_expires_at': now,
+        'reconcile_after_at': (
+            firestore.DELETE_FIELD if bool(job.get('requires_byok')) else now + get_finalization_reconcile_stale_after()
+        ),
+        'last_failure_code': failure_code,
+    }
+    if job.get('fanout_status') == 'leased' and int(job.get('fanout_lease_epoch') or 0) == lease_epoch:
+        retry_update.update({'fanout_status': 'drained', 'fanout_drained_at': now})
+    transaction.update(job_ref, retry_update)
+    record_finalization_projection_delta(transaction, projection_collection, job, leased=-1, queued=1)
     return True
 
 
@@ -833,7 +882,13 @@ def _mark_finalization_dead_letter_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     job = snapshot.to_dict() or {}
-    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+    cleanup_owner = (
+        job.get('status') == DEAD_LETTER_CLEANUP_STATUS
+        and job.get('fanout_status') == DEAD_LETTER_CLEANUP_STATUS
+        and int(job.get('dispatch_generation') or 1) == dispatch_generation
+        and int(job.get(DEAD_LETTER_CLEANUP_EPOCH_FIELD) or 0) == lease_epoch
+    )
+    if not cleanup_owner and not is_current_finalization_lease(job, dispatch_generation, lease_epoch):
         return False
     conversation_ref = None
     conversation = None
@@ -846,10 +901,6 @@ def _mark_finalization_dead_letter_txn(
         and isinstance(conversation_id, str)
         and conversation_id
     ):
-        # Read the bound conversation before the first transaction write. A
-        # final worker failure must close its still-current processing
-        # generation atomically with dead-lettering the job; otherwise a crash
-        # between independent writes strands the customer on processing.
         conversation_ref = conversation_ref_for_job(uid, conversation_id)
         conversation_snapshot = conversation_ref.get(transaction=transaction)
         conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
@@ -864,9 +915,11 @@ def _mark_finalization_dead_letter_txn(
             'reconcile_after_at': firestore.DELETE_FIELD,
             'task_retry_count': retry_count,
             'last_failure_code': 'final_attempt_failed',
+            'fanout_status': 'dead_letter',
+            DEAD_LETTER_CLEANUP_EPOCH_FIELD: firestore.DELETE_FIELD,
         },
     )
-    _record_projection_delta(transaction, projection_collection, job, leased=-1, dead_letter=1, failure=1)
+    record_finalization_projection_delta(transaction, projection_collection, job, leased=-1, dead_letter=1, failure=1)
     if (
         conversation_ref is not None
         and isinstance(conversation, Mapping)
@@ -874,6 +927,11 @@ def _mark_finalization_dead_letter_txn(
         and not conversation.get('discarded')
         and conversation.get('finalization_job_id') == job_ref.id
         and conversation.get('finalization_revision') == job.get('finalization_revision')
+        and (
+            _finalization_incarnation_id(job) is None
+            or conversation.get(finalization_effects.FINALIZATION_INCARNATION_FIELD)
+            == _finalization_incarnation_id(job)
+        )
     ):
         transaction.update(
             conversation_ref,
@@ -932,6 +990,10 @@ def _claim_finalization_replay_txn(
     status = str(job.get('status') or '')
     if status == 'blocked_byok' or status in TERMINAL_JOB_STATUSES:
         return _intent_from_job(snapshot.id, job)
+    if status == DEAD_LETTER_CLEANUP_STATUS:
+        reconcile_after_at = job.get('reconcile_after_at')
+        if isinstance(reconcile_after_at, datetime) and reconcile_after_at > now:
+            return _intent_from_job(snapshot.id, job)
     if status == 'leased':
         lease_expires_at = job.get('lease_expires_at')
         if isinstance(lease_expires_at, datetime) and lease_expires_at > now:
@@ -940,7 +1002,9 @@ def _claim_finalization_replay_txn(
         dispatch_requested_at = job.get('dispatch_requested_at')
         if isinstance(dispatch_requested_at, datetime) and dispatch_requested_at > now - stale_after:
             return _intent_from_job(snapshot.id, job)
-    if status not in ('queued', 'leased'):
+    if status in {'queued', 'leased'} and job.get('fanout_status') == 'leased':
+        return _intent_from_job(snapshot.id, job)
+    if status not in ('queued', 'leased', DEAD_LETTER_CLEANUP_STATUS):
         return _intent_from_job(snapshot.id, job)
 
     generation = int(job.get('dispatch_generation') or 1) + 1
@@ -953,10 +1017,19 @@ def _claim_finalization_replay_txn(
             'updated_at': now,
             'lease_expires_at': now,
             'reconcile_after_at': now + stale_after,
+            **(
+                {
+                    'fanout_status': 'pending',
+                    'completed_effects': [],
+                    DEAD_LETTER_CLEANUP_EPOCH_FIELD: firestore.DELETE_FIELD,
+                }
+                if status == DEAD_LETTER_CLEANUP_STATUS
+                else {}
+            ),
         },
     )
-    if status == 'leased':
-        _record_projection_delta(transaction, projection_collection, job, leased=-1, queued=1)
+    if status in {'leased', DEAD_LETTER_CLEANUP_STATUS}:
+        record_finalization_projection_delta(transaction, projection_collection, job, leased=-1, queued=1)
     job['status'] = 'queued'
     job['dispatch_generation'] = generation
     return _intent_from_job(snapshot.id, job)
@@ -985,7 +1058,7 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
     query = collection.where('reconcile_after_at', '<=', _now()).limit(max(1, min(limit, 100)))
     for snapshot in query.stream():
         job = snapshot.to_dict() or {}
-        if job.get('status') in {'queued', 'leased'}:
+        if job.get('status') in {'queued', 'leased', DEAD_LETTER_CLEANUP_STATUS}:
             result.append(job | {'job_id': snapshot.id})
     return result
 

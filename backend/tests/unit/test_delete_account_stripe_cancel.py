@@ -37,6 +37,7 @@ def users_service():
         "database.users": AutoMockModule("database.users"),
         "database.action_items": AutoMockModule("database.action_items"),
         "database.conversations": AutoMockModule("database.conversations"),
+        "database.conversation_vector_cleanup": AutoMockModule("database.conversation_vector_cleanup"),
         "database.memories": AutoMockModule("database.memories"),
         "database.screen_activity": AutoMockModule("database.screen_activity"),
         "database.vector_db": AutoMockModule("database.vector_db"),
@@ -49,6 +50,7 @@ def users_service():
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
+        "utils.other.conversation_playback_storage": AutoMockModule("utils.other.conversation_playback_storage"),
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }

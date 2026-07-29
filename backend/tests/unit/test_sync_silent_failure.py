@@ -581,6 +581,7 @@ _STUB_MODULES = [
     'pydub',
     'utils.other.endpoints',
     'utils.other.storage',
+    'utils.other.conversation_playback_storage',
     'utils.log_sanitizer',
     'utils.encryption',
     'utils.stt.pre_recorded',
@@ -592,6 +593,8 @@ _STUB_MODULES = [
     'utils.subscription',
     'utils.cloud_tasks',
     'utils.sync.content_id',
+    'utils.sync.conversation_artifact_protocol',
+    'utils.sync.conversation_artifact_worker',
     'utils.conversations.process_conversation',
     'python_multipart',
     'python_multipart.multipart',
@@ -654,6 +657,10 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
         sys.modules['utils.other.storage'].compute_audio_files_fingerprint = MagicMock(return_value='fp')
+        sys.modules['utils.other.storage'].conversation_finalization_identity = MagicMock(return_value=None)
+        sys.modules['utils.other.storage'].conversation_playback_artifact_generation_id = MagicMock(
+            return_value='a' * 32
+        )
         sys.modules['utils.other.storage'].enqueue_conversation_artifact_build = MagicMock()
         sys.modules['utils.other.storage'].get_conversation_playback_signed_url = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].upload_conversation_playback_artifact = MagicMock()
@@ -661,6 +668,20 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].get_conversation_playback_unavailable_fingerprint = MagicMock(
             return_value=None
         )
+        sys.modules['utils.other.conversation_playback_storage'].get_conversation_playback_signed_url = MagicMock(
+            return_value=None
+        )
+        sys.modules['utils.other.conversation_playback_storage'].get_conversation_playback_unavailable_fingerprint = (
+            MagicMock(return_value=None)
+        )
+        sys.modules['utils.sync.conversation_artifact_protocol'].conversation_finalization_identity = MagicMock(
+            return_value=None
+        )
+        sys.modules['utils.sync.conversation_artifact_protocol'].conversation_playback_artifact_generation_id = (
+            MagicMock(return_value='a' * 32)
+        )
+        sys.modules['utils.sync.conversation_artifact_protocol'].enqueue_conversation_artifact_build = MagicMock()
+        sys.modules['utils.sync.conversation_artifact_worker'].run_conversation_merge_job = AsyncMock()
         sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
         sys.modules['utils.cloud_tasks'].get_sync_tasks_max_attempts = MagicMock(return_value=5)
         sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)

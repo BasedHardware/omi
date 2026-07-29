@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
+import database.conversation_finalization_identity as finalization_identity_db
+import database.conversation_write_fence as conversation_write_fence_db
+import pytest
+from google.api_core.exceptions import InvalidArgument
 from models.conversation import Conversation, ConversationMutationResponse
 from models.structured import Structured
 
@@ -64,11 +68,23 @@ class _Firestore:
 
 
 class _Transaction:
+    def create(self, ref, data):
+        ref.create(data)
+
     def set(self, ref, data, **kwargs):
         ref.set(data, **kwargs)
 
     def update(self, ref, data):
         ref.update(data)
+
+
+@pytest.fixture(autouse=True)
+def _transaction_contract_defaults(monkeypatch):
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    monkeypatch.setattr(conversations_db, 'account_deletion_blocks_writes', lambda *args, **kwargs: False)
+    monkeypatch.setattr(finalization_identity_db.firestore, 'transactional', lambda function: function)
+    monkeypatch.setattr(finalization_identity_db, 'account_deletion_blocks_writes', lambda *args, **kwargs: False)
+    monkeypatch.setattr(conversation_write_fence_db, 'account_deletion_blocks_writes', lambda *args, **kwargs: False)
 
 
 def test_document_update_time_is_exposed_as_server_revision():
@@ -166,6 +182,257 @@ def test_first_processing_write_still_creates_complete_document(monkeypatch):
     assert options == {}
     assert 'updated_at' not in written
     assert written['structured']['title'] == 'Generated title'
+    assert isinstance(written['finalization_incarnation_id'], str)
+    assert written['finalization_incarnation_id']
+
+
+def test_processing_upsert_preserves_server_owned_incarnation(monkeypatch):
+    existing = {
+        'id': 'conversation-1',
+        'finalization_incarnation_id': 'incarnation-existing',
+        'data_protection_level': 'standard',
+    }
+    ref = _ConversationRef(_Snapshot(existing))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+
+    conversations_db.upsert_conversation_with_lifecycle(
+        'user-1',
+        {
+            'id': 'conversation-1',
+            'finalization_incarnation_id': 'incarnation-untrusted',
+            'data_protection_level': 'standard',
+        },
+    )
+
+    assert ref.set_calls[0][0]['finalization_incarnation_id'] == 'incarnation-existing'
+
+
+def test_same_id_recreation_receives_a_new_incarnation(monkeypatch):
+    first_ref = _ConversationRef(_Snapshot(None, exists=False))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(first_ref))
+    conversations_db.create_conversation_if_absent_with_lifecycle(
+        'user-1',
+        {'id': 'conversation-1', 'data_protection_level': 'standard'},
+    )
+    first_incarnation = first_ref.create_calls[0]['finalization_incarnation_id']
+
+    recreated_ref = _ConversationRef(_Snapshot(None, exists=False))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(recreated_ref))
+    conversations_db.create_conversation_if_absent_with_lifecycle(
+        'user-1',
+        {'id': 'conversation-1', 'data_protection_level': 'standard'},
+    )
+
+    assert recreated_ref.create_calls[0]['finalization_incarnation_id'] != first_incarnation
+
+
+@pytest.mark.parametrize(
+    ('finalization_job_id', 'finalization_revision'),
+    ((None, None), ('job-1', 4)),
+    ids=('fully-legacy', 'legacy-with-job-binding'),
+)
+def test_ensure_finalization_identity_stamps_legacy_row_and_preserves_job_binding(
+    finalization_job_id,
+    finalization_revision,
+):
+    existing = {'id': 'conversation-1', 'data_protection_level': 'standard'}
+    if finalization_job_id is not None:
+        existing['finalization_job_id'] = finalization_job_id
+        existing['finalization_revision'] = finalization_revision
+    ref = _ConversationRef(_Snapshot(existing))
+
+    identity = finalization_identity_db.ensure_conversation_finalization_identity(
+        'user-1',
+        'conversation-1',
+        firestore_client=_Firestore(ref),
+    )
+
+    assert identity is not None
+    assert isinstance(identity[0], str)
+    assert identity[0]
+    assert identity[1:] == (finalization_job_id, finalization_revision)
+    assert ref.update_calls == [{'finalization_incarnation_id': identity[0]}]
+
+
+def test_ensure_finalization_identity_restarts_expired_transaction_with_fresh_id(monkeypatch):
+    ref = _ConversationRef(_Snapshot({'id': 'conversation-1', 'data_protection_level': 'standard'}))
+    transactions = []
+
+    class _RetryFirestore(_Firestore):
+        def transaction(self):
+            transaction = super().transaction()
+            transactions.append(transaction)
+            return transaction
+
+    attempts = 0
+
+    def expire_once(function):
+        def invoke(transaction):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise InvalidArgument('400 The referenced transaction has expired or is no longer valid.')
+            return function(transaction)
+
+        return invoke
+
+    monkeypatch.setattr(finalization_identity_db.firestore, 'transactional', expire_once)
+
+    identity = finalization_identity_db.ensure_conversation_finalization_identity(
+        'user-1',
+        'conversation-1',
+        firestore_client=_RetryFirestore(ref),
+    )
+
+    assert identity is not None
+    assert attempts == 2
+    assert len(transactions) == 2
+    assert transactions[0] is not transactions[1]
+    assert ref.update_calls == [{'finalization_incarnation_id': identity[0]}]
+
+
+@pytest.mark.parametrize(
+    'identity_fields',
+    (
+        {'finalization_incarnation_id': ''},
+        {'finalization_job_id': 'job-1'},
+        {'finalization_revision': 1},
+        {'finalization_job_id': '', 'finalization_revision': 1},
+        {'finalization_job_id': 'job-1', 'finalization_revision': True},
+        {'finalization_job_id': 'job-1', 'finalization_revision': 0},
+    ),
+    ids=('empty-incarnation', 'job-only', 'revision-only', 'empty-job', 'boolean-revision', 'zero-revision'),
+)
+def test_ensure_finalization_identity_rejects_malformed_or_partial_binding(identity_fields):
+    ref = _ConversationRef(_Snapshot({'id': 'conversation-1', 'data_protection_level': 'standard', **identity_fields}))
+
+    identity = finalization_identity_db.ensure_conversation_finalization_identity(
+        'user-1',
+        'conversation-1',
+        firestore_client=_Firestore(ref),
+    )
+
+    assert identity is None
+    assert ref.update_calls == []
+
+
+@pytest.mark.parametrize('fence', ({'deleted': True}, {'vector_cleanup_pending': True}), ids=('deleted', 'cleanup'))
+def test_ensure_finalization_identity_respects_destructive_write_fences(fence):
+    ref = _ConversationRef(_Snapshot({'id': 'conversation-1', 'data_protection_level': 'standard', **fence}))
+
+    identity = finalization_identity_db.ensure_conversation_finalization_identity(
+        'user-1',
+        'conversation-1',
+        firestore_client=_Firestore(ref),
+    )
+
+    assert identity is None
+    assert ref.update_calls == []
+
+
+def test_ensure_finalization_identity_respects_account_deletion_fence(monkeypatch):
+    ref = _ConversationRef(_Snapshot({'id': 'conversation-1', 'data_protection_level': 'standard'}))
+    monkeypatch.setattr(finalization_identity_db, 'account_deletion_blocks_writes', lambda *args, **kwargs: True)
+
+    identity = finalization_identity_db.ensure_conversation_finalization_identity(
+        'user-1',
+        'conversation-1',
+        firestore_client=_Firestore(ref),
+    )
+
+    assert identity is None
+    assert ref.update_calls == []
+
+
+def test_stamped_legacy_identity_fences_same_id_recreation(monkeypatch):
+    ref = _ConversationRef(_Snapshot({'id': 'conversation-1', 'data_protection_level': 'standard'}))
+    store = _Firestore(ref)
+    monkeypatch.setattr(conversations_db, 'db', store)
+
+    expected_identity = finalization_identity_db.ensure_conversation_finalization_identity(
+        'user-1',
+        'conversation-1',
+        firestore_client=store,
+    )
+    assert expected_identity is not None
+    ref.snapshot = _Snapshot(
+        {
+            'id': 'conversation-1',
+            'finalization_incarnation_id': 'replacement-incarnation',
+            'data_protection_level': 'standard',
+        }
+    )
+
+    persisted = conversations_db.persist_processing_result_with_lifecycle(
+        'user-1',
+        {'id': 'conversation-1', 'status': 'completed', 'data_protection_level': 'standard'},
+        expected_finalization_identity=expected_identity,
+    )
+
+    assert persisted is False
+    assert ref.set_calls == []
+
+
+@pytest.mark.parametrize(
+    'expected_identity',
+    (
+        (None, 'job-1', 1),
+        ('incarnation-2', 'job-1', 1),
+        ('incarnation-1', 'job-2', 1),
+        ('incarnation-1', 'job-1', 2),
+    ),
+    ids=('explicit-legacy-incarnation', 'recreated-row', 'different-job', 'different-revision'),
+)
+def test_processing_result_rejects_a_different_finalization_identity(monkeypatch, expected_identity):
+    ref = _ConversationRef(
+        _Snapshot(
+            {
+                'id': 'conversation-1',
+                'finalization_incarnation_id': 'incarnation-1',
+                'finalization_job_id': 'job-1',
+                'finalization_revision': 1,
+                'data_protection_level': 'standard',
+            }
+        )
+    )
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+
+    persisted = conversations_db.persist_processing_result_with_lifecycle(
+        'user-1',
+        {'id': 'conversation-1', 'status': 'completed', 'data_protection_level': 'standard'},
+        expected_finalization_identity=expected_identity,
+    )
+
+    assert persisted is False
+    assert ref.set_calls == []
+
+
+def test_processing_result_preserves_matching_finalization_identity(monkeypatch):
+    identity = ('incarnation-1', 'job-1', 1)
+    ref = _ConversationRef(
+        _Snapshot(
+            {
+                'id': 'conversation-1',
+                'finalization_incarnation_id': identity[0],
+                'finalization_job_id': identity[1],
+                'finalization_revision': identity[2],
+                'data_protection_level': 'standard',
+            }
+        )
+    )
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+
+    persisted = conversations_db.persist_processing_result_with_lifecycle(
+        'user-1',
+        {'id': 'conversation-1', 'status': 'completed', 'data_protection_level': 'standard'},
+        expected_finalization_identity=identity,
+    )
+
+    assert persisted is True
+    assert ref.set_calls[0][0]['finalization_incarnation_id'] == identity[0]
 
 
 def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch):

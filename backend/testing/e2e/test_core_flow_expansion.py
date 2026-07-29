@@ -7,6 +7,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from fakes.firestore import read_conversation, seed_conversation
 from fakes.stt import fake_suggested_transcript_event
@@ -96,16 +97,39 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
                 "category": "work",
             }
         )
-        conversations_db.update_conversation(
-            uid,
-            conversation.id,
-            {"structured": structured, "finished_at": datetime.now(timezone.utc)},
+        completed = conversation.model_dump()
+        completed.update(
+            {
+                "structured": structured,
+                "finished_at": datetime.now(timezone.utc),
+                "status": "completed",
+            }
         )
-        lifecycle.complete(uid, conversation.id)
+        persisted = lifecycle.persist_processed_conversation(
+            uid,
+            completed,
+            expected_finalization_identity=kwargs.get("expected_finalization_identity"),
+        )
+        persistence_observer = kwargs.get("persistence_observer")
+        if persistence_observer is not None:
+            persistence_observer(persisted)
+        derived_effects_observer = kwargs.get("derived_effects_observer")
+        if persisted and derived_effects_observer is not None:
+            derived_effects_observer(lambda: None)
         return deserialize_conversation(conversations_db.get_conversation(uid, conversation.id))
 
     async def fake_trigger_external_integrations(uid, conversation, **kwargs):
         return []
+
+    def fake_required_enrichment_effects(uid, conversation, **kwargs):
+        return (
+            SimpleNamespace(key="structured_vector", execute=lambda: None, resource_count=1),
+            SimpleNamespace(
+                key="transcript_vectors",
+                execute=lambda: None,
+                resource_count=kwargs.get("transcript_vector_count") or 0,
+            ),
+        )
 
     # The exact-ID finalize route now hands off to the durable Cloud Tasks
     # worker instead of processing inline. Configure dispatch, stub the enqueue
@@ -129,6 +153,7 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
     finalizer_module = sys.modules["utils.conversations.finalizer"]
     monkeypatch.setattr(finalizer_module, "process_conversation", fake_process_conversation)
     monkeypatch.setattr(finalizer_module, "extract_memories", lambda *a, **k: None)
+    monkeypatch.setattr(finalizer_module, "required_enrichment_effects", fake_required_enrichment_effects)
     monkeypatch.setattr(finalizer_module, "trigger_external_integrations", fake_trigger_external_integrations)
 
     finalized = client.post(f"/v1/conversations/{conversation_id}/finalize", headers=auth_headers)

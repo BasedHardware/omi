@@ -320,6 +320,8 @@ def _desktop_transcribe_isolation():
 
         _ensure_package('google', BACKEND_DIR / 'tests')
         _ensure_package('google.cloud', BACKEND_DIR / 'tests')
+        _google_cloud_exceptions = _install_module('google.cloud.exceptions')
+        _google_cloud_exceptions.NotFound = type('NotFound', (Exception,), {})
         _ensure_package('google.auth', BACKEND_DIR / 'tests')
         _google_auth_exceptions = _install_module('google.auth.exceptions')
         _google_auth_exceptions.DefaultCredentialsError = type('DefaultCredentialsError', (Exception,), {})

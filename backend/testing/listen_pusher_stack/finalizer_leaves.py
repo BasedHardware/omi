@@ -11,6 +11,7 @@ from typing import Any
 from models.conversation_enums import ConversationStatus
 from utils.conversations import finalizer
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.enrichment_plan import RequiredEnrichmentEffect
 
 _failure_budget: dict[str, int] = {}
 
@@ -59,7 +60,17 @@ def _offline_process_conversation(uid: str, _language: str, conversation: Any, *
     if _consume_failure('process', conversation_id):
         raise RuntimeError('controlled finalization processing failure')
     conversation.status = ConversationStatus.completed
-    persisted = lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
+    persisted = lifecycle_service.persist_processed_conversation(
+        uid,
+        conversation.model_dump(),
+        expected_finalization_identity=kwargs.get('expected_finalization_identity'),
+    )
+    persistence_observer = kwargs.get('persistence_observer')
+    if persistence_observer is not None:
+        persistence_observer(persisted)
+    derived_effects_observer = kwargs.get('derived_effects_observer')
+    if persisted and derived_effects_observer is not None:
+        derived_effects_observer(lambda: _offline_extract_memories(uid, conversation))
     _record(
         {
             'event': 'provider_leaf',
@@ -77,6 +88,48 @@ def _offline_process_conversation(uid: str, _language: str, conversation: Any, *
 def _offline_extract_memories(_uid: str, conversation: Any) -> None:
     _record(
         {'event': 'provider_leaf', 'stage': 'memory', 'outcome': 'skipped', 'conversation_id': str(conversation.id)}
+    )
+
+
+def _offline_required_enrichment_effects(
+    _uid: str,
+    conversation: Any,
+    *,
+    transcript_vector_count: int | None = None,
+    **_kwargs: Any,
+) -> tuple[RequiredEnrichmentEffect, ...]:
+    def skip(stage: str) -> None:
+        _record(
+            {
+                'event': 'provider_leaf',
+                'stage': stage,
+                'outcome': 'skipped',
+                'conversation_id': str(conversation.id),
+            }
+        )
+
+    return (
+        RequiredEnrichmentEffect('structured_vector', lambda: skip('structured_vector'), resource_count=1),
+        RequiredEnrichmentEffect(
+            'transcript_vectors',
+            lambda: skip('transcript_vectors'),
+            resource_count=transcript_vector_count or 0,
+        ),
+    )
+
+
+def _offline_cleanup_required_enrichment(
+    _uid: str,
+    conversation_id: str,
+    **_kwargs: Any,
+) -> None:
+    _record(
+        {
+            'event': 'provider_leaf',
+            'stage': 'required_enrichment_cleanup',
+            'outcome': 'skipped',
+            'conversation_id': conversation_id,
+        }
     )
 
 
@@ -102,4 +155,6 @@ def install_finalizer_leaves() -> None:
     _failure_budget = _parse_failure_budget()
     finalizer.process_conversation = _offline_process_conversation
     finalizer.extract_memories = _offline_extract_memories
+    finalizer.required_enrichment_effects = _offline_required_enrichment_effects
+    finalizer.cleanup_required_enrichment = _offline_cleanup_required_enrichment
     finalizer.trigger_external_integrations = _offline_trigger_integrations

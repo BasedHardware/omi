@@ -229,20 +229,28 @@ class TestFindSimilarActionItems:
 
 
 class TestQueryConversationVectors:
-    def test_start_date_only_builds_one_sided_filter(self, monkeypatch, vector_db):
+    def test_overfetches_physical_generations_for_logical_result_budget(self, monkeypatch, vector_db):
         fake_index, fake_embeddings = _setup_mocks(
             monkeypatch,
             vector_db,
-            query_response={'matches': [{'id': 'uid-abc-conv-1'}]},
+            query_response={
+                'matches': [
+                    {'id': 'uid-abc-conv-1-legacy', 'metadata': {'memory_id': 'conv-1'}},
+                    {'id': 'uid-abc-conv-1-generation', 'metadata': {'memory_id': 'conv-1'}},
+                    {'id': 'uid-abc-conv-2', 'metadata': {'memory_id': 'conv-2'}},
+                    {'id': 'uid-abc-conv-3', 'metadata': {'memory_id': 'conv-3'}},
+                    {'id': 'uid-abc-conv-4', 'metadata': {'memory_id': 'conv-4'}},
+                ]
+            },
         )
 
         result = vector_db.query_vectors('coffee', 'uid-abc', starts_at=100, ends_at=None, k=3)
 
-        assert result == ['conv-1']
+        assert result == ['conv-1', 'conv-2', 'conv-3']
         fake_embeddings.embed_query.assert_called_once_with('coffee')
         kwargs = fake_index.query.call_args.kwargs
         assert kwargs['filter'] == {'uid': 'uid-abc', 'created_at': {'$gte': 100}}
-        assert kwargs['top_k'] == 3
+        assert kwargs['top_k'] == 6
 
     def test_end_date_only_builds_one_sided_filter(self, monkeypatch, vector_db):
         fake_index, _ = _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})

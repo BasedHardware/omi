@@ -104,6 +104,8 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE
+    value: "standby"
   - name: BUCKET_SPEECH_PROFILES
     value: "profiles"
   - name: GITHUB_TOKEN

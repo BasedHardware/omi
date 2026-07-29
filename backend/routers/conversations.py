@@ -7,11 +7,19 @@ from datetime import datetime, timezone
 import database.conversations as conversations_db
 import database._client as db_client_module
 import database.action_items as action_items_db
+import database.conversation_finalization_identity as finalization_identity_db
 import database.memories as memories_db
 import database.redis_db as redis_db
 import database.users as users_db
-from database.vector_db import delete_vector, delete_memory_vector, delete_transcript_chunk_vectors
+from database.conversation_vector_cleanup import (
+    ConversationVectorCleanupBusy,
+    claim_conversation_vector_cleanup_descriptor,
+    delete_claimed_conversation_source,
+    release_conversation_vector_cleanup_descriptor,
+)
+from database.vector_db import delete_memory_vector
 from utils.other.storage import delete_conversation_audio_files
+from utils.other.conversation_playback_storage import delete_conversation_playback_artifacts
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     BulkAssignSegmentsRequest,
@@ -58,6 +66,7 @@ from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
+from utils.sync.conversation_artifact_protocol import conversation_finalization_identity
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -325,22 +334,52 @@ def reprocess_conversation(
     :param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)
     :return: The updated conversation after reprocessing.
     """
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     # Reprocess force-processes a *discarded* conversation to revive it, but a
     # soft-deleted tombstone is invisible to the user and must not be reprocessed:
     # process_conversation would regenerate structured data, action items, memories
     # and embeddings from content the user deleted, resurrecting it. Same
     # tombstone-eligibility contract as sync (#10119) and merge (#10262). Checked
     # on the raw doc because the Conversation model does not carry `deleted`.
-    if conversations_db.is_soft_deleted(conversation):
+    if conversations_db.is_soft_deleted(conversation_data):
         raise HTTPException(status_code=404, detail="Conversation not found")
-    conversation = deserialize_conversation(conversation)
+    expected_identity = finalization_identity_db.ensure_conversation_finalization_identity(uid, conversation_id)
+    if expected_identity is None:
+        raise HTTPException(status_code=409, detail="Conversation identity unavailable")
+    # The identity transaction may have stamped a legacy row or observed a
+    # concurrent replacement. Process only the exact post-transaction row.
+    conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
+    if conversations_db.is_soft_deleted(conversation_data):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation_finalization_identity(conversation_data) != expected_identity:
+        raise HTTPException(status_code=409, detail="Conversation identity unavailable")
+    conversation = deserialize_conversation(conversation_data)
     if not language_code:
         language_code = conversation.language or 'en'
 
-    processed_conversation = process_conversation(
-        uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id
-    )
+    persisted = False
+
+    def record_persistence(current: bool) -> None:
+        nonlocal persisted
+        persisted = current
+
+    with lifecycle_service.processing_admission_guard(
+        uid,
+        conversation_id,
+        failure_rollback=lifecycle_service.rollback_reprocessing_admission,
+    ):
+        processed_conversation = process_conversation(
+            uid,
+            language_code,
+            conversation,
+            force_process=True,
+            is_reprocess=True,
+            app_id=app_id,
+            expected_finalization_identity=expected_identity,
+            persistence_observer=record_persistence,
+        )
+    if not persisted:
+        return deserialize_conversation(_get_valid_conversation_by_id(uid, conversation_id))
 
     return processed_conversation
 
@@ -699,25 +738,38 @@ def delete_conversation(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
+    try:
+        vector_cleanup = claim_conversation_vector_cleanup_descriptor(uid, conversation_id)
+    except ConversationVectorCleanupBusy as error:
+        raise HTTPException(
+            status_code=409, detail="Conversation finalization is still draining; retry deletion."
+        ) from error
+    if vector_cleanup is None:
+        return {"status": "Ok"}
+    try:
+        if cascade:
+            # Delete associated memories and action items before removing the conversation doc
+            # so a partial failure cannot orphan derived data.
+            db_client = getattr(db_client_module, 'db', None)
+            memory_system = pin_memory_system(uid, db_client=db_client)
+            if memory_system == MemorySystem.CANONICAL:
+                MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
+            else:
+                deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
+                for memory_id in deletion_result.get('vector_delete_ids', []):
+                    delete_memory_vector(uid, memory_id)
 
-    if cascade:
-        # Delete associated memories and action items before removing the conversation doc
-        # so a partial failure cannot orphan derived data.
-        db_client = getattr(db_client_module, 'db', None)
-        memory_system = pin_memory_system(uid, db_client=db_client)
-        if memory_system == MemorySystem.CANONICAL:
-            MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
-        else:
-            deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
-            for memory_id in deletion_result.get('vector_delete_ids', []):
-                delete_memory_vector(uid, memory_id)
+            action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+            background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
-        action_items_db.delete_action_items_for_conversation(uid, conversation_id)
-        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
-
-    conversations_db.delete_conversation(uid, conversation_id)
-    delete_vector(uid, conversation_id)
-    delete_transcript_chunk_vectors(uid, conversation_id)
+        delete_claimed_conversation_source(
+            uid,
+            vector_cleanup,
+            delete_source_artifacts=delete_conversation_playback_artifacts,
+        )
+    except Exception:
+        release_conversation_vector_cleanup_descriptor(uid, vector_cleanup)
+        raise
 
     return {"status": "Ok"}
 

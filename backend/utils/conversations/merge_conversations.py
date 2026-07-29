@@ -15,7 +15,12 @@ from typing import Dict, List, Optional, Tuple
 
 import database.conversations as conversations_db
 from database._client import db as firestore_db
-from database.vector_db import delete_vector
+from database.conversation_vector_cleanup import (
+    ConversationVectorCleanupConflict,
+    claim_conversation_vector_cleanup_descriptor,
+    delete_claimed_conversation_source,
+    release_conversation_vector_cleanup_descriptor,
+)
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
@@ -29,15 +34,23 @@ from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
     compute_audio_files_fingerprint,
     delete_conversation_audio_files,
-    enqueue_conversation_artifact_build,
     list_audio_chunks,
     _get_storage_client,
     private_cloud_sync_bucket,
     _get_extension_for_path,
 )
+from utils.other.conversation_playback_storage import delete_conversation_playback_artifacts
+from utils.sync.conversation_artifact_protocol import (
+    conversation_finalization_identity,
+    enqueue_conversation_artifact_build,
+)
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class _MergeConversationCleanupMissing(RuntimeError):
+    """The exact merge-owned conversation incarnation is already absent."""
 
 
 def _coerce_dt(value):
@@ -156,6 +169,28 @@ def validate_merge_compatibility(
     return True, None, warning_msg
 
 
+def _enqueue_merged_playback_artifact(
+    uid: str,
+    conversation_id: str,
+    audio_files: List[AudioFile],
+    destination_source: Dict,
+) -> bool:
+    if not audio_files or not is_audio_merge_dispatch_enabled():
+        return False
+    identity = conversation_finalization_identity(destination_source)
+    if identity is None:
+        return False
+    payload = [audio_file.model_dump() for audio_file in audio_files]
+    enqueue_conversation_artifact_build(
+        uid,
+        conversation_id,
+        compute_audio_files_fingerprint(payload),
+        caller='merge_conversations',
+        expected_finalization_identity=identity,
+    )
+    return True
+
+
 def perform_merge_async(
     uid: str,
     conversation_ids: List[str],
@@ -181,6 +216,9 @@ def perform_merge_async(
     from utils.conversations.process_conversation import process_conversation
     from utils.notifications import send_merge_completed_message
 
+    new_conversation_id: str | None = None
+    new_conversation_incarnation_id: str | None = None
+    destination_created = False
     try:
         # 1. Fetch all source conversations
         conversations = []
@@ -289,15 +327,18 @@ def perform_merge_async(
 
         # 7. Save stub conversation to database
         lifecycle_service.create_processing_conversation(uid, new_conversation.model_dump())
+        destination_created = True
+        destination_source = conversations_db.get_conversation(uid, new_conversation_id)
+        if not isinstance(destination_source, dict):
+            raise RuntimeError('merge_destination_missing_after_create')
+        raw_destination_incarnation_id = destination_source.get('finalization_incarnation_id')
+        if not isinstance(raw_destination_incarnation_id, str) or not raw_destination_incarnation_id:
+            raise RuntimeError('merge_destination_incarnation_missing')
+        new_conversation_incarnation_id = raw_destination_incarnation_id
 
-        # Build the conversation-level playback artifact for the merged conversation.
-        # Fingerprint-named task: dedups with the enqueue process_conversation may
-        # also fire on the reprocess path.
-        if merged_audio_files and is_audio_merge_dispatch_enabled():
-            files_payload = [af.model_dump() for af in merged_audio_files]
-            enqueue_conversation_artifact_build(
-                uid, new_conversation_id, compute_audio_files_fingerprint(files_payload), caller='merge_conversations'
-            )
+        # Fingerprint-named tasks deduplicate with process_conversation while the
+        # destination identity prevents a delayed build from stamping a replacement.
+        _enqueue_merged_playback_artifact(uid, new_conversation_id, merged_audio_files, destination_source)
 
         # Store photos in subcollection if any
         if merged_photos:
@@ -325,7 +366,11 @@ def perform_merge_async(
 
         # 9. Delete ALL source conversations and their related data
         for conv in sorted_convs:
-            _delete_conversation_and_related_data(uid, conv['id'])
+            _delete_conversation_and_related_data(
+                uid,
+                conv['id'],
+                expected_finalization_incarnation_id=conv.get('finalization_incarnation_id'),
+            )
 
         # 10. Send FCM notification
         send_merge_completed_message(uid, new_conversation_id, conversation_ids)
@@ -339,7 +384,21 @@ def perform_merge_async(
         import traceback
 
         traceback.print_exc()
-        _handle_merge_failure(uid, conversation_ids)
+        if destination_created and new_conversation_incarnation_id is None:
+            # Restoring the sources while an unidentifiable destination remains
+            # would expose the duplicate that compensation is meant to prevent.
+            # Keep the sources in their admitted state for operator recovery.
+            logger.error(
+                'Merge destination compensation blocked because its exact incarnation is unavailable: '
+                f'uid={uid}, destination={new_conversation_id}'
+            )
+            return
+        _handle_merge_failure(
+            uid,
+            conversation_ids,
+            destination_conversation_id=new_conversation_id if destination_created else None,
+            destination_incarnation_id=new_conversation_incarnation_id,
+        )
 
 
 def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
@@ -532,7 +591,12 @@ def _shared_client_device_provenance(conversations: List[Dict]) -> Tuple[Optiona
     return client_device_id, client_platform
 
 
-def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> None:
+def _delete_conversation_and_related_data(
+    uid: str,
+    conversation_id: str,
+    *,
+    expected_finalization_incarnation_id: str | None = None,
+) -> None:
     """
     Delete a conversation and all its generated/related data.
 
@@ -548,54 +612,84 @@ def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> Non
     import database.memories as memories_db
     import database.action_items as action_items_db
 
-    memory_system: MemorySystem | None = None
+    vector_cleanup = claim_conversation_vector_cleanup_descriptor(
+        uid,
+        conversation_id,
+        expected_finalization_incarnation_id=expected_finalization_incarnation_id,
+    )
+    if vector_cleanup is None:
+        raise _MergeConversationCleanupMissing('merge_source_disappeared_before_cleanup')
     try:
         memory_system = pin_memory_system(uid, db_client=firestore_db)
         if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=firestore_db).retract_conversation_memories(uid, conversation_id)
         else:
             memories_db.delete_memories_for_conversation(uid, conversation_id)
-    except Exception as e:
-        logger.error(f"Error deleting memories for {conversation_id}: {e}")
-        # A canonical-selected account must retry the merge rather than delete
-        # its source conversation while its canonical evidence retraction is
-        # unavailable. Continuing here would silently leave active canonical
-        # memories pointing at a deleted source.
-        if memory_system == MemorySystem.CANONICAL:
-            raise
 
-    try:
-        # Delete action items from standalone collection
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
-    except Exception as e:
-        logger.error(f"Error deleting action items for {conversation_id}: {e}")
-
-    try:
-        # Delete photos subcollection
         conversations_db.delete_conversation_photos(uid, conversation_id)
     except Exception as e:
-        logger.error(f"Error deleting photos for {conversation_id}: {e}")
+        # Every source-owned artifact is removed before the conditional source
+        # delete. A retry can safely repeat earlier cleanup, while continuing
+        # would make the just-created merge permanently orphan source data.
+        logger.error(f"Error deleting source-owned data for {conversation_id}: {e}")
+        release_conversation_vector_cleanup_descriptor(uid, vector_cleanup)
+        raise
 
     try:
-        # Delete audio chunks from GCS
-        delete_conversation_audio_files(uid, conversation_id)
+        deleted = delete_claimed_conversation_source(
+            uid,
+            vector_cleanup,
+            delete_source_artifacts=_delete_merge_storage_artifacts,
+        )
+        if not deleted:
+            raise ConversationVectorCleanupConflict('merge_cleanup_destination_replaced')
     except Exception as e:
-        logger.error(f"Error deleting audio files for {conversation_id}: {e}")
+        logger.error(f"Error deleting conversation vectors or source for {conversation_id}: {e}")
+        raise
 
+
+def _delete_merge_storage_artifacts(uid: str, conversation_id: str) -> None:
+    """Delete retry-safe GCS artifacts while the exact row cleanup claim is current."""
+    delete_conversation_audio_files(uid, conversation_id)
+    delete_conversation_playback_artifacts(uid, conversation_id)
+
+
+def _compensate_failed_merge_destination(
+    uid: str,
+    conversation_id: str,
+    expected_finalization_incarnation_id: str,
+) -> bool:
+    """Remove only the destination incarnation created by this merge attempt."""
     try:
-        # Delete vector embedding
-        delete_vector(uid, conversation_id)
-    except Exception as e:
-        logger.error(f"Error deleting vector for {conversation_id}: {e}")
+        _delete_conversation_and_related_data(
+            uid,
+            conversation_id,
+            expected_finalization_incarnation_id=expected_finalization_incarnation_id,
+        )
+    except _MergeConversationCleanupMissing:
+        # Source deletion is the final compensation step. If the exact row is
+        # already absent, a prior retry completed the destructive sequence.
+        return True
+    except ConversationVectorCleanupConflict:
+        # The original destination is already gone and this ID now belongs to a
+        # replacement. Treat that as a completed compensation fence without
+        # touching any replacement-owned vectors, storage, photos, or source.
+        logger.warning(
+            'Merge destination compensation fenced by replacement: '
+            f'uid={uid}, destination={conversation_id}, incarnation={expected_finalization_incarnation_id}'
+        )
+        return False
+    return True
 
-    try:
-        # Delete conversation document
-        conversations_db.delete_conversation(uid, conversation_id)
-    except Exception as e:
-        logger.error(f"Error deleting conversation {conversation_id}: {e}")
 
-
-def _handle_merge_failure(uid: str, conversation_ids: List[str]) -> None:
+def _handle_merge_failure(
+    uid: str,
+    conversation_ids: List[str],
+    *,
+    destination_conversation_id: str | None = None,
+    destination_incarnation_id: str | None = None,
+) -> None:
     """
     Handle merge failure by resetting conversation statuses.
 
@@ -603,6 +697,14 @@ def _handle_merge_failure(uid: str, conversation_ids: List[str]) -> None:
     reset them back to 'completed' so the user can try again or continue using them.
     """
     logger.error(f"Merge failed for conversations: {conversation_ids}")
+    if destination_conversation_id is not None:
+        if destination_incarnation_id is None:
+            raise RuntimeError('merge_destination_compensation_identity_missing')
+        _compensate_failed_merge_destination(
+            uid,
+            destination_conversation_id,
+            destination_incarnation_id,
+        )
     for conv_id in conversation_ids:
         try:
             lifecycle_service.complete(uid, conv_id)

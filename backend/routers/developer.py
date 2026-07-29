@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from enum import Enum
 from typing import List, Optional
@@ -57,6 +57,7 @@ from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import developer_cleanup
 from utils.conversations.location import resolve_geolocation
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
@@ -86,9 +87,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
-
-_FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
 
 
 class DeveloperSuccessResponse(BaseModel):
@@ -1631,24 +1629,6 @@ def get_conversation_endpoint(
         )
 
 
-def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
-    return str(uuid.uuid5(_FROM_SEGMENTS_CONVERSATION_NAMESPACE, f'{uid}\0{client_session_id}'))
-
-
-def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, now: datetime) -> bool:
-    external_data = conversation.get('external_data') or {}
-    if external_data.get('from_segments_client_session_id') != client_session_id:
-        return False
-    if conversation.get('status') != ConversationStatus.processing.value:
-        return False
-    claimed_at = external_data.get('from_segments_claimed_at')
-    if not isinstance(claimed_at, datetime):
-        return False
-    if claimed_at.tzinfo is None:
-        claimed_at = claimed_at.replace(tzinfo=timezone.utc)
-    return now - claimed_at > FROM_SEGMENTS_CLAIM_STALE_AFTER
-
-
 def _conversation_response_from_data(conversation: dict) -> ConversationResponse:
     status = conversation.get('status') or 'completed'
     if hasattr(status, 'value'):
@@ -1676,7 +1656,7 @@ def _create_conversation_from_segments(
     if len(request.transcript_segments) > 500:
         raise HTTPException(status_code=422, detail="Maximum 500 transcript segments allowed")
 
-    # Validate segments
+    # Validate all segment content before creating the idempotent processing claim.
     for idx, segment in enumerate(request.transcript_segments):
         if segment.end <= segment.start:
             raise HTTPException(status_code=422, detail=f"Segment {idx}: end time must be after start time")
@@ -1685,7 +1665,6 @@ def _create_conversation_from_segments(
         if not segment.text or len(segment.text.strip()) == 0:
             raise HTTPException(status_code=422, detail=f"Segment {idx}: text cannot be empty")
 
-    # Convert DevTranscriptSegment to TranscriptSegment
     transcript_segments = []
     for seg in request.transcript_segments:
         transcript_segments.append(
@@ -1700,15 +1679,11 @@ def _create_conversation_from_segments(
             )
         )
 
-    # Calculate started_at and finished_at
-    # started_at defaults to now
     started_at = request.started_at if request.started_at is not None else datetime.now(timezone.utc)
 
-    # finished_at: if not provided, calculate from last segment's end time
     if request.finished_at is not None:
         finished_at = request.finished_at
     else:
-        # Calculate total duration from segments
         last_segment = request.transcript_segments[-1]
         total_duration_seconds = last_segment.end
         finished_at = started_at + timedelta(seconds=total_duration_seconds)
@@ -1729,10 +1704,10 @@ def _create_conversation_from_segments(
 
     conversation_id = None
     if request.client_session_id:
-        conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        conversation_id = developer_cleanup.from_segments_conversation_id(uid, request.client_session_id)
         existing_conversation = conversations_db.get_conversation(uid, conversation_id)
         if existing_conversation:
-            if _is_stale_from_segments_claim(
+            if developer_cleanup.is_stale_from_segments_claim(
                 existing_conversation, request.client_session_id, datetime.now(timezone.utc)
             ):
                 logger.warning(
@@ -1741,7 +1716,12 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
-                conversations_db.delete_conversation(uid, conversation_id)
+                try:
+                    developer_cleanup.cleanup_conversation(
+                        uid, conversation_id, existing_conversation.get('finalization_incarnation_id')
+                    )
+                except developer_cleanup.ConversationCleanupUnavailable as error:
+                    raise HTTPException(status_code=409, detail="Conversation cleanup is still in progress.") from error
             else:
                 logger.info(
                     "from-segments idempotency hit for uid=%s client_session_id=%s conversation_id=%s",
@@ -1799,19 +1779,31 @@ def _create_conversation_from_segments(
             client_platform=resolved_client_platform,
         )
 
-    # Process conversation. The idempotent (client_session_id) path creates a
-    # processing row; the admission guard's lease heartbeat keeps it fresh so the
-    # crash-orphan sweep can never terminalize active work. rollback_on_failure is
-    # False because this path owns its own recovery (delete on exception below).
+    # Re-read the row created by the lifecycle claim so processing carries the
+    # exact incarnation fence into durable persistence.
+    admitted_incarnation_id = None
+    if conversation_id:
+        admitted = conversations_db.get_conversation(uid, conversation_id) or {}
+        admitted_incarnation_id = admitted.get('finalization_incarnation_id')
     try:
         if conversation_id:
-            with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
-                conversation = process_conversation(uid, language_code, create_conversation_obj)
+            with developer_cleanup.from_segments_processing_guard(uid, conversation_id, admitted_incarnation_id):
+                conversation = process_conversation(
+                    uid,
+                    language_code,
+                    create_conversation_obj,
+                    expected_finalization_identity=(admitted_incarnation_id, None, None),
+                )
         else:
             conversation = process_conversation(uid, language_code, create_conversation_obj)
+    except developer_cleanup.ConversationCleanupUnavailable as error:
+        raise HTTPException(status_code=409, detail="Conversation ownership changed; retry.") from error
     except Exception:
         if request.client_session_id and conversation_id:
-            conversations_db.delete_conversation(uid, conversation_id)
+            try:
+                developer_cleanup.cleanup_conversation(uid, conversation_id, admitted_incarnation_id)
+            except Exception:
+                logger.exception('from-segments failed claim cleanup could not complete')
         raise
     if request.client_session_id:
         logger.info(
@@ -1820,7 +1812,6 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
 
     return ConversationResponse(
         id=conversation.id,
@@ -1939,7 +1930,16 @@ def delete_conversation_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    conversations_db.delete_conversation(uid, conversation_id)
+    try:
+        deleted = developer_cleanup.cleanup_conversation_for_endpoint(
+            uid, conversation_id, conversation.get('finalization_incarnation_id')
+        )
+    except developer_cleanup.ConversationCleanupUnavailable as error:
+        raise HTTPException(
+            status_code=409, detail="Conversation finalization is still draining; retry deletion."
+        ) from error
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversation not found")
     return {"success": True}
 
 

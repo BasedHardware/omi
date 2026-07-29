@@ -44,7 +44,8 @@ The pusher entrypoint (for inline scenarios) and the Cloud Tasks entrypoint
 
 - conversation LLM processing;
 - memory extraction;
-- external-integration delivery.
+- required structured/transcript vector enrichment and cleanup;
+- external-integration delivery;
 - private-cloud audio storage (the queue and 101/103 frame handling remain real).
 
 The real finalizer still persists through the lifecycle owner and claims and
