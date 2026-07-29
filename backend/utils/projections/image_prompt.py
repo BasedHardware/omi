@@ -19,21 +19,27 @@ form an image of this situation takes — where the figure sits, how it moves, w
 haunt the scene — and the person's week supplies everything the form is made of. That is
 Jung's archetype-as-such against the archetypal image, expressed as a graph.
 
-Lighting has an owner but not yet a vocabulary. The selector writes the charge in plain words
-and the generator derives the palette from it, deliberately without our asserting a
-colour-to-emotion mapping: whether such a mapping is strong enough to encode, or belongs to
-the image model, is an open research question. When it answers, this slot takes a weighted
-emotion vector instead of a phrase; nothing else in the graph moves.
+Lighting is measured rather than described: a dedicated pass rates the week against the Geneva
+Emotion Wheel's twenty families and hands over the consolidated charge, with the selector's own
+phrase as the person-specific gloss. Where they disagree the rating is authoritative — it is
+the half that is averaged, logged and comparable across weeks.
+
+What this slot deliberately does **not** carry is a colour. The evidence supports emotion
+driving lightness and chroma and does not support it driving hue: hue's effect on valence is
+not significant and reverses direction with saturation. So the charge is named and the mapping
+is left to the image model rather than asserted by us. Encoding lightness and chroma
+mechanically from the rated vector is a deferred follow-up, not a missing piece.
 """
 
 from __future__ import annotations
 
 from utils.projections.aesthetic import AESTHETIC
 from utils.projections.archetypes import STAGE_IMAGERY
+from utils.projections.emotions import EMPTY_PROFILE, EmotionProfile
 from utils.projections.selector import SelectedSubject
 
 
-def build_image_prompt(subject: SelectedSubject) -> str:
+def build_image_prompt(subject: SelectedSubject, emotions: EmotionProfile = EMPTY_PROFILE) -> str:
     """Render one selected subject as an image prompt."""
     imagery = STAGE_IMAGERY[subject.stage]
     return '\n\n'.join(
@@ -51,11 +57,12 @@ def build_image_prompt(subject: SelectedSubject) -> str:
                 'replace the subject or the setting, and nothing here is the point of the image.'
             ),
             (
-                'LIGHT AND COLOUR: this moment carries, for the person whose life it is, '
-                f'{subject.tone}. Derive the entire palette, the key, and the direction and '
-                'quality of the light from that charge and from nothing else. Commit to it — a '
-                'neutral or evenly pleasant treatment is a failure, and so is any scheme chosen '
-                'because it is what this subject is usually painted in.'
+                'LIGHT AND COLOUR: what this carries for the person whose life it is, rated '
+                f'against the Geneva Emotion Wheel, is {emotions.as_prompt_text()}. In their own '
+                f'words it reads as {subject.tone}. Derive the key, the intensity and the '
+                'direction and quality of the light from that charge and from nothing else. '
+                'Commit to it — a neutral or evenly pleasant treatment is a failure, and so is '
+                'any scheme chosen because it is what this subject is usually painted in.'
             ),
         ]
     )

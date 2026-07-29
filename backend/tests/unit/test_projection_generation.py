@@ -14,6 +14,7 @@ import pytest
 from utils.projections import generation as generation_module
 from utils.projections.aesthetic import AESTHETIC
 from utils.projections.archetypes import STAGE_IMAGERY
+from utils.projections.emotions import EmotionProfile
 from utils.projections.errors import NoProjectionSubject
 from utils.projections.evidence import assemble_packet
 from utils.projections.selector import ProjectionStage, SelectedSubject, SubjectSelection
@@ -28,6 +29,15 @@ SUBJECT = SelectedSubject(
     tone='apprehension with something exhilarated underneath it',
     imperative='The place you keep imagining is a decision, not a daydream.',
     evidence=('Circling the move again (2026-07-26)',),
+)
+
+PROFILE = EmotionProfile(
+    primary='fear',
+    secondary='interest',
+    intensity=3.4,
+    dispersion=0.8,
+    vector={'fear': 3.4, 'interest': 3.0},
+    samples=5,
 )
 
 SELECTION = SubjectSelection(
@@ -62,6 +72,7 @@ def stub_reads(monkeypatch):
     monkeypatch.setattr(generation_module, 'read_evidence', lambda uid: packet)
     monkeypatch.setattr(generation_module, 'read_previous_projections', lambda uid, limit: [])
     monkeypatch.setattr(generation_module, '_store_image', lambda image_bytes, projection_id: 'https://img/x.png')
+    monkeypatch.setattr(generation_module, 'rate_emotions', lambda subject, evidence, material: PROFILE)
     return packet
 
 
@@ -95,6 +106,13 @@ def test_the_persisted_document_records_what_produced_it(stub_reads):
     assert projection['evidence'] == ['Circling the move again (2026-07-26)']
     assert projection['selection']['fell_through'] == 1
     assert projection['selection']['signals']['conversation_ids'] == ['conv-1']
+    # The rated charge is recorded whole: the vector, the spread across completions and the
+    # inventory it was rated against. Cheap now, unrecoverable later, and the only way to find
+    # out from our own data whether a week of one person's prose rates discriminatingly at all.
+    assert projection['emotions']['primary'] == 'fear'
+    assert projection['emotions']['dispersion'] == 0.8
+    assert projection['emotions']['inventory'] == 'geneva_emotion_wheel_3.0'
+    assert projection['emotions']['vector']['fear'] == 3.4
 
 
 def test_a_refusal_does_not_generate_an_image(stub_reads):

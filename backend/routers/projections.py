@@ -49,7 +49,7 @@ class ProjectionsResponse(BaseModel):
 # of the user's own week — so a page of thirty projections would ship thirty copies of it.
 # The response model allows extra keys, so these have to be dropped explicitly rather than
 # relied on to be filtered by the schema.
-INTERNAL_PROJECTION_FIELDS = ('selection', 'projection', 'evidence', 'setting', 'tone')
+INTERNAL_PROJECTION_FIELDS = ('selection', 'projection', 'evidence', 'setting', 'tone', 'emotions')
 
 
 def _served(projection: Dict[str, Any]) -> Dict[str, Any]:

@@ -23,6 +23,7 @@ from typing import Any, Mapping, cast
 from utils.llm.gateway_client import generate_image_via_gateway
 from utils.observability.fallback import record_fallback
 from utils.other import storage
+from utils.projections.emotions import rate_emotions
 from utils.projections.image_prompt import build_image_prompt
 from utils.projections.selector import MAX_PREVIOUS, select_subject
 from utils.projections.sources import read_evidence, read_previous_projections
@@ -92,7 +93,11 @@ def generate_projection(uid: str) -> dict[str, Any]:
     selection = select_subject(packet, previous=previous)
     subject = selection.subject
 
-    image_prompt = build_image_prompt(subject)
+    # A dedicated pass, deliberately not another field on the selection call: making a model
+    # rate and predict in one call measurably degrades the ratings.
+    emotions = rate_emotions(subject.subject, subject.evidence, packet.as_prompt_text())
+
+    image_prompt = build_image_prompt(subject, emotions)
     image_url = _store_image(_generate_image(image_prompt), projection_id)
     logger.info(
         'generated projection uid=%s projection_id=%s stage=%s fell_through=%s',
@@ -112,6 +117,7 @@ def generate_projection(uid: str) -> dict[str, Any]:
         'projection': subject.projection,
         'setting': subject.setting,
         'tone': subject.tone,
+        'emotions': emotions.as_metadata(),
         'evidence': list(subject.evidence),
         'selection': selection.metadata,
         'generation': {

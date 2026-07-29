@@ -54,6 +54,7 @@ model_config_features:
       - conv_app_select
       - external_structure
       - proactive_notification
+      - projection_emotions
       - projection_subject
       - trends
       - translation
