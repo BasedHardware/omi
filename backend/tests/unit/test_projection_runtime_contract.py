@@ -51,3 +51,10 @@ def test_runtime_documentation_pins_private_and_local_fallback_behavior():
     assert 'public access prevention' in documentation
     assert 'deterministic Firestore ID' in documentation
     assert 'Hosted runtimes refuse this fallback' in documentation
+
+
+def test_projection_deployment_settings_are_classified_as_non_secret_config():
+    classification = yaml.safe_load((ROOT / 'config' / 'deployment-setting-classification.json').read_text())
+
+    configured = set(classification['kinds']['config'])
+    assert {'BASE_API_URL', 'BUCKET_PROJECTION_IMAGES', 'PROJECTION_ENABLED_USERS'} <= configured
