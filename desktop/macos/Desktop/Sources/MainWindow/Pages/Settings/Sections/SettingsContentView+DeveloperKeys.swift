@@ -14,7 +14,6 @@ func byokMissingKeysHint(_ keys: [String]) -> String? {
     "Still missing: \(missing.joined(separator: ", ")). All 4 keys must be entered at the same time to activate the free plan."
 }
 
-
 extension SettingsContentView {
   var developerKeysSubsection: some View {
     VStack(spacing: OmiSpacing.xl) {
@@ -80,7 +79,6 @@ extension SettingsContentView {
     .onChange(of: devGeminiKey) { _, _ in refreshBYOKActivation() }
     .onChange(of: devDeepgramKey) { _, _ in refreshBYOKActivation() }
   }
-
 
   var byokIncompleteHint: String? {
     byokMissingKeysHint([devOpenAIKey, devAnthropicKey, devGeminiKey, devDeepgramKey])
