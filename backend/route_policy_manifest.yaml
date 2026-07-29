@@ -121,7 +121,6 @@ routes:
       auth:
         mechanisms:
           - developer_api_key
-          - firebase_id_token
         placement: dependency
         scopes:
           - conversations:read
