@@ -39,7 +39,6 @@ from scripts.select_backend_unit_tests import LEGACY_UNLISTED_TESTS, discover_un
 WORKFLOW_COVERED_PREFIXES = {
     'testing/e2e/': ('backend-hermetic-e2e.yml', 'directory'),
     'testing/contracts/': ('desktop-backend-contracts.yml', 'directory'),
-    'testing/desktop_beta_admission/': ('desktop_beta_admission_control.yml', 'directory'),
     'tests/container/': ('parakeet_gpu_tests.yml', 'explicit'),
 }
 
@@ -52,7 +51,9 @@ POLICY_EXCLUDED_PREFIXES = {
 
 # On-demand harnesses deliberately outside every scheduled runner. Entries
 # must exist on disk; additions are a reviewed diff of this checker itself.
-MANUAL_ONLY_TESTS: dict[str, str] = {}
+MANUAL_ONLY_TESTS: dict[str, str] = {
+    'testing/desktop_beta_admission/firestore_contention_test.py': 'on-demand Firestore emulator proof for Beta admission fence; no scheduled runner',
+}
 
 # Frozen copy of the selector's LEGACY_UNLISTED_TESTS. Pinned in both
 # directions: the selector's set may not grow past this baseline, and fixing
