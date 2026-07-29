@@ -232,10 +232,7 @@ struct SBOnboardingView: View {
       permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") {
         model.answerScreen()
       }
-    case .files:
-      permStepWidget("full_disk_access", "Full Disk Access", "cite your files · read-only, stays on this Mac") {
-        model.answerFiles()
-      }
+    case .files: filesWidget
     case .accessibility:
       permStepWidget("accessibility", "Accessibility", "catch your shortcut + click/type for you") {
         model.answerAccessibility()
@@ -441,6 +438,58 @@ struct SBOnboardingView: View {
       }
     }
     .frame(maxWidth: 380, alignment: .leading)
+  }
+
+  @ViewBuilder private var filesWidget: some View {
+    switch model.localFileProfileState {
+    case .idle:
+      permStepWidget("full_disk_access", "Full Disk Access", "cite your files · read-only, stays on this Mac") {
+        model.answerFiles()
+      }
+    case .scanning:
+      VStack(alignment: .leading, spacing: 10) {
+        Text("Building your local profile").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+        HStack(spacing: 8) {
+          ProgressView().controlSize(.small)
+          Text("Scanning your projects and recent files…").geist(size: 13).foregroundStyle(sb.ink(.w45))
+        }
+      }
+      .frame(maxWidth: 380, alignment: .leading)
+    case .complete(let fileCount, let memoryCount, let deniedFolders):
+      VStack(alignment: .leading, spacing: 10) {
+        Text("Your local profile is ready").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+        Text("\(fileCount.formatted()) files indexed · \(memoryCount) profile memories saved")
+          .geist(size: 13).foregroundStyle(sb.ink(.w45))
+        if !deniedFolders.isEmpty {
+          Text("Some folders need access later: \(deniedFolders.joined(separator: ", "))")
+            .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
+        }
+        if model.fdaState != .on {
+          Button(model.fdaState == .waiting ? "Waiting for Full Disk Access…" : "Allow Full Disk Access") {
+            if model.fdaState == .ask { model.requestPerm("full_disk_access") }
+          }
+          .buttonStyle(.plain)
+          .disabled(model.fdaState == .waiting)
+          .geist(size: 13, weight: .medium)
+          .foregroundStyle(sb.ink(.w6))
+        }
+        SBInkButton(title: "Continue", isDefaultAction: true) { model.finishFilesStep() }
+      }
+      .frame(maxWidth: 380, alignment: .leading)
+    case .failed(let message):
+      VStack(alignment: .leading, spacing: 10) {
+        Text("I couldn't finish scanning your files").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+        Text(message).geist(size: 13).foregroundStyle(sb.ink(.w45))
+        HStack(spacing: 10) {
+          SBInkButton(title: "Retry") { model.retryLocalFileScan() }
+          Button("Continue without a scan") { model.finishFilesStep() }
+            .buttonStyle(.plain)
+            .geist(size: 13, weight: .medium)
+            .foregroundStyle(sb.ink(.w6))
+        }
+      }
+      .frame(maxWidth: 380, alignment: .leading)
+    }
   }
 
   /// A physical-looking keycap (symbol + key name for modifiers, centered glyph
