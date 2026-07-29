@@ -45,71 +45,70 @@ struct OnboardingVoiceDemoView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, OmiSpacing.xl)
 
-      Spacer()
-
-      VStack(spacing: OmiSpacing.xxl) {
-        VStack(spacing: OmiSpacing.md) {
-          Text("Hold \(shortcutSettings.pttShortcut.displayLabel) and Ask")
-            .font(.system(size: 24, weight: .bold))
-            .foregroundColor(OmiColors.textPrimary)
-
-          Text("Try asking: What's on my screen?")
-            .font(.system(size: 18, weight: .medium))
-            .foregroundColor(OmiColors.textSecondary)
-            .multilineTextAlignment(.center)
-        }
-
-        if outputReadiness.shouldAskUserToTurnUpVolume {
-          volumeWarning
-            .transition(.opacity)
-        } else if !observedShortcutPress {
+      OnboardingContentWithPinnedActions {
+        VStack(spacing: OmiSpacing.xxl) {
           VStack(spacing: OmiSpacing.md) {
-            Text("Hold the shortcut, speak, then release")
-              .font(.system(size: 13))
-              .foregroundColor(OmiColors.textTertiary)
+            Text("Hold \(shortcutSettings.pttShortcut.displayLabel) and Ask")
+              .font(.system(size: 24, weight: .bold))
+              .foregroundColor(OmiColors.textPrimary)
 
-            HStack(spacing: OmiSpacing.xs) {
-              ForEach(Array(shortcutSettings.pttShortcut.displayTokens.enumerated()), id: \.offset) { _, token in
-                keyCap(token)
-              }
-              Text("hold")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(OmiColors.textTertiary)
-            }
+            Text("Try asking: What's on my screen?")
+              .font(.system(size: 18, weight: .medium))
+              .foregroundColor(OmiColors.textSecondary)
+              .multilineTextAlignment(.center)
           }
-          .padding(.top, OmiSpacing.xxs)
-          .transition(.opacity)
-        } else if !showContinue {
-          Text(waitingForResponse ? "Waiting for omi to respond..." : "Listening... release when done")
-            .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
+
+          if outputReadiness.shouldAskUserToTurnUpVolume {
+            volumeWarning
+              .transition(.opacity)
+          } else if !observedShortcutPress {
+            VStack(spacing: OmiSpacing.md) {
+              Text("Hold the shortcut, speak, then release")
+                .font(.system(size: 13))
+                .foregroundColor(OmiColors.textTertiary)
+
+              HStack(spacing: OmiSpacing.xs) {
+                ForEach(Array(shortcutSettings.pttShortcut.displayTokens.enumerated()), id: \.offset) { _, token in
+                  keyCap(token)
+                }
+                Text("hold")
+                  .font(.system(size: 13, weight: .medium))
+                  .foregroundColor(OmiColors.textTertiary)
+              }
+            }
             .padding(.top, OmiSpacing.xxs)
             .transition(.opacity)
-        }
-      }
-      .padding(.horizontal, OmiSpacing.page)
-
-      Spacer()
-
-      HStack(spacing: OmiSpacing.md) {
-        OnboardingBackButton()
-
-        if showContinue {
-          Button(action: onComplete) {
-            Text("Continue")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(.black)
-              .frame(maxWidth: 280)
-              .padding(.vertical, OmiSpacing.md)
-              .background(Color.white)
-              .cornerRadius(OmiChrome.smallControlRadius)
+          } else if !showContinue {
+            Text(waitingForResponse ? "Waiting for omi to respond..." : "Listening... release when done")
+              .font(.system(size: 13))
+              .foregroundColor(OmiColors.textTertiary)
+              .padding(.top, OmiSpacing.xxs)
+              .transition(.opacity)
           }
-          .buttonStyle(.plain)
-          .keyboardShortcut(.defaultAction)
-          .transition(.move(edge: .bottom).combined(with: .opacity))
+
         }
+        .frame(maxWidth: 420)
+      } actions: {
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if showContinue {
+            Button(action: onComplete) {
+              Text("Continue")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.black)
+                .frame(maxWidth: 280)
+                .padding(.vertical, OmiSpacing.md)
+                .background(Color.white)
+                .cornerRadius(OmiChrome.smallControlRadius)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.defaultAction)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+          }
+        }
+        .frame(maxWidth: 420)
       }
-      .padding(.bottom, OmiSpacing.section)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(OmiColors.backgroundPrimary)
