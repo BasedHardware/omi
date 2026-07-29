@@ -37,6 +37,9 @@ struct AppleRemindersSyncUpdate: Encodable, Sendable {
   var description: String?
   var completed: Bool?
   var dueAt: String?
+  /// When true, encode an explicit JSON null for `due_at` so the sync-batch
+  /// endpoint's model_fields_set path clears the backend deadline (omission leaves it).
+  var clearDueAt: Bool?
   var exported: Bool?
   var exportPlatform: String?
   var appleReminderId: String?
@@ -46,6 +49,7 @@ struct AppleRemindersSyncUpdate: Encodable, Sendable {
     description: String? = nil,
     completed: Bool? = nil,
     dueAt: String? = nil,
+    clearDueAt: Bool? = nil,
     exported: Bool? = nil,
     exportPlatform: String? = nil,
     appleReminderId: String? = nil
@@ -54,6 +58,7 @@ struct AppleRemindersSyncUpdate: Encodable, Sendable {
     self.description = description
     self.completed = completed
     self.dueAt = dueAt
+    self.clearDueAt = clearDueAt
     self.exported = exported
     self.exportPlatform = exportPlatform
     self.appleReminderId = appleReminderId
@@ -64,6 +69,22 @@ struct AppleRemindersSyncUpdate: Encodable, Sendable {
     case dueAt = "due_at"
     case exportPlatform = "export_platform"
     case appleReminderId = "apple_reminder_id"
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(id, forKey: .id)
+    try container.encodeIfPresent(description, forKey: .description)
+    try container.encodeIfPresent(completed, forKey: .completed)
+    // Explicit null (not omission) so backend model_fields_set clears due_at.
+    if clearDueAt == true {
+      try container.encodeNil(forKey: .dueAt)
+    } else {
+      try container.encodeIfPresent(dueAt, forKey: .dueAt)
+    }
+    try container.encodeIfPresent(exported, forKey: .exported)
+    try container.encodeIfPresent(exportPlatform, forKey: .exportPlatform)
+    try container.encodeIfPresent(appleReminderId, forKey: .appleReminderId)
   }
 }
   }
