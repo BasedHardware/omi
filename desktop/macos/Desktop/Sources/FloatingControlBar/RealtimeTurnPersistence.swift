@@ -51,10 +51,14 @@ struct RealtimeStreamingJournalProjection: Equatable {
   let continuityKey: String
   let userTurnID: String
   let assistantTurnID: String
+  /// Pinned at admission so a mid-stream chat switch cannot redirect deltas
+  /// or finalization to a different conversation surface.
+  let admissionSurface: AgentSurfaceReference
 
-  init(ownerID: String, continuityKey: String) {
+  init(ownerID: String, continuityKey: String, admissionSurface: AgentSurfaceReference) {
     self.ownerID = ownerID
     self.continuityKey = continuityKey
+    self.admissionSurface = admissionSurface
     userTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
     assistantTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant")
   }
@@ -182,6 +186,15 @@ final class RealtimeStreamingJournalWriteLedger {
     entries.removeAll()
     generation &+= 1
     for task in tasks { task.cancel() }
+  }
+
+  /// Cancels a single continuity key's projection so a later canonical receipt
+  /// (e.g. an accepted spawn_agent) can take over without competing writes.
+  func cancel(continuityKey: String) {
+    guard let entry = entries.removeValue(forKey: continuityKey) else { return }
+    generation &+= 1
+    entry.recordTask.cancel()
+    entry.tail.cancel()
   }
 }
 

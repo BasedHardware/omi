@@ -30,11 +30,16 @@ extension RealtimeHubController {
     else { return }
 
     let projection = RealtimeStreamingJournalProjection(
-      ownerID: ownerID, continuityKey: turnIdempotencyKey)
-    guard streamingJournalWriteLedger.begin(projection: projection, record: { projection in
-      await FloatingControlBarManager.shared.recordStreamingRealtimeExchange(
-        projection: projection, userText: userText)
-    }) else { return }
+      ownerID: ownerID, continuityKey: turnIdempotencyKey,
+      admissionSurface: FloatingControlBarManager.shared.mainChatSurfaceReference())
+    guard
+      streamingJournalWriteLedger.begin(
+        projection: projection,
+        record: { projection in
+          await FloatingControlBarManager.shared.recordStreamingRealtimeExchange(
+            projection: projection, userText: userText)
+        })
+    else { return }
     scheduleStreamingRealtimeProjectionFlush(continuityKey: projection.continuityKey)
   }
 
@@ -81,6 +86,13 @@ extension RealtimeHubController {
     streamingJournalFlushTasks.removeAll()
     for task in flushTasks { task.cancel() }
     streamingJournalWriteLedger.cancelAll()
+  }
+
+  /// Cancels streaming writes for a single continuity key when a canonical
+  /// spawn receipt takes over its journal exchange.
+  func cancelStreamingJournalWrites(forContinuityKey continuityKey: String) {
+    streamingJournalFlushTasks.removeValue(forKey: continuityKey)?.cancel()
+    streamingJournalWriteLedger.cancel(continuityKey: continuityKey)
   }
 
   func awaitTurnPersistenceFence() async {

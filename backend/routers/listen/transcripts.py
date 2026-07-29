@@ -10,6 +10,8 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, cast
 
+from fastapi.websockets import WebSocketDisconnect
+
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource
 from models.conversation_photo import ConversationPhoto
@@ -243,6 +245,23 @@ class TranscriptProcessor:
         if self.translation_coordinator:
             await self.translation_coordinator.observe(segments, removed, conversation_id)
 
+    async def _deliver_segments(self, client_segments: List[Dict[str, Any]]) -> bool:
+        """Push live segments to the client without letting a gone client kill the loop.
+
+        A disconnect is normal, and the ASGI server answers a send after close with a
+        RuntimeError. Either way the socket is finished, not this loop: `process_loop`
+        still owes the session its final speaker-assignment flush.
+        """
+        try:
+            await self.host.request.websocket.send_json(client_segments)
+            return True
+        except WebSocketDisconnect:
+            self.host.state.active = False
+        except RuntimeError as error:
+            self.host.state.active = False
+            logger.warning('Listen segment delivery after close type=%s', type(error).__name__)
+        return False
+
     async def process_loop(self) -> None:
         while self.host.state.active or self.segment_buffer or self.photo_buffer:
             if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer):
@@ -312,8 +331,8 @@ class TranscriptProcessor:
             if not transcript_segments:
                 continue
             client_segments = [segment.model_dump() for segment in updated]
-            await self.host.request.websocket.send_json(client_segments)
-            if client_segments:
+            delivered = await self._deliver_segments(client_segments)
+            if delivered and client_segments:
                 self.host.complete_live_transcription()
             if self.host.transcript_send is not None and self.host.user_has_credits:
                 self.host.transcript_send([segment.model_dump() for segment in transcript_segments])
