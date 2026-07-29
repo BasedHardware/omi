@@ -90,9 +90,10 @@ class WindowsReleasePathTests(unittest.TestCase):
                 ["desktop/windows/src/runtime.md"],
             )
 
-    def test_workflow_filters_docs_and_uses_the_tested_classifier(self) -> None:
+    def test_manual_workflow_uses_the_tested_classifier(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
-        self.assertIn("- '!desktop/windows/docs/**'", workflow)
+        self.assertIn("\non:\n  workflow_dispatch:\n", workflow)
+        self.assertNotIn("\n  push:\n", workflow)
         self.assertIn(
             'HAS_CHANGES=$(python3 .github/scripts/windows_release_paths.py --base "$LATEST")',
             workflow,
@@ -105,8 +106,7 @@ class WindowsReleasePathTests(unittest.TestCase):
             ["git", *args],
             cwd=root,
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             encoding="utf-8",
         )
@@ -130,8 +130,7 @@ class WindowsReleasePathTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, str(MODULE_PATH), "--root", str(root), "--base", base],
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             encoding="utf-8",
         )

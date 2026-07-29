@@ -14,7 +14,7 @@ RELEASE_NEUTRAL_PREFIXES = ("desktop/windows/docs/",)
 
 def normalize_path(path: str) -> str:
     normalized = path.replace("\\", "/")
-    return normalized[2:] if normalized.startswith("./") else normalized
+    return normalized.removeprefix("./")
 
 
 def is_releasable_windows_path(path: str) -> bool:
@@ -29,8 +29,7 @@ def git_paths(root: Path, *args: str) -> list[str]:
         ["git", *args],
         cwd=root,
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         encoding="utf-8",
     )
