@@ -13,6 +13,7 @@ ACTION_SOURCE_RELATIVE_PATHS = (
     "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
     "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
     "Desktop/Sources/MainWindow/Pages/ProjectionPage.swift",
+    "Desktop/Sources/ProjectionAutomationHarness.swift",
 )
 
 FLOW_LINT_INPUTS = frozenset(
