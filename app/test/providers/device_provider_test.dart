@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
@@ -228,4 +233,142 @@ void main() {
       expect(flag2, true, reason: 'Exactly 20% should not reset flag (needs > 20)');
     });
   });
+
+  group('DFU connection ownership', () {
+    late _DfuTestDeviceService deviceService;
+    late DeviceProvider provider;
+
+    setUp(() {
+      deviceService = _DfuTestDeviceService();
+      provider = DeviceProvider(deviceService: deviceService)
+        ..connectedDevice = BtDevice(name: 'Omi', id: 'device-123', type: DeviceType.omi, rssi: -40);
+    });
+
+    tearDown(() {
+      provider.dispose();
+    });
+
+    test('retries null and thrown reconnects while coalescing terminal callbacks', () async {
+      final disconnectGate = Completer<void>();
+      deviceService
+        ..disconnectGate = disconnectGate
+        ..reconnectResults = [
+          null,
+          StateError('transient reconnect failure'),
+          _DfuTestDeviceConnection(),
+        ];
+
+      var prepareCompleted = false;
+      final prepareFuture = provider.prepareDFU().then((_) => prepareCompleted = true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(deviceService.events, ['disconnect']);
+      expect(prepareCompleted, isFalse);
+      expect(provider.isFirmwareUpdateInProgress, isTrue);
+
+      disconnectGate.complete();
+      await prepareFuture;
+
+      final firstResume = provider.resumeConnectionAfterDFU();
+      final duplicateResume = provider.resumeConnectionAfterDFU();
+      await Future.wait([firstResume, duplicateResume]);
+
+      expect(deviceService.events, [
+        'disconnect',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+      ]);
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+
+      await provider.resumeConnectionAfterDFU();
+      expect(deviceService.events, [
+        'disconnect',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+      ]);
+    });
+
+    test('keeps retrying at the bounded backoff cap until reclaim succeeds', () async {
+      deviceService.reconnectResults = [null, null, null, null, _DfuTestDeviceConnection()];
+      await provider.prepareDFU();
+
+      await provider.resumeConnectionAfterDFU();
+
+      expect(deviceService.events, [
+        'disconnect',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+        'reconnect:device-123:true',
+      ]);
+    });
+
+    test('forgetting the suspended device deliberately abandons reconnect', () async {
+      final reconnectGate = Completer<void>();
+      deviceService
+        ..reconnectGate = reconnectGate
+        ..reconnectResults = [null];
+      await provider.prepareDFU();
+
+      final resumeFuture = provider.resumeConnectionAfterDFU();
+      await Future<void>.delayed(Duration.zero);
+      await deviceService.forgetDevice('device-123');
+      reconnectGate.complete();
+      await resumeFuture;
+
+      await provider.resumeConnectionAfterDFU();
+      expect(deviceService.events.first, 'disconnect');
+      expect(deviceService.events.where((event) => event.startsWith('reconnect:')), isNotEmpty);
+    });
+
+    test('failed disconnect releases the lease and clears firmware-update state', () async {
+      deviceService.disconnectError = StateError('disconnect failed');
+
+      await expectLater(provider.prepareDFU(), throwsStateError);
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+
+      deviceService.disconnectError = null;
+      await provider.prepareDFU();
+      await provider.resumeConnectionAfterDFU();
+
+      expect(deviceService.events, ['disconnect', 'disconnect', 'reconnect:device-123:true']);
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+    });
+  });
+}
+
+class _DfuTestDeviceService extends DeviceService {
+  _DfuTestDeviceService() : super(dfuReconnectBackoff: const [Duration.zero, Duration.zero, Duration.zero]);
+
+  final List<String> events = [];
+  Completer<void>? disconnectGate;
+  Completer<void>? reconnectGate;
+  List<Object?> reconnectResults = [_DfuTestDeviceConnection()];
+  Object? disconnectError;
+
+  @override
+  Future<void> disconnectDevice() async {
+    events.add('disconnect');
+    final error = disconnectError;
+    if (error != null) throw error;
+    await disconnectGate?.future;
+  }
+
+  @override
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
+    events.add('reconnect:$deviceId:$force');
+    await reconnectGate?.future;
+    if (reconnectResults.isEmpty) return null;
+    final result = reconnectResults.removeAt(0);
+    if (result is Object && result is! DeviceConnection) throw result;
+    return result as DeviceConnection?;
+  }
+}
+
+class _DfuTestDeviceConnection implements DeviceConnection {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
