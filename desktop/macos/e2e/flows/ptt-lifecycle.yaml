@@ -24,6 +24,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+PushToTalk.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+StreamingJournal.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoiceContextSingleFlight.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+TransportReplacement.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+VoiceOutput.swift
@@ -36,6 +37,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarManager+RealtimeStreamingJournal.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/ScreenCaptureManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
