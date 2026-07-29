@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: omiglass-ota-fail-closed
+    command: ["python3", ".github/scripts/check_omiglass_ota_boundary.py"]
+    triggers: ["omiGlass/firmware/**", ".github/scripts/check_omiglass_ota_boundary.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9589: static tripwire keeps the BLE OTA surface and unauthenticated downloader removed until the device verifies signed artifacts"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/scripts/omi-fault-inject.sh", "desktop/macos/scripts/release-keyvalue.py", ".github/checks-manifest.yaml"]

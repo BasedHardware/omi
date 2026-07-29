@@ -1,6 +1,6 @@
 # OMI Glass Firmware Guide
 
-This document provides comprehensive instructions for building, flashing, and managing the OMI Glass firmware.
+This document provides comprehensive instructions for building, flashing, and managing the OMI Glass firmware. BLE OTA updates are disabled pending an authenticated signed-artifact delivery path; USB and PlatformIO flashing remain available.
 
 ## 1. Flashing with UF2 (Easiest Method)
 
