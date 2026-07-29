@@ -60,6 +60,22 @@ final class SBOnboardingModel: ObservableObject {
 
   enum PermState: Equatable { case ask, waiting, on }
 
+  enum LocalFileProfileState: Equatable {
+    case idle
+    case scanning
+    case complete(fileCount: Int, memoryCount: Int, deniedFolders: [String])
+    case failed(message: String)
+
+    var isTerminal: Bool {
+      switch self {
+      case .complete, .failed: true
+      case .idle, .scanning: false
+      }
+    }
+  }
+
+  typealias FileScanRunner = @MainActor (AppState) async -> LocalFileProfileState
+
   @Published var step: Step = .promise
   @Published var thread: [Msg] = []
   /// The current Omi message streaming in (nil once committed).
@@ -83,6 +99,7 @@ final class SBOnboardingModel: ObservableObject {
   @Published var fdaState: PermState = .ask  // full disk access (files)
   @Published var accState: PermState = .ask  // accessibility
   @Published var autoState: PermState = .ask  // automation / Apple Events
+  @Published var localFileProfileState: LocalFileProfileState = .idle
 
   var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
 
@@ -146,8 +163,11 @@ final class SBOnboardingModel: ObservableObject {
   /// Backend writes for editable answers are per-field serialized. Revisiting a
   /// question never lets an earlier request finish after the user's revision.
   private let answerWriteGate = OnboardingAnswerWriteGate()
+  let fileScanRunner: FileScanRunner
   private let onComplete: (() -> Void)?
   var streamTask: Task<Void, Never>?
+  var localFileScanTask: Task<Void, Never>?
+  var localFileScanID: UUID?
   /// Permission-grant pollers, one per permission key. Keyed so requesting a
   /// second permission (the meetings "both" mic+system-audio step) never cancels
   /// a still-running poll for the first and strands it on "macOS…".
@@ -164,11 +184,46 @@ final class SBOnboardingModel: ObservableObject {
     appState: AppState,
     chatProvider: ChatProvider,
     importConnectorStatusStore: ImportConnectorStatusStore? = nil,
+    fileScanRunner: @escaping FileScanRunner = { appState in
+      ChatToolExecutor.onboardingAppState = appState
+      guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+        return .failed(message: "Please sign in again before building your local profile.")
+      }
+      let outcome = await ChatToolExecutor.scanLocalFiles(
+        expectedOwnerID: authorization.ownerID,
+        authorizationSnapshot: authorization)
+      guard !Task.isCancelled, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        return .failed(message: "Your account changed before Omi could save your local profile.")
+      }
+      guard outcome.didCompleteSuccessfully, outcome.hasReadableUserFileTarget else {
+        return .failed(message: ConnectorImportOperations.localFilesFailureLine(for: outcome))
+      }
+
+      // Preserve the legacy post-scan owner: it derives the indexed-file
+      // snapshot, writes aggregate local-file profile evidence, and updates the
+      // knowledge graph. The conversational flow merely presents its outcome.
+      let coordinator = OnboardingPagedIntroCoordinator()
+      await coordinator.refreshSnapshotIfAvailable(
+        expectedOwnerID: authorization.ownerID,
+        authorizationSnapshot: authorization)
+      guard !Task.isCancelled, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        return .failed(message: "Your account changed before Omi could save your local profile.")
+      }
+      let fileCount = coordinator.scanSnapshot?.fileCount ?? outcome.indexedFileCount
+      if fileCount > 0, coordinator.localFileMemoriesSaved == 0 {
+        return .failed(message: "Your files were indexed, but Omi couldn't save your profile memories. Try again.")
+      }
+      return .complete(
+        fileCount: fileCount,
+        memoryCount: coordinator.localFileMemoriesSaved,
+        deniedFolders: outcome.deniedUserFolders)
+    },
     onComplete: (() -> Void)?
   ) {
     self.appState = appState
     self.chatProvider = chatProvider
     self.importConnectorStatusStore = importConnectorStatusStore
+    self.fileScanRunner = fileScanRunner
     self.onComplete = onComplete
     // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
     // journal surface so they never pollute the real Chat tab. Cleared on
@@ -390,6 +445,11 @@ final class SBOnboardingModel: ObservableObject {
   /// Tear down any live monitors/tasks a step installed before leaving it.
   private func teardownStep(_ step: Step) {
     switch step {
+    case .files:
+      localFileScanTask?.cancel()
+      if case .scanning = localFileProfileState {
+        localFileProfileState = .idle
+      }
     case .shortcutOpen, .shortcutTalk: disarmShortcutSummon()
     case .screenDemo: teardownVoiceDemo()
     default: break
@@ -614,6 +674,9 @@ final class SBOnboardingModel: ObservableObject {
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.
   private func teardownAll() {
     streamTask?.cancel()
+    localFileScanTask?.cancel()
+    localFileScanTask = nil
+    localFileScanID = nil
     for pollTask in pollTasks.values {
       pollTask.cancel()
     }
