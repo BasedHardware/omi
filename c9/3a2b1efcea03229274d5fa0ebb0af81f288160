@@ -1,0 +1,19 @@
+scripts/test-make-setup.sh
+  s_b5d52d5f05403b::t_7e7140d0e31527 142-147,149-152,154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "c93a2b1efcea03229274d5fa0ebb0af81f288160",
+  "prompts": {},
+  "sessions": {
+    "s_b5d52d5f05403b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82d7239f-7b04-40bc-b1d8-8737cb48399a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
