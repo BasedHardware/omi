@@ -26,6 +26,25 @@ import {
 const nodeSqliteFactory = DatabaseSync as unknown as DatabaseFactory
 
 const createdDirs: string[] = []
+const WINDOWS_SESSION_COLUMNS = [
+  'session_id',
+  'owner_id',
+  'agent_definition_id',
+  'title',
+  'status',
+  'surface_kind',
+  'external_ref_kind',
+  'external_ref_id',
+  'default_adapter_id',
+  'default_cwd',
+  'model_profile',
+  'metadata_json',
+  'created_at_ms',
+  'updated_at_ms',
+  'last_activity_at_ms',
+  'execution_role',
+  'provider_boundary'
+]
 
 afterEach(() => {
   for (const dir of createdDirs.splice(0)) {
@@ -40,7 +59,7 @@ describe('SqliteAgentStore', () => {
     store.migrate()
     store.migrate()
 
-    expect(store.getRow('SELECT COUNT(*) AS count FROM schema_migrations').count).toBe(14)
+    expect(store.getRow('SELECT COUNT(*) AS count FROM schema_migrations').count).toBe(15)
     expect(tableNames(store)).toEqual([
       'adapter_bindings',
       'artifacts',
@@ -67,6 +86,146 @@ describe('SqliteAgentStore', () => {
     ])
     expect(tableNames(store)).not.toContain('desktop_action_queue')
 
+    store.close()
+  })
+
+  it('retires v14 identity shims without losing sessions, runs, or grants', () => {
+    const databasePath = newDatabasePath()
+    let store = openStore({ databasePath, reconcileOnOpen: false })
+    const session = store.insertSession({
+      sessionId: 'ses_legacy_identity',
+      ownerId: 'owner',
+      surfaceKind: 'main_chat',
+      defaultAdapterId: 'acp'
+    })
+    const run = store.insertRun({
+      runId: 'run_legacy_identity',
+      sessionId: session.sessionId,
+      clientId: 'client',
+      requestId: 'request',
+      status: 'succeeded',
+      mode: 'ask'
+    })
+    store.insertGrant({
+      grantId: 'grant_legacy_identity',
+      sessionId: session.sessionId,
+      runId: run.runId,
+      capability: 'filesystem',
+      operation: 'read',
+      resourcePattern: 'C:\\workspace\\**',
+      effect: 'allow',
+      source: 'user',
+      constraintsJson: '{"scope":"legacy"}'
+    })
+    store.close()
+
+    makeDatabaseLookLikeV14(databasePath)
+
+    store = openStore({ databasePath, reconcileOnOpen: false })
+    expect(store.allRows('PRAGMA table_info(sessions)').map((row) => String(row.name))).toEqual([
+      ...WINDOWS_SESSION_COLUMNS,
+      'current_profile_generation'
+    ])
+    expect(
+      String(
+        store.getRow("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'grants'").sql
+      )
+    ).not.toContain('legacy_default')
+    const migratedGrant = store.getRow(
+      `SELECT source, constraints_json, revoked_at_ms
+       FROM grants
+       WHERE grant_id = ?`,
+      ['grant_legacy_identity']
+    )
+    expect(migratedGrant.source).toBe('system')
+    expect(Number(migratedGrant.revoked_at_ms)).toBeGreaterThan(0)
+    expect(JSON.parse(String(migratedGrant.constraints_json))).toMatchObject({
+      _omiLegacyIdentityCleanup: {
+        originalSource: 'legacy_default',
+        action: 'revoked',
+        version: 29
+      },
+      originalConstraints: { scope: 'legacy' }
+    })
+    expect(
+      store.getRow('SELECT current_profile_generation FROM sessions WHERE session_id = ?', [
+        'ses_legacy_identity'
+      ]).current_profile_generation
+    ).toBe(3)
+    expect(
+      store.getRow('SELECT session_id FROM runs WHERE run_id = ?', ['run_legacy_identity'])
+        .session_id
+    ).toBe('ses_legacy_identity')
+    expect(store.allRows('PRAGMA foreign_key_check')).toEqual([])
+    expect(Number(store.getPragma('foreign_keys'))).toBe(1)
+
+    store.execute('DELETE FROM sessions WHERE session_id = ?', ['ses_legacy_identity'])
+    expect(store.getRow('SELECT COUNT(*) AS count FROM runs').count).toBe(0)
+    expect(store.getRow('SELECT COUNT(*) AS count FROM grants').count).toBe(0)
+
+    store.migrate()
+    expect(
+      store.getRow('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 29').count
+    ).toBe(1)
+    store.close()
+  })
+
+  it('refuses to rebuild the sessions parent table inside an active transaction', () => {
+    const store = newStore({ reconcileOnOpen: false })
+    const session = store.insertSession({
+      ownerId: 'owner',
+      surfaceKind: 'main_chat',
+      defaultAdapterId: 'acp'
+    })
+    store.execute('ALTER TABLE sessions ADD COLUMN legacy_client_scope TEXT')
+    store.execute('DELETE FROM schema_migrations WHERE version = 29')
+
+    expect(() => store.withTransaction(() => store.migrate())).toThrow(
+      /must run outside an active transaction/
+    )
+    expect(Number(store.getPragma('foreign_keys'))).toBe(1)
+    expect(
+      store.getRow('SELECT session_id FROM sessions WHERE session_id = ?', [session.sessionId])
+        .session_id
+    ).toBe(session.sessionId)
+    expect(
+      store.getRow('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 29').count
+    ).toBe(0)
+    store.close()
+  })
+
+  it('rolls back the cleanup and restores foreign keys when schema recreation fails', () => {
+    const store = newStore({ reconcileOnOpen: false })
+    store.insertSession({
+      ownerId: 'owner',
+      surfaceKind: 'main_chat',
+      externalRefKind: 'task',
+      externalRefId: 'duplicate',
+      defaultAdapterId: 'acp'
+    })
+    store.execute('DROP INDEX sessions_external_ref_uq')
+    store.insertSession({
+      ownerId: 'owner',
+      surfaceKind: 'main_chat',
+      externalRefKind: 'task',
+      externalRefId: 'duplicate',
+      defaultAdapterId: 'acp'
+    })
+    store.execute('ALTER TABLE sessions ADD COLUMN legacy_client_scope TEXT')
+    store.execute('DELETE FROM schema_migrations WHERE version = 29')
+
+    expect(() => store.migrate()).toThrow(/UNIQUE constraint failed/)
+    expect(Number(store.getPragma('foreign_keys'))).toBe(1)
+    expect(store.getRow('SELECT COUNT(*) AS count FROM sessions').count).toBe(2)
+    expect(
+      store
+        .allRows('PRAGMA table_info(sessions)')
+        .map((row) => String(row.name))
+        .includes('legacy_client_scope')
+    ).toBe(true)
+    expect(
+      store.getRow('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 29').count
+    ).toBe(0)
     store.close()
   })
 
@@ -1471,12 +1630,17 @@ describe('SqliteAgentStore', () => {
     ).toBe(true)
   })
 
-  it('stores no legacy_default grant rows in a fresh database', () => {
+  it('creates fresh databases without retired identity columns or grant sources', () => {
     const store = newStore({ reconcileOnOpen: false })
-    const count = Number(
-      store.getRow("SELECT COUNT(*) AS count FROM grants WHERE source = 'legacy_default'").count
+    const sessionColumns = store
+      .allRows('PRAGMA table_info(sessions)')
+      .map((row) => String(row.name))
+    const grantsSql = String(
+      store.getRow("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'grants'").sql
     )
-    expect(count).toBe(0)
+
+    expect(sessionColumns).toEqual(WINDOWS_SESSION_COLUMNS)
+    expect(grantsSql).not.toContain('legacy_default')
     store.close()
   })
 
@@ -1581,4 +1745,92 @@ function tableNames(store: SqliteAgentStore): string[] {
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     )
     .map((row) => String(row.name))
+}
+
+function makeDatabaseLookLikeV14(databasePath: string): void {
+  const db = new DatabaseSync(databasePath)
+  try {
+    db.exec('PRAGMA foreign_keys = OFF')
+    db.exec('BEGIN IMMEDIATE')
+
+    const sessionColumns = db.prepare('PRAGMA table_info(sessions)').all() as Array<{
+      name: string
+    }>
+    if (!sessionColumns.some((column) => column.name === 'legacy_client_scope')) {
+      db.exec('ALTER TABLE sessions ADD COLUMN legacy_client_scope TEXT')
+      db.exec('ALTER TABLE sessions ADD COLUMN legacy_session_key TEXT')
+      db.exec(`
+        CREATE UNIQUE INDEX sessions_legacy_alias_uq
+          ON sessions(owner_id, legacy_client_scope, legacy_session_key)
+          WHERE legacy_client_scope IS NOT NULL
+      `)
+    }
+    db.exec(`
+      UPDATE sessions
+      SET legacy_client_scope = 'desktop',
+          legacy_session_key = 'legacy-session'
+      WHERE session_id = 'ses_legacy_identity'
+    `)
+    if (!sessionColumns.some((column) => column.name === 'current_profile_generation')) {
+      db.exec(`
+        ALTER TABLE sessions
+          ADD COLUMN current_profile_generation INTEGER NOT NULL DEFAULT 1
+          CHECK (current_profile_generation > 0)
+      `)
+    }
+    db.exec(`
+      UPDATE sessions
+      SET current_profile_generation = 3
+      WHERE session_id = 'ses_legacy_identity';
+      INSERT OR IGNORE INTO schema_migrations (version, applied_at_ms)
+      VALUES (16, 1);
+    `)
+
+    const grantsSql = String(
+      (
+        db
+          .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'grants'")
+          .get() as { sql: string }
+      ).sql
+    )
+    if (!grantsSql.includes('legacy_default')) {
+      db.exec(`
+        CREATE TABLE grants_v14 (
+          grant_id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+          run_id TEXT REFERENCES runs(run_id) ON DELETE CASCADE,
+          capability TEXT NOT NULL,
+          operation TEXT NOT NULL,
+          resource_pattern TEXT NOT NULL,
+          effect TEXT NOT NULL CHECK (effect IN ('allow', 'deny')),
+          source TEXT NOT NULL CHECK (source IN ('legacy_default', 'policy', 'user', 'system')),
+          constraints_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(constraints_json)),
+          created_at_ms INTEGER NOT NULL,
+          expires_at_ms INTEGER,
+          revoked_at_ms INTEGER
+        ) STRICT;
+
+        INSERT INTO grants_v14
+        SELECT * FROM grants;
+
+        DROP TABLE grants;
+        ALTER TABLE grants_v14 RENAME TO grants;
+        CREATE INDEX grants_lookup_idx
+          ON grants(session_id, run_id, capability, operation, created_at_ms DESC);
+      `)
+    }
+    db.exec(`
+      UPDATE grants
+      SET source = 'legacy_default'
+      WHERE grant_id = 'grant_legacy_identity';
+      DELETE FROM schema_migrations WHERE version = 29;
+    `)
+    db.exec('COMMIT')
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK')
+    throw error
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON')
+    db.close()
+  }
 }
