@@ -880,26 +880,44 @@ ACTION_ITEMS_NAMESPACE = "ns4"
 
 
 def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -> List[float] | None:
+    """Index one action item for semantic search.
+
+    Every caller runs this *after* the Firestore write has already committed, so an
+    embedding/Pinecone failure must not propagate: it would turn a successful
+    create/update into an HTTP 500 (and make clients retry a write that landed).
+    Degrades to ``None`` — the task is simply absent from semantic search until it
+    is next indexed, matching ``find_similar_action_items``.
+    """
     if index is None:
         logger.warning('Pinecone index not initialized, skipping action item vector upsert')
         return None
 
-    vector = embeddings.embed_query(description)
-    data: VectorRecordDoc = {
-        "id": f'{uid}-ai-{action_item_id}',
-        "values": vector,
-        "metadata": {
-            "uid": uid,
-            "action_item_id": action_item_id,
-            "created_at": int(datetime.now(timezone.utc).timestamp()),
-        },
-    }
-    res = index.upsert(vectors=[data], namespace=ACTION_ITEMS_NAMESPACE)
-    logger.info(f'upsert_action_item_vector {action_item_id} {res}')
-    return vector
+    try:
+        vector = embeddings.embed_query(description)
+        data: VectorRecordDoc = {
+            "id": f'{uid}-ai-{action_item_id}',
+            "values": vector,
+            "metadata": {
+                "uid": uid,
+                "action_item_id": action_item_id,
+                "created_at": int(datetime.now(timezone.utc).timestamp()),
+            },
+        }
+        res = index.upsert(vectors=[data], namespace=ACTION_ITEMS_NAMESPACE)
+        logger.info(f'upsert_action_item_vector {action_item_id} {res}')
+        return vector
+    except Exception as e:
+        logger.exception(
+            f'upsert_action_item_vector failed uid={uid} action_item_id={action_item_id} '
+            f'(task saved, vector missing): {e}'
+        )
+        return None
 
 
 def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
+    """Index a batch of action items. Best-effort, for the same reason as
+    ``upsert_action_item_vector``: returns 0 instead of raising into a caller
+    whose Firestore writes already succeeded."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping action item vector batch upsert')
         return 0
@@ -907,25 +925,32 @@ def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> i
     if not items:
         return 0
 
-    descriptions: List[str] = [item['description'] for item in items]
-    vectors: List[List[float]] = embeddings.embed_documents(descriptions)
+    try:
+        descriptions: List[str] = [item['description'] for item in items]
+        vectors: List[List[float]] = embeddings.embed_documents(descriptions)
 
-    now_ts = int(datetime.now(timezone.utc).timestamp())
-    payload: List[VectorRecordDoc] = [
-        {
-            "id": f"{uid}-ai-{item['action_item_id']}",
-            "values": vectors[i],
-            "metadata": {
-                "uid": uid,
-                "action_item_id": item['action_item_id'],
-                "created_at": now_ts,
-            },
-        }
-        for i, item in enumerate(items)
-    ]
-    res = index.upsert(vectors=payload, namespace=ACTION_ITEMS_NAMESPACE)
-    logger.info(f'upsert_action_item_vectors_batch count={len(payload)} {res}')
-    return len(payload)
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        payload: List[VectorRecordDoc] = [
+            {
+                "id": f"{uid}-ai-{item['action_item_id']}",
+                "values": vectors[i],
+                "metadata": {
+                    "uid": uid,
+                    "action_item_id": item['action_item_id'],
+                    "created_at": now_ts,
+                },
+            }
+            for i, item in enumerate(items)
+        ]
+        res = index.upsert(vectors=payload, namespace=ACTION_ITEMS_NAMESPACE)
+        logger.info(f'upsert_action_item_vectors_batch count={len(payload)} {res}')
+        return len(payload)
+    except Exception as e:
+        logger.exception(
+            f'upsert_action_item_vectors_batch failed uid={uid} count={len(items)} '
+            f'(tasks saved, vectors missing): {e}'
+        )
+        return 0
 
 
 def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_score: float = 0.3) -> List[str]:
