@@ -84,7 +84,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
     )
   }
 
-
   func testConversationWarmupWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.conversationWarmupDelay,
