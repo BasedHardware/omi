@@ -136,7 +136,9 @@ print-resolved-python:
 	@printf 'PYTHON=%s\n' "$(PYTHON)"
 EOF
 git init -q --bare "$TMPDIR/fallback-bare.git"
-out="$(cd "$FB_ROOT" && env -u PYTHON GIT_DIR="$TMPDIR/fallback-bare.git" make print-resolved-python 2>/dev/null)"
+# This contract also runs beneath `make preflight`; suppress nested Make's
+# directory banner so stdout remains the resolver value under both entrypoints.
+out="$(cd "$FB_ROOT" && env -u PYTHON GIT_DIR="$TMPDIR/fallback-bare.git" make --no-print-directory print-resolved-python 2>/dev/null)"
 # Resolve the physical path because Git Bash exposes /tmp as a logical mount
 # while BASH_SOURCE resolves the same directory through its Windows path.
 expected="PYTHON=$(cd "$FB_ROOT" && pwd -P)/backend/.venv/bin/python"
