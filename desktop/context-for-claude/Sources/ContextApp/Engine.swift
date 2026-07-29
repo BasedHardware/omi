@@ -181,7 +181,7 @@ final class Engine: ObservableObject {
         startHeartbeatTimer()
 
         // 2. Permissions and the transcript consumer: what the sensors need in order to start.
-        capabilities = Permissions.report()
+        capabilities = Permissions.groupedReport()
         startLineConsumer()
         // Started with capture, not with the account. The socket reports `.idle` until there is a
         // session and connects when one lands, so putting it behind the sign-in restore would only
@@ -356,7 +356,7 @@ final class Engine: ObservableObject {
         // Reasons recorded before the pause describe a pipeline that no longer exists. Storage is
         // the exception: that failure is about the database, not about a source.
         reasons = reasons.filter { $0.key == .storage }
-        capabilities = Permissions.report()
+        capabilities = Permissions.groupedReport()
         startPermittedSources()
         ContextLog.info("Capture resumed", "engine")
         publishState()
@@ -365,7 +365,7 @@ final class Engine: ObservableObject {
     /// Re-reads the permission state and starts anything that is now allowed but not yet running —
     /// a grant that lands after launch, or a source that failed and can be retried.
     func refreshCapabilities() {
-        capabilities = Permissions.report()
+        capabilities = Permissions.groupedReport()
         startPermittedSources()
         publishState()
     }

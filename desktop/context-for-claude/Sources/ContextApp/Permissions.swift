@@ -45,6 +45,37 @@ extension Capability {
     }
 }
 
+/// What the user thinks they granted.
+///
+/// macOS splits each of these in two, and neither split is a decision anyone is making. A
+/// microphone tap and a system-audio tap are separate TCC records, but "hear me" and "hear the
+/// other side of the call" are one idea. Reading a window's text is a separate grant from capturing
+/// its pixels, but both are just *seeing the screen* — the tree and the screenshot are two readings
+/// of one window, and the app wants them together or the answer is half blind.
+///
+/// A row per TCC record made the menu bar read like a permissions audit. A row per capability reads
+/// like what the app actually does.
+enum CapabilityGroup: String, CaseIterable {
+    case microphone
+    case screen
+
+    /// Ordered: a tap acts on the first member still ungranted, so the row always offers the nearest
+    /// piece of work rather than the last one.
+    var members: [Capability] {
+        switch self {
+        case .microphone: return [.microphone, .systemAudio]
+        case .screen: return [.screen, .accessibility]
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .microphone: return "Microphone"
+        case .screen: return "Screen"
+        }
+    }
+}
+
 enum Permissions {
 
     // MARK: - Reading
@@ -66,7 +97,27 @@ enum Permissions {
         }
     }
 
-    /// Fixed order — the onboarding rows and the menu bar read this top to bottom.
+    /// One row per capability rather than per TCC record — what the menu bar shows.
+    ///
+    /// A group is granted only when every member is: a row that reads "granted" while half of it is
+    /// still missing would be the row lying, which is the one failure this surface cannot afford.
+    /// The status word comes from the first member still waiting, so the row describes the work that
+    /// remains rather than the best case.
+    static func groupedReport() -> [CapabilityReport] {
+        CapabilityGroup.allCases.map { group in
+            let waiting = group.members.first { !check($0) }
+            let granted = waiting == nil
+            // Granted groups still defer to the first member's word, because `screen` reports
+            // "action required" while a grant is waiting on a relaunch.
+            let subject = waiting ?? group.members[0]
+            return CapabilityReport(
+                name: group.rawValue,
+                granted: granted,
+                detail: statusWord(for: subject, granted: granted))
+        }
+    }
+
+    /// Fixed order — the onboarding rows read this top to bottom.
     static func report() -> [CapabilityReport] {
         let ordered: [Capability] = [.microphone, .systemAudio, .screen, .accessibility]
         return ordered.map { c in

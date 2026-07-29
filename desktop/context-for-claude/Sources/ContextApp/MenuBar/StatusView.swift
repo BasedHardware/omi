@@ -122,17 +122,14 @@ struct StatusView: View {
     /// `Capability.title` is the first-person sentence onboarding uses to introduce itself. This is a
     /// glance surface for a user who has already been introduced, so it gets the noun instead.
     private func label(for name: String) -> String {
-        guard let capability = Capability(rawValue: name) else { return name }
-        switch capability {
-        case .microphone: return "Microphone"
-        case .systemAudio: return "Call audio"
-        case .screen: return "Screen"
-        case .accessibility: return "Window text"
-        }
+        CapabilityGroup(rawValue: name)?.title ?? name
     }
 
     private func handle(_ report: CapabilityReport) {
-        guard let capability = Capability(rawValue: report.name) else { return }
+        guard let group = CapabilityGroup(rawValue: report.name) else { return }
+        // The row stands for several grants, so a tap acts on the nearest one still missing — and on
+        // the first member when they are all in, because that is the pane a user opens to revoke.
+        let capability = group.members.first { !Permissions.check($0) } ?? group.members[0]
 
         // A granted Screen Recording checkbox over a dead capture is the one row that lies, and the
         // only cure is a relaunch — so that is what tapping it does.

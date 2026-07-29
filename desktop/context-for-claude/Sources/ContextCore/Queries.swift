@@ -549,14 +549,31 @@ public enum Queries {
         until: Double?,
         limit: Int
     ) throws -> [Candidate] {
+        // Two indexes, one result set. OCR and the accessibility tree see different halves of the
+        // same window and fail in opposite directions: OCR reads everything drawn and guesses at it,
+        // while the tree is exact but covers only what the application chose to expose. A frame
+        // matched by either is a frame the user saw, so their union is the honest candidate set —
+        // OCR alone made every window that draws its text as a canvas unfindable, and the tree alone
+        // would lose every window that exposes nothing.
+        //
+        // `MIN(score)` keeps whichever index matched it better rather than averaging a strong match
+        // against a missing one, and the GROUP BY is what stops a frame both indexes matched from
+        // arriving twice.
         var sql = """
-            SELECT f.capturedAt AS at, f.appName AS appName, f.windowTitle AS windowTitle, f.ocrText AS ocrText,
-                   bm25(frames_fts, \(frameOCRWeight), \(frameTitleWeight), \(frameAppWeight)) AS bm25Score
-            FROM frames_fts
-            JOIN frames f ON f.rowid = frames_fts.rowid
-            WHERE frames_fts MATCH ?
+            SELECT f.capturedAt AS at, f.appName AS appName, f.windowTitle AS windowTitle,
+                   f.ocrText AS ocrText, f.axText AS axText, MIN(m.score) AS bm25Score
+            FROM (
+                SELECT rowid AS rid,
+                       bm25(frames_fts, \(frameOCRWeight), \(frameTitleWeight), \(frameAppWeight)) AS score
+                FROM frames_fts WHERE frames_fts MATCH ?
+                UNION ALL
+                SELECT rowid AS rid, bm25(frames_ax_fts) AS score
+                FROM frames_ax_fts WHERE frames_ax_fts MATCH ?
+            ) m
+            JOIN frames f ON f.rowid = m.rid
+            WHERE 1 = 1
             """
-        var args: [(any DatabaseValueConvertible)?] = [match]
+        var args: [(any DatabaseValueConvertible)?] = [match, match]
         if let since {
             sql += "\n  AND f.capturedAt >= ?"
             args.append(since)
@@ -565,7 +582,7 @@ public enum Queries {
             sql += "\n  AND f.capturedAt <= ?"
             args.append(until)
         }
-        sql += "\nORDER BY bm25Score ASC, f.capturedAt DESC\nLIMIT ?"
+        sql += "\nGROUP BY f.rowid\nORDER BY bm25Score ASC, f.capturedAt DESC\nLIMIT ?"
         args.append(limit)
 
         let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
@@ -577,9 +594,11 @@ public enum Queries {
                 let app: String? = row["appName"]
                 let window: String? = row["windowTitle"]
                 let ocr: String? = row["ocrText"]
-                // Coverage reads the untruncated row: `frameHit` clips OCR for the reader, and a
+                let ax: String? = row["axText"]
+                // Coverage reads the untruncated row: `frameHit` clips text for the reader, and a
                 // term that fell off the end of the snippet is still a term the frame contained.
-                return [window, app, ocr].compactMap { $0 }.joined(separator: " ")
+                // Both readings of the window count — a term OCR mangled may be intact in the tree.
+                return [window, app, ocr, ax].compactMap { $0 }.joined(separator: " ")
             },
             signature: { frameSignature($0) })
     }
@@ -1137,10 +1156,11 @@ public enum Queries {
         let app: String? = row["appName"]
         let window: String? = row["windowTitle"]
         let ocr: String? = row["ocrText"]
+        let ax: String? = row["axText"]
         return Hit(
             kind: "screen",
             at: at ?? 0,
-            text: screenText(app: app, window: window, ocr: ocr),
+            text: screenText(app: app, window: window, ocr: ocr, ax: ax),
             app: collapsedNonEmpty(app),
             window: collapsedNonEmpty(window)
         )
@@ -1153,7 +1173,13 @@ public enum Queries {
 
     /// OCR is raw layout text: newlines and column padding everywhere. Collapse it, then keep only
     /// as much as a reader can actually use.
-    private static func screenText(app: String?, window: String?, ocr: String?) -> String {
+    ///
+    /// The accessibility text wins wherever there is any, because it is the application's own
+    /// strings rather than a reading of its pixels: no character-level guessing, no ligature
+    /// collapsed into a different word, no `rn` read as `m`. OCR stays the fallback, and for a
+    /// window that exposes nothing at all it is the only thing there is.
+    private static func screenText(app: String?, window: String?, ocr: String?, ax: String?) -> String {
+        if let ax = collapsedNonEmpty(ax) { return truncate(ax, to: screenTextLimit) }
         if let ocr = collapsedNonEmpty(ocr) { return truncate(ocr, to: screenTextLimit) }
         if let window = collapsedNonEmpty(window) { return truncate(window, to: screenTextLimit) }
         return collapsedNonEmpty(app) ?? ""
