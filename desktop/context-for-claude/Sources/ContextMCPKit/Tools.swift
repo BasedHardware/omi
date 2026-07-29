@@ -86,15 +86,65 @@ public enum Tools {
     public static func call(name: String, arguments: JSONValue?, store: ContextStore?) throws -> String {
         guard all.contains(where: { $0.name == name }) else { throw ToolError.unknownTool(name) }
 
+        let text: String
         switch name {
-        case "recall": return try runRecall(arguments, store)
-        case "recent": return try runRecent(arguments, store)
-        case "conversations": return try runConversations(arguments, store)
-        case "transcript": return try runTranscript(arguments, store)
-        case "screen": return try runScreen(arguments, store)
-        case "activity": return try runActivity(arguments, store)
-        case "status": return runStatus(store)
+        case "recall": text = try runRecall(arguments, store)
+        case "recent": text = try runRecent(arguments, store)
+        case "conversations": text = try runConversations(arguments, store)
+        case "transcript": text = try runTranscript(arguments, store)
+        case "screen": text = try runScreen(arguments, store)
+        case "activity": text = try runActivity(arguments, store)
+        case "status": text = runStatus(store)
         default: throw ToolError.unknownTool(name)
+        }
+        // The last thing before the transport, and deliberately here rather than in `renderMerged`:
+        // three of the seven tools render outside it and so carry no budget at all, and `activity`
+        // has no row limit at any layer — a ceiling only some paths respect is not a ceiling.
+        return clampToolResult(text, tool: name)
+    }
+
+    /// Carried by every clamped result, so a truncated answer cannot be read as a complete one —
+    /// by a model, or by a test asserting the clamp fired.
+    static let clampedResultMarker = "Truncated to fit one reply"
+
+    /// Cuts `text` to something the client will inline, on a line boundary, and says that it did.
+    ///
+    /// Silence is the dangerous failure here. A result that stops early without saying so reads as
+    /// a complete account of the window, and "nothing after 1:06 PM" then becomes evidence that
+    /// nothing happened after 1:06 PM.
+    static func clampToolResult(_ text: String, tool: String) -> String {
+        guard text.count > maxToolResultCharacters else { return text }
+
+        let note = "\n\n_\(clampedResultMarker) — the end of this result was dropped. \(narrowingAdvice(for: tool))_"
+        var body = String(text.prefix(max(0, maxToolResultCharacters - note.count)))
+        // On a line boundary: half a rendered entry reads as a whole one, and half a timestamp is
+        // not a shorter timestamp, it is a wrong one.
+        if let lastBreak = body.lastIndex(of: "\n") { body = String(body[body.startIndex..<lastBreak]) }
+        return body + note
+    }
+
+    /// Only the knobs the tool's own schema actually accepts.
+    ///
+    /// The shared note used to tell every caller to "narrow the range with `since` / `until`, or
+    /// ask for a smaller `limit`" — advice `recent`, whose only parameter is `minutes`, cannot
+    /// follow. Recovery instructions naming parameters that do not exist leave the model with no
+    /// move except to ask again for exactly the same thing.
+    private static func narrowingAdvice(for tool: String) -> String {
+        switch tool {
+        case "recall":
+            return "Ask again with a narrower `since` / `until`, a smaller `limit`, or a more specific `query`."
+        case "recent":
+            return "Ask again with fewer `minutes`."
+        case "conversations":
+            return "Ask again with a narrower `since` / `until`, or a smaller `limit`."
+        case "screen":
+            return "Ask again with a narrower `since` / `until`, a single `app`, or a smaller `limit`."
+        case "activity":
+            return "Ask again with a narrower `since` / `until`."
+        case "transcript":
+            return "This conversation is longer than one reply can carry; use `recall` to find the moment you need inside it."
+        default:
+            return "Ask again over a narrower range."
         }
     }
 
@@ -1207,9 +1257,27 @@ extension Tools {
         return notes
     }
 
+    /// The most a tool result can be and still reach the model *as text*.
+    ///
+    /// An MCP client does not shorten an oversized result — it writes it to a file and hands the
+    /// model a path. In the incident this ceiling exists to prevent, a 67,000-character `recent`
+    /// became a file path and was never opened: the one line that answered the question had been
+    /// captured, was returned, and went unread. A shorter answer that arrives beats a complete one
+    /// that does not.
+    ///
+    /// Claude Code's default budget is 25,000 tokens (`MAX_MCP_OUTPUT_TOKENS`). Timestamped
+    /// markdown of this shape measured about 2.7 characters per token in the result that failed,
+    /// and denser content — numbers, punctuation, non-Latin scripts — runs nearer 2.0. So 40,000
+    /// characters is ~15,000 tokens at the observed ratio and still ~20,000 at the pessimistic one.
+    static let maxToolResultCharacters = 40_000
+
     /// Roughly 1500 rendered lines, whichever of the two limits bites first.
+    ///
+    /// Under `maxToolResultCharacters` by the headroom headers, watermarks and footers need, since
+    /// those are appended *after* this budget. The renderer drops the least relevant lines and says
+    /// how many; the boundary clamp can only cut the tail. Whichever one bites should be this one.
     private static let maxHitLines = 1500
-    private static let maxHitCharacters = 120_000
+    private static let maxHitCharacters = 36_000
     private static let omiOverviewLimit = 400
     private static let omiScreenTextLimit = 600
 
@@ -1374,7 +1442,7 @@ extension Tools {
             out.append("")
             out.append("""
             _\(plural(omitted, "older entry", "older entries")) omitted to keep this readable. \
-            Narrow the range with `since` / `until`, or ask for a smaller `limit`._
+            Ask again over a narrower range to see them._
             """)
         }
         return out.joined(separator: "\n")

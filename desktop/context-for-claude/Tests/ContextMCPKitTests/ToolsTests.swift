@@ -1001,4 +1001,81 @@ final class ToolsTests: XCTestCase {
                 ocrText: "pricing change rollout notes"))
         return store
     }
+
+    // MARK: - The client's inline ceiling
+
+    /// A result larger than the client will inline is not a large answer — it is no answer. Claude
+    /// Code writes an oversized tool result to a file and hands the model a path, and in the
+    /// incident this guards, the model never opened it: a 67,000-character `recent` became a file
+    /// path, and the one line that answered the question went unread.
+    ///
+    /// Asserted across every tool through the clamp the server actually applies, because the
+    /// renderer budget that only four of the seven pass through was never the whole ceiling.
+    func testNoToolResultExceedsTheClientInlineCeiling() {
+        let oversized = String(
+            repeating: "- **1:06 PM** · *me* · live: a captured line long enough to matter\n", count: 5_000)
+        XCTAssertGreaterThan(oversized.count, Tools.maxToolResultCharacters, "the fixture is not oversized")
+
+        for tool in Tools.all.map(\.name) {
+            XCTAssertLessThanOrEqual(
+                Tools.clampToolResult(oversized, tool: tool).count, Tools.maxToolResultCharacters,
+                "\(tool) can still emit a result the client will spool to a file")
+        }
+    }
+
+    /// A result that stops early without saying so reads as a complete account of the window, and
+    /// "nothing after 1:06 PM" then becomes evidence that nothing happened after 1:06 PM.
+    ///
+    /// And the recovery it offers has to be one the caller can actually perform: the shared note
+    /// used to tell `recent` — whose only parameter is `minutes` — to narrow `since` / `until` or
+    /// ask for a smaller `limit`.
+    func testAClampedResultSaysSoAndNamesOnlyParametersTheToolAccepts() {
+        let oversized = String(repeating: "captured context that runs well past the ceiling\n", count: 5_000)
+
+        // Each tool's own schema. Written out rather than derived from `Tools.all` so that widening
+        // a schema without revisiting the advice is a test failure, not a silent divergence.
+        let accepts: [String: Set<String>] = [
+            "recall": ["query", "since", "until", "limit"],
+            "recent": ["minutes"],
+            "conversations": ["since", "until", "limit"],
+            "transcript": ["session_id"],
+            "screen": ["since", "until", "app", "limit"],
+            "activity": ["since", "until"],
+            "status": [],
+        ]
+        let everyParameter: Set<String> = ["query", "since", "until", "limit", "minutes", "app", "session_id"]
+
+        for tool in Tools.all.map(\.name) {
+            let clamped = Tools.clampToolResult(oversized, tool: tool)
+            XCTAssertTrue(
+                clamped.contains(Tools.clampedResultMarker),
+                "\(tool) dropped the end of its answer without saying so")
+
+            for parameter in everyParameter.subtracting(accepts[tool] ?? []) {
+                XCTAssertFalse(
+                    clamped.contains("`\(parameter)`"),
+                    "\(tool) told the caller to use `\(parameter)`, which its schema does not accept")
+            }
+        }
+    }
+
+    /// The renderer drops the least relevant lines and explains itself; the boundary clamp can only
+    /// cut the tail. So the renderer has to reach the ceiling first, or every long answer loses its
+    /// end instead of its least useful middle.
+    func testTheRendererTrimsBeforeTheBoundaryClampHasTo() {
+        let hits = (0..<4_000).map {
+            speech("line \($0) of captured speech about the Lisbon trip", at: base + Double($0), confidence: 0.9)
+        }
+        let rendered = Tools.renderHitsOnly(hits, order: .oldestFirst)
+
+        XCTAssertLessThanOrEqual(
+            rendered.count, Tools.maxToolResultCharacters,
+            "the renderer handed the boundary clamp more than the client can inline")
+        XCTAssertTrue(
+            rendered.contains("omitted to keep this readable"),
+            "the renderer dropped lines without telling the reader")
+        XCTAssertEqual(
+            Tools.clampToolResult(rendered, tool: "recent"), rendered,
+            "the blunt clamp had to cut what the renderer should already have trimmed")
+    }
 }
