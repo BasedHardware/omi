@@ -5,32 +5,38 @@ import stat
 import subprocess
 from pathlib import Path
 
+from testing.shell import bash_command, bash_path
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 TEST_RUNNER = BACKEND_DIR / "test.sh"
 
 
+def _write_executable(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8", newline="\n")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
 def test_file_isolation_failure_prints_exact_rerun_guidance(tmp_path):
     selected_tests = tmp_path / "selected-tests.txt"
-    selected_tests.write_text("tests/unit/test_example_failure.py\n", encoding="utf-8")
+    selected_tests.write_text("tests/unit/test_example_failure.py\n", encoding="utf-8", newline="\n")
 
     fake_python = tmp_path / "fake-python"
-    fake_python.write_text(
+    _write_executable(
+        fake_python,
         "#!/usr/bin/env bash\n"
         "if [[ \"$1\" == \"-m\" && \"$2\" == \"pytest\" ]]; then\n"
         "  exit 1\n"
         "fi\n"
         "exit 0\n",
-        encoding="utf-8",
     )
-    fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
 
     environment = os.environ | {
-        "PYTHON": str(fake_python),
-        "BACKEND_UNIT_TEST_FILE_LIST": str(selected_tests),
+        "PYTHON": bash_path(fake_python, cwd=BACKEND_DIR),
+        "BACKEND_UNIT_TEST_FILE_LIST": bash_path(selected_tests, cwd=BACKEND_DIR),
         "BACKEND_PYTEST_WORKERS": "1",
     }
     result = subprocess.run(
-        ["bash", str(TEST_RUNNER)],
+        bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
         cwd=BACKEND_DIR,
         env=environment,
         text=True,
@@ -49,27 +55,27 @@ def test_file_isolation_failure_prints_exact_rerun_guidance(tmp_path):
 
 def test_file_isolation_caps_native_pools_and_scrubs_hook_git_environment(tmp_path):
     selected_tests = tmp_path / "selected-tests.txt"
-    selected_tests.write_text("tests/unit/test_example_success.py\n", encoding="utf-8")
+    selected_tests.write_text("tests/unit/test_example_success.py\n", encoding="utf-8", newline="\n")
     captured_environment = tmp_path / "native-thread-environment.txt"
 
     fake_python = tmp_path / "fake-python"
-    fake_python.write_text(
+    _write_executable(
+        fake_python,
         "#!/usr/bin/env bash\n"
         "if [[ \"$1\" == \"-m\" && \"$2\" == \"pytest\" ]]; then\n"
-        f"  printf '%s\\n' \"$OMP_NUM_THREADS\" \"$OPENBLAS_NUM_THREADS\" \"$MKL_NUM_THREADS\" "
-        f"\"$VECLIB_MAXIMUM_THREADS\" \"$NUMEXPR_NUM_THREADS\" \"$BLIS_NUM_THREADS\" "
-        f"\"${{GIT_DIR-unset}}\" \"${{GIT_WORK_TREE-unset}}\" \"${{GIT_INDEX_FILE-unset}}\" "
-        f"> {captured_environment}\n"
+        "  printf '%s\\n' \"$OMP_NUM_THREADS\" \"$OPENBLAS_NUM_THREADS\" \"$MKL_NUM_THREADS\" "
+        "\"$VECLIB_MAXIMUM_THREADS\" \"$NUMEXPR_NUM_THREADS\" \"$BLIS_NUM_THREADS\" "
+        "\"${GIT_DIR-unset}\" \"${GIT_WORK_TREE-unset}\" \"${GIT_INDEX_FILE-unset}\" "
+        "> \"$CAPTURED_ENVIRONMENT\"\n"
         "fi\n"
         "exit 0\n",
-        encoding="utf-8",
     )
-    fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
 
     environment = os.environ | {
-        "PYTHON": str(fake_python),
-        "BACKEND_UNIT_TEST_FILE_LIST": str(selected_tests),
+        "PYTHON": bash_path(fake_python, cwd=BACKEND_DIR),
+        "BACKEND_UNIT_TEST_FILE_LIST": bash_path(selected_tests, cwd=BACKEND_DIR),
         "BACKEND_PYTEST_WORKERS": "1",
+        "CAPTURED_ENVIRONMENT": bash_path(captured_environment, cwd=BACKEND_DIR),
         "GIT_DIR": subprocess.check_output(["git", "rev-parse", "--git-dir"], cwd=BACKEND_DIR, text=True).strip(),
         "GIT_WORK_TREE": str(BACKEND_DIR.parent),
         "GIT_INDEX_FILE": str(tmp_path / "outer-index"),
@@ -85,7 +91,7 @@ def test_file_isolation_caps_native_pools_and_scrubs_hook_git_environment(tmp_pa
         environment.pop(variable, None)
 
     result = subprocess.run(
-        ["bash", str(TEST_RUNNER)],
+        bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
         cwd=BACKEND_DIR,
         env=environment,
         text=True,
@@ -105,7 +111,7 @@ def test_file_isolation_caps_native_pools_and_scrubs_hook_git_environment(tmp_pa
         "BLIS_NUM_THREADS": "7",
     }
     override_result = subprocess.run(
-        ["bash", str(TEST_RUNNER)],
+        bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
         cwd=BACKEND_DIR,
         env=environment | overrides,
         text=True,
@@ -129,15 +135,17 @@ def test_file_isolation_reuses_first_worker_that_finishes(tmp_path):
     selected_tests.write_text(
         "tests/unit/test_slow.py\ntests/unit/test_fast.py\ntests/unit/test_releases_slow.py\n",
         encoding="utf-8",
+        newline="\n",
     )
     control_dir = tmp_path / "control"
     control_dir.mkdir()
 
     fake_python = tmp_path / "fake-python"
-    fake_python.write_text(
+    _write_executable(
+        fake_python,
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
-        f"control_dir={control_dir!s}\n"
+        'control_dir="$CONTROL_DIR"\n'
         'test_path="${!#}"\n'
         'case "$test_path" in\n'
         "  tests/unit/test_slow.py)\n"
@@ -158,18 +166,17 @@ def test_file_isolation_reuses_first_worker_that_finishes(tmp_path):
         '    touch "$control_dir/release-slow"\n'
         "    ;;\n"
         "esac\n",
-        encoding="utf-8",
     )
-    fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
 
     result = subprocess.run(
-        ["bash", str(TEST_RUNNER)],
+        bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
         cwd=BACKEND_DIR,
         env=os.environ
         | {
-            "PYTHON": str(fake_python),
-            "BACKEND_UNIT_TEST_FILE_LIST": str(selected_tests),
+            "PYTHON": bash_path(fake_python, cwd=BACKEND_DIR),
+            "BACKEND_UNIT_TEST_FILE_LIST": bash_path(selected_tests, cwd=BACKEND_DIR),
             "BACKEND_PYTEST_WORKERS": "2",
+            "CONTROL_DIR": bash_path(control_dir, cwd=BACKEND_DIR),
         },
         text=True,
         capture_output=True,
@@ -195,10 +202,12 @@ def test_file_isolation_reaps_worker_that_dies_before_status(tmp_path):
     selected_tests.write_text(
         "tests/unit/test_crash.py\ntests/unit/test_ok.py\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     fake_python = tmp_path / "fake-python"
-    fake_python.write_text(
+    _write_executable(
+        fake_python,
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
         'test_path="${!#}"\n'
@@ -213,17 +222,15 @@ def test_file_isolation_reaps_worker_that_dies_before_status(tmp_path):
         "    exit 0\n"
         "    ;;\n"
         "esac\n",
-        encoding="utf-8",
     )
-    fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
 
     result = subprocess.run(
-        ["bash", str(TEST_RUNNER)],
+        bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
         cwd=BACKEND_DIR,
         env=os.environ
         | {
-            "PYTHON": str(fake_python),
-            "BACKEND_UNIT_TEST_FILE_LIST": str(selected_tests),
+            "PYTHON": bash_path(fake_python, cwd=BACKEND_DIR),
+            "BACKEND_UNIT_TEST_FILE_LIST": bash_path(selected_tests, cwd=BACKEND_DIR),
             "BACKEND_PYTEST_WORKERS": "1",
         },
         text=True,
