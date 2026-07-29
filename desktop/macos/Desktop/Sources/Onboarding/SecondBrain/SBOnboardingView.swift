@@ -312,9 +312,11 @@ struct SBOnboardingView: View {
         // Auto-detected default: accept with one tap, or reveal the picker.
         HStack(spacing: 8) {
           Text(draft).geist(size: 17, weight: .medium).foregroundStyle(sb.ink)
-          Text(SBOnboardingLanguageCopy.detectedLanguageDetail)
-            .geist(size: 12.5)
-            .foregroundStyle(sb.ink(.w4))
+          if model.languageIsDetectedFromMac {
+            Text(SBOnboardingLanguageCopy.detectedLanguageDetail)
+              .geist(size: 12.5)
+              .foregroundStyle(sb.ink(.w4))
+          }
         }
         SBInkButton(title: SBOnboardingLanguageCopy.continueAction(for: draft), isDefaultAction: true) {
           if let m = all.first(where: { $0.name.lowercased() == draft.lowercased() }) {

@@ -70,6 +70,7 @@ final class SBOnboardingModel: ObservableObject {
   // Per-step answers / state
   @Published var nameDraft = ""
   @Published var languageDraft = ""
+  @Published private(set) var languageIsDetectedFromMac = false
   @Published var languageName: String?
   @Published var howHeard: String?
   @Published var roleDraft = ""
@@ -464,6 +465,7 @@ final class SBOnboardingModel: ObservableObject {
   func pickLanguage(code: String, name: String) {
     languageName = name
     languageDraft = name
+    languageIsDetectedFromMac = false
     AssistantSettings.shared.voiceLanguages = [code]
     answerWriteGate.enqueue(.language) { [code] in
       _ = try? await APIClient.shared.updateUserLanguage(code)
@@ -474,11 +476,18 @@ final class SBOnboardingModel: ObservableObject {
   /// Auto-detect the Mac's language and pre-fill it so the picker defaults to it
   /// (the user can still type to change). Only fills an empty field once.
   func prefillDetectedLanguage() {
-    guard languageDraft.isEmpty, languageName == nil else { return }
     let raw = Locale.current.language.languageCode?.identifier ?? Locale.preferredLanguages.first ?? "en"
+    prefillDetectedLanguage(from: raw)
+  }
+
+  /// Records that the draft came from the Mac locale, rather than a saved or
+  /// fallback language, so the UI can accurately disclose its source.
+  func prefillDetectedLanguage(from raw: String) {
+    guard languageDraft.isEmpty, languageName == nil else { return }
     let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
     if let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code }) {
       languageDraft = match.name
+      languageIsDetectedFromMac = true
     }
   }
 
