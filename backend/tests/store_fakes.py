@@ -28,6 +28,7 @@ _OPS = {
     "<=": lambda a, b: a <= b,
     ">": lambda a, b: a > b,
     ">=": lambda a, b: a >= b,
+    "array_contains": lambda a, b: isinstance(a, (list, tuple)) and b in a,
 }
 
 

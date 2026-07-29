@@ -155,6 +155,17 @@ def test_query_equality_order_and_limit(store, uid):
     assert [d.id for d in limited] == ["p2"]
 
 
+def test_query_array_contains(store, uid):
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1", "tags": ["persona", "audio"]})
+    store.set(f"{base}/p2", {"name": "p2", "tags": ["chat"]})
+    store.set(f"{base}/p3", {"name": "p3", "tags": ["persona"]})
+
+    hits = store.query(base, filters=[("tags", "array_contains", "persona")])
+    assert {d.id for d in hits} == {"p1", "p3"}
+    assert store.count(base, filters=[("tags", "array_contains", "persona")]) == 2
+
+
 def test_query_offset_and_count(store, uid):
     base = f"users/{uid}/people"
     for i in range(5):

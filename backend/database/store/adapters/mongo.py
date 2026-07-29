@@ -270,7 +270,12 @@ class MongoDocumentStore:
     def _filter(collection: str, filters: Optional[Iterable[Filter]]) -> Dict[str, Any]:
         mongo_filter: Dict[str, Any] = {"_parent": collection}
         for field, op, value in filters or ():
-            mongo_filter.setdefault("d." + field, {})[_OP[op]] = value
+            if op == "array_contains":
+                # Mongo matches an array field against a scalar by membership: {field: value}
+                # selects docs whose array field contains value (mirrors Firestore array_contains).
+                mongo_filter["d." + field] = value
+            else:
+                mongo_filter.setdefault("d." + field, {})[_OP[op]] = value
         return mongo_filter
 
     def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int:

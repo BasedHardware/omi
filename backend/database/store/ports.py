@@ -6,7 +6,8 @@ depends only on this Protocol, never on a concrete backend. Addressing is by log
 snapshots cross this boundary.
 
 Query filters are neutral ``(field, op, value)`` tuples with ``op`` in {"==", "in", "<", "<=",
-">", ">="}. Field transforms use the neutral sentinels in ``database.store.sentinels``.
+">", ">=", "array_contains"}. ``array_contains`` matches documents whose array-valued ``field``
+contains ``value``. Field transforms use the neutral sentinels in ``database.store.sentinels``.
 """
 
 from __future__ import annotations
