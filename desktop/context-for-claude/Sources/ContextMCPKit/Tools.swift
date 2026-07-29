@@ -1265,10 +1265,15 @@ extension Tools {
     /// captured, was returned, and went unread. A shorter answer that arrives beats a complete one
     /// that does not.
     ///
-    /// Claude Code's default budget is 25,000 tokens (`MAX_MCP_OUTPUT_TOKENS`). Timestamped
-    /// markdown of this shape measured about 2.7 characters per token in the result that failed,
-    /// and denser content — numbers, punctuation, non-Latin scripts — runs nearer 2.0. So 40,000
-    /// characters is ~15,000 tokens at the observed ratio and still ~20,000 at the pessimistic one.
+    /// The gate that fires is a *character* count, not a token estimate — worth stating because the
+    /// obvious guess is wrong. Claude Code decides with a plain `.length` comparison against
+    /// `min(tool.maxResultSizeChars, 50_000)`, inclusive, and MCP tools carry `maxResultSizeChars`
+    /// of 100,000, so the real limit is 50,000 characters. The separate 25,000-token
+    /// `MAX_MCP_OUTPUT_TOKENS` gate runs first but did not fire on the failing result: at 4
+    /// characters per token it would have needed text denser than 2.68 chars/token to trip.
+    ///
+    /// 40,000 leaves a fifth of the budget spare, for the day a client ships a smaller cap or a
+    /// caller's own wrapper adds to the payload.
     static let maxToolResultCharacters = 40_000
 
     /// Roughly 1500 rendered lines, whichever of the two limits bites first.
