@@ -85,9 +85,7 @@ def _storage_client():
             credentials = service_account.Credentials.from_service_account_info(info)
             _client = storage.Client(credentials=credentials)
         else:
-            project = (
-                os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT_ID") or ""
-            ).strip()
+            project = (os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT_ID") or "").strip()
             _client = storage.Client(project=project) if project else storage.Client()
         return _client
 
