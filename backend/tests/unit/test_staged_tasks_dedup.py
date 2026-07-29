@@ -53,27 +53,15 @@ def test_normalize_handles_none_and_empty():
 
 
 def _make_doc(doc_id, data):
-    doc = MagicMock()
-    doc.id = doc_id
-    doc.to_dict.return_value = data
-    return doc
+    return (doc_id, data)
 
 
 def _stub_action_items_query(monkeypatch, docs):
-    """Stub db.collection(...).document(uid).collection(action_items).where(...).stream() to yield docs."""
-    fake_query = MagicMock()
-    fake_query.stream.return_value = iter(docs)
-
-    fake_subcol = MagicMock()
-    fake_subcol.where.return_value = fake_query
-
-    fake_user_doc = MagicMock()
-    fake_user_doc.collection.return_value = fake_subcol
-
-    fake_users = MagicMock()
-    fake_users.document.return_value = fake_user_doc
-
-    monkeypatch.setattr(action_items_db, 'db', MagicMock(collection=MagicMock(return_value=fake_users)))
+    """Seed the active-action-items collection through the ``_store()`` seam."""
+    store = FakeDocumentStore()
+    for doc_id, data in docs:
+        store._docs[f'users/uid/action_items/{doc_id}'] = dict(data)
+    monkeypatch.setattr(action_items_db, '_store', lambda: store)
 
 
 def test_returns_none_when_no_active_items(monkeypatch):

@@ -11,6 +11,7 @@ import database.task_recommendations as task_recommendations_db
 import routers.task_recommendations as task_recommendations_router
 from database.firestore_index_registry import ACTIVE_ATTENTION_OVERRIDE_QUERY, firebase_index_manifest
 from scripts import firestore_query_coverage, generate_firestore_indexes
+from tests.store_fakes import FakeDocumentStore
 
 
 class _RecordingQuery:
@@ -20,61 +21,6 @@ class _RecordingQuery:
     def where(self, *, filter):
         self.filters.append((filter.field_path, filter.op_string, filter.value))
         return self
-
-
-class _OverrideSnapshot:
-    def __init__(self, payload):
-        self._payload = payload
-
-    def to_dict(self):
-        return dict(self._payload)
-
-
-class _OverrideCollection:
-    def __init__(self, rows, filters=()):
-        self.rows = rows
-        self.filters = filters
-
-    def where(self, *, filter):
-        return _OverrideCollection(self.rows, (*self.filters, (filter.field_path, filter.op_string, filter.value)))
-
-    def stream(self):
-        def matches(payload):
-            for field, operator, expected in self.filters:
-                actual = payload.get(field)
-                if operator == '==' and actual != expected:
-                    return False
-                if operator == '>' and not (actual is not None and actual > expected):
-                    return False
-            return True
-
-        return [_OverrideSnapshot(payload) for payload in self.rows if matches(payload)]
-
-
-class _OverrideUserRef:
-    def __init__(self, rows):
-        self.rows = rows
-
-    def collection(self, name):
-        assert name == 'task_attention_overrides'
-        return _OverrideCollection(self.rows)
-
-
-class _OverrideUsersCollection:
-    def __init__(self, rows):
-        self.rows = rows
-
-    def document(self, _uid):
-        return _OverrideUserRef(self.rows)
-
-
-class _OverrideFirestore:
-    def __init__(self, rows):
-        self.rows = rows
-
-    def collection(self, name):
-        assert name == 'users'
-        return _OverrideUsersCollection(self.rows)
 
 
 def test_registered_attention_override_query_builds_the_real_filter_chain():
@@ -93,13 +39,16 @@ def test_registered_attention_override_query_builds_the_real_filter_chain():
 
 def test_what_matters_now_route_executes_the_registered_attention_override_query(monkeypatch):
     now = datetime(2026, 7, 14, tzinfo=timezone.utc)
-    database = _OverrideFirestore(
+    store = FakeDocumentStore()
+    for index, row in enumerate(
         [
             {'dedupe_key': 'active', 'account_generation': 3, 'expires_at': now + timedelta(minutes=1)},
             {'dedupe_key': 'expired', 'account_generation': 3, 'expires_at': now - timedelta(minutes=1)},
             {'dedupe_key': 'prior-generation', 'account_generation': 2, 'expires_at': now + timedelta(minutes=1)},
         ]
-    )
+    ):
+        store.set(f'users/smoke-user/{task_recommendations_db.ATTENTION_OVERRIDES_COLLECTION}/o{index}', row)
+    monkeypatch.setattr(task_recommendations_db, '_store', lambda: store)
     sentinel_projection = object()
     monkeypatch.setattr(
         task_recommendations_router,
@@ -115,7 +64,6 @@ def test_what_matters_now_route_executes_the_registered_attention_override_query
             uid,
             now=now,
             account_generation=account_generation,
-            firestore_client=database,
         ) == {'active'}
         return sentinel_projection
 

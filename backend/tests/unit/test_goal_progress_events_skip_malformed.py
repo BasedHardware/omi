@@ -38,22 +38,27 @@ def _a_validation_error() -> ValidationError:
 def _snapshot(doc):
     snap = MagicMock()
     snap.id = doc.get('id')
+    snap.exists = True
     snap.to_dict.return_value = doc
     return snap
 
 
-def _fake_client(snapshots):
-    fake = MagicMock()
-    for attr in ('collection', 'document', 'order_by', 'limit', 'where'):
-        getattr(fake, attr).return_value = fake
-    fake.stream.return_value = snapshots
-    return fake
+class _FakeStore:
+    """Neutral store stub whose query() returns exactly the ordered snapshots under test.
+
+    list_goal_progress_events reads the events collection through ``_store().query(...)`` and hands
+    the results to the shared read boundary; the test controls that ordered result directly.
+    """
+
+    def __init__(self, snapshots):
+        self._snapshots = list(snapshots)
+
+    def query(self, collection, **kwargs):
+        return list(self._snapshots)
 
 
-@pytest.fixture(autouse=True)
-def _direct_snapshot_dict(monkeypatch):
-    # Bypass the real _snapshot_dict decode; the test controls the dicts directly.
-    monkeypatch.setattr(goals, '_snapshot_dict', lambda snap: snap.to_dict())
+def _bind_store(monkeypatch, snapshots):
+    monkeypatch.setattr(goals, '_store', lambda: _FakeStore(snapshots))
 
 
 def _stub_validate(monkeypatch):
@@ -69,8 +74,8 @@ def _stub_validate(monkeypatch):
 
 def test_list_goal_progress_events_skips_malformed(monkeypatch):
     _stub_validate(monkeypatch)
-    client = _fake_client([_snapshot({'id': 'e1'}), _snapshot({'id': 'bad', '_bad': True}), _snapshot({'id': 'e2'})])
-    result = goals.list_goal_progress_events('u1', 'g1', firestore_client=client)
+    _bind_store(monkeypatch, [_snapshot({'id': 'e1'}), _snapshot({'id': 'bad', '_bad': True}), _snapshot({'id': 'e2'})])
+    result = goals.list_goal_progress_events('u1', 'g1')
     assert result == [{'id': 'e1'}, {'id': 'e2'}]  # one malformed event must not 500 the detail page
 
 
@@ -80,6 +85,6 @@ def test_unexpected_error_is_not_swallowed(monkeypatch):
         raise RuntimeError('unexpected')
 
     monkeypatch.setattr(goals.GoalProgressEvent, 'model_validate', staticmethod(boom))
-    client = _fake_client([_snapshot({'id': 'e1'})])
+    _bind_store(monkeypatch, [_snapshot({'id': 'e1'})])
     with pytest.raises(RuntimeError):
-        goals.list_goal_progress_events('u1', 'g1', firestore_client=client)
+        goals.list_goal_progress_events('u1', 'g1')

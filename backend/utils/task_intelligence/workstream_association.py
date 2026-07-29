@@ -140,7 +140,7 @@ def associate_canonical_evidence(
 
     if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
         return finish(AssociationOutcome(outcome=AssociationOutcomeKind.not_canonical_cohort))
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
     if control.workflow_mode == TaskWorkflowMode.off:
         return finish(AssociationOutcome(outcome=AssociationOutcomeKind.workflow_disabled))
 
@@ -163,7 +163,6 @@ def associate_canonical_evidence(
             uid,
             workstream_id,
             account_generation=target_generation,
-            firestore_client=firestore_client,
         )
         if workstream is None or workstream.status != WorkstreamStatus.open:
             purge_stale(uid, workstream_id, account_generation=target_generation)
@@ -246,7 +245,6 @@ def associate_canonical_evidence(
         ),
         idempotency_key=_association_idempotency_key(evidence, judgment.workstream_id),
         account_generation=target_generation,
-        firestore_client=firestore_client,
         required_status=WorkstreamStatus.open,
     )
     return finish(
@@ -279,7 +277,7 @@ def consume_recurrence_signal(
             outcome=RecurrenceOutcomeKind.not_canonical_cohort,
             signal_id=signal.signal_id,
         )
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
     if control.account_generation != account_generation:
         raise recurrence_inbox_db.RecurrenceGenerationMismatchError('account generation mismatch')
     if control.workflow_mode == TaskWorkflowMode.off:
@@ -341,7 +339,7 @@ def persist_recurrence_signals_for_maintenance(
     enqueue: Callable[..., RecurrenceInboxReceipt] = recurrence_inbox_db.enqueue_recurrence_signal,
 ) -> int:
     """Durably hand off a consolidation batch before its memory watermark advances."""
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
     signal_list = list(signals)
     if control.workflow_mode == TaskWorkflowMode.shadow:
         return sum(
@@ -387,7 +385,7 @@ def drain_recurrence_inbox_for_maintenance(
     complete: Callable[..., None] = recurrence_inbox_db.complete_recurrence_receipt,
     retry: Callable[..., None] = recurrence_inbox_db.retry_recurrence_receipt,
 ) -> int:
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
     if control.workflow_mode in {TaskWorkflowMode.off, TaskWorkflowMode.shadow}:
         return 0
 
@@ -446,7 +444,7 @@ def consume_recurrence_signals_for_maintenance(
         firestore_client=firestore_client,
         enqueue=enqueue,
     )
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
     if control.workflow_mode == TaskWorkflowMode.shadow:
         return evaluated_or_persisted
     return drain_recurrence_inbox_for_maintenance(

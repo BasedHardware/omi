@@ -7,7 +7,6 @@ so an unexpected runtime error still surfaces instead of being hidden as a skip.
 """
 
 import os
-from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -18,29 +17,24 @@ os.environ.setdefault(
 )
 
 import database.candidates as candidates_db  # noqa: E402
+from tests.store_fakes import FakeDocumentStore  # noqa: E402
 
 
 class _Probe(BaseModel):
     x: int
 
 
-def _fake_candidates_db(stream):
-    fake_db = MagicMock()
-    q = fake_db.collection.return_value.document.return_value.collection.return_value
-    for method in ("where", "order_by", "offset", "limit"):
-        getattr(q, method).return_value = q
-    q.stream.return_value = stream
-    return fake_db
+def _store_with(monkeypatch, docs):
+    """Seed a FakeDocumentStore with candidate docs and route ``list_candidates`` through it."""
+    store = FakeDocumentStore()
+    for doc_id, data in docs:
+        store.set(f"users/u1/candidates/{doc_id}", data)
+    monkeypatch.setattr(candidates_db, "_store", lambda: store)
+    return store
 
 
 def test_list_candidates_skips_malformed_without_logging_private_input(monkeypatch, caplog):
     secret = "private launch description 8427"
-    good = MagicMock()
-    good.id = "good"
-    good.to_dict.return_value = {"ok": True}
-    bad = MagicMock()
-    bad.id = "bad"
-    bad.to_dict.return_value = {"bad": True, "description": secret, secret: "private-value"}
 
     def fake_validate(data):
         if data.get("bad"):
@@ -49,8 +43,14 @@ def test_list_candidates_skips_malformed_without_logging_private_input(monkeypat
 
     monkeypatch.setattr(candidates_db.CandidateRecord, "model_validate", staticmethod(fake_validate))
 
-    with patch.object(candidates_db, "db", _fake_candidates_db([good, bad])):
-        result = candidates_db.list_candidates("u1")
+    _store_with(
+        monkeypatch,
+        [
+            ("good", {"ok": True}),
+            ("bad", {"bad": True, "description": secret, secret: "private-value"}),
+        ],
+    )
+    result = candidates_db.list_candidates("u1")
 
     assert result == [{"ok": True}]  # malformed candidate skipped, good one kept
     assert "bad" in caplog.text
@@ -60,15 +60,11 @@ def test_list_candidates_skips_malformed_without_logging_private_input(monkeypat
 
 def test_list_candidates_does_not_swallow_unexpected_error(monkeypatch):
     # An unexpected (non-validation) error must propagate, not be hidden as a skipped candidate.
-    good = MagicMock()
-    good.id = "x"
-    good.to_dict.return_value = {"ok": True}
-
     def boom(_data):
         raise RuntimeError("unexpected parsing failure")
 
     monkeypatch.setattr(candidates_db.CandidateRecord, "model_validate", staticmethod(boom))
 
-    with patch.object(candidates_db, "db", _fake_candidates_db([good])):
-        with pytest.raises(RuntimeError):
-            candidates_db.list_candidates("u1")
+    _store_with(monkeypatch, [("x", {"ok": True})])
+    with pytest.raises(RuntimeError):
+        candidates_db.list_candidates("u1")

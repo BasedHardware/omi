@@ -1,10 +1,10 @@
 """database.workstreams list endpoints skip a malformed doc instead of 500ing the whole page.
 
-list_artifact_descriptors and list_continuation_checkpoints validated each Firestore doc with no
+list_artifact_descriptors and list_continuation_checkpoints validated each stored doc with no
 try/except, so one malformed/legacy doc raised ValidationError and 500'd the whole list
 (GET /v1/workstreams/{id}/artifacts and /checkpoints). This mirrors the skip-malformed guard the
-sibling list endpoints already carry. database.workstreams is light (firestore_client injectable),
-so the test drives it directly with a fake client.
+sibling list endpoints already carry. database.workstreams reads through the storage port, so the
+test drives it directly with a fake ``_store()`` that returns the seeded documents.
 
 The same gap existed in the get_goal_detail / get_workstream_detail tasks loops (per-item
 ActionItemResponse.model_validate with no guard -> 500 on GET /v1/goals/{id}/detail and
@@ -46,12 +46,18 @@ def _snapshot(doc):
     return snap
 
 
-def _fake_client(snapshots):
-    fake = MagicMock()
-    for attr in ('collection', 'document', 'order_by', 'limit', 'where'):
-        getattr(fake, attr).return_value = fake
-    fake.stream.return_value = snapshots
-    return fake
+class _FakeStore:
+    """Minimal storage-port stand-in: ``query`` returns the seeded snapshots, ``get`` the one doc."""
+
+    def __init__(self, snapshots=None, *, get_result=None):
+        self._snapshots = list(snapshots or [])
+        self._get_result = get_result
+
+    def query(self, collection, **kwargs):
+        return list(self._snapshots)
+
+    def get(self, path, **kwargs):
+        return self._get_result
 
 
 @pytest.fixture(autouse=True)
@@ -73,15 +79,17 @@ def _stub_validate(monkeypatch, model_name):
 
 def test_list_artifact_descriptors_skips_malformed(monkeypatch):
     _stub_validate(monkeypatch, 'ArtifactDescriptor')
-    client = _fake_client([_snapshot({'id': 'a1'}), _snapshot({'id': 'bad', '_bad': True}), _snapshot({'id': 'a2'})])
-    result = ws.list_artifact_descriptors('u1', 'w1', firestore_client=client)
+    snapshots = [_snapshot({'id': 'a1'}), _snapshot({'id': 'bad', '_bad': True}), _snapshot({'id': 'a2'})]
+    monkeypatch.setattr(ws, '_store', lambda: _FakeStore(snapshots))
+    result = ws.list_artifact_descriptors('u1', 'w1')
     assert result == [{'id': 'a1'}, {'id': 'a2'}]
 
 
 def test_list_continuation_checkpoints_skips_malformed(monkeypatch):
     _stub_validate(monkeypatch, 'ContinuationCheckpoint')
-    client = _fake_client([_snapshot({'id': 'c1'}), _snapshot({'id': 'bad', '_bad': True})])
-    result = ws.list_continuation_checkpoints('u1', 'w1', firestore_client=client)
+    snapshots = [_snapshot({'id': 'c1'}), _snapshot({'id': 'bad', '_bad': True})]
+    monkeypatch.setattr(ws, '_store', lambda: _FakeStore(snapshots))
+    result = ws.list_continuation_checkpoints('u1', 'w1')
     assert result == [{'id': 'c1'}]
 
 
@@ -91,9 +99,9 @@ def test_unexpected_error_is_not_swallowed(monkeypatch):
         raise RuntimeError('unexpected')
 
     monkeypatch.setattr(ws.ArtifactDescriptor, 'model_validate', staticmethod(boom))
-    client = _fake_client([_snapshot({'id': 'a1'})])
+    monkeypatch.setattr(ws, '_store', lambda: _FakeStore([_snapshot({'id': 'a1'})]))
     with pytest.raises(RuntimeError):
-        ws.list_artifact_descriptors('u1', 'w1', firestore_client=client)
+        ws.list_artifact_descriptors('u1', 'w1')
 
 
 def test_task_responses_from_snapshots_skips_malformed(monkeypatch):
@@ -124,11 +132,10 @@ def test_workstream_presentation_read_skips_malformed_snapshot(monkeypatch):
     _stub_validate(monkeypatch, 'Workstream')
     snapshot = _snapshot({'id': 'bad', '_bad': True})
     snapshot.exists = True
-    client = _fake_client([])
-    client.get.return_value = snapshot
+    monkeypatch.setattr(ws, '_store', lambda: _FakeStore(get_result=snapshot))
 
     with patch('database.read_boundary.record_fallback') as fallback:
-        result = ws.get_workstream('u1', 'bad', firestore_client=client)
+        result = ws.get_workstream('u1', 'bad')
 
     assert result is None
     fallback.assert_called_once()

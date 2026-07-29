@@ -908,33 +908,47 @@ class TestLlmUsageBucketParam:
 
 
 # ===========================================================================
-# 3. SCORE COMPUTATION TESTS (mock Firestore)
+# 3. SCORE COMPUTATION TESTS (storage port)
 # ===========================================================================
+
+from types import SimpleNamespace  # noqa: E402
+
+
+class _ScriptedScoreStore:
+    """Minimal DocumentStore stand-in for get_daily_score / get_scores.
+
+    Dispatches each ``query`` by the field it filters on — ``due_at`` (daily window),
+    ``created_at`` (weekly window), or no filter (overall) — to a scripted list of task dicts,
+    and records the filters so a test can assert which field/bounds the score query used.
+    """
+
+    def __init__(self, *, daily=None, weekly=None, overall=None):
+        self.daily = list(daily or [])
+        self.weekly = list(weekly or [])
+        self.overall = list(overall or [])
+        self.filters = []
+
+    def query(self, collection, *, filters=None, **kwargs):
+        filters = list(filters or [])
+        self.filters.extend(filters)
+        fields = {field for field, _op, _value in filters}
+        if 'due_at' in fields:
+            rows = self.daily
+        elif 'created_at' in fields:
+            rows = self.weekly
+        else:
+            rows = self.overall
+        return [SimpleNamespace(id=row.get('id', 'doc-1'), to_dict=(lambda row=row: dict(row))) for row in rows]
 
 
 class TestDailyScoreWireCompat:
     """Verify daily-score returns Swift DailyScore-compatible fields."""
 
-    def _make_mock_doc(self, data):
-        doc = MagicMock()
-        doc.to_dict.return_value = data
-        doc.id = data.get('id', 'doc-1')
-        return doc
-
-    def test_daily_score_uses_completed_tasks_and_total_tasks(self):
+    def test_daily_score_uses_completed_tasks_and_total_tasks(self, monkeypatch):
         """get_daily_score returns completed_tasks/total_tasks, not completed/total."""
-        mock_col = MagicMock()
-        mock_query = MagicMock()
-        mock_query.where.return_value = mock_query
-        mock_query.stream.return_value = [
-            self._make_mock_doc({'completed': True}),
-            self._make_mock_doc({'completed': False}),
-        ]
-        mock_col.where.return_value = mock_query
-
-        with patch.object(action_items_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_daily_score('test-uid', date='2025-01-15')
+        store = _ScriptedScoreStore(daily=[{'completed': True}, {'completed': False}])
+        monkeypatch.setattr(action_items_db, '_store', lambda: store)
+        result = action_items_db.get_daily_score('test-uid', date='2025-01-15')
 
         assert 'completed_tasks' in result, f"Expected completed_tasks, got keys: {result.keys()}"
         assert 'total_tasks' in result, f"Expected total_tasks, got keys: {result.keys()}"
@@ -949,59 +963,21 @@ class TestDailyScoreWireCompat:
 class TestScoreComputation:
     """Verify score computation logic."""
 
-    def _make_mock_doc(self, data):
-        doc = MagicMock()
-        doc.to_dict.return_value = data
-        doc.id = data.get('id', 'doc-1')
-        return doc
-
-    def test_weekly_uses_created_at_not_due_at(self):
+    def test_weekly_uses_created_at_not_due_at(self, monkeypatch):
         """get_scores weekly query uses created_at field, not due_at."""
-        mock_col = MagicMock()
+        store = _ScriptedScoreStore(
+            daily=[],
+            weekly=[{'completed': True, 'created_at': datetime.now(timezone.utc)}],
+            overall=[{'completed': True}],
+        )
+        monkeypatch.setattr(action_items_db, '_store', lambda: store)
+        action_items_db.get_scores('test-uid', date='2025-01-15')
 
-        # Daily query (due_at) returns empty
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = []
+        captured_fields = [field for field, _op, _value in store.filters]
+        # Verify created_at was used in filter calls (for the weekly window).
+        assert 'created_at' in captured_fields, f"Expected created_at in filters, got: {captured_fields}"
 
-        # Weekly query (created_at) returns 1 completed task
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_doc = self._make_mock_doc({'completed': True, 'created_at': datetime.now(timezone.utc)})
-        weekly_query.stream.return_value = [weekly_doc]
-
-        # Overall stream returns same
-        mock_col.stream.return_value = [weekly_doc]
-
-        # Track which field filters are created
-        captured_filters = []
-        original_ff = action_items_db.FieldFilter
-
-        def tracking_filter(field, op, value):
-            captured_filters.append(field)
-            return original_ff(field, op, value)
-
-        call_count = [0]
-
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
-            else:
-                return weekly_query
-
-        mock_col.where = col_where
-
-        with patch.object(action_items_db, 'db') as patched_db, patch.object(
-            action_items_db, 'FieldFilter', side_effect=tracking_filter
-        ):
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
-
-        # Verify created_at was used in filter calls (for weekly query)
-        assert 'created_at' in captured_filters, f"Expected created_at in filters, got: {captured_filters}"
-
-    def test_weekly_window_spans_seven_days_ending_on_date(self):
+    def test_weekly_window_spans_seven_days_ending_on_date(self, monkeypatch):
         """The weekly window is the 7 days ending on `date`, i.e. [date-6, date+1).
 
         Regression: it was [date-7, date+1) — 8 calendar days — which over-counted
@@ -1010,144 +986,49 @@ class TestScoreComputation:
         """
         from datetime import timedelta
 
-        mock_col = MagicMock()
-        empty = MagicMock()
-        empty.where.return_value = empty
-        empty.stream.return_value = []
-        mock_col.where.return_value = empty
-        mock_col.stream.return_value = []
-
-        captured = []  # (field, op, value)
-        original_ff = action_items_db.FieldFilter
-
-        def tracking_filter(field, op, value):
-            captured.append((field, op, value))
-            return original_ff(field, op, value)
-
-        with patch.object(action_items_db, 'db') as patched_db, patch.object(
-            action_items_db, 'FieldFilter', side_effect=tracking_filter
-        ):
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            action_items_db.get_scores('test-uid', date='2026-07-19')
+        store = _ScriptedScoreStore()
+        monkeypatch.setattr(action_items_db, '_store', lambda: store)
+        action_items_db.get_scores('test-uid', date='2026-07-19')
 
         day = datetime(2026, 7, 19, tzinfo=timezone.utc)
-        created_at_lower = [v for (f, op, v) in captured if f == 'created_at' and op == '>=']
-        assert created_at_lower, f"no created_at >= filter captured: {captured}"
+        created_at_lower = [value for (field, op, value) in store.filters if field == 'created_at' and op == '>=']
+        assert created_at_lower, f"no created_at >= filter captured: {store.filters}"
         # 7 days ending on 2026-07-19 -> lower bound is 2026-07-13 (day-6), not 2026-07-12 (day-7).
         assert created_at_lower[0] == day - timedelta(days=6), created_at_lower[0]
 
-    def test_default_tab_daily_when_highest(self):
+    def test_default_tab_daily_when_highest(self, monkeypatch):
         """default_tab is 'daily' when daily has tasks and highest score."""
-        mock_col = MagicMock()
-
-        # Daily: 2/2 completed = 100%
-        daily_docs = [
-            self._make_mock_doc({'completed': True}),
-            self._make_mock_doc({'completed': True}),
-        ]
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = daily_docs
-
-        # Weekly: 1/2 = 50%
-        weekly_docs = [
-            self._make_mock_doc({'completed': True}),
-            self._make_mock_doc({'completed': False}),
-        ]
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_query.stream.return_value = weekly_docs
-
-        # Overall: same as weekly
-        mock_col.stream.return_value = weekly_docs
-
-        call_count = [0]
-
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
-            else:
-                return weekly_query
-
-        mock_col.where = col_where
-
-        with patch.object(action_items_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        store = _ScriptedScoreStore(
+            daily=[{'completed': True}, {'completed': True}],  # 2/2 = 100%
+            weekly=[{'completed': True}, {'completed': False}],  # 1/2 = 50%
+            overall=[{'completed': True}, {'completed': False}],  # 1/2 = 50%
+        )
+        monkeypatch.setattr(action_items_db, '_store', lambda: store)
+        result = action_items_db.get_scores('test-uid', date='2025-01-15')
 
         assert result['default_tab'] == 'daily'
 
-    def test_default_tab_weekly_when_no_daily_tasks(self):
+    def test_default_tab_weekly_when_no_daily_tasks(self, monkeypatch):
         """default_tab is 'weekly' when daily has no tasks."""
-        mock_col = MagicMock()
-
-        # Daily: 0 tasks
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = []
-
-        # Weekly: 1/1 = 100%
-        weekly_doc = self._make_mock_doc({'completed': True})
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_query.stream.return_value = [weekly_doc]
-
-        # Overall: 1/2 = 50%
-        overall_docs = [
-            self._make_mock_doc({'completed': True}),
-            self._make_mock_doc({'completed': False}),
-        ]
-        mock_col.stream.return_value = overall_docs
-
-        call_count = [0]
-
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
-            else:
-                return weekly_query
-
-        mock_col.where = col_where
-
-        with patch.object(action_items_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        store = _ScriptedScoreStore(
+            daily=[],  # 0 tasks
+            weekly=[{'completed': True}],  # 1/1 = 100%
+            overall=[{'completed': True}, {'completed': False}],  # 1/2 = 50%
+        )
+        monkeypatch.setattr(action_items_db, '_store', lambda: store)
+        result = action_items_db.get_scores('test-uid', date='2025-01-15')
 
         assert result['default_tab'] == 'weekly'
 
-    def test_default_tab_overall_when_lowest_weekly(self):
+    def test_default_tab_overall_when_lowest_weekly(self, monkeypatch):
         """default_tab is 'overall' when overall score exceeds weekly."""
-        mock_col = MagicMock()
-
-        # Daily: 0 tasks
-        daily_query = MagicMock()
-        daily_query.where.return_value = daily_query
-        daily_query.stream.return_value = []
-
-        # Weekly: 0/1 = 0%
-        weekly_query = MagicMock()
-        weekly_query.where.return_value = weekly_query
-        weekly_query.stream.return_value = [self._make_mock_doc({'completed': False})]
-
-        # Overall: 1/1 = 100%
-        mock_col.stream.return_value = [self._make_mock_doc({'completed': True})]
-
-        call_count = [0]
-
-        def col_where(**kwargs):
-            call_count[0] += 1
-            if call_count[0] <= 1:
-                return daily_query
-            else:
-                return weekly_query
-
-        mock_col.where = col_where
-
-        with patch.object(action_items_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = action_items_db.get_scores('test-uid', date='2025-01-15')
+        store = _ScriptedScoreStore(
+            daily=[],  # 0 tasks
+            weekly=[{'completed': False}],  # 0/1 = 0%
+            overall=[{'completed': True}],  # 1/1 = 100%
+        )
+        monkeypatch.setattr(action_items_db, '_store', lambda: store)
+        result = action_items_db.get_scores('test-uid', date='2025-01-15')
 
         assert result['default_tab'] == 'overall'
 

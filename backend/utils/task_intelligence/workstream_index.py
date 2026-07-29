@@ -27,12 +27,11 @@ def refresh_workstream_association_index(
     if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
         return False
     try:
-        control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+        control = workstreams_db.get_task_workflow_control(uid)
         workstream = hydrate(
             uid,
             workstream_id,
             account_generation=control.account_generation,
-            firestore_client=firestore_client,
         )
         if workstream is None or workstream.status != WorkstreamStatus.open:
             return delete_index(uid, workstream_id, account_generation=control.account_generation)
@@ -64,13 +63,12 @@ def rebuild_workstream_association_index(
 ) -> WorkstreamIndexRebuildReport:
     if resolve_memory_system(uid, db_client=firestore_client) != MemorySystem.CANONICAL:
         return WorkstreamIndexRebuildReport(uid=uid, source_count=0, indexed_count=0)
-    control = workstreams_db.get_task_workflow_control(uid, firestore_client=firestore_client)
+    control = workstreams_db.get_task_workflow_control(uid)
     workstreams = [
         item
         for item in list_source(
             uid,
             account_generation=control.account_generation,
-            firestore_client=firestore_client,
         )
         if item.status == WorkstreamStatus.open
     ]

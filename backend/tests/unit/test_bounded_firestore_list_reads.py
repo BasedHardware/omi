@@ -1,4 +1,4 @@
-"""Bounded Firestore list reads for prod GET 504s (action-items / memories / KG).
+"""Bounded list reads for prod GET 504s (action-items / memories / KG).
 
 Regression coverage for Closes #10746: list paths must not full-collection stream.
 """
@@ -6,11 +6,12 @@ Regression coverage for Closes #10746: list paths must not full-collection strea
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch
+from typing import Any, Dict, Optional
+from unittest.mock import patch
 
 import pytest
+
+from tests.store_fakes import FakeDocumentStore
 
 
 def _item(
@@ -38,66 +39,9 @@ def _item(
     }
 
 
-class _FakeDoc:
-    def __init__(self, data: Dict[str, Any]):
-        self.id = data['id']
-        self._data = {k: v for k, v in data.items() if k != 'id'}
-
-    def to_dict(self):
-        return dict(self._data)
-
-
-class _FakeQuery:
-    def __init__(self, docs: List[_FakeDoc], filters: Optional[List] = None):
-        self._docs = docs
-        self._filters = list(filters or [])
-        self._limit = None
-
-    def where(self, *args, **kwargs):
-        filt = kwargs.get('filter') or (args[0] if args else None)
-        return _FakeQuery(self._docs, self._filters + [filt])
-
-    def order_by(self, *args, **kwargs):
-        return self
-
-    def limit(self, n: int):
-        q = _FakeQuery(self._docs, self._filters)
-        q._limit = n
-        return q
-
-    def stream(self):
-        docs = self._docs
-        for filt in self._filters:
-            # FieldFilter duck: .field_path / .op_string / .value
-            field = getattr(filt, 'field_path', None) or getattr(filt, 'field', None)
-            op = getattr(filt, 'op_string', None) or getattr(filt, 'op', '==')
-            value = getattr(filt, 'value', None)
-            if field == 'completed' and op == '==':
-                docs = [d for d in docs if bool(d._data.get('completed')) is bool(value)]
-            elif field == 'conversation_id' and op == '==':
-                docs = [d for d in docs if d._data.get('conversation_id') == value]
-        if self._limit is not None:
-            docs = docs[: self._limit]
-        # yield copies so callers can mutate safely
-        for d in docs:
-            yield _FakeDoc({'id': d.id, **d._data})
-
-
-class _FakeCollection:
-    def __init__(self, docs: List[_FakeDoc]):
-        self._docs = docs
-
-    def document(self, uid: str):
-        return SimpleNamespace(collection=lambda name: _FakeQuery(self._docs))
-
-
-class _FakeDB:
-    def __init__(self, docs: List[_FakeDoc]):
-        self._coll = _FakeCollection(docs)
-
-    def collection(self, name: str):
-        assert name == 'users'
-        return self._coll
+def _seed(store: FakeDocumentStore, uid: str, items) -> None:
+    for item in items:
+        store._docs[f'users/{uid}/action_items/{item["id"]}'] = {k: v for k, v in item.items() if k != 'id'}
 
 
 @pytest.fixture
@@ -114,31 +58,22 @@ def ai_mod(monkeypatch):
     return ai, recorded, metrics
 
 
+def _bind_store(ai, monkeypatch) -> FakeDocumentStore:
+    store = FakeDocumentStore()
+    monkeypatch.setattr(ai, '_store', lambda: store)
+    return store
+
+
 def test_get_action_items_active_first_without_full_scan(ai_mod, monkeypatch):
     ai, recorded, metrics = ai_mod
+    store = _bind_store(ai, monkeypatch)
     # Many completed docs first in storage order; actives must still lead the page.
-    docs = []
+    items = []
     for i in range(300):
-        docs.append(
-            _FakeDoc(
-                _item(
-                    f'c{i}',
-                    completed=True,
-                    created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-                )
-            )
-        )
+        items.append(_item(f'c{i}', completed=True, created_at=datetime(2026, 1, 2, tzinfo=timezone.utc)))
     for i in range(5):
-        docs.append(
-            _FakeDoc(
-                _item(
-                    f'a{i}',
-                    completed=False,
-                    created_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
-                )
-            )
-        )
-    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+        items.append(_item(f'a{i}', completed=False, created_at=datetime(2026, 1, 3, tzinfo=timezone.utc)))
+    _seed(store, 'uid', items)
 
     page = ai.get_action_items('uid', limit=10, offset=0)
     assert [x['id'] for x in page[:5]] == ['a0', 'a1', 'a2', 'a3', 'a4']
@@ -153,8 +88,8 @@ def test_get_action_items_active_first_without_full_scan(ai_mod, monkeypatch):
 
 def test_get_action_items_hard_caps_document_iteration(ai_mod, monkeypatch):
     ai, recorded, metrics = ai_mod
-    docs = [_FakeDoc(_item(f'x{i}', completed=False)) for i in range(5000)]
-    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+    store = _bind_store(ai, monkeypatch)
+    _seed(store, 'uid', [_item(f'x{i}', completed=False) for i in range(5000)])
 
     page = ai.get_action_items('uid', limit=50, offset=0)
     assert len(page) == 50
@@ -164,12 +99,16 @@ def test_get_action_items_hard_caps_document_iteration(ai_mod, monkeypatch):
 
 def test_get_action_items_skips_deleted_in_active_bucket(ai_mod, monkeypatch):
     ai, recorded, metrics = ai_mod
-    docs = [
-        _FakeDoc(_item('del1', completed=False, deleted=True)),
-        _FakeDoc(_item('a1', completed=False)),
-        _FakeDoc(_item('c1', completed=True)),
-    ]
-    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+    store = _bind_store(ai, monkeypatch)
+    _seed(
+        store,
+        'uid',
+        [
+            _item('del1', completed=False, deleted=True),
+            _item('a1', completed=False),
+            _item('c1', completed=True),
+        ],
+    )
     page = ai.get_action_items('uid', limit=10, offset=0)
     ids = [x['id'] for x in page]
     assert 'del1' not in ids
