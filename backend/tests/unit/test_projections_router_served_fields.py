@@ -14,6 +14,7 @@ PERSISTED = {
     'imperative': 'The place you keep imagining is a decision, not a daydream.',
     'image_url': 'https://img/x.png',
     'image_path': 'uid-1/p1.png',
+    'cadence_key': '2026-07-28',
     'subject': 'the move',
     'stage': 'threshold',
     'projection': 'the crossing already made',

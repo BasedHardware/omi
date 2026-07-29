@@ -35,6 +35,10 @@ struct ProjectionPage: View {
       viewModel.ownerDidChange()
       Task { await viewModel.load() }
     }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) {
+      _ in
+      Task { await viewModel.refreshOnActivation() }
+    }
   }
 
   @ViewBuilder
@@ -120,6 +124,7 @@ final class ProjectionViewModel: ObservableObject {
   private let captureAuthorization: () -> RuntimeOwnerAuthorizationSnapshot?
   private let authorizationIsCurrent: (RuntimeOwnerAuthorizationSnapshot) -> Bool
   private var requestGeneration: UInt64 = 0
+  private var lastRefreshAt = Date.distantPast
 
   init(
     client: any ProjectionClient = APIClient.shared,
@@ -135,11 +140,12 @@ final class ProjectionViewModel: ObservableObject {
     self.authorizationIsCurrent = authorizationIsCurrent
   }
 
-  func load() async {
+  func load(now: Date = Date()) async {
     guard let authorization = captureAuthorization() else {
       clearOwnerState()
       return
     }
+    lastRefreshAt = now
     let request = beginRequest()
     isLoading = true
     defer {
@@ -161,6 +167,15 @@ final class ProjectionViewModel: ObservableObject {
       image = nil
       errorMessage = "Could not load projections: \(error.localizedDescription)"
     }
+  }
+
+  func refreshOnActivation(now: Date = Date()) async {
+    guard
+      PollingConfig.shouldAllowActivationRefresh(
+        now: now,
+        lastRefresh: lastRefreshAt)
+    else { return }
+    await load(now: now)
   }
 
   func generate() async {
@@ -259,5 +274,6 @@ final class ProjectionViewModel: ObservableObject {
     isImageLoading = false
     imageLoadFailed = false
     errorMessage = nil
+    lastRefreshAt = .distantPast
   }
 }

@@ -5,6 +5,7 @@ user-profile router, and its routes were pushing that file past the product line
 The response models live here too, so the app-client contract has one owner.
 """
 
+import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -20,6 +21,19 @@ from utils.projections import NoProjectionSubject, generate_projection, local_pr
 from utils.projections import storage as projection_storage
 
 router = APIRouter()
+
+
+def _manual_generation_enabled() -> bool:
+    """Keep the on-demand route available for local/demo builds, never production."""
+    stage = (os.getenv('OMI_ENV_STAGE') or os.getenv('ENVIRONMENT') or os.getenv('APP_ENV') or '').strip().lower()
+    if stage in {'prod', 'production'}:
+        return False
+    return not (os.getenv('K_SERVICE') or os.getenv('KUBERNETES_SERVICE_HOST')) or stage in {
+        'dev',
+        'development',
+        'local',
+        'test',
+    }
 
 
 class ProjectionGeneration(BaseModel):
@@ -51,7 +65,16 @@ class ProjectionsResponse(BaseModel):
 # of the user's own week — so a page of thirty projections would ship thirty copies of it.
 # The response model allows extra keys, so these have to be dropped explicitly rather than
 # relied on to be filtered by the schema.
-INTERNAL_PROJECTION_FIELDS = ('selection', 'projection', 'evidence', 'setting', 'tone', 'emotions', 'image_path')
+INTERNAL_PROJECTION_FIELDS = (
+    'selection',
+    'projection',
+    'evidence',
+    'setting',
+    'tone',
+    'emotions',
+    'image_path',
+    'cadence_key',
+)
 
 
 def _served(projection: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,6 +93,9 @@ def test_projection(uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, 
     was grounded in the captured evidence. Both are real outcomes rather than errors: an
     invented projection is the evidence-free artifact this surface exists to replace.
     """
+    if not _manual_generation_enabled():
+        raise HTTPException(status_code=404, detail='Projection generation is not available')
+
     try:
         projection = generate_projection(uid)
     except NoProjectionSubject as error:

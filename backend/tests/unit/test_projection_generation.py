@@ -120,6 +120,21 @@ def test_the_persisted_document_records_what_produced_it(stub_reads):
     assert projection['emotions']['vector']['fear'] == 3.4
 
 
+def test_scheduled_generation_uses_the_owned_id_and_records_its_cadence(stub_reads):
+    projection_id = '00000000-0000-0000-0000-000000000001'
+    with patch.object(generation_module, 'select_subject', return_value=SELECTION):
+        with patch.object(generation_module, '_generate_image', return_value=b'png'):
+            projection = generation_module.generate_projection(
+                'uid-1',
+                projection_id=projection_id,
+                cadence_key='2026-07-28',
+            )
+
+    assert projection['id'] == projection_id
+    assert projection['cadence_key'] == '2026-07-28'
+    assert projection['image_path'] == f'uid-1/{projection_id}.png'
+
+
 def test_a_refusal_does_not_generate_an_image(stub_reads):
     with patch.object(generation_module, 'select_subject', side_effect=NoProjectionSubject('nothing grounded')):
         with patch.object(generation_module, '_generate_image') as generate_image:

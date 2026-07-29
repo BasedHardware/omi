@@ -74,14 +74,19 @@ def _store_image(image_bytes: bytes, uid: str, projection_id: str) -> str:
     return projection_image_path(uid, projection_id)
 
 
-def generate_projection(uid: str) -> dict[str, Any]:
+def generate_projection(
+    uid: str,
+    *,
+    projection_id: str | None = None,
+    cadence_key: str | None = None,
+) -> dict[str, Any]:
     """Generate, store and return one projection document for `uid`.
 
     Raises `NoProjectionSubject` when there is nothing to project from, or when nothing the
     selector ranked was grounded in the evidence. The caller is responsible for persisting
     the returned document.
     """
-    projection_id = str(uuid.uuid4())
+    projection_id = projection_id or str(uuid.uuid4())
 
     packet = read_evidence(uid)
     previous = read_previous_projections(uid, MAX_PREVIOUS)
@@ -102,7 +107,7 @@ def generate_projection(uid: str) -> dict[str, Any]:
         selection.metadata['fell_through'],
     )
 
-    return {
+    projection = {
         'id': projection_id,
         'created_at': datetime.now(timezone.utc),
         'imperative': subject.imperative,
@@ -123,6 +128,9 @@ def generate_projection(uid: str) -> dict[str, Any]:
             'prompt': image_prompt,
         },
     }
+    if cadence_key:
+        projection['cadence_key'] = cadence_key
+    return projection
 
 
 def _generate_image(prompt: str) -> bytes:

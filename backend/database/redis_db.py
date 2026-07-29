@@ -841,7 +841,8 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # Lua script: atomic increment + TTL in a single round-trip.
 # Returns [current_count, ttl_remaining].  Sets TTL on first hit
 # and self-heals any key that lost its TTL (prevents permanent buckets).
-_RATE_LIMIT_LUA = r.register_script("""
+_RATE_LIMIT_LUA = r.register_script(
+    """
 local key = KEYS[1]
 local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
@@ -854,7 +855,8 @@ if ttl < 0 then
     ttl = window
 end
 return {current, ttl}
-""")
+"""
+)
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -883,7 +885,8 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
 # Burst uses a sorted set keyed by timestamp-ms for sliding-window accuracy,
 # trimmed on every call (O(log n)). Daily char counter auto-expires at midnight
 # UTC (caller passes seconds_until_midnight_utc as the TTL).
-_TTS_RATE_LIMIT_LUA = r.register_script("""
+_TTS_RATE_LIMIT_LUA = r.register_script(
+    """
 local burst_key = KEYS[1]
 local daily_key = KEYS[2]
 local now_ms = tonumber(ARGV[1])
@@ -911,7 +914,8 @@ if new_daily == char_count then
     redis.call('EXPIRE', daily_key, daily_ttl)
 end
 return {0, 0}
-""")
+"""
+)
 
 
 def _seconds_until_midnight_utc() -> int:
@@ -1073,6 +1077,12 @@ def get_chat_share(token: str) -> Optional[Dict[str, Any]]:
 def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:
     """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
     result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def try_acquire_projection_generation_lock(uid: str, cadence_key: str, ttl: int = 60 * 60 * 2) -> bool:
+    """Best-effort lock around one user's expensive scheduled projection generation."""
+    result = r.set(f'users:{uid}:projection_generation_lock:{cadence_key}', '1', ex=ttl, nx=True)
     return result is not None
 
 

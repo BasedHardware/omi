@@ -15,6 +15,10 @@ private final class ProjectionClientFake: ProjectionClient, @unchecked Sendable 
   var imageError: Error?
   var suspendList = false
 
+  var listCallCount: Int {
+    lock.withLock { requestedOwnerIDs.count }
+  }
+
   private(set) var requestedOwnerIDs: [String] = []
   private(set) var imageOwnerIDs: [String] = []
 
@@ -166,6 +170,21 @@ final class ProjectionPageTests: XCTestCase {
     XCTAssertNil(viewModel.projection)
     XCTAssertNil(viewModel.image)
     XCTAssertNil(viewModel.errorMessage)
+  }
+
+  func testActivationRefreshUsesSharedCooldown() async throws {
+    let fake = ProjectionClientFake()
+    let viewModel = ProjectionViewModel(client: fake)
+    let start = Date(timeIntervalSince1970: 1_000)
+
+    await viewModel.load(now: start)
+    await viewModel.refreshOnActivation(
+      now: start.addingTimeInterval(PollingConfig.activationCooldown - 1))
+    XCTAssertEqual(fake.listCallCount, 1)
+
+    await viewModel.refreshOnActivation(
+      now: start.addingTimeInterval(PollingConfig.activationCooldown))
+    XCTAssertEqual(fake.listCallCount, 2)
   }
 
   func testAPIClientAttachesFirebaseAuthorizationToImageRequest() async throws {
