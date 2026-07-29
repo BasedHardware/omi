@@ -147,10 +147,16 @@ public struct CaptureState: Codable, Sendable, Equatable {
         case readerIsStale(capturingSince: Double, heartbeatAgeSeconds: Double)
         /// No heartbeat at all, or a long-stale one: the app genuinely is not running here.
         case appNotRunning
+        /// A database is there and readable, but predates this binary's queries. The history is
+        /// intact and nothing is lost; the app simply has not relaunched since the update.
+        case databaseAwaitingUpgrade
     }
 
     /// Classifies an unopenable database. Call this before saying anything about emptiness.
     public static func diagnoseMissingDatabase() -> ReaderFault {
+        // Before the heartbeat, because this is the fault the heartbeat cannot see: capture can be
+        // running perfectly while this reader still cannot query what it writes.
+        if ContextStore.needsAppUpgrade() { return .databaseAwaitingUpgrade }
         guard let state = read() else { return .appNotRunning }
         let age = ContextTime.now - state.updatedAt
         guard !state.isStale else { return .appNotRunning }

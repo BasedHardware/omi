@@ -171,6 +171,13 @@ public enum Tools {
             \(subject) has not captured anything on this Mac yet — the app is not running here, so \
             there is no local speech, screen text, or activity history from the last few minutes.
             """
+        case .databaseAwaitingUpgrade:
+            return """
+            \(subject) was updated and its capture database has not been upgraded yet, so this \
+            reader cannot query it. **Nothing has been lost and the history is not empty** — do not \
+            tell the user their recordings are gone. Opening the Context for Claude app once \
+            performs the upgrade; it happens on launch, in under a second.
+            """
         }
     }
 

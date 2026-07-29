@@ -880,4 +880,44 @@ final class StoreTests: XCTestCase {
                 arguments: [term]) ?? 0
         }
     }
+
+    // MARK: - A database older than the binary reading it
+
+    /// The app owns migrations and the MCP reader opens read-only, so between an update and the
+    /// app's next launch the reader meets a schema older than its own queries. That window used to
+    /// surface as `SQLite error 1: no such column: speakerLabel` — returned not to a log but to the
+    /// model, as the *answer* to the user's question.
+    ///
+    /// Detected at open, as a named condition, so the one thing that fixes it can be said plainly.
+    func testAReaderRefusesADatabaseOlderThanItsOwnQueries() throws {
+        XCTAssertFalse(
+            ContextStore.needsAppUpgrade(at: fixture.databaseURL),
+            "a freshly migrated database was reported as needing an upgrade")
+
+        // Roll the ledger back to exactly what an older app would have left behind: those rows are
+        // what GRDB consults, and what `hasCompletedMigrations` reads.
+        try fixture.store.write { db in
+            try db.execute(
+                sql: "DELETE FROM grdb_migrations WHERE identifier IN (?, ?)",
+                arguments: ["v4-segment-speaker", "v5-cloud-segment-identity"])
+        }
+
+        XCTAssertTrue(
+            ContextStore.needsAppUpgrade(at: fixture.databaseURL),
+            "a database behind this binary was not recognised as needing the app to upgrade it")
+
+        XCTAssertThrowsError(try ContextStore(url: fixture.databaseURL, readOnly: true)) { error in
+            guard case ContextStoreError.awaitingAppUpgrade = error else {
+                return XCTFail("opened an unqueryable database instead of naming the reason: \(error)")
+            }
+        }
+    }
+
+    /// Absence and staleness are different faults with different remedies — only one of them is
+    /// fixed by launching the app — so the check must not answer "upgrade me" for a database that
+    /// is simply not there.
+    func testAMissingDatabaseIsNotReportedAsNeedingAnUpgrade() {
+        XCTAssertFalse(
+            ContextStore.needsAppUpgrade(at: fixture.root.appendingPathComponent("nothing-here.db")))
+    }
 }

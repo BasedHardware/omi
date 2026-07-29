@@ -29,7 +29,15 @@ private func openStore() -> ContextStore? {
             """)
         case .appNotRunning:
             note("no database yet — Context for Claude has not captured anything")
+        case .databaseAwaitingUpgrade:
+            note("database predates this binary — launch the Context for Claude app once to upgrade it")
         }
+        return nil
+    } catch ContextStoreError.awaitingAppUpgrade {
+        note("""
+        the capture database predates this binary and the app owns migrations, so every query would \
+        fail. Launch the Context for Claude app once — it upgrades on launch. No captured data is lost.
+        """)
         return nil
     } catch {
         note("could not open the database read-only: \(error)")

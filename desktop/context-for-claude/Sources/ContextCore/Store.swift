@@ -69,6 +69,13 @@ public final class ContextStore: @unchecked Sendable {
                 throw ContextStoreError.notInitialized
             }
             pool = try DatabasePool(path: url.path, configuration: Self.makeConfiguration(readOnly: true))
+            // Checked once, here, rather than met as `no such column: speakerLabel` from whichever
+            // query happened to run first. A raw SQLite string does not reach a log in this binary
+            // — it reaches the model as the *answer* to the user's question, and an answer that
+            // reads like a database fault teaches it to stop asking rather than to relaunch the app.
+            guard try pool.read({ try Self.isUpgraded($0) }) else {
+                throw ContextStoreError.awaitingAppUpgrade
+            }
         } else {
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
@@ -76,6 +83,31 @@ public final class ContextStore: @unchecked Sendable {
             pool = try DatabasePool(path: url.path, configuration: Self.makeConfiguration(readOnly: false))
             try Self.makeMigrator().migrate(pool)
         }
+    }
+
+    /// Whether a database exists but is older than this binary's queries.
+    ///
+    /// Distinct from "no database": one says the app has never run, the other that it has not run
+    /// *since the update*. They need different sentences, because only one of them is fixed by
+    /// launching the app. A database that cannot be opened at all answers `false` — that is a
+    /// different fault, and claiming an upgrade would send the user to the wrong remedy.
+    public static func needsAppUpgrade(at url: URL = ContextPaths.databaseURL) -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        guard let pool = try? DatabasePool(path: url.path, configuration: makeConfiguration(readOnly: true)),
+              let upgraded = try? pool.read({ try isUpgraded($0) })
+        else { return false }
+        return !upgraded
+    }
+
+    /// Whether `db` carries every migration this binary's queries assume.
+    ///
+    /// An **empty** ledger is not an old database — it is an empty or foreign file, and answering
+    /// "launch the app to upgrade it" would send the user to a remedy that cannot work. Only a
+    /// ledger that is populated *and* short is a database the app is behind on.
+    private static func isUpgraded(_ db: Database) throws -> Bool {
+        let migrator = makeMigrator()
+        if try migrator.appliedIdentifiers(db).isEmpty { return true }
+        return try migrator.hasCompletedMigrations(db)
     }
 
     // MARK: - Access
@@ -503,6 +535,9 @@ public enum ContextStoreError: Error {
     case readOnly
     /// The database file does not exist yet — the app has never captured anything.
     case notInitialized
+    /// The database predates this binary. The app owns migrations, so a reader that was updated
+    /// while the app has not yet relaunched meets a schema older than its own queries.
+    case awaitingAppUpgrade
     /// A cloud segment cannot be safely replaced without both backend identity components.
     case missingCloudSegmentIdentity
 }
