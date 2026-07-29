@@ -731,6 +731,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     captureTrigger.updateHeartbeatInterval(interval)
   }
 
+  /// Whether this frame must not reach Rewind or any assistant: the user's excluded-app
+  /// list, or a browser window in a private session. Both feed the privacy gate below.
+  private func isExcludedFromCapture(appName: String, windowTitle: String?) -> Bool {
+    if RewindSettings.shared.isAppExcluded(appName) { return true }
+    return PrivateBrowsingWindow.isPrivate(
+      windowTitle: windowTitle,
+      bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+  }
+
   private func captureFrame() async {
     guard isMonitoring, let screenCaptureService = screenCaptureService else { return }
 
@@ -809,7 +818,8 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
 
     // Check if the current app is excluded from Rewind capture
-    var isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
+    var isRewindExcluded =
+      realAppName.map { isExcludedFromCapture(appName: $0, windowTitle: windowTitle) } ?? false
 
     // Throttle capture when a video call app is frontmost to reduce CPU contention.
     // Captures 1 out of every N frames (e.g., effective ~5s interval at default 1s capture rate).
@@ -936,7 +946,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         if let fallbackApp = fallbackApp {
           appName = fallbackApp
           currentWindowTitle = fallbackTitle
-          isRewindExcluded = RewindSettings.shared.isAppExcluded(fallbackApp)
+          isRewindExcluded = isExcludedFromCapture(
+            appName: fallbackApp, windowTitle: fallbackTitle)
         }
       }
       switch captureResult {
@@ -1030,7 +1041,7 @@ public class ProactiveAssistantsPlugin: NSObject {
       if let freshApp = freshApp {
         resolvedApp = freshApp
         currentWindowTitle = freshTitle
-        isRewindExcluded = RewindSettings.shared.isAppExcluded(freshApp)
+        isRewindExcluded = isExcludedFromCapture(appName: freshApp, windowTitle: freshTitle)
       }
 
       let recoveredAfterFailures = screenCaptureFailureTracker.recordCaptureSuccess()

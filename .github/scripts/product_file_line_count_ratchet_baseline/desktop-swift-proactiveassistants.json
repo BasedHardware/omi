@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1742,
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1739
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1775
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Task candidate context now carries only backend action-item IDs, while local SQLite/staged evidence remains id-less so the model cannot target it for a backend mutation.",
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "Rewind capture policy adds per-app heartbeat and preview skip logic inline; also registers SuggestionAssistant (event-driven) with logic in Assistants/Suggestions/."
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "Adds the secure-input and private-browsing capture skips at the one place the privacy gate lives; the deciding logic sits in Core/SecureInputCaptureGate.swift and Core/PrivateBrowsingWindow.swift, leaving only the call sites here."
   },
   "threshold": 1500
 }

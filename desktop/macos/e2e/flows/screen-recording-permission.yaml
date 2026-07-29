@@ -23,6 +23,8 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/CapturedFrame.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveAssistantOrchestrationPolicy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveExternalCaptureYield.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/SecureInputCaptureGate.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/PrivateBrowsingWindow.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+NotificationSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+ScreenCaptureHealth.swift
