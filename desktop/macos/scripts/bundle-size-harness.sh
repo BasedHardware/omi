@@ -178,7 +178,7 @@ human_size() {
 
 smoke_packaged_runtime() {
   local app="$1"
-  local node="$app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+  local node="$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
   local pi_dir="$app/Contents/Resources/pi-mono-extension"
 
   "$node" --version >/dev/null

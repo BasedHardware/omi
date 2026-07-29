@@ -4221,6 +4221,17 @@ actor AgentRuntimeProcess {
         bundleURL
           .appendingPathComponent("Contents/Resources")
           .appendingPathComponent(bundleName)
+          .appendingPathComponent("Contents/Resources")
+          .appendingPathComponent(resourceName))
+      append(
+        bundleURL
+          .appendingPathComponent("Contents/Resources")
+          .appendingPathComponent(bundleName)
+          .appendingPathComponent(resourceName))
+      append(
+        bundleURL
+          .appendingPathComponent(bundleName)
+          .appendingPathComponent("Contents/Resources")
           .appendingPathComponent(resourceName))
       append(
         bundleURL

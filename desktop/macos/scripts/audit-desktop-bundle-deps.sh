@@ -111,25 +111,27 @@ resolve_rpath_dependency() {
   local resolved_rpath
   local resolved_dep
 
-  for rpath in "${candidate_rpaths[@]}"; do
-    case "$rpath" in
-      @executable_path/*|@loader_path/*)
-        resolved_rpath="$(resolve_token_path "$rpath" "$binary")" || continue
-        ;;
-      "$APP_BUNDLE"/*)
-        resolved_rpath="$rpath"
-        ;;
-      /*)
-        continue
-        ;;
-      *)
-        continue
-        ;;
-    esac
+  if [[ ${#candidate_rpaths[@]} -gt 0 ]]; then
+    for rpath in "${candidate_rpaths[@]}"; do
+      case "$rpath" in
+        @executable_path/*|@loader_path/*)
+          resolved_rpath="$(resolve_token_path "$rpath" "$binary")" || continue
+          ;;
+        "$APP_BUNDLE"/*)
+          resolved_rpath="$rpath"
+          ;;
+        /*)
+          continue
+          ;;
+        *)
+          continue
+          ;;
+      esac
 
-    resolved_dep="$resolved_rpath/$dep_name"
-    path_inside_bundle "$resolved_dep" && return 0
-  done
+      resolved_dep="$resolved_rpath/$dep_name"
+      path_inside_bundle "$resolved_dep" && return 0
+    done
+  fi
 
   dependency_exists_in_bundle "$dep_name"
 }
@@ -231,7 +233,7 @@ done < <(
     -print0
 )
 
-node_bin="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/node"
+node_bin="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
 if [[ -x "$node_bin" ]]; then
   "$node_bin" --version >/dev/null 2>&1 || report_error "bundled node failed runtime probe: $node_bin"
   codesign --verify --verbose=1 "$node_bin" >/dev/null 2>&1 || report_error "bundled node failed codesign verification: $node_bin"
