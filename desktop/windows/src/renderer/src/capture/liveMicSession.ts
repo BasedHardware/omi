@@ -27,18 +27,83 @@ export type LiveMicController = {
   stop: () => void
 }
 
-// How many always-on mic controllers are live right now. The continuous mic
-// session already streams the mic to the backend's /v4/listen conversation, so a
-// concurrently-detected meeting must NOT open a second mic /v4/listen for the same
-// audio (C6). Both hosts run in the capture window, so this module-level count is
-// the shared "is the mic already owned?" signal. Kept as a count (not a boolean)
-// so a StrictMode double-mount never wedges it false.
-let liveMicActiveCount = 0
+export type LiveMicSessionHealth = 'inactive' | 'connecting' | 'ready' | 'failed'
+
+// Track each controller independently so React StrictMode overlap cannot make a
+// stopped controller overwrite the health of its replacement.
+let nextControllerId = 1
+const controllerHealth = new Map<number, Exclude<LiveMicSessionHealth, 'inactive'>>()
+const healthListeners = new Set<(health: LiveMicSessionHealth) => void>()
+let aggregateHealth: LiveMicSessionHealth = 'inactive'
+
+function computeAggregateHealth(): LiveMicSessionHealth {
+  const states = [...controllerHealth.values()]
+  if (states.includes('ready')) return 'ready'
+  if (states.includes('connecting')) return 'connecting'
+  return states.length > 0 ? 'failed' : 'inactive'
+}
+
+function setControllerHealth(
+  controllerId: number,
+  health: Exclude<LiveMicSessionHealth, 'inactive'> | null
+): void {
+  if (health) controllerHealth.set(controllerId, health)
+  else controllerHealth.delete(controllerId)
+  const next = computeAggregateHealth()
+  if (next === aggregateHealth) return
+  aggregateHealth = next
+  for (const listener of healthListeners) listener(next)
+}
 
 /** True when an always-on continuous mic session is running. Read by the meeting
  *  session to defer to it instead of opening a duplicate mic /v4/listen. */
 export function isLiveMicSessionActive(): boolean {
-  return liveMicActiveCount > 0
+  return controllerHealth.size > 0
+}
+
+export function getLiveMicSessionHealth(): LiveMicSessionHealth {
+  return aggregateHealth
+}
+
+export function onLiveMicSessionHealth(
+  listener: (health: LiveMicSessionHealth) => void
+): () => void {
+  healthListeners.add(listener)
+  listener(aggregateHealth)
+  return () => healthListeners.delete(listener)
+}
+
+/** Wait for an in-flight continuous mic to become usable. A meeting uses this
+ *  as part of its own startup barrier instead of assuming controller existence
+ *  means the user's voice is already being captured. */
+export function waitForLiveMicSessionReady(
+  signal?: AbortSignal,
+  timeoutMs = 3_500
+): Promise<boolean> {
+  if (signal?.aborted) return Promise.resolve(false)
+  if (aggregateHealth === 'ready') return Promise.resolve(true)
+  if (aggregateHealth !== 'connecting') return Promise.resolve(false)
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (ready: boolean): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      healthListeners.delete(onHealth)
+      signal?.removeEventListener('abort', onAbort)
+      resolve(ready)
+    }
+    const onHealth = (health: LiveMicSessionHealth): void => {
+      if (health === 'ready') finish(true)
+      else if (health === 'failed' || health === 'inactive') finish(false)
+    }
+    const onAbort = (): void => finish(false)
+    const timer = setTimeout(() => finish(false), timeoutMs)
+    healthListeners.add(onHealth)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    // Close the subscribe-after-check race.
+    onHealth(aggregateHealth)
+  })
 }
 
 /**
@@ -69,7 +134,8 @@ export function isLiveMicSessionActive(): boolean {
  */
 export function startLiveMicSession(): LiveMicController {
   let cancelled = false
-  liveMicActiveCount++ // mark the mic as owned (see isLiveMicSessionActive / C6)
+  const controllerId = nextControllerId++
+  setControllerHealth(controllerId, 'connecting')
   let handle: TranscriptionHandle | null = null
   let hasSpeech = false
   let silenceTimer: ReturnType<typeof setTimeout> | null = null
@@ -166,6 +232,7 @@ export function startLiveMicSession(): LiveMicController {
   // Open (or reconnect) the socket for the CURRENT conversation, re-sending the
   // same clientConversationId so a reconnect resumes it.
   const connect = (): void => {
+    setControllerHealth(controllerId, 'connecting')
     captureLiveStore.setStatus('connecting')
     void startTranscription(
       'mic',
@@ -173,6 +240,7 @@ export function startLiveMicSession(): LiveMicController {
         onLine: (line) => {
           if (cancelled) return
           reconnectAttempt = 0 // a delivered segment proves the socket is healthy
+          setControllerHealth(controllerId, 'ready')
           captureLiveStore.setStatus('live')
           captureLiveStore.appendLine(line)
           hasSpeech = true
@@ -182,6 +250,7 @@ export function startLiveMicSession(): LiveMicController {
         onBackend: () => {
           if (cancelled) return
           reconnectAttempt = 0
+          setControllerHealth(controllerId, 'ready')
           captureLiveStore.setStatus('live')
         },
         onSegments: (segs) => {
@@ -216,6 +285,7 @@ export function startLiveMicSession(): LiveMicController {
             // raises the "Upgrade" modal. Do NOT call showUsageLimit here: this
             // hidden capture window is a separate renderer, so its in-memory popup
             // signal never reaches the popup host.
+            setControllerHealth(controllerId, 'failed')
             captureLiveStore.setStatus('error', (e as Error).message)
             return
           }
@@ -225,6 +295,7 @@ export function startLiveMicSession(): LiveMicController {
             // 429 handshake rejection backs off from a longer floor (don't hammer a
             // server that just rate-limited us); jitter decorrelates lanes in a storm.
             reconnectAttempt++
+            setControllerHealth(controllerId, 'connecting')
             const rateLimited = isRateLimitedDropError((e as Error).message)
             captureLiveStore.setStatus('connecting')
             timers.push(
@@ -238,23 +309,28 @@ export function startLiveMicSession(): LiveMicController {
           } else {
             // Exhausted — rescue the recording via from-segments, then surface the error.
             rescue()
+            setControllerHealth(controllerId, 'failed')
             captureLiveStore.setStatus('error', (e as Error).message)
           }
         }
       },
       'conversation',
       clientConversationId
-    ).then((h) => {
-      if (cancelled) {
-        try {
-          h.stop()
-        } catch {
-          /* ignore */
+    )
+      .then((h) => {
+        if (cancelled) {
+          try {
+            h.stop()
+          } catch {
+            /* ignore */
+          }
+          return
         }
-        return
-      }
-      handle = h
-    })
+        handle = h
+      })
+      // startTranscription reports the same initial failure through onError,
+      // which already owns retry/quota handling above.
+      .catch(() => {})
   }
 
   // Begin a fresh conversation: new resumable id, cleared retainer, reset backoff.
@@ -277,7 +353,7 @@ export function startLiveMicSession(): LiveMicController {
     stop: (): void => {
       if (cancelled) return // idempotent — decrement the active count exactly once
       cancelled = true
-      liveMicActiveCount = Math.max(0, liveMicActiveCount - 1)
+      setControllerHealth(controllerId, null)
       clearSilence()
       timers.forEach(clearTimeout)
       unsubFinalize()
