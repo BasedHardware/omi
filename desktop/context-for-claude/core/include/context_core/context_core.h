@@ -63,6 +63,52 @@ int ctx_should_open_new_session(int has_last_segment,
  */
 double ctx_pcm_rms_int16le(const uint8_t *bytes, size_t byte_count);
 
+/**
+ * Encodes normalised float samples into the 16-bit little-endian wire format.
+ *
+ * Values outside -1…1 are clamped rather than allowed to wrap, because a wrapped sample is a
+ * full-scale sign flip: an audible click that also drags the RMS of its window over the silence
+ * floor and wakes the model for nothing. NaN is treated as silence.
+ *
+ * Bytes are assembled by hand so the output is little-endian on any host — this data is written
+ * to disk and passed between processes, and it must not silently depend on the byte order of the
+ * machine that produced it.
+ *
+ * `out_bytes` must have room for `sample_count * 2` bytes. Returns the number of bytes written
+ * (always `sample_count * 2` when `samples` is non-null).
+ */
+size_t ctx_pcm_encode_int16le(const float *samples, size_t sample_count, uint8_t *out_bytes);
+
+/**
+ * Decodes 16-bit little-endian wire format back into normalised float samples.
+ *
+ * The inverse of `ctx_pcm_encode_int16le` up to one LSB. A trailing odd byte is ignored for the
+ * same reason as in `ctx_pcm_rms_int16le`: capture callbacks can be cut across a sample during a
+ * device-format change, and losing that byte is preferable to taking down an active conversation.
+ *
+ * `out_samples` must have room for `byte_count / 2` samples. Returns the number of samples
+ * written.
+ */
+size_t ctx_pcm_decode_int16le(const uint8_t *bytes, size_t byte_count, float *out_samples);
+
+/**
+ * Averages interleaved channels down to mono.
+ *
+ * Averaging rather than taking the first channel: USB interfaces and headsets routinely put the
+ * microphone on one channel and silence on the other, and picking a channel would lose that input
+ * entirely on half of them. Averaging keeps it at -6 dB, which the transcriber handles and a
+ * missing channel is not.
+ *
+ * `channels <= 1` returns zero samples written (the caller should use the input untouched).
+ * A sample count that is not a whole number of frames truncates the partial frame: device format
+ * changes produce ragged buffers, and losing one frame is not worth a crash.
+ *
+ * `out_mono` must have room for `sample_count / channels` samples. Returns the number of mono
+ * samples written.
+ */
+size_t ctx_pcm_downmix_mono(const float *interleaved, size_t sample_count, int channels,
+                            float *out_mono);
+
 /* ------------------------------------------------------------------- recall ranking */
 
 /**

@@ -82,6 +82,109 @@ void test_pcm_rms() {
     CHECK_CLOSE(ctx_pcm_rms_int16le(ragged, sizeof(ragged)), 0.5, 1e-12);
 }
 
+void test_pcm_encode_little_endian_and_clamped() {
+    // 0.5 * 32767 rounds to 16384 == 0x4000, low byte first.
+    uint8_t buf[2] = {};
+    const float half = 0.5f;
+    const size_t written = ctx_pcm_encode_int16le(&half, 1, buf);
+    CHECK(written == 2);
+    CHECK(buf[0] == 0x00);
+    CHECK(buf[1] == 0x40);
+
+    // Zero.
+    const float zero = 0.0f;
+    ctx_pcm_encode_int16le(&zero, 1, buf);
+    CHECK(buf[0] == 0x00);
+    CHECK(buf[1] == 0x00);
+
+    // Positive clamp: values above 1.0 clamp to 0x7FFF (32767).
+    const float over = 2.0f;
+    ctx_pcm_encode_int16le(&over, 1, buf);
+    CHECK(buf[0] == 0xFF);
+    CHECK(buf[1] == 0x7F);
+
+    // Negative clamp: values below -1.0 clamp to 0x8001 (-32767).
+    const float under = -3.0f;
+    ctx_pcm_encode_int16le(&under, 1, buf);
+    CHECK(buf[0] == 0x01);
+    CHECK(buf[1] == 0x80);
+
+    // NaN maps to silence (0x0000).
+    const float nan_val = std::nanf("");
+    ctx_pcm_encode_int16le(&nan_val, 1, buf);
+    CHECK(buf[0] == 0x00);
+    CHECK(buf[1] == 0x00);
+
+    // Empty input.
+    CHECK(ctx_pcm_encode_int16le(nullptr, 0, buf) == 0);
+    CHECK(ctx_pcm_encode_int16le(&half, 0, buf) == 0);
+    CHECK(ctx_pcm_encode_int16le(&half, 1, nullptr) == 0);
+}
+
+void test_pcm_decode_basic() {
+    // Decode 0x4000 (16384) → 0.5.
+    const uint8_t encoded[] = {0x00, 0x40, 0x00, 0xC0};  // 0.5, -0.5
+    float samples[2] = {};
+    const size_t count = ctx_pcm_decode_int16le(encoded, sizeof(encoded), samples);
+    CHECK(count == 2);
+    CHECK_CLOSE(samples[0], 0.5f, 1e-4f);
+    CHECK_CLOSE(samples[1], -0.5f, 1e-4f);
+
+    // Empty input.
+    float dummy;
+    CHECK(ctx_pcm_decode_int16le(nullptr, 0, &dummy) == 0);
+    CHECK(ctx_pcm_decode_int16le(encoded, 0, &dummy) == 0);
+    CHECK(ctx_pcm_decode_int16le(encoded, 2, nullptr) == 0);
+
+    // Odd trailing byte is ignored.
+    const uint8_t ragged[] = {0x00, 0x40, 0x7F};
+    float ragged_samples[1] = {};
+    CHECK(ctx_pcm_decode_int16le(ragged, sizeof(ragged), ragged_samples) == 1);
+    CHECK_CLOSE(ragged_samples[0], 0.5f, 1e-4f);
+}
+
+void test_pcm_roundtrip_stays_within_one_lsb() {
+    const float samples[] = {0.0f, 0.5f, -0.5f, 0.123f, -0.987f, 1.0f, -1.0f};
+    const size_t n = sizeof(samples) / sizeof(samples[0]);
+
+    uint8_t encoded[n * 2];
+    ctx_pcm_encode_int16le(samples, n, encoded);
+
+    float decoded[n];
+    ctx_pcm_decode_int16le(encoded, n * 2, decoded);
+
+    for (size_t i = 0; i < n; ++i) {
+        CHECK(std::fabs(decoded[i] - samples[i]) <= 1e-4f);
+    }
+}
+
+void test_pcm_downmix_averages_channels() {
+    // Stereo: (1,0) (0.5,-0.5) (0.2,0.2) → mono: 0.5, 0, 0.2
+    const float stereo[] = {1.0f, 0.0f, 0.5f, -0.5f, 0.2f, 0.2f};
+    float mono[3] = {};
+    const size_t count = ctx_pcm_downmix_mono(stereo, 6, 2, mono);
+    CHECK(count == 3);
+    CHECK_CLOSE(mono[0], 0.5f, 1e-6f);
+    CHECK_CLOSE(mono[1], 0.0f, 1e-6f);
+    CHECK_CLOSE(mono[2], 0.2f, 1e-6f);
+
+    // channels <= 1 returns zero (caller should use input untouched).
+    float dummy[3];
+    CHECK(ctx_pcm_downmix_mono(stereo, 6, 1, dummy) == 0);
+    CHECK(ctx_pcm_downmix_mono(stereo, 6, 0, dummy) == 0);
+
+    // Empty input.
+    CHECK(ctx_pcm_downmix_mono(nullptr, 0, 2, mono) == 0);
+    CHECK(ctx_pcm_downmix_mono(stereo, 0, 2, mono) == 0);
+    CHECK(ctx_pcm_downmix_mono(stereo, 6, 2, nullptr) == 0);
+
+    // Ragged buffer: partial frame truncated.
+    const float ragged[] = {1.0f, 0.0f, 1.0f};
+    float ragged_mono[1] = {};
+    CHECK(ctx_pcm_downmix_mono(ragged, 3, 2, ragged_mono) == 1);
+    CHECK_CLOSE(ragged_mono[0], 0.5f, 1e-6f);
+}
+
 /* ------------------------------------------------------------------- recall ranking */
 
 void test_recall_score() {
@@ -352,6 +455,10 @@ void test_version_is_reported() {
 int main() {
     test_session_boundaries();
     test_pcm_rms();
+    test_pcm_encode_little_endian_and_clamped();
+    test_pcm_decode_basic();
+    test_pcm_roundtrip_stays_within_one_lsb();
+    test_pcm_downmix_averages_channels();
     test_recall_score();
     test_moment_empty_input();
     test_moment_single_frame_is_one_moment();
