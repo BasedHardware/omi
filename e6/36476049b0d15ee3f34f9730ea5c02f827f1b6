@@ -1,0 +1,23 @@
+desktop/context-for-claude/Tests/ContextCoreTests/AccessibilityTests.swift
+  s_b5d52d5f05403b::t_5ff0824cf562ff 1-316
+desktop/context-for-claude/Sources/ContextCore/Accessibility.swift
+  s_b5d52d5f05403b::t_d69cb74bed2d9c 1-30,32-125,133,136,141-293
+  s_b5d52d5f05403b::t_3331501d4b5189 31
+  s_b5d52d5f05403b::t_97b5702d2c949b 126-132,134-135,137-140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "e636476049b0d15ee3f34f9730ea5c02f827f1b6",
+  "prompts": {},
+  "sessions": {
+    "s_b5d52d5f05403b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82d7239f-7b04-40bc-b1d8-8737cb48399a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
