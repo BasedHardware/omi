@@ -48,6 +48,12 @@ or an allowlist miss is also disabled. No Helm or production default enables thi
 path. The local cassette may include restricted audio/transcript event payloads,
 so keep its root outside Git and never attach it to a PR.
 
+The development listen deployment mounts `/var/omi-parity-pack` as an `emptyDir`
+for explicitly allowlisted dogfood principals. It is writable but ephemeral: the
+cassettes are lost when the pod is restarted, replaced, or deleted. Inspect or
+copy a cassette only through an approved development-cluster operator workflow;
+never promote it to production storage or commit it to the repository.
+
 ## Replay players
 
 `STTCassettePlayer` and `LLMCassettePlayer` are callback-oriented loopback

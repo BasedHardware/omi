@@ -121,6 +121,14 @@ env:
     value: "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
     value: "dev"
+  # Development-only dogfood capture. The capture runtime compares this exact
+  # Firebase UID; do not replace it with an email or a broad user allowlist.
+  - name: OMI_PARITY_PACK_CAPTURE
+    value: "1"
+  - name: OMI_PARITY_PACK_ALLOWED_PRINCIPALS
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: OMI_PARITY_PACK_ROOT
+    value: "/var/omi-parity-pack"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
@@ -462,15 +470,21 @@ lifecycle:
     exec:
       command: ["sh", "-c", "sleep 15"]
 
-# Additional volumes on the output Deployment definition.
-volumes: []
+# Additional volumes on the output Deployment definition. Parity Pack cassettes
+# are restricted dogfood artifacts and intentionally live only for the pod's
+# lifetime; collect them before a restart if they need operator inspection.
+volumes:
+  - name: parity-pack
+    emptyDir: {}
 # - name: foo
 #   secret:
 #     secretName: mysecret
 #     optional: false
 
 # Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
+volumeMounts:
+  - name: parity-pack
+    mountPath: "/var/omi-parity-pack"
 # - name: foo
 #   mountPath: "/etc/foo"
 #   readOnly: true
