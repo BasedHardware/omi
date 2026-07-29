@@ -282,9 +282,11 @@ struct SBOnboardingView: View {
         // Auto-detected default: accept with one tap, or reveal the picker.
         HStack(spacing: 8) {
           Text(draft).geist(size: 17, weight: .medium).foregroundStyle(sb.ink)
-          Text("· detected").geist(size: 12.5).foregroundStyle(sb.ink(.w4))
+          Text(SBOnboardingLanguageCopy.detectedLanguageDetail)
+            .geist(size: 12.5)
+            .foregroundStyle(sb.ink(.w4))
         }
-        SBInkButton(title: "Continue", isDefaultAction: true) {
+        SBInkButton(title: SBOnboardingLanguageCopy.continueAction(for: draft), isDefaultAction: true) {
           if let m = all.first(where: { $0.name.lowercased() == draft.lowercased() }) {
             model.pickLanguage(code: m.code, name: m.name)
           } else {
@@ -294,7 +296,9 @@ struct SBOnboardingView: View {
         Button {
           languageChanging = true
         } label: {
-          Text("Change language").geist(size: 13).foregroundStyle(sb.ink(.w45))
+          Text(SBOnboardingLanguageCopy.changeSpokenLanguageAction)
+            .geist(size: 13)
+            .foregroundStyle(sb.ink(.w45))
         }
         .buttonStyle(.plain)
       } else {
