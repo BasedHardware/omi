@@ -77,6 +77,10 @@ final class ConnectorImportRunner: ObservableObject {
   private var tasks: [String: Task<Void, Never>] = [:]
   private var runTokens: [String: UUID] = [:]
   private var runStartedAt: [String: Date] = [:]
+  /// The surface that started each run. The shared runner is the sole terminal
+  /// telemetry boundary for imports, so onboarding must retain its identity
+  /// through completion instead of being reported as an Apps-tab import.
+  private var runSurfaces: [String: IntegrationConnectTelemetry.Surface] = [:]
 
   func isRunning(_ connectorID: String) -> Bool {
     tasks[connectorID] != nil
@@ -90,6 +94,7 @@ final class ConnectorImportRunner: ObservableObject {
     connectorID: String,
     progressTitle: String,
     progressDetail: String,
+    surface: IntegrationConnectTelemetry.Surface = .apps,
     operation: @escaping @MainActor (ProgressSink) async -> RunOutcome
   ) -> Task<Void, Never>? {
     guard tasks[connectorID] == nil else { return nil }
@@ -104,13 +109,14 @@ final class ConnectorImportRunner: ObservableObject {
       errorMessage: nil
     )
     runStartedAt[connectorID] = Date()
+    runSurfaces[connectorID] = surface
     // Funnel numerator: one Attempted per real user-initiated connect, emitted
     // at the single authoritative start boundary so every surface (Apps tab,
     // and future onboarding callers) is measured identically.
     AnalyticsManager.shared.integrationConnectAttempted(
       integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
       connectorID: connectorID,
-      surface: .apps,
+      surface: surface,
       stage: "import"
     )
 
@@ -144,6 +150,8 @@ final class ConnectorImportRunner: ObservableObject {
     tasks[connectorID] = nil
     let startedAt = runStartedAt[connectorID]
     runStartedAt[connectorID] = nil
+    let surface = runSurfaces[connectorID] ?? .apps
+    runSurfaces[connectorID] = nil
     let durationMs = startedAt.map { max(0, Int(Date().timeIntervalSince($0) * 1000)) }
     switch outcome {
     case .success(let message, let metrics):
@@ -153,7 +161,7 @@ final class ConnectorImportRunner: ObservableObject {
       AnalyticsManager.shared.integrationConnectSucceeded(
         integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
         connectorID: connectorID,
-        surface: .apps,
+        surface: surface,
         stage: "import",
         durationMs: durationMs,
         sourceCount: metrics.sourceCount,
@@ -173,7 +181,7 @@ final class ConnectorImportRunner: ObservableObject {
       AnalyticsManager.shared.integrationConnectFailed(
         integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
         connectorID: connectorID,
-        surface: .apps,
+        surface: surface,
         stage: "import",
         errorClass: errorClass,
         durationMs: durationMs,

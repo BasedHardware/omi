@@ -43,6 +43,7 @@ final class SBOnboardingModel: ObservableObject {
   @Published var nameDraft = ""
   @Published var languageDraft = ""
   @Published var languageName: String?
+  @Published var howHeard: String?
   @Published var roleDraft = ""
   @Published var role: String?
 
@@ -68,6 +69,10 @@ final class SBOnboardingModel: ObservableObject {
   /// The chosen shortcut + which mechanism it uses (key hotkey vs modifier-hold).
   var chosenShortcut: ShortcutSettings.KeyboardShortcut?
   var chosenShortcutIsPTT = false
+  /// Each shortcut stage keeps its own choice so stepping back does not make a
+  /// user re-select a key they already confirmed.
+  var openShortcutSelection: ShortcutSettings.KeyboardShortcut?
+  var talkShortcutSelection: ShortcutSettings.KeyboardShortcut?
   var shortcutMonitors: [Any] = []
   /// Main menu stashed while the shortcut step's key monitor is armed (menu key
   /// equivalents like ⌘O would otherwise swallow the press before we see it).
@@ -82,8 +87,17 @@ final class SBOnboardingModel: ObservableObject {
   /// response). The screen-demo Continue button stays hidden until then, so the
   /// user can't skip past before seeing the "fun part" work.
   @Published var screenDemoDone = false
+  /// The hold-to-talk demo is armed only after the bridge has initialized its
+  /// kernel context. Showing the chord sooner invites a first PTT turn while its
+  /// only response route is still cold.
+  @Published var screenDemoPTTReady = false
+  /// Bridge startup can fail before an authenticated response route exists. In
+  /// that state, leave PTT unarmed and offer an explicit retry or skip instead
+  /// of presenting a shortcut which cannot answer.
+  @Published var screenDemoPTTUnavailable = false
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
+  var screenDemoSetupTask: Task<Void, Never>?
 
   // Connectors — keyed by a stable id ("openclaw", "calendar", …) → state string
   // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
@@ -96,6 +110,13 @@ final class SBOnboardingModel: ObservableObject {
 
   unowned let appState: AppState
   let chatProvider: ChatProvider
+  /// The same persisted connector authority the post-onboarding Home and Apps
+  /// surfaces read. A context row is not connected until this store records a
+  /// completed import, never merely because a browser session passed a probe.
+  let importConnectorStatusStore: ImportConnectorStatusStore?
+  /// Backend writes for editable answers are per-field serialized. Revisiting a
+  /// question never lets an earlier request finish after the user's revision.
+  private let answerWriteGate = OnboardingAnswerWriteGate()
   private let onComplete: (() -> Void)?
   var streamTask: Task<Void, Never>?
   /// Permission-grant pollers, one per permission key. Keyed so requesting a
@@ -110,9 +131,15 @@ final class SBOnboardingModel: ObservableObject {
   /// only ever written on the main actor and `removeObserver` is thread-safe.
   nonisolated(unsafe) private var nameObserver: NSObjectProtocol?
 
-  init(appState: AppState, chatProvider: ChatProvider, onComplete: (() -> Void)?) {
+  init(
+    appState: AppState,
+    chatProvider: ChatProvider,
+    importConnectorStatusStore: ImportConnectorStatusStore? = nil,
+    onComplete: (() -> Void)?
+  ) {
     self.appState = appState
     self.chatProvider = chatProvider
+    self.importConnectorStatusStore = importConnectorStatusStore
     self.onComplete = onComplete
     // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
     // journal surface so they never pollute the real Chat tab. Cleared on
@@ -319,12 +346,43 @@ final class SBOnboardingModel: ObservableObject {
     streamMessage(for: target)
   }
 
+  /// Return to the immediately preceding onboarding stage without discarding
+  /// any answer the user already supplied. The conversational transcript stays
+  /// intact; the re-rendered widget is the editable source of truth for that
+  /// stage, so a user can revise (for example) Student to Founder.
+  func goBack() {
+    guard let previous = Step(rawValue: step.rawValue - 1) else { return }
+    teardownStep(step)
+    cancelPermissionPollForCurrentStep()
+    rehydrateDrafts()
+    step = previous
+    UserDefaults.standard.set(previous.rawValue, forKey: Self.resumeStepKey)
+    streamMessage(for: previous)
+  }
+
+  var canGoBack: Bool {
+    step != .promise
+  }
+
   /// Tear down any live monitors/tasks a step installed before leaving it.
   private func teardownStep(_ step: Step) {
     switch step {
     case .shortcutOpen, .shortcutTalk: disarmShortcutSummon()
     case .screenDemo: teardownVoiceDemo()
     default: break
+    }
+  }
+
+  /// A permission poll is scoped to the page that requested it. If Back leaves
+  /// that page while macOS is still open, stop the stale poll so a late grant
+  /// cannot overwrite the newly displayed page's state. The system grant itself
+  /// is still observed if the user returns to this page.
+  private func cancelPermissionPollForCurrentStep() {
+    guard let key = permissionKey(for: step) else { return }
+    pollTasks[key]?.cancel()
+    pollTasks[key] = nil
+    if permState(key) == .waiting {
+      resetPermToAsk(key)
     }
   }
 
@@ -336,9 +394,16 @@ final class SBOnboardingModel: ObservableObject {
       let n = AuthService.shared.givenName.trimmingCharacters(in: .whitespaces)
       if !n.isEmpty { nameDraft = n }
     }
-    if roleDraft.isEmpty, role == nil {
+    if role == nil {
       let saved = UserDefaults.standard.string(forKey: .onboardingRole) ?? ""
-      if !saved.isEmpty { roleDraft = saved }
+      if !saved.isEmpty {
+        role = saved
+        if roleDraft.isEmpty { roleDraft = saved }
+      }
+    }
+    if howHeard == nil {
+      let saved = UserDefaults.standard.string(forKey: DefaultsKey.onboardingHowDidYouHearSource)
+      if let saved, !saved.isEmpty { howHeard = saved }
     }
     if languageDraft.isEmpty, languageName == nil, let code = AssistantSettings.shared.voiceLanguages.first,
       let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code })
@@ -354,16 +419,21 @@ final class SBOnboardingModel: ObservableObject {
   func answerName() {
     let trimmed = nameDraft.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return }
-    Task { await AuthService.shared.updateGivenName(trimmed) }
+    answerWriteGate.enqueue(.name) { [trimmed] in
+      await AuthService.shared.updateGivenName(trimmed)
+    }
     advance(userAnswer: trimmed, to: .howHeard)
   }
 
   /// Record the acquisition source (analytics + backend, like the legacy step),
   /// then move on.
   func pickHowHeard(_ source: String) {
+    howHeard = source
     UserDefaults.standard.set(source, forKey: DefaultsKey.onboardingHowDidYouHearSource)
     AnalyticsManager.shared.onboardingHowDidYouHear(source: source)
-    Task { try? await APIClient.shared.updateOnboardingAcquisitionSource(source) }
+    answerWriteGate.enqueue(.acquisitionSource) { [source] in
+      _ = try? await APIClient.shared.updateOnboardingAcquisitionSource(source)
+    }
     advance(userAnswer: source, to: .language)
   }
 
@@ -371,8 +441,11 @@ final class SBOnboardingModel: ObservableObject {
   /// confirmLanguages, single-primary). Advances optimistically.
   func pickLanguage(code: String, name: String) {
     languageName = name
+    languageDraft = name
     AssistantSettings.shared.voiceLanguages = [code]
-    Task { _ = try? await APIClient.shared.updateUserLanguage(code) }
+    answerWriteGate.enqueue(.language) { [code] in
+      _ = try? await APIClient.shared.updateUserLanguage(code)
+    }
     advance(userAnswer: name, to: .role)
   }
 

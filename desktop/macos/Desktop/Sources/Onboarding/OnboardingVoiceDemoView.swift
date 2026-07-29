@@ -125,7 +125,7 @@ struct OnboardingVoiceDemoView: View {
       // override so a quit/crash mid-step can't corrupt the saved PTT mode.
       shortcutSettings.pttTranscriptionModeDemoOverride = .live
       Task {
-        await chatProvider.warmupBridge()
+        _ = await chatProvider.warmupBridge()
       }
     }
     .onDisappear {
