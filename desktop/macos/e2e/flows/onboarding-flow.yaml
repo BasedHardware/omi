@@ -29,6 +29,7 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  - desktop/macos/Desktop/Sources/Providers/LocationPermissionService.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/OnboardingOpenerComposer.swift
   - desktop/macos/Desktop/Sources/MainWindow/OnboardingOpenerView.swift
   - desktop/macos/Desktop/Sources/MainWindow/OnboardingWalkthroughOverlay.swift
