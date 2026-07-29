@@ -137,6 +137,15 @@ class ListenParityCapture:
         if self._invocation is None:
             return
         try:
-            self._invocation.persist()
+            path = self._invocation.persist()
         except Exception as error:
             logger.warning("Parity pack capture persist failed error_type=%s", type(error).__name__)
+            return
+        # Durable export is best-effort and must never affect listen availability.
+        try:
+            from .parity_pack_export import ensure_reconcile_loop, export_cassette_file
+
+            ensure_reconcile_loop()
+            export_cassette_file(path)
+        except Exception as error:
+            logger.warning("Parity pack capture export failed error_type=%s", type(error).__name__)
