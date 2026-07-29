@@ -1588,7 +1588,7 @@ actor ActionItemStorage {
     }
   }
 
-    /// Clear all agent fields for a task (when user stops/removes session)
+  /// Clear all agent fields for a task (when user stops/removes session)
   func clearAgentState(
     taskId: String,
     authorization: LocalMutationAuthorization
