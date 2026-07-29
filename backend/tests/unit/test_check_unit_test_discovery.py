@@ -56,7 +56,9 @@ def test_policy_excluded_and_allowlisted_files_are_not_orphans():
         'tests/test_legacy.py',
     }
     assert find_orphans(all_files, set(), {'tests/test_legacy.py'}, FAKE_WORKFLOWS) == []
-    assert MANUAL_ONLY_TESTS == {}  # nothing is currently blessed as manual-only
+    assert MANUAL_ONLY_TESTS == {
+        'testing/desktop_beta_admission/firestore_contention_test.py': 'on-demand Firestore emulator proof for Beta admission fence; no scheduled runner',
+    }
 
 
 def test_commented_out_or_deselected_references_are_not_coverage():
