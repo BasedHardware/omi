@@ -125,6 +125,33 @@ public final class ContextStore: @unchecked Sendable {
         }
     }
 
+    /// Inserts a cloud segment or atomically replaces its previously stored backend revision.
+    ///
+    /// Text and timestamps are never identity: two people can say the same thing at once. Only the
+    /// backend's conversation/segment pair permits a replacement claim.
+    @discardableResult
+    public func upsertCloudSegment(_ segment: Segment) throws -> Int64 {
+        guard let conversationId = segment.backendConversationId,
+              let segmentId = segment.backendSegmentId
+        else { throw ContextStoreError.missingCloudSegmentIdentity }
+
+        return try write { db in
+            if let existingId = try Int64.fetchOne(
+                db,
+                sql: "SELECT id FROM segments WHERE backendConversationId = ? AND backendSegmentId = ?",
+                arguments: [conversationId, segmentId])
+            {
+                var revision = segment
+                revision.id = existingId
+                try revision.update(db)
+                return existingId
+            }
+            var record = segment
+            try record.insert(db)
+            return record.id ?? db.lastInsertedRowID
+        }
+    }
+
     /// Stores one screen observation and returns its id. The FTS index updates via trigger.
     @discardableResult
     public func insertFrame(_ frame: Frame) throws -> Int64 {
@@ -431,6 +458,21 @@ public final class ContextStore: @unchecked Sendable {
             }
         }
 
+        // A cloud segment can arrive again with revised words or attribution. Keeping its identity
+        // in the row makes replacement survive app restarts. SQLite permits multiple NULLs here, so
+        // ordinary local transcription remains append-only.
+        migrator.registerMigration("v5-cloud-segment-identity") { db in
+            try db.alter(table: "segments") { t in
+                t.add(column: "backendConversationId", .text)
+                t.add(column: "backendSegmentId", .text)
+            }
+            try db.create(
+                index: "idx_segments_backend_identity",
+                on: "segments",
+                columns: ["backendConversationId", "backendSegmentId"],
+                unique: true)
+        }
+
         return migrator
     }
 
@@ -461,4 +503,6 @@ public enum ContextStoreError: Error {
     case readOnly
     /// The database file does not exist yet — the app has never captured anything.
     case notInitialized
+    /// A cloud segment cannot be safely replaced without both backend identity components.
+    case missingCloudSegmentIdentity
 }

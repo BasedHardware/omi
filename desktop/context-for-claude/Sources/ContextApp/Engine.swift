@@ -13,6 +13,10 @@ private struct TranscriptLine: Sendable {
     /// Both nil on the local path, which cannot tell voices apart at all.
     var speakerLabel: String?
     var personId: String?
+    /// The durable backend identity that makes a revised cloud segment an update rather than a new
+    /// transcript row. Both are nil for the local fallback path.
+    var backendConversationId: String? = nil
+    var backendSegmentId: String? = nil
 }
 
 /// What the app says about itself between launch and the first live sensor.
@@ -321,7 +325,9 @@ final class Engine: ObservableObject {
             endedAt: base + segment.end,
             source: segment.isUser ? .mic : .system,
             speakerLabel: segment.speaker,
-            personId: segment.personId
+            personId: segment.personId,
+            backendConversationId: cloudConversationId,
+            backendSegmentId: segment.id
         )
         lastLine = line.text
         lineFeed?.yield(line)
@@ -859,15 +865,21 @@ private final class EngineStore: @unchecked Sendable {
             }
             guard let sessionId = openSessionId else { return }
 
-            try store.insertSegment(
-                Segment(
-                    sessionId: sessionId,
-                    startedAt: line.startedAt,
-                    endedAt: line.endedAt,
-                    source: line.source,
-                    text: line.text,
-                    speakerLabel: line.speakerLabel,
-                    personId: line.personId))
+            let segment = Segment(
+                sessionId: sessionId,
+                startedAt: line.startedAt,
+                endedAt: line.endedAt,
+                source: line.source,
+                text: line.text,
+                speakerLabel: line.speakerLabel,
+                personId: line.personId,
+                backendConversationId: line.backendConversationId,
+                backendSegmentId: line.backendSegmentId)
+            if segment.backendConversationId != nil, segment.backendSegmentId != nil {
+                try store.upsertCloudSegment(segment)
+            } else {
+                try store.insertSegment(segment)
+            }
             // `max`, because a 10 s window from the other transcriber can land out of order and
             // must not drag the session's end backwards.
             lastSegmentEndedAt = max(lastSegmentEndedAt ?? line.endedAt, line.endedAt)

@@ -93,7 +93,7 @@ final class StoreTests: XCTestCase {
         }
         // Exactly the ones the store's own migrator registers. A missing entry would mean the
         // migration re-runs on every launch and fails on the second one.
-        XCTAssertEqual(applied, ["v1", "v3-segment-confidence", "v4-segment-speaker"])
+        XCTAssertEqual(applied, ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity"])
 
         // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
         // migrator and skips itself when its identifier is already recorded. Proving the two live
@@ -104,7 +104,7 @@ final class StoreTests: XCTestCase {
         }
         XCTAssertEqual(
             coexisting,
-            ["v1", "v3-segment-confidence", "v4-segment-speaker", UploadQueue.migrationIdentifier])
+            ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity", UploadQueue.migrationIdentifier])
         XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
 
         let segments: [Segment] = try upgraded.read { try Segment.fetchAll($0) }
@@ -192,7 +192,7 @@ final class StoreTests: XCTestCase {
         // Exactly what this migrator registers, in order. A fresh identifier rather than a reused
         // one is the whole point: a duplicate would be skipped forever and the columns would simply
         // never appear.
-        XCTAssertEqual(applied, ["v1", "v3-segment-confidence", "v4-segment-speaker"])
+        XCTAssertEqual(applied, ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity"])
 
         // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
         // migrator. Proving they still coexist is the only way to know `v4-` did not claim a slot
@@ -203,7 +203,7 @@ final class StoreTests: XCTestCase {
         }
         XCTAssertEqual(
             coexisting,
-            ["v1", "v3-segment-confidence", "v4-segment-speaker", UploadQueue.migrationIdentifier])
+            ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity", UploadQueue.migrationIdentifier])
         XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
 
         let segments: [Segment] = try upgraded.read { try Segment.fetchAll($0) }
@@ -253,6 +253,60 @@ final class StoreTests: XCTestCase {
         let stored = try XCTUnwrap(attributed)
         XCTAssertEqual(stored.speakerLabel, "SPEAKER_01")
         XCTAssertEqual(stored.personId, "person-sarah")
+    }
+
+    func testCloudIdentityMigrationLeavesOldSegmentsUnidentifiedAndAddsTheUniqueKey() throws {
+        let url = fixture.root.appendingPathComponent("pre-cloud-identity.db")
+        let legacySessionId: Int64
+        let legacySegmentId: Int64
+        do {
+            let legacy = try ContextStore(url: url)
+            legacySessionId = try legacy.openSession(at: Fixture.base, appHint: "zoom.us")
+            legacySegmentId = try legacy.insertSegment(
+                Segment(
+                    sessionId: legacySessionId,
+                    startedAt: Fixture.base + 10,
+                    endedAt: Fixture.base + 14,
+                    source: .system,
+                    text: "a local line from before cloud identities"))
+            try legacy.write { db in
+                try db.execute(sql: "DROP INDEX idx_segments_backend_identity")
+                try db.execute(sql: "ALTER TABLE segments DROP COLUMN backendConversationId")
+                try db.execute(sql: "ALTER TABLE segments DROP COLUMN backendSegmentId")
+                try db.execute(
+                    sql: "DELETE FROM grdb_migrations WHERE identifier = ?",
+                    arguments: ["v5-cloud-segment-identity"])
+            }
+        }
+
+        let upgraded = try ContextStore(url: url)
+        let columnsAfter = try columns(of: "segments", in: upgraded)
+        XCTAssertTrue(columnsAfter.contains("backendConversationId"))
+        XCTAssertTrue(columnsAfter.contains("backendSegmentId"))
+        let indexes = try upgraded.read { db in
+            try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'index'")
+        }
+        XCTAssertTrue(indexes.contains("idx_segments_backend_identity"))
+
+        let legacy: Segment? = try upgraded.read { db in
+            try Segment.fetchOne(db, sql: "SELECT * FROM segments WHERE id = ?", arguments: [legacySegmentId])
+        }
+        XCTAssertNil(try XCTUnwrap(legacy).backendConversationId)
+        XCTAssertNil(try XCTUnwrap(legacy).backendSegmentId)
+
+        let cloud = Segment(
+            sessionId: legacySessionId,
+            startedAt: Fixture.base + 20,
+            endedAt: Fixture.base + 25,
+            source: .system,
+            text: "the backend can now revise this",
+            backendConversationId: "conversation-8",
+            backendSegmentId: "segment-1")
+        _ = try upgraded.upsertCloudSegment(cloud)
+        let count = try upgraded.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM segments") ?? 0
+        }
+        XCTAssertEqual(count, 2)
     }
 
     // MARK: - Round trips
@@ -417,6 +471,55 @@ final class StoreTests: XCTestCase {
     func testClosingAnUnknownSessionIsANoOp() throws {
         // The engine closes sessions it may never have opened when a source dies mid-write.
         XCTAssertNoThrow(try fixture.store.closeSession(9_999, at: Fixture.base))
+    }
+
+    // MARK: - Cloud transcript identity
+
+    func testCloudSegmentUpsertReplacesTheStoredRevisionAndFTSContent() throws {
+        let store = fixture.store
+        let sessionId = try store.openSession(at: Fixture.base, appHint: "Zoom")
+        let original = Segment(
+            sessionId: sessionId,
+            startedAt: Fixture.base + 10,
+            endedAt: Fixture.base + 14,
+            source: .system,
+            text: "we should ship on Thursday",
+            speakerLabel: "SPEAKER_00",
+            personId: "person-alex",
+            backendConversationId: "conversation-7",
+            backendSegmentId: "segment-42")
+        let originalID = try store.upsertCloudSegment(original)
+
+        let revision = Segment(
+            sessionId: sessionId,
+            startedAt: Fixture.base + 10,
+            endedAt: Fixture.base + 15,
+            source: .system,
+            text: "we should ship on Friday",
+            speakerLabel: "SPEAKER_01",
+            personId: "person-sam",
+            backendConversationId: "conversation-7",
+            backendSegmentId: "segment-42")
+        let revisionID = try store.upsertCloudSegment(revision)
+
+        XCTAssertEqual(revisionID, originalID, "a backend revision must update its canonical row")
+        let rows: [(id: Int64, text: String, speaker: String?, person: String?)] = try store.read { db in
+            try Row.fetchAll(
+                db,
+                sql: "SELECT id, text, speakerLabel, personId FROM segments "
+                    + "WHERE backendConversationId = ? AND backendSegmentId = ?",
+                arguments: ["conversation-7", "segment-42"]
+            ).map { row in
+                (row["id"], row["text"], row["speakerLabel"], row["personId"])
+            }
+        }
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?.id, originalID)
+        XCTAssertEqual(rows.first?.text, "we should ship on Friday")
+        XCTAssertEqual(rows.first?.speaker, "SPEAKER_01")
+        XCTAssertEqual(rows.first?.person, "person-sam")
+        XCTAssertEqual(try segmentMatches("Thursday"), 0, "FTS retained the superseded revision")
+        XCTAssertEqual(try segmentMatches("Friday"), 1, "FTS did not receive the replacement text")
     }
 
     // MARK: - FTS synchronisation

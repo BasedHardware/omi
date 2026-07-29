@@ -82,6 +82,10 @@ public struct Segment: Codable, Sendable, Identifiable, FetchableRecord, Mutable
     /// model was unsure". A default of 0 here would turn a year of perfectly good transcript into
     /// evidence that the app never understood a word.
     public var confidence: Double?
+    /// Stable Omi conversation identity for a cloud-transcribed segment. Nil for local lines.
+    public var backendConversationId: String?
+    /// Stable only within `backendConversationId`. Nil means the backend supplied no safe revision key.
+    public var backendSegmentId: String?
 
     public init(
         id: Int64? = nil,
@@ -92,7 +96,9 @@ public struct Segment: Codable, Sendable, Identifiable, FetchableRecord, Mutable
         text: String,
         speakerLabel: String? = nil,
         personId: String? = nil,
-        confidence: Double? = nil
+        confidence: Double? = nil,
+        backendConversationId: String? = nil,
+        backendSegmentId: String? = nil
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -107,6 +113,8 @@ public struct Segment: Codable, Sendable, Identifiable, FetchableRecord, Mutable
         self.speakerLabel = Segment.attribute(speakerLabel)
         self.personId = Segment.attribute(personId)
         self.confidence = confidence
+        self.backendConversationId = Segment.attribute(backendConversationId)
+        self.backendSegmentId = Segment.attribute(backendSegmentId)
     }
 
     private static func attribute(_ value: String?) -> String? {
