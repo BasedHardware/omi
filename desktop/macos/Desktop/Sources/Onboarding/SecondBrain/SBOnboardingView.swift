@@ -6,6 +6,19 @@ enum SBOnboardingRepository {
   static let url = URL(string: "https://github.com/BasedHardware/omi")!
 }
 
+enum SBOnboardingPanelLayout {
+  static let maximumSize = CGSize(width: 540, height: 640)
+  static let horizontalInset: CGFloat = 24
+  static let verticalInset: CGFloat = 20
+
+  static func size(in availableSize: CGSize) -> CGSize {
+    CGSize(
+      width: min(maximumSize.width, max(0, availableSize.width - horizontalInset * 2)),
+      height: min(maximumSize.height, max(0, availableSize.height - verticalInset * 2))
+    )
+  }
+}
+
 /// The Second Brain conversational onboarding — a chat with Omi that streams
 /// word-by-word and performs real side-effects. Replaces the legacy wizard.
 struct SBOnboardingView: View {
@@ -56,39 +69,23 @@ struct SBOnboardingView: View {
       } else {
         SBWallpaper()
       }
-      panel
-        .frame(width: 540, height: min(640, 900))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      GeometryReader { geometry in
+        let panelSize = SBOnboardingPanelLayout.size(in: geometry.size)
+        panel
+          .frame(width: panelSize.width, height: panelSize.height)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
     }
     .overlay(alignment: .topTrailing) {
-      HStack(spacing: 8) {
-        if model.canGoBack {
-          Button(action: { model.goBack() }) {
-            Text("← Back")
-              .geist(size: 13).foregroundStyle(sb.ink(.w75))
-              .padding(.horizontal, 14).padding(.vertical, 7)
-              .background(
-                Capsule().fill(Color.white.opacity(0.06))
-                  .background(.ultraThinMaterial, in: Capsule())
-              )
-              .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
-          }
-          .buttonStyle(.plain)
-          .help("Go back and change an earlier answer")
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 8) {
+          backButton
+          skipButton
         }
-
-        Button(action: { model.skip() }) {
-          Text("Skip")
-            .geist(size: 13).foregroundStyle(sb.ink(.w45))
-            .padding(.horizontal, 14).padding(.vertical, 7)
-            .background(
-              Capsule().fill(Color.white.opacity(0.06))
-                .background(.ultraThinMaterial, in: Capsule())
-            )
-            .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+        VStack(alignment: .trailing, spacing: 8) {
+          backButton
+          skipButton
         }
-        .buttonStyle(.plain)
-        .help("Skip onboarding and go to your second brain")
       }
       .padding(.top, 20).padding(.trailing, 24)
     }
@@ -159,6 +156,38 @@ struct SBOnboardingView: View {
     )
     .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
     .shadow(color: .black.opacity(0.5), radius: 60, y: 30)
+  }
+
+  @ViewBuilder private var backButton: some View {
+    if model.canGoBack {
+      Button(action: { model.goBack() }) {
+        Text("← Back")
+          .geist(size: 13).foregroundStyle(sb.ink(.w75))
+          .padding(.horizontal, 14).padding(.vertical, 7)
+          .background(
+            Capsule().fill(Color.white.opacity(0.06))
+              .background(.ultraThinMaterial, in: Capsule())
+          )
+          .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+      }
+      .buttonStyle(.plain)
+      .help("Go back and change an earlier answer")
+    }
+  }
+
+  private var skipButton: some View {
+    Button(action: { model.skip() }) {
+      Text("Skip")
+        .geist(size: 13).foregroundStyle(sb.ink(.w45))
+        .padding(.horizontal, 14).padding(.vertical, 7)
+        .background(
+          Capsule().fill(Color.white.opacity(0.06))
+            .background(.ultraThinMaterial, in: Capsule())
+        )
+        .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+    }
+    .buttonStyle(.plain)
+    .help("Skip onboarding and go to your second brain")
   }
 
   private func scrollDown(_ proxy: ScrollViewProxy) {
