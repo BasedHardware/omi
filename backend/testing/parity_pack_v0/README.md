@@ -26,6 +26,28 @@ manifests, reports, or Git.
 wire observations using relative milliseconds. A whitelist miss writes no
 cassette bytes and retains only bounded lane/reason metadata.
 
+## Live listen wiring
+
+The `/v4/listen` runtime creates `routers.listen.parity_capture.ListenParityCapture`
+only after Firebase WebSocket authentication and STT provider selection. It uses
+the Firebase UID solely for the exact `CaptureWhitelist` comparison, derives
+anonymous session/event identifiers before cassette creation, and records decoded
+client audio, the successful STT socket send, and provider transcript callbacks.
+The capture persists during normal listen-session teardown.
+
+Set a fourth, required operator-only variable to an absolute path outside the
+repository:
+
+```bash
+OMI_PARITY_PACK_ROOT=/absolute/restricted/local/parity-pack
+```
+
+There is no default root. A missing, relative, or repository-contained root is
+disabled; `OMI_ENV_STAGE` other than `dev`, a missing `OMI_PARITY_PACK_CAPTURE=1`,
+or an allowlist miss is also disabled. No Helm or production default enables this
+path. The local cassette may include restricted audio/transcript event payloads,
+so keep its root outside Git and never attach it to a PR.
+
 ## Replay players
 
 `STTCassettePlayer` and `LLMCassettePlayer` are callback-oriented loopback
