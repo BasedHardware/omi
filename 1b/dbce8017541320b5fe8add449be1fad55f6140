@@ -1,0 +1,100 @@
+desktop/earshot/Sources/EarshotApp/Account/OmiAuth.swift
+  s_030a94a2f319d8::t_d7490c35803185 273
+  s_030a94a2f319d8::t_0458fd9ff08183 488-489,493
+  s_030a94a2f319d8::t_ce79c3198d173f 1-272,274-487,490-492,494-565
+desktop/earshot/Sources/EarshotApp/Backend/ConversationUploader.swift
+  s_030a94a2f319d8::t_7a0d592311dcd5 1-248,259-262,264-300,303,306-411,417-665,668-685
+  s_030a94a2f319d8::t_d0abf84ba7b7a7 301-302,304-305
+  s_030a94a2f319d8::t_d11fc6be6cecba 412-416
+  s_030a94a2f319d8::t_33c4d8d302d5d2 666-667
+  s_030a94a2f319d8::t_df998793550d15 249-258,263
+desktop/earshot/Sources/EarshotMCPKit/Tools.swift
+  s_030a94a2f319d8::t_3ac123d05efc00 49-63,81-85,96,101-116,122-123,127-129,132-142,146-147,153-155,159-161,163-166,168,172-174,176-177,181-184,188-189,201-202,214-216,220-221,224,279-283,346-354,360,368,372-382,385-391,393-414,417-418,426-435,437-438,441,446,450-465,467,470,474,477-481,485-506,512-514,521,525-546,549,555,559-567,569,572-573,575-576,579-580,596,602-613,618,627-653,657,662-674,676,681-694,696-772,775-776,780,784-785,788,791,794-798,801,807-812,824-828,832,834,850-851,853,857,859,862-1011,1013-1017,1019-1022,1024-1029,1033-1050,1053,1089-1099,1112-1113,1123-1126,1145-1146,1156-1214,1217-1218,1220-1222,1226-1229,1237,1249-1251,1255-1281,1294,1297,1332,1342,1346,1351,1355,1359-1370,1386-1393
+  s_030a94a2f319d8::t_5a33e9467e7167 369-371
+  s_030a94a2f319d8::t_53b8be2f5e773e 447-449
+  s_030a94a2f319d8::t_65756073c7bec6 556-558
+  s_030a94a2f319d8::t_a7233078e41574 614-617,619-626
+  s_030a94a2f319d8::t_9f137460c0352c 1394
+desktop/earshot/Sources/EarshotApp/Account/LoopbackCallbackServer.swift
+  s_030a94a2f319d8::t_44179af981e7f6 1-379
+desktop/earshot/Sources/EarshotCore/UploadQueue.swift
+  s_030a94a2f319d8::t_a6fb38885cc3af 1-344,346-355,358-397,400-448,450,456,458-467
+  s_030a94a2f319d8::t_2e7df8ea6e90f3 449,451-455,457
+  s_030a94a2f319d8::t_670b42dd74a0b1 345
+  s_030a94a2f319d8::t_ada78c1b45131d 356-357
+  s_030a94a2f319d8::t_0d7c60a2543d68 398-399
+desktop/earshot/Sources/EarshotMCPKit/OmiBackend.swift
+  s_030a94a2f319d8::t_ad301f77dd4a1a 162
+  s_030a94a2f319d8::t_6339a99b35cb48 485-487
+  s_030a94a2f319d8::t_60f0d958eb66d2 636
+  s_030a94a2f319d8::t_383a0796557bb6 842-845
+  s_030a94a2f319d8::t_55a0a69ce386ab 364-366
+  s_030a94a2f319d8::t_0682583eb671e9 220-222
+  s_030a94a2f319d8::t_42a6b81c69bb3e 224
+  s_030a94a2f319d8::t_6530c6461cda35 1-161,163-219,223,225-265,267-363,367-484,488-635,637-841,846
+  s_030a94a2f319d8::t_4e8c60abdfa54a 266
+desktop/earshot/Sources/EarshotApp/Onboarding/OnboardingView.swift
+  s_030a94a2f319d8::t_b1c318d42d4988 308-315,317-321
+  s_030a94a2f319d8::t_9dad2f73a3559b 228-230
+  s_030a94a2f319d8::t_c0ecef2f3fcdda 344-345
+  s_030a94a2f319d8::t_2a6c31fb490fc8 44-50
+  s_030a94a2f319d8::t_0c1de47e36edb5 5-11,13,15,22-24
+  s_030a94a2f319d8::t_7e65a8dfa9b885 115,121-190
+  s_030a94a2f319d8::t_3208a17ce45a6a 89
+  s_030a94a2f319d8::t_1373ad619ca38f 71-73
+  s_030a94a2f319d8::t_c197716bab4849 260-265
+  s_030a94a2f319d8::t_4dc923feafdec4 243
+  s_030a94a2f319d8::t_83d40634ddb4f1 25
+  s_196fb3eacdba24::t_d043602b369483 101,103-105
+desktop/earshot/Sources/EarshotApp/Backend/ScreenActivityUploader.swift
+  s_030a94a2f319d8::t_602e6b8c5b9f0e 147
+  s_030a94a2f319d8::t_db91fd219d6d38 164-165
+  s_030a94a2f319d8::t_88b0ec67c635c3 1-146,148-163,166-199,204-205,209-265,267-272,275-482
+  s_030a94a2f319d8::t_8ab149c141f824 266,273-274
+  s_030a94a2f319d8::t_45eac8c2b4e020 200-203,206-208
+desktop/earshot/Sources/EarshotApp/Account/SessionStore.swift
+  s_030a94a2f319d8::t_bd3c5d34d98c29 1-137
+desktop/earshot/Sources/EarshotApp/Backend/OmiAPI.swift
+  s_030a94a2f319d8::t_a2bf8ee522ae04 140-141
+  s_030a94a2f319d8::t_52c3dd4bf45423 211-212
+  s_030a94a2f319d8::t_4e9b59073d6d90 297
+  s_030a94a2f319d8::t_033cf84d07c7ee 158-159,161
+  s_030a94a2f319d8::t_ceb285681d04f8 199
+  s_030a94a2f319d8::t_941270a3a8e3e6 1-104,107-116,119-139,142-157,160,162-198,200-210,213-228,255-296,298-444,446-450,452-515
+  s_030a94a2f319d8::t_216eb37b19e1d4 229-254
+  s_030a94a2f319d8::t_2e3b7747df4d80 105-106,117-118
+  s_030a94a2f319d8::t_862e260effb197 445
+  s_030a94a2f319d8::t_ce55dfe718befa 451
+desktop/earshot/Sources/EarshotApp/Engine.swift
+  s_030a94a2f319d8::t_337375e3cf7101 104-109,502-505,586,599-601
+desktop/earshot/Sources/EarshotApp/MenuBar/StatusView.swift
+  s_030a94a2f319d8::t_169c09acd5c53d 14-15,32,185-227
+desktop/earshot/scripts/build.sh
+  s_030a94a2f319d8::t_4b256493dc8c56 43-45,146-165
+desktop/earshot/scripts/uninstall.sh
+  s_030a94a2f319d8::t_cff1b2583fd4e1 27-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "1bdbce8017541320b5fe8add449be1fad55f6140",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_196fb3eacdba24": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a9aae42d00f73b470",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

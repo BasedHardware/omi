@@ -1,0 +1,27 @@
+desktop/earshot/Sources/EarshotApp/MenuBar/EarshotMark.swift
+  s_030a94a2f319d8::t_4bb7e9fccc1ced 1-78
+desktop/earshot/Sources/EarshotApp/Onboarding/MenuBarSpotlight.swift
+  s_030a94a2f319d8::t_e75b937475548e 1-190
+desktop/earshot/Sources/EarshotApp/EarshotApp.swift
+  s_030a94a2f319d8::t_18dfffae6f1ec2 23-29
+desktop/earshot/Sources/EarshotApp/Onboarding/OnboardingView.swift
+  s_030a94a2f319d8::t_9995611f1885be 75-88,517-520,526-529
+desktop/earshot/Sources/EarshotApp/Onboarding/OnboardingWindow.swift
+  s_030a94a2f319d8::t_4d42ca222c00c5 90-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "1292532592ae33a4ab253bd1e72bcde76688dbce",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

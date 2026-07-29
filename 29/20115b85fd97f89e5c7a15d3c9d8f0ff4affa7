@@ -1,0 +1,109 @@
+desktop/context-for-claude/ARCHITECTURE.md
+  s_030a94a2f319d8::t_48f71db8c42c39 1,12,27-30,41,61,64,85-88,97,104,106
+desktop/context-for-claude/CONTRACTS.md
+  s_030a94a2f319d8::t_79f6a73db5884e 1,19-20,25-28,35-38,42,44,47,49-50,66,99,101,105,107-108,110-111,113-114,128,130,162,166,171,175,192,194,217,229,258,260,264,272,276,278,283,285,288,293-294,296,308,321,331,348,351,371,388,394,411,416,424,434,436,440,443,452-454,456,461,463,465
+desktop/context-for-claude/Package.swift
+  s_030a94a2f319d8::t_50730a3749ab54 5,8-10,23,29-30,34-35,39,41,47-48,52-53
+desktop/context-for-claude/README.md
+  s_030a94a2f319d8::t_e898e84ac4785e 1,9,25,29,36,68,71,93
+desktop/context-for-claude/Resources/Info.plist
+  s_030a94a2f319d8::t_55e62d1a76beef 6,8,10,12
+desktop/context-for-claude/Sources/ContextApp/Account/LoopbackCallbackServer.swift
+  s_030a94a2f319d8::t_01962495dc997f 33,233-234,248-250
+desktop/context-for-claude/Sources/ContextApp/Account/OmiAuth.swift
+  s_030a94a2f319d8::t_0d4020345b944e 21,25,34,36,84,88,96,114,127,130,153,156,167,217,235,243,245,252,271,274,324,331,364,406,434,473,503,508,513
+desktop/context-for-claude/Sources/ContextApp/Account/SessionStore.swift
+  s_030a94a2f319d8::t_e0c718e7ad36a0 5,19,24-25,35,54,62,74,88,96,104,107,118
+desktop/context-for-claude/Sources/ContextApp/Backend/ConversationUploader.swift
+  s_030a94a2f319d8::t_dd75b7124cad2b 2,7,66,93,97,117,139,169,212,228,251,260,272,280,291,303,318,322,333,336,345,350,357,361,373,376,398,406,417,563,601,610,649,658-659,662,677,679,682
+desktop/context-for-claude/Sources/ContextApp/Backend/OmiAPI.swift
+  s_030a94a2f319d8::t_b34826e55acc84 31,34,95,156,179,203,222,240,250,276,314,377,380,459,485
+desktop/context-for-claude/Sources/ContextApp/Backend/ScreenActivityUploader.swift
+  s_030a94a2f319d8::t_0d2151da693098 3,48-49,66,88,98,116,138,154,174,176,180,187,215,219,229,266-267,271,288
+desktop/context-for-claude/Sources/ContextApp/Capture/MicCapture.swift
+  s_030a94a2f319d8::t_37a5c1d499a9c3 53-54,146,171,232,313,391,493,503,638,645,652
+desktop/context-for-claude/Sources/ContextApp/Capture/ScreenWatcher.swift
+  s_030a94a2f319d8::t_52d945b5197a0e 1,34,46,61,135,238,245,472,476,487,491,499
+desktop/context-for-claude/Sources/ContextApp/Capture/SystemAudioCapture.swift
+  s_030a94a2f319d8::t_002d9cafe6722e 46,96,121,133,140,151,171,179,211,346,413,418,428,446,453
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_030a94a2f319d8::t_b0ec5ea82f6cdf 5,12-13,23,29,38,40,77,90,92
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_030a94a2f319d8::t_83754ccc2b5eb3 1,44,62,70,107-114,129,139,151,350,355,359,390,454,457,463,470,473,486,489,530,541,552,555,561,566,592,601
+desktop/context-for-claude/Sources/ContextApp/Integration/ClaudeRegistrar.swift
+  s_030a94a2f319d8::t_f4bc3b98a9b9a9 1,4,24,28,55,62,68,75,81,136,223,226,230
+desktop/context-for-claude/Sources/ContextApp/Integration/LoginItem.swift
+  s_030a94a2f319d8::t_f4e311ea21afd4 11,28,30,34,42,44
+desktop/context-for-claude/Sources/ContextApp/MenuBar/ContextMark.swift
+  s_030a94a2f319d8::t_ee089188b4fd36 3,14
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_030a94a2f319d8::t_e545ddf9d01076 1,8
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_030a94a2f319d8::t_08a3654739ce94 22,115,137,438,477,493,504,506
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingWindow.swift
+  s_030a94a2f319d8::t_ed8132196d9529 36
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_030a94a2f319d8::t_8eaec220193634 2,7,95,110,134,136,165,189,226,239,248,268,320-322,325
+desktop/context-for-claude/Sources/ContextApp/Support/Log.swift
+  s_030a94a2f319d8::t_9dbbb8b9896378 4,7,9,12,25,42-43,46
+desktop/context-for-claude/Sources/ContextApp/Transcribe/Transcriber.swift
+  s_030a94a2f319d8::t_f8d796c1179dab 2,29,60,63,110,117,192,202,257,262,266,282,328,356,362
+desktop/context-for-claude/Sources/ContextCore/ClaudeConfig.swift
+  s_030a94a2f319d8::t_dd03e21e56c180 3,10,15-22,31,48,70,76,84-87,94,101,197,308,310
+desktop/context-for-claude/Sources/ContextCore/Models.swift
+  s_030a94a2f319d8::t_ed2ab86757e6fa 137,171,195,247,256
+desktop/context-for-claude/Sources/ContextCore/Paths.swift
+  s_030a94a2f319d8::t_b49bcfdf0f5971 5-8,10,13-19,22,24,50-100,103,115,126,128-129,134
+desktop/context-for-claude/Sources/ContextCore/Policy.swift
+  s_030a94a2f319d8::t_d93988151ea693 7
+desktop/context-for-claude/Sources/ContextCore/Queries.swift
+  s_030a94a2f319d8::t_34e874fb07080c 28,45,47,59,75,142,160,180,208,221
+desktop/context-for-claude/Sources/ContextCore/Store.swift
+  s_030a94a2f319d8::t_c0821cecab3f1c 4,6,12,19,23,29,35,54,57,111,217,235-236
+desktop/context-for-claude/Sources/ContextCore/UploadQueue.swift
+  s_030a94a2f319d8::t_623cb2adfdbbb8 6,123,173-174,192,194,213,215,232,234,250,252,264-265,280,298,308,317,333,377-378,422,433
+desktop/context-for-claude/Sources/ContextMCP/main.swift
+  s_030a94a2f319d8::t_9df31252fad1e0 1-2,8,13-14,16-18
+desktop/context-for-claude/Sources/ContextMCPKit/MCPServer.swift
+  s_030a94a2f319d8::t_7b155f4306aa18 1,10-35,37-42,45,48,119,181
+desktop/context-for-claude/Sources/ContextMCPKit/OmiBackend.swift
+  s_030a94a2f319d8::t_e4866b509f1aae 1,18-19,27,31,33,35,72,81,199,409,411-412,585
+desktop/context-for-claude/Sources/ContextMCPKit/Tools.swift
+  s_030a94a2f319d8::t_1438aad990a519 1,52,56,86,105,128,138,160,182,189,214,282,360,439,448,463,492,519,524,534,544,550,561,578,608,614,625,631,646,648,654,998,1009,1082,1119,1123,1132,1134,1136,1162,1194,1204,1207,1214-1215,1225,1246,1249,1256,1265,1290,1292,1305,1310,1364-1365,1367,1517,1559-1561
+desktop/context-for-claude/Tests/ContextCoreTests/ClaudeConfigTests.swift
+  s_030a94a2f319d8::t_4211e33312d9f7 1,8,12,29,70,79,83,112,116
+desktop/context-for-claude/Tests/ContextCoreTests/Fixture.swift
+  s_030a94a2f319d8::t_147308723813e1 1,5,18,29,33,118,122,126-127
+desktop/context-for-claude/Tests/ContextCoreTests/PolicyTests.swift
+  s_030a94a2f319d8::t_3ebd4011f7523e 1
+desktop/context-for-claude/Tests/ContextCoreTests/QueriesTests.swift
+  s_030a94a2f319d8::t_a9726e95b50899 1,39,41,107,228,230,260,268
+desktop/context-for-claude/Tests/ContextCoreTests/StoreTests.swift
+  s_030a94a2f319d8::t_85760892f3690a 1,154,169,187,200,237
+desktop/context-for-claude/Tests/ContextMCPKitTests/MCPServerTests.swift
+  s_030a94a2f319d8::t_c24c9684222567 1-2,26,154,156,159,163,165
+desktop/context-for-claude/Tests/ContextMCPKitTests/ToolsTests.swift
+  s_030a94a2f319d8::t_147ccd3db57b62 1-2,88,213,219
+desktop/context-for-claude/docs/earshot-design-system.md
+  s_030a94a2f319d8::t_e61b60c10f9964 1
+desktop/context-for-claude/scripts/build.sh
+  s_030a94a2f319d8::t_1bb6fa071abbb2 3,6,14,27-29,35,43-45,68,120,139-140,142-143,147-148,151,158,160-162,171,227,229,240,256,285,299
+desktop/context-for-claude/scripts/uninstall.sh
+  s_030a94a2f319d8::t_7c59a80785b5f0 3,6-7,20-22,24,27-29,45,69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2920115b85fd97f89e5c7a15d3c9d8f0ff4affa7",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

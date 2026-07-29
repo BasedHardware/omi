@@ -1,0 +1,35 @@
+desktop/earshot/Tests/EarshotMCPKitTests/ToolsTests.swift
+  s_030a94a2f319d8::t_ce55be86721bc4 51-58
+desktop/earshot/Sources/EarshotMCPKit/OmiBackend.swift
+  s_030a94a2f319d8::t_71854e38cfdc11 133
+  s_030a94a2f319d8::t_23992e14f48d3a 38-44,52,54
+  s_030a94a2f319d8::t_1c444cdaf2cdf2 629-630
+  s_030a94a2f319d8::t_3555269cdfea30 606-615
+  s_030a94a2f319d8::t_1cfb3c76edc159 412
+  s_030a94a2f319d8::t_702fa79d631837 173-174
+  s_030a94a2f319d8::t_3c398ca702b854 45-51
+  s_030a94a2f319d8::t_a5ca4f188edc52 151-152
+desktop/earshot/Sources/EarshotMCPKit/Tools.swift
+  s_030a94a2f319d8::t_79073dcdc77f36 385
+  s_030a94a2f319d8::t_ab31b7dced1730 486
+  s_030a94a2f319d8::t_ab0a982a9e26c9 601
+  s_030a94a2f319d8::t_85114ea3008685 556-565,571-572
+  s_030a94a2f319d8::t_eb9cedbc9baa5f 1285-1294
+  s_030a94a2f319d8::t_c0cccca52e3a05 406-412,417-429,431-436
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "d979b4b3a911c002a226e85ee552f605267f0d2e",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

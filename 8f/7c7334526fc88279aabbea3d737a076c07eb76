@@ -1,0 +1,21 @@
+desktop/earshot/README.md
+  s_030a94a2f319d8::t_eb8b3e00c3afa0 1-112
+desktop/earshot/scripts/build.sh
+  s_030a94a2f319d8::t_f15a57538954da 104-124,171-174
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "8f7c7334526fc88279aabbea3d737a076c07eb76",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

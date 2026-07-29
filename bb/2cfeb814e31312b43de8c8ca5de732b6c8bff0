@@ -1,0 +1,90 @@
+desktop/context-for-claude/Tests/ContextCoreTests/StoreTests.swift
+  s_030a94a2f319d8::t_bd170d7efa9864 566-567
+  s_030a94a2f319d8::t_754a28f8f01dac 96
+  s_030a94a2f319d8::t_ab22d8d1955dda 59-93,107-148
+  s_030a94a2f319d8::t_543318432e0224 571-574
+  s_030a94a2f319d8::t_8ac4036551f95b 94-95,97-106
+  s_030a94a2f319d8::t_4ec7969a4639fa 207-247
+  s_030a94a2f319d8::t_ec976a539535ad 562-565,568-570,575-580
+desktop/context-for-claude/Sources/ContextCore/Queries.swift
+  s_030a94a2f319d8::t_d2908de1b210e3 1066-1069,1071-1072
+  s_030a94a2f319d8::t_4b95de4e28d745 489
+  s_030a94a2f319d8::t_4dd524e99fb17c 566
+  s_030a94a2f319d8::t_8a2872018464a0 21-36
+  s_030a94a2f319d8::t_6ba40a7329f6d4 349
+  s_030a94a2f319d8::t_40e4dda050cc98 1032-1035
+desktop/context-for-claude/Sources/ContextMCPKit/Tools.swift
+  s_030a94a2f319d8::t_5a141fc28cd83c 998-1016,1021-1022,1028-1033,1036-1057
+  s_030a94a2f319d8::t_5224215431a820 216-217
+  s_030a94a2f319d8::t_bdcbc1b8b16838 235-236
+  s_030a94a2f319d8::t_40c50ce1ae725e 1100-1111
+  s_030a94a2f319d8::t_2ac193723530bb 1124
+  s_030a94a2f319d8::t_daea3bba78238c 1293-1299
+  s_030a94a2f319d8::t_2b31b5d1de6f12 914-985
+  s_030a94a2f319d8::t_b94b06af6c983c 169-174
+  s_030a94a2f319d8::t_93d198e929cb2e 1175-1176
+  s_030a94a2f319d8::t_542a875cc66a47 1017-1020,1023-1027,1034-1035
+  s_030a94a2f319d8::t_83fb7d8defe0dc 705-713
+  s_030a94a2f319d8::t_2d3b02cacf6f8a 424-437,448-450,467-470
+  s_030a94a2f319d8::t_f65af82f120659 1247-1250,1253-1260
+  s_030a94a2f319d8::t_06aaeb92a862cb 1340-1342,1345,1347
+  s_030a94a2f319d8::t_4bb561b644be51 757-760,769-771
+desktop/context-for-claude/Sources/ContextCore/Models.swift
+  s_030a94a2f319d8::t_a6c89f5d4ccd93 55-61,69-70,79
+  s_030a94a2f319d8::t_a619785a294643 125-140,151-158,166-167,176-179
+desktop/context-for-claude/Tests/ContextCoreTests/QueriesTests.swift
+  s_030a94a2f319d8::t_41f5905ad9dc46 103-179,182,186-187
+  s_030a94a2f319d8::t_8938519b900ee3 374-392
+  s_030a94a2f319d8::t_913eefaab64eeb 180-181,183-185
+desktop/context-for-claude/Tests/ContextMCPKitTests/ToolsTests.swift
+  s_030a94a2f319d8::t_135356196ebd2c 821-871,874-885
+  s_030a94a2f319d8::t_b082c9061f9a19 526-597,599-608,611,613-695
+  s_030a94a2f319d8::t_61cb7f962af69a 609-610,612
+  s_030a94a2f319d8::t_aef261411dfb89 598
+  s_030a94a2f319d8::t_3987ff8efeeee2 872-873
+desktop/context-for-claude/Sources/ContextCore/Store.swift
+  s_030a94a2f319d8::t_d048a45eb19773 389-407
+desktop/context-for-claude/Sources/ContextApp/Capture/AudioMixer.swift
+  s_030a94a2f319d8::t_a460c04a75b5ee 1-20,25,30-292
+  s_030a94a2f319d8::t_eb7746440ceaba 21-24,26-29
+desktop/context-for-claude/Sources/ContextApp/Transcribe/Transcriber.swift
+  s_030a94a2f319d8::t_ea076d881c63c0 353-384
+  s_030a94a2f319d8::t_95fc55bea6df6f 433-457,463-480,482,486-488
+  s_030a94a2f319d8::t_bc968c02bee8bd 494
+  s_030a94a2f319d8::t_3d62ddd20508ec 515-526,533,535,540-550
+  s_030a94a2f319d8::t_b319b9e89b77c5 559-571,575,578,580-590,600,602-623
+  s_030a94a2f319d8::t_899f9a743a280e 551-552
+desktop/context-for-claude/Sources/ContextApp/Backend/ListenSocket.swift
+  s_030a94a2f319d8::t_183e7ddf7bca74 204
+  s_030a94a2f319d8::t_fbfc4ea5105e86 283-291
+  s_030a94a2f319d8::t_ffb38b45cd58b4 170,174-177,181-189,191
+  s_030a94a2f319d8::t_140e495635de77 125-127
+  s_030a94a2f319d8::t_7c94e8aa6b4480 70-72
+  s_030a94a2f319d8::t_3915204b310c75 316-326
+  s_030a94a2f319d8::t_e674e0073528f8 73-77
+  s_030a94a2f319d8::t_8fdd5a4405f684 1-69,78-124,128-169,171-173,178-180,190,192-203,205-282,292-315,327-496,501-505,507-622,630-772,776-827,829-842,851-852
+  s_030a94a2f319d8::t_7a2b9be33c3636 497-500,506
+  s_030a94a2f319d8::t_5f5e5c8dc0341e 623-629
+  s_030a94a2f319d8::t_8545ae4c123814 773-775
+  s_030a94a2f319d8::t_b6db2d3bb3298a 828,843-850
+desktop/context-for-claude/Sources/ContextApp/Account/OmiAuth.swift
+  s_030a94a2f319d8::t_752f00fa541b2c 82-89,91-98
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_030a94a2f319d8::t_7ced4ad1c201a8 89-94,178-181,254-318,323-327,336,436-449
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "bb2cfeb814e31312b43de8c8ca5de732b6c8bff0",
+  "prompts": {},
+  "sessions": {
+    "s_030a94a2f319d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2f9eea09-4e93-491a-97fc-64478d14b9b6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
