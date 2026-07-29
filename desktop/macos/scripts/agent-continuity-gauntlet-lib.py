@@ -4134,7 +4134,7 @@ def continuity_contract_self_check_failures() -> list[str]:
         "func testHydratePreferencePrefersRunThenSessionThenPill(",
         "func testFindPillMatchesByHydratePreferenceOrder(",
         "func testAgentCompletionBlockExposesOpenRefAndStaysVisible(",
-        "func testChatSelectionDoesNotWrapStackChromeInSelectionOverlay(",
+        "func testChatSelectionIsLimitedToSettledMessageBodies(",
         "func testAgentPreviewTextPrefersPromptOverOutput(",
         "func testAgentCompletionCardsUsePromptPreviewHelper(",
         "func testFloatingResourceStripsBindPerMessageNotProviderWide(",
