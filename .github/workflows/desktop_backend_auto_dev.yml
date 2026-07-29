@@ -183,9 +183,13 @@ jobs:
       - name: Build and publish Agent VM image
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}
         run: |
           set -euo pipefail
-          test -n "$AGENT_GCS_BUCKET"
+          if [[ -z "$AGENT_GCS_BUCKET" ]]; then
+            echo "::warning::AGENT_GCS_BUCKET is not set — skipping Agent VM image build"
+            exit 0
+          fi
           agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.candidate-identity.outputs.image_tag }}"
           docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
           python3 backend/scripts/runtime_image_contracts.py smoke \
