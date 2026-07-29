@@ -492,10 +492,6 @@ export class PiMonoAdapter implements HarnessAdapter {
     const args = [
       "--mode",
       "rpc",
-      // Headless desktop RPC has no TUI host. Auto-discovered ~/.pi packages
-      // (ponytail, caveman, etc.) emit extension_ui_request and can stall the
-      // turn. Keep only the explicitly passed Omi extension (-e still works).
-      "--no-extensions",
       "-e",
       this.extensionPath,
       "--provider",

@@ -1,3 +1,3 @@
 {
-  "change": "Fixed text chat hanging forever when personal pi packages (like ponytail) were auto-loaded into the headless desktop agent"
+  "change": "Fixed text chat hanging forever when personal pi packages request unavailable headless UI dialogs"
 }

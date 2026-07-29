@@ -910,7 +910,7 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     vi.mocked(spawn).mockClear();
   });
 
-  it("passes --no-extensions so user TUI packages are not auto-discovered", async () => {
+  it("keeps user extensions enabled while loading the Omi extension", async () => {
     const config: HarnessConfig = {
       authToken: "test-token",
     };
@@ -922,7 +922,7 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     expect(cmd).toBe("/fake/pi");
     expect(args).toContain("--mode");
     expect(args).toContain("rpc");
-    expect(args).toContain("--no-extensions");
+    expect(args).not.toContain("--no-extensions");
     expect(args).toContain("-e");
     expect(args).toContain("/fake/ext.ts");
 
