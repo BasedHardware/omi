@@ -184,6 +184,8 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Keep formatter output reproducible across runner images and local hooks.
+          flutter-version: 3.44.5
           cache: true
 
       - name: Resolve Flutter dependencies for formatting
