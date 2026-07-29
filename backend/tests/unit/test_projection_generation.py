@@ -111,6 +111,19 @@ def test_the_persisted_document_records_what_produced_it(stub_reads):
     assert projection['evidence'] == ['conversation:conv-1']
     assert projection['selection']['fell_through'] == 1
     assert projection['selection']['signals']['conversation_ids'] == ['conv-1']
+    assert projection['why_this'] == {
+        'evidence': [
+            {
+                'reference': 'conversation:conv-1',
+                'source': 'conversation',
+                'label': 'The move',
+                'occurred_at': NOW,
+            }
+        ],
+        'evidence_tier': 'rich',
+        'selection_rank': 2,
+        'uncertainty': ['1 higher-ranked candidate did not pass grounding checks.'],
+    }
     # The rated charge is recorded whole: the vector, the spread across completions and the
     # inventory it was rated against. Cheap now, unrecoverable later, and the only way to find
     # out from our own data whether a week of one person's prose rates discriminatingly at all.

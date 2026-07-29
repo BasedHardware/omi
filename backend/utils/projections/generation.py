@@ -23,7 +23,7 @@ from utils.llm.gateway_client import generate_image_via_gateway
 from utils.observability.fallback import record_fallback
 from utils.projections.emotions import rate_emotions
 from utils.projections.image_prompt import build_image_prompt
-from utils.projections.selector import MAX_PREVIOUS, select_subject
+from utils.projections.selector import MAX_PREVIOUS, SubjectSelection, select_subject
 from utils.projections.sources import read_evidence, read_previous_projections
 from utils.projections.storage import (
     local_projection_image_path,
@@ -99,6 +99,7 @@ def generate_projection(
 
     image_prompt = build_image_prompt(subject, emotions)
     image_path = _store_image(_generate_image(image_prompt), uid, projection_id)
+    why_this = _why_this_receipt(packet, selection)
     logger.info(
         'generated projection uid=%s projection_id=%s stage=%s fell_through=%s',
         uid,
@@ -120,6 +121,7 @@ def generate_projection(
         'tone': subject.tone,
         'emotions': emotions.as_metadata(),
         'evidence': list(subject.evidence),
+        'why_this': why_this,
         'selection': selection.metadata,
         'generation': {
             'model': PROJECTION_IMAGE_MODEL,
@@ -131,6 +133,27 @@ def generate_projection(
     if cadence_key:
         projection['cadence_key'] = cadence_key
     return projection
+
+
+def _why_this_receipt(packet: EvidencePacket, selection: SubjectSelection) -> dict[str, Any]:
+    """Build a compact owner-visible receipt without exposing prompt or overview prose."""
+    selection_rank = int(selection.metadata.get('fell_through') or 0) + 1
+    uncertainty: list[str] = []
+    if packet.tier.value == 'thin':
+        uncertainty.append('No recent conversation overview was available; this used open action items.')
+    if selection_rank > 1:
+        uncertainty.append(
+            f'{selection_rank - 1} higher-ranked candidate'
+            f'{"s" if selection_rank > 2 else ""} did not pass grounding checks.'
+        )
+    if not uncertainty:
+        uncertainty.append('Selected from the highest-ranked grounded thread in the available window.')
+    return {
+        'evidence': packet.receipts_for(selection.subject.evidence),
+        'evidence_tier': packet.tier.value,
+        'selection_rank': selection_rank,
+        'uncertainty': uncertainty,
+    }
 
 
 def _generate_image(prompt: str) -> bytes:

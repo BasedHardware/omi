@@ -14,6 +14,7 @@ private final class ProjectionClientFake: ProjectionClient, @unchecked Sendable 
   var listError: Error?
   var imageError: Error?
   var suspendList = false
+  var invalidateAuthorizationOnFeedback = false
 
   var listCallCount: Int {
     lock.withLock { requestedOwnerIDs.count }
@@ -21,6 +22,12 @@ private final class ProjectionClientFake: ProjectionClient, @unchecked Sendable 
 
   private(set) var requestedOwnerIDs: [String] = []
   private(set) var imageOwnerIDs: [String] = []
+  private(set) var feedbackOwnerIDs: [String] = []
+  private var authorizationInvalidated = false
+
+  var authorizationIsCurrent: Bool {
+    lock.withLock { !authorizationInvalidated }
+  }
 
   func getProjections(
     limit: Int,
@@ -58,6 +65,21 @@ private final class ProjectionClientFake: ProjectionClient, @unchecked Sendable 
     lock.withLock { imageOwnerIDs.append(expectedOwnerId) }
     if let imageError { throw imageError }
     return imageData
+  }
+
+  func recordProjectionFeedback(
+    projectionID: String,
+    rating: ProjectionFeedbackRating,
+    expectedOwnerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> ProjectionFeedbackRating {
+    lock.withLock {
+      feedbackOwnerIDs.append(expectedOwnerId)
+      if invalidateAuthorizationOnFeedback {
+        authorizationInvalidated = true
+      }
+    }
+    return rating
   }
 
   func waitUntilListStarted() async {
@@ -185,6 +207,34 @@ final class ProjectionPageTests: XCTestCase {
     await viewModel.refreshOnActivation(
       now: start.addingTimeInterval(PollingConfig.activationCooldown))
     XCTAssertEqual(fake.listCallCount, 2)
+  }
+
+  func testFeedbackCarriesOwnerAndUpdatesTheRenderedSignal() async throws {
+    let fake = ProjectionClientFake()
+    fake.projections = [projection(id: "projection-a")]
+    fake.imageData = imageData()
+    let viewModel = ProjectionViewModel(client: fake)
+    await viewModel.load()
+
+    await viewModel.submitFeedback(.up)
+
+    XCTAssertEqual(viewModel.feedbackRating, .up)
+    XCTAssertEqual(fake.feedbackOwnerIDs, ["projection-owner-a"])
+  }
+
+  func testFeedbackResultIsRejectedWhenAuthorizationBecomesStale() async throws {
+    let fake = ProjectionClientFake()
+    fake.projections = [projection(id: "projection-a")]
+    fake.imageData = imageData()
+    fake.invalidateAuthorizationOnFeedback = true
+    let viewModel = ProjectionViewModel(
+      client: fake,
+      authorizationIsCurrent: { _ in fake.authorizationIsCurrent })
+    await viewModel.load()
+
+    await viewModel.submitFeedback(.down)
+
+    XCTAssertNil(viewModel.feedbackRating)
   }
 
   func testAPIClientAttachesFirebaseAuthorizationToImageRequest() async throws {

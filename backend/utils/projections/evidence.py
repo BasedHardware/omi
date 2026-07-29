@@ -92,6 +92,34 @@ class EvidencePacket:
             references.append('goal:active')
         return tuple(references)
 
+    def receipts_for(self, reference_ids: Sequence[str]) -> list[dict[str, Any]]:
+        """Compact owner-visible labels for validated references, without source prose."""
+        receipts: dict[str, dict[str, Any]] = {}
+        for item in self.conversations:
+            reference = f'conversation:{item.id}'
+            receipts[reference] = {
+                'reference': reference,
+                'source': 'conversation',
+                'label': _truncate(item.title, 160),
+                'occurred_at': item.created_at,
+            }
+        for item in self.action_items:
+            reference = f'action_item:{item.id}'
+            receipts[reference] = {
+                'reference': reference,
+                'source': 'action_item',
+                'label': _truncate(item.description, 160),
+                'occurred_at': item.created_at,
+            }
+        if self.goal is not None:
+            receipts['goal:active'] = {
+                'reference': 'goal:active',
+                'source': 'goal',
+                'label': _truncate(self.goal.title, 160),
+                'occurred_at': None,
+            }
+        return [receipts[reference] for reference in dict.fromkeys(reference_ids) if reference in receipts]
+
     def signal_summary(self) -> dict[str, Any]:
         """What this packet was built from, in a form that is safe to persist and log.
 

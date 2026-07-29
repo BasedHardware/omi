@@ -7,8 +7,8 @@ The response models live here too, so the app-client contract has one owner.
 
 import os
 import uuid
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -28,6 +28,8 @@ def _manual_generation_enabled() -> bool:
     stage = (os.getenv('OMI_ENV_STAGE') or os.getenv('ENVIRONMENT') or os.getenv('APP_ENV') or '').strip().lower()
     if stage in {'prod', 'production'}:
         return False
+    if (os.getenv('K_SERVICE') or os.getenv('KUBERNETES_SERVICE_HOST')) and not projection_storage.uses_gcs():
+        return False
     return not (os.getenv('K_SERVICE') or os.getenv('KUBERNETES_SERVICE_HOST')) or stage in {
         'dev',
         'development',
@@ -42,7 +44,29 @@ class ProjectionGeneration(BaseModel):
     model: Optional[str] = None
     size: Optional[str] = None
     quality: Optional[str] = None
-    prompt: Optional[str] = None
+
+
+class ProjectionEvidenceReceipt(BaseModel):
+    reference: str
+    source: Literal['conversation', 'action_item', 'goal']
+    label: str
+    occurred_at: Optional[datetime] = None
+
+
+class ProjectionWhyThis(BaseModel):
+    evidence: List[ProjectionEvidenceReceipt] = Field(default_factory=list)
+    evidence_tier: str
+    selection_rank: int = Field(ge=1)
+    uncertainty: List[str] = Field(default_factory=list)
+
+
+class ProjectionFeedback(BaseModel):
+    rating: Literal['up', 'down']
+    updated_at: Optional[datetime] = None
+
+
+class ProjectionFeedbackRequest(BaseModel):
+    rating: Literal['up', 'down']
 
 
 class ProjectionResponse(BaseModel):
@@ -55,30 +79,35 @@ class ProjectionResponse(BaseModel):
     subject: Optional[str] = None
     stage: Optional[str] = None
     generation: Optional[ProjectionGeneration] = None
+    why_this: Optional[ProjectionWhyThis] = None
+    feedback: Optional[ProjectionFeedback] = None
 
 
 class ProjectionsResponse(BaseModel):
     projections: List[ProjectionResponse] = Field(default_factory=list)
 
 
-# Persisted but never served. `selection.prompt` is the whole evidence packet — 7-10k tokens
-# of the user's own week — so a page of thirty projections would ship thirty copies of it.
-# The response model allows extra keys, so these have to be dropped explicitly rather than
-# relied on to be filtered by the schema.
-INTERNAL_PROJECTION_FIELDS = (
-    'selection',
-    'projection',
-    'evidence',
-    'setting',
-    'tone',
-    'emotions',
-    'image_path',
-    'cadence_key',
+# Serve an allowlist rather than trying to enumerate every internal field that generation
+# may add later. `selection.prompt` alone can contain 7-10k tokens of the owner's week.
+SERVED_PROJECTION_FIELDS = (
+    'id',
+    'created_at',
+    'imperative',
+    'image_url',
+    'subject',
+    'stage',
+    'generation',
+    'why_this',
+    'feedback',
 )
 
 
 def _served(projection: Dict[str, Any]) -> Dict[str, Any]:
-    return {key: value for key, value in projection.items() if key not in INTERNAL_PROJECTION_FIELDS}
+    served = {key: projection[key] for key in SERVED_PROJECTION_FIELDS if key in projection}
+    generation = served.get('generation')
+    if isinstance(generation, dict):
+        served['generation'] = {key: generation[key] for key in ('model', 'size', 'quality') if key in generation}
+    return served
 
 
 @router.post('/v1/users/projections/test', tags=['v1'], response_model=ProjectionResponse)
@@ -120,6 +149,26 @@ def get_projection_endpoint(projection_id: str, uid: str = Depends(auth.get_curr
     if not projection:
         raise HTTPException(status_code=404, detail='Projection not found')
     return _served(projection)
+
+
+@router.post(
+    '/v1/users/projections/{projection_id}/feedback',
+    tags=['v1'],
+    response_model=ProjectionFeedback,
+)
+def set_projection_feedback(
+    projection_id: str,
+    request: ProjectionFeedbackRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+) -> Dict[str, Any]:
+    """Record the authenticated owner's latest explicit response signal."""
+    try:
+        uuid.UUID(projection_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail='Projection not found')
+    if not projections_db.set_projection_feedback(uid, projection_id, request.rating):
+        raise HTTPException(status_code=404, detail='Projection not found')
+    return {'rating': request.rating, 'updated_at': datetime.now(timezone.utc)}
 
 
 @router.get('/v1/projection-images/{projection_id}.png', tags=['v1'], include_in_schema=False)

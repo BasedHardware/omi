@@ -1,12 +1,11 @@
 """The projection API serves the artifact, not the machinery behind it.
 
-`ProjectionResponse` allows extra keys, so anything added to the persisted document reaches
-the client unless it is dropped explicitly. `selection.prompt` is the entire evidence packet —
-7-10k tokens of the user's own week — and a default page is thirty projections, so leaking it
-turns a list read into a multi-megabyte response.
+`ProjectionResponse` allows extra keys, so the router uses a response allowlist. That keeps a
+future persisted field from silently becoming public. `selection.prompt` is the entire evidence
+packet — 7-10k tokens of the user's own week — and a default page is thirty projections.
 """
 
-from routers.projections import INTERNAL_PROJECTION_FIELDS, _served
+from routers.projections import SERVED_PROJECTION_FIELDS, _served
 
 PERSISTED = {
     'id': 'p1',
@@ -21,15 +20,17 @@ PERSISTED = {
     'evidence': ['Circling the move again'],
     'selection': {'prompt': 'THEIR MATERIAL ... the whole packet ...', 'model': 'gpt-4.1-mini'},
     'generation': {'model': 'gpt-image-1', 'prompt': 'the crossing already made'},
+    'future_internal_owner_context': 'must stay private without another denylist edit',
 }
 
 
 def test_the_selection_machinery_is_not_served():
     served = _served(PERSISTED)
 
-    for field in INTERNAL_PROJECTION_FIELDS:
-        assert field not in served
+    assert set(served) <= set(SERVED_PROJECTION_FIELDS)
+    assert 'future_internal_owner_context' not in served
     assert 'the whole packet' not in str(served)
+    assert 'prompt' not in served['generation']
 
 
 def test_the_artifact_itself_survives():

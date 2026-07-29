@@ -186,3 +186,10 @@ def test_reference_ids_distinguish_grounding_material_from_goal_context():
         'action_item:item-Return company laptop',
         'goal:active',
     )
+
+    receipts = packet.receipts_for(('action_item:item-Return company laptop', 'conversation:conv-1'))
+    assert [(receipt['source'], receipt['label']) for receipt in receipts] == [
+        ('action_item', 'Return company laptop'),
+        ('conversation', 'A conversation'),
+    ]
+    assert 'Talked about the move again.' not in str(receipts)

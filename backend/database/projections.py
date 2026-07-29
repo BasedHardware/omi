@@ -62,3 +62,26 @@ def get_projections(
         if isinstance(raw, dict):
             results.append(cast(Dict[str, Any], raw))
     return results
+
+
+def set_projection_feedback(
+    uid: str,
+    projection_id: str,
+    rating: str,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Set the owner's latest explicit response signal, or return False if absent."""
+    client = firestore_client or get_firestore_client()
+    projection_ref = client.collection('users').document(uid).collection(PROJECTIONS_COLLECTION).document(projection_id)
+    if not getattr(projection_ref.get(), 'exists', False):
+        return False
+    projection_ref.update(
+        {
+            'feedback': {
+                'rating': rating,
+                'updated_at': firestore.SERVER_TIMESTAMP,
+            }
+        }
+    )
+    return True

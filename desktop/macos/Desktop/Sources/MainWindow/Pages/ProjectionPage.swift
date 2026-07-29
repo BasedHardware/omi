@@ -30,7 +30,10 @@ struct ProjectionPage: View {
       .padding(.vertical, 32)
     }
     .background(OmiColors.backgroundPrimary)
-    .task { await viewModel.load() }
+    .task {
+      viewModel.registerAutomationActions()
+      await viewModel.load()
+    }
     .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
       viewModel.ownerDidChange()
       Task { await viewModel.load() }
@@ -49,6 +52,10 @@ struct ProjectionPage: View {
         Text(projection.imperative)
           .font(.system(size: 20, weight: .semibold))
           .fixedSize(horizontal: false, vertical: true)
+        if let whyThis = projection.whyThis {
+          whyThisDisclosure(whyThis)
+        }
+        feedbackControls
       }
     } else if viewModel.isLoading {
       ProgressView()
@@ -57,6 +64,58 @@ struct ProjectionPage: View {
       Text(viewModel.errorMessage ?? "No projection yet.")
         .frame(maxWidth: .infinity, minHeight: 240)
     }
+  }
+
+  private func whyThisDisclosure(_ receipt: ProjectionWhyThis) -> some View {
+    DisclosureGroup("Why this") {
+      VStack(alignment: .leading, spacing: 10) {
+        ForEach(receipt.evidence) { evidence in
+          Label {
+            Text(evidence.label)
+          } icon: {
+            Image(systemName: evidence.source == "action_item" ? "checklist" : "quote.bubble")
+          }
+        }
+        ForEach(receipt.uncertainty, id: \.self) { note in
+          Text(note)
+            .foregroundStyle(.secondary)
+        }
+      }
+      .font(.system(size: 13))
+      .padding(.top, 8)
+    }
+  }
+
+  private var feedbackControls: some View {
+    HStack(spacing: 12) {
+      feedbackButton(.up, systemName: "hand.thumbsup")
+      feedbackButton(.down, systemName: "hand.thumbsdown")
+      if viewModel.isSubmittingFeedback {
+        ProgressView().controlSize(.small)
+      }
+      if let error = viewModel.feedbackError {
+        Text(error)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  private func feedbackButton(
+    _ rating: ProjectionFeedbackRating,
+    systemName: String
+  ) -> some View {
+    Button {
+      Task { await viewModel.submitFeedback(rating) }
+    } label: {
+      Image(
+        systemName: viewModel.feedbackRating == rating
+          ? "\(systemName).fill"
+          : systemName)
+    }
+    .buttonStyle(.plain)
+    .disabled(viewModel.isSubmittingFeedback)
+    .accessibilityLabel(rating == .up ? "Helpful projection" : "Unhelpful projection")
   }
 
   @ViewBuilder
@@ -106,6 +165,13 @@ protocol ProjectionClient: Sendable {
     expectedOwnerId: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> Data
+
+  func recordProjectionFeedback(
+    projectionID: String,
+    rating: ProjectionFeedbackRating,
+    expectedOwnerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> ProjectionFeedbackRating
 }
 
 extension APIClient: ProjectionClient {}
@@ -119,12 +185,17 @@ final class ProjectionViewModel: ObservableObject {
   @Published private(set) var isImageLoading = false
   @Published private(set) var imageLoadFailed = false
   @Published private(set) var errorMessage: String?
+  @Published private(set) var feedbackRating: ProjectionFeedbackRating?
+  @Published private(set) var isSubmittingFeedback = false
+  @Published private(set) var feedbackError: String?
 
   private let client: any ProjectionClient
   private let captureAuthorization: () -> RuntimeOwnerAuthorizationSnapshot?
   private let authorizationIsCurrent: (RuntimeOwnerAuthorizationSnapshot) -> Bool
   private var requestGeneration: UInt64 = 0
+  private var feedbackRequestGeneration: UInt64 = 0
   private var lastRefreshAt = Date.distantPast
+  private var didRegisterAutomationActions = false
 
   init(
     client: any ProjectionClient = APIClient.shared,
@@ -165,6 +236,7 @@ final class ProjectionViewModel: ObservableObject {
       guard canApply(request, authorization: authorization) else { return }
       projection = nil
       image = nil
+      feedbackRating = nil
       errorMessage = "Could not load projections: \(error.localizedDescription)"
     }
   }
@@ -200,12 +272,80 @@ final class ProjectionViewModel: ObservableObject {
       guard canApply(request, authorization: authorization) else { return }
       projection = nil
       image = nil
+      feedbackRating = nil
       errorMessage = "Could not generate a projection: \(error.localizedDescription)"
     }
   }
 
   func ownerDidChange() {
     clearOwnerState()
+  }
+
+  func submitFeedback(_ rating: ProjectionFeedbackRating) async {
+    guard let projection, let authorization = captureAuthorization() else { return }
+    feedbackRequestGeneration &+= 1
+    let feedbackRequest = feedbackRequestGeneration
+    isSubmittingFeedback = true
+    feedbackError = nil
+    defer {
+      if feedbackRequestGeneration == feedbackRequest {
+        isSubmittingFeedback = false
+      }
+    }
+    do {
+      let recorded = try await client.recordProjectionFeedback(
+        projectionID: projection.id,
+        rating: rating,
+        expectedOwnerId: authorization.ownerID,
+        authorizationSnapshot: authorization)
+      guard
+        feedbackRequestGeneration == feedbackRequest,
+        authorizationIsCurrent(authorization),
+        self.projection?.id == projection.id
+      else { return }
+      feedbackRating = recorded
+    } catch {
+      guard
+        feedbackRequestGeneration == feedbackRequest,
+        authorizationIsCurrent(authorization),
+        self.projection?.id == projection.id
+      else { return }
+      feedbackError = "Feedback could not be saved."
+    }
+  }
+
+  /// Registers deterministic, local-UI-only states for the typed desktop harness.
+  ///
+  /// The real list, generate, image, and feedback transports are verified through
+  /// `ProjectionClient` and `APIClient` tests. The bridge action deliberately does
+  /// not contact a provider or write a projection: it lets a named non-production
+  /// bundle prove every customer-facing presentation without relying on account data.
+  func registerAutomationActions() {
+    guard DesktopAutomationLaunchOptions.isEnabled, !didRegisterAutomationActions else { return }
+    didRegisterAutomationActions = true
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.register(
+      name: "projection_harness_state",
+      summary: "Present a deterministic loading, loaded, generated, empty, or main-error projection state",
+      params: ["mode"],
+      category: "projections",
+      surfaces: ["projections"],
+      safety: "local_ui_state",
+      sideEffects: ["Changes only the current non-production Projection page state"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "projection view model deallocated"] }
+      return self.applyAutomationState(params["mode"] ?? "")
+    }
+    registry.register(
+      name: "projection_snapshot",
+      summary: "Read the current Projection page presentation state",
+      category: "projections",
+      surfaces: ["projections"],
+      safety: "read_only"
+    ) { [weak self] _ in
+      guard let self else { return ["error": "projection view model deallocated"] }
+      return self.automationSnapshot()
+    }
   }
 
   private func apply(
@@ -217,12 +357,14 @@ final class ProjectionViewModel: ObservableObject {
       projection = nil
       image = nil
       imageLoadFailed = false
+      feedbackRating = nil
       return
     }
     guard let imageURL = nextProjection.imageURL else {
       projection = nextProjection
       image = nil
       imageLoadFailed = true
+      feedbackRating = nextProjection.feedback
       return
     }
 
@@ -240,16 +382,19 @@ final class ProjectionViewModel: ObservableObject {
         projection = nextProjection
         image = nil
         imageLoadFailed = true
+        feedbackRating = nextProjection.feedback
         return
       }
       projection = nextProjection
       image = loadedImage
       imageLoadFailed = false
+      feedbackRating = nextProjection.feedback
     } catch {
       guard canApply(request, authorization: authorization) else { return }
       projection = nextProjection
       image = nil
       imageLoadFailed = true
+      feedbackRating = nextProjection.feedback
     }
   }
 
@@ -265,8 +410,93 @@ final class ProjectionViewModel: ObservableObject {
     requestGeneration == request && authorizationIsCurrent(authorization)
   }
 
+  private func applyAutomationState(_ rawMode: String) -> [String: String] {
+    guard DesktopAutomationLaunchOptions.isEnabled else {
+      return ["error": "projection harness states are disabled"]
+    }
+    requestGeneration &+= 1
+    feedbackRequestGeneration &+= 1
+    isLoading = false
+    isGenerating = false
+    isImageLoading = false
+    isSubmittingFeedback = false
+    feedbackError = nil
+    image = nil
+    feedbackRating = nil
+
+    let mode = rawMode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    switch mode {
+    case "loading":
+      projection = nil
+      imageLoadFailed = false
+      errorMessage = nil
+      isLoading = true
+    case "loaded", "generated":
+      let imperative =
+        mode == "loaded"
+        ? "Prepare the review outline before tomorrow's standup."
+        : "Send the revised launch checklist before the afternoon review."
+      projection = Projection(
+        id: "automation-\(mode)",
+        imperative: imperative,
+        imageURL: nil,
+        whyThis: ProjectionWhyThis(
+          evidence: [
+            ProjectionEvidenceReceipt(
+              reference: "action_item:automation",
+              source: "action_item",
+              label: "Review launch checklist",
+              occurredAt: nil)
+          ],
+          evidenceTier: "grounded",
+          selectionRank: 1,
+          uncertainty: ["Based on the evidence currently available."]))
+      imageLoadFailed = false
+      errorMessage = nil
+    case "empty":
+      projection = nil
+      imageLoadFailed = false
+      errorMessage = nil
+    case "error":
+      projection = nil
+      imageLoadFailed = false
+      errorMessage = "Could not load projections: harness backend unavailable."
+    default:
+      return ["error": "mode must be loading, loaded, generated, empty, or error"]
+    }
+    return automationSnapshot().merging(["requested_mode": mode]) { current, _ in current }
+  }
+
+  private func automationSnapshot() -> [String: String] {
+    let state: String
+    if isLoading {
+      state = "loading"
+    } else if projection?.id == "automation-generated" {
+      state = "generated"
+    } else if projection != nil {
+      state = "loaded"
+    } else if errorMessage != nil {
+      state = "error"
+    } else {
+      state = "empty"
+    }
+    let displayMessage = projection?.imperative ?? errorMessage ?? "No projection yet."
+    return [
+      "state": state,
+      "projection_id": projection?.id ?? "",
+      "imperative": projection?.imperative ?? "",
+      "display_message": displayMessage,
+      "evidence_count": "\(projection?.whyThis?.evidence.count ?? 0)",
+      "error_message": errorMessage ?? "",
+      "generate_visible": AppBuild.isNonProduction ? "true" : "false",
+      "why_this_visible": projection?.whyThis == nil ? "false" : "true",
+      "feedback_visible": projection == nil ? "false" : "true",
+    ]
+  }
+
   private func clearOwnerState() {
     requestGeneration &+= 1
+    feedbackRequestGeneration &+= 1
     projection = nil
     image = nil
     isLoading = false
@@ -274,6 +504,9 @@ final class ProjectionViewModel: ObservableObject {
     isImageLoading = false
     imageLoadFailed = false
     errorMessage = nil
+    feedbackRating = nil
+    isSubmittingFeedback = false
+    feedbackError = nil
     lastRefreshAt = .distantPast
   }
 }

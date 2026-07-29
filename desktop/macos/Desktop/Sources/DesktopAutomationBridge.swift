@@ -3,6 +3,7 @@ import CryptoKit
 import Foundation
 import Network
 import OmiSupport
+import SwiftUI
 import VoiceTurnDomain
 
 enum DesktopAutomationLaunchOptions {
@@ -641,6 +642,7 @@ final class DesktopAutomationActionRegistry {
 
   private var entries: [String: Entry] = [:]
   private var didRegisterBuiltins = false
+  private var projectionHarnessWindow: NSWindow?
   /// Non-prod harness latch so race probes stay busy without relying on LLM latency.
   private var harnessBusyUntil: Date?
   /// The current typed floating-bar submission and its pre-submit timeline size.
@@ -716,6 +718,48 @@ final class DesktopAutomationActionRegistry {
     guard !didRegisterBuiltins else { return }
     didRegisterBuiltins = true
     registerOpenOmiShortcutActionsForQA()
+    register(
+      name: "open_projection_harness",
+      summary: "Open the real Projection page in an isolated non-production harness window",
+      category: "projections",
+      surfaces: ["projections"],
+      safety: "local_ui_state",
+      sideEffects: ["Opens one local test window"]
+    ) { [weak self] _ in
+      guard let self else { return ["error": "automation registry unavailable"] }
+      self.projectionHarnessWindow?.close()
+
+      let controller = NSHostingController(rootView: ProjectionPage())
+      let window = NSWindow(contentViewController: controller)
+      window.title = "Omi — Projection harness"
+      window.setContentSize(NSSize(width: 720, height: 760))
+      window.isReleasedWhenClosed = false
+      window.center()
+      window.makeKeyAndOrderFront(nil)
+      NSApp.activate()
+      self.projectionHarnessWindow = window
+
+      let deadline = Date().addingTimeInterval(2)
+      while self.entries["projection_harness_state"] == nil, Date() < deadline {
+        try? await Task.sleep(nanoseconds: 20_000_000)
+      }
+      return [
+        "opened": "true",
+        "action_registered": self.entries["projection_harness_state"] == nil ? "false" : "true",
+      ]
+    }
+    register(
+      name: "close_projection_harness",
+      summary: "Close the isolated Projection harness window",
+      category: "projections",
+      surfaces: ["projections"],
+      safety: "local_ui_state",
+      sideEffects: ["Closes one local test window"]
+    ) { [weak self] _ in
+      self?.projectionHarnessWindow?.close()
+      self?.projectionHarnessWindow = nil
+      return ["closed": "true"]
+    }
     register(
       name: "refresh_all_data",
       summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"
@@ -4262,6 +4306,8 @@ final class DesktopAutomationBridge: @unchecked Sendable {
         window = NSApp.windows.first(where: { $0 is FloatingControlBarWindow && $0.isVisible })
       } else if payload.target == "overlay" {
         window = CloudConnectorGuidanceOverlay.shared.automationWindow
+      } else if payload.target == "projection_harness" {
+        window = NSApp.windows.first(where: { $0.title == "Omi — Projection harness" && $0.isVisible })
       } else if payload.target == "task_thread" {
         window = NSApp.windows.first(where: { $0.title == "Omi — Task thread scenario" && $0.isVisible })
       } else {

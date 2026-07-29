@@ -15851,6 +15851,92 @@
         "title": "ProgressExtractUpdateResponse",
         "type": "object"
       },
+      "ProjectionEvidenceReceipt": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "conversation",
+              "action_item",
+              "goal"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "source",
+          "label"
+        ],
+        "title": "ProjectionEvidenceReceipt",
+        "type": "object"
+      },
+      "ProjectionFeedback": {
+        "properties": {
+          "rating": {
+            "enum": [
+              "up",
+              "down"
+            ],
+            "title": "Rating",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "rating"
+        ],
+        "title": "ProjectionFeedback",
+        "type": "object"
+      },
+      "ProjectionFeedbackRequest": {
+        "properties": {
+          "rating": {
+            "enum": [
+              "up",
+              "down"
+            ],
+            "title": "Rating",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rating"
+        ],
+        "title": "ProjectionFeedbackRequest",
+        "type": "object"
+      },
       "ProjectionGeneration": {
         "additionalProperties": true,
         "properties": {
@@ -15864,17 +15950,6 @@
               }
             ],
             "title": "Model"
-          },
-          "prompt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prompt"
           },
           "quality": {
             "anyOf": [
@@ -15916,6 +15991,16 @@
               }
             ],
             "title": "Created At"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectionFeedback"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "generation": {
             "anyOf": [
@@ -15981,9 +16066,52 @@
               }
             ],
             "title": "Subject"
+          },
+          "why_this": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectionWhyThis"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "ProjectionResponse",
+        "type": "object"
+      },
+      "ProjectionWhyThis": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectionEvidenceReceipt"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "evidence_tier": {
+            "title": "Evidence Tier",
+            "type": "string"
+          },
+          "selection_rank": {
+            "minimum": 1.0,
+            "title": "Selection Rank",
+            "type": "integer"
+          },
+          "uncertainty": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Uncertainty",
+            "type": "array"
+          }
+        },
+        "required": [
+          "evidence_tier",
+          "selection_rank"
+        ],
+        "title": "ProjectionWhyThis",
         "type": "object"
       },
       "ProjectionsResponse": {
@@ -51155,6 +51283,103 @@
           }
         ],
         "summary": "Get Projection Endpoint",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/projections/{projection_id}/feedback": {
+      "post": {
+        "description": "Record the authenticated owner's latest explicit response signal.",
+        "operationId": "set_projection_feedback_v1_users_projections__projection_id__feedback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projection_id",
+            "required": true,
+            "schema": {
+              "title": "Projection Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectionFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionFeedback"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Set Projection Feedback",
         "tags": [
           "v1"
         ]
