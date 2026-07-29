@@ -987,6 +987,7 @@ class TestStructuredOutputFeatureTracking:
             'trends',
             'what_matters_now',
             'projection_subject',
+            'projection_emotions',
         }
         assert _STRUCTURED_OUTPUT_FEATURES == expected
 
