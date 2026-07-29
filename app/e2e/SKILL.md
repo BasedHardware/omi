@@ -52,24 +52,32 @@ Full iOS physical-device playbook (setup, driving, verification, troubleshooting
 For pendant reconnect, DFU handoff, timestamp, and backlog acceptance on Android and iOS, also run
 [`BLE_RELIABILITY_ACCEPTANCE.md`](./BLE_RELIABILITY_ACCEPTANCE.md).
 
-Verified 2026-07-11 on an iPhone XR (iOS 18.7.9), app 1.0.543, prod-flavor debug build, agent-flutter CLI + marionette MCP. iOS Simulator has no BLE — use a physical device for anything beyond onboarding/UI checks (see also iOS Simulator Known Limitations below).
+Verified 2026-07-29 on an iPhone 13 Pro Max (iOS 26.5.2), isolated
+production-backed dev build, agent-flutter CLI, and a CV1 on firmware 3.0.29.
+iOS Simulator has no BLE — use a physical device for anything beyond
+onboarding/UI checks (see also iOS Simulator Known Limitations below).
 
 ```bash
 # 1. Get the physical device id
 flutter devices
 
-# 2. Run in debug mode with stdout captured — prod flavor (dev flavor can fail codesigning on a
-#    fresh worktree: "provisioning profile doesn't support the App Groups capability")
-cd app && flutter run -d <device-id> --flavor prod > /tmp/omi-flutter.log 2>&1 &
+# 2. Verify the ignored production-backed dev inputs before building
+cd app && scripts/verify_ios_physical_test_auth_config.sh
+
+# 3. Run the isolated dev app in debug mode with stdout captured
+flutter run -d <device-id> --flavor dev > /tmp/omi-flutter.log 2>&1 &
 # Wait for "A Dart VM Service ... is available" in the log
 
-# 3. Connect agent-flutter — auto-detects the ws URI from the log
+# 4. Connect agent-flutter — auto-detects the ws URI from the log
 AGENT_FLUTTER_LOG=/tmp/omi-flutter.log agent-flutter connect
 agent-flutter snapshot -i --json
 ```
 
 **Gotchas:**
-- **Fresh git worktrees need real prod config seeded from the primary checkout** before building the `prod` flavor: copy `app/.env`, `app/lib/firebase_options_prod.dart`, `app/ios/Config/Prod/GoogleService-Info.plist`, `app/lib/env/prod_env.g.dart`. The `test.sh` bootstrap seeds dev-placeholder versions that point at the wrong Firebase project.
+- **Fresh worktrees need the maintainer's production-backed dev fixture** before
+  building. The exact ignored files and safe metadata preflight are documented
+  in `IOS_DEVICE_TESTING.md`. Staging Firebase plus the production API fails
+  custom-token auth; an Android Firebase app ID crashes iOS initialization.
 - **adb-backed commands do NOT work on iOS**: `back`, `press x y`, `dismiss`, `text --press`, `text --fill`. Use in-app back buttons (find the top-left `IconButton` ref) and marionette ref presses only.
 - **`fill @ref` can silently no-op on keyless `TextField`s on iOS** — it reports success but the controller stays empty. Verify via the marionette MCP `get_interactive_elements` (shows the `TextEditingController` contents). Durable fix: add a `ValueKey` to the field, hot reload (sheet state survives), then enter text by key.
 - **`snapshot` labels are empty with `marionette_flutter` 0.3.0** on iOS. Primary orientation/assertion tool is `agent-flutter text` (semantic text dump) — assert outcomes by text presence (e.g. the copy snackbar text). Target elements by type + bounds from `snapshot -i`.

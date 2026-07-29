@@ -23,23 +23,43 @@ Device prerequisites (human, once): iPhone in Developer Mode, cable to the Mac, 
 
 ## 2. Per-worktree app setup
 
-The app builds fine from any git worktree, but `app/test.sh`'s bootstrap seeds **dev-placeholder** Firebase/env files that point at the wrong project for prod flavor. Before a `--flavor prod` build in a fresh worktree, copy the real config from the primary checkout:
+Use an isolated dev app backed by the production API and the production
+Firebase project. This preserves the App Store app while still exercising the
+real auth and transcription path. A staging Firebase registration with the
+production API fails custom-token exchange with
+`firebase_auth/custom-token-mismatch`; an Android Firebase app ID placed in the
+iOS options crashes Firebase initialization.
+
+Seed these ignored files from the maintainer's known-good iOS physical-test
+fixture (never commit their credentials):
 
 ```bash
-M=<primary-checkout>/app; W=<worktree>/app
-cp $M/.env $W/.env
-cp $M/lib/firebase_options_prod.dart $W/lib/firebase_options_prod.dart
-cp $M/ios/Config/Prod/GoogleService-Info.plist $W/ios/Config/Prod/GoogleService-Info.plist
-cp $M/lib/env/prod_env.g.dart $W/lib/env/prod_env.g.dart   # or rerun build_runner after copying .env
+M=<maintainer-config-source>/app; W=<worktree>/app
+cp "$M/.dev.env" "$W/.dev.env"
+cp "$M/lib/firebase_options_dev.dart" "$W/lib/firebase_options_dev.dart"
+cp "$M/ios/Config/Dev/GoogleService-Info.plist" "$W/ios/Config/Dev/GoogleService-Info.plist"
+cp "$M/lib/env/dev_env.g.dart" "$W/lib/env/dev_env.g.dart"
 ```
 
-**Which flavor:** prefer `prod` on a physical device. The dev flavor's bundle id may have no usable provisioning profile in a fresh worktree — it fails with `Provisioning profile "iOS Team Provisioning Profile: *" doesn't support the App Groups capability`. Prod uses the routinely-provisioned profile. Note: a prod build **replaces the App Store app** on the phone (same bundle id; data/keychain survive, but reinstall from the App Store afterwards if the user wants the signed release back).
+Then run the mandatory preflight:
+
+```bash
+cd "$W"
+scripts/verify_ios_physical_test_auth_config.sh
+```
+
+It checks only project/platform metadata and the generated API target; it does
+not print credentials. A passing check means the dev flavor has a production
+API, a `based-hardware` Firebase project, and an iOS (not Android) Firebase app
+registration. Signing and the isolated bundle ID remain local maintainer
+concerns.
 
 ## 3. Launch
 
 ```bash
 flutter devices                                # get the device id (cable connected, phone unlocked)
-cd app && flutter run -d <device-id> --flavor prod \
+cd app && scripts/verify_ios_physical_test_auth_config.sh
+flutter run -d <device-id> --flavor dev \
   > /tmp/omi-flutter.log 2>&1 &                # ALWAYS capture stdout — it is the auth token for agent-flutter AND your verification log
 # wait for: "A Dart VM Service on <device> is available at: http://127.0.0.1:<port>/<token>/"
 ```
@@ -94,11 +114,18 @@ Verified order of attack; stop at the first rung that works:
 
 - **Keep the phone unlocked.** iOS terminates the debug link after prolonged backgrounding: `"The OS has terminated the Flutter debug connection for being inactive"` — the app keeps running but you must relaunch `flutter run` to reattach. This is a session-ender if you're mid-flow; check the phone before long code-reading pauses.
 - **Test data**: create-then-delete your own artifacts (e.g. a memory literally named "smoke-test — safe to delete"); never exercise destructive flows on the user's real data. If a leftover survives (session died first), tell the user exactly what to remove.
-- **Build side effects**: `flutter run` dirties `app/ios/Flutter/AppFrameworkInfo.plist` and sometimes `app/pubspec.lock` — `git checkout --` them before committing anything.
+- **Build side effects**: `flutter run` can dirty `app/ios/Podfile.lock`,
+  `app/ios/Flutter/AppFrameworkInfo.plist`, and `app/pubspec.lock`. Restore only
+  the mechanical build changes you inspected; do not discard unrelated user
+  edits.
 - **After the session**: the phone carries your branch build. Tell the user; App Store reinstall restores the release binary (data survives).
 
 ## 8. Known limitations
 
 - No biometric/OS-dialog control: Sign in with Apple, system permission prompts mid-flow, and Safari OAuth sheets need the human (agent-flutter sees only the Flutter tree).
+- XCTest/Appium can fail before a session with `Timed out while enabling
+  automation mode` even while the phone is unlocked. Record radio-toggle cases
+  as unrun; an app-process outage proves storage recovery but is not evidence
+  for the iOS Bluetooth Settings toggle itself.
 - Semantic `text` dump is partial — some visual text (image-heavy cards, custom painters) never appears; corroborate with widget-tree types/bounds.
 - One session at a time per device; `flutter run` owns the VM Service.
