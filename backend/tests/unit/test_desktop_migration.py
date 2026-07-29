@@ -141,6 +141,7 @@ client_stub = _stub_module("database._client")
 mock_db = MagicMock()
 client_stub.db = mock_db
 client_stub.delete_collection_recursive = MagicMock()
+client_stub.run_transactional = MagicMock()  # imported by the Firestore adapter (get_document_store path)
 client_stub.document_id_from_seed = MagicMock(return_value="seed-id")
 client_stub.get_firestore_client = MagicMock(return_value=mock_db)
 
@@ -1223,13 +1224,15 @@ class TestLlmUsage:
 class TestBatchLimit:
     """Verify _commit_batch triggers commit at BATCH_LIMIT=500."""
 
-    def test_commit_at_batch_limit(self):
-        """_commit_batch commits and returns fresh batch when count >= BATCH_LIMIT."""
+    def test_commit_at_batch_limit(self, monkeypatch):
+        """_commit_batch commits and returns a fresh port batch when count >= BATCH_LIMIT."""
         mock_batch = MagicMock()
-        new_batch = MagicMock()
-        with patch.object(staged_tasks_db, 'db') as patched_db:
-            patched_db.batch.return_value = new_batch
-            result_batch, result_count = staged_tasks_db._commit_batch(mock_batch, 500)
+        new_batch = object()  # sentinel: the fresh batch comes from the store port
+        store = MagicMock()
+        store.batch.return_value = new_batch
+        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
+
+        result_batch, result_count = staged_tasks_db._commit_batch(mock_batch, 500)
 
         mock_batch.commit.assert_called_once()
         assert result_batch is new_batch
@@ -1447,46 +1450,36 @@ class TestRatingZeroBoundary:
 class TestMigrationBatchIntegration:
     """Exercise migration functions with enough items to cross batch boundary."""
 
-    def test_migrate_ai_tasks_commits_at_batch_boundary(self):
-        """migrate_ai_tasks with 260 AI tasks triggers batch commit (260*2=520 ops > 500)."""
+    def test_migrate_ai_tasks_commits_at_batch_boundary(self, monkeypatch):
+        """migrate_ai_tasks with 260 AI tasks triggers batch commit (257*2=514 ops > 500)."""
+        store = FakeDocumentStore()
+        for i in range(260):
+            store.set(
+                f'users/test-uid/action_items/task-{i}',
+                {'id': f'task-{i}', 'completed': False, 'source': 'screenshot', 'relevance_score': i},
+            )
 
-        def _make_doc(i, source='screenshot'):
-            doc = MagicMock()
-            doc.id = f'task-{i}'
-            doc.to_dict.return_value = {
-                'id': f'task-{i}',
-                'completed': False,
-                'source': source,
-                'relevance_score': i,
-            }
-            return doc
+        # Count port batches created so we can prove the 500-op boundary was crossed
+        # (an intermediate commit spawns a fresh batch mid-run).
+        batch_calls = []
+        real_batch = store.batch
 
-        ai_docs = [_make_doc(i) for i in range(260)]
+        def counting_batch():
+            b = real_batch()
+            batch_calls.append(b)
+            return b
 
-        mock_action_col = MagicMock()
-        mock_query = MagicMock()
-        mock_query.stream.return_value = ai_docs
-        mock_action_col.where.return_value = mock_query
-        mock_action_col.document.return_value = MagicMock()
+        monkeypatch.setattr(store, 'batch', counting_batch)
+        monkeypatch.setattr(staged_tasks_db, '_store', lambda: store)
 
-        mock_staged_col = MagicMock()
-        mock_staged_col.document.return_value = MagicMock()
-
-        batch1 = MagicMock()
-        batch2 = MagicMock()
-
-        def col_side_effect(col_name):
-            if col_name == 'action_items':
-                return mock_action_col
-            return mock_staged_col
-
-        with patch.object(staged_tasks_db, 'db') as patched_db:
-            patched_db.batch.side_effect = [batch1, batch2]
-            patched_db.collection.return_value.document.return_value.collection.side_effect = col_side_effect
-            result = staged_tasks_db.migrate_ai_tasks('test-uid')
+        result = staged_tasks_db.migrate_ai_tasks('test-uid')
 
         assert result['moved'] == 257  # 260 - 3 kept
-        batch1.commit.assert_called()  # intermediate commit at 500 ops
+        # Boundary crossed → more than one batch was created (intermediate commit).
+        assert len(batch_calls) >= 2
+        # The moved rows now live in staged_tasks; only the top-3 remain in action_items.
+        assert len(store.list_ids('users/test-uid/staged_tasks')) == 257
+        assert len(store.list_ids('users/test-uid/action_items')) == 3
 
 
 # ============================================================================

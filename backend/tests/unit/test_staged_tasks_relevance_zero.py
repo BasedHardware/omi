@@ -7,128 +7,58 @@ an int in 0-1000 where 0 is most relevant) to 999, sorting the single most relev
 so it gets moved out of action_items instead of kept. The key now maps only a genuinely missing
 (None) score to 999.
 
-Seam: database.staged_tasks reads/writes exclusively through the module-level `db`, so a fake
-db that streams action-item docs and records batched writes exercises the real migration path.
+Seam: database.staged_tasks reads/writes exclusively through the ``_store()`` port seam, so an
+in-memory FakeDocumentStore seeded with action-item docs exercises the real migration path and a
+"move out of action_items" is observable as the doc landing in the staged_tasks collection.
 """
 
 import database.staged_tasks as staged_tasks
+from tests.store_fakes import FakeDocumentStore
 
 
-class _FakeDoc:
-    def __init__(self, doc_id, data):
-        self.id = doc_id
-        self._data = data
-
-    def to_dict(self):
-        return dict(self._data)
-
-
-class _FakeQuery:
-    def __init__(self, docs):
-        self._docs = docs
-
-    def where(self, **kwargs):
-        return self
-
-    def select(self, *args, **kwargs):
-        return self
-
-    def stream(self):
-        return iter(self._docs)
-
-
-class _FakeDocRef:
-    def __init__(self, doc_id):
-        self.id = doc_id
-
-
-class _FakeCollection:
-    def __init__(self, docs):
-        self._docs = docs
-
-    def where(self, **kwargs):
-        return _FakeQuery(self._docs)
-
-    def document(self, doc_id=None):
-        return _FakeDocRef(doc_id)
-
-
-class _FakeUserDoc:
-    def __init__(self, action_docs):
-        self._action_docs = action_docs
-
-    def collection(self, name):
-        # Only action_items is streamed; staged_tasks is used solely for .document(id).
-        return _FakeCollection(self._action_docs if name == 'action_items' else [])
-
-
-class _FakeUsersCollection:
-    def __init__(self, action_docs):
-        self._action_docs = action_docs
-
-    def document(self, uid):
-        return _FakeUserDoc(self._action_docs)
-
-
-class _FakeBatch:
-    def __init__(self, moved_ids):
-        self._moved_ids = moved_ids
-
-    def set(self, ref, data):
-        # A set into staged_tasks is a "move out of action_items".
-        self._moved_ids.append(ref.id)
-
-    def delete(self, ref):
-        pass
-
-    def commit(self):
-        pass
-
-
-class _FakeDB:
-    def __init__(self, action_docs, moved_ids):
-        self._action_docs = action_docs
-        self._moved_ids = moved_ids
-
-    def collection(self, name):  # 'users'
-        return _FakeUsersCollection(self._action_docs)
-
-    def batch(self):
-        return _FakeBatch(self._moved_ids)
+def _seed(monkeypatch, action_docs):
+    store = FakeDocumentStore()
+    for doc_id, data in action_docs:
+        store.set(f'users/u1/action_items/{doc_id}', {'completed': False, **data})
+    monkeypatch.setattr(staged_tasks, '_store', lambda: store)
+    return store
 
 
 def test_migrate_keeps_relevance_zero_task(monkeypatch):
     # Five AI tasks; ascending best-first means score 0 is the single best and must be kept.
-    action_docs = [
-        _FakeDoc('t0', {'source': 'screenshot', 'relevance_score': 0}),  # best (0)
-        _FakeDoc('t1', {'source': 'screenshot', 'relevance_score': 1}),
-        _FakeDoc('t2', {'source': 'screenshot', 'relevance_score': 2}),
-        _FakeDoc('t3', {'source': 'screenshot', 'relevance_score': 3}),
-        _FakeDoc('t4', {'source': 'screenshot', 'relevance_score': 4}),
-    ]
-    moved_ids: list[str] = []
-    monkeypatch.setattr(staged_tasks, 'db', _FakeDB(action_docs, moved_ids))
+    store = _seed(
+        monkeypatch,
+        [
+            ('t0', {'source': 'screenshot', 'relevance_score': 0}),  # best (0)
+            ('t1', {'source': 'screenshot', 'relevance_score': 1}),
+            ('t2', {'source': 'screenshot', 'relevance_score': 2}),
+            ('t3', {'source': 'screenshot', 'relevance_score': 3}),
+            ('t4', {'source': 'screenshot', 'relevance_score': 4}),
+        ],
+    )
 
     staged_tasks.migrate_ai_tasks('u1')
 
+    moved_ids = set(store.list_ids('users/u1/staged_tasks'))
     # Keep the three lowest scores (t0, t1, t2); move the rest. The best (t0, score 0)
     # must NOT be moved out. With the old `or 999` key it sorted last and was moved.
     assert 't0' not in moved_ids
-    assert set(moved_ids) == {'t3', 't4'}
+    assert moved_ids == {'t3', 't4'}
 
 
 def test_migrate_still_sorts_missing_score_last(monkeypatch):
     # A genuinely missing score must still sort last (moved), distinct from a 0.
-    action_docs = [
-        _FakeDoc('z', {'source': 'screenshot', 'relevance_score': 0}),
-        _FakeDoc('a', {'source': 'screenshot', 'relevance_score': 5}),
-        _FakeDoc('b', {'source': 'screenshot', 'relevance_score': 7}),
-        _FakeDoc('none', {'source': 'screenshot'}),  # missing relevance_score
-    ]
-    moved_ids: list[str] = []
-    monkeypatch.setattr(staged_tasks, 'db', _FakeDB(action_docs, moved_ids))
+    store = _seed(
+        monkeypatch,
+        [
+            ('z', {'source': 'screenshot', 'relevance_score': 0}),
+            ('a', {'source': 'screenshot', 'relevance_score': 5}),
+            ('b', {'source': 'screenshot', 'relevance_score': 7}),
+            ('none', {'source': 'screenshot'}),  # missing relevance_score
+        ],
+    )
 
     staged_tasks.migrate_ai_tasks('u1')
 
     # Keep z(0), a(5), b(7); the missing-score task sorts last and is moved.
-    assert moved_ids == ['none']
+    assert store.list_ids('users/u1/staged_tasks') == ['none']

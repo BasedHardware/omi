@@ -8,27 +8,28 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
-
-from ._client import db
+from database.store import get_document_store
 import database.action_items as action_items_db
 
 logger = logging.getLogger(__name__)
 
-BATCH_LIMIT = 500  # Firestore hard limit
+BATCH_LIMIT = 500  # bulk-write chunk size (adapters honor their own batch limits)
 
 
-def _user_col(uid: str, collection: str):
-    """Shorthand for users/{uid}/{collection}."""
-    return db.collection('users').document(uid).collection(collection)
+def _store():
+    return get_document_store()
+
+
+def _col(uid: str, collection: str) -> str:
+    """Logical path for users/{uid}/{collection}."""
+    return f'users/{uid}/{collection}'
 
 
 def _commit_batch(batch, count):
     """Commit batch if count reaches BATCH_LIMIT; return fresh batch and 0."""
     if count >= BATCH_LIMIT:
         batch.commit()
-        return db.batch(), 0
+        return _store().batch(), 0
     return batch, count
 
 
@@ -41,11 +42,11 @@ def create_staged_task(uid: str, description: str, **kwargs) -> dict:
     so we don't end up with two staged candidates that resolve to the
     same action_item at promotion time.
     """
-    col = _user_col(uid, 'staged_tasks')
+    col = _col(uid, 'staged_tasks')
 
     # Deduplicate
     desc_norm = action_items_db._normalize_description(description)
-    for doc in col.stream():
+    for doc in _store().query(col):
         if action_items_db._normalize_description(doc.to_dict().get('description', '')) == desc_norm:
             existing = doc.to_dict()
             existing['id'] = doc.id
@@ -64,21 +65,24 @@ def create_staged_task(uid: str, description: str, **kwargs) -> dict:
         if field in kwargs and kwargs[field] is not None:
             doc[field] = kwargs[field]
 
-    col.document(task_id).set(doc)
+    _store().set(f'{col}/{task_id}', doc)
     return doc
 
 
 def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[dict]:
     """Fetch uncompleted staged tasks ordered by relevance (ascending)."""
-    col = _user_col(uid, 'staged_tasks')
-    query = col.where(filter=FieldFilter('completed', '==', False))
-    query = query.order_by('relevance_score', direction=firestore.Query.ASCENDING)
-    if offset > 0:
-        query = query.offset(offset)
-    query = query.limit(limit)
+    col = _col(uid, 'staged_tasks')
+    docs = _store().query(
+        col,
+        filters=[('completed', '==', False)],
+        order_by='relevance_score',
+        direction='asc',
+        limit=limit,
+        offset=offset if offset > 0 else None,
+    )
 
     items = []
-    for doc in query.stream():
+    for doc in docs:
         data = doc.to_dict()
         data['id'] = doc.id
         items.append(data)
@@ -89,7 +93,7 @@ def get_all_staged_tasks_for_migration(uid: str) -> List[dict]:
     """Read active and terminal staged rows for idempotent Candidate reconciliation."""
 
     items: List[dict] = []
-    for snapshot in _user_col(uid, 'staged_tasks').stream():
+    for snapshot in _store().query(_col(uid, 'staged_tasks')):
         data = snapshot.to_dict() or {}
         data['id'] = snapshot.id
         items.append(data)
@@ -99,13 +103,13 @@ def get_all_staged_tasks_for_migration(uid: str) -> List[dict]:
 def get_top_staged_task_for_promotion(uid: str) -> Optional[dict]:
     """Select the exact active row that a fenced write-mode promotion will mutate."""
 
-    query = (
-        _user_col(uid, 'staged_tasks')
-        .where(filter=FieldFilter('completed', '==', False))
-        .order_by('relevance_score', direction=firestore.Query.ASCENDING)
-        .limit(1)
+    docs = _store().query(
+        _col(uid, 'staged_tasks'),
+        filters=[('completed', '==', False)],
+        order_by='relevance_score',
+        direction='asc',
+        limit=1,
     )
-    docs = list(query.stream())
     if not docs:
         return None
     row = docs[0].to_dict() or {}
@@ -114,10 +118,10 @@ def get_top_staged_task_for_promotion(uid: str) -> Optional[dict]:
 
 
 def delete_staged_task(uid: str, task_id: str) -> bool:
-    ref = _user_col(uid, 'staged_tasks').document(task_id)
-    if not ref.get().exists:
+    path = f'{_col(uid, "staged_tasks")}/{task_id}'
+    if not _store().exists(path):
         return False
-    ref.delete()
+    _store().delete(path)
     return True
 
 
@@ -135,20 +139,21 @@ def complete_staged_task_promotion(
     }
     if promotion_skipped is not None:
         patch['promotion_skipped'] = promotion_skipped
-    _user_col(uid, 'staged_tasks').document(staged_id).update(patch)
+    _store().update(f'{_col(uid, "staged_tasks")}/{staged_id}', patch)
 
 
 def suppress_staged_task_for_terminal_candidate(uid: str, staged_id: str, *, reason: str) -> None:
     """Close a legacy row whose canonical sidecar is already terminal without creating a task."""
 
     now = datetime.now(timezone.utc)
-    _user_col(uid, 'staged_tasks').document(staged_id).update(
+    _store().update(
+        f'{_col(uid, "staged_tasks")}/{staged_id}',
         {
             'completed': True,
             'updated_at': now,
             'candidate_terminal_reason': reason,
             'promotion_skipped': 'candidate_terminal',
-        }
+        },
     )
 
 
@@ -160,18 +165,17 @@ def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
     """
     if not scores:
         return
-    col = _user_col(uid, 'staged_tasks')
-    active_query = col.where(filter=FieldFilter('completed', '==', False)).select([])
-    existing_ids = {doc.id for doc in active_query.stream()}
+    col = _col(uid, 'staged_tasks')
+    existing_ids = {doc.id for doc in _store().query(col, filters=[('completed', '==', False)], fields=[])}
     valid_scores = [s for s in scores if s['id'] in existing_ids]
     if not valid_scores:
         return
     now = datetime.now(timezone.utc)
-    batch = db.batch()
+    store = _store()
+    batch = store.batch()
     count = 0
     for item in valid_scores:
-        ref = col.document(item['id'])
-        batch.update(ref, {'relevance_score': item['relevance_score'], 'updated_at': now})
+        batch.update(f'{col}/{item["id"]}', {'relevance_score': item['relevance_score'], 'updated_at': now})
         count += 1
         batch, count = _commit_batch(batch, count)
     if count > 0:
@@ -206,15 +210,15 @@ def promote_staged_task(
 
     Without this guard, every conversation that re-mentions the same task is
     extracted into a new staged task and promoted into a fresh action_item
-    document — Firestore allocates a new id on each ``add()``, so the user's
+    document — each ``create`` allocates a new id, so the user's
     list accumulates 5–6 duplicates per task description over the course of
     a few hours of activity.
     """
-    col = _user_col(uid, 'staged_tasks')
+    col = _col(uid, 'staged_tasks')
     if reservation_kind not in {None, 'create', 'existing'}:
         raise ValueError('reservation_kind must be create or existing')
     if task_id is not None:
-        snap = col.document(task_id).get()
+        snap = _store().get(f'{col}/{task_id}')
         if not snap.exists:
             return None
         staged = snap.to_dict() or {}
@@ -223,12 +227,13 @@ def promote_staged_task(
             return None
         staged['id'] = snap.id
     else:
-        query = (
-            col.where(filter=FieldFilter('completed', '==', False))
-            .order_by('relevance_score', direction=firestore.Query.ASCENDING)
-            .limit(1)
+        docs = _store().query(
+            col,
+            filters=[('completed', '==', False)],
+            order_by='relevance_score',
+            direction='asc',
+            limit=1,
         )
-        docs = list(query.stream())
         if not docs:
             return None
         staged = docs[0].to_dict()
@@ -262,13 +267,14 @@ def promote_staged_task(
                     e,
                 )
 
-        col.document(staged['id']).update(
+        _store().update(
+            f'{col}/{staged["id"]}',
             {
                 'completed': True,
                 'promoted_at': datetime.now(timezone.utc),
                 'promotion_skipped': 'duplicate',
                 'promoted_to': existing['id'],
-            }
+            },
         )
         logger.info(
             "Skipped promotion of staged task %s for user %s — duplicate of action_item %s (merged %d fields)",
@@ -282,13 +288,14 @@ def promote_staged_task(
     if reservation_kind == 'existing':
         if action_item_id is None:
             raise ValueError('existing reservation requires action_item_id')
-        col.document(staged['id']).update(
+        _store().update(
+            f'{col}/{staged["id"]}',
             {
                 'completed': True,
                 'promoted_at': datetime.now(timezone.utc),
                 'promotion_skipped': 'duplicate_target_closed',
                 'promoted_to': action_item_id,
-            }
+            },
         )
         result = {'id': action_item_id}
         return {**result, '_staged_task_id': staged['id']} if include_staged_id else result
@@ -310,12 +317,13 @@ def promote_staged_task(
     )
 
     # Mark staged task as completed
-    col.document(staged['id']).update(
+    _store().update(
+        f'{col}/{staged["id"]}',
         {
             'completed': True,
             'promoted_at': datetime.now(timezone.utc),
             'promoted_to': action_id,
-        }
+        },
     )
 
     action_item = action_items_db.get_action_item(uid, action_id)
@@ -330,13 +338,13 @@ def clear_staged_tasks(uid: str) -> int:
     Returns the number deleted. Scoped to completed==False so promotion history
     (completed/promoted staged tasks) is preserved.
     """
-    col = _user_col(uid, 'staged_tasks')
-    active_query = col.where(filter=FieldFilter('completed', '==', False)).select([])
-    batch = db.batch()
+    col = _col(uid, 'staged_tasks')
+    store = _store()
+    batch = store.batch()
     count = 0
     total = 0
-    for doc in active_query.stream():
-        batch.delete(col.document(doc.id))
+    for doc in store.query(col, filters=[('completed', '==', False)], fields=[]):
+        batch.delete(doc.path)
         count += 1
         total += 1
         batch, count = _commit_batch(batch, count)
@@ -351,11 +359,10 @@ def migrate_ai_tasks(uid: str) -> dict:
     Keeps top 3 AI tasks in action_items, moves the rest to staged_tasks.
     Uses a 'source' field marker to identify AI-created tasks.
     """
-    col = _user_col(uid, 'action_items')
-    query = col.where(filter=FieldFilter('completed', '==', False))
+    col = _col(uid, 'action_items')
 
     all_items = []
-    for doc in query.stream():
+    for doc in _store().query(col, filters=[('completed', '==', False)]):
         data = doc.to_dict()
         data['id'] = doc.id
         if data.get('deleted'):
@@ -374,12 +381,13 @@ def migrate_ai_tasks(uid: str) -> dict:
     keep = ai_tasks[:3]
     to_move = ai_tasks[3:]
 
-    staged_col = _user_col(uid, 'staged_tasks')
-    batch = db.batch()
+    staged_col = _col(uid, 'staged_tasks')
+    store = _store()
+    batch = store.batch()
     batch_count = 0
     for task in to_move:
-        batch.set(staged_col.document(task['id']), task)
-        batch.delete(col.document(task['id']))
+        batch.set(f'{staged_col}/{task["id"]}', task)
+        batch.delete(f'{col}/{task["id"]}')
         batch_count += 2  # set + delete = 2 operations
         batch, batch_count = _commit_batch(batch, batch_count)
     if batch_count > 0:
@@ -390,21 +398,22 @@ def migrate_ai_tasks(uid: str) -> dict:
 
 def migrate_conversation_items_to_staged(uid: str) -> dict:
     """Move conversation-sourced action items (without 'source') to staged_tasks."""
-    col = _user_col(uid, 'action_items')
-    staged_col = _user_col(uid, 'staged_tasks')
+    col = _col(uid, 'action_items')
+    staged_col = _col(uid, 'staged_tasks')
 
-    batch = db.batch()
+    store = _store()
+    batch = store.batch()
     moved = 0
     batch_count = 0
-    for doc in col.stream():
+    for doc in store.query(col):
         data = doc.to_dict()
         if data.get('deleted') or data.get('completed'):
             continue
         if data.get('conversation_id') and not data.get('source'):
             data['id'] = doc.id
             data['source'] = 'conversation_migration'
-            batch.set(staged_col.document(doc.id), data)
-            batch.delete(col.document(doc.id))
+            batch.set(f'{staged_col}/{doc.id}', data)
+            batch.delete(f'{col}/{doc.id}')
             moved += 1
             batch_count += 2  # set + delete = 2 operations
             batch, batch_count = _commit_batch(batch, batch_count)

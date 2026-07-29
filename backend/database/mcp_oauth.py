@@ -6,13 +6,16 @@ import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, cast
+from typing import Any, Dict, List, Optional, Tuple, TypedDict, cast
 import re
 from urllib.parse import unquote, urlsplit
 
-from google.cloud import firestore
+from database.store import get_document_store
 
-from database._client import db
+
+def _store():
+    return get_document_store()
+
 
 MCP_RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", "https://api.omi.me/v1/mcp/sse")
 DEFAULT_CLIENT_ID = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_ID", "omi-chatgpt-prod")
@@ -83,11 +86,6 @@ class OAuthRefreshTokenDict(TypedDict):
     replaced_by: Optional[str]
     revoked_at: Optional[datetime]
     replay_detected_at: Optional[datetime]
-
-
-def _typed_transactional(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Typed shim around firestore.transactional (SDK stub gap)."""
-    return firestore.transactional(func)  # type: ignore[reportUnknownMemberType]  # firestore transactional decorator is untyped
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -282,7 +280,7 @@ def _default_public_client() -> Optional[Dict[str, Any]]:
 
 def get_client(client_id: str) -> Optional[Dict[str, Any]]:
     client: Optional[Dict[str, Any]] = None
-    doc = db.collection("mcp_oauth_clients").document(client_id).get()
+    doc = _store().get(f"mcp_oauth_clients/{client_id}")
     if doc.exists:
         data: Dict[str, Any] = _typed_doc(doc)
         data.setdefault("id", client_id)
@@ -403,17 +401,19 @@ def validate_pkce_challenge(code_challenge: Optional[str], code_challenge_method
 def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
     deterministic_grant_id = f"{uid}:{client_id}:{hash_secret(resource)[:16]}"
     now = _now()
-    ref = db.collection("mcp_oauth_grants").document(deterministic_grant_id)
-    doc = ref.get()
+    grant_id = deterministic_grant_id
+    path = f"mcp_oauth_grants/{grant_id}"
+    doc = _store().get(path)
     existing: Dict[str, Any] = _typed_doc(doc) if doc.exists else {}
     if existing and (existing.get("revoked_at") or existing.get("status") == "revoked"):
-        ref = db.collection("mcp_oauth_grants").document(f"{deterministic_grant_id}:{uuid.uuid4()}")
-        doc = ref.get()
+        grant_id = f"{deterministic_grant_id}:{uuid.uuid4()}"
+        path = f"mcp_oauth_grants/{grant_id}"
+        doc = _store().get(path)
         existing = {}
     existing_scopes = set(existing.get("scopes") or [])
     merged_scopes = sorted(existing_scopes.union(scopes))
     data: Dict[str, Any] = {
-        "id": ref.id,
+        "id": grant_id,
         "uid": uid,
         "client_id": client_id,
         "resource": resource,
@@ -425,7 +425,7 @@ def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List
     }
     if not doc.exists:
         data["created_at"] = now
-    ref.set(data, merge=True)
+    _store().set(path, data, merge=True)
     return {**existing, **data}
 
 
@@ -440,7 +440,8 @@ def issue_authorization_code(
 ) -> str:
     raw_code = "omi_code_" + secrets.token_urlsafe(32)
     now = _now()
-    db.collection("mcp_oauth_authorization_codes").document(hash_secret(raw_code)).set(
+    _store().set(
+        f"mcp_oauth_authorization_codes/{hash_secret(raw_code)}",
         {
             "uid": uid,
             "grant_id": grant_id,
@@ -465,12 +466,10 @@ def consume_authorization_code(
     resource: str,
     code_verifier: str,
 ) -> Optional[Dict[str, Any]]:
-    ref = db.collection("mcp_oauth_authorization_codes").document(hash_secret(code))
-    transaction = db.transaction()
+    path = f"mcp_oauth_authorization_codes/{hash_secret(code)}"
 
-    @_typed_transactional
-    def _consume(transaction: Any) -> Optional[Dict[str, Any]]:
-        doc = ref.get(transaction=transaction)
+    def _consume(tx: Any) -> Optional[Dict[str, Any]]:
+        doc = tx.get(path)
         if not doc.exists:
             return None
         data: Dict[str, Any] = _typed_doc(doc)
@@ -491,10 +490,10 @@ def consume_authorization_code(
             data.get("code_challenge") or "", verifier_challenge
         ):
             return None
-        transaction.update(ref, {"consumed_at": _now()})
+        tx.update(path, {"consumed_at": _now()})
         return data
 
-    return _consume(transaction)
+    return _store().run_transaction(_consume)
 
 
 def exchange_authorization_code_for_tokens(
@@ -504,12 +503,10 @@ def exchange_authorization_code_for_tokens(
     resource: str,
     code_verifier: str,
 ) -> Optional[Dict[str, Any]]:
-    code_ref = db.collection("mcp_oauth_authorization_codes").document(hash_secret(code))
-    transaction = db.transaction()
+    code_path = f"mcp_oauth_authorization_codes/{hash_secret(code)}"
 
-    @_typed_transactional
-    def _exchange(transaction: Any) -> Optional[Dict[str, Any]]:
-        code_doc = code_ref.get(transaction=transaction)
+    def _exchange(tx: Any) -> Optional[Dict[str, Any]]:
+        code_doc = tx.get(code_path)
         if not code_doc.exists:
             return None
         code_data: Dict[str, Any] = _typed_doc(code_doc)
@@ -530,23 +527,23 @@ def exchange_authorization_code_for_tokens(
             code_data.get("code_challenge") or "", verifier_challenge
         ):
             return None
-        grant_ref = db.collection("mcp_oauth_grants").document(code_data.get("grant_id"))
-        grant_doc = grant_ref.get(transaction=transaction)
+        grant_path = f"mcp_oauth_grants/{code_data.get('grant_id')}"
+        grant_doc = tx.get(grant_path)
         grant: Optional[Dict[str, Any]] = _typed_doc(grant_doc) if grant_doc.exists else None
         if not grant or grant.get("revoked_at") or grant.get("status") == "revoked":
             return None
         grant.setdefault("id", code_data.get("grant_id"))
-        access_token, refresh_token, access_ref, access_data, refresh_ref, refresh_data, _ = _build_token_pair_writes(
+        access_token, refresh_token, access_path, access_data, refresh_path, refresh_data, _ = _build_token_pair_writes(
             grant, code_data.get("scopes") or []
         )
         now = _now()
-        transaction.update(code_ref, {"consumed_at": now})
-        transaction.set(access_ref, access_data)
-        transaction.set(refresh_ref, refresh_data)
-        transaction.set(grant_ref, {"last_used_at": now}, merge=True)
+        tx.update(code_path, {"consumed_at": now})
+        tx.set(access_path, access_data)
+        tx.set(refresh_path, refresh_data)
+        tx.set(grant_path, {"last_used_at": now}, merge=True)
         return _token_pair_response(access_token, refresh_token, access_data["scopes"])
 
-    return _exchange(transaction)
+    return _store().run_transaction(_exchange)
 
 
 def _new_access_token() -> str:
@@ -560,12 +557,12 @@ def _new_refresh_token() -> str:
 def issue_token_pair(
     grant: Dict[str, Any], scopes: Optional[List[str]] = None, token_family_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    access_token, refresh_token, access_ref, access_data, refresh_ref, refresh_data, grant_ref = (
+    access_token, refresh_token, access_path, access_data, refresh_path, refresh_data, grant_path = (
         _build_token_pair_writes(grant, scopes, token_family_id)
     )
-    access_ref.set(access_data)
-    refresh_ref.set(refresh_data)
-    grant_ref.set({"last_used_at": _now()}, merge=True)
+    _store().set(access_path, access_data)
+    _store().set(refresh_path, refresh_data)
+    _store().set(grant_path, {"last_used_at": _now()}, merge=True)
     return _token_pair_response(access_token, refresh_token, access_data["scopes"])
 
 
@@ -573,7 +570,7 @@ def _build_token_pair_writes(
     grant: Dict[str, Any],
     scopes: Optional[List[str]] = None,
     token_family_id: Optional[str] = None,
-) -> Tuple[str, str, Any, OAuthAccessTokenDict, Any, OAuthRefreshTokenDict, Any]:
+) -> Tuple[str, str, str, OAuthAccessTokenDict, str, OAuthRefreshTokenDict, str]:
     now = _now()
     issued_scopes: List[str] = sorted(set(scopes or grant.get("scopes") or []))
     access_token = _new_access_token()
@@ -581,9 +578,9 @@ def _build_token_pair_writes(
     access_id = str(uuid.uuid4())
     refresh_id = str(uuid.uuid4())
     family_id = token_family_id or str(uuid.uuid4())
-    access_ref = db.collection("mcp_oauth_access_tokens").document(hash_secret(access_token))
-    refresh_ref = db.collection("mcp_oauth_refresh_tokens").document(hash_secret(refresh_token))
-    grant_ref = db.collection("mcp_oauth_grants").document(grant["id"])
+    access_path = f"mcp_oauth_access_tokens/{hash_secret(access_token)}"
+    refresh_path = f"mcp_oauth_refresh_tokens/{hash_secret(refresh_token)}"
+    grant_path = f"mcp_oauth_grants/{grant['id']}"
     access_data: OAuthAccessTokenDict = {
         "id": access_id,
         "grant_id": grant["id"],
@@ -610,7 +607,7 @@ def _build_token_pair_writes(
         "revoked_at": None,
         "replay_detected_at": None,
     }
-    return access_token, refresh_token, access_ref, access_data, refresh_ref, refresh_data, grant_ref
+    return access_token, refresh_token, access_path, access_data, refresh_path, refresh_data, grant_path
 
 
 def _token_pair_response(access_token: str, refresh_token: str, scopes: List[str]) -> Dict[str, Any]:
@@ -624,7 +621,7 @@ def _token_pair_response(access_token: str, refresh_token: str, scopes: List[str
 
 
 def get_active_grant(grant_id: str) -> Optional[Dict[str, Any]]:
-    doc = db.collection("mcp_oauth_grants").document(grant_id).get()
+    doc = _store().get(f"mcp_oauth_grants/{grant_id}")
     if not doc.exists:
         return None
     data: Dict[str, Any] = _typed_doc(doc)
@@ -635,7 +632,7 @@ def get_active_grant(grant_id: str) -> Optional[Dict[str, Any]]:
 
 
 def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -> Optional[Dict[str, Any]]:
-    doc = db.collection("mcp_oauth_access_tokens").document(hash_secret(access_token)).get()
+    doc = _store().get(f"mcp_oauth_access_tokens/{hash_secret(access_token)}")
     if not doc.exists:
         return None
     data: Dict[str, Any] = _typed_doc(doc)
@@ -645,7 +642,7 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
     grant = get_active_grant(cast(str, data.get("grant_id")))
     if not grant:
         return None
-    db.collection("mcp_oauth_grants").document(data["grant_id"]).set({"last_used_at": _now()}, merge=True)
+    _store().set(f"mcp_oauth_grants/{data['grant_id']}", {"last_used_at": _now()}, merge=True)
     return {
         "uid": data.get("uid"),
         "auth_type": "oauth",
@@ -659,21 +656,19 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
 def rotate_refresh_token(
     refresh_token: str, client_id: str, resource: str, scope: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
-    ref = db.collection("mcp_oauth_refresh_tokens").document(hash_secret(refresh_token))
-    transaction = db.transaction()
+    ref_path = f"mcp_oauth_refresh_tokens/{hash_secret(refresh_token)}"
     replay_grant_id: Optional[str] = None
 
-    @_typed_transactional
-    def _rotate(transaction: Any) -> Optional[Dict[str, Any]]:
+    def _rotate(tx: Any) -> Optional[Dict[str, Any]]:
         nonlocal replay_grant_id
-        doc = ref.get(transaction=transaction)
+        doc = tx.get(ref_path)
         if not doc.exists:
             return None
         data: Dict[str, Any] = _typed_doc(doc)
         now = _now()
         expires_at = data.get("expires_at")
-        grant_ref = db.collection("mcp_oauth_grants").document(data.get("grant_id"))
-        grant_doc = grant_ref.get(transaction=transaction)
+        grant_path = f"mcp_oauth_grants/{data.get('grant_id')}"
+        grant_doc = tx.get(grant_path)
         grant: Optional[Dict[str, Any]] = _typed_doc(grant_doc) if grant_doc.exists else None
         if (
             data.get("client_id") != client_id
@@ -688,8 +683,8 @@ def rotate_refresh_token(
         grant.setdefault("id", data.get("grant_id"))
         if data.get("used_at") or data.get("replaced_by"):
             replay_grant_id = data.get("grant_id")
-            transaction.set(grant_ref, {"revoked_at": now, "status": "revoked", "replay_detected": True}, merge=True)
-            transaction.set(ref, {"replay_detected_at": now, "revoked_at": now}, merge=True)
+            tx.set(grant_path, {"revoked_at": now, "status": "revoked", "replay_detected": True}, merge=True)
+            tx.set(ref_path, {"replay_detected_at": now, "revoked_at": now}, merge=True)
             return None
         try:
             requested_scopes: List[str] = (
@@ -702,19 +697,19 @@ def rotate_refresh_token(
         (
             access_token,
             new_refresh_token,
-            access_ref,
+            access_path,
             access_data,
-            refresh_ref,
+            refresh_path,
             refresh_data,
             _,
         ) = _build_token_pair_writes(grant, requested_scopes, data.get("token_family_id"))
-        transaction.set(access_ref, access_data)
-        transaction.set(refresh_ref, refresh_data)
-        transaction.update(ref, {"used_at": now, "replaced_by": hash_secret(new_refresh_token)})
-        transaction.set(grant_ref, {"last_used_at": now}, merge=True)
+        tx.set(access_path, access_data)
+        tx.set(refresh_path, refresh_data)
+        tx.update(ref_path, {"used_at": now, "replaced_by": hash_secret(new_refresh_token)})
+        tx.set(grant_path, {"last_used_at": now}, merge=True)
         return _token_pair_response(access_token, new_refresh_token, requested_scopes)
 
-    token_pair: Optional[Dict[str, Any]] = _rotate(transaction)
+    token_pair: Optional[Dict[str, Any]] = _store().run_transaction(_rotate)
     if replay_grant_id:
         revoke_grant(replay_grant_id, replay_detected=True)
     return token_pair
@@ -722,17 +717,18 @@ def rotate_refresh_token(
 
 def revoke_grant(grant_id: str, replay_detected: bool = False) -> None:
     now = _now()
-    db.collection("mcp_oauth_grants").document(grant_id).set(
-        {"revoked_at": now, "status": "revoked", "replay_detected": replay_detected}, merge=True
+    _store().set(
+        f"mcp_oauth_grants/{grant_id}",
+        {"revoked_at": now, "status": "revoked", "replay_detected": replay_detected},
+        merge=True,
     )
     for collection_name in ("mcp_oauth_access_tokens", "mcp_oauth_refresh_tokens"):
-        docs = db.collection(collection_name).where("grant_id", "==", grant_id).stream()
-        for doc in docs:
-            doc.reference.set({"revoked_at": now}, merge=True)
+        for doc in _store().query(collection_name, filters=[("grant_id", "==", grant_id)]):
+            _store().set(doc.path, {"revoked_at": now}, merge=True)
 
 
 def list_user_grants(uid: str) -> List[Dict[str, Any]]:
-    docs = db.collection("mcp_oauth_grants").where("uid", "==", uid).stream()
+    docs = _store().query("mcp_oauth_grants", filters=[("uid", "==", uid)])
     grants: List[Dict[str, Any]] = []
     for doc in docs:
         data: Dict[str, Any] = _typed_doc(doc)
@@ -748,7 +744,7 @@ def list_user_grants(uid: str) -> List[Dict[str, Any]]:
 
 
 def revoke_user_grant(uid: str, grant_id: str) -> bool:
-    doc = db.collection("mcp_oauth_grants").document(grant_id).get()
+    doc = _store().get(f"mcp_oauth_grants/{grant_id}")
     if not doc.exists:
         return False
     data: Dict[str, Any] = _typed_doc(doc)
