@@ -1,0 +1,38 @@
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_abe8283a0c57dd::t_7acefdcd31ee8f 100-120
+  s_abe8283a0c57dd::t_e07a3ae974f03c 48-78
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_abe8283a0c57dd::t_8bb76f7f191ad1 125
+  s_abe8283a0c57dd::t_171e0068da884f 129-132
+desktop/context-for-claude/Sources/ContextCore/Queries.swift
+  s_b5d52d5f05403b::t_b4e6b0a8d690ce 552-561,563-574,576
+  s_b5d52d5f05403b::t_e612e4cfdcb67c 1176-1182
+  s_b5d52d5f05403b::t_f97b83eb2a44fe 585,597-598,600-601
+  s_b5d52d5f05403b::t_b45298b7a4381f 1159,1163
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_abe8283a0c57dd::t_33ccbd4428bb01 184,359,368
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "03c88c032b0613229113c35def02ad000634c852",
+  "prompts": {},
+  "sessions": {
+    "s_abe8283a0c57dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "87377558-5689-4a2d-aa25-ff41404d6e61",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_b5d52d5f05403b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82d7239f-7b04-40bc-b1d8-8737cb48399a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
