@@ -8,7 +8,7 @@ Outside ``backend/database/`` (and the documented exceptions below) no module ma
     ``.collection_group(...)`` / ``.transaction(...)`` method call.
 
 Blessed database/ ports (``database.document_store``, ``database.sentinels``,
-``database.firestore_errors``, ``database.persistence``, ``database.document_ids`` and every other
+``database.firestore_errors``, ``database.document_ids`` and every other
 ``database.*`` module) are allowed everywhere — that is how callers reach persistence now.
 
 Ratchets against a baseline (WP1 target: empty). Companion of ADR-0001/0002/0004: this is the
@@ -131,7 +131,7 @@ def main() -> int:
     if not errors:
         return 0
     print('FAIL: Firestore persistence boundary breached — go through database/ ports')
-    print('(database.document_store / sentinels / firestore_errors / persistence), not the client/SDK.')
+    print('(database.document_store / sentinels / firestore_errors), not the client/SDK.')
     print(*errors, sep='\n')
     return 1
 
