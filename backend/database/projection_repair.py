@@ -1,11 +1,19 @@
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, cast
 
-from ._client import db
+from database.store import get_document_store
 
 users_collection = 'users'
 projection_repairs_collection = 'projection_repairs'
 PROJECTION_VERSION = 1
+
+
+def _store():
+    return get_document_store()
+
+
+def _repairs_path(uid: str) -> str:
+    return f'{users_collection}/{uid}/{projection_repairs_collection}'
 
 DANGEROUS_REASONS = {'retract_fact', 'tombstone_evidence', 'source_tombstoned'}
 TERMINAL_REPAIR_STATUSES = {'repaired', 'dead_letter'}
@@ -44,9 +52,7 @@ def repair_reason(mutation: Dict[str, Any]) -> str:
     return mutation_type
 
 
-def enqueue_projection_repairs(
-    uid: str, commit: Optional[Dict[str, Any]], *, firestore_client: Any = None
-) -> List[str]:
+def enqueue_projection_repairs(uid: str, commit: Optional[Dict[str, Any]]) -> List[str]:
     if not commit:
         return []
     mutations: List[Dict[str, Any]] = commit.get('mutations') or []
@@ -55,21 +61,19 @@ def enqueue_projection_repairs(
         return []
 
     now = datetime.now(timezone.utc)
-    database: Any = firestore_client or db
-    batch: Any = database.batch()
-    collection_ref: Any = database.collection(users_collection).document(uid).collection(projection_repairs_collection)
+    store = _store()
+    batch = store.batch()
+    repairs_path = _repairs_path(uid)
     repair_ids: List[str] = []
     reasons_by_fact = _reasons_by_fact(mutations)
     for fact_id in fact_ids:
         reasons = reasons_by_fact.get(fact_id, ['unknown'])
         repair_id = f"{commit.get('commit_id')}:{fact_id}"
         repair_ids.append(repair_id)
-        document_ref: Any = collection_ref.document(repair_id)
-        existing: Any = document_ref.get()
-        if getattr(existing, 'exists', False):
+        if store.get(f'{repairs_path}/{repair_id}').exists:
             continue
         batch.set(
-            document_ref,
+            f'{repairs_path}/{repair_id}',
             {
                 'repair_id': repair_id,
                 'fact_id': fact_id,
@@ -92,7 +96,6 @@ def process_projection_repairs(
     fact_loader: Callable[[str], Optional[Dict[str, Any]]],
     repair_func: Callable[[str, Optional[Dict[str, Any]]], str],
     limit: int = 100,
-    firestore_client: Any = None,
     max_attempts: int = 3,
 ) -> Dict[str, Any]:
     if limit < 1:
@@ -100,15 +103,15 @@ def process_projection_repairs(
     if max_attempts < 1:
         raise ValueError('max_attempts must be positive')
 
-    database: Any = firestore_client or db
-    collection_ref: Any = database.collection(users_collection).document(uid).collection(projection_repairs_collection)
+    store = _store()
+    repairs_path = _repairs_path(uid)
     repaired: List[str] = []
     failed: List[str] = []
     seen_doc_ids: Set[Any] = set()
     docs: List[Any] = []
     for status in PROCESSABLE_REPAIR_STATUSES:
-        for doc in collection_ref.where('status', '==', status).limit(limit).stream():
-            doc_id = getattr(doc, 'id', None)
+        for doc in store.query(repairs_path, filters=[('status', '==', status)], limit=limit):
+            doc_id = doc.id
             if doc_id in seen_doc_ids:
                 continue
             seen_doc_ids.add(doc_id)
@@ -123,24 +126,26 @@ def process_projection_repairs(
         fact_id = repair.get('fact_id')
         try:
             action = repair_func(uid, fact_loader(cast(str, fact_id)))
-            doc.reference.update(
+            store.update(
+                doc.path,
                 {
                     'status': 'repaired',
                     'repair_action': action,
                     'updated_at': datetime.now(timezone.utc),
-                }
+                },
             )
             repaired.append(repair.get('repair_id') or doc.id)
         except Exception as exc:
             next_attempt_count = int(repair.get('attempt_count') or 0) + 1
             next_status = 'dead_letter' if next_attempt_count >= max_attempts else 'failed'
-            doc.reference.update(
+            store.update(
+                doc.path,
                 {
                     'status': next_status,
                     'attempt_count': next_attempt_count,
                     'error': str(exc),
                     'updated_at': datetime.now(timezone.utc),
-                }
+                },
             )
             failed.append(repair.get('repair_id') or doc.id)
     return {'repaired': repaired, 'failed': failed, 'processed': len(repaired) + len(failed)}

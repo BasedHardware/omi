@@ -1,84 +1,47 @@
-from unittest.mock import MagicMock
+"""A stale memory update on a missing projection doc must be idempotent, not a 500.
 
-import pytest
-from google.api_core.exceptions import NotFound
+set_memory_kg_extracted / invalidate_memory can target a memory whose projection document no longer
+exists (deleted, or a canonical cohort that never wrote the legacy projection). The port's tx.update
+on a missing doc is adapter-defined (ADR-0021), so these guard with exists() and no-op the projection
+write; invalidate_memory still records the ledger commit. This exercises the real port seam via
+FakeDocumentStore (mongomock has no transactions).
+"""
 
-import database.memories as memories_module
+import os
 
+os.environ.setdefault(
+    'ENCRYPTION_SECRET',
+    'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
+)
 
-class _FakeDb:
-    def __init__(self, memory_ref):
-        self.memory_ref = memory_ref
+import pytest  # noqa: E402
 
-    def collection(self, _name):
-        return self
-
-    def document(self, _name):
-        return self
-
-    def update(self, payload):
-        return self.memory_ref.update(payload)
-
-    def batch(self):
-        return MagicMock()
-
-
-class _FakeTransaction:
-    def update(self, ref, payload):
-        return ref.update(payload)
-
-
-def _append_commit_with_projection(**kwargs):
-    projection_writer = kwargs.get('projection_writer')
-    if projection_writer:
-        projection_writer(_FakeTransaction())
-    return None
+import database.memories as memories_module  # noqa: E402
+from database import memory_ledger, projection_repair  # noqa: E402
+from tests.store_fakes import FakeDocumentStore  # noqa: E402
 
 
 @pytest.fixture
-def patch_memories(monkeypatch):
-    """Wire ``database.memories`` to a fake db rooted at ``memory_ref`` and mock the ledger.
-
-    ``database.memories`` imports cleanly now (``db`` is a lazy proxy, no import-time
-    side effects), so the sanctioned seam is ``monkeypatch.setattr`` on the module
-    attributes rather than ``sys.modules`` mutation. See backend/docs/test_isolation.md.
-    """
-
-    def _configure(memory_ref):
-        fake_db = _FakeDb(memory_ref)
-        monkeypatch.setattr(memories_module, 'get_firestore_client', lambda: fake_db)
-        monkeypatch.setattr(
-            memories_module.memory_ledger,
-            'append_commit',
-            MagicMock(side_effect=lambda *args, **kwargs: _append_commit_with_projection(**kwargs)),
-        )
-        return memories_module
-
-    return _configure
+def store(monkeypatch):
+    fake = FakeDocumentStore()
+    # memories + the ledger + repair enqueue all resolve the same backing store.
+    monkeypatch.setattr(memories_module, '_store', lambda: fake)
+    monkeypatch.setattr(memory_ledger, '_store', lambda: fake)
+    monkeypatch.setattr(projection_repair, '_store', lambda: fake)
+    return fake
 
 
-def test_set_memory_kg_extracted_missing_doc_is_idempotent(caplog, patch_memories):
-    memory_ref = MagicMock()
-    memory_ref.update.side_effect = NotFound('No document to update: users/u/memories/m')
-    memories = patch_memories(memory_ref)
+def test_set_memory_kg_extracted_missing_doc_is_idempotent(caplog, store):
+    # No memory doc seeded — the update must no-op rather than raise.
+    assert memories_module.set_memory_kg_extracted('uid-abc', 'memory-1') is None
 
-    assert memories.set_memory_kg_extracted('uid-abc', 'memory-1') is None
-
-    memory_ref.update.assert_called_once_with({'kg_extracted': True})
-    assert 'memory-1' not in caplog.text
+    assert not store.exists('users/uid-abc/memories/memory-1')  # not created
     assert 'No document to update' not in caplog.text
 
 
-def test_invalidate_memory_missing_doc_is_idempotent(caplog, patch_memories):
-    memory_ref = MagicMock()
-    memory_ref.update.side_effect = NotFound('No document to update: users/u/memories/m')
-    memories = patch_memories(memory_ref)
+def test_invalidate_memory_missing_doc_is_idempotent(store):
+    # No projection doc — the write is skipped, but the ledger still records the invalidation.
+    result = memories_module.invalidate_memory('uid-abc', 'memory-1', superseded_by='memory-2')
 
-    assert memories.invalidate_memory('uid-abc', 'memory-1', superseded_by='memory-2') is None
-
-    payload = memory_ref.update.call_args.args[0]
-    assert 'invalid_at' in payload
-    assert payload['superseded_by'] == 'memory-2'
-    assert 'memory-1' not in caplog.text
-    assert 'memory-2' not in caplog.text
-    assert 'No document to update' not in caplog.text
+    assert not store.exists('users/uid-abc/memories/memory-1')  # projection not resurrected
+    assert result is not None and result.get('applied') is True  # ledger commit recorded
