@@ -19,6 +19,7 @@ calls and drives the real process_pending. No patching and no sys.modules mutati
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+from database import conversations as conversations_db
 from database.conversations import select_stale_in_progress
 from routers.listen.conversations import LiveConversationController
 
@@ -151,3 +152,73 @@ def test_select_stale_in_progress_filters_sorts_and_bounds():
 
     bounded = select_stale_in_progress(conversations, cutoff, limit=1)
     assert [c['id'] for c in bounded] == ['oldest']
+
+
+class _QueryDocument:
+    def __init__(self, data: dict):
+        self._data = data
+
+    def to_dict(self):
+        return self._data
+
+
+class _StaleRecoveryQuery:
+    def __init__(self, documents: list[_QueryDocument]):
+        self.documents = documents
+        self.ordering = None
+        self.limit_value = None
+
+    def where(self, **_kwargs):
+        return self
+
+    def order_by(self, field_path, direction):
+        self.ordering = (field_path, direction)
+        return self
+
+    def limit(self, value):
+        self.limit_value = value
+        return self
+
+    def stream(self):
+        return iter(self.documents)
+
+
+class _StaleRecoveryClient:
+    def __init__(self, query: _StaleRecoveryQuery):
+        self.query = query
+
+    def collection(self, _name):
+        return _StaleRecoveryUserRef(self.query)
+
+
+class _StaleRecoveryUserRef:
+    def __init__(self, query: _StaleRecoveryQuery):
+        self.query = query
+
+    def document(self, _uid):
+        return self
+
+    def collection(self, _name):
+        return self.query
+
+
+def test_stale_recovery_queries_oldest_rows_before_bounding_the_read():
+    now = datetime.now(timezone.utc)
+    query = _StaleRecoveryQuery(
+        [
+            _QueryDocument({'id': 'oldest', 'finished_at': now - timedelta(days=2)}),
+            _QueryDocument({'id': 'old', 'finished_at': now - timedelta(hours=2)}),
+        ]
+    )
+    client = _StaleRecoveryClient(query)
+
+    selected = conversations_db.get_stale_in_progress_conversations(
+        'uid-1',
+        older_than_seconds=3600,
+        limit=1,
+        firestore_client=client,
+    )
+
+    assert [conversation['id'] for conversation in selected] == ['oldest']
+    assert query.ordering[0] == 'finished_at'
+    assert query.limit_value == 1

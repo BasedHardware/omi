@@ -1192,16 +1192,17 @@ def select_stale_in_progress(conversations, cutoff: datetime, limit: int):
 def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, limit: int = 10, firestore_client=None):
     """In-progress conversations whose last activity predates the cutoff (#9809).
 
-    Status is an equality-only filter so no composite index is needed; the age
-    cut happens client-side on a bounded read. Oldest first so recovery spreads
-    across sessions instead of stampeding the processing pipeline.
+    The composite index orders by the last activity clock, so the bounded read
+    always reaches the oldest candidates. Without that ordering, an arbitrary
+    first page could keep old orphaned rows beyond it invisible forever.
     """
     client = firestore_client or get_firestore_client()
     user_ref = client.collection('users').document(uid)
     conversations_ref = (
         user_ref.collection(conversations_collection)
         .where(filter=FieldFilter('status', '==', 'in_progress'))
-        .limit(200)
+        .order_by('finished_at', direction=firestore.Query.ASCENDING)
+        .limit(limit)
     )
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
     return select_stale_in_progress((doc.to_dict() for doc in conversations_ref.stream()), cutoff, limit)
