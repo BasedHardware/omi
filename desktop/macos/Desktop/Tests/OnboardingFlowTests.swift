@@ -437,7 +437,8 @@ final class OnboardingFlowTests: XCTestCase {
       continuousChoice.lowerBound,
       "Meeting-only recording must be the first capture choice")
     XCTAssertTrue(
-      secondBrainSource[defaultChoice.lowerBound...].prefix(500).contains(".keyboardShortcut(.defaultAction)"),
+      secondBrainSource[defaultChoice.lowerBound..<continuousChoice.lowerBound]
+        .contains(".keyboardShortcut(.defaultAction)"),
       "Return must choose the meeting-only capture default")
     XCTAssertFalse(secondBrainSource.contains("reaches me anytime"))
   }
