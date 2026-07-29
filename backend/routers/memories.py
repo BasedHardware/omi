@@ -1,4 +1,5 @@
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Optional, cast
 
@@ -32,6 +33,7 @@ from utils.memory.canonical_memory_adapter import (
     read_canonical_memory_item,
 )
 from utils.memory.memory_service import MemoryPayload, MemoryService, fetch_memory_dict
+from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.import_write_guard import (
     import_write_block_mode,
     import_write_violation_for_guard,
@@ -154,6 +156,41 @@ class BatchDeleteMemoriesRequest(BaseModel):
         description="Memory IDs to delete in a single batch request",
         max_length=MEMORIES_BATCH_DELETE_MAX,
     )
+
+
+def _parity_memory_payload(memories: List[MemoryDB]) -> list[dict[str, Any]]:
+    """Small, redaction-ready accepted-memory view for restricted dev cassettes."""
+    return [
+        {
+            "id": memory.id,
+            "content": (memory.content or "")[:8192],
+            "category": memory.category.value,
+            "visibility": memory.visibility,
+            "source_type": memory.evidence[0].source_type if memory.evidence else "unknown",
+        }
+        for memory in memories[:100]
+    ]
+
+
+def _start_memory_parity_capture(
+    uid: str, *, source: str, session_id: str, memories: List[MemoryDB]
+) -> SurfaceParityCapture:
+    capture = SurfaceParityCapture.from_environ(
+        principal_id=uid,
+        session_id=session_id,
+        surface="memory_write",
+        source=source,
+        provider_lane="memory",
+        route_or_model="memory-write",
+        request={"memory_count": len(memories), "source": source},
+    )
+    capture.observe("client", {"type": "memory_write_request", "memories": _parity_memory_payload(memories)})
+    return capture
+
+
+def _finish_memory_parity_capture(capture: SurfaceParityCapture, memories: List[MemoryDB]) -> None:
+    capture.observe("inbound", {"type": "accepted_memories", "memories": _parity_memory_payload(memories)})
+    capture.persist()
 
 
 class ReviewResolutionRequest(BaseModel):
@@ -455,11 +492,17 @@ async def create_memory(
         logger.info("memory_import.per_file_item_dropped endpoint=/v3/memories uid=%s", uid)
         return _legacy_memory_response(memory_db)
 
+    parity_capture = _start_memory_parity_capture(
+        uid,
+        source="v3_memory_create",
+        session_id=memory_db.id,
+        memories=[memory_db],
+    )
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         try:
             memory_service = MemoryService(db_client=db_client)
-            return await run_blocking(
+            created = await run_blocking(
                 db_executor,
                 memory_service.create_external_memory,
                 uid,
@@ -470,6 +513,8 @@ async def create_memory(
                 upsert_vector=False,
                 require_canonical_promotion=True,
             )
+            _finish_memory_parity_capture(parity_capture, [created])
+            return created
         except Exception:
             logger.exception("Canonical create_memory failed uid=%s", uid)
             raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -484,6 +529,8 @@ async def create_memory(
     except Exception:
         logger.exception("Firestore create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+
+    _finish_memory_parity_capture(parity_capture, [memory_db])
 
     try:
         await run_blocking(
@@ -567,6 +614,13 @@ async def create_memories_batch(
         if memory.visibility == 'public':
             has_public = True
 
+    parity_capture = _start_memory_parity_capture(
+        uid,
+        source="v3_memory_batch_create",
+        session_id=str(uuid.uuid4()),
+        memories=memory_dbs,
+    )
+
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         memory_service = MemoryService(db_client=db_client)
@@ -605,6 +659,7 @@ async def create_memories_batch(
             else:
                 logger.error("Canonical create_memories_batch readback missing uid=%s memory_id=%s", uid, memory_id)
                 raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+        _finish_memory_parity_capture(parity_capture, server_memories)
         return BatchMemoriesResponse(memories=server_memories, created_count=len(server_memories))
 
     # Persist to Firestore first — that write is the authoritative result.
@@ -622,6 +677,8 @@ async def create_memories_batch(
     except Exception:
         logger.exception("Firestore save_memories failed uid=%s count=%s", uid, len(memory_dbs))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+
+    _finish_memory_parity_capture(parity_capture, memory_dbs)
 
     # Pinecone batch upsert runs on a worker thread (postprocess pool, like the
     # single-create path) so a slow embeddings/Pinecone call can't starve the
@@ -679,11 +736,36 @@ async def create_memory_import_batch(
         logger.warning("memory import ingest disabled uid=%s reason=%s", uid, write_decision.reason)
         raise HTTPException(status_code=503, detail="memory_import_canonical_not_ready")
 
+    parity_capture = SurfaceParityCapture.from_environ(
+        principal_id=uid,
+        session_id=str(uuid.uuid4()),
+        surface="memory_import",
+        source="v3_memory_import_batch",
+        provider_lane="memory",
+        route_or_model="memory-import",
+        request={"source_type": request.source_type, "item_count": len(request.items)},
+    )
+    parity_capture.observe(
+        "client",
+        {
+            "type": "memory_import_artifacts",
+            "items": [
+                {
+                    "title": (item.title or "")[:2048],
+                    "snippet": (item.snippet or "")[:4096],
+                    "content": (item.content or "")[:8192],
+                }
+                for item in request.items[:100]
+            ],
+        },
+    )
     try:
         result = await run_blocking(db_executor, ingest_memory_import_batch, uid, request, db_client=db_client)
     except Exception:
         logger.exception("Memory import ingest failed uid=%s source_type=%s", uid, request.source_type)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    parity_capture.observe("inbound", {"type": "memory_import_result", **result.response.model_dump(mode="json")})
+    parity_capture.persist()
     return result.response
 
 

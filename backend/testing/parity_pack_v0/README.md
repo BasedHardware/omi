@@ -26,7 +26,7 @@ manifests, reports, or Git.
 wire observations using relative milliseconds. A whitelist miss writes no
 cassette bytes and retains only bounded lane/reason metadata.
 
-## Live listen wiring
+## Live surface wiring
 
 The `/v4/listen` runtime creates `routers.listen.parity_capture.ListenParityCapture`
 only after Firebase WebSocket authentication and STT provider selection. It uses
@@ -47,6 +47,19 @@ disabled; `OMI_ENV_STAGE` other than `dev`, a missing `OMI_PARITY_PACK_CAPTURE=1
 or an allowlist miss is also disabled. No Helm or production default enables this
 path. The local cassette may include restricted audio/transcript event payloads,
 so keep its root outside Git and never attach it to a PR.
+
+`SurfaceParityCapture` uses the same gate/exporter for the additional
+memory-forming surfaces below.  It extends the cassette document with optional
+top-level discriminators while leaving the v1 identity, fingerprint, and event
+contract unchanged for existing players:
+
+| `surface` | `source` | Captured seam |
+| --- | --- | --- |
+| `ptt` | `desktop_ptt_http`, `desktop_ptt_stream` | Desktop PCM PTT and live PTT STT (bounded audio + transcript events) |
+| `screen` | `desktop_screen_activity_sync` | Text-only screen activity/context sync; no video or embedding vectors |
+| `conversation_finalization` | `conversation_<source>` | Transcript input, memory extraction result, and accepted memories |
+| `memory_write` | `v3_memory_create`, `v3_memory_batch_create`, `integration_<app>`, `twitter_<persona>` | Manual/API, integration, and social memory writers |
+| `memory_import` | `v3_memory_import_batch` | Bounded import artifacts and ingestion result (not raw media) |
 
 The development listen deployment mounts `/var/omi-parity-pack` as an `emptyDir`
 for explicitly allowlisted dogfood principals and best-effort exports cassette

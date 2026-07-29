@@ -309,6 +309,24 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            # Dev-only, exact-principal replay capture. Cloud Run's writable
+            # scratch is ephemeral; persist synchronously to the private dev
+            # bucket and never copy these values into the prod manifest.
+            OMI_PARITY_PACK_CAPTURE:
+              value: '1'
+              category: replay_capture
+            OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: replay_capture
+            OMI_PARITY_PACK_ROOT:
+              value: /tmp/omi-parity-pack
+              category: replay_capture
+            OMI_PARITY_PACK_GCS_URI:
+              value: gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0
+              category: replay_capture
+            OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
+              value: '3600'
+              category: replay_capture
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -443,6 +461,21 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            OMI_PARITY_PACK_CAPTURE:
+              value: '1'
+              category: replay_capture
+            OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: replay_capture
+            OMI_PARITY_PACK_ROOT:
+              value: /tmp/omi-parity-pack
+              category: replay_capture
+            OMI_PARITY_PACK_GCS_URI:
+              value: gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0
+              category: replay_capture
+            OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
+              value: '3600'
+              category: replay_capture
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
@@ -544,6 +577,21 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            OMI_PARITY_PACK_CAPTURE:
+              value: '1'
+              category: replay_capture
+            OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: replay_capture
+            OMI_PARITY_PACK_ROOT:
+              value: /tmp/omi-parity-pack
+              category: replay_capture
+            OMI_PARITY_PACK_GCS_URI:
+              value: gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0
+              category: replay_capture
+            OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
+              value: '3600'
+              category: replay_capture
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata

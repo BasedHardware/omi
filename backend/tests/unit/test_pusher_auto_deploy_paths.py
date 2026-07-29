@@ -22,6 +22,7 @@ def test_pusher_auto_deploy_tracks_its_shared_lifecycle_and_observability_import
         'backend/routers/**',
         'backend/services/**',
         'backend/utils/**',
+        'backend/testing/parity_pack_v0/**',
         'backend/pusher/**',
         'backend/charts/pusher/**',
         '.dockerignore',
