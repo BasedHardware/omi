@@ -71,6 +71,7 @@ from utils.llm.conversation_processing import (
     get_suggested_apps_for_conversation,
     get_reprocess_transcript_structure,
     extract_action_items,
+    identified_participant_names,
 )
 from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
@@ -206,6 +207,10 @@ def _get_structured(
                 if calendar_data:
                     calendar_context = CalendarMeetingContext(**calendar_data)
 
+        # Names of the people identified in this conversation, so the title/summary prompts
+        # can put the correct names in the title for ordinary conversations too (issue #3602).
+        participant_names = identified_participant_names(people)
+
         if (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
@@ -222,6 +227,7 @@ def _get_structured(
                         uid,
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
+                        participant_names=participant_names,
                     )
                 with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                     structured.action_items = extract_action_items(
@@ -274,6 +280,7 @@ def _get_structured(
                     structured_conv.structured.title,
                     photos=main_conv.photos,
                     output_language_code=user_language,
+                    participant_names=participant_names,
                 )
             with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                 structured.action_items = extract_action_items(
@@ -311,6 +318,7 @@ def _get_structured(
                 photos=main_conv.photos,
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
+                participant_names=participant_names,
             )
         with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
             structured.action_items = extract_action_items(
