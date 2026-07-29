@@ -28,6 +28,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+import database.desktop_update_channels as channels_db  # noqa: E402
 from database.desktop_update_channels import (  # noqa: E402
     BETA_ADMISSION_COLLECTION,
     BETA_ADMISSION_DOCUMENT,
@@ -38,8 +39,32 @@ from database.desktop_update_channels import (  # noqa: E402
     reserve_beta_candidate,
     set_beta_admission_enabled,
 )
+from database.store.adapters.firestore import FirestoreDocumentStore  # noqa: E402
 
 _WAIT_SECONDS = 20
+
+# The domain functions no longer take an injected ``firestore_client``; they resolve their store
+# through the module-level ``_store`` seam. To keep this cross-client emulator proof — two
+# independent Firestore sessions genuinely contending on the emulator — we bind the store to a
+# specific client per thread. ``channels_db._store`` is patched (in ``main``) to this thread-local
+# resolver, so each domain call runs against the client the surrounding ``_with_store`` selected.
+_local = threading.local()
+
+
+def _current_store() -> FirestoreDocumentStore:
+    store = getattr(_local, "store", None)
+    if store is None:
+        raise RuntimeError("no Firestore store is bound for this thread")
+    return store
+
+
+def _with_store(client: Any, fn: Callable[[], Any]) -> Any:
+    previous = getattr(_local, "store", None)
+    _local.store = FirestoreDocumentStore(client)
+    try:
+        return fn()
+    finally:
+        _local.store = previous
 
 
 def _require_safe_emulator() -> None:
@@ -134,9 +159,9 @@ def _prepare_case(client: Any) -> tuple[str, str, Any, Any, Any, Any, dict[str, 
     for ref in (control_ref, manifest_ref, beta_ref):
         _delete_if_present(ref)
 
-    reserve_beta_candidate(tag_a, firestore_client=client)
-    enabled = set_beta_admission_enabled(True, firestore_client=client)
-    captured = capture_beta_admission(tag_a, firestore_client=client)
+    _with_store(client, lambda: reserve_beta_candidate(tag_a))
+    enabled = _with_store(client, lambda: set_beta_admission_enabled(True))
+    captured = _with_store(client, lambda: capture_beta_admission(tag_a))
     assert captured["control_generation"] == enabled["control_generation"]
     return tag_a, tag_b, control_ref, manifest_ref, beta_ref, stable_ref, stable_before
 
@@ -180,15 +205,18 @@ def _run_stale_capture_case(name: str, mutate: Callable[[Any, str], None]) -> No
 
     def admit_a() -> None:
         try:
-            admit_qualified_beta_manifest(
-                _manifest(tag_a), control_generation=captured["control_generation"], firestore_client=client_a
+            _with_store(
+                client_a,
+                lambda: admit_qualified_beta_manifest(
+                    _manifest(tag_a), control_generation=captured["control_generation"]
+                ),
             )
         except Exception as exc:  # The production transaction must reject the now-stale capture.
             state["error"] = exc
         finally:
             finished.set()
 
-    captured = capture_beta_admission(tag_a, firestore_client=client_a)
+    captured = _with_store(client_a, lambda: capture_beta_admission(tag_a))
     DocumentReference.get = wrapped_get
     worker = threading.Thread(target=admit_a, name=worker_name, daemon=True)
     try:
@@ -226,7 +254,7 @@ def _run_pessimistic_serialization_case() -> None:
     original_get = DocumentReference.get
     a_name = f"beta-admit-lock-{uuid.uuid4().hex}"
     b_name = f"beta-reserve-lock-{uuid.uuid4().hex}"
-    captured = capture_beta_admission(tag_a, firestore_client=client_a)
+    captured = _with_store(client_a, lambda: capture_beta_admission(tag_a))
 
     def wrapped_get(reference: Any, *args: Any, **kwargs: Any) -> Any:
         is_control_read = reference.path == control_ref.path and kwargs.get("transaction") is not None
@@ -242,8 +270,11 @@ def _run_pessimistic_serialization_case() -> None:
 
     def admit_a() -> None:
         try:
-            admit_qualified_beta_manifest(
-                _manifest(tag_a), control_generation=captured["control_generation"], firestore_client=client_a
+            _with_store(
+                client_a,
+                lambda: admit_qualified_beta_manifest(
+                    _manifest(tag_a), control_generation=captured["control_generation"]
+                ),
             )
         except Exception as exc:
             state["a_error"] = exc
@@ -252,7 +283,7 @@ def _run_pessimistic_serialization_case() -> None:
 
     def reserve_b() -> None:
         try:
-            reserve_beta_candidate(tag_b, firestore_client=client_b)
+            _with_store(client_b, lambda: reserve_beta_candidate(tag_b))
         except Exception as exc:
             state["b_error"] = exc
         finally:
@@ -292,14 +323,17 @@ def _run_pessimistic_serialization_case() -> None:
 
 def main() -> int:
     _require_safe_emulator()
+    # Route the domain modules' store through the per-thread client binding for this proof.
+    channels_db._store = _current_store
     _run_stale_capture_case(
-        "reservation-before-final-read", lambda client, tag_b: reserve_beta_candidate(tag_b, firestore_client=client)
+        "reservation-before-final-read",
+        lambda client, tag_b: _with_store(client, lambda: reserve_beta_candidate(tag_b)),
     )
     _run_stale_capture_case(
         "pause-resume-before-final-read",
-        lambda client, _tag_b: (
-            set_beta_admission_enabled(False, firestore_client=client),
-            set_beta_admission_enabled(True, firestore_client=client),
+        lambda client, _tag_b: _with_store(
+            client,
+            lambda: (set_beta_admission_enabled(False), set_beta_admission_enabled(True)),
         ),
     )
     _run_stale_capture_case(

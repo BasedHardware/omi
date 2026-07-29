@@ -1,43 +1,34 @@
-import os
 from datetime import datetime, timezone
-from pathlib import Path
-from types import ModuleType
 
 import pytest
 
-from testing.import_isolation import fake_firestore_transactional, load_module_fresh, stub_modules
-
+import database.memory_non_active_routes as nar_module
 from database.memory_collections import MemoryCollections
 
-from tests.unit.fixtures.non_active_firestore import TransactionalFakeDb as _FakeDb
-
-_BACKEND = Path(__file__).resolve().parents[2]
+from tests.store_fakes import FakeDocumentStore
 
 
-@pytest.fixture(scope="module")
-def nar():
-    """Load a fresh database.memory_non_active_routes with a fake-transactional firestore_v1.
+class _Nar:
+    """Test handle: the migrated module plus the backing dict its store writes into."""
 
-    ``_persist_non_active_route_outcome_transaction`` is bound to ``transactional`` at import
-    time, and the real ``google.cloud.firestore_v1.transactional`` uses Firestore's internal
-    transaction machinery (which the unit-test ``FakeTransaction`` does not implement). We
-    therefore wrap the real ``firestore_v1`` module so every other attribute stays intact,
-    override only ``transactional`` with the fake-transaction-compatible wrapper, and re-exec
-    the module against that wrapper. See backend/docs/test_isolation.md and
-    testing/import_isolation.load_module_fresh.
+    def __init__(self, docs):
+        self.docs = docs
+
+    def __getattr__(self, name):
+        return getattr(nar_module, name)
+
+
+@pytest.fixture
+def nar(monkeypatch):
+    """Bind the module's neutral ``_store`` seam to a fresh in-memory FakeDocumentStore.
+
+    The persistence path migrated off the raw Firestore client onto the storage port
+    (ADR-0002); tests assert on returned values and stored state, not Firestore call
+    mechanics. ``nar.docs`` is the path->data dict the store persists into.
     """
-    import google.cloud.firestore_v1 as real_fv1
-
-    fv1_stub = ModuleType("google.cloud.firestore_v1")
-    fv1_stub.__dict__.update(real_fv1.__dict__)
-    setattr(fv1_stub, "transactional", fake_firestore_transactional)
-
-    with stub_modules({"google.cloud.firestore_v1": fv1_stub}):
-        module = load_module_fresh(
-            "database.memory_non_active_routes",
-            os.path.join(str(_BACKEND), "database", "memory_non_active_routes.py"),
-        )
-        yield module
+    docs = {}
+    monkeypatch.setattr(nar_module, "_store", lambda: FakeDocumentStore(backing=docs))
+    return _Nar(docs)
 
 
 def _outcome(nar, **overrides):
@@ -57,16 +48,14 @@ def _outcome(nar, **overrides):
 
 
 def test_persist_non_active_outcome_is_idempotent_and_uses_one_deterministic_document(nar):
-    db = _FakeDb()
     outcome = _outcome(nar)
 
-    first = nar.persist_non_active_route_outcome(outcome, db_client=db)
-    second = nar.persist_non_active_route_outcome(outcome, db_client=db)
+    first = nar.persist_non_active_route_outcome(outcome)
+    second = nar.persist_non_active_route_outcome(outcome)
 
     assert first == second
-    assert len(db.docs) == 1
-    assert len(db.transaction_obj.sets) == 0
-    path, stored = next(iter(db.docs.items()))
+    assert len(nar.docs) == 1
+    path, stored = next(iter(nar.docs.items()))
     assert path == f"users/u1/non_active_memory_routes/{first.outcome_id}"
     assert stored["idempotency_key"] == "idem-review-1"
     assert stored["source_ids"] == ["conv1", "ev1"]
@@ -78,17 +67,15 @@ def test_persist_non_active_outcome_is_idempotent_and_uses_one_deterministic_doc
 
 
 def test_same_idempotency_key_with_different_payload_fails_closed(nar):
-    db = _FakeDb()
-    nar.persist_non_active_route_outcome(_outcome(nar), db_client=db)
+    nar.persist_non_active_route_outcome(_outcome(nar))
 
     with pytest.raises(nar.NonActiveRouteStoreConflict, match="idempotency key payload mismatch"):
-        nar.persist_non_active_route_outcome(_outcome(nar, reason="different", source_ids=["conv2"]), db_client=db)
+        nar.persist_non_active_route_outcome(_outcome(nar, reason="different", source_ids=["conv2"]))
 
-    assert len(db.docs) == 1
+    assert len(nar.docs) == 1
 
 
 def test_all_t17_non_active_routes_are_persistable_auditable_and_kept_out_of_default_memory_items(nar):
-    db = _FakeDb()
     collections = MemoryCollections(uid="u1")
 
     for route in [
@@ -107,12 +94,11 @@ def test_all_t17_non_active_routes_are_persistable_auditable_and_kept_out_of_def
                 reason=f"{route.value} decision",
                 source_ids=[f"src-{route.value}"],
             ),
-            db_client=db,
         )
         assert persisted.route == route
         assert persisted.default_long_term_visible is False
         assert persisted.audit_metadata["actor"] == "l2"
 
-    assert len(db.docs) == 6
-    assert all(path.startswith("users/u1/non_active_memory_routes/") for path in db.docs)
-    assert not any(path.startswith(f"{collections.memory_items}/") for path in db.docs)
+    assert len(nar.docs) == 6
+    assert all(path.startswith("users/u1/non_active_memory_routes/") for path in nar.docs)
+    assert not any(path.startswith(f"{collections.memory_items}/") for path in nar.docs)

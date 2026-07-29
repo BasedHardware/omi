@@ -124,7 +124,6 @@ def persist_non_active_route_for_patch(
     *,
     reason: Optional[str] = None,
     audit_metadata: Optional[Dict[str, Any]] = None,
-    db_client: Any = None,
 ) -> Optional[PersistedNonActiveRouteOutcome]:
     route = _NON_ACTIVE_ROUTE_BY_DECISION.get(patch.decision)
     if route is None:
@@ -149,8 +148,6 @@ def persist_non_active_route_for_patch(
             "new_memory_id": patch.new_memory_id,
         },
     )
-    if db_client is not None:
-        return persist_non_active_route_outcome(outcome, db_client=db_client)
     return persist_non_active_route_outcome(outcome)
 
 

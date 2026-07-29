@@ -1,21 +1,28 @@
-from unittest.mock import MagicMock
-
 import pytest
 
+import database.desktop_previews as previews_db
 from database.desktop_previews import (
     PREVIEW_MANIFESTS_COLLECTION,
     PREVIEW_POINTERS_COLLECTION,
     _build_preview_delisting,
     _build_preview_pointer,
-    _delist_preview_transaction,
+    delist_preview,
     get_current_preview,
     get_preview_manifest,
     normalize_preview_manifest,
     preview_identity,
 )
+from tests.store_fakes import FakeDocumentStore
 
 SLUG = "new-onboarding"
 SOURCE_SHA = "a" * 40
+
+
+@pytest.fixture
+def store(monkeypatch):
+    fake = FakeDocumentStore()
+    monkeypatch.setattr(previews_db, "_store", lambda: fake)
+    return fake
 
 
 def _manifest(**overrides):
@@ -35,6 +42,14 @@ def _manifest(**overrides):
     }
     data.update(overrides)
     return data
+
+
+def _pointer_path(slug=SLUG):
+    return f"{PREVIEW_POINTERS_COLLECTION}/{slug}"
+
+
+def _manifest_path(slug=SLUG, source_sha=SOURCE_SHA):
+    return f"{PREVIEW_MANIFESTS_COLLECTION}/{slug}:{source_sha}"
 
 
 class TestPreviewManifestNormalization:
@@ -97,79 +112,37 @@ class TestPreviewPointers:
         with pytest.raises(ValueError, match="generation mismatch"):
             _build_preview_delisting(current, slug=SLUG, expected_generation=3)
 
-    def test_delisting_transaction_deletes_only_the_pointer(self):
-        pointer_snapshot = MagicMock(exists=True)
-        pointer_snapshot.to_dict.return_value = {"slug": SLUG, "source_sha": SOURCE_SHA, "generation": 4}
-        pointer_ref = MagicMock()
-        pointer_ref.get.return_value = pointer_snapshot
-        transaction = MagicMock()
+    def test_delisting_transaction_deletes_only_the_pointer(self, store):
+        store.set(_pointer_path(), {"slug": SLUG, "source_sha": SOURCE_SHA, "generation": 4})
+        store.set(_manifest_path(), normalize_preview_manifest(_manifest()))
 
-        result = _delist_preview_transaction.to_wrap(
-            transaction,
-            pointer_ref,
-            slug=SLUG,
-            expected_generation=4,
-        )
+        result = delist_preview(SLUG, expected_generation=4)
 
         assert result == {"slug": SLUG, "deleted": True, "generation": 4}
-        transaction.delete.assert_called_once_with(pointer_ref)
+        # Only the mutable pointer is removed; the immutable artifact is retained.
+        assert _pointer_path() not in store._docs
+        assert _manifest_path() in store._docs
 
-    def test_delisting_an_absent_pointer_is_idempotent(self):
-        pointer_snapshot = MagicMock(exists=False)
-        pointer_ref = MagicMock()
-        pointer_ref.get.return_value = pointer_snapshot
-        transaction = MagicMock()
-
-        result = _delist_preview_transaction.to_wrap(
-            transaction,
-            pointer_ref,
-            slug=SLUG,
-            expected_generation=4,
-        )
+    def test_delisting_an_absent_pointer_is_idempotent(self, store):
+        result = delist_preview(SLUG, expected_generation=4)
 
         assert result == {"slug": SLUG, "deleted": False, "generation": None}
-        transaction.delete.assert_not_called()
 
 
 class TestPreviewLookup:
-    def test_resolves_immutable_manifest_from_preview_only_collection(self):
-        snapshot = MagicMock(exists=True)
-        snapshot.to_dict.return_value = _manifest()
-        ref = MagicMock()
-        ref.get.return_value = snapshot
-        collection = MagicMock()
-        collection.document.return_value = ref
-        client = MagicMock()
-        client.collection.return_value = collection
+    def test_resolves_immutable_manifest_from_preview_only_collection(self, store):
+        store.set(_manifest_path(), _manifest())
 
-        result = get_preview_manifest(SLUG, SOURCE_SHA, firestore_client=client)
+        result = get_preview_manifest(SLUG, SOURCE_SHA)
 
         assert result is not None
         assert result["dmg_url"].endswith("/Omi-Preview.dmg")
-        client.collection.assert_called_once_with(PREVIEW_MANIFESTS_COLLECTION)
-        collection.document.assert_called_once_with(f"{SLUG}:{SOURCE_SHA}")
 
-    def test_current_pointer_resolves_its_immutable_manifest(self):
-        pointer_snapshot = MagicMock(exists=True)
-        pointer_snapshot.to_dict.return_value = {"slug": SLUG, "source_sha": SOURCE_SHA, "generation": 2}
-        manifest_snapshot = MagicMock(exists=True)
-        manifest_snapshot.to_dict.return_value = _manifest()
+    def test_current_pointer_resolves_its_immutable_manifest(self, store):
+        store.set(_pointer_path(), {"slug": SLUG, "source_sha": SOURCE_SHA, "generation": 2})
+        store.set(_manifest_path(), _manifest())
 
-        pointer_ref = MagicMock()
-        pointer_ref.get.return_value = pointer_snapshot
-        manifest_ref = MagicMock()
-        manifest_ref.get.return_value = manifest_snapshot
-        pointer_collection = MagicMock()
-        pointer_collection.document.return_value = pointer_ref
-        manifest_collection = MagicMock()
-        manifest_collection.document.return_value = manifest_ref
-        client = MagicMock()
-        client.collection.side_effect = lambda name: {
-            PREVIEW_POINTERS_COLLECTION: pointer_collection,
-            PREVIEW_MANIFESTS_COLLECTION: manifest_collection,
-        }[name]
-
-        result = get_current_preview(SLUG, firestore_client=client)
+        result = get_current_preview(SLUG)
 
         assert result is not None
         assert result["pointer"]["generation"] == 2

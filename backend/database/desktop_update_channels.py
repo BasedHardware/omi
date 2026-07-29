@@ -4,9 +4,7 @@ from datetime import datetime, timezone
 import re
 from typing import Any, cast
 
-from google.cloud.firestore import transactional
-
-from database._client import get_firestore_client
+from database.store import get_document_store
 from desktop_release_manifest import ManifestError, validate_manifest
 
 CHANNELS_COLLECTION = "desktop_update_channels"
@@ -26,6 +24,10 @@ _BETA_ADMISSION_FIELDS = frozenset(
         "admission_updated_at",
     }
 )
+
+
+def _store():
+    return get_document_store()
 
 
 def _generation(value: object) -> int:
@@ -82,20 +84,19 @@ def _validate_beta_admission_control(data: object) -> dict[str, Any]:
     return cast(dict[str, Any], data)
 
 
-def _beta_admission_ref(client: Any) -> Any:
-    return client.collection(BETA_ADMISSION_COLLECTION).document(BETA_ADMISSION_DOCUMENT)
+def _beta_admission_path() -> str:
+    return f"{BETA_ADMISSION_COLLECTION}/{BETA_ADMISSION_DOCUMENT}"
 
 
 def _control_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-@transactional
-def _reserve_beta_candidate_transaction(transaction: Any, control_ref: Any, tag: str) -> dict[str, Any]:
-    snapshot = control_ref.get(transaction=transaction)
+def _reserve_beta_candidate_transaction(tx: Any, control_path: str, tag: str) -> dict[str, Any]:
+    snapshot = tx.get(control_path)
     target_tag, target_version, target_build = _canonical_beta_tag(tag)
     now = _control_now()
-    if not getattr(snapshot, "exists", False):
+    if not snapshot.exists:
         control = {
             "schema_version": 1,
             "promotion_enabled": False,
@@ -105,7 +106,7 @@ def _reserve_beta_candidate_transaction(transaction: Any, control_ref: Any, tag:
             "latest_reserved_at": now,
             "admission_updated_at": now,
         }
-        transaction.set(control_ref, control)
+        tx.set(control_path, control)
         return control
     raw: object = snapshot.to_dict()
     current = _validate_beta_admission_control(raw)
@@ -124,21 +125,21 @@ def _reserve_beta_candidate_transaction(transaction: Any, control_ref: Any, tag:
         "latest_reserved_at": now,
         "admission_updated_at": now,
     }
-    transaction.set(control_ref, control)
+    tx.set(control_path, control)
     return control
 
 
-def reserve_beta_candidate(tag: str, *, firestore_client: Any = None) -> dict[str, Any]:
+def reserve_beta_candidate(tag: str) -> dict[str, Any]:
     """Reserve one higher immutable candidate without enabling its promotion."""
     _canonical_beta_tag(tag)
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    return _reserve_beta_candidate_transaction(client.transaction(), _beta_admission_ref(client), tag)
+    return _store().run_transaction(
+        lambda tx: _reserve_beta_candidate_transaction(tx, _beta_admission_path(), tag)
+    )
 
 
-@transactional
-def _set_beta_admission_enabled_transaction(transaction: Any, control_ref: Any, enabled: bool) -> dict[str, Any]:
-    snapshot = control_ref.get(transaction=transaction)
-    if not getattr(snapshot, "exists", False):
+def _set_beta_admission_enabled_transaction(tx: Any, control_path: str, enabled: bool) -> dict[str, Any]:
+    snapshot = tx.get(control_path)
+    if not snapshot.exists:
         if enabled:
             raise ValueError("beta admission cannot resume without a reservation")
         # An explicit initial pause is a state transition, even before a candidate.
@@ -152,7 +153,7 @@ def _set_beta_admission_enabled_transaction(transaction: Any, control_ref: Any, 
             "latest_reserved_at": None,
             "admission_updated_at": now,
         }
-        transaction.set(control_ref, control)
+        tx.set(control_path, control)
         return control
     raw: object = snapshot.to_dict()
     current = _validate_beta_admission_control(raw)
@@ -166,23 +167,23 @@ def _set_beta_admission_enabled_transaction(transaction: Any, control_ref: Any, 
         "control_generation": current["control_generation"] + 1,
         "admission_updated_at": _control_now(),
     }
-    transaction.set(control_ref, control)
+    tx.set(control_path, control)
     return control
 
 
-def set_beta_admission_enabled(enabled: bool, *, firestore_client: Any = None) -> dict[str, Any]:
+def set_beta_admission_enabled(enabled: bool) -> dict[str, Any]:
     if type(enabled) is not bool:
         raise ValueError("beta admission enabled must be a boolean")
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    return _set_beta_admission_enabled_transaction(client.transaction(), _beta_admission_ref(client), enabled)
+    return _store().run_transaction(
+        lambda tx: _set_beta_admission_enabled_transaction(tx, _beta_admission_path(), enabled)
+    )
 
 
-def capture_beta_admission(tag: str, *, firestore_client: Any = None) -> dict[str, Any]:
+def capture_beta_admission(tag: str) -> dict[str, Any]:
     """Capture the server-owned generation before untrusted, expensive GitHub reads."""
     tag, _, build = _canonical_beta_tag(tag)
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    snapshot = _beta_admission_ref(client).get()
-    if not getattr(snapshot, "exists", False):
+    snapshot = _store().get(_beta_admission_path())
+    if not snapshot.exists:
         raise ValueError("beta admission control is unavailable")
     raw: object = snapshot.to_dict()
     control = _validate_beta_admission_control(raw)
@@ -201,13 +202,12 @@ def normalize_release_manifest(data: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(str(exc)) from exc
 
 
-def register_release_manifest(data: dict[str, Any], *, firestore_client: Any = None) -> dict[str, Any]:
+def register_release_manifest(data: dict[str, Any]) -> dict[str, Any]:
     """Create an immutable release manifest, allowing exact idempotent retries."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
     manifest = normalize_release_manifest(data)
-    ref = client.collection(MANIFESTS_COLLECTION).document(manifest["release_id"])
-    snapshot = ref.get()
-    if getattr(snapshot, "exists", False):
+    path = f"{MANIFESTS_COLLECTION}/{manifest['release_id']}"
+    snapshot = _store().get(path)
+    if snapshot.exists:
         existing_raw: object = snapshot.to_dict()
         existing_data = cast(dict[str, Any], existing_raw) if isinstance(existing_raw, dict) else {}
         existing = normalize_release_manifest(existing_data)
@@ -216,8 +216,8 @@ def register_release_manifest(data: dict[str, Any], *, firestore_client: Any = N
         return existing
 
     # ``created_at`` is part of the canonical manifest and its RFC3339 bytes
-    # participate in the immutable digest. Firestore must retain it unchanged.
-    ref.create(manifest)
+    # participate in the immutable digest. The store must retain it unchanged.
+    _store().create(path, manifest)
     return manifest
 
 
@@ -298,11 +298,10 @@ def _build_pointer(
     return pointer
 
 
-@transactional
 def _promote_channel_transaction(
-    transaction: Any,
-    pointer_ref: Any,
-    manifest_ref: Any,
+    tx: Any,
+    pointer_path: str,
+    manifest_path: str,
     *,
     transition: str,
     platform: str,
@@ -311,15 +310,15 @@ def _promote_channel_transaction(
     expected_generation: int | None,
     expected_current_release_id: str | None = None,
 ) -> dict[str, Any]:
-    manifest_snapshot = manifest_ref.get(transaction=transaction)
-    if not getattr(manifest_snapshot, "exists", False):
+    manifest_snapshot = tx.get(manifest_path)
+    if not manifest_snapshot.exists:
         raise ValueError("release manifest does not exist")
     raw_manifest: object = manifest_snapshot.to_dict()
     manifest_data = cast(dict[str, Any], raw_manifest) if isinstance(raw_manifest, dict) else {}
     manifest = normalize_release_manifest(manifest_data)
 
-    pointer_snapshot = pointer_ref.get(transaction=transaction)
-    current_raw: object = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
+    pointer_snapshot = tx.get(pointer_path)
+    current_raw: object = pointer_snapshot.to_dict() if pointer_snapshot.exists else {}
     current = cast(dict[str, Any], current_raw) if isinstance(current_raw, dict) else {}
     pointer = _build_pointer(
         current,
@@ -332,7 +331,7 @@ def _promote_channel_transaction(
         expected_current_release_id=expected_current_release_id,
     )
     if pointer is not current:
-        transaction.set(pointer_ref, pointer)
+        tx.set(pointer_path, pointer)
     return pointer
 
 
@@ -344,7 +343,6 @@ def promote_channel(
     expected_generation: int | None = None,
     expected_current_release_id: str | None = None,
     operation: str = "promote",
-    firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Advance or explicitly repoint a channel pointer to a qualified manifest."""
     platform = platform.strip().lower()
@@ -363,38 +361,37 @@ def promote_channel(
     if operation == "repoint" and (expected_current_release_id is None or expected_generation is None):
         raise ValueError("repoint requires expected_current_release_id and expected_generation")
 
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    pointer_ref = client.collection(CHANNELS_COLLECTION).document(f"{platform}-{channel}")
-    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
-    transaction = client.transaction()
-    return _promote_channel_transaction(
-        transaction,
-        pointer_ref,
-        manifest_ref,
-        transition=operation,
-        platform=platform,
-        channel=channel,
-        release_id=release_id,
-        expected_generation=expected_generation,
-        expected_current_release_id=expected_current_release_id,
+    pointer_path = f"{CHANNELS_COLLECTION}/{platform}-{channel}"
+    manifest_path = f"{MANIFESTS_COLLECTION}/{release_id}"
+    return _store().run_transaction(
+        lambda tx: _promote_channel_transaction(
+            tx,
+            pointer_path,
+            manifest_path,
+            transition=operation,
+            platform=platform,
+            channel=channel,
+            release_id=release_id,
+            expected_generation=expected_generation,
+            expected_current_release_id=expected_current_release_id,
+        )
     )
 
 
-@transactional
 def _admit_qualified_beta_transaction(
-    transaction: Any,
-    control_ref: Any,
-    pointer_ref: Any,
-    manifest_ref: Any,
+    tx: Any,
+    control_path: str,
+    pointer_path: str,
+    manifest_path: str,
     manifest: dict[str, Any],
     control_generation: int,
 ) -> dict[str, Any]:
     """Atomically retain one canonical manifest and advance only macOS Beta."""
-    # Firestore requires every read before the first write. Read the control
-    # document first so a reservation/pause committed during evidence validation
-    # necessarily conflicts or fails this generation check before any mutation.
-    control_snapshot = control_ref.get(transaction=transaction)
-    if not getattr(control_snapshot, "exists", False):
+    # Every read happens before the first write. Read the control document first
+    # so a reservation/pause committed during evidence validation necessarily
+    # conflicts or fails this generation check before any mutation.
+    control_snapshot = tx.get(control_path)
+    if not control_snapshot.exists:
         raise ValueError("beta admission control is unavailable")
     control_raw: object = control_snapshot.to_dict()
     control = _validate_beta_admission_control(control_raw)
@@ -405,8 +402,8 @@ def _admit_qualified_beta_transaction(
         raise ValueError("beta admission generation changed")
     if control["latest_reserved_tag"] != tag or control["latest_reserved_build_number"] != build:
         raise ValueError("beta admission reservation does not match candidate")
-    manifest_snapshot = manifest_ref.get(transaction=transaction)
-    manifest_exists = getattr(manifest_snapshot, "exists", False)
+    manifest_snapshot = tx.get(manifest_path)
+    manifest_exists = manifest_snapshot.exists
     if manifest_exists:
         raw_existing: object = manifest_snapshot.to_dict()
         existing = normalize_release_manifest(
@@ -414,8 +411,8 @@ def _admit_qualified_beta_transaction(
         )
         if existing != manifest:
             raise ValueError("release_id already exists with different immutable metadata")
-    pointer_snapshot = pointer_ref.get(transaction=transaction)
-    raw_pointer: object = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
+    pointer_snapshot = tx.get(pointer_path)
+    raw_pointer: object = pointer_snapshot.to_dict() if pointer_snapshot.exists else {}
     current = cast(dict[str, Any], raw_pointer) if isinstance(raw_pointer, dict) else {}
     pointer = _build_pointer(
         current,
@@ -427,35 +424,33 @@ def _admit_qualified_beta_transaction(
         expected_generation=None,
     )
     if not manifest_exists:
-        transaction.create(manifest_ref, manifest)
+        tx.set(manifest_path, manifest)
     if pointer is not current:
-        transaction.set(pointer_ref, pointer)
+        tx.set(pointer_path, pointer)
     return {"manifest": manifest, "pointer": pointer, "idempotent": manifest_exists and pointer is current}
 
 
-def admit_qualified_beta_manifest(
-    data: dict[str, Any], *, control_generation: int, firestore_client: Any = None
-) -> dict[str, Any]:
+def admit_qualified_beta_manifest(data: dict[str, Any], *, control_generation: int) -> dict[str, Any]:
     """Commit the narrow server-owned Beta transaction after admission succeeds."""
     manifest = normalize_release_manifest(data)
-    client = firestore_client if firestore_client is not None else get_firestore_client()
     if type(control_generation) is not int or control_generation < 0:
         raise ValueError("beta admission generation is invalid")
-    control_ref = _beta_admission_ref(client)
-    pointer_ref = client.collection(CHANNELS_COLLECTION).document("macos-beta")
-    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(manifest["release_id"])
-    return _admit_qualified_beta_transaction(
-        client.transaction(), control_ref, pointer_ref, manifest_ref, manifest, control_generation
+    control_path = _beta_admission_path()
+    pointer_path = f"{CHANNELS_COLLECTION}/macos-beta"
+    manifest_path = f"{MANIFESTS_COLLECTION}/{manifest['release_id']}"
+    return _store().run_transaction(
+        lambda tx: _admit_qualified_beta_transaction(
+            tx, control_path, pointer_path, manifest_path, manifest, control_generation
+        )
     )
 
 
-def get_channel_release(platform: str, channel: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
+def get_channel_release(platform: str, channel: str) -> dict[str, Any] | None:
     """Resolve one explicit channel pointer to its immutable manifest."""
     if platform != "macos" or channel not in VALID_CHANNELS:
         raise ValueError("invalid platform or channel")
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    pointer_snapshot = client.collection(CHANNELS_COLLECTION).document(f"{platform}-{channel}").get()
-    if not getattr(pointer_snapshot, "exists", False):
+    pointer_snapshot = _store().get(f"{CHANNELS_COLLECTION}/{platform}-{channel}")
+    if not pointer_snapshot.exists:
         return None
     raw_pointer: object = pointer_snapshot.to_dict()
     pointer = cast(dict[str, Any], raw_pointer) if isinstance(raw_pointer, dict) else {}
@@ -463,8 +458,8 @@ def get_channel_release(platform: str, channel: str, *, firestore_client: Any = 
     if not isinstance(release_id, str) or not release_id:
         raise ValueError("channel pointer is missing release_id")
 
-    manifest_snapshot = client.collection(MANIFESTS_COLLECTION).document(release_id).get()
-    if not getattr(manifest_snapshot, "exists", False):
+    manifest_snapshot = _store().get(f"{MANIFESTS_COLLECTION}/{release_id}")
+    if not manifest_snapshot.exists:
         raise ValueError("channel pointer references a missing manifest")
     raw_manifest: object = manifest_snapshot.to_dict()
     manifest_data = cast(dict[str, Any], raw_manifest) if isinstance(raw_manifest, dict) else {}
@@ -485,14 +480,13 @@ def get_channel_release(platform: str, channel: str, *, firestore_client: Any = 
     }
 
 
-def get_release_manifest(release_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
+def get_release_manifest(release_id: str) -> dict[str, Any] | None:
     """Read one retained immutable manifest without consulting release metadata."""
     release_id = release_id.strip()
     if not release_id:
         raise ValueError("release_id is required")
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    snapshot = client.collection(MANIFESTS_COLLECTION).document(release_id).get()
-    if not getattr(snapshot, "exists", False):
+    snapshot = _store().get(f"{MANIFESTS_COLLECTION}/{release_id}")
+    if not snapshot.exists:
         return None
     raw: object = snapshot.to_dict()
     data = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}

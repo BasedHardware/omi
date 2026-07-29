@@ -82,11 +82,10 @@ def test_memory_patch_adapter_skip_duplicate_has_no_ledger_mutations():
 def test_memory_patch_adapter_persists_non_active_patch_decisions_through_route_store(monkeypatch):
     captured = []
 
-    def fake_persist(outcome, *, db_client=None):
-        captured.append((outcome, db_client))
+    def fake_persist(outcome):
+        captured.append(outcome)
         return outcome
 
-    fake_db = object()
     import utils.memory.patch_adapter as adapter
 
     monkeypatch.setattr(adapter, "persist_non_active_route_outcome", fake_persist)
@@ -101,11 +100,10 @@ def test_memory_patch_adapter_persists_non_active_patch_decisions_through_route_
         rationale="low confidence conflict needs human review",
     )
 
-    persisted = persist_non_active_route_for_patch("u1", patch, audit_metadata={"actor": "unit"}, db_client=fake_db)
+    persisted = persist_non_active_route_for_patch("u1", patch, audit_metadata={"actor": "unit"})
 
-    assert persisted is captured[0][0]
-    outcome, used_db = captured[0]
-    assert used_db is fake_db
+    assert persisted is captured[0]
+    outcome = captured[0]
     assert outcome.uid == "u1"
     assert outcome.route == "review"
     assert outcome.idempotency_key == "memory_patch:idem_review"

@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable, Sequence
-from typing import Any, List, Optional, Protocol, cast
+from typing import List, Optional, Protocol, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -179,7 +179,6 @@ def extract_l1_memory_archive_items_from_text(
     language_instruction: str = "",
     run_id: Optional[str] = None,
     persist_route_outcomes: bool = True,
-    db_client: Any = None,
     llm: LlmInvoker | None = None,
 ) -> List[WorkingObservationArchiveItem]:
     stripped_text = text.strip() if text else ""
@@ -221,7 +220,6 @@ def extract_l1_memory_archive_items_from_text(
             source_type=source_type,
             run_id=run_id,
             items=items,
-            db_client=db_client,
         )
     return items
 
@@ -233,7 +231,6 @@ def _persist_l1_archive_route_outcomes(
     source_type: str,
     run_id: Optional[str],
     items: List[WorkingObservationArchiveItem],
-    db_client: Any = None,
 ) -> None:
     for item in items:
         outcome = NonActiveRouteOutcome(
@@ -256,7 +253,4 @@ def _persist_l1_archive_route_outcomes(
                 "remediation_state": "archive_product_tier",
             },
         )
-        if db_client is not None:
-            persist_non_active_route_outcome(outcome, db_client=db_client)
-        else:
-            persist_non_active_route_outcome(outcome)
+        persist_non_active_route_outcome(outcome)
