@@ -1211,6 +1211,8 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     assert results[0]['app_id'] == 'app-1'
     assert results[0]['content'] == 'APP SUMMARY'
     assert written.get('suggested_summarization_apps') == ['app-1']
+
+
 def test_dedup_candidates_exclude_own_and_merge_source_items():
     """Regression: on reprocess/merge, the conversation's own previous action
     items (and the merge sources') came back as dedup candidates — the LLM
