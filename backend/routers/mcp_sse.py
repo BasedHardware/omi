@@ -53,6 +53,7 @@ from utils.memory.memory_service import (
     resolve_external_memory_write_context,
 )
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
@@ -928,6 +929,13 @@ def execute_tool(
             )
         except HTTPException as exc:
             _raise_tool_error_from_http(exc)
+
+        capture_memory_write(
+            principal_id=user_id,
+            source="mcp_tool_memory_create",
+            session_id=memory_db.id,
+            memories=[memory_db],
+        )
 
         exposure = (
             MemoryApiExposure.CANONICAL

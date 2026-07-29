@@ -106,6 +106,19 @@ def with_listen_finalization_orphan_env(payload: str) -> str:
     )
 
 
+def with_parity_pack_env(payload: str) -> str:
+    """Keep offline dev Cloud Run states aligned with replay-capture bindings."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "OMI_PARITY_PACK_CAPTURE", "value": "1"},\n'
+        '        {"name": "OMI_PARITY_PACK_ALLOWED_PRINCIPALS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},\n'
+        '        {"name": "OMI_PARITY_PACK_ROOT", "value": "/tmp/omi-parity-pack"},\n'
+        '        {"name": "OMI_PARITY_PACK_GCS_URI", "value": "gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0"},\n'
+        '        {"name": "OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS", "value": "3600"},',
+    )
+
+
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
@@ -114,7 +127,9 @@ GOOGLE_OAUTH_SECRETS = '''\
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
         with_backend_pusher_env(
-            with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+            with_parity_pack_env(
+                with_listen_finalization_orphan_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+            )
         )
     )
     return re.sub(
