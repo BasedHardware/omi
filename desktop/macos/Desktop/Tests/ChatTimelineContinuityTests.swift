@@ -1359,6 +1359,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
   }
 
+  @MainActor
   func testSelectableMarkdownRendersWithStableLayout() {
     // Render a settled (selectable) message body in a real hosting view and
     // verify the SelectionOverlay-backed content produces a finite, stable size
