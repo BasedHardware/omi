@@ -285,6 +285,36 @@ class MongoDocumentStore:
     def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int:
         return self._db[_collection_name(collection)].count_documents(self._filter(collection, filters))
 
+    def query_group(
+        self,
+        group: str,
+        *,
+        filters: Optional[Iterable[Filter]] = None,
+        order_by: Optional[str] = None,
+        direction: str = "asc",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[StoredDocument]:
+        # A collection-group query is the whole Mongo collection named after the leaf (``group``),
+        # with NO ``_parent`` scope — docs from every parent live there already (see the path model).
+        mongo_filter: Dict[str, Any] = {}
+        for field, op, value in filters or ():
+            if op == "array_contains":
+                mongo_filter["d." + field] = value
+            else:
+                mongo_filter.setdefault("d." + field, {})[_OP[op]] = value
+        specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
+        cursor = self._db[group].find(mongo_filter)
+        if specs:
+            sort_spec = [("d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs]
+            sort_spec.append(("_id", ASCENDING if specs[-1][1] == "asc" else DESCENDING))
+            cursor = cursor.sort(sort_spec)
+        if offset is not None:
+            cursor = cursor.skip(offset)
+        if limit is not None:
+            cursor = cursor.limit(limit)
+        return [_to_record(doc, doc["_id"]) for doc in cursor]
+
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]:
         if not ids:
             return []

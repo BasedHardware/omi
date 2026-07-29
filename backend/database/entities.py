@@ -108,14 +108,13 @@ def merge_entities(
     evidence: Optional[Dict[str, Any]] = None,
     confidence: float = 0.5,
 ):
-    user_ref = kg_db.db.collection(kg_db.users_collection).document(uid)
-    nodes_ref = user_ref.collection(kg_db.knowledge_nodes_collection)
-    entity_a_ref = nodes_ref.document(entity_a)
-    entity_b_ref = nodes_ref.document(entity_b)
+    nodes_prefix = f'{kg_db.users_collection}/{uid}/{kg_db.knowledge_nodes_collection}'
+    entity_a_path = f'{nodes_prefix}/{entity_a}'
+    entity_b_path = f'{nodes_prefix}/{entity_b}'
 
     def write_projection(transaction: Any) -> None:
-        a_snapshot = entity_a_ref.get(transaction=transaction)
-        b_snapshot = entity_b_ref.get(transaction=transaction)
+        a_snapshot = transaction.get(entity_a_path)
+        b_snapshot = transaction.get(entity_b_path)
         if not a_snapshot.exists or not b_snapshot.exists:
             return
         merged = apply_entity_mutations(
@@ -123,8 +122,8 @@ def merge_entities(
             [memory_ledger.merge_entities(entity_a, entity_b, evidence=evidence, confidence=confidence)],
         )
         if entity_a in merged:
-            transaction.set(entity_a_ref, merged[entity_a])
-        transaction.delete(entity_b_ref)
+            transaction.set(entity_a_path, merged[entity_a])
+        transaction.delete(entity_b_path)
 
     return memory_ledger.append_commit(
         uid,
@@ -136,15 +135,14 @@ def merge_entities(
 
 
 def split_entity(uid: str, entity_id: str, into: List[Dict[str, Any]], *, reason: str = ''):
-    user_ref = kg_db.db.collection(kg_db.users_collection).document(uid)
-    nodes_ref = user_ref.collection(kg_db.knowledge_nodes_collection)
-    entity_ref = nodes_ref.document(entity_id)
+    nodes_prefix = f'{kg_db.users_collection}/{uid}/{kg_db.knowledge_nodes_collection}'
+    entity_path = f'{nodes_prefix}/{entity_id}'
 
     def write_projection(transaction: Any) -> None:
-        transaction.delete(entity_ref)
+        transaction.delete(entity_path)
         for entity in into:
             if entity.get('id'):
-                transaction.set(nodes_ref.document(entity['id']), copy.deepcopy(entity))
+                transaction.set(f'{nodes_prefix}/{entity["id"]}', copy.deepcopy(entity))
 
     return memory_ledger.append_commit(
         uid,
@@ -156,7 +154,7 @@ def split_entity(uid: str, entity_id: str, into: List[Dict[str, Any]], *, reason
 
 
 def reassign_fact_subject(uid: str, fact_id: str, old: Optional[str], new: Optional[str]):
-    memory_ref = kg_db.db.collection(kg_db.users_collection).document(uid).collection('memories').document(fact_id)
+    memory_path = f'{kg_db.users_collection}/{uid}/memories/{fact_id}'
     if new == USER_ENTITY_ID:
         attribution = SubjectAttribution.user
     elif new and new.startswith('person:'):
@@ -166,7 +164,7 @@ def reassign_fact_subject(uid: str, fact_id: str, old: Optional[str], new: Optio
 
     def write_projection(transaction: Any) -> None:
         transaction.update(
-            memory_ref,
+            memory_path,
             {
                 'subject_entity_id': new,
                 'subject_attribution': attribution.value,

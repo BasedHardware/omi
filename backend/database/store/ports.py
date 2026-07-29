@@ -8,6 +8,10 @@ snapshots cross this boundary.
 Query filters are neutral ``(field, op, value)`` tuples with ``op`` in {"==", "in", "<", "<=",
 ">", ">=", "array_contains"}. ``array_contains`` matches documents whose array-valued ``field``
 contains ``value``. Field transforms use the neutral sentinels in ``database.store.sentinels``.
+
+``query`` scopes to one containing collection (a single parent); ``query_group`` scopes to every
+collection sharing a leaf name across all parents (a Firestore collection-group query), returning
+records whose ``path`` is the full logical path so callers can recover the parent (e.g. the uid).
 """
 
 from __future__ import annotations
@@ -76,6 +80,16 @@ class DocumentStore(Protocol):
         start_after: Optional[Dict[str, Any]] = None,
     ) -> List[StoredDocument]: ...
     def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int: ...
+    def query_group(
+        self,
+        group: str,
+        *,
+        filters: Optional[Iterable[Filter]] = None,
+        order_by: Optional[OrderBy] = None,
+        direction: str = "asc",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[StoredDocument]: ...  # cross-parent collection-group query; results carry full paths
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]: ...
     def list_ids(self, collection: str) -> List[str]: ...
     def delete_recursive(self, path: str) -> None: ...

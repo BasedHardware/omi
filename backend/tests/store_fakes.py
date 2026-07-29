@@ -221,6 +221,35 @@ class FakeDocumentStore:
     def count(self, collection: str, *, filters: Optional[Iterable] = None) -> int:
         return len(self._matching_rows(collection, filters))
 
+    def query_group(
+        self,
+        group: str,
+        *,
+        filters: Optional[Iterable] = None,
+        order_by: Optional[str] = None,
+        direction: str = "asc",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[StoredDocument]:
+        # Collection-group scope: every doc whose containing collection's leaf name == ``group``,
+        # regardless of parent (e.g. ``users/{uid}/fair_use_state/current`` matches ``fair_use_state``).
+        rows = [(p, d) for p, d in self._docs.items() if p.rsplit("/", 1)[0].rsplit("/", 1)[-1] == group]
+        for field, op, value in filters or ():
+            rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
+        reverse = direction == "desc"
+        if order_by is None or isinstance(order_by, str):
+            if order_by is not None:
+                rows.sort(key=lambda pd: (pd[1].get(order_by), pd[0]), reverse=reverse)
+        else:
+            rows.sort(key=lambda pd: pd[0])
+            for field, fdir in reversed(list(order_by)):
+                rows.sort(key=lambda pd, f=field: pd[1].get(f), reverse=(fdir == "desc"))
+        if offset is not None:
+            rows = rows[offset:]
+        if limit is not None:
+            rows = rows[:limit]
+        return [StoredDocument.present(p, copy.deepcopy(d), updated_at=self._updated.get(p)) for p, d in rows]
+
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]:
         result = []
         for doc_id in ids:

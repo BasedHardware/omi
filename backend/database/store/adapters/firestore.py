@@ -223,6 +223,30 @@ class FirestoreDocumentStore:
         result = query.count().get()
         return int(result[0][0].value)
 
+    def query_group(
+        self,
+        group: str,
+        *,
+        filters: Optional[Iterable[Filter]] = None,
+        order_by: Optional[str] = None,
+        direction: str = "asc",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[StoredDocument]:
+        query: Any = self._client.collection_group(group)
+        for field, op, value in filters or ():
+            query = query.where(filter=FieldFilter(field, op, value))
+        specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
+        for _field, _dir in specs:
+            query = query.order_by(_field, direction=_DIRECTION[_dir])
+        if offset is not None:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        # _record_from_query fills each record's path from the snapshot reference, so a
+        # collection-group result carries its full logical path (parent recoverable by the caller).
+        return [_record_from_query(snapshot) for snapshot in query.stream()]
+
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]:
         if not ids:
             return []

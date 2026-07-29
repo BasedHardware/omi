@@ -166,6 +166,18 @@ def test_query_multi_field_order_by(store, uid):
     assert [d.id for d in ordered] == ["c", "b", "a"]
 
 
+def test_query_group_spans_parents(store, uid):
+    # collection-group: the same leaf collection under different parents, plus a different leaf excluded.
+    store.set(f"users/{uid}/widgets/w1", {"kind": "a"})
+    store.set(f"users/{uid}-other/widgets/w2", {"kind": "a"})
+    store.set(f"users/{uid}/gadgets/g1", {"kind": "a"})  # different leaf → excluded
+
+    hits = store.query_group("widgets", filters=[("kind", "==", "a")])
+    assert {d.id for d in hits} == {"w1", "w2"}
+    # results carry the full logical path so the caller can recover the parent (uid)
+    assert {d.path for d in hits} == {f"users/{uid}/widgets/w1", f"users/{uid}-other/widgets/w2"}
+
+
 def test_query_array_contains(store, uid):
     base = f"users/{uid}/people"
     store.set(f"{base}/p1", {"name": "p1", "tags": ["persona", "audio"]})

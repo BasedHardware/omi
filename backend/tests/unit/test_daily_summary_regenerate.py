@@ -32,66 +32,39 @@ def _stub_module(name: str) -> types.ModuleType:
     return sys.modules[name]
 
 
-# Stub google.cloud.firestore so importing database._client doesn't try to
-# initialize a real Firestore client (which needs credentials).
-firestore_stub = _stub_module("google.cloud.firestore")
-firestore_stub.Client = MagicMock(return_value=MagicMock())
-firestore_stub.Query = MagicMock()
-
-
-class _BaseFilter:  # database.daily_summaries imports FieldFilter from this path
-    pass
-
-
-fbq_stub = _stub_module("google.cloud.firestore_v1.base_query")
-fbq_stub.FieldFilter = MagicMock()
-
-database_pkg = sys.modules.get("database")
-if database_pkg is not None:
-    database_pkg.__path__ = [os.path.join(_BACKEND_DIR, "database")]
-
-client_stub = sys.modules.get("database._client")
-if client_stub is not None:
-    client_stub.db = MagicMock()
-
+# redis_db is imported by database.daily_summaries; stub the redis driver so the
+# import doesn't try to open a real connection.
 redis_stub = _stub_module("redis")
 redis_stub.Redis = MagicMock(return_value=MagicMock())
 
 import database.daily_summaries as daily_summaries  # noqa: E402
+from tests.store_fakes import FakeDocumentStore  # noqa: E402
 
 
-def test_update_daily_summary_forces_id_to_existing_doc_id():
+def _summary_path(uid: str, summary_id: str) -> str:
+    return f"users/{uid}/{daily_summaries.DAILY_SUMMARIES_COLLECTION}/{summary_id}"
+
+
+def test_update_daily_summary_forces_id_to_existing_doc_id(monkeypatch):
     """
     Regression: generator always allocates a fresh UUID. update_daily_summary
     must pin the stored payload's id back to the existing summary_id so
     readers that key off summary['id'] keep finding the same row.
     """
-    captured = {}
+    store = FakeDocumentStore()
+    monkeypatch.setattr(daily_summaries, "_store", lambda: store)
 
-    fake_set = MagicMock(side_effect=lambda payload: captured.setdefault("payload", payload))
-    fake_doc = MagicMock(set=fake_set)
-    fake_collection = MagicMock(document=MagicMock(return_value=fake_doc))
-    fake_user_doc = MagicMock(collection=MagicMock(return_value=fake_collection))
+    daily_summaries.update_daily_summary(
+        "uid-abc",
+        "existing-summary-id",
+        {
+            "id": "freshly-generated-uuid-from-llm",
+            "date": "2026-06-02",
+            "headline": "Updated",
+        },
+    )
 
-    original_db = daily_summaries.db
-    try:
-        daily_summaries.db = MagicMock(
-            collection=MagicMock(return_value=MagicMock(document=MagicMock(return_value=fake_user_doc)))
-        )
-
-        daily_summaries.update_daily_summary(
-            "uid-abc",
-            "existing-summary-id",
-            {
-                "id": "freshly-generated-uuid-from-llm",
-                "date": "2026-06-02",
-                "headline": "Updated",
-            },
-        )
-    finally:
-        daily_summaries.db = original_db
-
-    payload = captured["payload"]
+    payload = store.get(_summary_path("uid-abc", "existing-summary-id")).to_dict()
     assert payload["id"] == "existing-summary-id", (
         "update_daily_summary must overwrite the generator's UUID with the "
         "existing doc id so regenerate replaces in place"
@@ -100,46 +73,28 @@ def test_update_daily_summary_forces_id_to_existing_doc_id():
     assert payload["headline"] == "Updated"
 
 
-def test_update_daily_summary_preserves_other_fields():
+def test_update_daily_summary_preserves_other_fields(monkeypatch):
     """All non-id fields pass through unchanged."""
-    captured = {}
+    store = FakeDocumentStore()
+    monkeypatch.setattr(daily_summaries, "_store", lambda: store)
 
-    fake_set = MagicMock(side_effect=lambda payload: captured.setdefault("payload", payload))
-    fake_doc = MagicMock(set=fake_set)
-    fake_collection = MagicMock(document=MagicMock(return_value=fake_doc))
-    fake_user_doc = MagicMock(collection=MagicMock(return_value=fake_collection))
+    daily_summaries.update_daily_summary(
+        "uid-abc",
+        "existing-summary-id",
+        {
+            "id": "x",
+            "date": "2026-06-02",
+            "headline": "H",
+            "overview": "O",
+            "day_emoji": "🎉",
+            "stats": {"total_conversations": 7},
+            "regenerated_at": "2026-06-02T12:00:00",
+            "visibility": "shared",
+        },
+    )
 
-    original_db = daily_summaries.db
-    try:
-        daily_summaries.db = MagicMock(
-            collection=MagicMock(return_value=MagicMock(document=MagicMock(return_value=fake_user_doc)))
-        )
-
-        daily_summaries.update_daily_summary(
-            "uid-abc",
-            "existing-summary-id",
-            {
-                "id": "x",
-                "date": "2026-06-02",
-                "headline": "H",
-                "overview": "O",
-                "day_emoji": "🎉",
-                "stats": {"total_conversations": 7},
-                "regenerated_at": "2026-06-02T12:00:00",
-                "visibility": "shared",
-            },
-        )
-    finally:
-        daily_summaries.db = original_db
-
-    payload = captured["payload"]
+    payload = store.get(_summary_path("uid-abc", "existing-summary-id")).to_dict()
     assert payload["stats"] == {"total_conversations": 7}
     assert payload["regenerated_at"] == "2026-06-02T12:00:00"
     assert payload["visibility"] == "shared"
     assert payload["day_emoji"] == "🎉"
-
-
-if __name__ == "__main__":
-    test_update_daily_summary_forces_id_to_existing_doc_id()
-    test_update_daily_summary_preserves_other_fields()
-    print("OK")
