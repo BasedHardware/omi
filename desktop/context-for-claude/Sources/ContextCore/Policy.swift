@@ -1,3 +1,4 @@
+import ContextCoreCxx
 import Foundation
 
 // MARK: - Session boundaries
@@ -15,7 +16,7 @@ public struct SessionPolicy {
     /// middle of one conversation does not shatter it into fragments. The asymmetry is deliberate:
     /// recall degrades far more from a session that was split (the line that gave an earlier line
     /// its meaning is now in a different session) than from two that were joined.
-    public static let gapSeconds: Double = 300
+    public static let gapSeconds = ctx_session_default_gap_seconds()
 
     /// The threshold this instance applies. Injectable so tests can express minutes without sleeping.
     public let gapSeconds: Double
@@ -36,10 +37,12 @@ public struct SessionPolicy {
     /// continues the current session instead. Continuing costs one over-long session; splitting
     /// costs context that recall can never put back.
     public func shouldOpenNewSession(lastSegmentEndedAt: Double?, nextSegmentStartedAt: Double) -> Bool {
-        guard let last = lastSegmentEndedAt else { return true }
-        let gap = nextSegmentStartedAt - last
-        guard gap > 0 else { return false }
-        return gap > self.gapSeconds
+        ctx_should_open_new_session(
+            lastSegmentEndedAt == nil ? 0 : 1,
+            lastSegmentEndedAt ?? 0,
+            nextSegmentStartedAt,
+            gapSeconds
+        ) == 1
     }
 }
 
@@ -192,22 +195,10 @@ public enum PCM {
     /// upstream; the trailing byte is ignored rather than treated as a fatal condition, because
     /// dropping half a millisecond of audio is always better than tearing down the capture stack.
     public static func rms(int16LE data: Data) -> Float {
-        guard data.count >= 2 else { return 0 }
-
-        let (sumOfSquares, sampleCount) = data.withUnsafeBytes { raw -> (Double, Int) in
-            let count = raw.count / 2
-            var accumulator = 0.0
-            for index in 0..<count {
-                // Accumulate in Double: a 10 s window is 160k samples, and summing that many
-                // squared Int16 magnitudes overflows Float's precision long before its range.
-                let sample = Double(loadSample(raw, at: index))
-                accumulator += sample * sample
-            }
-            return (accumulator, count)
+        data.withUnsafeBytes { raw in
+            guard let bytes = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return 0 }
+            return Float(ctx_pcm_rms_int16le(bytes, raw.count))
         }
-
-        guard sampleCount > 0 else { return 0 }
-        return Float((sumOfSquares / Double(sampleCount)).squareRoot() / Double(fullScale))
     }
 
     /// Averages interleaved channels down to mono.

@@ -66,6 +66,22 @@ void test_session_boundaries() {
     CHECK(ctx_should_open_new_session(1, 0.0, 2.0, 60.0) == 0);
 }
 
+/* --------------------------------------------------------------------------- audio */
+
+void test_pcm_rms() {
+    const uint8_t half_scale[] = {0x00, 0x40, 0x00, 0x40, 0x00, 0x40, 0x00, 0x40};
+    CHECK_CLOSE(ctx_pcm_rms_int16le(half_scale, sizeof(half_scale)), 0.5, 1e-12);
+
+    const uint8_t silence[] = {0x00, 0x00, 0x00, 0x00};
+    CHECK_CLOSE(ctx_pcm_rms_int16le(silence, sizeof(silence)), 0.0, 0.0);
+    CHECK_CLOSE(ctx_pcm_rms_int16le(nullptr, 0), 0.0, 0.0);
+    CHECK_CLOSE(ctx_pcm_rms_int16le(half_scale, 1), 0.0, 0.0);
+
+    // The incomplete trailing byte is ignored, not treated as a second sample.
+    const uint8_t ragged[] = {0x00, 0x40, 0x7f};
+    CHECK_CLOSE(ctx_pcm_rms_int16le(ragged, sizeof(ragged)), 0.5, 1e-12);
+}
+
 /* ------------------------------------------------------------------- recall ranking */
 
 void test_recall_score() {
@@ -335,6 +351,7 @@ void test_version_is_reported() {
 
 int main() {
     test_session_boundaries();
+    test_pcm_rms();
     test_recall_score();
     test_moment_empty_input();
     test_moment_single_frame_is_one_moment();
