@@ -39,7 +39,7 @@ final class ClipboardWatcherTests: XCTestCase {
   }
 
   // swiftlint:disable:next implicitly_unwrapped_optional XCTest setUp fixture (assigned in setUp before any test uses it)
-  private var fake: FakeClipboard!
+  nonisolated(unsafe) private var fake: FakeClipboard!
 
   override func setUp() {
     super.setUp()

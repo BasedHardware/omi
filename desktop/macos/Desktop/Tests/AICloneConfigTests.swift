@@ -16,8 +16,8 @@ import XCTest
 @MainActor
 final class AICloneConfigTests: XCTestCase {
 
-  private var customDefaults: UserDefaults!
-  private var suiteName: String!
+  nonisolated(unsafe) private var customDefaults: UserDefaults!
+  nonisolated(unsafe) private var suiteName: String!
 
   override func setUp() {
     super.setUp()
