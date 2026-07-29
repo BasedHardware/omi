@@ -606,7 +606,7 @@ def _stop_exact_typesense_container(record: dict[str, object], lease_id: str, si
     if not _is_exact_typesense_docker_proxy(record, lease_id):
         raise QualificationLeaseError("Refusing to stop a Typesense container whose exact lease binding is unproven")
     container = f"omi-dev-harness-{lease_id}-typesense"
-    command = ["docker", "kill", container] if sig == signal.SIGKILL else ["docker", "stop", "--time", "10", container]
+    command = ["docker", "kill", container] if sig.name == "SIGKILL" else ["docker", "stop", "--time", "10", container]
     try:
         stopped = subprocess.run(
             command,
