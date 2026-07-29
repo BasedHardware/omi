@@ -45,7 +45,8 @@ final class ProjectionAutomationHarness {
   private func open(registry: DesktopAutomationActionRegistry) async -> [String: String] {
     close()
 
-    let controller = NSHostingController(rootView: ProjectionPage())
+    let controller = NSHostingController(
+      rootView: ProjectionPage(refreshesOnActivation: false))
     let window = NSWindow(contentViewController: controller)
     window.title = Self.windowTitle
     window.setContentSize(NSSize(width: 720, height: 760))

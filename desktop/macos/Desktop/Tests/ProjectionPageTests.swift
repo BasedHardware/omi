@@ -238,6 +238,25 @@ final class ProjectionPageTests: XCTestCase {
     XCTAssertEqual(fake.listCallCount, 2)
   }
 
+  func testHarnessActivationPolicyRetainsThePresentedProjection() async throws {
+    let fake = ProjectionClientFake()
+    fake.projections = [projection(id: "projection-a")]
+    fake.imageData = imageData()
+    let viewModel = ProjectionViewModel(
+      client: fake,
+      refreshesOnActivation: false)
+    let start = Date(timeIntervalSince1970: 1_000)
+
+    await viewModel.load(now: start)
+    fake.projections = []
+    await viewModel.refreshOnActivation(
+      now: start.addingTimeInterval(PollingConfig.activationCooldown))
+
+    XCTAssertEqual(viewModel.projection?.id, "projection-a")
+    XCTAssertNotNil(viewModel.image)
+    XCTAssertEqual(fake.listCallCount, 1)
+  }
+
   func testFeedbackCarriesOwnerAndUpdatesTheRenderedSignal() async throws {
     let fake = ProjectionClientFake()
     fake.projections = [projection(id: "projection-a")]
