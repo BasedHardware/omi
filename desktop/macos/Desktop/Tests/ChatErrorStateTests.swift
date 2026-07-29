@@ -55,6 +55,18 @@ final class ChatErrorStateMappingTests: XCTestCase {
 
 final class ChatErrorStateTests: XCTestCase {
 
+  @MainActor
+  func testRuntimeOwnerChangeClearsStaleAuthRecoveryCard() {
+    let provider = ChatProvider()
+    provider.currentError = .authRequired
+    provider.errorMessage = "Previous account error"
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertNil(provider.currentError, "the next account must not inherit a sign-in CTA")
+    XCTAssertNil(provider.errorMessage, "the next account must not inherit an error banner")
+  }
+
   // MARK: - Exhaustive recovery coverage
 
   /// Every `ChatErrorState` case must have a `primaryRecovery`. Implemented
