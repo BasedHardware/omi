@@ -57,7 +57,7 @@ def merge():
     vector_db_stub.delete_vector = MagicMock()
 
     # utils.other.storage is stubbed (not imported real) so the merge module's
-    # ``_get_storage_client`` / ``list_audio_chunks`` / ``private_cloud_sync_bucket``
+    # ``get_storage_client`` / ``list_audio_chunks`` / ``private_cloud_sync_bucket``
     # references resolve to fakes that tests then override via monkeypatch.
     storage_stub = ModuleType("utils.other.storage")
     for _name in [
@@ -65,7 +65,7 @@ def merge():
         "delete_conversation_audio_files",
         "enqueue_conversation_artifact_build",
         "list_audio_chunks",
-        "_get_storage_client",
+        "get_storage_client",
         "private_cloud_sync_bucket",
         "_get_extension_for_path",
     ]:
@@ -680,7 +680,7 @@ class TestCopyAudioChunksForMergeBatchAware:
         mock_storage_client = MagicMock()
         mock_list = MagicMock()
         mock_conv_db = MagicMock()
-        monkeypatch.setattr(merge, '_get_storage_client', lambda: mock_storage_client)
+        monkeypatch.setattr(merge, 'get_storage_client', lambda: mock_storage_client)
         monkeypatch.setattr(merge, 'list_audio_chunks', mock_list)
         monkeypatch.setattr(merge, 'conversations_db', mock_conv_db)
 
@@ -709,7 +709,7 @@ class TestCopyAudioChunksForMergeBatchAware:
         mock_storage_client = MagicMock()
         mock_list = MagicMock()
         mock_conv_db = MagicMock()
-        monkeypatch.setattr(merge, '_get_storage_client', lambda: mock_storage_client)
+        monkeypatch.setattr(merge, 'get_storage_client', lambda: mock_storage_client)
         monkeypatch.setattr(merge, 'list_audio_chunks', mock_list)
         monkeypatch.setattr(merge, 'conversations_db', mock_conv_db)
 
@@ -737,7 +737,7 @@ class TestCopyAudioChunksForMergeBatchAware:
         mock_storage_client = MagicMock()
         mock_list = MagicMock()
         mock_conv_db = MagicMock()
-        monkeypatch.setattr(merge, '_get_storage_client', lambda: mock_storage_client)
+        monkeypatch.setattr(merge, 'get_storage_client', lambda: mock_storage_client)
         monkeypatch.setattr(merge, 'list_audio_chunks', mock_list)
         monkeypatch.setattr(merge, 'conversations_db', mock_conv_db)
 

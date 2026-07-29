@@ -22,7 +22,7 @@ class TestDeleteAllConversationRecordings:
     def test_unconfigured_bucket_is_a_no_op(self):
         """Before the fix this raised ValueError and blocked the whole account wipe."""
         with patch.object(storage_mod, "memories_recordings_bucket", None), patch.object(
-            storage_mod, "_get_storage_client"
+            storage_mod, "get_storage_client"
         ) as get_client:
             storage_mod.delete_all_conversation_recordings("uid1")
         get_client.assert_not_called()
@@ -34,7 +34,7 @@ class TestDeleteAllConversationRecordings:
         client = MagicMock()
         client.bucket.return_value = bucket
         with patch.object(storage_mod, "memories_recordings_bucket", "memories-recordings"), patch.object(
-            storage_mod, "_get_storage_client", return_value=client
+            storage_mod, "get_storage_client", return_value=client
         ):
             storage_mod.delete_all_conversation_recordings("uid1")
         client.bucket.assert_called_once_with("memories-recordings")
@@ -46,7 +46,7 @@ class TestDeleteAllConversationRecordings:
         client = MagicMock()
         client.bucket.side_effect = RuntimeError("gcs down")
         with patch.object(storage_mod, "memories_recordings_bucket", "memories-recordings"), patch.object(
-            storage_mod, "_get_storage_client", return_value=client
+            storage_mod, "get_storage_client", return_value=client
         ):
             with pytest.raises(RuntimeError):
                 storage_mod.delete_all_conversation_recordings("uid1")

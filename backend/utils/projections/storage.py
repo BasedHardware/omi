@@ -33,9 +33,11 @@ def local_projection_image_path(uid: str, projection_id: str) -> Path:
 
 def upload_projection_image(file_path: str, uid: str, projection_id: str) -> str:
     """Upload an owner-scoped image without granting a public object ACL."""
-    bucket = gcs_storage._get_storage_client().bucket(gcs_storage.projection_images_bucket)
+    bucket_name = gcs_storage.projection_images_bucket
+    if not bucket_name:
+        raise RuntimeError('Projection image storage is not configured')
     path = projection_image_path(uid, projection_id)
-    blob = bucket.blob(path)
+    blob = gcs_storage.get_storage_client().bucket(bucket_name).blob(path)
     blob.cache_control = 'private, no-store'
     blob.upload_from_filename(file_path)
     return path
@@ -43,7 +45,7 @@ def upload_projection_image(file_path: str, uid: str, projection_id: str) -> str
 
 def download_projection_image(uid: str, projection_id: str) -> bytes:
     """Download an owner-scoped image from the private projection bucket."""
-    if not gcs_storage.projection_images_bucket:
+    bucket_name = gcs_storage.projection_images_bucket
+    if not bucket_name:
         raise BlobNotFound('Projection image storage is not configured')
-    bucket = gcs_storage._get_storage_client().bucket(gcs_storage.projection_images_bucket)
-    return bucket.blob(projection_image_path(uid, projection_id)).download_as_bytes()
+    return gcs_storage.download_blob_bytes(bucket_name, projection_image_path(uid, projection_id))

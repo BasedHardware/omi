@@ -111,7 +111,9 @@ async def start_cron_job(*, now: datetime | None = None) -> ProjectionCronResult
 
     eligible: list[tuple[str, date]] = []
     for uid, time_zone in zip(user_ids, time_zones):
-        if isinstance(time_zone, Exception):
+        if isinstance(time_zone, BaseException):
+            if not isinstance(time_zone, Exception):
+                raise time_zone
             logger.error('scheduled projection skipped uid=%s reason=timezone_lookup_failed error=%s', uid, time_zone)
             continue
         if not time_zone:

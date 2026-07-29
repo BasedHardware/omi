@@ -46,7 +46,7 @@ class _FakeBucket:
 def _install(monkeypatch, *, chunks_by_conv, bucket, list_raises_for=()):
     storage_client = MagicMock()
     storage_client.bucket.return_value = bucket
-    monkeypatch.setattr(merge, "_get_storage_client", lambda: storage_client)
+    monkeypatch.setattr(merge, "get_storage_client", lambda: storage_client)
 
     def _list_audio_chunks(uid, conv_id):
         if conv_id in list_raises_for:

@@ -109,7 +109,7 @@ def test_gcs_upload_is_owner_scoped_and_never_public(monkeypatch, tmp_path: Path
     source = tmp_path / 'projection.png'
     source.write_bytes(b'png')
     monkeypatch.setattr(gcs_storage, 'projection_images_bucket', 'private-projections')
-    monkeypatch.setattr(gcs_storage, '_get_storage_client', lambda: _StorageClient(bucket))
+    monkeypatch.setattr(gcs_storage, 'get_storage_client', lambda: _StorageClient(bucket))
 
     stored_path = projection_storage.upload_projection_image(str(source), 'owner-a', 'projection-1')
 

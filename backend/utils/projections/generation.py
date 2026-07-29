@@ -22,6 +22,7 @@ from typing import Any, Mapping, cast
 from utils.llm.gateway_client import generate_image_via_gateway
 from utils.observability.fallback import record_fallback
 from utils.projections.emotions import rate_emotions
+from utils.projections.evidence import EvidencePacket
 from utils.projections.image_prompt import build_image_prompt
 from utils.projections.selector import MAX_PREVIOUS, SubjectSelection, select_subject
 from utils.projections.sources import read_evidence, read_previous_projections
