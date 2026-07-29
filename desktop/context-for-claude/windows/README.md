@@ -5,7 +5,7 @@ This is a **Windows-only developer build surface** for Context for Claude. It ha
 1. `../core` is the portable C++17 policy/audio/recall library. Native Windows hosts call its stable C ABI directly.
 2. [swift-winrt](https://github.com/thebrowsercompany/swift-winrt) at pinned revision `79ffa65c` generates Swift bindings for **Windows SDK metadata** (`.winmd`). It is not a generator for this project's C ABI and does not make the core into a WinRT component.
 
-The CMake target `generate_windows_foundation_projection` runs the actual upstream `swiftwinrt.exe` against the installed SDK's `Windows.winmd`, including the concrete `Windows.Foundation` namespace. That gives a Windows Swift host the real platform projection it needs; its separate `ContextCoreBridge` system-library/module map should import and link `../core`'s C ABI.
+The CMake target `generate_windows_foundation_projection` runs the actual upstream `swiftwinrt.exe` against the installed SDK's `Windows.winmd`, including the concrete `Windows.Foundation` namespace. It produces the real platform projection that a future Windows Swift host would consume; that host and its separate `ContextCoreBridge` system-library/module map are not part of this slice yet.
 
 ## What this proves
 
@@ -41,26 +41,21 @@ ctest --test-dir out/context-for-claude-windows -C Release --output-on-failure
 cmake --build out/context-for-claude-windows --config Release `
   --target generate_windows_foundation_projection
 
-# Swift wrappers -> separately built Context core C ABI.
-cmake --build out/context-for-claude-windows --config Release `
-  --target context_for_claude_swift_host_tests
 ```
 
 For ARM64, configure with `-A ARM64`. The projection command must run on Windows: this macOS development host cannot compile `swiftwinrt.exe` or exercise WinRT activation/UI runtime behavior.
 
 ## Validate on macOS
 
-macOS can validate the portable C++ boundary and the platform-neutral Swift wrappers:
+macOS can validate the portable C++ boundary:
 
 ```bash
 cmake -S desktop/context-for-claude/core -B /tmp/context-core
 cmake --build /tmp/context-core
 ctest --test-dir /tmp/context-core --output-on-failure
-swift test --package-path desktop/context-for-claude/windows/swift-host \
-  -Xlinker -L/tmp/context-core
 ```
 
-The Windows CMake project intentionally stops immediately on non-Windows hosts and does not fetch or pretend to validate `swift-winrt` there. The macOS Swift test links the separately built portable library; it does not generate, compile, or run any WinRT projection.
+The Windows CMake project intentionally stops immediately on non-Windows hosts and does not fetch or pretend to validate `swift-winrt` there. This repository has no Windows Swift host yet, so macOS does not claim to generate, compile, or run a WinRT projection.
 
 ## Structure
 
@@ -70,6 +65,5 @@ windows/
 ├── src/core_smoke.cpp    Session/recall C ABI smoke test
 ├── src/session_host.cpp  Session-boundary host test
 ├── src/pcm_host.cpp      PCM encode/decode/RMS/downmix host test
-├── swift-host/           Swift system-library import, wrappers, and tests
 └── README.md
 ```

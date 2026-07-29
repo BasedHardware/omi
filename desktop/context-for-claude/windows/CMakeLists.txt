@@ -21,13 +21,6 @@ if(NOT CONTEXT_FOR_CLAUDE_SWIFTC_EXECUTABLE)
         "Install the Windows toolchain recommended by swift-winrt, then rerun CMake.")
 endif()
 
-find_program(CONTEXT_FOR_CLAUDE_SWIFT_EXECUTABLE NAMES swift)
-if(NOT CONTEXT_FOR_CLAUDE_SWIFT_EXECUTABLE)
-    message(FATAL_ERROR
-        "Context for Claude's Windows host requires the Swift driver on PATH. "
-        "Install the Windows toolchain recommended by swift-winrt, then rerun CMake.")
-endif()
-
 execute_process(
     COMMAND "${CONTEXT_FOR_CLAUDE_SWIFTC_EXECUTABLE}" --version
     RESULT_VARIABLE CONTEXT_FOR_CLAUDE_SWIFTC_RESULT
@@ -93,15 +86,6 @@ add_custom_target(generate_windows_foundation_projection
     COMMAND $<TARGET_FILE:swiftwinrt> "@${CONTEXT_FOR_CLAUDE_SWIFTWINRT_RESPONSE_FILE}"
     DEPENDS swiftwinrt
     COMMENT "Generating Windows.Foundation Swift bindings with upstream swift-winrt"
-    VERBATIM
-)
-
-add_custom_target(context_for_claude_swift_host_tests
-    COMMAND "${CONTEXT_FOR_CLAUDE_SWIFT_EXECUTABLE}" test
-        -Xlinker "/LIBPATH:$<TARGET_FILE_DIR:context_core>"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/swift-host"
-    DEPENDS context_core
-    COMMENT "Testing Swift wrappers against the separately linked Context core C ABI"
     VERBATIM
 )
 
