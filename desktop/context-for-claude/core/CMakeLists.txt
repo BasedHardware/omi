@@ -14,6 +14,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(context_core STATIC
+    src/audio_policy.cpp
     src/moment_grouping.cpp
     src/recall_ranking.cpp
     src/session_policy.cpp

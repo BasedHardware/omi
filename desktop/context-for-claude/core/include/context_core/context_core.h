@@ -51,6 +51,18 @@ int ctx_should_open_new_session(int has_last_segment,
                                 double next_segment_started_at,
                                 double gap_seconds);
 
+/* ---------------------------------------------------------------------- audio */
+
+/**
+ * Computes the RMS of signed 16-bit little-endian PCM, normalised to 0...1.
+ *
+ * A null buffer and a buffer shorter than one sample are silence. An odd final
+ * byte is ignored: capture callbacks can be cut across a sample during a
+ * device-format change, and losing that byte is preferable to taking down an
+ * active conversation. The caller retains ownership of `bytes`.
+ */
+double ctx_pcm_rms_int16le(const uint8_t *bytes, size_t byte_count);
+
 /* ------------------------------------------------------------------- recall ranking */
 
 /**
