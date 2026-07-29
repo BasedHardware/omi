@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1526
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1533
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds the session-owned silent-microphone recovery cap so recreated CoreAudio services cannot loop indefinitely while transcription remains visibly active."
+    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds shared-capture silent-mic recovery telemetry so non-Bluetooth CoreAudio rebuild attempts are visible to release-health alongside the existing Bluetooth fallback."
   },
   "threshold": 1500
 }
