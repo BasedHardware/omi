@@ -1,40 +1,11 @@
 name: Build Desktop Release Candidate
 
 on:
+  # Manual only: automatic push/schedule tagging was cutting a new macOS candidate
+  # tag on nearly every desktop-affecting main merge and every 15 minutes. Plan and
+  # publish a candidate deliberately via workflow_dispatch; qualification/promotion
+  # workflows remain unchanged once a tag exists.
   workflow_dispatch:
-  # Continuous deployment: plan a beta candidate on every macOS-affecting merge to
-  # main. The candidate flows through the two-machine qualification pipeline
-  # (desktop_qualify_beta.yml: Codemagic primary lane + self-hosted qualify-m1-studio
-  # and qualify-m4-mini fallbacks); on qualification success desktop_promote_beta.yml
-  # advances the beta channel to the Codemagic-built, notarized, Sparkle-signed
-  # artifact. The push filter is intentionally coarse (the planner does the precise
-  # releasable-change check, excluding CHANGELOG/AGENTS/changelog); the
-  # quiet-window, exact-SHA, and one-active-release fences still admit at most one
-  # candidate at a time, so bursts collapse to the newest SHA. Keep these paths in
-  # lockstep with DESKTOP_RELEASE_PATHS in plan-desktop-release.py; the alignment is
-  # enforced by test_push_paths_cover_releasable_desktop_paths.
-  push:
-    branches: [main]
-    paths:
-      - 'desktop/macos/**'
-      - 'codemagic.yaml'
-      - 'scripts/dev-harness/dev_harness/qualification.py'
-      - '.github/scripts/plan-desktop-release.py'
-      - '.github/scripts/desktop-release-source-identity.py'
-      - '.github/scripts/publish-desktop-candidate-tag.py'
-      - '.github/scripts/verify-pre-tag-readiness.py'
-      - '.github/workflows/desktop_auto_release.yml'
-      - '.github/workflows/desktop_qualify_beta.yml'
-      - '.github/workflows/desktop-swift-ci.yml'
-  schedule:
-    # Poll every 15 min. The push trigger fires immediately on merge, but at that
-    # instant the change is inside the quiet window AND its required CI checks
-    # (Build & Tests / Release Compile / Release Eligibility, ~10-20 min) are not
-    # yet green, so the planner fail-closes. This frequent backstop re-evaluates
-    # shortly after those checks settle and the active-release fence clears, so a
-    # candidate reliably cuts without waiting for the next hour. Builds stay
-    # serialized by the one-active-release fence, so this cannot pile up builds.
-    - cron: '*/15 * * * *'
 
 permissions:
   contents: write
