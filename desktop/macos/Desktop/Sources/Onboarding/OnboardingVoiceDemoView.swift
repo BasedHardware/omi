@@ -121,6 +121,7 @@ struct OnboardingVoiceDemoView: View {
       if let barState = FloatingControlBarManager.shared.barState {
         PushToTalkManager.shared.setup(barState: barState)
       }
+      FloatingControlBarManager.shared.showForOnboardingDemo()
       // Force live transcription for the demo via a transient, never-persisted
       // override so a quit/crash mid-step can't corrupt the saved PTT mode.
       shortcutSettings.pttTranscriptionModeDemoOverride = .live
@@ -132,6 +133,7 @@ struct OnboardingVoiceDemoView: View {
       shortcutSettings.pttTranscriptionModeDemoOverride = nil
       resetFloatingBarConversation()
       PushToTalkManager.shared.cleanup()
+      FloatingControlBarManager.shared.hideForOnboardingDemo()
     }
     .task {
       await pollOutputReadiness()
