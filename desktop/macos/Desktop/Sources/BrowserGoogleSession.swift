@@ -166,8 +166,9 @@ struct BrowserGoogleSession: Equatable {
     }
   }
 
-  static func configsForPython(logPrefix: String) -> [[String: String]] {
-    all().compactMap { session in
+  static func configsForPython(logPrefix: String, userInitiated: Bool = true) -> [[String: String]] {
+    guard userInitiated else { return [] }
+    return BrowserGoogleSession.all().compactMap { session in
       guard FileManager.default.fileExists(atPath: session.cookiePath) else { return nil }
       guard
         let password = BrowserKeychainCache.shared.password(

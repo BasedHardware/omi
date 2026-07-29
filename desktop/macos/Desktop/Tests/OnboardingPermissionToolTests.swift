@@ -10,7 +10,8 @@ final class OnboardingPermissionToolTests: XCTestCase {
       notifications: false,
       accessibility: false,
       automation: false,
-      fullDiskAccess: false
+      fullDiskAccess: false,
+      location: false
     )
 
     XCTAssertEqual(
@@ -18,6 +19,7 @@ final class OnboardingPermissionToolTests: XCTestCase {
       Set(ChatToolExecutor.onboardingPermissionTypes)
     )
     XCTAssertTrue(statuses.keys.contains("notifications"))
+    XCTAssertTrue(statuses.keys.contains("location"))
   }
 
   func testSupportedPermissionTypesIncludeNotifications() {
@@ -30,6 +32,7 @@ final class OnboardingPermissionToolTests: XCTestCase {
         "accessibility",
         "automation",
         "full_disk_access",
+        "location",
       ])
   }
 

@@ -516,12 +516,13 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission. Screen sharing is the macOS Screen Recording permission.", [
       "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
       "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
+      "For a weather question without an explicit place, call request_permission with type=location at query time instead of asking where the user is.",
       "Ask the user to choose when their request is generic or names multiple permissions.",
       "The user must still complete the native macOS prompt or Settings toggle.",
     ]),
     voice: {
       realtimeDescription:
-        "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
+        "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, Full Disk Access, and Location.",
     },
   },
   scan_files: {
@@ -1100,7 +1101,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     inputSchema: schema({
       type: {
         type: "string",
-        enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
+        enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access", "location"],
         description: "Optional permission type. Omit to return all supported permissions.",
       },
     }),
@@ -1120,6 +1121,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     promptGuidelines: [
       "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
       "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
+      "For a weather question without an explicit place, call request_permission with type=location at query time instead of asking where the user is.",
       "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status.",
@@ -1129,9 +1131,9 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       {
         type: {
           type: "string",
-          enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
+          enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access", "location"],
           description:
-            "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access",
+            "Permission type: screen_recording, microphone, notifications, accessibility, automation, full_disk_access, or location",
         },
       },
       ["type"],

@@ -1580,7 +1580,7 @@ struct OnboardingChatView: View {
     gmailReadingTask = Task {
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
-          maxResults: 50, query: "newer_than:30d"
+          maxResults: 50, query: "newer_than:30d", userInitiated: false
         )
         guard !emails.isEmpty else {
           log("OnboardingChat: No Gmail emails found, skipping synthesis")
@@ -1645,7 +1645,7 @@ struct OnboardingChatView: View {
     calendarReadingTask = Task {
       do {
         let events = try await CalendarReaderService.shared.readEvents(
-          daysBack: 90, daysForward: 14, maxResults: 200
+          daysBack: 90, daysForward: 14, maxResults: 200, userInitiated: false
         )
         guard !events.isEmpty else {
           log("OnboardingChat: No calendar events found, skipping synthesis")

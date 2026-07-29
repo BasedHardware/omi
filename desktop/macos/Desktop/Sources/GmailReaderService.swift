@@ -145,7 +145,11 @@ actor GmailReaderService {
   /// - Parameters:
   ///   - maxResults: Maximum number of emails to return
   ///   - query: Gmail search query (default: "newer_than:1d"). For onboarding use "newer_than:30d".
-  func readRecentEmails(maxResults: Int = 50, query: String = "newer_than:1d") async throws
+  func readRecentEmails(
+    maxResults: Int = 50,
+    query: String = "newer_than:1d",
+    userInitiated: Bool = true
+  ) async throws
     -> [GmailEmail]
   {
     let emails: [GmailEmail]
@@ -154,9 +158,14 @@ actor GmailReaderService {
         maxResults: maxResults,
         query: query,
         feedPath: nil,
-        allowBootstrap: false
+        allowBootstrap: false,
+        userInitiated: userInitiated
       )
-      let labelEmails = try fetchGmailViaLabelFeeds(maxResults: maxResults, query: query)
+      let labelEmails = try fetchGmailViaLabelFeeds(
+        maxResults: maxResults,
+        query: query,
+        userInitiated: userInitiated
+      )
       var merged: [String: GmailEmail] = [:]
       for email in queryEmails + labelEmails {
         let existing = merged[email.id]
@@ -169,7 +178,11 @@ actor GmailReaderService {
         .prefix(maxResults)
         .map(\.self)
     } else {
-      emails = try fetchGmailViaAtomFeedSingle(maxResults: maxResults, query: query)
+      emails = try fetchGmailViaAtomFeedSingle(
+        maxResults: maxResults,
+        query: query,
+        userInitiated: userInitiated
+      )
     }
     return emails.sorted { $0.date > $1.date }
   }
@@ -405,14 +418,18 @@ actor GmailReaderService {
     maxResults: Int,
     query: String = "newer_than:1d",
     feedPath: String? = nil,
-    allowBootstrap: Bool? = nil
+    allowBootstrap: Bool? = nil,
+    userInitiated: Bool = true
   ) throws
     -> [GmailEmail]
   {
     let shouldUseBootstrapPage =
       allowBootstrap ?? (feedPath == nil && Self.parseNewerThanDays(query) != nil)
 
-    let browserConfigs = BrowserGoogleSession.configsForPython(logPrefix: "GmailReaderService")
+    let browserConfigs = BrowserGoogleSession.configsForPython(
+      logPrefix: "GmailReaderService",
+      userInitiated: userInitiated
+    )
 
     guard !browserConfigs.isEmpty else {
       throw GmailReaderError.noBrowserFound
@@ -759,7 +776,11 @@ actor GmailReaderService {
     }
   }
 
-  private func fetchGmailViaLabelFeeds(maxResults: Int, query: String) throws -> [GmailEmail] {
+  private func fetchGmailViaLabelFeeds(
+    maxResults: Int,
+    query: String,
+    userInitiated: Bool
+  ) throws -> [GmailEmail] {
     guard maxResults > 0 else { return [] }
 
     let feedPaths = [
@@ -784,7 +805,8 @@ actor GmailReaderService {
         maxResults: min(20, maxResults),
         query: query,
         feedPath: feedPath,
-        allowBootstrap: false
+        allowBootstrap: false,
+        userInitiated: userInitiated
       )
       for email in feedEmails {
         let existing = merged[email.id]

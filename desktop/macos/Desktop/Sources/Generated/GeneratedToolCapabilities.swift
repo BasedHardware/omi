@@ -496,6 +496,7 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
       "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
+      "For a weather question without an explicit place, call request_permission with type=location at query time instead of asking where the user is.",
       "Ask the user to choose when their request is generic or names multiple permissions.",
       "The user must still complete the native macOS prompt or Settings toggle.",
       "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",

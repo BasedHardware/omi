@@ -101,6 +101,15 @@ final class BrowserGoogleSessionTests: XCTestCase {
     BrowserKeychainCache.shared.invalidate(cacheKey: cacheKey)
   }
 
+  func testBackgroundGoogleWorkSkipsSafeStorageAccess() {
+    XCTAssertTrue(
+      BrowserGoogleSession.configsForPython(
+        logPrefix: "BrowserGoogleSessionTests",
+        userInitiated: false
+      ).isEmpty
+    )
+  }
+
   func testUnknownVersionCookieBlobIsSkippedInsteadOfEmittedAsPlaintext() throws {
     let databasePath = tempRoot.appendingPathComponent("Cookies").path
     let script =

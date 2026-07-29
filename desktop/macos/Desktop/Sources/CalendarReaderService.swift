@@ -225,12 +225,20 @@ actor CalendarReaderService {
   /// Read calendar events using browser cookies + SAPISID auth.
   /// Tries Arc, Chrome, Brave, and Edge across all Chromium profiles.
   /// Fetches events from `daysBack` days ago to `daysForward` days from now.
-  func readEvents(daysBack: Int = 90, daysForward: Int = 14, maxResults: Int = 200) async throws
+  func readEvents(
+    daysBack: Int = 90,
+    daysForward: Int = 14,
+    maxResults: Int = 200,
+    userInitiated: Bool = true
+  ) async throws
     -> [CalendarEvent]
   {
     await APIKeyService.shared.waitForKeys()
     let events = try fetchCalendarViaCookies(
-      daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
+      daysBack: daysBack,
+      daysForward: daysForward,
+      maxResults: maxResults,
+      userInitiated: userInitiated)
     return events.sorted { $0.startTime > $1.startTime }
   }
 
@@ -489,7 +497,12 @@ actor CalendarReaderService {
 
   // MARK: - Python: decrypt cookies + fetch Calendar events via SAPISID auth
 
-  private func fetchCalendarViaCookies(daysBack: Int, daysForward: Int, maxResults: Int) throws
+  private func fetchCalendarViaCookies(
+    daysBack: Int,
+    daysForward: Int,
+    maxResults: Int,
+    userInitiated: Bool = true
+  ) throws
     -> [CalendarEvent]
   {
     let parameters = CalendarFetchParameters.normalized(
@@ -505,7 +518,10 @@ actor CalendarReaderService {
 
     // Build browser configs as JSON for Python
     // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
-    let browserConfigs = BrowserGoogleSession.configsForPython(logPrefix: "CalendarReaderService")
+    let browserConfigs = BrowserGoogleSession.configsForPython(
+      logPrefix: "CalendarReaderService",
+      userInitiated: userInitiated
+    )
 
     guard !browserConfigs.isEmpty else {
       throw CalendarReaderError.noBrowserFound

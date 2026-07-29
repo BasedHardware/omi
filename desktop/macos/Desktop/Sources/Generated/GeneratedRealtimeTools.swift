@@ -527,7 +527,8 @@ enum GeneratedRealtimeTools {
             "notifications",
             "accessibility",
             "automation",
-            "full_disk_access"
+            "full_disk_access",
+            "location"
           ],
           "description": "Optional permission type. Omit to return all supported permissions."
         }
@@ -538,7 +539,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "request_permission",
-    "description": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
+    "description": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, Full Disk Access, and Location.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -550,9 +551,10 @@ enum GeneratedRealtimeTools {
             "notifications",
             "accessibility",
             "automation",
-            "full_disk_access"
+            "full_disk_access",
+            "location"
           ],
-          "description": "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access"
+          "description": "Permission type: screen_recording, microphone, notifications, accessibility, automation, full_disk_access, or location"
         }
       },
       "required": [
