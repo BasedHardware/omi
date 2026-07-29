@@ -45,10 +45,9 @@ EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/docs/qualification-environment.md",
     # Manual cleanup inventory for deprecated per-version host qual artifacts.
     "desktop/macos/docs/qualification-cleanup.md",
-    # Portable tag-arg qualification babysitter + runner registration helper:
-    # host-local release infrastructure, never ships in the desktop app.
+    # Portable tag-arg qualification babysitter: host-local release
+    # infrastructure, never ships in the desktop app.
     "desktop/macos/scripts/qualify-desktop-beta-service.py",
-    "desktop/macos/scripts/provision-qualification-runner.sh",
     # CI-only flow-validation script and its shared action-source inventory do
     # not alter the desktop application a user receives.
     "desktop/macos/scripts/desktop-flow-lint.py",

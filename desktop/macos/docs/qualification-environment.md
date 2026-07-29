@@ -215,8 +215,7 @@ make dev-up && make dev-status && make dev-down
 ### GitHub Actions runner registration
 
 Download the latest macOS ARM64 actions runner into a durable home (example:
-`~/.local/share/omi-actions-runner`), then either run the helper or call
-`config.sh` directly.
+`~/.local/share/omi-actions-runner`), then register it with `config.sh`.
 
 Labels required by `.github/workflows/desktop_qualify_beta.yml` for the
 official qualifier:
@@ -229,10 +228,24 @@ self-hosted, macOS, ARM64, omi-desktop-qualification, omi-qual-m1-studio
 Omi-specific labels explicitly:
 
 ```bash
-desktop/macos/scripts/provision-qualification-runner.sh \
-  --name m1-mac-studio-qualification \
-  --labels omi-desktop-qualification,omi-qual-m1-studio \
-  --runner-home ~/.local/share/omi-actions-runner
+RUNNER_HOME=~/.local/share/omi-actions-runner
+REPO=BasedHardware/omi
+NAME=m1-mac-studio-qualification
+LABELS=omi-desktop-qualification,omi-qual-m1-studio
+
+api_token=$(gh auth token)
+registration_token=$(curl -fsS -X POST \
+  -H "Authorization: Bearer $api_token" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/${REPO}/actions/runners/registration-token" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+
+"$RUNNER_HOME/config.sh" --unattended \
+  --url "https://github.com/${REPO}" \
+  --token "$registration_token" \
+  --name "$NAME" \
+  --labels "$LABELS" \
+  --work _work
 ```
 
 A secondary capacity host (for example the M4 Mini) may register with
