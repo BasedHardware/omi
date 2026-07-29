@@ -101,6 +101,106 @@ curl -fsS http://localhost:8000/v1/health
 7. **Health path.** The brief mentioned `/health`: it does not exist in the backend; the real
    no-auth endpoint is **`/v1/health`** (`backend/routers/other.py`).
 
+## Testing the backend offline
+
+The box has only Docker (no host venv). Suites run in a **test image** = the WP0 backend image plus
+additive test dependencies:
+
+```dockerfile
+# Dockerfile.test — build from deploy/onprem (after `docker compose build`), then:
+FROM omi-onprem-backend:latest
+USER root
+RUN pip install --no-cache-dir aioresponses==0.7.8 fake-firestore==0.13.1 fakeredis==2.36.2 \
+    lupa==2.8 pytest-httpserver==1.1.5 werkzeug==3.1.8 pymongo==4.10.1 mongomock==4.3.0
+```
+
+```bash
+cd deploy/onprem
+docker compose build                                            # WP0 images (once)
+docker build -t omi-onprem-backend-test -f Dockerfile.test .    # test image
+```
+
+### Run one suite — FILE-ISOLATED (mandatory)
+
+The suite carries module-level state (`load_module_fresh`, monkeypatched clients, singletons), so
+**more than one test file per `pytest` process cross-contaminates `sys.modules` -> false failures.**
+Run **one process per file**:
+
+```bash
+docker run --rm -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
+  -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test \
+  -e PYTHONUTF8=1 -e OMP_NUM_THREADS=1 -e OMI_ENV_STAGE=offline -e LOCAL_DEVELOPMENT=true \
+  omi-onprem-backend-test /opt/venv/bin/python -m pytest -q -o addopts="" tests/unit/<file>.py
+```
+
+Use `/opt/venv/bin/python` (not `bash -l`, which resets PATH and loses the venv).
+
+### Full sweep — parallelize the OUTER loop, not pytest
+
+File isolation is a correctness requirement, but the outer loop parallelizes across cores: N
+concurrent `pytest <one-file>` invocations, **each still its own process** — identical isolation,
+identical verdicts, ~7.5x faster (measured full unit sweep ~17 min -> ~2.2 min on 20 cores). Do
+**not** use `pytest-xdist -n … --dist loadfile`: xdist workers reuse a process across files, which
+brings the contamination back. Self-contained runner:
+
+```bash
+docker run --rm -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
+  -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test -e PYTHONUTF8=1 \
+  -e OMP_NUM_THREADS=1 -e OMI_ENV_STAGE=offline -e LOCAL_DEVELOPMENT=true \
+  omi-onprem-backend-test bash -c '
+    ls tests/unit/test_*.py tests/unit/utils/test_*.py | \
+    xargs -P 16 -I{} sh -c '\''out=$(/opt/venv/bin/python -m pytest -q -o addopts="" -p no:cacheprovider "{}" 2>&1 | tail -1);
+      echo "$out" | grep -qiE "failed|error" && echo "FAIL | {} | $out" || echo "PASS | {} | $out"'\'' '
+```
+
+To gate a change for regressions, diff the FAIL set against a baseline built the same way from a
+clean branch-point worktree: a file failing in both is pre-existing (see the environmental-failures
+note below); a file failing only at HEAD is a regression to fix.
+
+### Regression guard
+
+```bash
+python3 .github/scripts/check_firestore_persistence_boundary.py   # must exit 0 (0 violations)
+```
+
+Runs bare with stdlib `python3` (no venv). It enforces the WP1 boundary: only `database/` may touch
+the raw Firestore client.
+
+### Dual-backend contract test (adapter parity)
+
+Proves the Firestore and Mongo adapters honor the same neutral contract against **real** services.
+Mongo owns the network namespace; the emulator and the test container share it (`--network
+container:`) so both services are on `localhost` and the hermetic loopback-only guard in
+`tests/conftest.py` accepts them.
+
+```bash
+# 1. Mongo (single-node replica set)
+docker run -d --name wp2-mongo mongo:latest --replSet rs0 --bind_ip_all
+docker exec wp2-mongo mongosh --quiet --eval \
+  "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"   # wait for isWritablePrimary
+# 2. Firestore emulator in the same netns
+docker run -d --name wp2-emu --network container:wp2-mongo omi-onprem-firestore-emulator:latest
+# 3. Contract suite (same netns)
+docker run --rm --network container:wp2-mongo -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
+  -e FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 -e MONGO_URI="mongodb://127.0.0.1:27017/?replicaSet=rs0" \
+  -e FIREBASE_PROJECT_ID=demo-omi-local -e GOOGLE_CLOUD_PROJECT=demo-omi-local \
+  -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test -e OMI_ENV_STAGE=offline \
+  omi-onprem-backend-test /opt/venv/bin/python -m pytest -q -o addopts="" \
+  tests/contract/test_document_store_contract.py
+docker rm -f wp2-mongo wp2-emu    # cleanup
+```
+
+Note: gRPC (Firestore) bypasses the Python socket guard; pymongo uses Python sockets but on loopback,
+which the guard permits.
+
+### Pre-existing environmental failures
+
+A set of unit files fails in this offline image independently of any self-host change — they read
+repo-root paths not mounted under `backend/` (`.github/`, helm, desktop, firestore-index config),
+run app-client codegen, or need a live service/network. They fail identically at the branch-point
+baseline, so the sweep's HEAD-vs-baseline diff classifies them as not-a-regression. Making the
+offline image fully green (mount the repo root, or mark them `integration`) is separate, optional work.
+
 ## Git notes
 
 Work happens on the `fullonprem` branch (ADR-0013). `backend.env` is ignored (`*.env`); the
