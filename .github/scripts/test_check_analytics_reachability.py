@@ -9,6 +9,7 @@ from check_analytics_reachability import (
     audit_platform,
     dart_call_counts,
     dart_methods,
+    emitters,
     swift_call_counts,
     swift_methods,
     typescript_methods,
@@ -112,6 +113,23 @@ class AnalyticsReachabilityTests(unittest.TestCase):
         self.assertTrue(any("noCaller: no production call site" in error for error in errors))
         self.assertTrue(any("empty: empty analytics method" in error for error in errors))
         self.assertTrue(any("deadCollector: unreachable private analytics helper" in error for error in errors))
+
+
+    def test_test_only_seams_are_not_audited_as_emitters(self) -> None:
+        methods = emitters(
+            swift_methods("""
+                  class AnalyticsManager {
+                    private var capture: (@MainActor (String, [String: Any]) -> Void)?
+                    func setSuggestionTelemetryCaptureForTests(
+                      _ value: (@MainActor (String, [String: Any]) -> Void)?
+                    ) { capture = value }
+                    private func captureSuggestionTelemetryForTests(_ event: String) { capture?(event, [:]) }
+                    func gateOutcome() { PostHogManager.shared.track("Gate") }
+                  }
+                """)
+        )
+        self.assertEqual([method.name for method in methods], ["gateOutcome"])
+        self.assertEqual(audit_platform("macos", methods, {"gateOutcome": 1}, EMPTY_BASELINE), [])
 
 
 if __name__ == "__main__":

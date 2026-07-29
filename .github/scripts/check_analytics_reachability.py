@@ -300,6 +300,20 @@ def windows_call_counts(sources: list[str]) -> dict[str, int]:
     return counts
 
 
+def is_test_seam(name: str) -> bool:
+    """Return whether a method is a test-only observation hook, not an emitter.
+
+    Installing or forwarding to a scoped test capture is production-unreachable
+    by construction, so auditing it only forces one baseline entry per seam. The
+    emitters that call these hooks are still audited normally.
+    """
+    return name.endswith("ForTests") or name.endswith("ForTesting")
+
+
+def emitters(methods: list[Method]) -> list[Method]:
+    return [method for method in methods if not is_test_seam(method.name)]
+
+
 def private_incoming(methods: list[Method]) -> dict[str, int]:
     private_names = {method.name for method in methods if not method.public}
     incoming = dict.fromkeys(private_names, 0)
@@ -379,10 +393,10 @@ def load_platforms(root: Path) -> dict[str, tuple[list[Method], dict[str, int]]]
         and path != windows_manager
     ]
     return {
-        "flutter": (dart_methods(dart_manager.read_text(encoding="utf-8")), dart_call_counts(dart_sources)),
-        "macos": (swift_methods(swift_manager.read_text(encoding="utf-8")), swift_call_counts(swift_sources)),
+        "flutter": (emitters(dart_methods(dart_manager.read_text(encoding="utf-8"))), dart_call_counts(dart_sources)),
+        "macos": (emitters(swift_methods(swift_manager.read_text(encoding="utf-8"))), swift_call_counts(swift_sources)),
         "windows": (
-            typescript_methods(windows_manager.read_text(encoding="utf-8")),
+            emitters(typescript_methods(windows_manager.read_text(encoding="utf-8"))),
             windows_call_counts(windows_sources),
         ),
     }

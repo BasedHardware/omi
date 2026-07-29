@@ -67,9 +67,6 @@
       "floatingBarQuerySent": 2,
       "floatingBarToggled": 4,
       "identify": 3,
-      "integrationConnectAttempted": 3,
-      "integrationConnectFailed": 2,
-      "integrationConnectSucceeded": 2,
       "knowledgeGraphBuildCompleted": 2,
       "launchAtLoginChanged": 4,
       "memoryAssistantAnalysisRun": 2,
@@ -94,6 +91,8 @@
       "signInCompleted": 2,
       "signInFailed": 2,
       "signInStarted": 2,
+      "suggestionAssistantDeliveryOutcome": 2,
+      "suggestionAssistantGateOutcome": 3,
       "tabChanged": 6,
       "taskIntelligenceAttribution": 4
     },
@@ -154,8 +153,6 @@
       "recapTabOpened",
       "recordingLanguageChanged",
       "removedPerson",
-      "resetForTesting",
-      "retryDelayForTesting",
       "setInteractionContext",
       "setNameAndEmail",
       "setPeopleValues",
@@ -185,10 +182,7 @@
       "optOutTracking",
       "pageViewed",
       "permissionDenied",
-      "searchBarFocused",
-      "setDevicePairingTelemetryCaptureForTests",
-      "setIntegrationConnectTelemetryCaptureForTests",
-      "setMemoryAssistantTelemetryCaptureForTests"
+      "searchBarFocused"
     ],
     "windows": []
   }
