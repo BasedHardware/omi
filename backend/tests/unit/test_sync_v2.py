@@ -1820,6 +1820,9 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.RUN_LOCK_HEARTBEAT_SECONDS = 0.001
             pipeline.RUN_LOCK_TTL_SECONDS = 0.006
             pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.001
+            # Keep the lease clock deterministic under full-suite CPU load.
+            # The event-loop timeout remains real so the hung renewal path runs.
+            pipeline.time = types.SimpleNamespace(monotonic=MagicMock(side_effect=[0.0, 0.0, 0.001, 0.006]))
             renewal_started = asyncio.Event()
 
             async def _hanging_run_blocking(_executor, _fn, *_args, **_kwargs):
