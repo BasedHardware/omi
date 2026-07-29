@@ -112,7 +112,8 @@ web/app/public/firebase-messaging-sw.js
 !app/pubspec.lock
 !app/ios/Podfile.lock
 !mcp/uv.lock
-*.lock
+!desktop/Cargo.lock
+0
 *.log
 *.swo
 *.swp
