@@ -245,10 +245,7 @@ struct OnboardingVoiceShortcutStepView: View {
   private func shortcutChoiceButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
     let isSelected = shortcutSettings.pttShortcut == shortcut && !shortcutSettings.pttUsesCustomShortcut
     return Button {
-      shortcutSettings.pttShortcut = shortcut
-      isRecordingCustomShortcut = false
-      captureError = nil
-      resetDetectionState()
+      beginCustomShortcutCapture()
     } label: {
       HStack(spacing: OmiSpacing.xs) {
         ForEach(Array(shortcut.displayTokens.enumerated()), id: \.offset) { _, token in
