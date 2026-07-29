@@ -85,6 +85,7 @@ class CloudTasksRecorder:
             'source',
             'should_lock',
             'conversation_id',
+            'transcript_mode',
             'client_device_id',
             'client_platform',
             'enqueued_at',

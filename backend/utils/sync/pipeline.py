@@ -117,6 +117,7 @@ from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_w
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
+from utils.sync.transcript_mode import SyncTranscriptMode
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -1042,6 +1043,7 @@ def process_segment(
     client_platform: Optional[str] = None,
     sync_lane: str = SyncLane.FRESH.value,
     deferred_outcome: dict | None = None,
+    transcript_mode: SyncTranscriptMode = SyncTranscriptMode.MERGE,
 ):
     provider = 'unknown'
     model = 'unknown'
@@ -1128,6 +1130,44 @@ def process_segment(
 
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end
+
+        if transcript_mode is SyncTranscriptMode.REPLACE:
+            if not target_conversation_id:
+                raise ValueError('Canonical transcript replacement requires a target conversation')
+            replacement_segments = []
+            for segment in transcript_segments:
+                replacement = segment.model_dump()
+                replacement['timestamp'] = timestamp + replacement['start']
+                replacement_segments.append(replacement)
+            with lock:
+                response.setdefault('_replacement_segments', {}).setdefault(target_conversation_id, []).extend(
+                    replacement_segments
+                )
+                response.setdefault('_replacement_languages', {})[target_conversation_id] = language
+            if private_cloud_sync_enabled:
+                _store_sync_audio_chunk(
+                    uid,
+                    target_conversation_id,
+                    timestamp,
+                    audio_bytes,
+                    data_protection_level,
+                )
+            _set_deferred_segment_outcome(
+                deferred_outcome,
+                outcome=TranscriptionOutcome.SUCCESS,
+                provider=provider,
+                model=model,
+                retryable=False,
+            )
+            if deferred_outcome is None:
+                _record_sync_segment_outcome(
+                    TranscriptionOutcome.SUCCESS,
+                    provider=provider,
+                    model=model,
+                    lane=sync_lane,
+                    retryable=False,
+                )
+            return True
 
         # When a target conversation is specified (auto-sync from live capture),
         # attach segments to it directly instead of searching by timestamp.
@@ -1246,17 +1286,12 @@ def process_segment(
             if is_locked:
                 conversations_db.update_conversation(uid, closest_memory['id'], {'is_locked': True})
 
-            # Reprocess if conversation was discarded or if auto-synced WALs added new segments
-            if closest_memory.get('discarded', False) or target_conversation_id:
-                reason = 'discarded' if closest_memory.get('discarded', False) else 'auto-sync'
-                logger.info(f'Conversation {closest_memory["id"]} reprocessing ({reason}) after segment merge')
-                _reprocess_conversation_after_update(uid, closest_memory['id'], language)
-            else:
-                # Summary/structured data is now stale (it predates the merged segments).
-                # Record it so the caller reprocesses once per conversation at batch end,
-                # instead of once per merged segment.
-                with lock:
-                    response.setdefault('_merged', {})[closest_memory['id']] = language
+            # Summary/structured data is stale until the complete batch lands.
+            # The map deduplicates every fragment targeting this conversation,
+            # preventing one LLM reprocess and partially rebuilt summary per
+            # recovered audio segment.
+            with lock:
+                response.setdefault('_merged', {})[closest_memory['id']] = language
         _set_deferred_segment_outcome(
             deferred_outcome,
             outcome=TranscriptionOutcome.SUCCESS,
@@ -1319,6 +1354,73 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
+
+
+def _commit_canonical_conversation_transcript(
+    uid: str,
+    response: dict,
+    conversation_id: Optional[str],
+    capture_start: Optional[float],
+    segment_errors: list,
+):
+    """Replace a realtime preview only after its entire canonical capture succeeds."""
+    if segment_errors:
+        raise RuntimeError('Canonical transcript retained because one or more recovered segments failed')
+    if not conversation_id or capture_start is None:
+        raise ValueError('Canonical transcript replacement is missing its target or capture timestamp')
+
+    absolute_segments = response.get('_replacement_segments', {}).get(conversation_id, [])
+    if not absolute_segments:
+        # VAD/STT can authoritatively find no speech. Retaining the preview is
+        # safer than deleting user-visible text on an empty provider result.
+        return
+
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversations_db.eligible_merge_target(conversation):
+        raise ValueError('Canonical transcript replacement target is unavailable')
+
+    absolute_segments.sort(key=lambda segment: (segment['timestamp'], segment['end'] - segment['start']))
+    deduped = []
+    seen = set()
+    for segment in absolute_segments:
+        duration = segment['end'] - segment['start']
+        key = (
+            round(segment['timestamp'], 2),
+            round(duration, 2),
+            segment.get('speaker', ''),
+            segment.get('text', ''),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        replacement = dict(segment)
+        replacement['start'] = replacement['timestamp'] - capture_start
+        replacement['end'] = replacement['start'] + duration
+        replacement.pop('timestamp', None)
+        deduped.append(replacement)
+
+    if not deduped:
+        return
+
+    started_at = datetime.fromtimestamp(capture_start, tz=timezone.utc)
+    finished_at = datetime.fromtimestamp(capture_start + max(segment['end'] for segment in deduped), tz=timezone.utc)
+    if not update_conversation_segments(
+        uid,
+        conversation_id,
+        deduped,
+        started_at=started_at,
+        finished_at=finished_at,
+    ):
+        raise ValueError('Canonical transcript replacement target disappeared before commit')
+
+    response.pop('_replacement_segments', None)
+    languages = response.pop('_replacement_languages', {})
+    response.setdefault('updated_memories', set()).add(conversation_id)
+    _reprocess_conversation_after_update(
+        uid,
+        conversation_id,
+        languages.get(conversation_id, 'en'),
+    )
 
 
 async def _checkpoint_fenced_conversations_for_run(
@@ -1631,6 +1733,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     inline_run_lock_token: Optional[str] = None,
     content_run_bound: bool = False,
     ledger_fence_active: bool = True,
+    transcript_mode: SyncTranscriptMode = SyncTranscriptMode.MERGE,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -1652,6 +1755,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     sync_model = 'unknown'
     job_outcome_recorded = False
     preserve_retry_material = False
+    canonical_capture_start = (
+        min(float(get_timestamp_from_path(path)) for path in raw_paths)
+        if transcript_mode is SyncTranscriptMode.REPLACE and raw_paths
+        else None
+    )
     # Both dispatch modes own a Redis token for every worker-driven job write.
     # Inline additionally renews it because it can wait behind the local
     # semaphore; Cloud Tasks stays below the request-timeout < lease invariant.
@@ -2046,7 +2154,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
 
             # Segments that fully landed in a prior Cloud Tasks attempt are skipped
             already_processed = set()
-            if task_mode:
+            if task_mode and transcript_mode is not SyncTranscriptMode.REPLACE:
                 already_processed = await run_blocking(db_executor, get_processed_segments, job_id)
                 if already_processed:
                     logger.info(
@@ -2056,7 +2164,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
 
             durable_processed_segment_ids: set[str] = set()
             segment_ids_by_path: dict[str, str] = {}
-            if content_id:
+            if content_id and transcript_mode is not SyncTranscriptMode.REPLACE:
                 durable_processed_segment_ids = await run_blocking(
                     db_executor, get_processed_sync_segment_ids, uid, content_id
                 )
@@ -2096,6 +2204,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     client_platform=client_platform,
                     sync_lane=sync_lane,
                     deferred_outcome=deferred_outcome,
+                    transcript_mode=transcript_mode,
                 )
                 if ok:
                     # Persist result contributions before the processed marker.
@@ -2122,9 +2231,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                             )
                             if not checkpointed:
                                 raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
-                if ok and task_mode:
+                if ok and task_mode and transcript_mode is not SyncTranscriptMode.REPLACE:
                     _add_processed_segment_for_run(job_id, active_run_lock_token, path)
-                if ok and content_id and segment_id:
+                if ok and content_id and segment_id and transcript_mode is not SyncTranscriptMode.REPLACE:
                     marked_segment = add_processed_sync_segment_id(
                         uid,
                         content_id,
@@ -2228,13 +2337,24 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     coordinator_loop,
                 ).result()
 
-            await run_blocking(
-                sync_executor,
-                _reprocess_merged_conversations,
-                uid,
-                response,
-                on_fenced=_checkpoint_fenced_conversations,
-            )
+            if transcript_mode is SyncTranscriptMode.REPLACE:
+                await run_blocking(
+                    sync_executor,
+                    _commit_canonical_conversation_transcript,
+                    uid,
+                    response,
+                    target_conversation_id,
+                    canonical_capture_start,
+                    segment_errors,
+                )
+            else:
+                await run_blocking(
+                    sync_executor,
+                    _reprocess_merged_conversations,
+                    uid,
+                    response,
+                    on_fenced=_checkpoint_fenced_conversations,
+                )
 
             # Persist conversation audio (private-cloud chunks → audio_files) so synced
             # conversations play exactly like realtime ones. Gated on the user's setting.

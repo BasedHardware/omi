@@ -983,6 +983,193 @@ class TestProcessSegmentReal:
         assert len(errors) == 0
         assert 'conv-existing' in response['updated_memories']
 
+    def test_targeted_gap_repair_reprocesses_once_after_the_batch(self):
+        """A target conversation is summarized only after all job segments land."""
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock, patch
+
+        from models.conversation_enums import ConversationSource
+        from utils.sync.pipeline import _reprocess_merged_conversations
+
+        process_segment = self._import_process_segment()
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        segment = MagicMock()
+        segment.end = 1.0
+        segment.model_dump.return_value = {
+            'start': 0.0,
+            'end': 1.0,
+            'text': 'recovered words',
+            'speaker': 'SPEAKER_00',
+        }
+        existing = {
+            'id': 'live-conversation',
+            'started_at': datetime.fromtimestamp(1700000000, tz=timezone.utc),
+            'finished_at': datetime.fromtimestamp(1700000001, tz=timezone.utc),
+            'transcript_segments': [],
+            'discarded': False,
+        }
+
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'recovered words'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[segment]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000001.0), patch(
+            'utils.sync.pipeline.conversations_db.get_conversation', return_value=existing
+        ), patch(
+            'utils.sync.pipeline.conversations_db.eligible_merge_target', return_value=True, create=True
+        ), patch(
+            'utils.sync.pipeline.update_conversation_segments'
+        ), patch(
+            'utils.sync.pipeline._reprocess_conversation_after_update'
+        ) as reprocess, patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ):
+            result = process_segment(
+                '/tmp/1700000001.wav',
+                'uid',
+                response,
+                lock,
+                errors,
+                ConversationSource.omi,
+                False,
+                target_conversation_id='live-conversation',
+            )
+
+            assert result is True
+            reprocess.assert_not_called()
+            assert response['_merged'] == {'live-conversation': 'en'}
+
+            _reprocess_merged_conversations('uid', response)
+            reprocess.assert_called_once_with('uid', 'live-conversation', 'en')
+
+        assert '_merged' not in response
+        assert errors == []
+
+    def test_canonical_repair_replaces_preview_once_after_every_segment_lands(self):
+        """Canonical capture is atomic: no partial segment mutates the live preview."""
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock, patch
+
+        from models.conversation_enums import ConversationSource
+        from utils.sync.pipeline import _commit_canonical_conversation_transcript
+        from utils.sync.transcript_mode import SyncTranscriptMode
+
+        process_segment = self._import_process_segment()
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        segment = MagicMock()
+        segment.end = 1.0
+        segment.model_dump.return_value = {
+            'start': 0.0,
+            'end': 1.0,
+            'text': 'canonical words',
+            'speaker': 'SPEAKER_00',
+        }
+        existing = {
+            'id': 'live-conversation',
+            'started_at': datetime.fromtimestamp(1700000000, tz=timezone.utc),
+            'finished_at': datetime.fromtimestamp(1700000010, tz=timezone.utc),
+            'transcript_segments': [{'start': 0.0, 'end': 1.0, 'text': 'preview'}],
+            'discarded': False,
+        }
+
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'canonical words'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[segment]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000005.0), patch(
+            'utils.sync.pipeline.update_conversation_segments'
+        ) as update, patch(
+            'utils.sync.pipeline._reprocess_conversation_after_update'
+        ) as reprocess, patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ):
+            result = process_segment(
+                '/tmp/1700000005.wav',
+                'uid',
+                response,
+                lock,
+                errors,
+                ConversationSource.omi,
+                False,
+                target_conversation_id='live-conversation',
+                transcript_mode=SyncTranscriptMode.REPLACE,
+            )
+
+            assert result is True
+            update.assert_not_called()
+            reprocess.assert_not_called()
+
+            with patch('utils.sync.pipeline.conversations_db.get_conversation', return_value=existing), patch(
+                'utils.sync.pipeline.conversations_db.eligible_merge_target', return_value=True, create=True
+            ):
+                update.return_value = True
+                _commit_canonical_conversation_transcript(
+                    'uid',
+                    response,
+                    'live-conversation',
+                    1700000000.0,
+                    [],
+                )
+
+            update.assert_called_once()
+            args, kwargs = update.call_args
+            assert args[:2] == ('uid', 'live-conversation')
+            assert args[2] == [
+                {
+                    'start': 5.0,
+                    'end': 6.0,
+                    'text': 'canonical words',
+                    'speaker': 'SPEAKER_00',
+                }
+            ]
+            assert kwargs['started_at'] == datetime.fromtimestamp(1700000000, tz=timezone.utc)
+            assert kwargs['finished_at'] == datetime.fromtimestamp(1700000006, tz=timezone.utc)
+            reprocess.assert_called_once_with('uid', 'live-conversation', 'en')
+
+        assert response['updated_memories'] == {'live-conversation'}
+        assert '_replacement_segments' not in response
+        assert errors == []
+
+    def test_canonical_repair_failure_keeps_preview_and_accumulated_segments_for_retry(self):
+        """One failed STT segment prevents the canonical mutation and reprocess."""
+        from unittest.mock import patch
+
+        from utils.sync.pipeline import _commit_canonical_conversation_transcript
+
+        response = {
+            'updated_memories': set(),
+            'new_memories': set(),
+            '_replacement_segments': {
+                'live-conversation': [
+                    {
+                        'timestamp': 1700000005.0,
+                        'start': 0.0,
+                        'end': 1.0,
+                        'text': 'partial canonical words',
+                    }
+                ]
+            },
+        }
+
+        with patch('utils.sync.pipeline.update_conversation_segments') as update, patch(
+            'utils.sync.pipeline._reprocess_conversation_after_update'
+        ) as reprocess:
+            with pytest.raises(RuntimeError, match='one or more recovered segments failed'):
+                _commit_canonical_conversation_transcript(
+                    'uid',
+                    response,
+                    'live-conversation',
+                    1700000000.0,
+                    ['stt_timeout'],
+                )
+
+        update.assert_not_called()
+        reprocess.assert_not_called()
+        assert response['updated_memories'] == set()
+        assert response['_replacement_segments']['live-conversation'][0]['text'] == 'partial canonical words'
+
     def test_speech_eligible_empty_segments_complete_as_silence(self):
         """VAD-positive segments that all transcribe empty complete, not fail.
 
