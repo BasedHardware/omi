@@ -1,0 +1,44 @@
+desktop/context-for-claude/Sources/ContextApp/Capture/AXElement.swift
+  s_b5d52d5f05403b::t_cfb8ccb3f313de 1-84
+desktop/context-for-claude/Sources/ContextCore/Store.swift
+  s_b5d52d5f05403b::t_ebd4bf4277b2ca 532-564
+  s_b5d52d5f05403b::t_4e8d1bc17f295b 197-220
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_b5d52d5f05403b::t_6a88a3f68f72d3 130
+desktop/context-for-claude/Sources/ContextApp/Capture/ScreenWatcher.swift
+  s_b5d52d5f05403b::t_67c878904072dd 719-720
+  s_b5d52d5f05403b::t_abd727b4ce839d 233-237,244-246
+  s_b5d52d5f05403b::t_2128862eed3964 429,735-759
+  s_b5d52d5f05403b::t_4196e4acce2359 367-369
+  s_b5d52d5f05403b::t_4340c155487fad 40-44,214,220-221,430-436
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_b5d52d5f05403b::t_ea6b966d148a2a 42-43
+  s_b5d52d5f05403b::t_f3091bbb64d900 95-101
+  s_b5d52d5f05403b::t_c6e231817d05c2 314-318
+  s_b5d52d5f05403b::t_14eb4e7ffad87c 12
+  s_b5d52d5f05403b::t_e7bfd7143d1e19 64-65
+  s_b5d52d5f05403b::t_a301f360e4f7f5 25-26
+  s_b5d52d5f05403b::t_7103fc30f2d654 71
+desktop/context-for-claude/Sources/ContextCore/Models.swift
+  s_b5d52d5f05403b::t_95da6ccde4e698 141,143-151,159-161,169-170
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_b5d52d5f05403b::t_7e2ab389e97bf5 541,775,830-836,921-930,957
+desktop/context-for-claude/Tests/ContextCoreTests/StoreTests.swift
+  s_b5d52d5f05403b::t_7ace4eae0dc2e5 96-99,110-111,199-202,213-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ad174a55ab02bfbaaa623ce7d24f6046a826411a",
+  "prompts": {},
+  "sessions": {
+    "s_b5d52d5f05403b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82d7239f-7b04-40bc-b1d8-8737cb48399a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
