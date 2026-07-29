@@ -4,7 +4,7 @@
     Action       carried by the projection's verb and by the arrangement's direction
     Environment  the real place and objects, from the selected subject's setting
     Style        global rendering metadata — `aesthetic.py`, and nothing else
-    Lighting     derived from the emotional charge this week carries, not from the stage
+    Lighting     stage-owned palette/value structure, personally inflected by emotional charge
     Details      the stage's archetypal motifs, attached to what is already in the scene
 
 The typing is the fix. Before it, three layers all wrote to Subject — the register said
@@ -19,16 +19,12 @@ form an image of this situation takes — where the figure sits, how it moves, w
 haunt the scene — and the person's week supplies everything the form is made of. That is
 Jung's archetype-as-such against the archetypal image, expressed as a graph.
 
-Lighting is measured rather than described: a dedicated pass rates the week against the Geneva
-Emotion Wheel's twenty families and hands over the consolidated charge, with the selector's own
-phrase as the person-specific gloss. Where they disagree the rating is authoritative — it is
-the half that is averaged, logged and comparable across weeks.
-
-What this slot deliberately does **not** carry is a colour. The evidence supports emotion
-driving lightness and chroma and does not support it driving hue: hue's effect on valence is
-not significant and reverses direction with saturation. So the charge is named and the mapping
-is left to the image model rather than asserted by us. Encoding lightness and chroma
-mechanically from the rated vector is a deferred follow-up, not a missing piece.
+Lighting has two non-overlapping owners. The stage supplies the byte-identical palette and
+value structure from the prototype run that cleared the image gate at 9-of-10. A dedicated
+pass rates the week against the Geneva Emotion Wheel's twenty families and supplies the
+personal inflection inside those bounds: intensity, edge energy, and light direction and
+quality. Removing the stage optics made the graph look simpler, but discarded the measured
+visual contract and reproduced a generic orange-and-teal collapse in live UAT.
 """
 
 from __future__ import annotations
@@ -44,12 +40,16 @@ def build_image_prompt(subject: SelectedSubject, emotions: EmotionProfile = EMPT
     imagery = STAGE_IMAGERY[subject.stage]
     return '\n\n'.join(
         [
-            f'SUBJECT — paint this, and nothing in place of it: {subject.projection}',
+            f'STYLE — binding rendering contract: {AESTHETIC}',
+            (
+                'PALETTE AND VALUE — binding stage optics, validated as part of the series: '
+                f'{imagery.palette} {imagery.value}'
+            ),
+            f'SUBJECT — depict this, and nothing in place of it: {subject.projection}',
             (
                 'SETTING — the real place it happens in. Keep it recognisable as itself; do not '
                 f'replace it with a symbol or a generic version of it: {subject.setting}'
             ),
-            f'STYLE: {AESTHETIC}',
             imagery.composition,
             (
                 f'{imagery.symbol} These motifs may inflect what the scene already contains — '
@@ -57,12 +57,22 @@ def build_image_prompt(subject: SelectedSubject, emotions: EmotionProfile = EMPT
                 'replace the subject or the setting, and nothing here is the point of the image.'
             ),
             (
-                'LIGHT AND COLOUR: what this carries for the person whose life it is, rated '
+                'EMOTIONAL INFLECTION — what this carries for the person whose life it is, rated '
                 f'against the Geneva Emotion Wheel, is {emotions.as_prompt_text()}. In their own '
-                f'words it reads as {subject.tone}. Derive the key, the intensity and the '
-                'direction and quality of the light from that charge and from nothing else. '
-                'Commit to it — a neutral or evenly pleasant treatment is a failure, and so is '
-                'any scheme chosen because it is what this subject is usually painted in.'
+                f'words it reads as {subject.tone}. Express that charge within that palette and '
+                'value structure through intensity, edge energy, and the direction and quality '
+                'of the light; never replace its hue range or tonal hierarchy. Commit to the '
+                'charge — a neutral or evenly pleasant treatment is a failure.'
+            ),
+            (
+                'FINAL RENDERING CHECK — line carries form and translucent wash carries '
+                'atmosphere. Keep contours hairline, tapered and calligraphic; keep every wash '
+                'thin, luminous and subordinate to those contours. A dense composition may '
+                'contain many forms, but must not become equal-weight surface noise. If the '
+                'surface reads as thick oil paint, wax crayon, colored-pencil hatching or '
+                'impressionist daubs, redraw it. Keep recognisable objects subordinate to the '
+                'psychological geometry; do not turn them into foreground product illustration '
+                'or a literal still life.'
             ),
         ]
     )

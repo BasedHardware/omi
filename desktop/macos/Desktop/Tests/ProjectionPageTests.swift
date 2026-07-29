@@ -103,12 +103,14 @@ private final class ProjectionImageURLProtocol: URLProtocol, @unchecked Sendable
   private static let lock = NSLock()
   private nonisolated(unsafe) static var capturedAuthorization: String?
   private nonisolated(unsafe) static var capturedURL: URL?
+  private nonisolated(unsafe) static var capturedTimeoutInterval: TimeInterval?
   private nonisolated(unsafe) static var responseData = Data()
 
   static func reset(data: Data = Data()) {
     lock.withLock {
       capturedAuthorization = nil
       capturedURL = nil
+      capturedTimeoutInterval = nil
       responseData = data
     }
   }
@@ -121,6 +123,10 @@ private final class ProjectionImageURLProtocol: URLProtocol, @unchecked Sendable
     lock.withLock { capturedURL }
   }
 
+  static var timeoutInterval: TimeInterval? {
+    lock.withLock { capturedTimeoutInterval }
+  }
+
   override class func canInit(with request: URLRequest) -> Bool { true }
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
@@ -128,6 +134,7 @@ private final class ProjectionImageURLProtocol: URLProtocol, @unchecked Sendable
     let data = Self.lock.withLock { () -> Data in
       Self.capturedAuthorization = request.value(forHTTPHeaderField: "Authorization")
       Self.capturedURL = request.url
+      Self.capturedTimeoutInterval = request.timeoutInterval
       return Self.responseData
     }
     guard let url = request.url,
@@ -330,6 +337,27 @@ final class ProjectionPageTests: XCTestCase {
 
     XCTAssertNil(ProjectionImageURLProtocol.authorization)
     XCTAssertNil(ProjectionImageURLProtocol.url)
+  }
+
+  func testAPIClientAllowsTheManualGenerationPipelineToFinish() async throws {
+    ProjectionImageURLProtocol.reset(
+      data: Data(
+        """
+        {"id":"projection-generated","imperative":"Cross the threshold."}
+        """.utf8))
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [ProjectionImageURLProtocol.self]
+    let client = APIClient(session: URLSession(configuration: configuration))
+    await client.setTestAuthHeader("Bearer projection-token")
+    let authorization = try XCTUnwrap(
+      RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "projection-owner-a"))
+
+    let generated = try await client.generateProjection(
+      expectedOwnerId: authorization.ownerID,
+      authorizationSnapshot: authorization)
+
+    XCTAssertEqual(generated?.id, "projection-generated")
+    XCTAssertEqual(ProjectionImageURLProtocol.timeoutInterval, 120)
   }
 
   private func projection(id: String) -> Projection {

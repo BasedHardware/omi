@@ -1,10 +1,12 @@
 """The stage's contribution to the image graph — form, not content.
 
-The prompt is a typed graph and every slot has exactly one owner. This module owns two of
-them and is forbidden the rest:
+The prompt is a typed graph and every slot has exactly one owner. This module owns the stage's
+formal and optical constraints:
 
     composition  -> Environment arrangement and the direction of the Action edge
     symbol       -> Details: motifs that may inflect entities the scene already contains
+    palette      -> the bounded hue range for this narrative position
+    value        -> the tonal hierarchy that makes those hues legible
 
     archetype    the Jungian figure constellated at that point of individuation
     operation    the alchemical operation Jung read as its psychic analogue
@@ -22,10 +24,13 @@ That is Jung's own distinction — the archetype-as-such is an empty formal disp
 cannot be represented, and the archetypal image is that form filled with personal material —
 and it is load-bearing here rather than decorative.
 
-Palette and value used to live here, owned by the alchemical operation. They left with the
-same correction: light and colour belong to the Lighting slot, which is owned by the emotional
-charge of this particular week, not by the stage. A stage cannot know whether the person is
-apprehensive or elated about the thing, and that is exactly what the image has to carry.
+Palette and value are the byte-identical optical constraints from the prototype run that
+cleared the declared image gate at 9-of-10. They briefly left this module when the person's
+emotional charge gained the Lighting slot. That made the graph look cleaner but silently
+discarded the only measured visual contract; live UAT then reproduced a generic orange-and-teal
+palette collapse. The two inputs now have separate jobs: the stage fixes hue range and tonal
+hierarchy, while the personal charge inflects intensity, edge energy, and light direction and
+quality within those bounds.
 
 ONE HONEST SEAM. Jung did not write the Hero's Journey; Campbell did, drawing on Jung. Jung's
 own model is individuation, which spirals and repeats rather than advancing through numbered
@@ -52,13 +57,16 @@ class StageImagery:
     """What one stage contributes to the image graph, by slot.
 
     `composition` fills the arrangement of the Environment and the direction of the Action.
-    `symbol` fills Details — motifs that may inflect entities already in the scene. Neither
-    may fill Subject or Environment themselves: the person's own situation owns those.
+    `symbol` fills Details — motifs that may inflect entities already in the scene. `palette`
+    and `value` constrain the optical treatment that was validated as a series. None may fill
+    Subject or Environment themselves: the person's own situation owns those.
     """
 
     archetype: str
     operation: str
     symbol: str
+    palette: str
+    value: str
     composition: str
 
 
@@ -75,6 +83,18 @@ STAGE_IMAGERY: dict[ProjectionStage, StageImagery] = {
             "ordinary world rendered as undifferentiated, unremarkable matter, with one "
             "intrusion into it that does not belong and cannot be unseen. Nothing is "
             "answered yet; the whole image is the arrival of a question."
+        ),
+        palette=(
+            "PALETTE: the ordinary world in dulled, desaturated, near-neutral earth and "
+            "stone, deliberately drab. The intruding summons carries the only saturated "
+            "colour in the frame — a narrow band of restrained gold and pale citrine. "
+            "No turquoise, no teal, no lapis dominance anywhere."
+        ),
+        value=(
+            "VALUE: the field flat and mid-toned by intention, with a small area of "
+            "genuine brightness at the point of arrival — the brightest thing in the "
+            "frame occupies less than a tenth of it. Strong local contrast, low global "
+            "contrast."
         ),
         composition=(
             "COMPOSITION: a single presence small and peripheral at the lower edge of the "
@@ -101,6 +121,17 @@ STAGE_IMAGERY: dict[ProjectionStage, StageImagery] = {
             "presses through and is turned back. The refusal is not cowardice; it is the "
             "old form holding its shape."
         ),
+        palette=(
+            "PALETTE: cold, dulled, institutional greys, slate and dry ochre in the "
+            "enclosing pattern — handsome and lifeless. A single seam of suppressed "
+            "violet-rose light at the point of pressure, small and losing. Forbid "
+            "turquoise and teal entirely."
+        ),
+        value=(
+            "VALUE: compressed and airless on purpose — no highlight anywhere, because "
+            "refusal is the absence of illumination. The narrowest tonal range of any "
+            "image in the series."
+        ),
         composition=(
             "COMPOSITION: a single presence held centrally but enclosed — ringed and pressed "
             "by orderly, repeating, grey-blue geometry that behaves like a room, a rhythm, or "
@@ -121,6 +152,16 @@ STAGE_IMAGERY: dict[ProjectionStage, StageImagery] = {
             "gate whose far side obeys different laws. One presence in transit, already "
             "dissolving slightly into the far side's substance. The guardian is the "
             "boundary itself, not a monster."
+        ),
+        palette=(
+            "PALETTE: genuinely and unmistakably bicolour — the near half in warm dry "
+            "gold, amber and bone, the far half in deep lapis and violet, meeting at a "
+            "hard vertical seam with no blending. This is the one image permitted a split "
+            "palette, and the two halves must not share a hue."
+        ),
+        value=(
+            "VALUE: the two halves also differ in key — the near half light and dry, the "
+            "far half deep and saturated. Contrast concentrated along the seam."
         ),
         composition=(
             "COMPOSITION: a single presence caught mid-transit across a vertical division at "
@@ -147,6 +188,16 @@ STAGE_IMAGERY: dict[ProjectionStage, StageImagery] = {
             "into a single company. Fine threads of unequal tension connecting them. No "
             "centre and no hierarchy — the difficulty is the multiplicity itself."
         ),
+        palette=(
+            "PALETTE: the full prismatic range at once and deliberately unresolved — lapis, "
+            "turquoise, emerald, violet, rose, gold and pearl in shifting iridescence, like "
+            "oil on water or a peacock's tail. This is the ONLY image entitled to the whole "
+            "seven-colour range simultaneously; every hue must be locatable somewhere."
+        ),
+        value=(
+            "VALUE: busy and evenly lit, with many small competing highlights and no single "
+            "dominant light source. Deliberately hard to rest the eye on."
+        ),
         composition=(
             "COMPOSITION: several presences at markedly different distances and scales, the "
             "central one no larger than the others. The motion radiates and disperses outward "
@@ -167,6 +218,16 @@ STAGE_IMAGERY: dict[ProjectionStage, StageImagery] = {
             "an aperture that admits less the further in it goes. Things shed and left "
             "along the way, deliberately abandoned rather than lost. The light thinning "
             "with depth. The figure goes in of its own accord."
+        ),
+        palette=(
+            "PALETTE: progressive desaturation with depth — muted umber, cold slate and "
+            "bituminous brown-black draining toward the aperture, with the last warmth "
+            "surviving only at the outer edge of the frame. No jewel tones, no turquoise."
+        ),
+        value=(
+            "VALUE: a strong gradient from a dim outer edge to genuine darkness at the "
+            "centre. The second-darkest image in the series, and the darkness must read "
+            "as depth rather than as shadow cast on a surface."
         ),
         composition=(
             "COMPOSITION: a single presence seen from behind, approaching and receding from "
@@ -190,6 +251,17 @@ STAGE_IMAGERY: dict[ProjectionStage, StageImagery] = {
             "series and must look like it; nothing here is consoling, and nothing here is "
             "pretty."
         ),
+        palette=(
+            "PALETTE: near-monochrome black, bitumen and cold ash, with exactly one hot "
+            "arterial rose-red admitted at the wound and nowhere else. This is where rose "
+            "first enters the series. Forbid gold, turquoise, emerald and any decorative "
+            "iridescence absolutely."
+        ),
+        value=(
+            "VALUE: the widest contrast in the series and the deepest true blacks — "
+            "genuine black, not dark blue — against one small hot point. The eye must "
+            "have exactly one place to go."
+        ),
         composition=(
             "COMPOSITION: two presences facing one another across the centre of the frame, "
             "held at maximum tension, close to symmetrical opposition. The motion is ruptured "
@@ -212,6 +284,17 @@ STAGE_IMAGERY: dict[ProjectionStage, StageImagery] = {
             "violence. The quality is washed, rinsed, and lunar rather than triumphant — "
             "this is relief and clarity, not victory."
         ),
+        palette=(
+            "PALETTE: pearl-white, silver, moonlit grey and the palest blue-white, with "
+            "restraint everywhere else. This is the ONLY image whose dominant colour is "
+            "pearl-white, and it must genuinely dominate. Forbid gold and saturated "
+            "turquoise."
+        ),
+        value=(
+            "VALUE: the highest-key image in the entire series and the only one permitted "
+            "true highlights — luminous near-white passages that read as actual light. If "
+            "no part of this image approaches white, it has failed."
+        ),
         composition=(
             "COMPOSITION: a single presence central, still, and at rest, having just set "
             "something down. The motion is decelerating — a wide, slow circular current "
@@ -232,6 +315,15 @@ STAGE_IMAGERY: dict[ProjectionStage, StageImagery] = {
             "ordinary matter below, with a presence moving downward and away while its "
             "weight still leans back toward what it is leaving. The upper world dissolves "
             "into the lower without a seam. What is carried is visibly heavy."
+        ),
+        palette=(
+            "PALETTE: a vertical drain — silver and pale luminous blue in the upper field "
+            "giving out into dry bone, grey and plain earth below. Colour literally runs "
+            "out toward the bottom of the frame. No saturated hue survives the descent."
+        ),
+        value=(
+            "VALUE: a strong vertical gradient, high-key above and mid-key below. The "
+            "brightness is real but is being left behind."
         ),
         composition=(
             "COMPOSITION: a single presence retreating away from a luminous, elaborate region "
@@ -257,6 +349,16 @@ STAGE_IMAGERY: dict[ProjectionStage, StageImagery] = {
             "leaf, the child. Below, unopened forms remaining whole and undestroyed. The "
             "old form is not defeated; it is completed and let go."
         ),
+        palette=(
+            "PALETTE: citrine and pale gold breaking upward, meeting deep lapis and "
+            "resolving into true violet where they meet — violet is the colour of the "
+            "union of opposites and must be plainly visible here. This is the ONLY image "
+            "where violet is a principal colour."
+        ),
+        value=(
+            "VALUE: dawn contrast — a genuinely luminous upper field against a still-dark "
+            "lower one, with the transition legible as a horizon rather than a blur."
+        ),
         composition=(
             "COMPOSITION: one presence divided into two aspects of itself — a continuing form "
             "and a dissolving form separating along a strong vertical axis. The motion "
@@ -280,6 +382,17 @@ STAGE_IMAGERY: dict[ProjectionStage, StageImagery] = {
             "set down on a plain surface where others will find it, and the maker is "
             "already turning away. It is visibly imperfect and visibly the work of one "
             "pair of hands. The gift is ordinary and it works."
+        ),
+        palette=(
+            "PALETTE: warm and embodied — deep rose, madder red, terracotta and full-bodied "
+            "gold, the warmest image in the series. Rose is the dominant colour and must "
+            "read as arrival rather than as wound. Forbid cold blues and turquoise "
+            "entirely."
+        ),
+        value=(
+            "VALUE: full and resolved — real darks, real lights, and a comfortable mid "
+            "range, in raking low light. The only image whose tonal range is simply "
+            "complete rather than pushed to an extreme."
         ),
         composition=(
             "COMPOSITION: a single presence peripheral and turned away at the edge of the "

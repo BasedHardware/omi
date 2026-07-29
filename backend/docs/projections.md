@@ -17,7 +17,19 @@ or ungrounded evidence packet is a normal no-artifact outcome.
 
 The macOS page fetches the latest artifact when opened and on app activation. Activation bursts
 use the shared 60-second cooldown. The Generate button and `/v1/users/projections/test` route are
-non-production demo seams; hosted development also requires shared bucket storage.
+non-production demo seams; hosted development also requires shared bucket storage. Manual
+generation runs subject selection, emotion rating, and image generation in one request. The
+desktop gives that pipeline a 120-second request budget instead of its shared 30-second API
+budget, so a valid long image call does not surface a false timeout while the backend finishes
+and persists it.
+
+The image prompt keeps three visual responsibilities separate. The shared aesthetic owns the
+rendering register; the selected stage owns the previously validated palette, tonal hierarchy,
+symbol, and composition; and the measured emotional charge inflects intensity, edge energy, and
+light direction and quality within those optical bounds. The person's selected situation and
+recognisable setting remain the subject. Do not replace the stage palette/value contract with a
+generic emotion-derived scheme: that removes the measured series safeguards and allows the image
+model to collapse toward its default treatment.
 
 ## Image storage and delivery
 

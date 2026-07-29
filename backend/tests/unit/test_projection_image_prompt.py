@@ -3,16 +3,18 @@
 These tests pin the typing, because every failure this layer has had was a slot with the wrong
 owner or no owner at all.
 
-Subject was written by three layers at once — the register, the stage's symbol, and the
-person's own situation arriving last — and Environment was written by nobody, so a projection
-about relocating to Lisbon rendered a faceless figure in a ring with no Lisbon in it. Lighting
-was owned by the stage's alchemical operation, so the same subject came out in institutional
-greys because the *stage* was refusal, regardless of what the person felt about the thing.
+Subject was written by three layers at once — the register, the stage's symbol, and the person's
+own situation — and Environment was written by nobody, so a projection about relocating to Lisbon
+rendered a faceless figure in a ring with no Lisbon in it. A later correction gave the person's
+charge the whole Lighting slot, but also removed the stage-specific palette and value structure
+that had cleared the image gate at 9-of-10. Live UAT then reproduced the old palette collapse as
+generic orange-and-teal painterly output.
 
-What is tested here is therefore ownership: the person's situation and place reach the model
-ahead of everything else and intact, the archetypal layer arrives explicitly demoted to
-inflection, light is derived from the charge this week carries, and the register still governs
-how any of it is painted.
+What is tested here is therefore ownership and priority: the rendering contract leads, matching
+the builder-approved prompt that produced the reference output; the person's situation and place
+then reach the model intact; the archetypal layer arrives explicitly demoted to inflection; the
+validated stage optics constrain rather than replace the personal charge; and the register
+governs how all of it is painted.
 """
 
 import pytest
@@ -46,22 +48,24 @@ def test_every_stage_carries_its_own_form():
     assert set(STAGE_IMAGERY) == set(ProjectionStage)
     for stage, imagery in STAGE_IMAGERY.items():
         assert imagery.symbol.startswith('SYMBOL:'), stage
+        assert imagery.palette.startswith('PALETTE:'), stage
+        assert imagery.value.startswith('VALUE:'), stage
         assert imagery.composition.startswith('COMPOSITION:'), stage
-        # Light left this layer when it moved to the tone axis; a stage that starts dictating
-        # colour again is the collapse returning.
-        assert 'PALETTE' not in imagery.composition and 'PALETTE' not in imagery.symbol, stage
 
 
 @pytest.mark.parametrize('stage', list(ProjectionStage))
-def test_the_persons_situation_and_place_lead_the_prompt(stage):
+def test_the_rendering_contract_leads_without_displacing_the_persons_situation(stage):
     prompt = build_image_prompt(_subject(stage))
 
-    assert prompt.startswith('SUBJECT')
+    assert prompt.startswith('STYLE — binding rendering contract')
     assert PROJECTION in prompt
     assert SETTING in prompt
-    # The scene and the place are stated before the register and before anything archetypal;
-    # arriving last is how the situation lost the frame.
-    assert prompt.index(SETTING) < prompt.index(AESTHETIC)
+    assert 'SUBJECT — depict this' in prompt
+    assert 'paint this' not in prompt
+    # Live UAT reproduced the opposite failure: the literal laptop scene led and the approved
+    # rendering register arrived 567 characters later, producing generic oil-paint daubs despite
+    # an explicit anti-impasto clause. The builder-approved reference prompt led with the register.
+    assert prompt.index(AESTHETIC) < prompt.index(PROJECTION)
     assert prompt.index(SETTING) < prompt.index(STAGE_IMAGERY[stage].symbol)
 
 
@@ -77,12 +81,25 @@ def test_the_archetypal_layer_arrives_demoted_to_inflection(stage):
 
 
 @pytest.mark.parametrize('stage', list(ProjectionStage))
-def test_light_is_derived_from_the_charge_this_week_carries(stage):
+def test_personal_charge_inflects_without_replacing_the_validated_stage_optics(stage):
+    imagery = STAGE_IMAGERY[stage]
     prompt = build_image_prompt(_subject(stage))
-    lighting = prompt[prompt.index('LIGHT AND COLOUR') :]
+    optics = prompt[prompt.index('PALETTE AND VALUE') :]
 
-    assert TONE in lighting
-    assert 'from that charge and from nothing else' in lighting
+    assert imagery.palette in optics
+    assert imagery.value in optics
+    assert TONE in optics
+    assert 'within that palette and value structure' in optics
+    assert 'never replace its hue range or tonal hierarchy' in optics
+
+
+def test_ordeal_keeps_the_measured_optical_contract_that_live_uat_lost():
+    prompt = build_image_prompt(_subject(ProjectionStage.ORDEAL))
+
+    assert 'near-monochrome black, bitumen and cold ash' in prompt
+    assert 'exactly one hot arterial rose-red' in prompt
+    assert 'the widest contrast in the series and the deepest true blacks' in prompt
+    assert prompt.index('PALETTE AND VALUE') < prompt.index('SUBJECT')
 
 
 @pytest.mark.parametrize('stage', list(ProjectionStage))
@@ -96,6 +113,17 @@ def test_the_register_still_governs_how_it_is_painted(stage):
     # once: a stock travel advertisement.
     assert 'Do not make a travel poster' in prompt
     assert 'No text, lettering, numbers, logos, or watermarks.' in prompt
+
+
+def test_the_register_rejects_the_painterly_failure_mode():
+    prompt = build_image_prompt(_subject(ProjectionStage.CALL))
+
+    assert 'finely controlled, miniature-like contours' in prompt
+    assert 'thick impasto, broad impressionist daubs' in prompt
+    rendering_check = prompt[prompt.index('FINAL RENDERING CHECK') :]
+    assert 'line carries form and translucent wash carries atmosphere' in rendering_check
+    assert 'colored-pencil hatching' in rendering_check
+    assert 'recognisable objects subordinate to the psychological geometry' in rendering_check
 
 
 def test_the_register_no_longer_forbids_the_visible_world():

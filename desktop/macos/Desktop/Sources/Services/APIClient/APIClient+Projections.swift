@@ -116,7 +116,8 @@ extension APIClient {
       "v1/users/projections/test",
       includeBYOK: false,
       expectedOwnerId: expectedOwnerId,
-      authorizationSnapshot: authorizationSnapshot)
+      authorizationSnapshot: authorizationSnapshot,
+      requestTimeoutInterval: 120)
     return Projection(response)
   }
 

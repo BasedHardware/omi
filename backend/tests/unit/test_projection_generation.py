@@ -85,11 +85,12 @@ def test_the_image_is_rendered_from_the_selected_subject(stub_reads):
         with patch.object(generation_module, '_generate_image', return_value=b'png') as generate_image:
             projection = generation_module.generate_projection('uid-1')
 
-    # The prompt is the selected subject's own graph, not a constant: the picture is about the
-    # thing the line is about, set in the place it actually happens, lit by what it carries.
-    # The composed prompt is what gets recorded, since that is what produced the image.
+    # The builder-approved rendering contract leads, and the selected subject's graph follows
+    # intact: the picture is about the thing the line is about, set in the place it actually
+    # happens, lit by what it carries. The composed prompt is what gets recorded, since that is
+    # what produced the image.
     prompt = generate_image.call_args.args[0]
-    assert prompt.startswith('SUBJECT')
+    assert prompt.startswith('STYLE — binding rendering contract')
     assert SUBJECT.projection in prompt
     assert SUBJECT.setting in prompt
     assert SUBJECT.tone in prompt

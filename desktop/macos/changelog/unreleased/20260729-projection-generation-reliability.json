@@ -1,0 +1,3 @@
+{
+  "change": "Improved generated projection artwork and prevented longer generations from reporting a false timeout"
+}
