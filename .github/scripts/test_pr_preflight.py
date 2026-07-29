@@ -288,6 +288,7 @@ class SelectionTests(unittest.TestCase):
                 "deferred-work-markers",
                 "lifecycle-headers",
                 "version-prefixed-filenames",
+                "pr-scope",
             },
         )
 
