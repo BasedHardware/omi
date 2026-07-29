@@ -48,6 +48,29 @@ or an allowlist miss is also disabled. No Helm or production default enables thi
 path. The local cassette may include restricted audio/transcript event payloads,
 so keep its root outside Git and never attach it to a PR.
 
+The development listen deployment mounts `/var/omi-parity-pack` as an `emptyDir`
+for explicitly allowlisted dogfood principals and best-effort exports cassette
+JSON to a private development bucket:
+
+```text
+gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0/cassettes/<identity-key>.json
+```
+
+Export is fail-open (listen continues if GCS is down). Download for offline
+replay:
+
+```bash
+gcloud storage cp -r \
+  "gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0" \
+  ./omi-parity-pack-dogfood/
+# Point OMI_PARITY_PACK_ROOT at the local tree (or compose a pack with
+# manifest.json as required by this README), then:
+npm run test:parity-pack-v0
+```
+
+Never promote cassettes to production storage or commit them to the repository.
+The emptyDir scratch is still lost on pod restart before a successful export.
+
 ## Replay players
 
 `STTCassettePlayer` and `LLMCassettePlayer` are callback-oriented loopback
