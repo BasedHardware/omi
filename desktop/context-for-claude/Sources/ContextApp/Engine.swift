@@ -451,18 +451,22 @@ final class Engine: ObservableObject {
                 let modelReady = Task { try await transcriber.start() }
                 self?.pumps[component] = Task.detached(priority: .userInitiated) {
                     for await chunk in chunks {
-                        // Both paths see every chunk. The cloud is preferred — it diarises and
-                        // matches against the user's speech profile, which this app cannot do — but
-                        // the local transcriber keeps running so a dropped network or a paywalled
-                        // account degrades to a worse transcript rather than to silence.
-                        await MainActor.run {
+                        // Every chunk reaches the cloud. The local model owns only the fallback:
+                        // feeding both while cloud is live persists two independent transcripts of
+                        // the same audio. Decide at ingestion time, before model latency can blur a
+                        // cloud-state transition with the line it later emits.
+                        let useLocalFallback = await MainActor.run { () -> Bool in
                             switch component {
                             case .microphone: Engine.shared.mixerInput(mic: chunk)
                             case .systemAudio: Engine.shared.mixerInput(system: chunk)
                             default: break
                             }
+                            return TranscriptOwnership.shouldFeedLocalFallback(
+                                when: ListenSocket.shared.state)
                         }
-                        await transcriber.append(chunk)
+                        if useLocalFallback {
+                            await transcriber.append(chunk)
+                        }
                     }
                 }
                 try await device.start(onChunk: { feed.yield($0) }, onLevel: { _ in })
@@ -728,6 +732,15 @@ final class Engine: ObservableObject {
         heartbeat.set(final)
         heartbeatQueue.sync { Self.writeHeartbeat(final) }
         ContextLog.info("Engine stopped", "engine")
+    }
+}
+
+/// Chooses one transcript owner for each audio chunk. Cloud is preferred only after the socket is
+/// truly live; every other state is an explicit local-fallback state so a sign-in delay, reconnect,
+/// or permanent cloud refusal never turns capture into silence.
+enum TranscriptOwnership {
+    static func shouldFeedLocalFallback(when cloudState: ListenSocket.State) -> Bool {
+        cloudState != .live
     }
 }
 

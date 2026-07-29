@@ -393,114 +393,24 @@ final class ToolsTests: XCTestCase {
             "a last-known grant must be dated rather than stated as current: \(clause)")
     }
 
-    // MARK: - How far back the account really goes
+    // MARK: - Account history sample
 
-    /// `status` reported the date of conversation number 501 as the depth of the account. On a busy
-    /// account that is a couple of months, while the account itself goes back years — so a model
-    /// asking "how far back do you know me?" was told a few months and then declined to search
-    /// earlier. This is that account: 501 back lands in June 2026, the record starts in August 2024.
-    func testTheHistoryProbeIsWalkedPastItsOwnSampleWithinARequestBudget() {
-        let earliest = epoch("2024-08-12")
-        let newest = epoch("2026-07-20")
+    /// `status` gets one bounded account probe. Its result is useful reachability evidence, but not
+    /// a license to make hidden history-crawl requests or to describe the sampled row as the start
+    /// of a person's record.
+    func testStatusPresentsTheSingleHistoryProbeAsASampleNotARecordBoundary() {
         let sampled = epoch("2026-06-09")
 
-        var probes = 0
-        let floor = Tools.deepenHistory(from: sampled) { anchor in
-            probes += 1
-            // The account, honestly simulated: the newest conversation at or before the anchor.
-            guard anchor >= earliest else { return .empty }
-            return .found(min(anchor, newest))
-        }
+        let text = Tools.historySampleLine(probeOffset: 500, sampledStart: sampled)
 
-        XCTAssertLessThanOrEqual(
-            probes, Tools.deepeningProbeBudget, "the walk went over its request budget")
-        XCTAssertFalse(floor.filterIgnored)
-        XCTAssertFalse(floor.haltedByFailure)
-        XCTAssertGreaterThan(
-            sampled - floor.provenOldest, 365 * 86_400,
-            "the walk did not get materially past the sample it started from")
-        XCTAssertGreaterThanOrEqual(
-            floor.provenOldest, earliest, "the walk claimed a record older than the account holds")
-        XCTAssertLessThan(
-            floor.emptyAtOrBefore ?? .infinity, earliest,
-            "the bracket excluded records the account really holds")
+        XCTAssertTrue(text.contains(ContextTime.describe(sampled)), text)
+        XCTAssertTrue(text.contains("not the start of the record"), text)
+        XCTAssertTrue(text.contains("`since`"), text)
+        XCTAssertFalse(text.contains("extra request"), text)
     }
 
-    /// A request that failed is not an empty account. Folding the two together would print
-    /// "nothing before <date>" about an account with years of history behind it.
-    func testAFailedProbeIsNeverRenderedAsTheAccountHavingNothingOlder() {
-        let sampled = epoch("2026-06-09")
-
-        let floor = Tools.deepenHistory(from: sampled) { _ in .unavailable }
-
-        XCTAssertTrue(floor.haltedByFailure)
-        XCTAssertNil(floor.emptyAtOrBefore, "a failed request was recorded as an empty account")
-        XCTAssertEqual(floor.provenOldest, sampled)
-
-        let text = Tools.historyDepthLines(probeOffset: 500, sampledStart: sampled, floor: floor)
-            .joined(separator: "\n")
-        XCTAssertFalse(
-            text.contains("holds nothing at or before"),
-            "a failed probe was reported as proof the history stops there: \(text)")
-        XCTAssertTrue(text.contains("could not be read"), text)
-    }
-
-    /// A date filter the server ignored proves nothing about depth.
-    func testADeepProbeThatIgnoresTheDateFilterProducesNoClaim() {
-        let sampled = epoch("2026-06-09")
-        let newest = epoch("2026-07-20")
-
-        let floor = Tools.deepenHistory(from: sampled) { _ in .found(newest) }
-
-        XCTAssertTrue(floor.filterIgnored)
-        XCTAssertEqual(floor.provenOldest, sampled, "a claim was built on an unapplied filter")
-
-        let text = Tools.historyDepthLines(probeOffset: 500, sampledStart: sampled, floor: floor)
-            .joined(separator: "\n")
-        XCTAssertFalse(text.contains(ContextTime.describe(newest)), text)
-        XCTAssertTrue(text.contains("did not apply"), text)
-    }
-
-    /// The rendering half: whatever the probe found, the sampled date must never be presented as
-    /// the date the user's record begins, and the reader must be told that searching earlier works.
-    func testStatusPresentsTheProbeDepthAsASampleAndNotAsTheStartOfTheRecord() {
-        let sampled = epoch("2026-06-09")
-        let proven = epoch("2024-12-08")
-        let floor = Tools.HistoryFloor(
-            startedFrom: sampled,
-            provenOldest: proven,
-            emptyAtOrBefore: epoch("2024-06-09"),
-            probesUsed: 4,
-            filterIgnored: false,
-            haltedByFailure: false
-        )
-
-        let text = Tools.historyDepthLines(probeOffset: 500, sampledStart: sampled, floor: floor)
-            .joined(separator: "\n")
-
-        XCTAssertTrue(
-            text.contains(ContextTime.describe(sampled)), "the sample itself is still reported")
-        XCTAssertTrue(
-            text.contains(ContextTime.describe(proven)),
-            "status kept quiet about the older record the probe proved: \(text)")
-        XCTAssertTrue(
-            text.contains("not the start of the record"),
-            "the sample was presented as a fact about the user's history: \(text)")
-        XCTAssertTrue(
-            text.contains("`since`"),
-            "status did not tell the reader that searching earlier still works: \(text)")
-
-        // Without any deepening at all the framing must still hold — a probe is a probe.
-        let sampleOnly = Tools.historyDepthLines(probeOffset: 500, sampledStart: sampled, floor: nil)
-            .joined(separator: "\n")
-        XCTAssertTrue(sampleOnly.contains("not the start of the record"), sampleOnly)
-    }
-
-    /// An empty deep probe is ambiguous — few conversations, or one request that failed — and the
-    /// old wording asserted the first. It may not be reported as a count.
-    func testAnEmptyDeepProbeIsNotReportedAsACountOfTheAccount() {
-        let text = Tools.historyDepthLines(probeOffset: 500, sampledStart: nil, floor: nil)
-            .joined(separator: "\n")
+    func testAnEmptyHistoryProbeIsNotReportedAsAnAccountCount() {
+        let text = Tools.historySampleLine(probeOffset: 500, sampledStart: nil)
 
         XCTAssertTrue(text.contains("cannot tell which"), text)
         XCTAssertTrue(text.contains("not a count"), text)

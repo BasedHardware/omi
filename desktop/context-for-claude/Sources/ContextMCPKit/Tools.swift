@@ -1728,198 +1728,26 @@ extension Tools {
         return out.joined(separator: "\n")
     }
 
-    /// One answer to "does the account hold any conversation at or before this instant?".
-    ///
-    /// Three cases, not two: **a request that failed is not an empty account.** Folding them
-    /// together is how a rate-limited `status` call would end up printing "nothing before August
-    /// 2024" about an account with years of history before it — the same lie, one level down.
-    enum HistoryProbeAnswer: Equatable {
-        case found(Double)
-        case empty
-        case unavailable
-    }
-
-    /// What a bounded walk back through the account actually established, as opposed to sampled.
-    struct HistoryFloor: Equatable {
-        /// Where the walk began — the sampled date it was trying to get behind.
-        let startedFrom: Double
-        /// The oldest conversation start seen for real. Proof, not a sample. Equal to `startedFrom`
-        /// when the walk learned nothing older, which must not then be dressed up as proof.
-        let provenOldest: Double
-        /// An instant the account was asked about and found to hold nothing at or before it. With
-        /// `provenOldest` it brackets where the record begins.
-        let emptyAtOrBefore: Double?
-        let probesUsed: Int
-        /// True when a probe answered with something *newer* than the window it asked for, i.e. the
-        /// date filter was not applied. Nothing may be concluded from a filter that did not run.
-        let filterIgnored: Bool
-        /// True when the walk stopped because a request could not be read, rather than because it
-        /// had learned enough. The difference decides whether "no older records" may be implied.
-        let haltedByFailure: Bool
-    }
-
-    /// At most this many extra requests. `status` may not turn into a crawl of the account: the read
-    /// budget is 300 an hour and Claude is blocked on the answer.
-    static let deepeningProbeBudget = 4
-
-    /// Stop bisecting once the bracket is this tight. A month of uncertainty about where a
-    /// multi-year history began is not worth another request.
-    static let deepeningStopWindow: Double = 30 * 86_400
-
-    /// How far past the requested end a record may land before the filter counts as ignored. Omi's
-    /// list endpoint takes a datetime but some paths round to the day, and one day of slack must not
-    /// be mistaken for a server that dropped the filter entirely.
-    static let deepeningFilterTolerance: Double = 86_400
-
-    /// Walks back from a sampled date to find out how far the account *really* reaches.
-    ///
-    /// `OmiBackend.history()` samples one conversation `historyProbeOffset` back and dates it. That
-    /// date is a fact about the probe, not about the user: on a busy account 500 conversations is a
-    /// couple of months, while the account itself goes back years. Reported as a floor it understated
-    /// a real account by nearly two years, and a model that reads it as the start of the record will
-    /// decline to search earlier — the worst outcome this product has, because the data is right
-    /// there.
-    ///
-    /// So: ask the cheapest possible question a few times — "is there any conversation at or before
-    /// this instant?" — stepping the anchor back exponentially, then bisecting once a miss brackets
-    /// the start. Every hit is proof. Pure apart from `probe`, so the walk is testable without a
-    /// network.
-    static func deepenHistory(
-        from sampled: Double,
-        budget: Int = Tools.deepeningProbeBudget,
-        probe: (Double) -> HistoryProbeAnswer
-    ) -> HistoryFloor {
-        var proven = sampled
-        var empty: Double?
-        var used = 0
-        var halted = false
-        var step: Double = 365 * 86_400
-
-        while used < budget {
-            let anchor: Double
-            if let empty {
-                // A miss brackets the start; bisecting halves the uncertainty per request.
-                guard proven - empty > deepeningStopWindow else { break }
-                anchor = empty + (proven - empty) / 2
-            } else {
-                anchor = proven - step
-                step *= 2
-            }
-            used += 1
-
-            switch probe(anchor) {
-            case let .found(at) where at > anchor + deepeningFilterTolerance:
-                // The account answered with a conversation newer than the window asked for, so the
-                // date filter was not applied. Anything built on it would be a claim from a filter
-                // that did not run.
-                return HistoryFloor(
-                    startedFrom: sampled,
-                    provenOldest: proven,
-                    emptyAtOrBefore: empty,
-                    probesUsed: used,
-                    filterIgnored: true,
-                    haltedByFailure: false
-                )
-            case let .found(at) where at > 0:
-                proven = min(proven, at)
-            case .found:
-                // A record with no usable date proves nothing about depth and cannot be a bound.
-                halted = true
-            case .empty:
-                empty = anchor
-            case .unavailable:
-                halted = true
-            }
-            if halted { break }
-        }
-        return HistoryFloor(
-            startedFrom: sampled,
-            provenOldest: proven,
-            emptyAtOrBefore: empty,
-            probesUsed: used,
-            filterIgnored: false,
-            haltedByFailure: halted
-        )
-    }
-
-    /// How far back the account goes, reported as what it is: a sample, plus whatever a bounded
-    /// probe could prove.
-    ///
-    /// The wording this replaced printed the date of conversation number 501 and said the account
-    /// "reaches at least that far" — literally true, and read by every model as the date the user's
-    /// history begins. A sampling limit is a fact about the probe. Presenting one as a fact about
-    /// the user's life is the defect this whole file exists to avoid.
-    static func historyDepthLines(
-        probeOffset: Int,
-        sampledStart: Double?,
-        floor: HistoryFloor?
-    ) -> [String] {
-        var lines: [String] = []
+    /// One request is the whole budget for `status`: it establishes reachability and gives a bounded
+    /// sample without turning an informational tool into an account-history crawler. The sample is
+    /// deliberately never described as the beginning of the record.
+    static func historySampleLine(probeOffset: Int, sampledStart: Double?) -> String {
         let depth = number(probeOffset + 1)
-
         if let sampledStart, sampledStart > 0 {
-            lines.append("""
+            return """
             History depth — **this is a sample, not the start of the record.** Context for Claude \
             read a single conversation \(depth) back from the newest one: it starts at \
             \(ContextTime.describe(sampledStart)). That proves the account holds at least \(depth) \
             conversations and reaches at least that far back. It is where this probe stopped, not \
-            where the history stops.
-            """)
-        } else {
-            lines.append("""
-            History depth: the probe \(depth) conversations back came back with nothing. That means \
-            either the account holds fewer than \(depth) conversations **or** that one request did \
-            not succeed — this tool cannot tell which, so it is not a count of the user's history.
-            """)
+            where the history stops. `recall`, `conversations` and `screen` can still search earlier \
+            with `since`.
+            """
         }
-
-        if let floor, floor.probesUsed > 0 {
-            if floor.filterIgnored {
-                lines.append("""
-                A deeper date probe was attempted, but Omi answered it with a record newer than the \
-                window requested — the date filter did not apply, so nothing was concluded from it.
-                """)
-            } else {
-                // Only call it proof when the walk actually got behind the sample. Restating the
-                // sample as a "proven" floor would be the original defect wearing a new label.
-                var line = floor.provenOldest < floor.startedFrom
-                    ? """
-                    Probed further back with \(plural(floor.probesUsed, "extra request")): the \
-                    account still holds a conversation from \
-                    \(ContextTime.describe(floor.provenOldest)), which is proven rather than sampled.
-                    """
-                    : """
-                    Probed further back with \(plural(floor.probesUsed, "extra request")) without \
-                    finding a record older than the sample above.
-                    """
-                if let empty = floor.emptyAtOrBefore, !floor.haltedByFailure {
-                    line += """
-                     The account also answered that it holds nothing at or before \
-                    \(ContextTime.describe(empty)), so the record begins somewhere between those two \
-                    dates.
-                    """
-                } else if floor.haltedByFailure {
-                    line += """
-                     Probing stopped because a further request could not be read — that is a gap in \
-                    this check, not a bound on the history, which may go back much further.
-                    """
-                } else {
-                    line += """
-                     Probing stopped there to stay inside Omi's 300-reads-an-hour limit; the history \
-                    may go back further still.
-                    """
-                }
-                lines.append(line)
-            }
-        }
-
-        lines.append("""
-        Every date above is a probe result, not a boundary on what can be searched: `recall`, \
-        `conversations` and `screen` accept a `since` older than any of them and will read that far \
-        back. Never decline to look earlier — or tell the user their history starts here — because \
-        of a depth printed in this section.
-        """)
-        return lines
+        return """
+        History depth: the probe \(depth) conversations back came back with nothing. That means \
+        either the account holds fewer than \(depth) conversations **or** that one request did not \
+        succeed — this tool cannot tell which, so it is not a count of the user's history.
+        """
     }
 
     /// The other half of honesty: an unreachable account and an empty account must never read the
@@ -1948,29 +1776,14 @@ extension Tools {
             } else {
                 out.append("The account is reachable but holds no conversations yet.")
             }
-            // The offset probe is a *sample*, and the deepening walk is what stops it from being
-            // read as the beginning of the user's life. Both are only worth running once the
-            // account has answered at all.
-            var floor: HistoryFloor?
-            if let anchor = probe.atProbeOffset?.startedAt ?? probe.newest?.startedAt, anchor > 0 {
-                floor = deepenHistory(from: anchor) { at in
-                    let answer = backend.conversations(since: nil, until: at, limit: 1)
-                    guard let rows = answer.value else { return .unavailable }
-                    guard let oldest = rows.first else { return .empty }
-                    // A conversation that exists but carries no date is not an empty account.
-                    guard let startedAt = oldest.startedAt, startedAt > 0 else { return .unavailable }
-                    return .found(startedAt)
-                }
-            }
-            // Each of these is a paragraph in its own right; run together they read as one claim.
-            for line in historyDepthLines(
-                probeOffset: probe.probeOffset,
-                sampledStart: probe.atProbeOffset?.startedAt,
-                floor: floor
-            ) {
-                out.append("")
-                out.append(line)
-            }
+            // `status` is an informational, single-request account check. The bounded probe is
+            // already a sample and must stay a sample; walking/bisecting history here turns a
+            // status render into up to four hidden remote reads.
+            out.append("")
+            out.append(
+                historySampleLine(
+                    probeOffset: probe.probeOffset,
+                    sampledStart: probe.atProbeOffset?.startedAt))
             out.append("")
             if let range = backend.seenRange, range.oldest > 0 {
                 out.append("Oldest Omi record read in this session: \(ContextTime.describe(range.oldest)).")
