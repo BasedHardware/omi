@@ -1,0 +1,24 @@
+desktop/context-for-claude/Sources/ContextApp/Capture/ScreenWatcher.swift
+  s_b5d52d5f05403b::t_7017f79ba12555 387-411
+  s_b5d52d5f05403b::t_00c01b260080e3 368
+  s_b5d52d5f05403b::t_02bf7feb2c1afa 791,793-794,798-801,803
+  s_b5d52d5f05403b::t_966f55eed40b8d 852,857,866
+  s_b5d52d5f05403b::t_304a3cde11461c 810
+  s_b5d52d5f05403b::t_bffc9a74b30383 188,206,221,451,614,701-702,708,734,822
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "3bd02a4ea2f329106dd301caf72ca2549492d020",
+  "prompts": {},
+  "sessions": {
+    "s_b5d52d5f05403b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82d7239f-7b04-40bc-b1d8-8737cb48399a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
