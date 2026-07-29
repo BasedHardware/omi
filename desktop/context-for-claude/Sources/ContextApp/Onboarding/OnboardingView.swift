@@ -10,14 +10,10 @@ import SwiftUI
 /// the main actor anyway, and annotating them one at a time only invites the next one to be missed.
 @MainActor
 struct OnboardingView: View {
-    /// Five screens. Only `signIn` asks a question; `setup` runs itself.
-    ///
-    /// `value` earns the two asks that follow it. Before it existed, the second thing this app ever
-    /// said was "which account is this?" — a request for a login from something the user had been
-    /// told one sentence about. Saying what is recorded, and where it goes, is the part that makes
-    /// the microphone prompt reasonable rather than startling.
+    /// The connector is configured before account and permission prompts, so the first product
+    /// action is the one that makes Claude useful rather than another credential request.
     private enum Step {
-        case intro, value, signIn, setup, done
+        case intro, value, connector, signIn, setup, done
     }
 
     /// Fixed order. Microphone first because it is the one people expect; the system tap second
@@ -37,7 +33,9 @@ struct OnboardingView: View {
     @State private var reported = false
     @State private var needsRelaunch = false
 
-    @State private var registration: String?
+    @State private var connectorSurfaces: Set<ClaudeSurface> = []
+    @State private var connectorMessage: String?
+    @State private var configuringConnector = false
     @State private var modelProgress: Double?
     @State private var warmingModels = false
 
@@ -106,6 +104,7 @@ struct OnboardingView: View {
         switch step {
         case .intro: intro
         case .value: value
+        case .connector: connector
         case .signIn: signIn
         case .setup: setup
         case .done: done
@@ -158,7 +157,7 @@ struct OnboardingView: View {
                 .foregroundStyle(Ink.mid)
                 .fixedSize(horizontal: false, vertical: true)
 
-            InkButton("Go on") { go(to: firstAsk) }
+            InkButton("Go on") { go(to: .connector) }
                 .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -166,7 +165,78 @@ struct OnboardingView: View {
         .animation(stepAnimation, value: settled)
     }
 
-    // MARK: - 3. Sign in — before anything is recorded, not after
+    // MARK: - 3. Claude connector — local configuration before remote account setup
+
+    private var connector: some View {
+        let copy = OnboardingConnectorCopy(surfaces: connectorSurfaces)
+        return VStack(alignment: .leading, spacing: 18) {
+            Text(copy.title)
+                .inkStyle(.firstTitle)
+                .foregroundStyle(Ink.ink)
+
+            Text(copy.detail)
+                .inkStyle(.prose)
+                .foregroundStyle(Ink.mid)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let connectorMessage {
+                Text(connectorMessage)
+                    .inkStyle(.statusLabel)
+                    .foregroundStyle(Ink.faint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 12) {
+                InkButton(configuringConnector ? "Setting up…" : copy.action) { configureConnectorOrContinue() }
+                    .disabled(configuringConnector)
+                if connectorMessage != nil, connectorSurfaces.isEmpty {
+                    InkButton("Continue without Claude", kind: .secondary) { go(to: firstAsk) }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .opacity(settled ? 1 : 0)
+        .animation(stepAnimation, value: settled)
+    }
+
+    private func configureConnectorOrContinue() {
+        guard connectorSurfaces.isEmpty else {
+            go(to: firstAsk)
+            return
+        }
+        guard !configuringConnector else { return }
+        configuringConnector = true
+        Task { @MainActor in
+            let result = await Task.detached(priority: .userInitiated) { ClaudeRegistrar.register() }.value
+            connectorSurfaces = configuredSurfaces(from: result)
+            connectorMessage = connectorSurfaces.isEmpty
+                ? "No local Claude configuration was changed. You can continue and connect it later."
+                : "The connector was configured locally. It will be available when you open Claude."
+            configuringConnector = false
+        }
+    }
+
+    private func configuredSurfaces(from result: ClaudeRegistrar.Result) -> Set<ClaudeSurface> {
+        configuredSurfaces(claudeCode: result.claudeCode, claudeDesktop: result.claudeDesktop)
+    }
+
+    private func configuredSurfaces(claudeCode: Bool, claudeDesktop: Bool) -> Set<ClaudeSurface> {
+        var surfaces: Set<ClaudeSurface> = []
+        if claudeCode { surfaces.insert(.claudeCode) }
+        if claudeDesktop { surfaces.insert(.claudeDesktop) }
+        return surfaces
+    }
+
+    private func refreshConnectorStatus() {
+        Task { @MainActor in
+            let status = await Task.detached(priority: .utility) { ClaudeRegistrar.status() }.value
+            guard step == .connector else { return }
+            connectorSurfaces = configuredSurfaces(
+                claudeCode: status.claudeCode, claudeDesktop: status.claudeDesktop)
+        }
+    }
+
+    // MARK: - 4. Sign in — before anything is recorded, not after
 
     /// The one screen with a real choice on it. It exists because everything Context for Claude hears lands in
     /// an Omi account, and starting to record before knowing which account that is would be wrong.
@@ -256,12 +326,7 @@ struct OnboardingView: View {
                 }
             }
 
-            if let registration {
-                Text(registration)
-                    .inkStyle(.statusLabel)
-                    .foregroundStyle(Ink.faint)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onReceive(Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()) { _ in
@@ -353,7 +418,7 @@ struct OnboardingView: View {
 
     /// `value` reads as a list, the same as `setup`, so it takes the same full column and the same
     /// left edge. Centring a three-line list gives every line a different left margin.
-    private var isLeftAligned: Bool { step == .setup || step == .value }
+    private var isLeftAligned: Bool { step == .setup || step == .value || step == .connector }
 
     private var columnWidth: CGFloat {
         isLeftAligned ? InkLayout.permissionsMaxWidth : InkLayout.contentMaxWidth
@@ -372,6 +437,7 @@ struct OnboardingView: View {
         switch step {
         case .signIn: return auth.isSigningIn
         case .setup: return granting || warmingModels
+        case .connector: return configuringConnector
         case .intro, .value, .done: return false
         }
     }
@@ -397,6 +463,9 @@ struct OnboardingView: View {
             // The word-by-word reveal runs for 1200 ms; the step is not settled until it lands.
             scheduleSettle(after: 1.2)
         case .value:
+            scheduleSettle(after: 0.34)
+        case .connector:
+            refreshConnectorStatus()
             scheduleSettle(after: 0.34)
         case .signIn:
             scheduleSettle(after: 0.34)
@@ -493,7 +562,6 @@ struct OnboardingView: View {
                 refreshPermissions()
             }
 
-            startRegistration()
             if !LoginItem.isEnabled { _ = LoginItem.enable() }
             warmModels()
 
@@ -509,17 +577,7 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Registration and models
-
-    private func startRegistration() {
-        Task { @MainActor in
-            let message = await Task.detached(priority: .userInitiated) {
-                ClaudeRegistrar.register().message
-            }.value
-            registration = message
-            ContextLog.info("claude registration: \(message)", "onboarding")
-        }
-    }
+    // MARK: - Models
 
     /// The first model pull is ~600 MB. Warming it behind this step costs the user nothing;
     /// leaving it to the first conversation costs them the conversation.

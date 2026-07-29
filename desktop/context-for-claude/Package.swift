@@ -66,5 +66,10 @@ let package = Package(
             dependencies: ["ContextMCPKit"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .testTarget(
+            name: "ContextAppTests",
+            dependencies: ["ContextApp"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )
