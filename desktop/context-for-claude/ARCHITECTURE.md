@@ -28,10 +28,21 @@ structural decision follows from it:
 | `ContextMCPKit` | library | ContextCore | JSON-RPC framing, the seven tools, MCP handshake. |
 | `ContextMCP` | executable | ContextMCPKit | `main.swift`. Opens the store read-only, pumps stdio. |
 | `ContextApp` | executable | ContextCore, FluidAudio | Capture, transcription, menu bar, onboarding, Claude registration. |
+| `context_for_claude_windows_core_smoke` | Windows executable | `ContextForClaude::core`, swift-winrt | Calls the portable C ABI for a session decision and ranking score. |
 
 The library/executable split exists so the protocol layer is testable without a bundle and so the
 MCP binary stays free of every UI and capture dependency — it must start in milliseconds and hold no
 permissions.
+
+## Windows portable-core host
+
+`windows/` is a Windows-only CMake build. It builds the same `core/` library as the macOS Swift
+package, fetches swift-winrt at commit `79ffa65c`, and builds its generator alongside a native C++
+smoke CLI. The CLI exercises the C ABI; it does not generate a Swift/WinRT projection because this
+slice calls no WinRT API.
+
+Windows support ends at that portable-core proof. Mic and system-audio capture, screen capture,
+OCR, storage, MCP, and the macOS UI remain outside this slice.
 
 ## Data flow
 
@@ -105,6 +116,9 @@ scripts/build.sh            # build, bundle, sign, install to /Applications/Cont
 scripts/build.sh --run      # …and launch it
 swift test --package-path desktop/context-for-claude
 ```
+
+Windows validation is documented in `windows/README.md` and must run on Windows; configuring that
+project on macOS intentionally fails before it fetches Windows-only dependencies.
 
 Signed with the local `Omi Local Dev Signing` identity, never ad-hoc — ad-hoc signing resets Screen
 Recording permission for every Omi app on the machine.
