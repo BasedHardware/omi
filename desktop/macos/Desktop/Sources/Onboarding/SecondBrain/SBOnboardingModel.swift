@@ -2,6 +2,16 @@ import AppKit
 import Combine
 import Foundation
 
+enum SBOnboardingLanguageCopy {
+  static let question = "What language should Omi listen and reply in?"
+  static let detectedLanguageDetail = "· detected from your Mac"
+  static let changeSpokenLanguageAction = "Change spoken language"
+
+  static func continueAction(for language: String) -> String {
+    "Continue in \(language)"
+  }
+}
+
 /// Drives the Second Brain conversational onboarding: a real chat with Omi that
 /// streams word-by-word, collects answers, and performs the SAME live side-effects
 /// as the legacy wizard (name/language → backend, every permission, the summon
@@ -13,6 +23,24 @@ import Foundation
 /// `SBOnboardingModel+Steps.swift`.
 @MainActor
 final class SBOnboardingModel: ObservableObject {
+  enum CaptureSelection: Equatable {
+    case onlyDuringMeetings
+    case continuous
+
+    var systemAudioCaptureMode: AssistantSettings.SystemAudioCaptureMode {
+      switch self {
+      case .onlyDuringMeetings: .onlyDuringMeetings
+      case .continuous: .always
+      }
+    }
+
+    var startsListeningImmediately: Bool {
+      self == .continuous
+    }
+  }
+
+  static let defaultCaptureSelection: CaptureSelection = .onlyDuringMeetings
+
   enum Step: Int, CaseIterable {
     case promise, name, howHeard, language, role
     case mic, systemAudio, screen, files, accessibility, automation
@@ -32,6 +60,22 @@ final class SBOnboardingModel: ObservableObject {
 
   enum PermState: Equatable { case ask, waiting, on }
 
+  enum LocalFileProfileState: Equatable {
+    case idle
+    case scanning
+    case complete(fileCount: Int, memoryCount: Int, deniedFolders: [String])
+    case failed(message: String)
+
+    var isTerminal: Bool {
+      switch self {
+      case .complete, .failed: true
+      case .idle, .scanning: false
+      }
+    }
+  }
+
+  typealias FileScanRunner = @MainActor (AppState) async -> LocalFileProfileState
+
   @Published var step: Step = .promise
   @Published var thread: [Msg] = []
   /// The current Omi message streaming in (nil once committed).
@@ -42,7 +86,9 @@ final class SBOnboardingModel: ObservableObject {
   // Per-step answers / state
   @Published var nameDraft = ""
   @Published var languageDraft = ""
+  @Published private(set) var languageIsDetectedFromMac = false
   @Published var languageName: String?
+  @Published var howHeard: String?
   @Published var roleDraft = ""
   @Published var role: String?
 
@@ -53,6 +99,7 @@ final class SBOnboardingModel: ObservableObject {
   @Published var fdaState: PermState = .ask  // full disk access (files)
   @Published var accState: PermState = .ask  // accessibility
   @Published var autoState: PermState = .ask  // automation / Apple Events
+  @Published var localFileProfileState: LocalFileProfileState = .idle
 
   var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
 
@@ -68,6 +115,10 @@ final class SBOnboardingModel: ObservableObject {
   /// The chosen shortcut + which mechanism it uses (key hotkey vs modifier-hold).
   var chosenShortcut: ShortcutSettings.KeyboardShortcut?
   var chosenShortcutIsPTT = false
+  /// Each shortcut stage keeps its own choice so stepping back does not make a
+  /// user re-select a key they already confirmed.
+  var openShortcutSelection: ShortcutSettings.KeyboardShortcut?
+  var talkShortcutSelection: ShortcutSettings.KeyboardShortcut?
   var shortcutMonitors: [Any] = []
   /// Main menu stashed while the shortcut step's key monitor is armed (menu key
   /// equivalents like ⌘O would otherwise swallow the press before we see it).
@@ -82,8 +133,17 @@ final class SBOnboardingModel: ObservableObject {
   /// response). The screen-demo Continue button stays hidden until then, so the
   /// user can't skip past before seeing the "fun part" work.
   @Published var screenDemoDone = false
+  /// The hold-to-talk demo is armed only after the bridge has initialized its
+  /// kernel context. Showing the chord sooner invites a first PTT turn while its
+  /// only response route is still cold.
+  @Published var screenDemoPTTReady = false
+  /// Bridge startup can fail before an authenticated response route exists. In
+  /// that state, leave PTT unarmed and offer an explicit retry or skip instead
+  /// of presenting a shortcut which cannot answer.
+  @Published var screenDemoPTTUnavailable = false
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
+  var screenDemoSetupTask: Task<Void, Never>?
 
   // Connectors — keyed by a stable id ("openclaw", "calendar", …) → state string
   // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
@@ -96,8 +156,18 @@ final class SBOnboardingModel: ObservableObject {
 
   unowned let appState: AppState
   let chatProvider: ChatProvider
+  /// The same persisted connector authority the post-onboarding Home and Apps
+  /// surfaces read. A context row is not connected until this store records a
+  /// completed import, never merely because a browser session passed a probe.
+  let importConnectorStatusStore: ImportConnectorStatusStore?
+  /// Backend writes for editable answers are per-field serialized. Revisiting a
+  /// question never lets an earlier request finish after the user's revision.
+  private let answerWriteGate = OnboardingAnswerWriteGate()
+  let fileScanRunner: FileScanRunner
   private let onComplete: (() -> Void)?
   var streamTask: Task<Void, Never>?
+  var localFileScanTask: Task<Void, Never>?
+  var localFileScanID: UUID?
   /// Permission-grant pollers, one per permission key. Keyed so requesting a
   /// second permission (the meetings "both" mic+system-audio step) never cancels
   /// a still-running poll for the first and strands it on "macOS…".
@@ -110,9 +180,50 @@ final class SBOnboardingModel: ObservableObject {
   /// only ever written on the main actor and `removeObserver` is thread-safe.
   nonisolated(unsafe) private var nameObserver: NSObjectProtocol?
 
-  init(appState: AppState, chatProvider: ChatProvider, onComplete: (() -> Void)?) {
+  init(
+    appState: AppState,
+    chatProvider: ChatProvider,
+    importConnectorStatusStore: ImportConnectorStatusStore? = nil,
+    fileScanRunner: @escaping FileScanRunner = { appState in
+      ChatToolExecutor.onboardingAppState = appState
+      guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+        return .failed(message: "Please sign in again before building your local profile.")
+      }
+      let outcome = await ChatToolExecutor.scanLocalFiles(
+        expectedOwnerID: authorization.ownerID,
+        authorizationSnapshot: authorization)
+      guard !Task.isCancelled, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        return .failed(message: "Your account changed before Omi could save your local profile.")
+      }
+      guard outcome.didCompleteSuccessfully, outcome.hasReadableUserFileTarget else {
+        return .failed(message: ConnectorImportOperations.localFilesFailureLine(for: outcome))
+      }
+
+      // Preserve the legacy post-scan owner: it derives the indexed-file
+      // snapshot, writes aggregate local-file profile evidence, and updates the
+      // knowledge graph. The conversational flow merely presents its outcome.
+      let coordinator = OnboardingPagedIntroCoordinator()
+      await coordinator.refreshSnapshotIfAvailable(
+        expectedOwnerID: authorization.ownerID,
+        authorizationSnapshot: authorization)
+      guard !Task.isCancelled, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        return .failed(message: "Your account changed before Omi could save your local profile.")
+      }
+      let fileCount = coordinator.scanSnapshot?.fileCount ?? outcome.indexedFileCount
+      if fileCount > 0, coordinator.localFileMemoriesSaved == 0 {
+        return .failed(message: "Your files were indexed, but Omi couldn't save your profile memories. Try again.")
+      }
+      return .complete(
+        fileCount: fileCount,
+        memoryCount: coordinator.localFileMemoriesSaved,
+        deniedFolders: outcome.deniedUserFolders)
+    },
+    onComplete: (() -> Void)?
+  ) {
     self.appState = appState
     self.chatProvider = chatProvider
+    self.importConnectorStatusStore = importConnectorStatusStore
+    self.fileScanRunner = fileScanRunner
     self.onComplete = onComplete
     // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
     // journal surface so they never pollute the real Chat tab. Cleared on
@@ -155,7 +266,7 @@ final class SBOnboardingModel: ObservableObject {
     case .name: return "What should I call you?"
     case .howHeard: return "Quick one. How did you hear about Omi?"
     case .language:
-      return "What language do you speak? I'll listen and reply in it."
+      return SBOnboardingLanguageCopy.question
     case .role:
       return
         "Nice to meet you, \(name). What do your days look like? Pick the closest, or tell me. It shapes what I make for you."
@@ -183,8 +294,6 @@ final class SBOnboardingModel: ObservableObject {
     case .context:
       return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
-      // The shortcut chord is rendered as keycap chips in `captureWidget` (a
-      // streamed Text can't host inline keycap views), so it's omitted here.
       return
         "You're all set, \(name). One last thing: should I listen all the time, or only during your meetings?"
     }
@@ -197,10 +306,6 @@ final class SBOnboardingModel: ObservableObject {
     if !stored.isEmpty { return stored }
     return "friend"
   }
-
-  /// The chosen open-Omi chord as individual tokens, rendered as keycap chips in
-  /// `captureWidget` (e.g. ⌘ + O) rather than plain glyphs in the message copy.
-  var summonTokens: [String] { ShortcutSettings.shared.askOmiShortcut.displayTokens }
 
   // MARK: lifecycle
 
@@ -319,12 +424,48 @@ final class SBOnboardingModel: ObservableObject {
     streamMessage(for: target)
   }
 
+  /// Return to the immediately preceding onboarding stage without discarding
+  /// any answer the user already supplied. The conversational transcript stays
+  /// intact; the re-rendered widget is the editable source of truth for that
+  /// stage, so a user can revise (for example) Student to Founder.
+  func goBack() {
+    guard let previous = Step(rawValue: step.rawValue - 1) else { return }
+    teardownStep(step)
+    cancelPermissionPollForCurrentStep()
+    rehydrateDrafts()
+    step = previous
+    UserDefaults.standard.set(previous.rawValue, forKey: Self.resumeStepKey)
+    streamMessage(for: previous)
+  }
+
+  var canGoBack: Bool {
+    step != .promise
+  }
+
   /// Tear down any live monitors/tasks a step installed before leaving it.
   private func teardownStep(_ step: Step) {
     switch step {
+    case .files:
+      localFileScanTask?.cancel()
+      if case .scanning = localFileProfileState {
+        localFileProfileState = .idle
+      }
     case .shortcutOpen, .shortcutTalk: disarmShortcutSummon()
     case .screenDemo: teardownVoiceDemo()
     default: break
+    }
+  }
+
+  /// A permission poll is scoped to the page that requested it. If Back leaves
+  /// that page while macOS is still open, stop the stale poll so a late grant
+  /// cannot overwrite the newly displayed page's state. The system grant itself
+  /// is still observed if the user returns to this page.
+  private func cancelPermissionPollForCurrentStep() {
+    guard let key = permissionKey(for: step) else { return }
+    pollTasks[key]?.cancel()
+    pollTasks[key] = nil
+    if permState(key) == .waiting {
+      resetPermToAsk(key)
     }
   }
 
@@ -336,9 +477,16 @@ final class SBOnboardingModel: ObservableObject {
       let n = AuthService.shared.givenName.trimmingCharacters(in: .whitespaces)
       if !n.isEmpty { nameDraft = n }
     }
-    if roleDraft.isEmpty, role == nil {
+    if role == nil {
       let saved = UserDefaults.standard.string(forKey: .onboardingRole) ?? ""
-      if !saved.isEmpty { roleDraft = saved }
+      if !saved.isEmpty {
+        role = saved
+        if roleDraft.isEmpty { roleDraft = saved }
+      }
+    }
+    if howHeard == nil {
+      let saved = UserDefaults.standard.string(forKey: DefaultsKey.onboardingHowDidYouHearSource)
+      if let saved, !saved.isEmpty { howHeard = saved }
     }
     if languageDraft.isEmpty, languageName == nil, let code = AssistantSettings.shared.voiceLanguages.first,
       let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code })
@@ -354,16 +502,21 @@ final class SBOnboardingModel: ObservableObject {
   func answerName() {
     let trimmed = nameDraft.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return }
-    Task { await AuthService.shared.updateGivenName(trimmed) }
+    answerWriteGate.enqueue(.name) { [trimmed] in
+      await AuthService.shared.updateGivenName(trimmed)
+    }
     advance(userAnswer: trimmed, to: .howHeard)
   }
 
   /// Record the acquisition source (analytics + backend, like the legacy step),
   /// then move on.
   func pickHowHeard(_ source: String) {
+    howHeard = source
     UserDefaults.standard.set(source, forKey: DefaultsKey.onboardingHowDidYouHearSource)
     AnalyticsManager.shared.onboardingHowDidYouHear(source: source)
-    Task { try? await APIClient.shared.updateOnboardingAcquisitionSource(source) }
+    answerWriteGate.enqueue(.acquisitionSource) { [source] in
+      _ = try? await APIClient.shared.updateOnboardingAcquisitionSource(source)
+    }
     advance(userAnswer: source, to: .language)
   }
 
@@ -371,19 +524,30 @@ final class SBOnboardingModel: ObservableObject {
   /// confirmLanguages, single-primary). Advances optimistically.
   func pickLanguage(code: String, name: String) {
     languageName = name
+    languageDraft = name
+    languageIsDetectedFromMac = false
     AssistantSettings.shared.voiceLanguages = [code]
-    Task { _ = try? await APIClient.shared.updateUserLanguage(code) }
+    answerWriteGate.enqueue(.language) { [code] in
+      _ = try? await APIClient.shared.updateUserLanguage(code)
+    }
     advance(userAnswer: name, to: .role)
   }
 
   /// Auto-detect the Mac's language and pre-fill it so the picker defaults to it
   /// (the user can still type to change). Only fills an empty field once.
   func prefillDetectedLanguage() {
-    guard languageDraft.isEmpty, languageName == nil else { return }
     let raw = Locale.current.language.languageCode?.identifier ?? Locale.preferredLanguages.first ?? "en"
+    prefillDetectedLanguage(from: raw)
+  }
+
+  /// Records that the draft came from the Mac locale, rather than a saved or
+  /// fallback language, so the UI can accurately disclose its source.
+  func prefillDetectedLanguage(from raw: String) {
+    guard languageDraft.isEmpty, languageName == nil else { return }
     let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
     if let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code }) {
       languageDraft = match.name
+      languageIsDetectedFromMac = true
     }
   }
 
@@ -409,14 +573,9 @@ final class SBOnboardingModel: ObservableObject {
 
   // MARK: capture choice → completes onboarding
 
-  func captureContinuous() {
-    AssistantSettings.shared.systemAudioCaptureMode = .always
-    complete(startListening: true)
-  }
-
-  func captureMeetingsOnly() {
-    AssistantSettings.shared.systemAudioCaptureMode = .onlyDuringMeetings
-    complete(startListening: false)
+  func capture(_ selection: CaptureSelection) {
+    AssistantSettings.shared.systemAudioCaptureMode = selection.systemAudioCaptureMode
+    complete(startListening: selection.startsListeningImmediately)
   }
 
   /// Skip the rest of onboarding: mark it complete and drop straight to the Chat
@@ -515,12 +674,14 @@ final class SBOnboardingModel: ObservableObject {
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.
   private func teardownAll() {
     streamTask?.cancel()
+    localFileScanTask?.cancel()
+    localFileScanTask = nil
+    localFileScanID = nil
     for pollTask in pollTasks.values {
       pollTask.cancel()
     }
     pollTasks.removeAll()
     disarmShortcutSummon()
     teardownVoiceDemo()
-    FloatingControlBarManager.shared.hide()
   }
 }

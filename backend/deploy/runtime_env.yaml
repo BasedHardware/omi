@@ -227,14 +227,13 @@ environments:
           STT_SERVICE_MODELS:
             value: modulate-velma-2,parakeet
             category: stt_policy
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware-dev
+            category: runtime
           GOOGLE_CLIENT_SECRET:
             secret:
               name: dev-omi-backend-secrets
               key: GOOGLE_CLIENT_SECRET
-          GOOGLE_APPLICATION_CREDENTIALS:
-            secret:
-              name: dev-omi-backend-secrets
-              key: GOOGLE_APPLICATION_CREDENTIALS
           ENCRYPTION_SECRET:
             secret:
               name: dev-omi-backend-secrets

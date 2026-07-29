@@ -19,21 +19,7 @@ struct DesktopTopBar: View {
   @State private var memoryDropdownTask: Task<Void, Never>?
   @State private var isMemoryButtonHovered = false
 
-  private struct NavItem: Identifiable {
-    let index: Int
-    let title: String
-    let icon: String
-    var id: Int { index }
-  }
-
-  private var navItems: [NavItem] {
-    [
-      NavItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
-      NavItem(index: SidebarNavItem.conversations.rawValue, title: "Memory", icon: "brain"),
-      NavItem(index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist"),
-      NavItem(index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill"),
-    ]
-  }
+  private var navItems: [TopNavigationItem] { TopNavigationRoutes.primaryItems }
 
   private var newConversations: Int {
     appState.conversations.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
@@ -46,17 +32,61 @@ struct DesktopTopBar: View {
   }
 
   var body: some View {
-    HStack(spacing: OmiSpacing.md) {
-      navPills
-      Spacer(minLength: OmiSpacing.md)
-      CaptureListeningControls(appState: appState, onRewind: onRewind)
-      settingsButton
-    }
+    TopNavigationBarLayout(
+      expandedNavigation: { navPills },
+      compactNavigation: { compactNavigationMenu },
+      persistentControls: { CaptureListeningControls(appState: appState, onRewind: onRewind) },
+      settings: { settingsButton }
+    )
+    .frame(maxWidth: .infinity)
     .frame(height: 44)
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
     .onDisappear {
       memoryDropdownTask?.cancel()
+    }
+  }
+
+  /// The complete primary navigation remains available when the full set of
+  /// fixed-width pills will not fit beside the persistent status controls.
+  private var compactNavigationMenu: some View {
+    Menu {
+      ForEach(navItems) { item in
+        compactNavigationItem(item)
+      }
+    } label: {
+      Label("Navigate", systemImage: "sidebar.left")
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .frame(height: 32)
+    }
+    .help("Navigate")
+    .accessibilityLabel("Navigate")
+    .accessibilityIdentifier("compact-navigation-menu")
+  }
+
+  @ViewBuilder
+  private func compactNavigationItem(_ item: TopNavigationItem) -> some View {
+    if item.index == SidebarNavItem.conversations.rawValue {
+      Menu {
+        ForEach(TopNavigationRoutes.memoryDestinations) { destination in
+          Button {
+            selectMemoryDestination(destination)
+          } label: {
+            Label(destination.title, systemImage: destination.icon)
+          }
+        }
+      } label: {
+        Label(item.title, systemImage: item.icon)
+      }
+    } else {
+      Button {
+        dismissMemoryDropdown()
+        OmiMotion.withGated(.easeOut(duration: 0.08)) {
+          selectedIndex = item.index
+        }
+      } label: {
+        Label(item.title, systemImage: item.icon)
+      }
     }
   }
 
@@ -121,7 +151,7 @@ struct DesktopTopBar: View {
     }
   }
 
-  private func memoryNavigationItem(_ item: NavItem) -> some View {
+  private func memoryNavigationItem(_ item: TopNavigationItem) -> some View {
     let isSelected =
       selectedIndex == item.index && memoryDestination == .memories
     let badgeCount = newCount(for: item)
@@ -227,13 +257,146 @@ struct DesktopTopBar: View {
   /// New-item count to badge on a nav button (since Omi was last in front).
   /// The Memory hub holds both memories and conversations, so its badge sums
   /// them; Tasks badges new tasks. Home/Apps have no counter.
-  private func newCount(for item: NavItem) -> Int {
+  private func newCount(for item: TopNavigationItem) -> Int {
     switch item.index {
     case SidebarNavItem.conversations.rawValue: return newMemories + newConversations
     case SidebarNavItem.tasks.rawValue: return newTasks
     default: return 0
     }
   }
+}
+
+/// Keeps the persistent capture and settings controls visible while replacing
+/// only primary navigation with its compact menu when a whole top-bar row no
+/// longer fits. Keeping the alternatives at this level means SwiftUI measures
+/// the complete row instead of an unconstrained child of an `HStack`.
+struct TopNavigationBarLayout<
+  ExpandedNavigation: View,
+  CompactNavigation: View,
+  PersistentControls: View,
+  Settings: View
+>: View {
+  let expandedNavigation: ExpandedNavigation
+  let compactNavigation: CompactNavigation
+  let persistentControls: PersistentControls
+  let settings: Settings
+
+  init(
+    @ViewBuilder expandedNavigation: () -> ExpandedNavigation,
+    @ViewBuilder compactNavigation: () -> CompactNavigation,
+    @ViewBuilder persistentControls: () -> PersistentControls,
+    @ViewBuilder settings: () -> Settings
+  ) {
+    self.expandedNavigation = expandedNavigation()
+    self.compactNavigation = compactNavigation()
+    self.persistentControls = persistentControls()
+    self.settings = settings()
+  }
+
+  var body: some View {
+    ViewThatFits(in: .horizontal) {
+      TopNavigationBarRowLayout {
+        expandedNavigation
+        persistentControls
+        settings
+      }
+      TopNavigationBarRowLayout {
+        compactNavigation
+        persistentControls
+        settings
+      }
+    }
+    .frame(maxWidth: .infinity)
+  }
+}
+
+/// Measures a top-bar row at its no-overflow width, then pins its persistent
+/// controls to the trailing edge once `ViewThatFits` has selected it.
+private struct TopNavigationBarRowLayout: Layout {
+  private static let navigationToControlsSpacing = OmiSpacing.md * 3
+  private static let controlsToSettingsSpacing = OmiSpacing.md
+
+  func sizeThatFits(
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout ()
+  ) -> CGSize {
+    let sizes = sizes(for: subviews)
+    return CGSize(
+      width: sizes.navigation.width + Self.navigationToControlsSpacing + sizes.controls.width
+        + Self.controlsToSettingsSpacing + sizes.settings.width,
+      height: max(sizes.navigation.height, sizes.controls.height, sizes.settings.height)
+    )
+  }
+
+  func placeSubviews(
+    in bounds: CGRect,
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout ()
+  ) {
+    let sizes = sizes(for: subviews)
+    guard subviews.count == 3 else { return }
+
+    let settingsX = bounds.maxX
+    let controlsX = settingsX - sizes.settings.width - Self.controlsToSettingsSpacing
+
+    // Cap navigation to the space available before the persistent controls so
+    // that an enlarged font scale (where even the compact fallback overflows)
+    // constrains navigation instead of overlapping capture/settings controls.
+    let availableNavigationWidth = max(
+      0,
+      controlsX - Self.navigationToControlsSpacing - bounds.minX
+    )
+    let navigationProposal = CGSize(
+      width: min(sizes.navigation.width, availableNavigationWidth),
+      height: sizes.navigation.height
+    )
+
+    subviews[0].place(
+      at: CGPoint(x: bounds.minX, y: bounds.midY),
+      anchor: .leading,
+      proposal: ProposedViewSize(navigationProposal)
+    )
+    subviews[1].place(
+      at: CGPoint(x: controlsX, y: bounds.midY),
+      anchor: .trailing,
+      proposal: ProposedViewSize(sizes.controls)
+    )
+    subviews[2].place(
+      at: CGPoint(x: settingsX, y: bounds.midY),
+      anchor: .trailing,
+      proposal: ProposedViewSize(sizes.settings)
+    )
+  }
+
+  private func sizes(for subviews: Subviews) -> (navigation: CGSize, controls: CGSize, settings: CGSize) {
+    guard subviews.count == 3 else { return (.zero, .zero, .zero) }
+    return (
+      subviews[0].sizeThatFits(.unspecified),
+      subviews[1].sizeThatFits(.unspecified),
+      subviews[2].sizeThatFits(.unspecified)
+    )
+  }
+}
+
+struct TopNavigationItem: Identifiable, Equatable {
+  let index: Int
+  let title: String
+  let icon: String
+
+  var id: Int { index }
+}
+
+enum TopNavigationRoutes {
+  static let primaryItems = [
+    TopNavigationItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
+    TopNavigationItem(index: SidebarNavItem.conversations.rawValue, title: "Memory", icon: "brain"),
+    TopNavigationItem(index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist"),
+    TopNavigationItem(index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill"),
+  ]
+
+  static let memoryDestinations = MemoryHubDestination.allCases
 }
 
 enum TopNavigationPillMetrics {

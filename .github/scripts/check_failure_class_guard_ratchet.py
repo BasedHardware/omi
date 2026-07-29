@@ -65,7 +65,7 @@ def run_git(root: Path, *args: str) -> str:
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
+        encoding="utf-8",
     )
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()

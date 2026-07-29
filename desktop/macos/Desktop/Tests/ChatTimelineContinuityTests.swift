@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 
 @testable import Omi_Computer
@@ -1295,11 +1297,12 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
   }
 
-  func testChatSelectionDoesNotWrapStackChromeInSelectionOverlay() throws {
+  func testChatSelectionIsLimitedToSettledMessageBodies() throws {
     // Mechanical guard for the omi-chat-continuity main-thread freeze:
     // ChatMessagesView used to apply `.textSelection(.enabled)` on the LazyVStack,
     // wrapping every agent-card header Text in SelectionOverlay and thrashing
-    // GraphHost via setFont → invalidateIntrinsicContentSize.
+    // GraphHost via setFont → invalidateIntrinsicContentSize. Settled message
+    // bodies may opt in; streaming content and stack chrome must not.
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -1321,18 +1324,69 @@ final class ChatTimelineContinuityTests: XCTestCase {
       messagesSource.contains(".textSelection(.enabled)"),
       "chat message stack must not enable selection on chrome Text views"
     )
-    XCTAssertFalse(
-      markdownSource.contains(".textSelection(.enabled)"),
-      "chat Markdown must not create SelectionOverlay views that can loop while scrolling"
+    XCTAssertTrue(
+      markdownSource.contains("if textSelectionEnabled {")
+        && markdownSource.contains(".textSelection(.enabled)")
+        && markdownSource.contains(".textSelection(.disabled)"),
+      "the markdown boundary must make body selection an explicit opt-in"
     )
     XCTAssertTrue(
-      markdownSource.contains(".textSelection(.disabled)"),
-      "the OmiMarkdown boundary must explicitly suppress inherited text selection"
+      bubbleSource.contains("isStreaming: message.isStreaming")
+        && markdownSource.contains("self.textSelectionEnabled = !isStreaming"),
+      "main-chat message bodies must enable native selection only after streaming finishes"
     )
     XCTAssertTrue(
       bubbleSource.contains(".textSelection(.disabled)"),
       "agent card headers must disable SelectionOverlay on truncated snippets"
     )
+  }
+
+  func testSettledMessageBodyEnablesSelectionWhileStreamingBodyDoesNot() {
+    // Behavioral coverage for the production selection branch. The source
+    // inspection tripwire above guards the forbidden patterns; this test
+    // exercises the API the chat surface uses and verifies that settled
+    // messages opt into selection while streaming messages do not.
+    let settled = OmiMarkdown(text: "Completed response", sender: .ai, isStreaming: false)
+    XCTAssertTrue(
+      settled.textSelectionEnabled,
+      "settled message bodies must enable native selection"
+    )
+
+    let streaming = OmiMarkdown(text: "Partial…", sender: .ai, isStreaming: true)
+    XCTAssertFalse(
+      streaming.textSelectionEnabled,
+      "streaming message bodies must not create SelectionOverlay views"
+    )
+  }
+
+  func testSelectableMarkdownRendersWithStableLayout() {
+    // Render a settled (selectable) message body in a real hosting view and
+    // verify the SelectionOverlay-backed content produces a finite, stable size
+    // across layout passes — the regression proxy for the prior layout loop.
+    let body = """
+      This is a completed assistant response with **bold**, `code`, and a list:
+
+      - First point
+      - Second point
+
+      It must remain selectable without reintroducing the scroll layout loop.
+      """
+    let host = NSHostingView(
+      rootView: OmiMarkdown(text: body, sender: .ai, isStreaming: false)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: 480, height: 400)
+    host.layoutSubtreeIfNeeded()
+
+    let size = host.fittingSize
+    XCTAssertTrue(size.width.isFinite, "selectable body width must be finite")
+    XCTAssertTrue(size.height.isFinite, "selectable body height must be finite")
+    XCTAssertGreaterThan(size.height, 0, "selectable body must produce visible content")
+
+    // Second pass — size must not diverge (the original SelectionOverlay loop
+    // thrashed setFont → invalidateIntrinsicContentSize on every layout pass).
+    host.layoutSubtreeIfNeeded()
+    let sizeAfterRelayout = host.fittingSize
+    XCTAssertEqual(size, sizeAfterRelayout, "selectable body layout must converge")
   }
 
   func testCanonicalSurfacesBindSharedProviderMessages() throws {

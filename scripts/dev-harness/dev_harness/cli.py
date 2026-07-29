@@ -917,9 +917,16 @@ def cmd_summary(args: argparse.Namespace) -> int:
 
 
 def _signal_owned_process_group(pid: int, service: str) -> None:
+    # Use SIGTERM (not SIGINT) so Python services receive a clean
+    # shutdown signal instead of KeyboardInterrupt.  SIGINT triggers
+    # Python's default signal handler which cancels background tasks and
+    # raises KeyboardInterrupt — this caused qualification failures when
+    # dev-down sent SIGINT to a healthy backend whose parent subshell had
+    # already exited due to an unrelated desktop-launch failure.
+    # See FC-qualification-sigint-cascade.
     try:
-        os.killpg(pid, signal.SIGINT)
-        print(f"{service}: sent SIGINT to process group {pid}")
+        os.killpg(pid, signal.SIGTERM)
+        print(f"{service}: sent SIGTERM to process group {pid}")
     except ProcessLookupError:
         return
     except PermissionError as exc:

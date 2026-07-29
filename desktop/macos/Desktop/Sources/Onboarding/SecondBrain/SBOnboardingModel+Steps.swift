@@ -7,6 +7,15 @@ import Foundation
 
 extension SBOnboardingModel {
   func requestPerm(_ key: String) {
+    // The user may have changed a grant in System Settings while this step was
+    // onscreen. Re-check it before opening another pane or asking macOS again.
+    refreshPermCheck(key)
+    if isGranted(key) {
+      setPermOn(key)
+      autoAdvanceIfCurrent(key)
+      return
+    }
+
     switch key {
     case "microphone":
       micState = .waiting
@@ -115,26 +124,30 @@ extension SBOnboardingModel {
     pollTasks["system_audio"]?.cancel()
     pollTasks["system_audio"] = Task { [weak self] in
       for _ in 0..<40 {  // ~20s
-        try? await Task.sleep(nanoseconds: 500_000_000)
         guard let self, !Task.isCancelled else { return }
         // Skipping this step is an explicit choice not to surface its consent.
         // Never let a late Screen Recording grant trigger the modal elsewhere.
         guard self.step == .systemAudio else { return }
         self.appState.checkScreenRecordingPermission()
-        guard self.appState.hasScreenRecordingPermission else { continue }
+        if self.appState.hasScreenRecordingPermission {
+          // A real process-tap attempt is the only truthful preflight for
+          // system audio. It completes without another prompt when consent was
+          // already granted, so reconcile it before asking the user again.
+          let granted = await self.appState.primeSystemAudioPermission()
+          guard !Task.isCancelled else { return }
+          guard granted else {
+            self.resetPermToAsk("system_audio")
+            return
+          }
 
-        let granted = await self.appState.primeSystemAudioPermission()
-        guard !Task.isCancelled else { return }
-        guard granted else {
-          self.resetPermToAsk("system_audio")
+          self.setPermOn("system_audio")
+          try? await Task.sleep(nanoseconds: 600_000_000)
+          guard !Task.isCancelled else { return }
+          self.autoAdvanceIfCurrent("system_audio")
           return
         }
 
-        self.setPermOn("system_audio")
-        try? await Task.sleep(nanoseconds: 600_000_000)
-        guard !Task.isCancelled else { return }
-        self.autoAdvanceIfCurrent("system_audio")
-        return
+        try? await Task.sleep(nanoseconds: 500_000_000)
       }
 
       guard let self, !Task.isCancelled else { return }
@@ -260,7 +273,57 @@ extension SBOnboardingModel {
   func answerMic() { advance(userAnswer: micState == .on ? "Allowed" : "Skip", to: .systemAudio) }
   func answerSystemAudio() { advance(userAnswer: sysState == .on ? "Allowed" : "Skip", to: .screen) }
   func answerScreen() { advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files) }
-  func answerFiles() { advance(userAnswer: fdaState == .on ? "Allowed" : "Skip", to: .accessibility) }
+  /// Restores the legacy Files-stage contract: scan what is readable after the
+  /// Full Disk Access choice, then form the aggregate local-file memories
+  /// before moving on. A skipped FDA grant still scans folders macOS permits.
+  func answerFiles() {
+    switch localFileProfileState {
+    case .idle:
+      thread.append(Msg(isOmi: false, text: fdaState == .on ? "Allowed" : "Skip"))
+      startLocalFileScan()
+    case .scanning:
+      break
+    case .complete, .failed:
+      finishFilesStep()
+    }
+  }
+
+  func startLocalFileScan() {
+    guard case .idle = localFileProfileState, localFileScanTask == nil else { return }
+    localFileProfileState = .scanning
+    let taskID = UUID()
+    localFileScanID = taskID
+    localFileScanTask = Task { [weak self] in
+      guard let self else { return }
+      defer {
+        if self.localFileScanID == taskID {
+          self.localFileScanTask = nil
+          self.localFileScanID = nil
+        }
+      }
+      let result = await self.fileScanRunner(self.appState)
+      guard !Task.isCancelled, self.step == .files, self.localFileScanID == taskID else { return }
+      self.localFileProfileState = result
+      if case .complete = result {
+        UserDefaults.standard.set(true, forKey: DefaultsKey.hasCompletedFileIndexing.rawValue)
+        // If the app closes before the user taps Continue, resuming at Files
+        // would otherwise run the scan and import a second time. The scan is
+        // complete, so resume at the next stage instead.
+        UserDefaults.standard.set(Step.accessibility.rawValue, forKey: Self.resumeStepKey)
+      }
+    }
+  }
+
+  func retryLocalFileScan() {
+    guard case .failed = localFileProfileState else { return }
+    localFileProfileState = .idle
+    startLocalFileScan()
+  }
+
+  func finishFilesStep() {
+    guard localFileProfileState.isTerminal else { return }
+    advance(userAnswer: nil, to: .accessibility)
+  }
   func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
   func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
 
@@ -302,6 +365,12 @@ extension SBOnboardingModel {
     var step = target
     while let key = permissionKey(for: step) {
       refreshPermCheck(key)
+      // A pre-granted FDA permission must still visit Files once so this flow
+      // performs the required scan and aggregate-memory formation.
+      if step == .files, isGranted(key), !localFileProfileState.isTerminal {
+        setPermOn(key)
+        break
+      }
       guard isGranted(key), let next = Step(rawValue: step.rawValue + 1) else { break }
       setPermOn(key)
       step = next
@@ -340,11 +409,18 @@ extension SBOnboardingModel {
   /// NSMenu key equivalents that AppKit dispatches before local monitors). Both are
   /// restored on leave. This is why the earlier attempt's monitor never fired.
   func armShortcutSummon() {
-    // Reset pick/press state so each shortcut step (open, then talk) starts fresh.
-    shortcutPicked = false
+    // Preserve a choice when the user returns with Back. A fresh stage still
+    // starts empty, while an already-confirmed shortcut stays visible/editable.
+    let rememberedSelection: ShortcutSettings.KeyboardShortcut?
+    switch step {
+    case .shortcutOpen: rememberedSelection = openShortcutSelection
+    case .shortcutTalk: rememberedSelection = talkShortcutSelection
+    default: rememberedSelection = nil
+    }
+    shortcutPicked = rememberedSelection != nil
     shortcutPressed = false
-    shortcutTokens = []
-    chosenShortcut = nil
+    shortcutTokens = rememberedSelection?.displayTokens ?? []
+    chosenShortcut = rememberedSelection
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
     if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
     NSApp.mainMenu = nil
@@ -431,9 +507,11 @@ extension SBOnboardingModel {
     shortcutPicked = true
     shortcutPressed = false
     if isTalk {
+      talkShortcutSelection = shortcut
       ShortcutSettings.shared.pttShortcut = shortcut
       ShortcutSettings.shared.pttEnabled = true
     } else {
+      openShortcutSelection = shortcut
       ShortcutSettings.shared.askOmiShortcut = shortcut
       ShortcutSettings.shared.askOmiEnabled = true
     }
@@ -459,34 +537,61 @@ extension SBOnboardingModel {
   /// the notch, which spins while Omi is thinking.
   func startScreenDemo() {
     screenDemoDone = false
+    screenDemoPTTReady = false
+    screenDemoPTTUnavailable = false
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
     FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
     resetFloatingBarConversation()
-    if let bar = FloatingControlBarManager.shared.barState {
-      PushToTalkManager.shared.setup(barState: bar)
-      // Mark the demo done the first time Omi actually answers, so the Continue
-      // button appears once the user has seen it work. The demo forces push-to-talk
-      // (`pttTranscriptionModeDemoOverride = .live`), and a *voice* answer surfaces
-      // through `voiceProjection` (the notch response phase) — it never flips
-      // `showingAIResponse`, which is only set by the typed/`.mainResponse` path.
-      // Watching only `showingAIResponse` is why the demo never advanced. Observe
-      // BOTH signals so either a voice or a typed answer reveals Continue.
-      // `resetFloatingBarConversation()` above cleared `showingAIResponse`, so its
-      // subscribe-time value is already false. `voiceProjection` has no such reset,
-      // and @Published replays its CURRENT value on subscribe — so on a resume/
-      // re-entry of the demo a stale `isResponseActive` would fire immediately and
-      // reveal Continue before the user does anything. `dropFirst()` ignores that
-      // replayed value; a real answer is always a later emission.
-      voiceCancellable = Publishers.Merge(
-        bar.$showingAIResponse.filter { $0 }.map { _ in () },
-        bar.$voiceProjection.dropFirst().filter { $0.isResponseActive }.map { _ in () }
-      )
-      .receive(on: DispatchQueue.main)
-      .sink { [weak self] _ in self?.screenDemoDone = true }
-    }
     ShortcutSettings.shared.pttTranscriptionModeDemoOverride = .live
-    Task { await chatProvider.warmupBridge() }
-    FloatingControlBarManager.shared.show()
+    screenDemoSetupTask?.cancel()
+    screenDemoSetupTask = Task { [weak self] in
+      guard let self else { return }
+      // Unlike the normal app, onboarding did not have an earlier home-screen
+      // warmup. The old order set up PTT first, which made the hub request its
+      // kernel context before the bridge existed; the user's first hold then
+      // raced that cold start and could end without an answer. Establish the
+      // bridge before arming PTT so its first turn has a real response route.
+      await self.activateScreenDemoPTTAfterBridgeWarmup(
+        warmup: { await self.chatProvider.warmupBridge() },
+        activate: { self.activateScreenDemoPTT() }
+      )
+    }
+  }
+
+  /// The screen demo owns PTT only while its stage is still mounted. Keep this
+  /// lifecycle fence outside the unstructured task so the same production
+  /// boundary can be regression-tested: leaving the stage during a cold bridge
+  /// start must not attach fresh event monitors to the next onboarding page.
+  func activateScreenDemoPTTAfterBridgeWarmup(
+    warmup: @escaping @MainActor () async -> Bool,
+    activate: @escaping @MainActor () -> Void
+  ) async {
+    let bridgeReady = await warmup()
+    guard !Task.isCancelled, step == .screenDemo else { return }
+    guard bridgeReady else {
+      screenDemoPTTUnavailable = true
+      return
+    }
+    activate()
+  }
+
+  private func activateScreenDemoPTT() {
+    guard step == .screenDemo,
+      let bar = FloatingControlBarManager.shared.barState
+    else { return }
+    PushToTalkManager.shared.setup(barState: bar)
+    // Mark the demo done the first time Omi actually answers. Voice answers
+    // surface through `voiceProjection`; typed answers use `showingAIResponse`.
+    // Drop the current voice projection so re-entering the demo cannot inherit a
+    // stale response from a prior turn.
+    voiceCancellable = Publishers.Merge(
+      bar.$showingAIResponse.filter { $0 }.map { _ in () },
+      bar.$voiceProjection.dropFirst().filter { $0.isResponseActive }.map { _ in () }
+    )
+    .receive(on: DispatchQueue.main)
+    .sink { [weak self] _ in self?.screenDemoDone = true }
+    screenDemoPTTReady = true
+    FloatingControlBarManager.shared.showForOnboardingDemo()
   }
 
   private func resetFloatingBarConversation() {
@@ -498,14 +603,18 @@ extension SBOnboardingModel {
   }
 
   func teardownVoiceDemo() {
+    screenDemoSetupTask?.cancel()
+    screenDemoSetupTask = nil
     voiceTimeout?.cancel()
     voiceTimeout = nil
     voiceCancellable = nil
     screenDemoDone = false
+    screenDemoPTTReady = false
+    screenDemoPTTUnavailable = false
     ShortcutSettings.shared.pttTranscriptionModeDemoOverride = nil
     resetFloatingBarConversation()
     PushToTalkManager.shared.cleanup()
-    FloatingControlBarManager.shared.hide()
+    FloatingControlBarManager.shared.hideForOnboardingDemo()
   }
 
   /// The push-to-talk chord to prompt for the voice demo.
@@ -647,16 +756,62 @@ extension SBOnboardingModel {
       {
         self.contextStates["applenotes"] = "on"
       }
-      let cal = await CalendarReaderService.shared.verifyConnection()
-      if cal.isConnected { self.markContextConnected("calendar") }
-      let gmail = await GmailReaderService.shared.verifyConnection()
-      if gmail.isConnected { self.markContextConnected("gmail") }
+
+      // Do not probe browser cookies just to decorate a fresh onboarding row.
+      // A functional probe without a completed import used to paint "on" even
+      // though post-onboarding Home/Apps had no persisted connector state and
+      // no imported data. Only re-check a connector that this account already
+      // completed through the canonical import path; a new source stays
+      // explicitly connectable until the user starts that import.
+      guard self.hasPersistedGoogleImport("calendar") || self.hasPersistedGoogleImport("gmail") else {
+        return
+      }
+      if self.hasPersistedGoogleImport("calendar") {
+        let calendar = await CalendarReaderService.shared.verifyConnection()
+        self.projectGoogleVerification("calendar", status: calendar)
+      }
+      if self.hasPersistedGoogleImport("gmail") {
+        let gmail = await GmailReaderService.shared.verifyConnection()
+        self.projectGoogleVerification("gmail", status: gmail)
+      }
     }
   }
 
-  func markContextConnected(_ id: String) {
+  private func hasPersistedGoogleImport(_ contextID: String) -> Bool {
+    guard
+      let statusStore = importConnectorStatusStore,
+      let connector = ImportConnector.all.first(where: {
+        $0.id == Self.importConnectorID(forGoogleContextID: contextID)
+      })
+    else { return false }
+    return statusStore.snapshot(for: connector).isConnected
+  }
+
+  private func markGoogleContextImported(_ id: String) {
     contextStates[id] = "on"
     contextDetails[id] = nil
+  }
+
+  private func projectGoogleVerification(_ id: String, status: CalendarConnectionStatus) {
+    switch status {
+    case .connected:
+      markGoogleContextImported(id)
+    case .needsSignIn:
+      projectGoogleContext(id, connected: false, needsSignIn: true)
+    case .error:
+      projectGoogleContext(id, connected: false, needsSignIn: false)
+    }
+  }
+
+  private func projectGoogleVerification(_ id: String, status: GmailConnectionStatus) {
+    switch status {
+    case .connected:
+      markGoogleContextImported(id)
+    case .needsSignIn:
+      projectGoogleContext(id, connected: false, needsSignIn: true)
+    case .error:
+      projectGoogleContext(id, connected: false, needsSignIn: false)
+    }
   }
 
   /// ChatGPT and Claude on this surface mean importing existing memories into
@@ -669,6 +824,10 @@ extension SBOnboardingModel {
     default:
       return .direct
     }
+  }
+
+  nonisolated static func importConnectorID(forGoogleContextID id: String) -> String {
+    id == "gmail" ? "email" : "calendar"
   }
 
   nonisolated static func googleContextResolution(
@@ -691,17 +850,10 @@ extension SBOnboardingModel {
     )
   }
 
-  /// Resolve a cookie-based Google connector (Calendar, Gmail). These don't OAuth —
-  /// they read your existing browser Google session — so a "not signed in" result
-  /// isn't an error to shrug at: OPEN the Google page so the user can actually sign
-  /// in, then Retry picks up the new session. (An `.error`, e.g. a not-yet-loaded
-  /// API key, just leaves a Retry button — opening Google wouldn't help.)
-  private func resolveGoogleConnect(
-    _ id: String,
-    connected: Bool,
-    needsSignIn: Bool,
-    signInURL: String
-  ) {
+  /// Projects a cookie-based Google import/probe into bounded onboarding copy.
+  /// Reconnect-required terminal imports open the browser separately; passive
+  /// refreshes must only show an honest retry state, never steal focus.
+  private func projectGoogleContext(_ id: String, connected: Bool, needsSignIn: Bool) {
     let resolution = Self.googleContextResolution(
       connectorID: id,
       connected: connected,
@@ -709,33 +861,6 @@ extension SBOnboardingModel {
     )
     contextStates[id] = resolution.state
     contextDetails[id] = resolution.detail
-    if resolution.shouldOpenSignIn, let url = URL(string: signInURL) {
-      NSWorkspace.shared.open(url)
-    }
-  }
-
-  /// Emits the terminal outcome for an onboarding connect verify-probe
-  /// (Calendar/Gmail). `needsSignIn` is the reconnect-required signal;
-  /// `.error` maps to the generic `unknown` class because the bounded status
-  /// enum does not carry the native failure subclass. The Apps-tab import path
-  /// emits the precise native class for the same connectors.
-  static func emitConnectVerifyOutcome(
-    connectorID: String,
-    connected: Bool,
-    needsSignIn: Bool,
-    durationMs: Int
-  ) {
-    let integrationName = IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID)
-    if connected {
-      AnalyticsManager.shared.integrationConnectSucceeded(
-        integrationName: integrationName, connectorID: connectorID,
-        surface: .onboarding, stage: "verify", durationMs: durationMs)
-    } else {
-      let errorClass: IntegrationConnectTelemetry.ErrorClass = needsSignIn ? .notSignedIn : .unknown
-      AnalyticsManager.shared.integrationConnectFailed(
-        integrationName: integrationName, connectorID: connectorID,
-        surface: .onboarding, stage: "verify", errorClass: errorClass, durationMs: durationMs)
-    }
   }
 
   func connectContext(_ id: String) {
@@ -743,71 +868,14 @@ extension SBOnboardingModel {
     // The view owns import-sheet presentation. Keep this guard so another
     // caller cannot accidentally route a memory import into the MCP exporter.
     guard Self.contextConnectionRoute(for: id) == .direct else { return }
-    contextStates[id] = "connecting"
-    contextDetails[id] = nil
     switch id {
     case "calendar":
-      Task { [weak self] in
-        let startedAt = Date()
-        AnalyticsManager.shared.integrationConnectAttempted(
-          integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: "calendar"),
-          connectorID: "calendar",
-          surface: .onboarding,
-          stage: "verify"
-        )
-        let s = await CalendarReaderService.shared.verifyConnection()
-        let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
-        let needsSignIn = {
-          switch s {
-          case .connected, .error:
-            return false
-          case .needsSignIn:
-            return true
-          }
-        }()
-        // Outcome telemetry for the onboarding connect probe. The bounded
-        // status enum is the only signal here; the precise native failure class
-        // is not recoverable from `CalendarConnectionStatus`, so needsSignIn
-        // maps to the reconnect-required class and `.error` to unknown. The
-        // Apps-tab import path carries the precise class.
-        Self.emitConnectVerifyOutcome(
-          connectorID: "calendar", connected: s.isConnected, needsSignIn: needsSignIn,
-          durationMs: durationMs)
-        self?.resolveGoogleConnect(
-          "calendar",
-          connected: s.isConnected,
-          needsSignIn: needsSignIn,
-          signInURL: "https://calendar.google.com"
-        )
+      startGoogleContextImport("calendar") { progress in
+        await ConnectorImportOperations.importCalendar(progress: progress)
       }
     case "gmail":
-      Task { [weak self] in
-        let startedAt = Date()
-        AnalyticsManager.shared.integrationConnectAttempted(
-          integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: "gmail"),
-          connectorID: "gmail",
-          surface: .onboarding,
-          stage: "verify"
-        )
-        let s = await GmailReaderService.shared.verifyConnection()
-        let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
-        let needsSignIn = {
-          switch s {
-          case .connected, .error:
-            return false
-          case .needsSignIn:
-            return true
-          }
-        }()
-        Self.emitConnectVerifyOutcome(
-          connectorID: "gmail", connected: s.isConnected, needsSignIn: needsSignIn,
-          durationMs: durationMs)
-        self?.resolveGoogleConnect(
-          "gmail",
-          connected: s.isConnected,
-          needsSignIn: needsSignIn,
-          signInURL: "https://mail.google.com"
-        )
+      startGoogleContextImport("gmail") { progress in
+        await ConnectorImportOperations.importGmail(progress: progress)
       }
     case "applenotes":
       Task { [weak self] in
@@ -854,10 +922,116 @@ extension SBOnboardingModel {
     }
   }
 
+  /// Starts Gmail/Calendar through the exact shared importer that Apps uses.
+  /// Success is deliberately a three-part predicate: the browser auth worked
+  /// for a real data read, that read/import completed, and the account-scoped
+  /// connector status persisted for the surface shown after onboarding.
+  private func startGoogleContextImport(
+    _ contextID: String,
+    operation: @escaping @MainActor (ConnectorImportRunner.ProgressSink) async -> ConnectorImportOperations.Outcome
+  ) {
+    guard
+      let statusStore = importConnectorStatusStore,
+      let connector = ImportConnector.all.first(where: {
+        $0.id == Self.importConnectorID(forGoogleContextID: contextID)
+      })
+    else {
+      projectGoogleContext(contextID, connected: false, needsSignIn: false)
+      return
+    }
+
+    let connectorID = connector.id
+    let wasFirstSync = !statusStore.snapshot(for: connector).isConnected
+    contextStates[contextID] = "connecting"
+    contextDetails[contextID] = nil
+    let task = ConnectorImportRunner.shared.start(
+      connectorID: connectorID,
+      progressTitle: "Connecting to \(connector.title)",
+      progressDetail: "Reading data and saving it to your Omi memory.",
+      surface: .onboarding
+    ) { [self] progress in
+      let outcome = await operation(progress)
+      let terminal = completeGoogleContextImport(
+        contextID: contextID,
+        connectorID: connectorID,
+        outcome: outcome,
+        statusStore: statusStore,
+        wasFirstSync: wasFirstSync
+      )
+      if case .failure(_, let metrics) = terminal,
+        let failureClass = metrics.failureClass,
+        IntegrationConnectTelemetry.failureRequiresReconnect(failureClass),
+        let url = URL(string: contextID == "gmail" ? "https://mail.google.com" : "https://calendar.google.com")
+      {
+        NSWorkspace.shared.open(url)
+      }
+      return terminal
+    }
+    if task == nil {
+      // A shared Apps/onboarding import is already running. Don't leave the
+      // row spinning indefinitely; the persisted status is updated by that
+      // authoritative run and the user can retry once it settles.
+      contextStates[contextID] = "error"
+      contextDetails[contextID] = "This connection is already syncing. Wait a moment, then retry."
+    }
+  }
+
+  /// Applies an import terminal exactly once. Keeping this state transition in
+  /// the onboarding model makes the durable Apps/Home status and the visible
+  /// onboarding status change together, so one cannot report a false success.
+  func completeGoogleContextImport(
+    contextID: String,
+    connectorID: String,
+    outcome: ConnectorImportOperations.Outcome,
+    statusStore: ImportConnectorStatusStore,
+    wasFirstSync: Bool
+  ) -> ConnectorImportRunner.RunOutcome {
+    switch outcome {
+    case .success(let result, let message):
+      statusStore.markSynced(
+        connectorID: connectorID,
+        sourceCount: result.sourceCount,
+        memoryCount: result.memoryCount,
+        lastDeltaCount: result.newItems
+      )
+      markGoogleContextImported(contextID)
+      return .success(
+        message: message,
+        metrics: ConnectorImportRunner.RunMetrics(
+          sourceCount: result.sourceCount,
+          memoryCount: result.memoryCount,
+          wasFirstSync: wasFirstSync
+        )
+      )
+    case .failure(let message, let failureClass):
+      let reconnectRequired = failureClass.map(IntegrationConnectTelemetry.failureRequiresReconnect) ?? false
+      projectGoogleContext(contextID, connected: false, needsSignIn: reconnectRequired)
+      return .failure(
+        message: message,
+        metrics: ConnectorImportRunner.RunMetrics(
+          failureClass: failureClass,
+          wasFirstSync: wasFirstSync
+        )
+      )
+    }
+  }
+
   func markContextImportConnected(_ connectorID: String) {
     guard Self.contextConnectionRoute(for: connectorID) == .importConnector(connectorID) else { return }
     contextStates[connectorID] = "on"
     contextDetails[connectorID] = nil
+  }
+
+  /// Receives the canonical persisted connector ID from the shared import
+  /// status store. Gmail's context-row ID differs from its Apps ID (`gmail`
+  /// vs `email`), so translate at this one authority boundary rather than
+  /// allowing a completed shared import to leave the onboarding row stale.
+  func markPersistedContextConnectorConnected(_ connectorID: String) {
+    switch connectorID {
+    case "calendar": markGoogleContextImported("calendar")
+    case "email": markGoogleContextImported("gmail")
+    default: markContextImportConnected(connectorID)
+    }
   }
 
   func answerContext() { advance(userAnswer: "Continue", to: .capture) }

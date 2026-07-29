@@ -24,6 +24,7 @@ def test_pusher_auto_deploy_tracks_its_shared_lifecycle_and_observability_import
         'backend/utils/**',
         'backend/pusher/**',
         'backend/charts/pusher/**',
+        '.dockerignore',
         'backend/scripts/verify_pusher_source_closure.py',
         'backend/scripts/verify_pusher_live_deployment_gate.py',
         'backend/scripts/verify_pusher_dev_observability.py',

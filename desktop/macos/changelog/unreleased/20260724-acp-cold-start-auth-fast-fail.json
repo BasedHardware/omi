@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the first chat message hanging when Claude sign-in had expired: it now fails fast and prompts you to reconnect instead of waiting on the sign-in window"
+}

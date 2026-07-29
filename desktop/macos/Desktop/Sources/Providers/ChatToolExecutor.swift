@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import AppKit
+@preconcurrency import ApplicationServices
 import Foundation
 @preconcurrency import GRDB
 @preconcurrency import UserNotifications
@@ -2199,7 +2200,10 @@ class ChatToolExecutor {
     return outcome.summaryText
   }
 
-  static func scanLocalFiles(expectedOwnerID: String? = nil) async -> LocalFileScanOutcome {
+  static func scanLocalFiles(
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async -> LocalFileScanOutcome {
     func ownerChangedOutcome() -> LocalFileScanOutcome {
       LocalFileScanOutcome(
         hasReadableUserFileTarget: false,
@@ -2208,7 +2212,12 @@ class ChatToolExecutor {
         deniedUserFolders: [],
         summaryText: authorizedOwnerChangedResult())
     }
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return ownerChangedOutcome() }
+    func isAuthorized() -> Bool {
+      !Task.isCancelled
+        && isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+    }
+
+    guard isAuthorized() else { return ownerChangedOutcome() }
     let fm = FileManager.default
     let homeDir = fm.homeDirectoryForCurrentUser
     let scanTargets: [(label: String, pathForUser: String, url: URL, countsAsUserFileAccess: Bool)] = {
@@ -2255,7 +2264,7 @@ class ChatToolExecutor {
     var accessibleFolders: [URL] = []
     var readableUserFileTargetCount = 0
     for target in scanTargets {
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return ownerChangedOutcome() }
+      guard isAuthorized() else { return ownerChangedOutcome() }
       do {
         _ = try fm.contentsOfDirectory(
           at: target.url,
@@ -2282,9 +2291,17 @@ class ChatToolExecutor {
     }
 
     // Actually scan accessible folders (blocking)
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return ownerChangedOutcome() }
-    let count = await FileIndexerService.shared.scanFolders(accessibleFolders)
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return ownerChangedOutcome() }
+    guard isAuthorized() else { return ownerChangedOutcome() }
+    let shouldContinue: @Sendable () -> Bool = {
+      !Task.isCancelled
+        && ChatToolExecutor.isExpectedOwnerCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+    }
+    let count = await FileIndexerService.shared.scanFolders(
+      accessibleFolders,
+      shouldContinue: shouldContinue)
+    guard isAuthorized() else { return ownerChangedOutcome() }
     log(
       "Onboarding file scan completed: \(count) files indexed, \(deniedFolders.count) folders denied"
     )
@@ -2294,7 +2311,7 @@ class ChatToolExecutor {
     var out: String
     do {
       out = try await getFileScanResultsFromDB(expectedOwnerID: expectedOwnerID)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return ownerChangedOutcome() }
+      guard isAuthorized() else { return ownerChangedOutcome() }
     } catch {
       didCompleteSuccessfully = false
       out = "Error: \(error.localizedDescription)"

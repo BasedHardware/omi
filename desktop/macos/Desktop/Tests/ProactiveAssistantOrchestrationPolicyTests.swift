@@ -411,4 +411,224 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
       messagingFastPathApps: ["Slack", "Messages"]
     )
   }
+
+  // MARK: - ProactiveCaptureTrigger
+
+  func testCaptureTriggerSkipsWhenIdle() {
+    let now = Date(timeIntervalSinceReferenceDate: 5_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 60, now: now),
+      .skip)
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 61, now: now),
+      .skip)
+  }
+
+  func testCaptureTriggerCapturesOnContextChange() {
+    let now = Date(timeIntervalSinceReferenceDate: 6_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    // First call: no prior context, so capture.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now),
+      .capture)
+    // Same context: skip until heartbeat.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(1)),
+      .skip)
+    // App change: capture immediately.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Xcode", windowTitle: "Project", idleSeconds: 0, now: now.addingTimeInterval(2)),
+      .capture)
+    // Title change: capture immediately.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Xcode", windowTitle: "Other", idleSeconds: 0, now: now.addingTimeInterval(2.5)),
+      .capture)
+  }
+
+  func testCaptureTriggerHeartbeatsOnlyWhenActive() {
+    let now = Date(timeIntervalSinceReferenceDate: 7_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now),
+      .capture)
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(2.9)),
+      .skip)
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(3)),
+      .preview)
+  }
+
+  func testCaptureTriggerDebouncesAppSwitchRequests() {
+    let now = Date(timeIntervalSinceReferenceDate: 8_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    trigger.requestAppSwitchCapture(app: "Safari", at: now)
+    // Before debounce: skip (same context anyway, but request is pending).
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(0.1)),
+      .skip)
+    // After debounce: context changed from nil, so capture.
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(0.6)),
+      .capture)
+  }
+
+  func testCaptureTriggerPreviewSimilaritySkipsUnchangedFrames() {
+    let now = Date(timeIntervalSinceReferenceDate: 9_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now),
+      .capture)
+
+    // First captured frame seeds the preview history and records the last capture time.
+    trigger.recordPreviewHash(0x1234, at: now)
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(3)),
+      .preview)
+
+    // 0x1235 is one bit away from 0x1234 -> very high similarity.
+    XCTAssertEqual(trigger.previewSimilarity(to: 0x1235), 63.0 / 64.0, accuracy: 1e-9)
+    XCTAssertTrue(trigger.shouldSkipPreview(0x1235, similarityThreshold: 0.92))
+
+    // 0xFFFF is very different -> low similarity.
+    XCTAssertTrue(trigger.previewSimilarity(to: 0xFFFF) < 0.9)
+    XCTAssertFalse(trigger.shouldSkipPreview(0xFFFF, similarityThreshold: 0.92))
+
+    // A cycling frame that matches any recent preview is skipped.
+    trigger.recordPreviewHash(0xABCD, at: now.addingTimeInterval(3))
+    XCTAssertTrue(trigger.shouldSkipPreview(0x1234, similarityThreshold: 0.92))
+  }
+
+  func testCaptureTriggerStretchesHeartbeatForStaticScreens() {
+    let now = Date(timeIntervalSinceReferenceDate: 9_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, maxHeartbeatMultiplier: 2.0,
+      heartbeatGrowthPerSimilarPreview: 0.5)
+
+    // First capture establishes the context and last capture time.
+    _ = trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now)
+    trigger.markCaptured(app: "Safari", windowTitle: "Docs", at: now, frameHash: 0xAAAA)
+
+    // After the base heartbeat we should preview.
+    let firstHeartbeat = now.addingTimeInterval(3)
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: firstHeartbeat),
+      .preview)
+
+    // Skip a similar preview; this stretches the next heartbeat to 1.5x.
+    trigger.markPreviewSkipped(at: firstHeartbeat, similarity: 0.99, threshold: 0.92)
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: firstHeartbeat.addingTimeInterval(3)),
+      .skip)
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: firstHeartbeat.addingTimeInterval(4.5)),
+      .preview)
+
+    // A changed preview resets the multiplier back to the base interval.
+    trigger.recordPreviewHash(0xBBBB, at: firstHeartbeat.addingTimeInterval(4.5))
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: firstHeartbeat.addingTimeInterval(7.5)),
+      .preview)
+  }
+
+  func testPreviewSimilarityThresholdPolicyByAppClass() {
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(bundleID: "com.apple.Notes", appName: "Notes"),
+      0.99)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.microsoft.VSCode", appName: "Code"),
+      0.96)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(bundleID: nil, appName: "Finder"),
+      0.95)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.tinyspeck.slackmacgap", appName: "Slack"),
+      0.92)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.apple.Safari", appName: "Safari"),
+      0.90)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.apple.Music", appName: "Music"),
+      0.88)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.valvesoftware.steam", appName: "Steam"),
+      0.82)
+  }
+
+  func testPreviewSimilarityThresholdPolicyKeepsSmallTextEdits() {
+    let now = Date(timeIntervalSinceReferenceDate: 10_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    trigger.recordPreviewHash(0x1234, at: now)
+    let oneBitChangeSimilarity = trigger.previewSimilarity(to: 0x1235)
+    XCTAssertEqual(oneBitChangeSimilarity, 63.0 / 64.0, accuracy: 1e-9)
+
+    // Notes/docs tier: one flipped dHash bit must still capture (typical text edit).
+    let notesThreshold = PreviewSimilarityThresholdPolicy.threshold(
+      bundleID: "com.apple.Notes", appName: "Notes")
+    XCTAssertEqual(notesThreshold, 0.99, accuracy: 1e-9)
+    XCTAssertFalse(trigger.shouldSkipPreview(0x1235, similarityThreshold: notesThreshold))
+
+    // Old coarse default (0.92) would have skipped this edit — regression guard.
+    XCTAssertTrue(trigger.shouldSkipPreview(0x1235, similarityThreshold: 0.92))
+  }
+
+  func testPreviewSimilarityThresholdPolicyBrowserWindowTitle() {
+    // Docs in browser → notes tier.
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.google.Chrome",
+        appName: "Google Chrome",
+        windowTitle: "Spec - Google Docs"),
+      0.99)
+    // Code host → code tier.
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.apple.Safari",
+        appName: "Safari",
+        windowTitle: "BasedHardware/omi · GitHub"),
+      0.96)
+    // Social feed → social tier.
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.google.Chrome",
+        appName: "Google Chrome",
+        windowTitle: "Home / X (twitter.com)"),
+      0.85)
+    // Video → game/thrash tier.
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.apple.Safari",
+        appName: "Safari",
+        windowTitle: "Funny Cats - YouTube"),
+      0.82)
+  }
 }

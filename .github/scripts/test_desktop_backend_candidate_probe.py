@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -183,6 +184,10 @@ class CandidateProbeTests(unittest.TestCase):
             path = Path(directory) / "token"
             path.write_text("abc.def.ghi", encoding="utf-8")
             path.chmod(0o600)
+            if os.name == "nt":
+                with self.assertRaisesRegex(PROBE.ProbeError, "mode-0600"):
+                    PROBE._valid_token(path)
+                return
             self.assertEqual(PROBE._valid_token(path), "abc.def.ghi")
             path.chmod(0o644)
             with self.assertRaisesRegex(PROBE.ProbeError, "mode-0600"):
@@ -210,10 +215,15 @@ class CandidateProbeTests(unittest.TestCase):
             ]
             with mock.patch.object(sys, "argv", argv), mock.patch.object(
                 PROBE,
+                "_valid_token",
+                return_value="abc.def.ghi",
+            ) as valid_token, mock.patch.object(
+                PROBE,
                 "probe_candidate",
                 return_value={"status": "passed"},
             ) as candidate:
                 self.assertEqual(PROBE.main(), 0)
+            valid_token.assert_called_once_with(token)
             self.assertEqual(candidate.call_args.kwargs["expected_revision"], "desktop-backend-abc")
             self.assertEqual(candidate.call_args.kwargs["workflow_run_id"], "123")
 
