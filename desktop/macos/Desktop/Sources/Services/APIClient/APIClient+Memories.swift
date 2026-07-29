@@ -431,19 +431,26 @@ extension APIClient {
   struct UploadSegment: Encodable {
     let text: String
     let speaker: String
+    // swift-format-ignore
     let speaker_id: Int?
+    // swift-format-ignore
     let is_user: Bool
+    // swift-format-ignore
     let person_id: String?
     let start: Double
     let end: Double
   }
 
   struct CreateConversationFromSegmentsRequest: Encodable {
+    // swift-format-ignore
     let transcript_segments: [UploadSegment]
     let source: String
+    // swift-format-ignore
     let started_at: String?  // ISO8601
+    // swift-format-ignore
     let finished_at: String?  // ISO8601
     let language: String
+    // swift-format-ignore
     let client_conversation_id: String?
   }
 
@@ -631,6 +638,13 @@ extension APIClient {
   /// Caller is responsible for chunking input into groups of at most
   /// `memoriesBatchMaxSize`. Returns the created count from the server.
   func createMemoriesBatch(_ memories: [MemoryBatchItem]) async throws -> BatchMemoriesResponse {
+    try await createMemoriesBatch(memories, authorizationSnapshot: nil)
+  }
+
+  func createMemoriesBatch(
+    _ memories: [MemoryBatchItem],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> BatchMemoriesResponse {
     precondition(
       memories.count <= Self.memoriesBatchMaxSize,
       "createMemoriesBatch received \(memories.count) memories, max is \(Self.memoriesBatchMaxSize)"
@@ -639,15 +653,26 @@ extension APIClient {
       let memories: [MemoryBatchItem]
     }
     let body = BatchRequest(memories: memories)
-    return try await post("v3/memories/batch", body: body)
+    return try await post("v3/memories/batch", body: body, authorizationSnapshot: authorizationSnapshot)
   }
 
   func createMemoryImportBatch(_ batch: ImportEvidenceBatch) async throws -> ImportEvidenceBatchResponse {
+    try await createMemoryImportBatch(batch, authorizationSnapshot: nil)
+  }
+
+  func createMemoryImportBatch(
+    _ batch: ImportEvidenceBatch,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> ImportEvidenceBatchResponse {
     precondition(
       batch.items.count <= Self.memoryImportBatchMaxSize,
       "createMemoryImportBatch received \(batch.items.count) artifacts, max is \(Self.memoryImportBatchMaxSize)"
     )
-    return try await post("v3/memory-imports/batch", body: batch, includeBYOK: false)
+    return try await post(
+      "v3/memory-imports/batch",
+      body: batch,
+      includeBYOK: false,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Deletes a memory by ID

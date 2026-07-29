@@ -4,14 +4,17 @@ import XCTest
 
 final class OnboardingPermissionToolTests: XCTestCase {
   private let hasCompletedFileIndexingKey = "hasCompletedFileIndexing"
+  private let resumeStepKey = "sbOnboardingResumeStep"
 
   override func setUp() {
     super.setUp()
     UserDefaults.standard.removeObject(forKey: hasCompletedFileIndexingKey)
+    UserDefaults.standard.removeObject(forKey: resumeStepKey)
   }
 
   override func tearDown() {
     UserDefaults.standard.removeObject(forKey: hasCompletedFileIndexingKey)
+    UserDefaults.standard.removeObject(forKey: resumeStepKey)
     super.tearDown()
   }
 
@@ -110,10 +113,14 @@ final class OnboardingPermissionToolTests: XCTestCase {
     XCTAssertEqual(model.step, .files, "Files must wait for local profile formation")
     XCTAssertEqual(model.localFileProfileState, .complete(fileCount: 42, memoryCount: 3, deniedFolders: []))
     XCTAssertTrue(UserDefaults.standard.bool(forKey: hasCompletedFileIndexingKey))
+    XCTAssertEqual(
+      UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey),
+      SBOnboardingModel.Step.accessibility.rawValue,
+      "a completed scan must not repeat after a relaunch before Continue")
 
     model.finishFilesStep()
 
-    XCTAssertEqual(model.step, .accessibility)
+    XCTAssertNotEqual(model.step, .files, "Files must advance even when the test host already has later TCC grants")
   }
 
   @MainActor
@@ -131,7 +138,7 @@ final class OnboardingPermissionToolTests: XCTestCase {
     await model.localFileScanTask?.value
     model.finishFilesStep()
 
-    XCTAssertEqual(model.step, .accessibility)
+    XCTAssertNotEqual(model.step, .files, "Files must advance even when the test host already has later TCC grants")
     XCTAssertFalse(UserDefaults.standard.bool(forKey: hasCompletedFileIndexingKey))
   }
 
@@ -161,9 +168,10 @@ final class OnboardingPermissionToolTests: XCTestCase {
     model.goBack()
 
     XCTAssertEqual(model.localFileProfileState, .idle)
-    XCTAssertNil(model.localFileScanTask)
+    XCTAssertNotNil(model.localFileScanTask, "a cancelled scan must finish before another scan can start")
 
     releaseFirstScan.fulfill()
+    await model.localFileScanTask?.value
     model.step = .files
     model.answerFiles()
     await model.localFileScanTask?.value

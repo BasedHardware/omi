@@ -175,7 +175,15 @@ final class SBOnboardingModel: ObservableObject {
     importConnectorStatusStore: ImportConnectorStatusStore? = nil,
     fileScanRunner: @escaping FileScanRunner = { appState in
       ChatToolExecutor.onboardingAppState = appState
-      let outcome = await ChatToolExecutor.scanLocalFiles()
+      guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+        return .failed(message: "Please sign in again before building your local profile.")
+      }
+      let outcome = await ChatToolExecutor.scanLocalFiles(
+        expectedOwnerID: authorization.ownerID,
+        authorizationSnapshot: authorization)
+      guard !Task.isCancelled, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        return .failed(message: "Your account changed before Omi could save your local profile.")
+      }
       guard outcome.didCompleteSuccessfully, outcome.hasReadableUserFileTarget else {
         return .failed(message: ConnectorImportOperations.localFilesFailureLine(for: outcome))
       }
@@ -184,7 +192,12 @@ final class SBOnboardingModel: ObservableObject {
       // snapshot, writes aggregate local-file profile evidence, and updates the
       // knowledge graph. The conversational flow merely presents its outcome.
       let coordinator = OnboardingPagedIntroCoordinator()
-      await coordinator.refreshSnapshotIfAvailable()
+      await coordinator.refreshSnapshotIfAvailable(
+        expectedOwnerID: authorization.ownerID,
+        authorizationSnapshot: authorization)
+      guard !Task.isCancelled, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        return .failed(message: "Your account changed before Omi could save your local profile.")
+      }
       let fileCount = coordinator.scanSnapshot?.fileCount ?? outcome.indexedFileCount
       if fileCount > 0, coordinator.localFileMemoriesSaved == 0 {
         return .failed(message: "Your files were indexed, but Omi couldn't save your profile memories. Try again.")
@@ -423,8 +436,6 @@ final class SBOnboardingModel: ObservableObject {
     switch step {
     case .files:
       localFileScanTask?.cancel()
-      localFileScanTask = nil
-      localFileScanID = nil
       if case .scanning = localFileProfileState {
         localFileProfileState = .idle
       }

@@ -306,6 +306,10 @@ extension SBOnboardingModel {
       self.localFileProfileState = result
       if case .complete = result {
         UserDefaults.standard.set(true, forKey: DefaultsKey.hasCompletedFileIndexing.rawValue)
+        // If the app closes before the user taps Continue, resuming at Files
+        // would otherwise run the scan and import a second time. The scan is
+        // complete, so resume at the next stage instead.
+        UserDefaults.standard.set(Step.accessibility.rawValue, forKey: Self.resumeStepKey)
       }
     }
   }

@@ -458,6 +458,15 @@ struct SBOnboardingView: View {
           Text("Some folders need access later: \(deniedFolders.joined(separator: ", "))")
             .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
         }
+        if model.fdaState != .on {
+          Button(model.fdaState == .waiting ? "Waiting for Full Disk Access…" : "Allow Full Disk Access") {
+            if model.fdaState == .ask { model.requestPerm("full_disk_access") }
+          }
+          .buttonStyle(.plain)
+          .disabled(model.fdaState == .waiting)
+          .geist(size: 13, weight: .medium)
+          .foregroundStyle(sb.ink(.w6))
+        }
         SBInkButton(title: "Continue", isDefaultAction: true) { model.finishFilesStep() }
       }
       .frame(maxWidth: 380, alignment: .leading)
