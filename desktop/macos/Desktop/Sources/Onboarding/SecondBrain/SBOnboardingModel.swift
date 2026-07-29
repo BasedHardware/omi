@@ -13,6 +13,24 @@ import Foundation
 /// `SBOnboardingModel+Steps.swift`.
 @MainActor
 final class SBOnboardingModel: ObservableObject {
+  enum CaptureSelection: Equatable {
+    case onlyDuringMeetings
+    case continuous
+
+    var systemAudioCaptureMode: AssistantSettings.SystemAudioCaptureMode {
+      switch self {
+      case .onlyDuringMeetings: .onlyDuringMeetings
+      case .continuous: .always
+      }
+    }
+
+    var startsListeningImmediately: Bool {
+      self == .continuous
+    }
+  }
+
+  static let defaultCaptureSelection: CaptureSelection = .onlyDuringMeetings
+
   enum Step: Int, CaseIterable {
     case promise, name, howHeard, language, role
     case mic, systemAudio, screen, files, accessibility, automation
@@ -66,7 +84,6 @@ final class SBOnboardingModel: ObservableObject {
   @Published var shortcutTokens: [String] = []
   @Published var shortcutPicked = false
   @Published var shortcutPressed = false
-  @Published var shortcutRecording = false
   /// The chosen shortcut + which mechanism it uses (key hotkey vs modifier-hold).
   var chosenShortcut: ShortcutSettings.KeyboardShortcut?
   var chosenShortcutIsPTT = false
@@ -203,7 +220,7 @@ final class SBOnboardingModel: ObservableObject {
     case .shortcutOpen:
       return "How do you want to open me? Just press one of these to set it."
     case .shortcutTalk:
-      return "And to talk to me hands-free? Press one of these to set it."
+      return "And to talk to me, hands-free? Just hold one of these and say something."
     case .screenDemo:
       return "Here's the fun part."
     case .agents:
@@ -211,8 +228,6 @@ final class SBOnboardingModel: ObservableObject {
     case .context:
       return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
-      // The shortcut chord is rendered as keycap chips in `captureWidget` (a
-      // streamed Text can't host inline keycap views), so it's omitted here.
       return
         "You're all set, \(name). One last thing: should I listen all the time, or only during your meetings?"
     }
@@ -225,18 +240,6 @@ final class SBOnboardingModel: ObservableObject {
     if !stored.isEmpty { return stored }
     return "friend"
   }
-
-  var selectedResponseLanguageName: String {
-    let code = AssistantSettings.shared.voiceLanguages.first ?? "en"
-    let baseCode = AssistantSettings.baseLanguageCode(code)
-    return AssistantSettings.supportedLanguages.first {
-      AssistantSettings.baseLanguageCode($0.code) == baseCode
-    }?.name ?? code
-  }
-
-  /// The chosen open-Omi chord as individual tokens, rendered as keycap chips in
-  /// `captureWidget` (e.g. ⌘ + O) rather than plain glyphs in the message copy.
-  var summonTokens: [String] { ShortcutSettings.shared.askOmiShortcut.displayTokens }
 
   // MARK: lifecycle
 
@@ -491,14 +494,9 @@ final class SBOnboardingModel: ObservableObject {
 
   // MARK: capture choice → completes onboarding
 
-  func captureContinuous() {
-    AssistantSettings.shared.systemAudioCaptureMode = .always
-    complete(startListening: true)
-  }
-
-  func captureMeetingsOnly() {
-    AssistantSettings.shared.systemAudioCaptureMode = .onlyDuringMeetings
-    complete(startListening: false)
+  func capture(_ selection: CaptureSelection) {
+    AssistantSettings.shared.systemAudioCaptureMode = selection.systemAudioCaptureMode
+    complete(startListening: selection.startsListeningImmediately)
   }
 
   /// Skip the rest of onboarding: mark it complete and drop straight to the Chat
@@ -603,5 +601,6 @@ final class SBOnboardingModel: ObservableObject {
     pollTasks.removeAll()
     disarmShortcutSummon()
     teardownVoiceDemo()
+    FloatingControlBarManager.shared.hide()
   }
 }
