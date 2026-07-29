@@ -110,7 +110,12 @@ def _served(projection: Dict[str, Any]) -> Dict[str, Any]:
     return served
 
 
-@router.post('/v1/users/projections/test', tags=['v1'], response_model=ProjectionResponse)
+@router.post(
+    '/v1/users/projections/test',
+    tags=['v1'],
+    response_model=ProjectionResponse,
+    include_in_schema=False,
+)
 def test_projection(uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
     """
     Generate a projection for the authenticated user immediately.

@@ -7607,16 +7607,6 @@ export interface OmiApiPaths {
       };
     };
   };
-  "/v1/users/projections/test": {
-    post: {
-      operationId: "test_projection_v1_users_projections_test_post";
-      responses: {
-        "200": ProjectionResponse;
-        "401": void;
-        "422": HTTPValidationError;
-      };
-    };
-  };
   "/v1/users/projections/{projection_id}": {
     get: {
       operationId: "get_projection_endpoint_v1_users_projections__projection_id__get";
@@ -14656,25 +14646,6 @@ export async function get_projections_endpoint_v1_users_projections_get(query: {
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function test_projection_v1_users_projections_test_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ProjectionResponse> {
-  const _base = init?.baseURL ?? "";
-  const _path = `/v1/users/projections/test`;
-  const _search = "";
-  const _res = await fetch(`${_base}${_path}${_search}`, {
-    method: "POST",
-    headers: {
-      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
-      ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
-      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
-    },
-  });
-  if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
-}
-
 export async function get_projection_endpoint_v1_users_projections__projection_id__get(path: { projection_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ProjectionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/projections/${path.projection_id}`;
@@ -15955,4 +15926,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 391 client methods generated.
+// Total: 390 client methods generated.

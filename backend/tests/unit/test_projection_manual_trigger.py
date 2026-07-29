@@ -26,6 +26,13 @@ def test_manual_generation_is_hidden_in_production(monkeypatch):
     assert response.status_code == 404
 
 
+def test_manual_generation_is_not_part_of_the_openapi_contract():
+    app = FastAPI()
+    app.include_router(projections.router)
+
+    assert '/v1/users/projections/test' not in app.openapi()['paths']
+
+
 def test_manual_generation_remains_available_for_demo(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.delenv('K_SERVICE', raising=False)
