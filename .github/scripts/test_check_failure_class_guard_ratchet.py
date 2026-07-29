@@ -8,6 +8,7 @@ allowlist behavior execute end to end. No source strings are asserted.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -15,6 +16,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import ModuleType
+from unittest.mock import patch
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +27,18 @@ NOW = "2026-07-24T00:00:00Z"
 # under a pre-commit or pre-push hook exports GIT_DIR and a hooks path that
 # would otherwise reach back into the real checkout.
 GIT_ISOLATION = ("-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false")
+
+
+def load_checker_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("check_failure_class_guard_ratchet", CHECKER)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+CHECKER_MODULE = load_checker_module()
 
 
 def clean_environment(**overrides: str) -> dict[str, str]:
@@ -56,6 +71,16 @@ def run_checker(root: Path, *extra: str) -> subprocess.CompletedProcess[str]:
 
 
 class GuardRatchetTests(unittest.TestCase):
+    def test_git_output_is_decoded_as_utf8(self) -> None:
+        output = "fix(ci): preserve Windows history \u2014 \u96ea\n"
+        completed = subprocess.CompletedProcess(["git", "log"], 0, stdout=output, stderr="")
+
+        with patch.object(CHECKER_MODULE.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(CHECKER_MODULE.run_git(Path("repo"), "log"), output)
+
+        self.assertEqual(run.call_args.kwargs.get("encoding"), "utf-8")
+        self.assertNotIn("text", run.call_args.kwargs)
+
     def setUp(self) -> None:
         self.temp_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_directory.name)
@@ -196,8 +221,8 @@ class GuardRatchetTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_history_shorter_than_the_window_skips_loudly(self) -> None:
-        recent = Path(tempfile.mkdtemp())
-        try:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            recent = Path(temporary_directory)
             git(recent, "init", "-q", "-b", "main")
             git(recent, "config", "user.email", "a@b.test")
             git(recent, "config", "user.name", "A B")
@@ -206,21 +231,17 @@ class GuardRatchetTests(unittest.TestCase):
             result = run_checker(recent)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("SKIP", result.stdout)
-        finally:
-            subprocess.run(["rm", "-rf", str(recent)], check=False)
 
     def test_shallow_clone_skips_loudly(self) -> None:
         self.define("FC-recurring-thing")
         self.declare("FC-recurring-thing", count=5)
-        shallow = Path(tempfile.mkdtemp()) / "shallow"
-        try:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            shallow = Path(temporary_directory) / "shallow"
             clone = git(shallow.parent, "clone", "-q", "--depth", "1", f"file://{self.root}", str(shallow))
             self.assertEqual(clone.returncode, 0, clone.stderr)
             result = run_checker(shallow)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("SKIP", result.stdout)
-        finally:
-            subprocess.run(["rm", "-rf", str(shallow.parent)], check=False)
 
     def test_repository_registry_is_green_today(self) -> None:
         """The shipped registry plus allowlist must pass in this checkout."""

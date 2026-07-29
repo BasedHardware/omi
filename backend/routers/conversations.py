@@ -52,7 +52,11 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils import byok
 from utils.memory.surface_routing import pin_memory_system
-from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
+from utils.conversations.search import (
+    ConversationSearchUnavailableError,
+    conversation_matches_speaker,
+    search_conversations,
+)
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
@@ -1204,6 +1208,14 @@ def search_conversations_endpoint(
     # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
     # so search never leaks that a locked conversation matched a query.
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+    # Speaker filtering happens here, not in Typesense: the index has no transcript_segments field, so
+    # asking Typesense for one 400'd and 500'd the request. The hydrated Firestore documents do carry
+    # transcript_segments, so match against those.
+    conversations = [
+        conversation
+        for conversation in conversations
+        if conversation_matches_speaker(conversation, search_request.speaker_id)
+    ]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the

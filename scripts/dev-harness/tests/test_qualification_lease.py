@@ -128,8 +128,8 @@ def test_active_lease_serializes_qualification_runs(monkeypatch: pytest.MonkeyPa
     qualification.release(repo_root=REPO_ROOT, lease_id="qualification-one", token=str(first["token"]))
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows-specific fail-closed behavior")
-def test_windows_fault_state_is_retained_without_posix_process_provenance(
+@pytest.mark.skipif(os.name != "nt", reason="Windows-specific non-POSIX cleanup behavior")
+def test_windows_release_retires_lease_pointer_while_retaining_fault_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     root = tmp_path / "qualification"
@@ -139,11 +139,11 @@ def test_windows_fault_state_is_retained_without_posix_process_provenance(
     fault_state = root / "state" / lease_id / qualification.FAULT_STATE_DIRNAME
     fault_state.mkdir()
 
-    with pytest.raises(qualification.QualificationLeaseError, match="requires POSIX process provenance"):
-        qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
+    qualification.release(repo_root=REPO_ROOT, lease_id=lease_id, token=str(acquired["token"]))
 
-    assert (root / "qualification-lease.json").is_file()
+    assert not (root / "qualification-lease.json").exists()
     assert fault_state.is_dir()
+    assert (root / "state" / lease_id / qualification.COMPLETION_FILENAME).is_file()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows-specific fail-closed behavior")

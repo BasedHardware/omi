@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from testing.shell import bash_command
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "backend" / "scripts" / "agent_vm_reaper.py"
 APPLY = ROOT / "backend" / "scripts" / "apply-agent-vm-reaper.sh"
@@ -232,7 +234,7 @@ def test_apply_script_refuses_without_gate():
     env = os.environ.copy()
     env.pop("AGENT_VM_REAPER_APPLY", None)
     proc = subprocess.run(
-        ["bash", str(APPLY)],
+        bash_command(APPLY, cwd=ROOT),
         cwd=ROOT,
         env=env,
         capture_output=True,

@@ -94,17 +94,18 @@ export function RewindCaptureHost(): React.JSX.Element {
       if (videoRef.current) videoRef.current.srcObject = null
     }
 
-    const isLive = (): boolean =>
-      streamRef.current?.getVideoTracks().some((t) => t.readyState === 'live') ?? false
+    const hasUsableVideoTrack = (stream = streamRef.current): boolean =>
+      stream?.getVideoTracks().some((t) => t.readyState === 'live' && !t.muted) ?? false
 
-    // A desktop-capture track can die while the app keeps running (display sleep,
-    // GPU/driver reset, resolution or session change). Nothing used to notice: the
-    // sampler kept drawing a dead <video>, so the timeline filled with blank frames
-    // and capture never came back. Re-open the stream instead. Our own teardown
-    // uses track.stop(), which does not fire 'ended', so this can't self-trigger.
-    const onTrackEnded = (): void => {
-      if (cancelled) return
-      console.warn('[rewind] capture track ended — reopening stream')
+    // #10504/#10737: a desktop-capture track can end or stay "live" while
+    // muted (temporarily unable to provide media) after display sleep, a
+    // GPU/driver reset, or a session change. Both states otherwise leave the
+    // sampler drawing blank frames indefinitely. Re-open the stream through one
+    // bounded recovery path.
+    // Our own track.stop() does not fire these events, so this cannot self-trigger.
+    const onTrackUnavailable = (): void => {
+      if (cancelled || hasUsableVideoTrack()) return
+      console.warn('[rewind] capture track unavailable — reopening stream')
       stop()
       timerRef.current = setTimeout(() => void start(), RESTART_DELAY_MS)
     }
@@ -115,7 +116,7 @@ export function RewindCaptureHost(): React.JSX.Element {
       if (cancelled || gen !== generation) return
       try {
         const v = videoRef.current
-        if (v && isLive() && v.videoWidth && v.videoHeight && !savingRef.current) {
+        if (v && hasUsableVideoTrack() && v.videoWidth && v.videoHeight && !savingRef.current) {
           const scale = Math.min(1, tier.maxEdge / Math.max(v.videoWidth, v.videoHeight))
           const w = Math.round(v.videoWidth * scale)
           const h = Math.round(v.videoHeight * scale)
@@ -178,13 +179,22 @@ export function RewindCaptureHost(): React.JSX.Element {
           return
         }
         streamRef.current = stream
-        stream.getVideoTracks().forEach((t) => t.addEventListener('ended', onTrackEnded))
-        const gen = generation
+        stream.getVideoTracks().forEach((t) => {
+          t.addEventListener('ended', onTrackUnavailable)
+          t.addEventListener('mute', onTrackUnavailable)
+        })
         const v = videoRef.current
         if (v) {
           v.srcObject = stream
           await v.play().catch(() => undefined)
         }
+        // A mute event may have recovered the stream while play() was pending.
+        if (streamRef.current !== stream) return
+        if (!hasUsableVideoTrack(stream)) {
+          onTrackUnavailable()
+          return
+        }
+        const gen = generation
         timerRef.current = setTimeout(() => void grabAndSchedule(gen), intervalMs)
       } catch (e) {
         console.error('[rewind] failed to start capture:', (e as Error).message)

@@ -18,8 +18,8 @@ from utils.subscription import is_trial_paywalled
 router = APIRouter()
 
 _ALLOWED_ACTIONS = frozenset({"generateContent", "streamGenerateContent", "embedContent", "batchEmbedContents"})
-_ALLOWED_MODELS = frozenset({"gemini-2.5-flash", "gemini-2.5-pro", "gemini-embedding-001"})
-_VERTEX_MODELS = frozenset({"gemini-2.5-flash", "gemini-2.5-pro", "gemini-embedding-001"})
+_ALLOWED_MODELS = frozenset({"gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-embedding-001"})
+_VERTEX_MODELS = frozenset({"gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-embedding-001"})
 _MAX_BODY_BYTES = 5 * 1024 * 1024
 _MAX_OUTPUT_TOKENS = 8192
 _DEFAULT_THINKING_BUDGET = 1024
