@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a stale sign-in prompt that could remain visible after switching accounts."
+}
