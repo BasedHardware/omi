@@ -672,6 +672,13 @@ extension AppState {
     switch SharedCaptureSilentMicRecoveryPolicy.action(for: silentMicRecoveryAttempts) {
     case .rebuild:
       log("Transcription: silent microphone detected — rebuilding CoreAudio capture stack")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "silent_mic",
+        from: "stalled_route",
+        to: "rebuilt_capture",
+        reason: "local_heal",
+        outcome: .degraded,
+        extra: ["recovery_attempts": silentMicRecoveryAttempts, "user_visible": false])
       await rebuildCoreAudioCaptureStack(reason: reason)
     case .stopAndSurfaceError:
       log("Transcription: stopping after repeated silent microphone recovery failures")
