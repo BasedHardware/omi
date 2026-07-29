@@ -161,7 +161,7 @@ protocol ProjectionClient: Sendable {
   ) async throws -> Projection?
 
   func getProjectionImage(
-    from url: URL,
+    projectionID: String,
     expectedOwnerId: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> Data
@@ -360,7 +360,7 @@ final class ProjectionViewModel: ObservableObject {
       feedbackRating = nil
       return
     }
-    guard let imageURL = nextProjection.imageURL else {
+    guard nextProjection.imageURL != nil else {
       projection = nextProjection
       image = nil
       imageLoadFailed = true
@@ -374,7 +374,7 @@ final class ProjectionViewModel: ObservableObject {
     }
     do {
       let data = try await client.getProjectionImage(
-        from: imageURL,
+        projectionID: nextProjection.id,
         expectedOwnerId: authorization.ownerID,
         authorizationSnapshot: authorization)
       guard canApply(request, authorization: authorization) else { return }

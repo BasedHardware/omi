@@ -22,6 +22,7 @@ private final class ProjectionClientFake: ProjectionClient, @unchecked Sendable 
 
   private(set) var requestedOwnerIDs: [String] = []
   private(set) var imageOwnerIDs: [String] = []
+  private(set) var imageProjectionIDs: [String] = []
   private(set) var feedbackOwnerIDs: [String] = []
   private var authorizationInvalidated = false
 
@@ -58,11 +59,14 @@ private final class ProjectionClientFake: ProjectionClient, @unchecked Sendable 
   }
 
   func getProjectionImage(
-    from url: URL,
+    projectionID: String,
     expectedOwnerId: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> Data {
-    lock.withLock { imageOwnerIDs.append(expectedOwnerId) }
+    lock.withLock {
+      imageOwnerIDs.append(expectedOwnerId)
+      imageProjectionIDs.append(projectionID)
+    }
     if let imageError { throw imageError }
     return imageData
   }
@@ -98,11 +102,13 @@ private final class ProjectionClientFake: ProjectionClient, @unchecked Sendable 
 private final class ProjectionImageURLProtocol: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
   private nonisolated(unsafe) static var capturedAuthorization: String?
+  private nonisolated(unsafe) static var capturedURL: URL?
   private nonisolated(unsafe) static var responseData = Data()
 
   static func reset(data: Data = Data()) {
     lock.withLock {
       capturedAuthorization = nil
+      capturedURL = nil
       responseData = data
     }
   }
@@ -111,12 +117,17 @@ private final class ProjectionImageURLProtocol: URLProtocol, @unchecked Sendable
     lock.withLock { capturedAuthorization }
   }
 
+  static var url: URL? {
+    lock.withLock { capturedURL }
+  }
+
   override class func canInit(with request: URLRequest) -> Bool { true }
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
   override func startLoading() {
     let data = Self.lock.withLock { () -> Data in
       Self.capturedAuthorization = request.value(forHTTPHeaderField: "Authorization")
+      Self.capturedURL = request.url
       return Self.responseData
     }
     guard let url = request.url,
@@ -159,6 +170,24 @@ final class ProjectionPageTests: XCTestCase {
     XCTAssertFalse(viewModel.imageLoadFailed)
     XCTAssertEqual(fake.requestedOwnerIDs, ["projection-owner-a"])
     XCTAssertEqual(fake.imageOwnerIDs, ["projection-owner-a"])
+    XCTAssertEqual(fake.imageProjectionIDs, ["projection-a"])
+  }
+
+  func testPersistedImageHostIsNotPassedToTheAuthenticatedImageClient() async throws {
+    let fake = ProjectionClientFake()
+    fake.projections = [
+      Projection(
+        id: "projection-a",
+        imperative: "Cross the threshold.",
+        imageURL: URL(string: "https://attacker.invalid/token-collector"))
+    ]
+    fake.imageData = imageData()
+    let viewModel = ProjectionViewModel(client: fake)
+
+    await viewModel.load()
+
+    XCTAssertEqual(fake.imageProjectionIDs, ["projection-a"])
+    XCTAssertNotNil(viewModel.image)
   }
 
   func testLateOwnerAResponseCannotPopulateOwnerBPage() async throws {
@@ -244,16 +273,44 @@ final class ProjectionPageTests: XCTestCase {
     configuration.protocolClasses = [ProjectionImageURLProtocol.self]
     let client = APIClient(session: URLSession(configuration: configuration))
     await client.setTestAuthHeader("Bearer projection-token")
+    let clientBaseURL = await client.baseURL
     let authorization = try XCTUnwrap(
       RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "projection-owner-a"))
+    let projectionID = "00000000-0000-0000-0000-000000000001"
 
     let loaded = try await client.getProjectionImage(
-      from: URL(string: "https://projection.test/v1/projection-images/projection-a.png")!,
+      projectionID: projectionID,
       expectedOwnerId: authorization.ownerID,
       authorizationSnapshot: authorization)
 
     XCTAssertEqual(loaded, data)
     XCTAssertEqual(ProjectionImageURLProtocol.authorization, "Bearer projection-token")
+    XCTAssertEqual(
+      ProjectionImageURLProtocol.url,
+      URL(string: "\(clientBaseURL)v1/projection-images/\(projectionID).png"))
+  }
+
+  func testAPIClientRejectsMalformedProjectionIDBeforeAttachingAuthorization() async throws {
+    ProjectionImageURLProtocol.reset(data: imageData())
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [ProjectionImageURLProtocol.self]
+    let client = APIClient(session: URLSession(configuration: configuration))
+    await client.setTestAuthHeader("Bearer projection-token")
+    let authorization = try XCTUnwrap(
+      RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "projection-owner-a"))
+
+    do {
+      _ = try await client.getProjectionImage(
+        projectionID: "../attacker.invalid/token-collector",
+        expectedOwnerId: authorization.ownerID,
+        authorizationSnapshot: authorization)
+      XCTFail("Malformed projection identifiers must be rejected")
+    } catch {
+      XCTAssertTrue(error is APIError)
+    }
+
+    XCTAssertNil(ProjectionImageURLProtocol.authorization)
+    XCTAssertNil(ProjectionImageURLProtocol.url)
   }
 
   private func projection(id: String) -> Projection {

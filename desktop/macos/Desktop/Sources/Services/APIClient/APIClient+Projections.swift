@@ -139,12 +139,22 @@ extension APIClient {
   }
 
   /// Loads private image bytes through the same owner-bound Firebase session as
-  /// the projection document. The backend performs the final uid ownership check.
+  /// the projection document. The persisted image URL is never trusted as an
+  /// authorization destination: this client constructs the route from the
+  /// projection UUID and its configured API base.
   func getProjectionImage(
-    from url: URL,
+    projectionID: String,
     expectedOwnerId: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> Data {
+    guard
+      let projectionUUID = UUID(uuidString: projectionID),
+      let url = URL(
+        string:
+          "\(baseURL)v1/projection-images/\(projectionUUID.uuidString.lowercased()).png")
+    else {
+      throw APIError.invalidResponse
+    }
     let authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)

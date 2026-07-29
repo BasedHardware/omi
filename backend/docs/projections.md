@@ -32,6 +32,9 @@ service and `notifications-job`.
 - The document exposes only `/v1/projection-images/{projection_id}.png`. That route requires a
   Firebase ID token, looks up the projection under the authenticated UID, and returns
   `Cache-Control: private, no-store`.
+- The macOS client never uses the persisted URL as an authorization destination. It validates
+  the projection UUID and constructs the image route from that UUID plus its configured Python
+  API base before attaching a Firebase token.
 
 When `BUCKET_PROJECTION_IMAGES` is empty in a local process, images fall back to
 `PROJECTION_LOCAL_IMAGE_DIR` (or the OS temporary directory) under a hashed-owner directory with

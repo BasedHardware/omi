@@ -53,7 +53,9 @@ Stored documents expose an authenticated API URL, not a public object URL. The r
 loads the projection under the Firebase-authenticated UID, then calls
 `storage.py:download_projection_image` with that same UID. Raw evidence prose and generation
 prompts remain internal; only the compact validated receipt assembled by `generation.py` is
-served as `why_this`.
+served as `why_this`. The macOS API client independently pins authenticated image downloads to
+its configured Python API origin by constructing the projection-image route from the validated
+projection UUID, so a malformed stored URL can never receive a Firebase bearer token.
 
 ## Change rules
 
