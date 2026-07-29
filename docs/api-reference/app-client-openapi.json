@@ -18686,6 +18686,15 @@
         "title": "SyncLocalFilesResultResponse",
         "type": "object"
       },
+      "SyncTranscriptMode": {
+        "description": "Select how a completed sync job may mutate its target conversation.",
+        "enum": [
+          "merge",
+          "replace"
+        ],
+        "title": "SyncTranscriptMode",
+        "type": "string"
+      },
       "Targeting": {
         "description": "Controls who sees the announcement",
         "properties": {
@@ -54511,6 +54520,17 @@
               "description": "Target conversation ID to attach audio to (auto-sync from live capture)",
               "title": "Conversation Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Merge recovery fragments or replace a realtime preview with one verified canonical capture",
+            "in": "query",
+            "name": "transcript_mode",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SyncTranscriptMode",
+              "default": "merge",
+              "description": "Merge recovery fragments or replace a realtime preview with one verified canonical capture"
             }
           },
           {

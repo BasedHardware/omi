@@ -3104,6 +3104,8 @@ export interface SyncLocalFilesResultResponse {
   updated_memories?: Array<string>;
 }
 
+export type SyncTranscriptMode = "merge" | "replace";
+
 export interface Targeting {
   app_version_max?: string | null;
   app_version_min?: string | null;
@@ -4170,6 +4172,7 @@ export interface OmiApiSchemas {
   "SyncJobStartResponse": SyncJobStartResponse;
   "SyncJobStatusResponse": SyncJobStatusResponse;
   "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
+  "SyncTranscriptMode": SyncTranscriptMode;
   "Targeting": Targeting;
   "TaskAssistantSettings": TaskAssistantSettings;
   "TaskCancelCandidate": TaskCancelCandidate;
@@ -15338,7 +15341,7 @@ export async function create_sync_capture_manifest_v2_sync_capture_manifest_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, authorization?: string }, init?: OmiApiClientInit): Promise<void> {
+export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string, transcript_mode?: SyncTranscriptMode }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, authorization?: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files`;
   const _params = query ? Object.entries(query)

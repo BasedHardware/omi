@@ -4,6 +4,7 @@ from testing.e2e.sync_helpers import patch_fresh_sync_lane
 
 import time
 import asyncio
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -270,3 +271,97 @@ def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, au
         "Existing live transcript.",
         "Merged sync transcript appended to the target conversation.",
     ]
+
+
+def test_sync_v2_verified_canonical_capture_atomically_replaces_live_preview(client, auth_headers, monkeypatch):
+    patch_fresh_sync_lane(monkeypatch)
+
+    target_id = "sync-canonical-target"
+    timestamp = int(time.time()) - 120
+    filename = f"audio_{timestamp}.bin"
+    audio = b"canonical-pcm-frame"
+    device_headers = {
+        **auth_headers,
+        "X-App-Platform": "ios",
+        "X-Device-Id-Hash": "a1b2c3d4",
+    }
+    seed_conversation(
+        "123",
+        {
+            "id": target_id,
+            "created_at": datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat(),
+            "started_at": datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat(),
+            "finished_at": datetime.fromtimestamp(timestamp + 30, tz=timezone.utc).isoformat(),
+            "source": "omi",
+            "language": "en",
+            "structured": {
+                "title": "Live Preview",
+                "overview": "",
+                "emoji": "🧠",
+                "category": "other",
+                "action_items": [],
+                "events": [],
+            },
+            "transcript_segments": [
+                {
+                    "id": "seg-preview",
+                    "text": "Duplicated live preview text.",
+                    "speaker": "SPEAKER_00",
+                    "is_user": True,
+                    "start": 0.0,
+                    "end": 30.0,
+                }
+            ],
+            "discarded": False,
+            "status": "completed",
+            "is_locked": False,
+            "client_device_id": "ios_a1b2c3d4",
+            "client_platform": "ios",
+            "data_protection_level": "standard",
+        },
+    )
+    reprocessed = []
+    pending_coroutines = _patch_sync_pipeline(
+        monkeypatch,
+        transcript_text="Canonical mobile transcript replaces the preview.",
+        reprocessed=reprocessed,
+    )
+
+    manifest_response = client.post(
+        "/v2/sync-capture-manifest",
+        json={
+            "conversation_id": target_id,
+            "files": [{"name": filename, "sha256": hashlib.sha256(audio).hexdigest()}],
+        },
+        headers=device_headers,
+    )
+    assert manifest_response.status_code == 200, manifest_response.text
+
+    response = client.post(
+        f"/v2/sync-local-files?conversation_id={target_id}&transcript_mode=replace",
+        files=[("files", (filename, audio, "application/octet-stream"))],
+        headers={
+            **device_headers,
+            "X-Omi-Sync-Capture-Manifest": manifest_response.json()["manifest"],
+        },
+    )
+    assert response.status_code == 202, response.text
+
+    _drain_background_coroutines(pending_coroutines)
+    job = _poll_sync_job(client, auth_headers, response.json()["job_id"])
+    assert job["status"] == "completed", job
+    assert job["result"]["new_memories"] == []
+    assert job["result"]["updated_memories"] == [target_id]
+    assert reprocessed == [target_id]
+
+    persisted = client.get(f"/v1/conversations/{target_id}", headers=auth_headers)
+    assert persisted.status_code == 200, persisted.text
+    body = persisted.json()
+    assert [segment["text"] for segment in body["transcript_segments"]] == [
+        "Canonical mobile transcript replaces the preview."
+    ]
+    assert body["structured"]["title"] == "Hermetic Sync Conversation Reprocessed"
+    started_at = datetime.fromisoformat(body["started_at"])
+    finished_at = datetime.fromisoformat(body["finished_at"])
+    assert started_at == datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    assert (finished_at - started_at).total_seconds() == 1.25

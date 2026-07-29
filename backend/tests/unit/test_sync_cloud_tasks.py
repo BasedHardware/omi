@@ -2330,6 +2330,102 @@ async def test_sync_dispatch_carries_device_provenance_into_cloud_task(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_canonical_replacement_rejects_unverified_capture_before_staging():
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.verify_capture_manifest.return_value = None
+
+    try:
+        upload = UploadFile(filename='canonical.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(
+            files=[upload],
+            uid='test-uid',
+            conversation_id='conversation-1',
+            transcript_mode=module.SyncTranscriptMode.REPLACE,
+        )
+
+        assert response.status_code == 422
+        assert json.loads(response.body)['code'] == 'canonical_replacement_unverified'
+        module._retrieve_file_paths_v2.assert_not_called()
+        mock_sync_jobs.create_sync_job.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_verified_canonical_replacement_reaches_one_cloud_task_as_replace():
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+
+    try:
+        upload = UploadFile(filename='canonical.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(
+            files=[upload],
+            uid='test-uid',
+            conversation_id='conversation-1',
+            transcript_mode=module.SyncTranscriptMode.REPLACE,
+            x_omi_sync_capture_manifest='signed-proof',
+        )
+
+        assert response.status_code == 202
+        module.compute_sync_content_id.assert_called_once()
+        assert module.compute_sync_content_id.call_args.kwargs['operation'] == 'replace:conversation-1'
+        payload = module.enqueue_sync_job.call_args.args[0]
+        assert payload['conversation_id'] == 'conversation-1'
+        assert payload['transcript_mode'] == 'replace'
+        assert payload['raw_blob_paths'] == ['syncing/test-uid/job-1/file.bin']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_cloud_task_rejects_unknown_transcript_mode_without_running_pipeline():
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(
+        return_value={
+            'job_id': 'job-1',
+            'uid': 'test-uid',
+            'raw_blob_paths': ['staged/audio.opus'],
+            'source': 'omi',
+            'transcript_mode': 'append-sometimes',
+        }
+    )
+    module._run_full_pipeline_background_async = AsyncMock()
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'dropped', 'reason': 'invalid_payload'}
+        module._run_full_pipeline_background_async.assert_not_awaited()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
 async def test_sync_dispatch_enqueue_uncertain_keeps_durable_work_and_never_starts_inline(monkeypatch):
     from starlette.datastructures import UploadFile
 

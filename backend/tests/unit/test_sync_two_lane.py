@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
+import hmac
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -84,6 +85,41 @@ def test_content_identity_distinguishes_identical_audio_at_different_capture_tim
     assert content_id.compute_sync_content_id('uid', [str(first)]) != content_id.compute_sync_content_id(
         'uid', [str(second)]
     )
+
+
+def test_content_identity_separates_merge_from_canonical_replacement(tmp_path, monkeypatch):
+    monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'test-secret')
+    recording = tmp_path / 'audio_cv1_opus_16000_1_fs160_1700000000.bin'
+    recording.write_bytes(b'audio')
+
+    merged = content_id.compute_sync_content_id('uid', [str(recording)])
+    replaced = content_id.compute_sync_content_id(
+        'uid',
+        [str(recording)],
+        operation='replace:conversation-1',
+    )
+    other_target = content_id.compute_sync_content_id(
+        'uid',
+        [str(recording)],
+        operation='replace:conversation-2',
+    )
+
+    assert len({merged, replaced, other_target}) == 3
+
+
+def test_default_merge_identity_remains_rolling_revision_compatible(tmp_path, monkeypatch):
+    monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'test-secret')
+    recording = tmp_path / '100.opus'
+    recording.write_bytes(b'audio')
+    file_digest = hashlib.sha256(b'audio').hexdigest()
+    canonical = f'{recording.name}:{file_digest}'
+    deployed_identity = hmac.new(
+        b'test-secret',
+        f'uid\n{canonical}'.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    assert content_id.compute_sync_content_id('uid', [str(recording)]) == deployed_identity
 
 
 def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():

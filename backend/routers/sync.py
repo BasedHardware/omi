@@ -6,7 +6,7 @@ import threading
 import time
 import uuid as _uuid
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Annotated, Dict, List, Optional
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response, Header
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -139,6 +139,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import SyncLane, capture_times_within_window, classify_sync_lane
+from utils.sync.transcript_mode import SyncTranscriptMode
 
 logger = logging.getLogger(__name__)
 
@@ -864,6 +865,10 @@ async def sync_local_files_v2(
     conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
+    transcript_mode: Annotated[
+        SyncTranscriptMode,
+        Query(description='Merge recovery fragments or replace a realtime preview with one verified canonical capture'),
+    ] = SyncTranscriptMode.MERGE,
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
@@ -915,6 +920,16 @@ async def sync_local_files_v2(
         filenames,
         client_device_context.client_device_id,
     )
+    if transcript_mode is SyncTranscriptMode.REPLACE and (
+        not conversation_id or not has_server_capture_proof or len(files) != 1
+    ):
+        return JSONResponse(
+            status_code=422,
+            content={
+                'code': 'canonical_replacement_unverified',
+                'detail': 'Canonical replacement requires one server-bound, verified capture file',
+            },
+        )
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
@@ -1043,7 +1058,17 @@ async def sync_local_files_v2(
                 },
             )
 
-        content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
+        content_id = await run_blocking(
+            sync_executor,
+            compute_sync_content_id,
+            uid,
+            paths,
+            operation=(
+                f'{SyncTranscriptMode.REPLACE.value}:{conversation_id}'
+                if transcript_mode is SyncTranscriptMode.REPLACE
+                else None
+            ),
+        )
 
         # Create Redis job — total_segments=0 until VAD completes in background
         await run_blocking(
@@ -1189,6 +1214,7 @@ async def sync_local_files_v2(
                 'source': source.value,
                 'should_lock': should_lock,
                 'conversation_id': conversation_id,
+                'transcript_mode': transcript_mode.value,
                 'client_device_id': client_device_context.client_device_id,
                 'client_platform': client_device_context.platform,
                 'enqueued_at': time.time(),
@@ -1348,6 +1374,7 @@ async def sync_local_files_v2(
                             inline_run_lock_token=inline_run_lock_token,
                             content_run_bound=ledger_fence_active,
                             ledger_fence_active=ledger_fence_active,
+                            transcript_mode=transcript_mode,
                         ),
                         name=f'sync_pipeline:{job_id}',
                     )
@@ -1548,6 +1575,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         source = ConversationSource(payload.get('source') or 'omi')
         should_lock = bool(payload.get('should_lock', False))
         conversation_id = payload.get('conversation_id')
+        transcript_mode = SyncTranscriptMode.from_task_payload(payload.get('transcript_mode'))
         client_device_id = payload.get('client_device_id')
         client_platform = payload.get('client_platform')
         sync_lane = payload.get('lane') if payload.get('lane') in ('fresh', 'backfill') else SyncLane.FRESH.value
@@ -1677,6 +1705,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 run_lock_token=lock_token if ledger_fence_active else None,
                 content_run_bound=ledger_fence_active,
                 ledger_fence_active=ledger_fence_active,
+                transcript_mode=transcript_mode,
             )
         except SyncConversationPersistenceFenced:
             latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job

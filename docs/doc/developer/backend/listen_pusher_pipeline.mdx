@@ -6,7 +6,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-26 (bounded Pusher delivery, validated frames, and durable finalization ownership)
+> Last updated: 2026-07-29 (canonical mobile recovery and atomic transcript replacement)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -95,6 +95,31 @@ STT segments or photos, the late write is fenced rather than recreating the
 terminal parent; the listen handler opens one fresh generation and replays that
 buffer once. The first-segment `started_at` value commits in that same content
 transaction, so this recovery cannot leave a timestamp-only write behind.
+
+### Canonical mobile recovery
+
+Storage-authoritative mobile capture can repair a live preview through
+`POST /v2/sync-local-files?conversation_id=<id>&transcript_mode=replace`.
+Replacement is intentionally narrower than ordinary backlog sync:
+
+- the request contains exactly one app-assembled canonical recording;
+- its signed capture manifest binds the user, device, filename, and existing
+  server conversation;
+- the backend transcribes every VAD segment without publishing partial
+  transcript mutations;
+- only a fully successful batch transactionally replaces the conversation's
+  transcript, `started_at`, and `finished_at`, then runs conversation
+  processing once.
+
+If any segment fails, the live preview remains unchanged and the durable task
+retries the whole canonical recording. Unknown task mutation modes are rejected
+instead of falling back to merge. Existing queued tasks without a mode retain
+the deployed merge behavior.
+
+Ordinary gap repair and historical backlog uploads remain `merge`. When several
+recovered fragments target one conversation, their transcript writes may land
+incrementally, but summary and structured-data regeneration is deferred until
+the complete batch finishes and runs only once for that conversation.
 
 ## Capture-device provenance
 

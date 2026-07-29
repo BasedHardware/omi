@@ -1600,6 +1600,41 @@ class TestAsyncCoordinatorBehavioral:
             'uid', 'current-conversation', {'audio_files': [{'path': 'current.opus'}]}
         )
 
+    def test_targeted_reprocess_fence_supersedes_the_whole_job(self, fenced_worker_module):
+        """A stale explicit target is terminal, not a successful empty gap repair."""
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+
+        class ConversationPersistenceFenced(RuntimeError):
+            pass
+
+        pipeline.SyncConversationPersistenceFenced = ConversationPersistenceFenced
+        pipeline.logger = MagicMock()
+        pipeline._reprocess_conversation_after_update = MagicMock(
+            side_effect=ConversationPersistenceFenced('conversation replaced')
+        )
+        response = {
+            '_merged': {'target-conversation': 'en'},
+            'updated_memories': {'target-conversation'},
+            'new_memories': set(),
+        }
+        checkpointed_fences = []
+
+        with pytest.raises(ConversationPersistenceFenced):
+            pipeline._reprocess_merged_conversations(
+                'uid',
+                response,
+                on_fenced=lambda: checkpointed_fences.append(set(response['_fenced_conversation_ids'])),
+                terminal_target_conversation_id='target-conversation',
+            )
+
+        assert response == {
+            '_fenced_conversation_ids': {'target-conversation'},
+            'updated_memories': set(),
+            'new_memories': set(),
+        }
+        assert checkpointed_fences == [{'target-conversation'}]
+
     @pytest.mark.asyncio
     async def test_durable_completion_offloads_epoch_and_terminal_metric(self, fenced_worker_module):
         """Redis-backed fencing and telemetry never run on the async coordinator loop."""
@@ -2729,7 +2764,7 @@ class TestAsyncCoordinatorBehavioral:
 
             pipeline._update_sync_job_for_run = MagicMock(side_effect=_record_job_partial)
 
-            def _fence_in_sync_worker(_uid, response, on_fenced):
+            def _fence_in_sync_worker(_uid, response, on_fenced, **_kwargs):
                 response['_fenced_conversation_ids'].add('fenced-conversation')
                 on_fenced()
 
@@ -2793,7 +2828,7 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.process_segment = MagicMock(return_value=False)
             pipeline.checkpoint_sync_content_partial_result = MagicMock(return_value=False)
 
-            def _fence_in_sync_worker(_uid, response, on_fenced):
+            def _fence_in_sync_worker(_uid, response, on_fenced, **_kwargs):
                 response['_fenced_conversation_ids'].add('fenced-conversation')
                 on_fenced()
 

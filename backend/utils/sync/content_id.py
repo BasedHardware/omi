@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-def compute_sync_content_id(uid: str, paths: Iterable[str]) -> str:
+def compute_sync_content_id(uid: str, paths: Iterable[str], *, operation: str | None = None) -> str:
     secret = os.getenv('SYNC_CONTENT_ID_SECRET') or os.getenv('ENCRYPTION_SECRET')
     if not secret:
         raise RuntimeError('SYNC_CONTENT_ID_SECRET or ENCRYPTION_SECRET is required for durable sync idempotency')
@@ -25,7 +25,11 @@ def compute_sync_content_id(uid: str, paths: Iterable[str]) -> str:
         file_digests.append(f'{Path(path).name}:{digest.hexdigest()}')
 
     canonical = '\n'.join(sorted(file_digests))
-    return hmac.new(secret.encode(), f'{uid}\n{canonical}'.encode(), hashlib.sha256).hexdigest()
+    # Preserve the deployed merge identity across rolling revisions. New
+    # mutation contracts add a domain tag so the same bytes cannot converge
+    # onto a ledger result produced under different write semantics.
+    identity = f'{uid}\n{canonical}' if operation is None else f'{uid}\n{operation}\n{canonical}'
+    return hmac.new(secret.encode(), identity.encode(), hashlib.sha256).hexdigest()
 
 
 def compute_sync_segment_id(uid: str, path: str) -> str:
