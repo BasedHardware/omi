@@ -1002,6 +1002,55 @@ final class ToolsTests: XCTestCase {
         return store
     }
 
+    // MARK: - Screen is not optional
+
+    /// Speech and screen answer different questions — what was said, and what was in front of them
+    /// — so neither may starve the other. Screen rows rank below speech, so any limit smaller than
+    /// the number of matches used to drop every one of them.
+    ///
+    /// Measured on real capture before the fix: `recall("boston")` returned ten spoken lines and
+    /// **none** of the six screen moments that matched, one of which was the travel page the user
+    /// was looking at while they spoke. Raising the limit brought them back, which is what proved
+    /// they had been found and then discarded rather than never fetched.
+    func testScreenSurvivesALimitSmallerThanTheSpeechThatOutranksIt() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ambient-screen-floor-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let store = try ContextStore(url: root.appendingPathComponent("context.db"))
+
+        // Comfortably more speech than the limit, so every screen row loses on rank alone.
+        let sessionId = try store.openSession(at: base, appHint: "Arc")
+        for index in 0..<30 {
+            _ = try store.insertSegment(
+                Segment(
+                    sessionId: sessionId,
+                    startedAt: base + Double(index),
+                    endedAt: base + Double(index) + 1,
+                    source: .mic,
+                    text: "talking about the boston trip, line \(index)"))
+        }
+        try store.closeSession(sessionId, at: base + 40)
+        for index in 0..<4 {
+            _ = try store.insertFrame(
+                Frame(
+                    capturedAt: base + 100 + Double(index) * 60,
+                    appName: "Arc",
+                    windowTitle: "bus from ny to boston",
+                    ocrText: "boston departures and fares"))
+        }
+
+        let text = try Tools.call(
+            name: "recall", arguments: ["query": "boston", "limit": 10], store: store)
+
+        XCTAssertTrue(
+            text.split(separator: "\n").contains { $0.contains("*screen*") },
+            "every screen match was crowded out by higher-ranked speech: \(text)")
+        XCTAssertTrue(
+            text.contains("boston departures") || text.contains("bus from ny to boston"),
+            "a screen row survived but carried none of what was on screen: \(text)")
+    }
+
     // MARK: - The client's inline ceiling
 
     /// A result larger than the client will inline is not a large answer — it is no answer. Claude

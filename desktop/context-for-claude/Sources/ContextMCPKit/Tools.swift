@@ -486,7 +486,7 @@ extension Tools {
         notes.append(contentsOf: rangeEnforcementNotes(ranged, noun: "record"))
 
         merged = dedupe(merged)
-        merged = Array(merged.prefix(limit))
+        merged = takeReservingScreen(merged, limit: limit)
 
         // `recall` reaches the account's conversations and memories but not its screen history, so
         // its screen rows are this Mac's alone. The watermark is what stops a reader concluding
@@ -1173,8 +1173,20 @@ private struct MergedHit {
     /// True when `line` carries the low-confidence marker. Tracked rather than scraped back out of
     /// the rendered text, so the legend is printed exactly when a marked line survives the budget.
     let uncertain: Bool
+    /// Whether this row is something the user was looking at rather than something said. Carried
+    /// rather than inferred from `rank`, which breaks exact ties and is not a statement of modality.
+    let isScreen: Bool
 
-    init(at: Double, origin: Origin, key: String, rank: Int, line: String, uncertain: Bool = false) {
+    init(
+        at: Double,
+        origin: Origin,
+        key: String,
+        rank: Int,
+        line: String,
+        uncertain: Bool = false,
+        isScreen: Bool = false
+    ) {
+        self.isScreen = isScreen
         self.at = at
         self.origin = origin
         self.key = key
@@ -1295,6 +1307,34 @@ extension Tools {
 
     // MARK: Building
 
+    /// Takes `limit` rows, but never lets the account's episodes crowd out what was on screen.
+    ///
+    /// `recall` merges this Mac's capture with the account's conversations and then keeps the top
+    /// `limit` by rank. Screen loses that competition structurally: a conversation the account has
+    /// already titled and summarised outranks a page the user was reading, so at the default limit
+    /// screen vanished entirely. Measured on the search that prompted this — `recall("boston")`
+    /// returned ten spoken lines and **none** of the six screen moments that matched, one of which
+    /// was the travel page the user was actually looking at. Raising `limit` to 200 brought them
+    /// back, which is what proves the rows were found and then discarded rather than never fetched.
+    ///
+    /// Speech and screen answer different questions — what was said, and what was in front of them
+    /// — so neither may starve the other. A quarter of the answer is held for screen when screen
+    /// matched at all; whatever that share does not need returns immediately to everything else.
+    private static func takeReservingScreen(_ hits: [MergedHit], limit: Int) -> [MergedHit] {
+        guard hits.count > limit else { return hits }
+        let screen = hits.indices.filter { hits[$0].isScreen }
+        guard !screen.isEmpty else { return Array(hits.prefix(limit)) }
+
+        // The best `floor` screen rows are admitted first, then the remaining slots fill in rank
+        // order. Selection only — the rows are returned in their original ranking, and the renderer
+        // sorts for display, so reserving a share never reorders what the reader sees.
+        var chosen = Set(screen.prefix(min(max(1, limit / 4), screen.count)))
+        for index in hits.indices where chosen.count < limit {
+            chosen.insert(index)
+        }
+        return hits.indices.filter { chosen.contains($0) }.map { hits[$0] }
+    }
+
     private static func liveHit(_ hit: Hit) -> MergedHit {
         MergedHit(
             at: hit.at,
@@ -1302,7 +1342,8 @@ extension Tools {
             key: fingerprint(hit.text, at: hit.at),
             rank: hit.kind == "screen" ? 1 : 0,
             line: hitLine(hit, origin: .live),
-            uncertain: isUncertainTranscript(hit)
+            uncertain: isUncertainTranscript(hit),
+            isScreen: hit.kind == "screen"
         )
     }
 
