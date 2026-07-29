@@ -1,6 +1,8 @@
 import AppKit
 import XCTest
 
+@testable import Omi_Computer
+
 final class EscapeKeyDispatchTests: XCTestCase {
   @MainActor
   func testTasksEscapeCancelsInlineCreationBeforeHomeNavigation() {
