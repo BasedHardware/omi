@@ -33,7 +33,8 @@ public enum SegmentSource: String, Codable, Sendable, CaseIterable {
     case mic
     case system
 
-    /// Speaker attribution without a diarization model.
+    /// Speaker attribution without a diarization model — the floor, not the ceiling. A line the
+    /// backend diarized carries `Segment.speakerLabel` and `Segment.personId` on top of this.
     public var speaker: String { self == .mic ? "me" : "them" }
 }
 
@@ -52,6 +53,28 @@ public struct Segment: Codable, Sendable, Identifiable, FetchableRecord, Mutable
     /// "me" or "them".
     public var speaker: String
     public var text: String
+    /// The diarization label the backend gave this voice, e.g. `"SPEAKER_00"`.
+    ///
+    /// Stable **within one backend conversation only**, and meaningless across two. What it is good
+    /// for is separating voices that this app's own attribution cannot: three people on a call all
+    /// arrive through the system tap and are all `speaker == "them"`, and this is the only thing in
+    /// the row that says they were three people rather than one.
+    ///
+    /// Nil for every locally transcribed line, which never had a diarizer, and for any cloud line
+    /// the server did not label. Nil means "nobody separated the voices here" — never "one voice".
+    public var speakerLabel: String?
+    /// The Omi person the backend's speech-profile matching identified on this line.
+    ///
+    /// An **opaque backend id**, deliberately not a name. The account's people are renamed, merged
+    /// and re-enrolled by the user long after a line is captured, and a name copied into this row at
+    /// capture time would keep asserting the old one forever with nothing to correct it. The id
+    /// stays true to whoever the person becomes; resolving it to today's name belongs to the reader,
+    /// which holds an Omi credential and can ask.
+    ///
+    /// Nil is the common case and carries no claim: no speech profile matched, no profile is
+    /// enrolled, or the line never went through the cloud at all. An absent person must never render
+    /// as an identified one.
+    public var personId: String?
     /// The transcriber's own confidence in this line, 0–1.
     ///
     /// Optional because it is unknowable for every row written before it was recorded, and because
@@ -67,6 +90,8 @@ public struct Segment: Codable, Sendable, Identifiable, FetchableRecord, Mutable
         endedAt: Double,
         source: SegmentSource,
         text: String,
+        speakerLabel: String? = nil,
+        personId: String? = nil,
         confidence: Double? = nil
     ) {
         self.id = id
@@ -76,7 +101,18 @@ public struct Segment: Codable, Sendable, Identifiable, FetchableRecord, Mutable
         self.source = source.rawValue
         self.speaker = source.speaker
         self.text = text
+        // Blank is the same absence as missing, and the wire is full of empty strings. Normalising
+        // here means one reading of "unattributed" reaches the database, so a `personId IS NOT NULL`
+        // in SQL cannot disagree with a `!= nil` in Swift.
+        self.speakerLabel = Segment.attribute(speakerLabel)
+        self.personId = Segment.attribute(personId)
         self.confidence = confidence
+    }
+
+    private static func attribute(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty
+        else { return nil }
+        return trimmed
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
@@ -156,6 +192,20 @@ public struct Hit: Codable, Sendable, Equatable {
     /// The point of a separate flag is that the reader does not have to know the bar to honour it,
     /// and that an unscored line cannot be mistaken for a doubtful one.
     public var isLowConfidence: Bool
+    /// The backend's diarization label for the voice on this line, e.g. `"SPEAKER_00"`. Nil for
+    /// screen hits and for any line nothing diarized.
+    ///
+    /// `kind` says which side of the microphone a line came from and never stops being true; this
+    /// says which voice it was. Two `heard` lines with different labels are two people, which is
+    /// more than `kind` alone can ever express.
+    public var speakerLabel: String?
+    /// The Omi person the backend matched this voice to, as an **opaque id** — never a name.
+    ///
+    /// Names live in the account and change there; this layer stores what was captured. A reader
+    /// with a credential turns the id into today's name, and a reader without one still knows that
+    /// two lines sharing an id came from the same person. Nil means nobody was identified, which is
+    /// the ordinary case and is not a claim about who was speaking.
+    public var personId: String?
 
     public init(
         kind: String,
@@ -164,7 +214,9 @@ public struct Hit: Codable, Sendable, Equatable {
         app: String? = nil,
         window: String? = nil,
         sessionId: Int64? = nil,
-        confidence: Double? = nil
+        confidence: Double? = nil,
+        speakerLabel: String? = nil,
+        personId: String? = nil
     ) {
         self.kind = kind
         self.at = at
@@ -174,6 +226,8 @@ public struct Hit: Codable, Sendable, Equatable {
         self.window = window
         self.sessionId = sessionId
         self.confidence = confidence
+        self.speakerLabel = speakerLabel
+        self.personId = personId
         // Derived here rather than at the call sites: a hit whose flag disagreed with its own score
         // would be worse than carrying no flag at all.
         self.isLowConfidence = confidence.map { $0 < Hit.lowConfidenceFloor } ?? false
@@ -190,6 +244,14 @@ public struct SessionSummary: Codable, Sendable, Equatable {
     public var lineCount: Int
     /// Whether the other side was captured at all — a one-sided session is you talking, not a call.
     public var bothSidesPresent: Bool
+    /// The Omi people the backend identified in this conversation, as opaque ids, in the order they
+    /// first spoke.
+    ///
+    /// This is what makes "my call with Sarah" answerable: a reader resolves the ids against the
+    /// account and picks the session, instead of reading every transcript looking for a name.
+    /// Empty means nobody was identified — a session nothing diarized, or one with no enrolled voice
+    /// in it. It never means the user was alone; `bothSidesPresent` is the field that speaks to that.
+    public var personIds: [String]
     /// First few lines, enough for Claude to decide whether to pull the transcript.
     public var preview: String
 
@@ -201,7 +263,8 @@ public struct SessionSummary: Codable, Sendable, Equatable {
         appHint: String?,
         lineCount: Int,
         bothSidesPresent: Bool,
-        preview: String
+        preview: String,
+        personIds: [String] = []
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -212,6 +275,7 @@ public struct SessionSummary: Codable, Sendable, Equatable {
         self.lineCount = lineCount
         self.bothSidesPresent = bothSidesPresent
         self.preview = preview
+        self.personIds = personIds
     }
 }
 

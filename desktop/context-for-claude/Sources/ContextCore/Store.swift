@@ -405,6 +405,32 @@ public final class ContextStore: @unchecked Sendable {
             }
         }
 
+        // Backend speaker attribution. Transcription moved to the Omi cloud precisely because the
+        // server diarizes the stream and matches voices against the account's enrolled speech
+        // profiles — and until this column existed there was nowhere to put either answer, so the
+        // whole reason for the move died at this boundary and every line was still "mic is the user,
+        // system tap is everyone else". Three people on a call came back as one indistinguishable
+        // "them".
+        //
+        // `"v4-"` continues the numbering `v3-segment-confidence` established around
+        // `UploadQueue.migrationIdentifier` (`"v2-uploads"`, registered outside this migrator into
+        // the same `grdb_migrations` ledger): distinct names cannot collide, and GRDB only ever acts
+        // on the intersection of registered and applied identifiers.
+        //
+        // Both nullable with no default, for the same reason `confidence` is. A local line, a line
+        // no speech profile matched, and every line captured before today legitimately have neither
+        // — and an absent attribution has to stay absent all the way to the reader rather than
+        // collapsing into a claim about who was speaking. Neither column is indexed: `personId` is
+        // read per session through `idx_segments_sessionId`, never searched across the corpus, and
+        // the FTS index covers `text` alone, so adding columns beneath it leaves the sync triggers
+        // untouched.
+        migrator.registerMigration("v4-segment-speaker") { db in
+            try db.alter(table: "segments") { t in
+                t.add(column: "speakerLabel", .text)
+                t.add(column: "personId", .text)
+            }
+        }
+
         return migrator
     }
 

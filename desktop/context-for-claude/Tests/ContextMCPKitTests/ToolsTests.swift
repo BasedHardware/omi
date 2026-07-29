@@ -322,6 +322,77 @@ final class ToolsTests: XCTestCase {
         XCTAssertTrue(neither.contains("not a negative result"), neither)
     }
 
+    // MARK: - A sensor that was switched off
+
+    /// A search that ran perfectly over a microphone nobody turned on is not evidence about the
+    /// user. "Both halves were searched, so this is a real empty result" is true and, alone,
+    /// licenses a model to report that nothing was said or on screen — so the empty answer has to
+    /// name the permission that made it empty.
+    func testAnEmptyAnswerNamesACaptureSensorThatWasSwitchedOff() throws {
+        let clause = try XCTUnwrap(
+            Tools.deniedCaptureClause(
+                CaptureState(
+                    capturing: true,
+                    capabilities: [
+                        CapabilityReport(name: "microphone", granted: true, detail: "Granted"),
+                        CapabilityReport(
+                            name: "screen", granted: false,
+                            detail: "Screen Recording is off in System Settings"),
+                    ])),
+            "a denied permission produced no disclosure at all")
+
+        // The wording `status` uses for the same fact, so a reader does not have to work out that
+        // two phrasings are one claim.
+        XCTAssertTrue(clause.contains("Not granted"), clause)
+        XCTAssertTrue(clause.contains("never captured at all"), clause)
+        XCTAssertTrue(clause.lowercased().contains("screen recording"), clause)
+        XCTAssertFalse(
+            clause.lowercased().contains("microphone"),
+            "a granted sensor was named as one that was off: \(clause)")
+    }
+
+    /// The rule that keeps this from becoming its own confident falsehood: what the heartbeat does
+    /// not say, the answer does not claim. Silence is the only safe rendering of unknown — the
+    /// failure to avoid is not a missing disclosure but a manufactured reassurance.
+    func testUnknownCapturePermissionsMakeNoClaimInEitherDirection() {
+        XCTAssertNil(
+            Tools.deniedCaptureClause(nil),
+            "an absent or unreadable heartbeat became a claim about permissions")
+        XCTAssertNil(
+            Tools.deniedCaptureClause(CaptureState(capturing: false, capabilities: [])),
+            "a heartbeat that reports no capabilities knows nothing and must say nothing")
+        XCTAssertNil(
+            Tools.deniedCaptureClause(
+                CaptureState(
+                    capturing: true,
+                    capabilities: [
+                        CapabilityReport(name: "microphone", granted: true, detail: "Granted"),
+                        CapabilityReport(name: "screen", granted: true, detail: "Granted"),
+                    ])),
+            "every permission granted needs no clause")
+    }
+
+    /// A stale beat means the app is not running, not that the grant was restored: a TCC decision
+    /// outlives the process that reported it, and nothing was being captured while the app was gone
+    /// either. Dropping the disclosure on staleness is what made this evidence expire after 90
+    /// seconds — including inside a slow test run.
+    func testALastKnownDenialSurvivesAStaleHeartbeat() throws {
+        let stale = CaptureState(
+            capturing: false,
+            capabilities: [
+                CapabilityReport(name: "screen", granted: false, detail: "Screen Recording is off"),
+            ],
+            updatedAt: ContextTime.now - (CaptureState.stalenessSeconds + 600))
+
+        let clause = try XCTUnwrap(
+            Tools.deniedCaptureClause(stale), "a stale beat dropped a denial it had recorded")
+
+        XCTAssertTrue(clause.contains("never captured at all"), clause)
+        XCTAssertTrue(
+            clause.contains("last reported"),
+            "a last-known grant must be dated rather than stated as current: \(clause)")
+    }
+
     // MARK: - How far back the account really goes
 
     /// `status` reported the date of conversation number 501 as the depth of the account. On a busy
@@ -475,6 +546,58 @@ final class ToolsTests: XCTestCase {
             text.contains("CHARLIE-NEWEST"), "a record after `until` was printed anyway: \(text)")
         XCTAssertFalse(
             text.contains("DELTA-LAST-YEAR"), "a record before `since` was printed anyway: \(text)")
+    }
+
+    /// `conversations` prints the same kind of promise in its header and used to leave it entirely
+    /// to whichever half answered — the local query, and an Omi endpoint whose date bounds are a
+    /// request rather than a guarantee. A conversation listed under a window it falls outside is the
+    /// worst shape this failure takes: the reader is confident about the wrong slice of the day.
+    func testConversationsListsOnlyWhatIsInsideTheRangeItPrints() throws {
+        let store = try conversationStore()
+
+        let text = try Tools.call(
+            name: "conversations",
+            arguments: ["since": .number(base + 1_000), "until": .number(base + 5_000)],
+            store: store)
+
+        XCTAssertTrue(text.contains("#2"), "the in-range conversation is missing: \(text)")
+        XCTAssertFalse(text.contains("#1"), "a conversation before `since` was listed: \(text)")
+        XCTAssertFalse(text.contains("#3"), "a conversation after `until` was listed: \(text)")
+        // The header is the claim; both boundaries it names must be the ones that were applied.
+        XCTAssertTrue(text.contains("between"), "the applied range was not printed: \(text)")
+    }
+
+    /// The enforcement seam itself, which is the half an offline test can reach: the local query
+    /// filters correctly on its own, so only this exercises what the tool layer adds on top of a
+    /// half that did not. Undated records cannot be judged against a window, so they are kept and
+    /// counted rather than silently treated as inside it.
+    func testRangeEnforcementIsOneSeamForEveryListingTool() {
+        struct Record { let id: String; let at: Double }
+        let records = [
+            Record(id: "inside", at: 500),
+            Record(id: "before", at: 10),
+            Record(id: "after", at: 5_000),
+            Record(id: "undated", at: 0),
+        ]
+
+        let ranged = Tools.restrictToRange(records, since: 100, until: 1_000, at: { $0.at })
+
+        XCTAssertEqual(ranged.kept.map(\.id), ["inside", "undated"])
+        XCTAssertEqual(ranged.droppedOutOfRange, 2)
+        XCTAssertEqual(ranged.undated, 1)
+
+        // What it cost is stated, not hidden: a silently emptied window and a genuinely empty one
+        // are different answers.
+        let notes = Tools.rangeEnforcementNotes(ranged, noun: "conversation")
+        XCTAssertEqual(notes.count, 2, "\(notes)")
+        XCTAssertTrue(notes[0].contains("2 conversations"), notes[0])
+        XCTAssertTrue(notes[0].contains("were dropped here"), notes[0])
+        XCTAssertTrue(notes[1].contains("no timestamp"), notes[1])
+
+        // No window asked for is no window enforced — and nothing to disclose.
+        let unbounded = Tools.restrictToRange(records, since: nil, until: nil, at: { $0.at })
+        XCTAssertEqual(unbounded.kept.count, records.count)
+        XCTAssertTrue(Tools.rangeEnforcementNotes(unbounded, noun: "conversation").isEmpty)
     }
 
     /// The decision itself, at the seam the tool uses. Undated records cannot be judged against a
@@ -708,6 +831,34 @@ final class ToolsTests: XCTestCase {
         XCTAssertThrowsError(try Tools.call(name: "no_such_tool", arguments: nil, store: store))
     }
 
+    /// A filter that is present but not a date in any reading used to return nil, which the caller
+    /// reads as "no filter was asked for": the search then ran over everything *and the header
+    /// printed no range at all*, so the caller believed it had bounded the question with nothing in
+    /// the answer to say otherwise. Loud is the only safe outcome.
+    func testATimeFilterOfTheWrongTypeIsRejectedRatherThanDropped() throws {
+        let store = try seededStore()
+        let wrongTypes: [(String, JSONValue)] = [
+            ("a boolean", .bool(true)),
+            ("an array", .array([.number(1), .number(2)])),
+            ("an object", .object(["x": .number(1)])),
+        ]
+
+        for (label, value) in wrongTypes {
+            XCTAssertThrowsError(
+                try Tools.call(
+                    name: "recall", arguments: ["query": "pricing", "since": value], store: store),
+                "a `since` of \(label) was dropped rather than rejected")
+        }
+
+        // The one shape that may still pass through: an empty string is "no filter asked for", and
+        // the header then prints no range, so nothing is claimed that was not applied.
+        let unbounded = try Tools.call(
+            name: "recall", arguments: ["query": "pricing", "since": ""], store: store)
+        XCTAssertFalse(
+            unbounded.split(separator: "\n").first?.lowercased().contains("since") ?? false,
+            "an empty `since` was printed as an applied filter: \(unbounded)")
+    }
+
     // MARK: - Helpers
 
     /// Valid arguments for every tool, so a test exercises the path it means to and not an
@@ -814,6 +965,29 @@ final class ToolsTests: XCTestCase {
                     appName: "Safari",
                     windowTitle: "Notes",
                     ocrText: "\(marker) on screen"))
+        }
+        return store
+    }
+
+    /// Three conversations spread over three hours, one line each, so a `since` / `until` window
+    /// can select exactly the middle one.
+    private func conversationStore() throws -> ContextStore {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ambient-conversations-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+
+        let store = try ContextStore(url: root.appendingPathComponent("context.db"))
+        for start in [base, base + 3_000, base + 9_000] {
+            let sessionId = try store.openSession(at: start, appHint: "zoom.us")
+            try store.closeSession(sessionId, at: start + 300)
+            _ = try store.insertSegment(
+                Segment(
+                    sessionId: sessionId,
+                    startedAt: start + 10,
+                    endedAt: start + 15,
+                    source: .mic,
+                    text: "a line inside this conversation"))
         }
         return store
     }

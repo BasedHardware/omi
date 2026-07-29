@@ -418,6 +418,16 @@ extension Tools {
 
         var merged = local.rows.map(liveHit)
         merged += omi.conversations.map(omiConversationHit)
+
+        // The headline prints the range it was asked for, so — as in `screen` and `conversations` —
+        // the range is applied here rather than trusted to whichever half answered. Omi's search is
+        // semantic and its date bounds are a request, not a guarantee. The remembered facts below
+        // are deliberately exempt: they carry no timestamp at all, are rendered in their own
+        // section, and that section says so.
+        let ranged = restrictToRange(merged, since: since, until: until, at: \.at)
+        merged = ranged.kept
+        notes.append(contentsOf: rangeEnforcementNotes(ranged, noun: "record"))
+
         merged = dedupe(merged)
         merged = Array(merged.prefix(limit))
 
@@ -584,6 +594,18 @@ extension Tools {
 
         var entries = (backend.value ?? []).map(omiConversationEntry)
         entries += sessions.rows.map(localConversationEntry)
+
+        // `renderConversations` prints the range it was *asked* for, so the range is enforced here
+        // rather than trusted to whichever half answered — the same reason `screen` enforces it.
+        // Omi's list endpoint takes date bounds and does not always honour them, and a conversation
+        // shown under a header claiming a window it falls outside is worse than no filter at all:
+        // the reader believes it is looking at one slice of the user's day while it is looking at
+        // another, and nothing in the answer reveals the swap. Before the limit, so the cap is
+        // never spent on rows this layer is about to drop.
+        let ranged = restrictToRange(entries, since: since, until: until, at: \.at)
+        entries = ranged.kept
+        notes.append(contentsOf: rangeEnforcementNotes(ranged, noun: "conversation"))
+
         entries.sort { $0.at > $1.at }
         entries = Array(entries.prefix(limit))
 
@@ -695,8 +717,14 @@ extension Tools {
         let limit = clamp(intArg(args, "limit") ?? 60, 1, 500)
 
         var notes: [String] = []
-        let local = readLocal(store, &notes) {
-            try Queries.screen($0, since: since, until: until, app: app, limit: limit)
+        // `screenPage`, not `screen`: it reports whether the local half was truncated. Without that
+        // the caller counts `limit` hits and cannot tell a complete answer from a bounded slice,
+        // which is how a partial list gets reported as the whole record.
+        var localTruncated = false
+        let local = readLocal(store, &notes) { store -> [Hit] in
+            let page = try Queries.screenPage(store, since: since, until: until, app: app, limit: limit)
+            localTruncated = page.truncated
+            return page.hits
         }
 
         let backend = OmiBackend.shared.screenActivity(since: since, until: until, app: app, limit: limit)
@@ -719,23 +747,9 @@ extension Tools {
         // trusted to whichever half answered. Printing a filter that was not applied is the same
         // class of lie as an understated coverage window: the reader believes it is looking at one
         // slice of the user's day while it is actually looking at another.
-        let ranged = restrictToRange(merged, since: since, until: until)
+        let ranged = restrictToRange(merged, since: since, until: until, at: \.at)
         merged = ranged.kept
-        if ranged.droppedOutOfRange > 0 {
-            notes.append("""
-            \(plural(ranged.droppedOutOfRange, "record")) came back outside the \
-            `since` / `until` range that was asked for and \
-            \(ranged.droppedOutOfRange == 1 ? "was" : "were") dropped here, so the range printed \
-            above is the range actually applied.
-            """)
-        }
-        if ranged.undated > 0 {
-            notes.append("""
-            \(plural(ranged.undated, "record")) carried no timestamp, so \
-            \(ranged.undated == 1 ? "it" : "they") could not be checked against the range and \
-            \(ranged.undated == 1 ? "is" : "are") listed under "Undated" rather than dropped.
-            """)
-        }
+        notes.append(contentsOf: rangeEnforcementNotes(ranged, noun: "record"))
 
         // Newest-first is a promise this tool makes in its description and its header; sort for it
         // here so the promise holds whatever order either half happened to return.
@@ -769,7 +783,9 @@ extension Tools {
         // Above the rows, because on this tool freshness decides how the whole list should be read.
         var out = header + "\n\n" + screenWatermarkSentence(watermark)
             + "\n\n" + renderMerged(merged, order: .newestFirst)
-        if available > merged.count {
+        // `available` only ever counted the rows this answer already held, so a local half that was
+        // itself capped could never trip it — the disclosure was unreachable on a local-only answer.
+        if available > merged.count || localTruncated {
             out += "\n\n" + """
             _These are the \(number(merged.count)) newest of at least \(number(available)) \
             observations that matched; raise `limit` or narrow `since` / `until` to see older ones._
@@ -1111,17 +1127,22 @@ private struct MergedHit {
     }
 }
 
-/// What enforcing the caller's window actually cost, so the tool can say it rather than hide it.
-private struct RangedHits {
-    let kept: [MergedHit]
-    let droppedOutOfRange: Int
-    /// Undated records are kept — dropping real history over missing metadata is worse — but they
-    /// are counted, because a reader must know they were never checked against the range.
-    let undated: Int
-}
-
 extension Tools {
     enum HitOrder { case oldestFirst, newestFirst }
+
+    /// What enforcing the caller's window actually cost, so the tool can say it rather than hide it.
+    ///
+    /// Generic over the record because the window is a promise every listing tool prints, and the
+    /// three that print it hold three different shapes: `screen` and `recall` merge hits, and
+    /// `conversations` merges conversation entries. One enforcement seam is what keeps them from
+    /// drifting into three different meanings of the same header.
+    struct RangedRecords<Element> {
+        let kept: [Element]
+        let droppedOutOfRange: Int
+        /// Undated records are kept — dropping real history over missing metadata is worse — but
+        /// they are counted, because a reader must know they were never checked against the range.
+        let undated: Int
+    }
 
     /// Whether a record may be shown under the range the header prints.
     ///
@@ -1136,26 +1157,54 @@ extension Tools {
         return true
     }
 
-    fileprivate static func restrictToRange(
-        _ hits: [MergedHit],
+    static func restrictToRange<Element>(
+        _ records: [Element],
         since: Double?,
-        until: Double?
-    ) -> RangedHits {
+        until: Double?,
+        at timestamp: (Element) -> Double
+    ) -> RangedRecords<Element> {
         guard since != nil || until != nil else {
-            return RangedHits(kept: hits, droppedOutOfRange: 0, undated: 0)
+            return RangedRecords(kept: records, droppedOutOfRange: 0, undated: 0)
         }
-        var kept: [MergedHit] = []
+        var kept: [Element] = []
         var dropped = 0
         var undated = 0
-        for hit in hits {
-            if hit.at <= 0 { undated += 1 }
-            if isWithinRange(hit.at, since: since, until: until) {
-                kept.append(hit)
+        for record in records {
+            let at = timestamp(record)
+            if at <= 0 { undated += 1 }
+            if isWithinRange(at, since: since, until: until) {
+                kept.append(record)
             } else {
                 dropped += 1
             }
         }
-        return RangedHits(kept: kept, droppedOutOfRange: dropped, undated: undated)
+        return RangedRecords(kept: kept, droppedOutOfRange: dropped, undated: undated)
+    }
+
+    /// What the enforcement cost, said out loud. Silently dropping a row is the same class of
+    /// dishonesty as printing one that does not belong: either way the reader is looking at a
+    /// different slice of the day than the one it believes, and only these notes close that gap.
+    static func rangeEnforcementNotes<Element>(
+        _ ranged: RangedRecords<Element>,
+        noun: String
+    ) -> [String] {
+        var notes: [String] = []
+        if ranged.droppedOutOfRange > 0 {
+            notes.append("""
+            \(plural(ranged.droppedOutOfRange, noun)) came back outside the \
+            `since` / `until` range that was asked for and \
+            \(ranged.droppedOutOfRange == 1 ? "was" : "were") dropped here, so the range printed \
+            above is the range actually applied.
+            """)
+        }
+        if ranged.undated > 0 {
+            notes.append("""
+            \(plural(ranged.undated, noun)) carried no timestamp, so \
+            \(ranged.undated == 1 ? "it" : "they") could not be checked against the range and \
+            \(ranged.undated == 1 ? "is" : "are") kept rather than dropped.
+            """)
+        }
+        return notes
     }
 
     /// Roughly 1500 rendered lines, whichever of the two limits bites first.
@@ -1946,12 +1995,17 @@ extension Tools {
     /// The single most important non-result in the product: it is what stops Claude from turning
     /// "not captured" into "never happened".
     private static func emptyMessage(_ store: ContextStore?, _ sentence: String) -> String {
+        // Every empty answer in the product is built here — `recall`, `recent`, `conversations`, an
+        // empty `transcript`, `screen`, `activity` — which makes it the one place a sensor that was
+        // switched off can be named without being said twice or missed on one path.
+        let sensorOff = deniedCaptureClause().map { "\n\n" + $0 } ?? ""
+
         guard let store else {
             return sentence + "\n\n" + """
             Context for Claude has captured nothing on this Mac (no local database), so this answer rests \
             entirely on the Omi account. Treat it as "not found in what could be read" rather than \
             "did not happen", and call `status` to see which halves are actually available.
-            """
+            """ + sensorOff
         }
         // A database that opens and then refuses to answer is the third state, and the one a `try?`
         // used to fold into "nothing was captured". The file is right there: this is a fault in the
@@ -1962,14 +2016,14 @@ extension Tools {
             answer, so its coverage window is unknown and its half of the search did not run. That is \
             a reader fault, not an empty history — do not report this as "nothing was captured". Call \
             `status` for the detail.
-            """
+            """ + sensorOff
         }
         if status.segmentCount == 0 && status.frameCount == 0 {
             return sentence + "\n\n" + """
             Context for Claude has recorded nothing locally on this Mac yet, so nothing here rules anything out. \
             Call `status` to see whether the Omi account is reachable before telling the user this \
             did not happen.
-            """
+            """ + sensorOff
         }
 
         var out = sentence
@@ -1982,10 +2036,9 @@ extension Tools {
             let reason = status.pausedReason.flatMap(nonEmpty) ?? "it is not running"
             out += " It is not capturing right now — \(reason)."
         }
-        if status.capabilities.contains(where: { !$0.granted }) {
-            let denied = status.capabilities.filter { !$0.granted }.map(\.name).joined(separator: ", ")
-            out += " Not granted: \(denied) — that context was never captured at all."
-        }
+        // Was a second, differently-worded rendering of the same permissions read from the same
+        // heartbeat, on the one path of four that reached it. One clause, every path.
+        out += sensorOff
         out += "\n\n"
         out += """
         Try different wording, widen `since` / `until`, or call `status` for the full picture — \
@@ -1995,6 +2048,56 @@ extension Tools {
         return out
     }
 
+    /// Capture permissions that were switched off, named so an empty answer cannot be mistaken for
+    /// an empty life.
+    ///
+    /// "Both halves were searched, so this is a real empty result" is true and, on its own,
+    /// misleading: if Screen Recording is denied there was never anything to search, and that
+    /// sentence licenses a model to report that nothing was on screen. A search that ran perfectly
+    /// over a sensor that was off is a fact about the sensor, not about the user.
+    ///
+    /// **Unknown stays unknown, in both directions.** No heartbeat, an unreadable one, or one that
+    /// reports no capabilities at all produces no clause whatsoever — never a reassurance that the
+    /// sensors were on. A *stale* beat is still reported, marked as last-known: a TCC grant outlives
+    /// the process that wrote it, and while the app was gone nothing was being captured either, so
+    /// silence there would be the more misleading answer of the two.
+    ///
+    /// The state is a parameter so the decision is testable without the machine's own heartbeat
+    /// deciding what a test observes.
+    static func deniedCaptureClause(_ state: CaptureState? = CaptureState.read()) -> String? {
+        guard let state else { return nil }
+        let denied = state.capabilities.filter { !$0.granted }.map { capabilityPhrase($0.name) }
+        guard !denied.isEmpty else { return nil }
+
+        // Deliberately the wording `status` uses for the same fact. A reader that meets "not
+        // granted" in one answer and a synonym in another has to work out that they are the same
+        // claim, and the one place that matters is the answer that looks empty.
+        let asOf = state.isStale
+            ? " when Context for Claude last reported, \(duration(ContextTime.now - state.updatedAt)) ago"
+            : ""
+        return """
+        **Not granted\(asOf): \(sentenceList(denied)).** That context was never captured at all, so \
+        the absence above is a sensor that was switched off rather than evidence about the user — do \
+        not report it as something that did not happen. `status` lists every capture permission.
+        """
+    }
+
+    /// The `Capability` raw values as a reader meets them: `systemAudio` is a developer's word for
+    /// the other side of a call.
+    private static func capabilityPhrase(_ name: String) -> String {
+        switch name {
+        case "microphone": return "the microphone"
+        case "systemAudio": return "call and system audio"
+        case "screen": return "screen recording"
+        default: return name
+        }
+    }
+
+    private static func sentenceList(_ items: [String]) -> String {
+        guard items.count > 1 else { return items.first ?? "" }
+        return items.dropLast().joined(separator: ", ") + " and " + items[items.count - 1]
+    }
+
     /// Says whether an empty answer is evidence at all.
     ///
     /// Two very different things end in nothing to show — "both halves were searched and there is
@@ -2002,6 +2105,10 @@ extension Tools {
     /// prints one sentence for both teaches a reader to treat a broken search as proof of absence,
     /// which is the exact failure this product exists to prevent. So the sentence is built from the
     /// two facts, and names the half that did not run.
+    ///
+    /// It says nothing about capture permissions: a sensor that was off is a third fact, it applies
+    /// to empty answers this sentence never reaches (`recent`, `activity`, an empty `transcript`),
+    /// and `emptyMessage` — which every one of them goes through — is where it is said once.
     static func nothingFound(
         what: String,
         localSearched: Bool,
@@ -2200,14 +2307,40 @@ extension Tools {
     /// which is the one case that may quietly pass through. Anything present but unreadable throws.
     private static func dateArg(_ args: JSONValue?, _ key: String) throws -> Double? {
         guard let value = args?[key] else { return nil }
-        if let text = value.stringValue.flatMap(nonEmpty) {
+        if case .string(let raw) = value {
+            // An empty string is "no filter asked for" — the header then prints no range, so
+            // nothing is claimed that was not applied.
+            guard let text = nonEmpty(raw) else { return nil }
             if let epoch = DateArg.parse(text) { return epoch }
             // A quoted epoch is unambiguous; accept it rather than failing a well-meaning caller.
             if let epoch = Double(text), epoch > 1_000_000_000 { return epoch }
             throw ToolError.unparsableDate(argument: key, value: text)
         }
         if case .number(let epoch) = value { return epoch }
-        return nil
+        // A boolean, an array or an object is not a date under any reading. This used to fall
+        // through to nil, which the caller reads as "no filter asked for": the search then ran over
+        // the whole corpus, the header printed no range at all, and the caller believed it had
+        // bounded the question with no way to find out that it had not.
+        throw ToolError.invalidArgument(
+            argument: key,
+            value: literalDescription(value),
+            expected: """
+            A time filter must be text or an epoch number. \(dateHelp) The call was rejected rather \
+            than run without the filter, so nothing here is a partial answer.
+            """
+        )
+    }
+
+    /// A short, quotable rendering of a value that is not the shape a tool asked for.
+    private static func literalDescription(_ value: JSONValue) -> String {
+        switch value {
+        case .null: return "null"
+        case let .bool(flag): return flag ? "true" : "false"
+        case let .number(number): return String(number)
+        case let .string(text): return text
+        case .array: return "an array"
+        case .object: return "an object"
+        }
     }
 
     private static func clamp(_ value: Int, _ lower: Int, _ upper: Int) -> Int {

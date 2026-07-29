@@ -78,7 +78,8 @@ CREATE TABLE segments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   sessionId INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   startedAt DOUBLE NOT NULL, endedAt DOUBLE NOT NULL,
-  source TEXT NOT NULL, speaker TEXT NOT NULL, text TEXT NOT NULL);
+  source TEXT NOT NULL, speaker TEXT NOT NULL, text TEXT NOT NULL,
+  confidence DOUBLE, speakerLabel TEXT, personId TEXT);
 CREATE INDEX idx_segments_startedAt ON segments(startedAt);
 CREATE INDEX idx_segments_sessionId ON segments(sessionId, startedAt);
 
