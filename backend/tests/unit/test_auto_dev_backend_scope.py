@@ -11,6 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW_PATH = ROOT / '.github/workflows/gcp_backend_auto_dev.yml'
+GIT_LAYOUT_PARENT_LIMIT = 3
 
 
 def _load_admission_script():
@@ -30,6 +31,30 @@ def _scope_job() -> dict:
 
 def _git(repo: Path, *args: str) -> str:
     return subprocess.check_output(['git', *args], cwd=repo, text=True).strip()
+
+
+def _find_git_bash(git_exec_path: Path) -> Path:
+    for parent in tuple(git_exec_path.parents)[:GIT_LAYOUT_PARENT_LIMIT]:
+        for relative_path in ('bin/bash.exe', 'usr/bin/bash.exe'):
+            candidate = parent / relative_path
+            if candidate.is_file():
+                return candidate
+    raise FileNotFoundError(f'Git Bash was not found above {git_exec_path}')
+
+
+def _bash(*, platform_name: str | None = None, git_exec_path: Path | None = None) -> str:
+    if (platform_name or os.name) != 'nt':
+        return 'bash'
+    return str(_find_git_bash(git_exec_path or Path(_git(ROOT, '--exec-path'))))
+
+
+def _bash_path(path: Path) -> str:
+    if os.name != 'nt':
+        return str(path)
+    return subprocess.check_output(
+        [_bash(), '-c', 'cygpath -u "$1"', 'bash', path],
+        text=True,
+    ).strip()
 
 
 def _commit(repo: Path, relative_path: str) -> str:
@@ -74,15 +99,39 @@ printf '200'
         encoding='utf-8',
     )
     curl.chmod(0o755)
+    if os.name == 'nt':
+        # Git for Windows does not ship jq, so model the two exact API
+        # identities while Linux continues to exercise the real jq filters.
+        jq = fake_bin / 'jq'
+        jq.write_text(
+            '''#!/usr/bin/env bash
+set -euo pipefail
+payload="$(<"${!#}")"
+status=identical
+[[ "$RELEASE_SHA" != "$MOCK_MAIN_SHA" ]] && status=behind
+expected_ref='{"ref":"refs/heads/main","object":{"type":"commit","sha":"'"$MOCK_MAIN_SHA"'"}}'
+expected_compare='{"base_commit":{"sha":"'"$RELEASE_SHA"'"},"head_commit":{"sha":"'"$MOCK_MAIN_SHA"'"},"status":"'"$status"'"}'
+if [[ "$payload" == "$expected_ref" ]]; then
+  printf '%s\\n' "$MOCK_MAIN_SHA"
+elif [[ "$payload" == "$expected_compare" ]]; then
+  printf '%s\\n' "$status"
+else
+  exit 1
+fi
+''',
+            encoding='utf-8',
+        )
+        jq.chmod(0o755)
     scope_step = next(step for step in _scope_job()['steps'] if step.get('id') == 'scope')
+    scope_script = f'export PATH="$OMI_TEST_FAKE_BIN:$PATH"\n{scope_step["run"]}'
     result = subprocess.run(
-        ['bash', '-c', scope_step['run']],
+        [_bash(), '-c', scope_script],
         cwd=repo,
         check=False,
         capture_output=True,
         env={
             **os.environ,
-            'PATH': f'{fake_bin}:{os.environ["PATH"]}',
+            'OMI_TEST_FAKE_BIN': _bash_path(fake_bin),
             'GH_TOKEN': 'test-token',
             'GITHUB_REPOSITORY': 'BasedHardware/omi',
             'RELEASE_SHA': sha,
@@ -104,6 +153,17 @@ def git_repo(tmp_path: Path) -> Path:
     _git(tmp_path, 'config', 'user.name', 'Scope Test')
     _commit(tmp_path, 'README.md')
     return tmp_path
+
+
+def test_windows_bash_resolution_uses_the_active_git_installation(tmp_path: Path) -> None:
+    git_root = tmp_path / 'Git'
+    git_exec_path = git_root / 'mingw64/libexec/git-core'
+    git_exec_path.mkdir(parents=True)
+    git_bash = git_root / 'bin/bash.exe'
+    git_bash.parent.mkdir()
+    git_bash.touch()
+
+    assert _bash(platform_name='nt', git_exec_path=git_exec_path) == str(git_bash)
 
 
 def test_unrelated_desktop_change_exits_as_a_green_no_op(git_repo: Path) -> None:
