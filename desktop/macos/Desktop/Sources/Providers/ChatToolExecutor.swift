@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import AppKit
+@preconcurrency import ApplicationServices
 import Foundation
 @preconcurrency import GRDB
 @preconcurrency import UserNotifications
