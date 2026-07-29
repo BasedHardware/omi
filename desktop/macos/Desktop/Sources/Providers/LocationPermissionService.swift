@@ -12,14 +12,14 @@ final class LocationPermissionService: NSObject {
   static let shared = LocationPermissionService()
 
   private let manager = CLLocationManager()
-  private let delegate = LocationPermissionDelegate()
+  private let callbackBridge = LocationPermissionDelegate()
   private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
   private var locationContinuation: CheckedContinuation<LocationPermissionResult, Never>?
 
   override init() {
     super.init()
-    delegate.owner = self
-    manager.delegate = delegate
+    callbackBridge.owner = self
+    manager.delegate = callbackBridge
   }
 
   var isAuthorized: Bool {
