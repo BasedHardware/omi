@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -43,6 +44,35 @@ def test_sanitize_rejects_multiple_candidates_and_path_is_allowlisted():
     )
     with pytest.raises(HTTPException):
         desktop_proxy._path_parts("models/gemini-2.5-pro:deleteModel")
+
+
+def test_desktop_live_suggestions_model_is_allowed_and_vertex_routed(monkeypatch):
+    """Desktop live suggestions run on Flash-Lite (ModelQoS.suggestions), so the proxy must forward it."""
+    assert desktop_proxy._path_parts("models/gemini-2.5-flash-lite:generateContent") == (
+        "models/gemini-2.5-flash-lite:generateContent",
+        "gemini-2.5-flash-lite",
+        "generateContent",
+    )
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "omi-test")
+    monkeypatch.setenv("GCP_LOCATION", "us-central1")
+    assert desktop_proxy._vertex_url("gemini-2.5-flash-lite", "generateContent") == (
+        "https://us-central1-aiplatform.googleapis.com/v1/projects/omi-test/locations/us-central1"
+        "/publishers/google/models/gemini-2.5-flash-lite:generateContent"
+    )
+
+
+def test_every_model_the_desktop_client_ships_is_proxy_allowlisted():
+    """Static checker: ModelQoS.swift picks the models the desktop sends to this proxy.
+
+    Not behavioral coverage — it reads the client's model table so a tier change there
+    cannot ship a model the proxy answers with 403.
+    """
+    qos = BACKEND_DIR.parent / "desktop/macos/Desktop/Sources/ModelQoS.swift"
+    if not qos.exists():  # partial checkouts (backend-only forks) have no desktop tree
+        pytest.skip("desktop sources are not present in this checkout")
+    client_models = set(re.findall(r'"(gemini-[^"]+)"', qos.read_text()))
+    assert client_models
+    assert client_models <= desktop_proxy._ALLOWED_MODELS
 
 
 def test_vertex_embedding_translation_round_trip():
