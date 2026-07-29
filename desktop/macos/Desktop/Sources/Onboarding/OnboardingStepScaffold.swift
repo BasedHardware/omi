@@ -52,6 +52,58 @@ enum OnboardingLayoutMode {
   case centered
 }
 
+/// Keeps the onboarding chrome visible while allowing a step's content to
+/// scroll only when a compact window cannot contain it. The minimum-height
+/// frame preserves the existing centered composition at ordinary sizes.
+struct OnboardingCenteredContentRegion<Content: View>: View {
+  let content: Content
+
+  init(@ViewBuilder content: () -> Content) {
+    self.content = content()
+  }
+
+  var body: some View {
+    GeometryReader { geometry in
+      ScrollView(showsIndicators: false) {
+        content
+          .frame(maxWidth: .infinity)
+          .frame(minHeight: geometry.size.height, alignment: .center)
+          .padding(.horizontal, OmiSpacing.page)
+          .padding(.vertical, OmiSpacing.section)
+      }
+      .scrollBounceBehavior(.basedOnSize)
+    }
+  }
+}
+
+/// Splits an onboarding step into scrollable content and persistent navigation
+/// actions. Keeping the footer outside the scroll view ensures users can
+/// always go back or continue, even while a compact-height window scrolls the
+/// larger instructional content.
+struct OnboardingContentWithPinnedActions<Content: View, Actions: View>: View {
+  let content: Content
+  let actions: Actions
+
+  init(
+    @ViewBuilder content: () -> Content,
+    @ViewBuilder actions: () -> Actions
+  ) {
+    self.content = content()
+    self.actions = actions()
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      OnboardingCenteredContentRegion { content }
+        .frame(maxHeight: .infinity)
+
+      actions
+        .padding(.horizontal, OmiSpacing.page)
+        .padding(.bottom, OmiSpacing.section)
+    }
+  }
+}
+
 struct OnboardingStepScaffold<Content: View>: View {
   @ObservedObject private var graphViewModel: MemoryGraphViewModel
   @Environment(\.onboardingJumpTo) private var onboardingJumpTo

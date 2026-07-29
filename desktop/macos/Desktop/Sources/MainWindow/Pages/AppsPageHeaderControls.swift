@@ -3,6 +3,7 @@ import SwiftUI
 
 enum AppsHeaderMetrics {
   static let searchFieldMaxWidth: CGFloat = 360
+  static let searchFieldMinWidth: CGFloat = 200
   static let controlIconSize: CGFloat = 16
   static let controlHeight: CGFloat = 44
 }
@@ -31,7 +32,10 @@ struct AppsHeaderRow<Search: View, Filters: View, Create: View, Dismiss: View>: 
     ViewThatFits(in: .horizontal) {
       HStack(spacing: OmiSpacing.md) {
         search
-          .frame(maxWidth: AppsHeaderMetrics.searchFieldMaxWidth)
+          .frame(
+            minWidth: AppsHeaderMetrics.searchFieldMinWidth,
+            maxWidth: AppsHeaderMetrics.searchFieldMaxWidth
+          )
         filters
           .fixedSize(horizontal: true, vertical: false)
         create
@@ -40,7 +44,7 @@ struct AppsHeaderRow<Search: View, Filters: View, Create: View, Dismiss: View>: 
 
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         HStack(spacing: OmiSpacing.sm) {
-          search
+          search.frame(minWidth: AppsHeaderMetrics.searchFieldMinWidth)
           dismiss
         }
 
@@ -49,6 +53,20 @@ struct AppsHeaderRow<Search: View, Filters: View, Create: View, Dismiss: View>: 
             .fixedSize(horizontal: true, vertical: false)
           create
         }
+      }
+
+      // The real filter controls have a fixed minimum width. Once they no
+      // longer fit with Create App, give each control group its own row.
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        HStack(spacing: OmiSpacing.sm) {
+          search
+          dismiss
+        }
+
+        filters
+          .fixedSize(horizontal: true, vertical: false)
+
+        create
       }
     }
   }

@@ -31,8 +31,6 @@ private protocol HostingSizingConfigurable: AnyObject {
 extension NSHostingView: HostingSizingConfigurable {}
 
 struct DesktopHomeView: View {
-  private let minimumWindowWidth: CGFloat = 1200
-  private let minimumWindowHeight: CGFloat = 680
   private static let pageNavigationAnimation = Animation.easeOut(duration: 0.08)
 
   @EnvironmentObject private var appState: AppState
@@ -411,7 +409,7 @@ struct DesktopHomeView: View {
       }
     }
     .background(OmiColors.backgroundPrimary)
-    .frame(minWidth: minimumWindowWidth, minHeight: minimumWindowHeight)
+    .frame(minWidth: DesktopWindowLayoutPolicy.width, minHeight: DesktopWindowLayoutPolicy.height)
     .preferredColorScheme(.dark)
     .tint(OmiColors.accent)
     .onAppear {
@@ -500,7 +498,7 @@ struct DesktopHomeView: View {
   }
 
   private func enforceMainWindowMinimumSize() {
-    let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
+    let minimumContentSize = DesktopWindowLayoutPolicy.minimumContentSize
     DispatchQueue.main.async {
       for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
         window.appearance = NSAppearance(named: .darkAqua)
@@ -534,7 +532,7 @@ struct DesktopHomeView: View {
   private func installMinimumSizeGuardIfNeeded() {
     guard !Self.minimumSizeGuardInstalled else { return }
     Self.minimumSizeGuardInstalled = true
-    let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
+    let minimumContentSize = DesktopWindowLayoutPolicy.minimumContentSize
     NotificationCenter.default.addObserver(
       forName: NSWindow.didResizeNotification, object: nil, queue: .main
     ) { notification in
