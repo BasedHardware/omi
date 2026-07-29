@@ -113,3 +113,80 @@ def test_listen_capture_bounds_audio_and_snapshots_transcript_segments(tmp_path)
     assert len(cassette['events']) == 1
     assert cassette['events'][0]['direction'] == 'inbound'
     assert cassette['events'][0]['payload']['segments'][0]['speaker'] == 'unknown'
+
+
+def test_listen_capture_export_fail_open_when_gcs_upload_raises(tmp_path, monkeypatch):
+    env = _capture_env(tmp_path)
+    env['OMI_PARITY_PACK_GCS_URI'] = 'gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0'
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError('gcs unavailable')
+
+    monkeypatch.setattr(
+        'routers.listen.parity_pack_export.export_cassette_file',
+        boom,
+    )
+
+    capture = ListenParityCapture.from_environ(
+        principal_id='allowed-firebase-uid',
+        session_id='runtime-session',
+        provider='parakeet',
+        model='parakeet_streaming',
+        request=_request(),
+        environ=env,
+    )
+    capture.observe_client_audio(b'client-audio')
+    # Must not raise even when export path fails hard.
+    capture.persist()
+    assert list((tmp_path / 'cassettes').glob('*.json'))
+
+
+def test_export_target_resolves_uri_and_bucket_prefix():
+    from routers.listen.parity_pack_export import resolve_export_target
+
+    assert resolve_export_target(
+        {'OMI_PARITY_PACK_GCS_URI': 'gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0'}
+    ) == ('based-hardware-dev-omi-parity-pack-v0', 'parity-pack/v0')
+    assert resolve_export_target(
+        {
+            'OMI_PARITY_PACK_GCS_BUCKET': 'based-hardware-dev-omi-parity-pack-v0',
+            'OMI_PARITY_PACK_GCS_PREFIX': 'parity-pack/v0',
+        }
+    ) == ('based-hardware-dev-omi-parity-pack-v0', 'parity-pack/v0')
+    assert resolve_export_target({}) is None
+
+
+def test_export_cassette_file_uploads_under_prefix(tmp_path, monkeypatch):
+    from routers.listen import parity_pack_export as export_mod
+
+    cassette_dir = tmp_path / 'cassettes'
+    cassette_dir.mkdir()
+    cassette = cassette_dir / 'abc.json'
+    cassette.write_text('{"ok":true}\n', encoding='utf-8')
+
+    uploaded = {}
+
+    class FakeBlob:
+        def upload_from_filename(self, filename, content_type=None):
+            uploaded['filename'] = filename
+            uploaded['content_type'] = content_type
+
+    class FakeBucket:
+        def blob(self, name):
+            uploaded['object'] = name
+            return FakeBlob()
+
+    class FakeClient:
+        def bucket(self, name):
+            uploaded['bucket'] = name
+            return FakeBucket()
+
+    monkeypatch.setattr(export_mod, '_storage_client', lambda: FakeClient())
+    env = {
+        'OMI_PARITY_PACK_ROOT': str(tmp_path),
+        'OMI_PARITY_PACK_GCS_URI': 'gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0',
+    }
+    assert export_mod.export_cassette_file(cassette, environ=env) is True
+    assert uploaded['bucket'] == 'based-hardware-dev-omi-parity-pack-v0'
+    assert uploaded['object'] == 'parity-pack/v0/cassettes/abc.json'
+    assert uploaded['filename'] == str(cassette)

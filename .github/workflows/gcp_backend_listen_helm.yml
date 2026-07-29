@@ -201,6 +201,12 @@ jobs:
           X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
         run: backend/scripts/deploy-backend-config.sh
 
+      - name: Ensure dev parity-pack bucket (development only)
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && (github.event.inputs.environment || 'development') == 'development' }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/ensure_dev_parity_pack_bucket.py
+
       - name: Helm diff (dry run)
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         run: |
