@@ -2,6 +2,16 @@ import AppKit
 import Combine
 import Foundation
 
+enum SBOnboardingLanguageCopy {
+  static let question = "What language should Omi listen and reply in?"
+  static let detectedLanguageDetail = "· detected from your Mac"
+  static let changeSpokenLanguageAction = "Change spoken language"
+
+  static func continueAction(for language: String) -> String {
+    "Continue in \(language)"
+  }
+}
+
 /// Drives the Second Brain conversational onboarding: a real chat with Omi that
 /// streams word-by-word, collects answers, and performs the SAME live side-effects
 /// as the legacy wizard (name/language → backend, every permission, the summon
@@ -60,6 +70,7 @@ final class SBOnboardingModel: ObservableObject {
   // Per-step answers / state
   @Published var nameDraft = ""
   @Published var languageDraft = ""
+  @Published private(set) var languageIsDetectedFromMac = false
   @Published var languageName: String?
   @Published var howHeard: String?
   @Published var roleDraft = ""
@@ -200,7 +211,7 @@ final class SBOnboardingModel: ObservableObject {
     case .name: return "What should I call you?"
     case .howHeard: return "Quick one. How did you hear about Omi?"
     case .language:
-      return "What language do you speak? I'll listen and reply in it."
+      return SBOnboardingLanguageCopy.question
     case .role:
       return
         "Nice to meet you, \(name). What do your days look like? Pick the closest, or tell me. It shapes what I make for you."
@@ -454,6 +465,7 @@ final class SBOnboardingModel: ObservableObject {
   func pickLanguage(code: String, name: String) {
     languageName = name
     languageDraft = name
+    languageIsDetectedFromMac = false
     AssistantSettings.shared.voiceLanguages = [code]
     answerWriteGate.enqueue(.language) { [code] in
       _ = try? await APIClient.shared.updateUserLanguage(code)
@@ -464,11 +476,18 @@ final class SBOnboardingModel: ObservableObject {
   /// Auto-detect the Mac's language and pre-fill it so the picker defaults to it
   /// (the user can still type to change). Only fills an empty field once.
   func prefillDetectedLanguage() {
-    guard languageDraft.isEmpty, languageName == nil else { return }
     let raw = Locale.current.language.languageCode?.identifier ?? Locale.preferredLanguages.first ?? "en"
+    prefillDetectedLanguage(from: raw)
+  }
+
+  /// Records that the draft came from the Mac locale, rather than a saved or
+  /// fallback language, so the UI can accurately disclose its source.
+  func prefillDetectedLanguage(from raw: String) {
+    guard languageDraft.isEmpty, languageName == nil else { return }
     let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
     if let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code }) {
       languageDraft = match.name
+      languageIsDetectedFromMac = true
     }
   }
 
