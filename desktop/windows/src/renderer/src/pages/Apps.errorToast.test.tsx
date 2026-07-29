@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, waitFor, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { Apps } from './Apps'
 
 // PR1 (error surfacing): the app-enable/disable toggle used to swallow EVERY failure
 // (backend 400 "setup not completed", 403 paid/private, network) into a console.error,
@@ -9,9 +10,11 @@ import { MemoryRouter } from 'react-router-dom'
 // a failed enable/disable raises a real error toast, the row reverts to its prior
 // state, and the button is never left stuck busy/disabled.
 
-const getMock = vi.fn()
-const postMock = vi.fn()
-const toastMock = vi.fn()
+const { getMock, postMock, toastMock } = vi.hoisted(() => ({
+  getMock: vi.fn(),
+  postMock: vi.fn(),
+  toastMock: vi.fn()
+}))
 vi.mock('../lib/apiClient', () => ({
   omiApi: {
     get: (...a: unknown[]) => getMock(...a),
@@ -58,11 +61,9 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
-  vi.resetModules()
 })
 
-async function renderApps(): Promise<void> {
-  const { Apps } = await import('./Apps')
+function renderApps(): void {
   render(
     <MemoryRouter>
       <Apps />
@@ -79,7 +80,7 @@ describe('Apps — enable/disable error surfacing (PR1)', () => {
   it('shows an error toast, reverts the row, and does not leave the button stuck busy when enable fails', async () => {
     seedGrid()
     postMock.mockRejectedValue(httpError(403, 'You are not authorized to enable this app'))
-    await renderApps()
+    renderApps()
 
     // Exact name 'Install' targets the card button, not the "Installed" tab (which
     // a /install/i regex would also match, making the query ambiguous).
@@ -114,7 +115,7 @@ describe('Apps — enable/disable error surfacing (PR1)', () => {
     postMock.mockRejectedValue(
       httpError(400, 'This app is currently unavailable. Please try again later.')
     )
-    await renderApps()
+    renderApps()
 
     const btn = await screen.findByRole('button', { name: 'Install' })
     fireEvent.click(btn)
