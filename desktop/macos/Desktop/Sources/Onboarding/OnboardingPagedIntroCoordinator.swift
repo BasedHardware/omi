@@ -847,7 +847,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
           maxResults: 300,
-          query: "newer_than:365d"
+          query: "newer_than:365d",
+          userInitiated: false
         )
         guard !Task.isCancelled else { return }
 
@@ -908,7 +909,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         let events = try await CalendarReaderService.shared.readEvents(
           daysBack: 365,
           daysForward: 90,
-          maxResults: 1000
+          maxResults: 1000,
+          userInitiated: false
         )
         guard !Task.isCancelled else { return }
 
