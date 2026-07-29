@@ -522,7 +522,7 @@ extension SBOnboardingModel {
     .receive(on: DispatchQueue.main)
     .sink { [weak self] _ in self?.screenDemoDone = true }
     screenDemoPTTReady = true
-    FloatingControlBarManager.shared.show()
+    FloatingControlBarManager.shared.showForOnboardingDemo()
   }
 
   private func resetFloatingBarConversation() {
@@ -545,7 +545,7 @@ extension SBOnboardingModel {
     ShortcutSettings.shared.pttTranscriptionModeDemoOverride = nil
     resetFloatingBarConversation()
     PushToTalkManager.shared.cleanup()
-    FloatingControlBarManager.shared.hide()
+    FloatingControlBarManager.shared.hideForOnboardingDemo()
   }
 
   /// The push-to-talk chord to prompt for the voice demo.

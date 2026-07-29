@@ -4,6 +4,8 @@
 // The host opens ONE persistent desktop stream; when that track dies (display
 // sleep, GPU/driver reset, session change) nothing noticed — the sampler kept
 // drawing a dead <video> and saving frames from it, and capture never recovered.
+// #10737 recurred after that fix because a source can become muted while its
+// track remains live; that state must use the same no-save + reopen path.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, act } from '@testing-library/react'
 import { RewindCaptureHost } from './RewindCaptureHost'
@@ -13,6 +15,7 @@ const RESTART_DELAY_MS = 2000
 
 class FakeTrack extends EventTarget {
   readyState: 'live' | 'ended' = 'live'
+  muted = false
   stop(): void {
     this.readyState = 'ended'
   }
@@ -111,7 +114,7 @@ async function requestCaptureNow(): Promise<void> {
   })
 }
 
-describe('RewindCaptureHost — dead capture track', () => {
+describe('RewindCaptureHost — unavailable capture track', () => {
   it('stops saving frames and reopens the stream when the capture track dies', async () => {
     render(<RewindCaptureHost />)
     await settle()
@@ -139,6 +142,50 @@ describe('RewindCaptureHost — dead capture track', () => {
     saveFrame.mockClear()
     await tick(INTERVAL_MS)
     expect(saveFrame).toHaveBeenCalled()
+  })
+
+  it('stops saving frames and reopens the stream when a live track becomes muted', async () => {
+    render(<RewindCaptureHost />)
+    await settle()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+
+    await tick(INTERVAL_MS)
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+
+    saveFrame.mockClear()
+    await act(async () => {
+      tracks[0].muted = true
+      expect(tracks[0].readyState).toBe('live')
+      tracks[0].dispatchEvent(new Event('mute'))
+    })
+
+    await tick(INTERVAL_MS)
+    expect(saveFrame).not.toHaveBeenCalled()
+
+    await tick(RESTART_DELAY_MS)
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+    saveFrame.mockClear()
+    await tick(INTERVAL_MS)
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+  })
+
+  it('reopens a stream that is already muted when getUserMedia resolves', async () => {
+    getUserMedia.mockImplementationOnce(async () => {
+      const track = new FakeTrack()
+      track.muted = true
+      tracks.push(track)
+      return fakeStream(track)
+    })
+
+    render(<RewindCaptureHost />)
+    await settle()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+    expect(saveFrame).not.toHaveBeenCalled()
+
+    await tick(RESTART_DELAY_MS)
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+    await tick(INTERVAL_MS)
+    expect(saveFrame).toHaveBeenCalledTimes(1)
   })
 
   it('keeps a single sampling loop when the track dies mid-save', async () => {

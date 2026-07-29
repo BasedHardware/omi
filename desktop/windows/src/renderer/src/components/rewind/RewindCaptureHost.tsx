@@ -99,17 +99,19 @@ export function RewindCaptureHost(): React.JSX.Element {
       if (videoRef.current) videoRef.current.srcObject = null
     }
 
-    const isLive = (): boolean =>
-      streamRef.current?.getVideoTracks().some((t) => t.readyState === 'live') ?? false
+    const hasUsableVideoTrack = (stream = streamRef.current): boolean =>
+      stream?.getVideoTracks().some((t) => t.readyState === 'live' && !t.muted) ?? false
 
-    // A desktop-capture track can die while the app keeps running (display sleep,
-    // GPU/driver reset, resolution or session change). Nothing used to notice: the
-    // sampler kept drawing a dead <video>, so the timeline filled with blank frames
-    // and capture never came back. Re-open the stream instead. Our own teardown
-    // uses track.stop(), which does not fire 'ended', so this can't self-trigger.
-    const onTrackEnded = (track: MediaStreamTrack): void => {
-      if (cancelled || !streamRef.current?.getVideoTracks().includes(track)) return
-      console.warn('[rewind] capture track ended — reopening stream')
+    // #10504/#10737: a desktop-capture track can end or stay "live" while
+    // muted (temporarily unable to provide media) after display sleep, a
+    // GPU/driver reset, or a session change. Both states otherwise leave the
+    // sampler drawing blank frames indefinitely. Re-open the stream through one
+    // bounded recovery path.
+    // Our own track.stop() does not fire these events, so this cannot self-trigger.
+    const onTrackUnavailable = (track?: MediaStreamTrack): void => {
+      const currentTracks = streamRef.current?.getVideoTracks() ?? []
+      if (cancelled || (track && !currentTracks.includes(track)) || hasUsableVideoTrack()) return
+      console.warn('[rewind] capture track unavailable — reopening stream')
       stop()
       timerRef.current = setTimeout(() => void start(), RESTART_DELAY_MS)
     }
@@ -142,16 +144,21 @@ export function RewindCaptureHost(): React.JSX.Element {
       previous?.getTracks().forEach((track) => track.stop())
       streamRef.current = stream
       activeSourceId = sourceId
-      stream
-        .getVideoTracks()
-        .forEach((track) => track.addEventListener('ended', () => onTrackEnded(track)))
+      stream.getVideoTracks().forEach((track) => {
+        track.addEventListener('ended', () => onTrackUnavailable(track))
+        track.addEventListener('mute', () => onTrackUnavailable(track))
+      })
       const video = videoRef.current
       if (video) {
         video.srcObject = stream
         await video.play().catch(() => undefined)
       }
-      if (cancelled || gen !== generation) {
+      if (cancelled || gen !== generation || streamRef.current !== stream) {
         stream.getTracks().forEach((track) => track.stop())
+        return false
+      }
+      if (!hasUsableVideoTrack(stream)) {
+        onTrackUnavailable(stream.getVideoTracks()[0])
         return false
       }
       return true
@@ -167,7 +174,8 @@ export function RewindCaptureHost(): React.JSX.Element {
         }
 
         const v = videoRef.current
-        if (!v || !isLive() || !v.videoWidth || !v.videoHeight || savingRef.current) return
+        if (!v || !hasUsableVideoTrack() || !v.videoWidth || !v.videoHeight || savingRef.current)
+          return
 
         savingRef.current = true
         const scale = Math.min(1, tier.maxEdge / Math.max(v.videoWidth, v.videoHeight))
@@ -200,7 +208,7 @@ export function RewindCaptureHost(): React.JSX.Element {
     // coalesce to one pending sample, while the next periodic timer is armed only
     // after all requested work settles.
     function scheduleNext(gen: number): void {
-      if (cancelled || gen !== generation || !isLive()) return
+      if (cancelled || gen !== generation || !hasUsableVideoTrack()) return
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => {
         timerRef.current = null
@@ -209,7 +217,7 @@ export function RewindCaptureHost(): React.JSX.Element {
     }
 
     function requestCapture(gen: number): void {
-      if (cancelled || gen !== generation || !isLive()) return
+      if (cancelled || gen !== generation || !hasUsableVideoTrack()) return
       if (captureRunning) {
         queuedGeneration = gen
         return
@@ -230,7 +238,7 @@ export function RewindCaptureHost(): React.JSX.Element {
         } finally {
           captureRunning = false
           queuedGeneration = null
-          if (!cancelled && processedGeneration === generation && isLive()) {
+          if (!cancelled && processedGeneration === generation && hasUsableVideoTrack()) {
             scheduleNext(generation)
           }
         }
@@ -249,7 +257,7 @@ export function RewindCaptureHost(): React.JSX.Element {
     }
 
     const captureNow = (): void => {
-      if (!enabled || cancelled || !isLive()) return
+      if (!enabled || cancelled || !hasUsableVideoTrack()) return
       if (timerRef.current) {
         clearTimeout(timerRef.current)
         timerRef.current = null

@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import subprocess
 
+from testing.shell import bash_command, bash_path
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HARNESS_DIR = REPO_ROOT / "backend" / "testing" / "replay_harness_lc3_frame_timing"
 RUNNER = HARNESS_DIR / "run.sh"
@@ -26,6 +28,7 @@ def _unsupported_uname(tmp_path: Path) -> Path:
         "  exit 64\n"
         "fi\n",
         encoding="utf-8",
+        newline="\n",
     )
     uname.chmod(0o755)
     return tmp_path
@@ -33,10 +36,16 @@ def _unsupported_uname(tmp_path: Path) -> Path:
 
 def test_lc3_replay_runner_fails_closed_on_an_unsupported_host(tmp_path: Path) -> None:
     environment = os.environ.copy()
-    environment["PATH"] = f"{_unsupported_uname(tmp_path)}:{environment['PATH']}"
+    environment["OMI_TEST_FAKE_BIN"] = bash_path(_unsupported_uname(tmp_path), cwd=REPO_ROOT)
 
     completed = subprocess.run(
-        ["bash", str(RUNNER)],
+        bash_command(
+            "-c",
+            'export PATH="$OMI_TEST_FAKE_BIN:$PATH"\nexec "$BASH" "$@"',
+            "bash",
+            RUNNER,
+            cwd=REPO_ROOT,
+        ),
         cwd=REPO_ROOT,
         env=environment,
         capture_output=True,

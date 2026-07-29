@@ -109,7 +109,7 @@ struct OnboardingVoiceShortcutStepView: View {
       FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
       FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
       resetFloatingBarConversation()
-      FloatingControlBarManager.shared.hide()
+      FloatingControlBarManager.shared.hideForOnboardingDemo()
       PushToTalkManager.shared.cleanup()
       installKeyMonitor()
     }

@@ -282,9 +282,14 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @MainActor
   final class PTTBarPresenter {
     private weak var barState: FloatingControlBarState?
+    private let resizeForPTT: @MainActor (Bool) -> Void
 
-    init(barState: FloatingControlBarState) {
+    init(
+      barState: FloatingControlBarState,
+      resizeForPTT: @escaping @MainActor (Bool) -> Void
+    ) {
       self.barState = barState
+      self.resizeForPTT = resizeForPTT
     }
 
     func apply(_ projection: VoiceTurnUIProjection) {
@@ -297,11 +302,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
       // compete with the reducer-owned voice presentation.
       barState.dismissNotchHoverForVoicePresentation()
 
+      // Onboarding uses this same renderer. Its PTT demo must receive the
+      // same surface transition as a completed user's first voice turn.
       if shouldExpandForVoice != wasExpandedForVoice,
-        !barState.showingAIConversation,
-        UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)
+        !barState.showingAIConversation
       {
-        FloatingControlBarManager.shared.resizeForPTT(expanded: shouldExpandForVoice)
+        resizeForPTT(shouldExpandForVoice)
       }
     }
   }
