@@ -185,7 +185,7 @@ final class ScreenWatcher {
             && ScreenPipeline.isForceDue(lastFullPassAt: lastFullPassAt, now: capturedAt)
 
         if seenRecently && !forced {
-            // Idle or oscillating screen: no OCR, no JPEG, and no row at all unless the user moved
+            // Idle or oscillating screen: no OCR, no image, and no row at all unless the user moved
             // to a different window — a duplicate row every 3 seconds would bury the timeline it is
             // meant to be.
             if appName != lastAppName || windowTitle != lastWindowTitle {
@@ -203,7 +203,7 @@ final class ScreenWatcher {
 
         // Whether this window is already the newest row on the timeline. Computed here because the
         // decision it feeds — is there enough new text to be worth a row — has to be made before
-        // the JPEG is written, and `lastAppName`/`lastWindowTitle` belong to this actor.
+        // the image is written, and `lastAppName`/`lastWindowTitle` belong to this actor.
         let repeatsLastStoredWindow = appName == lastAppName && windowTitle == lastWindowTitle
 
         let captured = CapturedImage(image: image)
@@ -218,7 +218,7 @@ final class ScreenWatcher {
         guard let processed else {
             // Pixels moved but no readable text arrived, in a window that is already the last row
             // stored — a spinner advancing, a progress bar filling, a repaint. The row would say
-            // nothing the row before it does not already say, so it costs a row, a JPEG, and an FTS
+            // nothing the row before it does not already say, so it costs a row, an image, and an FTS
             // entry for nothing.
             return
         }
@@ -365,7 +365,7 @@ private enum ScreenPipeline {
 
     // MARK: Tunables
 
-    /// Longest side of the stored JPEG. Storage only — it must never decide what Vision sees.
+    /// Longest side of the stored frame image. Storage only — it must never decide what Vision sees.
     static let maxPixelSize = 1600
 
     /// Longest side of the image handed to Vision.
@@ -384,7 +384,31 @@ private enum ScreenPipeline {
     /// moving it, and re-run it whenever the pinned Vision revision changes.
     static let ocrMaxPixelSize = 2400
 
-    static let jpegQuality: CGFloat = 0.5
+    /// Quality of the stored frame image, which is HEIC rather than JPEG.
+    ///
+    /// The number is low because the retention policy makes it the honest choice, and it was picked
+    /// by measurement, not taste. Encoding 60 real frames from this machine through the exact path
+    /// below — same downscale, same `CGImageDestination` call — gave, per frame:
+    ///
+    ///     jpeg q0.50   183.1 KB     heic q0.30    90.3 KB  (-51%)
+    ///     heic q0.50   131.1 KB     heic q0.25    80.3 KB  (-56%)
+    ///     heic q0.40   110.2 KB     heic q0.20    68.4 KB  (-63%)
+    ///
+    /// Note HEIC's quality scale is not JPEG's: 0.5 buys only 28%, and matching a "low" preset from
+    /// `sips` takes roughly 0.15. Anyone re-tuning this must re-measure rather than reason from the
+    /// JPEG number they replaced.
+    ///
+    /// Why it matters: capture burns ~200 MB a day, `defaultRetentionDays` is 30, and
+    /// `defaultFrameBytesCap` is 4 GB. As JPEG that is ~6 GB for the window the policy promises, so
+    /// the byte cap bit around three weeks in and silently deleted the rest — the user lost history
+    /// the settings told them they had. At this quality the same 30 days is ~2.2 GB, under the cap
+    /// with room for a heavier week, and the promise holds.
+    ///
+    /// Fidelity is the cheap side of that trade because nothing decodes these files: no MCP tool
+    /// returns pixels and the uploader sends only text. OCR reads a separate, larger image
+    /// (``ocrMaxPixelSize``) before this one is written and is untouched by this number. Keeping a
+    /// month at lower fidelity beats keeping three weeks at higher fidelity and calling it a month.
+    static let frameQuality: CGFloat = 0.20
     /// Titles can therefore lag reality by up to this long; the OCR text on the same row is always
     /// current, and the next tick corrects the title.
     static let shareableContentTTL: TimeInterval = 5
@@ -424,7 +448,7 @@ private enum ScreenPipeline {
     /// that keeps a continuously-viewed static window inside one unbroken block even when a tick is
     /// lost to a slow OCR pass or a missed window lookup, so "read one document for an hour" reads
     /// back as an hour rather than as absence. It also bounds the cost exactly: at most one extra
-    /// OCR pass and one JPEG per minute, a twentieth of what the 3 s tick could produce, and only
+    /// OCR pass and one stored image per minute, a twentieth of what the 3 s tick could produce, and only
     /// while a window is otherwise being suppressed.
     static let forceCaptureInterval: Double = 60
 
@@ -587,7 +611,7 @@ private enum ScreenPipeline {
     ///
     /// So: scale *up* towards the backing store, cap at ``ocrMaxPixelSize``, and never go below 1x.
     /// Below 1x throws away text that was on the screen; above the cap accuracy falls again (see
-    /// ``ocrMaxPixelSize``). The stored JPEG is brought back down separately in ``writeJPEG``.
+    /// ``ocrMaxPixelSize``). The stored image is brought back down separately in ``writeFrameImage``.
     ///
     /// A zero-area window makes the ratio NaN, and `Int(NaN)` traps rather than throwing — so a
     /// degenerate frame is refused here instead of crashing the app.
@@ -674,14 +698,14 @@ private enum ScreenPipeline {
         autoreleasepool { () -> ProcessedFrame? in
             let text = recognizeText(in: captured.image)
 
-            // Judged before the JPEG is written rather than after: a frame nobody stores must leave
-            // nothing behind, and an orphaned JPEG is never cleaned up — pruning walks the frames
+            // Judged before the image is written rather than after: a frame nobody stores must leave
+            // nothing behind, and an orphaned image is never cleaned up — pruning walks the frames
             // table, so a file with no row outlives the database itself.
             if repeatsLastStoredWindow, contentLength(of: text) < minimumContentCharacters {
                 return nil
             }
 
-            let path = writeJPEG(captured.image, capturedAt: capturedAt)
+            let path = writeFrameImage(captured.image, capturedAt: capturedAt)
             return ProcessedFrame(ocrText: text, imagePath: path)
         }
     }
@@ -707,7 +731,7 @@ private enum ScreenPipeline {
     /// the scrub. Redacting afterwards would be theatre — the plaintext would already be in the
     /// file, in the WAL, and in any backup taken between the two.
     ///
-    /// What this does *not* protect is the JPEG written beside the row: it still holds the pixels
+    /// What this does *not* protect is the image written beside the row: it still holds the pixels
     /// the credential was drawn in. Images are not searched and not returned by any MCP tool, so a
     /// secret cannot be recalled out of one, but anyone with the frames directory can look. Fixing
     /// that means not writing the image when a scrub fires, which is a bigger behaviour change than
@@ -764,22 +788,26 @@ private enum ScreenPipeline {
             .nilIfEmpty
     }
 
-    static func writeJPEG(_ image: CGImage, capturedAt: Double) -> String? {
+    static func writeFrameImage(_ image: CGImage, capturedAt: Double) -> String? {
         let sized = downscaled(image, longestSide: maxPixelSize) ?? image
-        guard let data = jpegData(from: sized) else {
-            ContextLog.error("Failed to encode frame JPEG", "screen")
+        guard let data = frameImageData(from: sized) else {
+            ContextLog.error("Failed to encode frame image", "screen")
             return nil
         }
 
+        // The extension changes with the format, and nothing downstream cares: `frames.imagePath`
+        // is opaque text, and both prune paths delete by path rather than by suffix. So the older
+        // `.jpg` files already on disk keep working and expire on the same schedule — the format
+        // change needs no migration and no dual-read path.
         let directory = ContextPaths.framesDirectory(for: capturedAt)
-        let name = "frame_\(fileStampFormatter.string(from: Date(timeIntervalSince1970: capturedAt))).jpg"
+        let name = "frame_\(fileStampFormatter.string(from: Date(timeIntervalSince1970: capturedAt))).heic"
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let url = directory.appendingPathComponent(name)
             try data.write(to: url, options: .atomic)
             return url.path
         } catch {
-            ContextLog.error("Failed to write frame JPEG: \(error.localizedDescription)", "screen")
+            ContextLog.error("Failed to write frame image: \(error.localizedDescription)", "screen")
             return nil
         }
     }
@@ -791,7 +819,7 @@ private enum ScreenPipeline {
         return formatter
     }()
 
-    /// Brings the stored JPEG back to `maxPixelSize`.
+    /// Brings the stored frame image back to `maxPixelSize`.
     ///
     /// This used to be a no-op, because the capture itself was clamped to 1600 — which is precisely
     /// why the OCR input size could not be raised without inflating storage. Now the capture is
@@ -821,12 +849,12 @@ private enum ScreenPipeline {
         return context.makeImage()
     }
 
-    static func jpegData(from image: CGImage) -> Data? {
+    static func frameImageData(from image: CGImage) -> Data? {
         let data = NSMutableData()
         guard
             let destination = CGImageDestinationCreateWithData(
                 data as CFMutableData,
-                "public.jpeg" as CFString,
+                "public.heic" as CFString,
                 1,
                 nil
             )
@@ -835,7 +863,7 @@ private enum ScreenPipeline {
         CGImageDestinationAddImage(
             destination,
             image,
-            [kCGImageDestinationLossyCompressionQuality: jpegQuality] as CFDictionary
+            [kCGImageDestinationLossyCompressionQuality: frameQuality] as CFDictionary
         )
         guard CGImageDestinationFinalize(destination) else { return nil }
         return data as Data
