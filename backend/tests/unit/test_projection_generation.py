@@ -24,6 +24,8 @@ SUBJECT = SelectedSubject(
     subject='the move',
     stage=ProjectionStage.THRESHOLD,
     projection='the crossing already made, the known world receding behind',
+    setting='the Lisbon kitchen at first light, the laptop open beside a cold coffee',
+    tone='apprehension with something exhilarated underneath it',
     imperative='The place you keep imagining is a decision, not a daydream.',
     evidence=('Circling the move again (2026-07-26)',),
 )
@@ -68,13 +70,15 @@ def test_the_image_is_rendered_from_the_selected_subject(stub_reads):
         with patch.object(generation_module, '_generate_image', return_value=b'png') as generate_image:
             projection = generation_module.generate_projection('uid-1')
 
-    # The prompt carries the selected projection, not a constant: the picture is about the
-    # thing the line is about. It is composed rather than passed through — the register and
-    # the stage's own directives are what keep it off the model's default — and the composed
-    # prompt is what gets recorded, since that is what actually produced the image.
+    # The prompt is the selected subject's own graph, not a constant: the picture is about the
+    # thing the line is about, set in the place it actually happens, lit by what it carries.
+    # The composed prompt is what gets recorded, since that is what produced the image.
     prompt = generate_image.call_args.args[0]
-    assert prompt.endswith(SUBJECT.projection)
-    assert prompt.startswith(AESTHETIC)
+    assert prompt.startswith('SUBJECT')
+    assert SUBJECT.projection in prompt
+    assert SUBJECT.setting in prompt
+    assert SUBJECT.tone in prompt
+    assert AESTHETIC in prompt
     assert STAGE_IMAGERY[SUBJECT.stage].composition in prompt
     assert projection['generation']['prompt'] == prompt
     assert projection['imperative'] == SUBJECT.imperative

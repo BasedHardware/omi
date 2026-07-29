@@ -1,35 +1,41 @@
-"""The visual register every projection is painted in.
+"""The Style slot: how the image is rendered, never what it contains.
 
-AUTHORSHIP BOUNDARY. `AESTHETIC` is the builder's, transcribed rather than composed, exactly
-as `REGISTER` in `register.py` is. It may not be reworded, shortened or "improved" by an
-agent: the 9-of-10 verdict that cleared this feature's declared gate is evidence about these
-strings, and rewriting them discards the measurement while keeping the appearance of it.
+In the prompt's graph this is global transformation metadata — the register, the mark, the
+treatment of any human presence, and the negative list. Nothing here may name a subject, a
+place, or a light, because those slots have their own owners and a global layer that writes
+to them overrides the person's actual situation every time.
 
-WHAT MAY LIVE HERE, and nothing else: what has to stay invariant for a series of projections
-to read as one series. That constraint is the governing architectural rule of the image layer
-and it was proven twice by failure. Composition lived here once and every stage came out as
-the same tarot card; palette and value lived here after that and collapsed onto teal-and-gold
-at a flat mid-tone, with three of seven named colours never rendered at all. A directive with
-no per-image reason to be obeyed is not an instruction, it is a permission the model spends on
-its own default. Everything that varies belongs to the stage — see `archetypes.py`.
+That is not hypothetical. This register carried the line "Depict a state of soul rather than
+the visible world", and it did exactly what it said: a projection about relocating to Lisbon
+produced an image with no Lisbon in it. The intent behind the line was never *don't paint the
+world* — it was *don't paint the world flatly*. It now says so.
 
-Two invariants in here are load-bearing rather than stylistic. The identity-indeterminate
-presence is what stops the artifact from being a picture of somebody else, which is the
-disqualifying failure this register was written to fix. The negative list is what keeps
-`gpt-image-1` off advertising stock, which is exactly what the first real end-to-end run
-produced when this layer was not attached.
+AUTHORSHIP. The register is the builder's, transcribed rather than composed, and its texture
+may not be rewritten for tone or concision — the 9-of-10 verdict that cleared this feature's
+gate is evidence about these strings. What an agent may do, and must do, is re-slot a clause
+that contradicts a stated intention, and say so. Taste stays his; consistency is the agent's
+job.
+
+Two clauses are load-bearing rather than stylistic. The identity-indeterminate presence is a
+property of any human entity in the graph — it is what stops the artifact being a picture of
+somebody else, the disqualifying failure this register was written to fix. The negative list
+is what keeps `gpt-image-1` off advertising stock, and it grew a clause when the image began
+depicting real places: a recognisable city with nothing else asked of it is a travel poster.
 """
 
 from __future__ import annotations
 
 AESTHETIC = (
     "A vertical painting in a specific register: Persian miniature transformed into "
-    "spiritual expressionism. Depict a state of soul rather than the visible world. "
+    "spiritual expressionism. Depict the real situation described above — its actual place, "
+    "objects and hour must remain recognisable — and render it as a state of soul rather than "
+    "as documentary fact. "
     "Persian-miniature precision released into atmospheric dissolution — tapered, "
     "accelerating calligraphic contour that lets categories transform into one another, "
     "hair into smoke, fabric into water, branches into nervous systems. Jewel-like detail "
-    "coexisting with translucent washes. Space is psychological, not documentary: scale, "
-    "gravity, and perspective bend according to spiritual importance rather than optics. "
+    "coexisting with translucent washes. Space is psychological rather than optical: within a "
+    "place that stays recognisable, scale, gravity and perspective bend according to spiritual "
+    "importance. "
     "Colour is iridescent and prismatic, carrying an emotional state rather than describing "
     "surfaces; the specific palette and light for this image are given below and must be "
     "obeyed exactly rather than averaged toward a default. "
@@ -42,7 +48,8 @@ AESTHETIC = (
     "scale, position and motion must carry the emotion. "
     "Do not make generic Western fantasy concept art, decorative Persian pastiche, Art "
     "Nouveau pastiche, storybook illustration, a cinematic poster, or a literal "
-    "motivational illustration. No synthetic glow, plastic skin, or airbrushed smoothness. "
+    "motivational illustration. Do not make a travel poster, a tourist postcard, or an "
+    "advertisement for the place. No synthetic glow, plastic skin, or airbrushed smoothness. "
     "Do not use the stock image of a lone figure facing a glowing portal. "
     "No text, lettering, numbers, logos, or watermarks. "
 )

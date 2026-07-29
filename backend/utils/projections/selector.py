@@ -51,6 +51,8 @@ class SubjectCandidate(BaseModel):
     subject: str = ''
     stage: str = ''
     projection: str = ''
+    setting: str = ''
+    tone: str = ''
     imperative: str = ''
     evidence: list[str] = Field(default_factory=list)
     grounded: bool = False
@@ -62,9 +64,18 @@ class RankedSubjects(BaseModel):
 
 @dataclass(frozen=True)
 class SelectedSubject:
+    """One projection, typed by the slot each field fills in the image graph.
+
+    `projection` is Subject and Action — what is happening and what is about to. `setting` is
+    Environment, the real place and objects it happens in. `tone` is Lighting, the emotional
+    charge the light and colour have to carry. Nothing else may write to those three slots.
+    """
+
     subject: str
     stage: ProjectionStage
     projection: str
+    setting: str
+    tone: str
     imperative: str
     evidence: tuple[str, ...]
 
@@ -141,8 +152,14 @@ def _admit(candidate: SubjectCandidate) -> tuple[Optional[SelectedSubject], str]
 
     subject = candidate.subject.strip()
     projection = candidate.projection.strip()
+    setting = candidate.setting.strip()
+    tone = candidate.tone.strip()
     imperative = candidate.imperative.strip()
-    if not (subject and projection and imperative):
+
+    # Setting and tone are required because they own slots in the image graph that nothing
+    # else may fill. Without a setting the picture has no place and reverts to the model's
+    # idea of the emotion; without a tone its light is decorative rather than this person's.
+    if not (subject and projection and setting and tone and imperative):
         return None, 'incomplete'
 
     # A reproduced exemplar is by definition about someone else's situation, however grounded
@@ -160,6 +177,8 @@ def _admit(candidate: SubjectCandidate) -> tuple[Optional[SelectedSubject], str]
             subject=subject,
             stage=stage,
             projection=projection,
+            setting=setting,
+            tone=tone,
             imperative=imperative,
             evidence=evidence,
         ),
@@ -202,7 +221,18 @@ def build_selection_prompt(
             '  stage       — exactly one key from the list below\n'
             '  projection  — the imagery of the future state, present tense, concrete and '
             'specific to this person\'s actual situation. This is what gets rendered, so it '
-            'must describe a scene rather than name a feeling.\n'
+            'must describe a scene rather than name a feeling: who or what is there, and what '
+            'is happening.\n'
+            '  setting     — the real place this happens in and the actual objects in it. '
+            'If they named a city, a street, a building or a room, name it here explicitly; a '
+            'generic version of the place is a failure, because this field is the only thing '
+            'that tells the painter where it is. Add the hour and the specific objects they '
+            'mentioned. A viewer who knows their situation must recognise it, and no symbol '
+            'may stand in for the place.\n'
+            '  tone        — the emotional charge this carries for them, in plain words and '
+            'grounded in how they actually spoke about it: apprehensive, elated, resigned, '
+            'exposed, and so on, with the shade of it that matters. Do not name colours; the '
+            'light is derived from this.\n'
             '  imperative  — the line that ships beside the image\n'
             '  evidence    — short references to the material below that produced this '
             'candidate. Quote or point at the specific conversations and items.\n'

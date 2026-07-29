@@ -48,6 +48,8 @@ def _candidate(**overrides):
         'subject': 'the move',
         'stage': 'threshold',
         'projection': 'the boxes already labelled and the keys handed over at the door',
+        'setting': 'the flat on Rua da Prata at eight in the morning, boxes against the wall',
+        'tone': 'apprehension with relief underneath it',
         'imperative': 'Name the date out loud. The waiting is the only part that is optional.',
         'evidence': ['Circling the move again (2026-07-26)'],
         'grounded': True,
@@ -137,6 +139,24 @@ def test_a_blank_imperative_does_not_survive_the_gate():
     )
 
     assert selection.subject.subject == 'the move'
+
+
+@pytest.mark.parametrize('missing', ['setting', 'tone'])
+def test_a_candidate_with_no_place_or_no_charge_does_not_survive_the_gate(missing):
+    # Both own a slot in the image graph that nothing else may fill. Without a setting the
+    # picture reverts to the model's idea of the emotion — the failure that rendered a
+    # projection about relocating to Lisbon with no Lisbon in it. Without a tone its light is
+    # decorative rather than this person's.
+    selection, _, _ = _run(
+        _packet(),
+        [
+            _candidate(subject='unrenderable', **{missing: '  '}),
+            _candidate(subject='the move'),
+        ],
+    )
+
+    assert selection.subject.subject == 'the move'
+    assert selection.metadata['fell_through_reasons'] == ['incomplete']
 
 
 def test_no_grounded_candidate_refuses_rather_than_shipping_the_best_of_a_bad_set():

@@ -110,6 +110,8 @@ def generate_projection(uid: str) -> dict[str, Any]:
         'subject': subject.subject,
         'stage': subject.stage.value,
         'projection': subject.projection,
+        'setting': subject.setting,
+        'tone': subject.tone,
         'evidence': list(subject.evidence),
         'selection': selection.metadata,
         'generation': {
