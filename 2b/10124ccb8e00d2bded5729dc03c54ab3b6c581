@@ -1,0 +1,32 @@
+desktop/context-for-claude/Sources/ContextMCP/main.swift
+  s_b5d52d5f05403b::t_5d096d1bf5b9a7 32-33,36-40
+  s_b5d52d5f05403b::t_5875903eed7cb5 41
+desktop/context-for-claude/Tests/ContextCoreTests/StoreTests.swift
+  s_b5d52d5f05403b::t_191c270ab60a5d 883-922
+desktop/context-for-claude/Sources/ContextCore/Paths.swift
+  s_b5d52d5f05403b::t_74000212f9a18a 150-152,157-159
+desktop/context-for-claude/Sources/ContextCore/Store.swift
+  s_b5d52d5f05403b::t_50fc761e0524ad 88-96,98,111-112
+  s_b5d52d5f05403b::t_e05d25bb54d573 72-75,77-78
+  s_b5d52d5f05403b::t_4f62c2b66fe154 76
+  s_b5d52d5f05403b::t_9a8bbd02c58952 97,99-110
+  s_b5d52d5f05403b::t_cc90111df377d9 538-540
+desktop/context-for-claude/Sources/ContextMCPKit/Tools.swift
+  s_b5d52d5f05403b::t_587281c21fe0cc 174-180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2b10124ccb8e00d2bded5729dc03c54ab3b6c581",
+  "prompts": {},
+  "sessions": {
+    "s_b5d52d5f05403b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82d7239f-7b04-40bc-b1d8-8737cb48399a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
