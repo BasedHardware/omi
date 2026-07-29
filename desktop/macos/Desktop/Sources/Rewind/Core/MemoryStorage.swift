@@ -1,6 +1,28 @@
 import Foundation
 @preconcurrency import GRDB
 
+/// Identity of a memory surfaced to the UI: either a backend ID, or the
+/// `local_<rowid>` placeholder minted by `MemoryRecord.toServerMemory()` for a
+/// local-only row. Mutations must resolve both forms: filtering a local ID by
+/// `backendId` silently misses rows whose backend sync failed or is pending.
+enum MemoryIdentity: Equatable {
+  case backend(String)
+  case localRow(Int64)
+
+  init(surfacedId: String) {
+    if surfacedId.hasPrefix("local_"), let rowId = Int64(surfacedId.dropFirst(6)) {
+      self = .localRow(rowId)
+    } else {
+      self = .backend(surfacedId)
+    }
+  }
+
+  var isLocalOnly: Bool {
+    if case .localRow = self { return true }
+    return false
+  }
+}
+
 /// Selects which provenance class may participate in a local-memory read.
 ///
 /// This is intentionally separate from ``MemoryLayer``: legacy compatibility
@@ -752,33 +774,69 @@ actor MemoryStorage {
 
   /// Soft delete a memory by backend ID
   func deleteMemoryByBackendId(_ backendId: String) async throws {
-    let db = try await ensureInitialized()
-
-    try await db.write { database in
-      try database.execute(
-        sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE backendId = ?",
-        arguments: [Date(), backendId]
-      )
-    }
-
-    log("MemoryStorage: Soft deleted memory with backendId \(backendId)")
-    HomeKnowledgeCountInvalidation.post()
+    try await deleteMemory(surfacedId: backendId)
   }
 
-  /// Restore a soft-deleted memory by backend ID. Used by undo/delete-failure paths;
-  /// callers must requery the active tier scope instead of appending directly to UI arrays.
-  func restoreMemoryByBackendId(_ backendId: String) async throws {
-    let db = try await ensureInitialized()
+  /// Soft-delete a memory addressed by either a backend ID or a surfaced
+  /// `local_<rowid>` placeholder.
+  func deleteMemory(surfacedId: String) async throws {
+    switch MemoryIdentity(surfacedId: surfacedId) {
+    case .localRow(let rowId):
+      try await deleteMemory(id: rowId)
+    case .backend(let backendId):
+      let db = try await ensureInitialized()
 
-    try await db.write { database in
-      try database.execute(
-        sql: "UPDATE memories SET deleted = 0, updatedAt = ? WHERE backendId = ?",
-        arguments: [Date(), backendId]
-      )
+      try await db.write { database in
+        try database.execute(
+          sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE backendId = ?",
+          arguments: [Date(), backendId]
+        )
+      }
+
+      log("MemoryStorage: Soft deleted memory with backendId \(backendId)")
+      HomeKnowledgeCountInvalidation.post()
     }
+  }
 
-    log("MemoryStorage: Restored memory with backendId \(backendId)")
-    HomeKnowledgeCountInvalidation.post()
+  /// Restore a soft-deleted memory addressed by either a backend ID or a
+  /// surfaced `local_<rowid>` placeholder. Used by undo/delete-failure paths;
+  /// callers must requery the active tier scope instead of appending directly
+  /// to UI arrays.
+  func restoreMemory(surfacedId: String) async throws {
+    switch MemoryIdentity(surfacedId: surfacedId) {
+    case .localRow(let rowId):
+      let db = try await ensureInitialized()
+
+      try await db.write { database in
+        guard var record = try MemoryRecord.fetchOne(database, key: rowId) else {
+          throw MemoryStorageError.recordNotFound
+        }
+        record.deleted = false
+        record.updatedAt = Date()
+        try record.update(database)
+      }
+
+      log("MemoryStorage: Restored local memory \(rowId)")
+      HomeKnowledgeCountInvalidation.post()
+    case .backend(let backendId):
+      let db = try await ensureInitialized()
+
+      try await db.write { database in
+        try database.execute(
+          sql: "UPDATE memories SET deleted = 0, updatedAt = ? WHERE backendId = ?",
+          arguments: [Date(), backendId]
+        )
+      }
+
+      log("MemoryStorage: Restored memory with backendId \(backendId)")
+      HomeKnowledgeCountInvalidation.post()
+    }
+  }
+
+  /// Restore a soft-deleted memory by backend ID. Kept for existing callers;
+  /// surfaced local IDs are resolved by `restoreMemory(surfacedId:)` as well.
+  func restoreMemoryByBackendId(_ backendId: String) async throws {
+    try await restoreMemory(surfacedId: backendId)
   }
 
   /// Soft-delete synced memories whose backendId is no longer present on the
