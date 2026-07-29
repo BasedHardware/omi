@@ -1,5 +1,7 @@
 import XCTest
 
+@testable import Omi_Computer
+
 final class DashboardCaptureStateTests: XCTestCase {
   func testDashboardCaptureStatusUsesLiveMonitoringState() throws {
     let source = try dashboardSource()
