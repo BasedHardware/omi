@@ -153,25 +153,9 @@ extension SettingsContentView {
               .scaledFont(size: OmiType.subheading)
               .foregroundColor(OmiColors.textTertiary)
 
-            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-              Text("AI Provider")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textSecondary)
-
-              if let provider = AIProvider.from(bridgeMode: chatBridgeMode) {
-                if let url = provider.attributionURL {
-                  Link(destination: url) {
-                    Text("\(provider.tagline) · \(url.host ?? "")")
-                      .scaledFont(size: OmiType.caption)
-                      .foregroundColor(OmiColors.textTertiary)
-                  }
-                } else {
-                  Text(provider.tagline)
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(OmiColors.textTertiary)
-                }
-              }
-            }
+            Text("AI Provider")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
@@ -186,6 +170,20 @@ extension SettingsContentView {
                   await chatProvider?.switchBridgeMode(to: mode)
                 }
               }
+            }
+          }
+
+          if let provider = AIProvider.from(bridgeMode: chatBridgeMode) {
+            if let url = provider.attributionURL {
+              Link(destination: url) {
+                Text("\(provider.tagline) · \(url.host ?? "")")
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(OmiColors.textTertiary)
+              }
+            } else {
+              Text(provider.tagline)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(OmiColors.textTertiary)
             }
           }
 
