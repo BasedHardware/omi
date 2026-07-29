@@ -29,8 +29,8 @@ DEFAULT_BASELINE = Path('.github/scripts/firestore_persistence_boundary_baseline
 # Paths (relative to the scan root, i.e. backend/) exempt from the boundary:
 #  - database/   : the boundary itself.
 #  - tests/, testing/ : the test suites (they inject fakes and drive fixtures).
-#  - scripts/    : one-off operational tooling, not deployed runtime (documented exception).
-#  - agent-proxy/: a separately deployed service with its own firebase_admin app (ADR follow-up).
+#  - scripts/    : one-off operational tooling, not deployed runtime (intentional, permanent — ADR-0023).
+#  - agent-proxy/: a separately deployed service with its own firebase_admin app (intentional — ADR-0023).
 #  - migrations/ : removed in WP1; kept here so a re-added dir does not silently slip in.
 EXCLUDED_PREFIXES = ('database/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/', 'migrations/')
 
