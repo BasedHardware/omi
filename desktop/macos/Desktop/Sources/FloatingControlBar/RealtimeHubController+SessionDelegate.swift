@@ -347,6 +347,9 @@ extension RealtimeHubController {
             self.acceptedSpawnJournalReceiptByContinuityKey[receipt.continuityKey] =
               AcceptedSpawnJournalReceipt(ownerID: binding.ownerID, receipt: receipt)
             self.turnPersistenceLedger.recordAcceptedReceipt(for: receipt.continuityKey)
+            // Cancel any streaming projection that may have started before the
+            // spawn receipt arrived; the spawn owns the canonical exchange now.
+            self.cancelStreamingJournalWrites(forContinuityKey: receipt.continuityKey)
             self.lastTurnDiagnostics = [
               "provider": self.providerTag,
               "provider_transcript": self.turnTranscript,
@@ -780,6 +783,8 @@ extension RealtimeHubController {
     else { return }
     if !text.isEmpty {
       assistantText += text
+      beginStreamingRealtimeProjectionIfNeeded()
+      scheduleStreamingRealtimeProjectionFlush(continuityKey: turnIdempotencyKey)
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
         let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
       {
