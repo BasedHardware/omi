@@ -9,6 +9,10 @@ private struct TranscriptLine: Sendable {
     let startedAt: Double
     let endedAt: Double
     let source: SegmentSource
+    /// Backend diarization label and resolved person, when the cloud transcribed this line.
+    /// Both nil on the local path, which cannot tell voices apart at all.
+    var speakerLabel: String?
+    var personId: String?
 }
 
 /// What the app says about itself between launch and the first live sensor.
@@ -302,15 +306,22 @@ final class Engine: ObservableObject {
     /// over, so a revision replaces its predecessor instead.
     private func acceptCloudLine(_ segment: CloudSegment) {
         let base = ListenSocket.shared.conversationStartedAt ?? ContextTime.now
+        // Keyed on attribution as well as text. The backend re-sends a segment under the same id
+        // when it improves — and an improvement is very often *only* the diarization or a
+        // speech-profile match, with the words unchanged. A text-only key discarded exactly the
+        // revisions this app moved to cloud transcription to receive.
         if let id = segment.id {
-            if cloudSegmentText[id] == segment.text { return }
-            cloudSegmentText[id] = segment.text
+            let revision = "\(segment.text)|\(segment.speaker ?? "")|\(segment.personId ?? "")|\(segment.isUser)"
+            if cloudSegmentText[id] == revision { return }
+            cloudSegmentText[id] = revision
         }
         let line = TranscriptLine(
             text: segment.text,
             startedAt: base + segment.start,
             endedAt: base + segment.end,
-            source: segment.isUser ? .mic : .system
+            source: segment.isUser ? .mic : .system,
+            speakerLabel: segment.speaker,
+            personId: segment.personId
         )
         lastLine = line.text
         lineFeed?.yield(line)
@@ -854,7 +865,9 @@ private final class EngineStore: @unchecked Sendable {
                     startedAt: line.startedAt,
                     endedAt: line.endedAt,
                     source: line.source,
-                    text: line.text))
+                    text: line.text,
+                    speakerLabel: line.speakerLabel,
+                    personId: line.personId))
             // `max`, because a 10 s window from the other transcriber can land out of order and
             // must not drag the session's end backwards.
             lastSegmentEndedAt = max(lastSegmentEndedAt ?? line.endedAt, line.endedAt)

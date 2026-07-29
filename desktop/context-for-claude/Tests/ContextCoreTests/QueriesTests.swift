@@ -100,6 +100,68 @@ final class QueriesTests: XCTestCase {
         }
     }
 
+    func testFTSExpressionReadsAPunctuatedWordTheWayTheIndexTokenizedIt() throws {
+        // The index tokenizes with `porter unicode61`, which breaks `SCA-219` into `sca` and `219`.
+        // Stripping the hyphen asked for `sca219`, a token no document it built can contain, so
+        // every ticket id and hyphenated name was unfindable by the exact string a person types.
+        // Both readings go out: the split one finds the row the index stored, the joined one finds a
+        // document that wrote the same identifier without punctuation.
+        XCTAssertEqual(Queries.ftsExpression(for: "SCA-219"), "\"SCA\" OR \"219\" OR \"SCA219\"")
+        XCTAssertEqual(Queries.ftsExpression(for: "omi-eng"), "\"omi\" OR \"eng\" OR \"omieng\"")
+        // An apostrophe is not an FTS operator, so it used to survive into the phrase
+        // `"Priyanka's"` — two adjacent tokens no document says. unicode61 does not join across it,
+        // so neither do we.
+        XCTAssertEqual(Queries.ftsExpression(for: "Priyanka's"), "\"Priyanka\" OR \"s\"")
+        // An unpunctuated word still reads the same both ways and must not be searched for twice.
+        XCTAssertEqual(Queries.ftsExpression(for: "pricing"), "\"pricing\"")
+    }
+
+    func testRecallFindsAPunctuatedIdentifierByTheNameItIsWrittenUnder() throws {
+        let scratch = try makeEmptyFixture()
+        try scratch.addFrame(
+            at: Fixture.base + 100, app: "Cursor", window: "SCA-219: Parity Pack v0 — omi",
+            ocr: "SCA-219 Parity Pack v0: one PR (dev whitelist capture).")
+        let sessionId = try scratch.store.openSession(at: Fixture.base, appHint: "zoom.us")
+        try scratch.addSegment(
+            session: sessionId, at: Fixture.base + 10, source: .mic,
+            "remind me to email Priyanka about the vendor contract")
+
+        // Every reading of the identifier reaches the one row that holds it: the whole string, the
+        // half a person remembers, and the possessive they would actually type.
+        for query in ["SCA-219", "219", "sca"] {
+            let hits = try Queries.recall(scratch.store, query: query)
+            XCTAssertEqual(
+                hits.first?.window, "SCA-219: Parity Pack v0 — omi",
+                "\(query.debugDescription) lost the window that shows it")
+        }
+        XCTAssertEqual(
+            try Queries.recall(scratch.store, query: "Priyanka's").first?.text,
+            "remind me to email Priyanka about the vendor contract")
+    }
+
+    func testAGenuineMatchStillOutranksNewerIncidentalOnes() throws {
+        // The regression the ranking was built for, re-run over a query whose identifier now splits:
+        // a titled window against six newer bookmark bars whose only tie to the query is "pack".
+        // Reading one typed word as several terms must not change who wins — coverage counts words.
+        let scratch = try makeEmptyFixture()
+        try scratch.addFrame(
+            at: Fixture.base + 1_500, app: "Cursor", window: "SCA-219: Parity Pack v0 — omi",
+            ocr: "SCA-219 Parity Pack v0: one PR (dev whitelist capture). Reviewers asked for a "
+                + "smaller diff before the parity pack lands.")
+        for (i, title) in ["Inbox (12) - Gmail", "Hacker News", "Amazon | Bulk pack deals",
+                           "Notion - Sprint board", "GitHub - pull requests", "YouTube"].enumerated() {
+            try scratch.addFrame(
+                at: Fixture.base + 1_600 + Double(i) * 60, app: "Arc", window: title,
+                ocr: "Bookmarks Bar: Pack Tracker - Battery Pack - Pack Reviews - Vacation packing "
+                    + "list - Six Pack Fitness.")
+        }
+
+        let hits = try Queries.recall(scratch.store, query: "Omi parity pack SCA-219")
+        XCTAssertEqual(hits.first?.window, "SCA-219: Parity Pack v0 — omi")
+        // And the incidental ones are floored out rather than padding the answer to `limit`.
+        XCTAssertEqual(hits.filter { $0.app == "Arc" }.count, 0, "bookmark bars survived the floor")
+    }
+
     // MARK: - Confidence
 
     func testHitsCarryTheTranscriberConfidenceAndMarkTheUncertainOnes() throws {
@@ -183,6 +245,116 @@ final class QueriesTests: XCTestCase {
         XCTAssertFalse(onTheFloor.isLowConfidence, "the floor itself is not below the floor")
         XCTAssertFalse(unscored.isLowConfidence)
         XCTAssertNil(unscored.confidence)
+    }
+
+    // MARK: - Speaker attribution
+
+    func testHitsCarryTheBackendSpeakerAndPersonOnEverySpeechPath() throws {
+        let scratch = try makeEmptyFixture()
+        let now = ContextTime.now
+        let sessionId = try scratch.store.openSession(at: now - 600, appHint: "zoom.us")
+        // The case the whole cloud move exists for: two people on one call, arriving through the
+        // same system tap, told apart by the backend and one of them matched to a real person.
+        try addSegment(
+            scratch, session: sessionId, at: now - 300, "I will send the contract tonight",
+            source: .system, speakerLabel: "SPEAKER_00", personId: "person-sarah")
+        try addSegment(
+            scratch, session: sessionId, at: now - 240, "can we push it to Monday",
+            source: .system, speakerLabel: "SPEAKER_01")
+        try addSegment(
+            scratch, session: sessionId, at: now - 180, "let me check the calendar",
+            source: .mic, speakerLabel: "SPEAKER_02", personId: "person-me")
+
+        // Every path that builds a speech hit has to agree, or a reader gets one answer from
+        // `recall` and a different one from `transcript` about the same line.
+        let recalled = try XCTUnwrap(
+            Queries.recall(scratch.store, query: "contract").first)
+        XCTAssertEqual(recalled.speakerLabel, "SPEAKER_00")
+        XCTAssertEqual(recalled.personId, "person-sarah")
+        // `kind` is untouched: which side of the microphone a line arrived on is a fact this app
+        // observed itself, and a resolved person does not overrule it.
+        XCTAssertEqual(recalled.kind, "heard")
+
+        let recent = try Queries.recent(scratch.store, minutes: 30)
+        XCTAssertEqual(
+            recent.map(\.text),
+            ["let me check the calendar", "can we push it to Monday", "I will send the contract tonight"])
+        XCTAssertEqual(recent.map(\.speakerLabel), ["SPEAKER_02", "SPEAKER_01", "SPEAKER_00"])
+        XCTAssertEqual(recent.map(\.personId), ["person-me", nil, "person-sarah"])
+
+        let transcript = try Queries.transcript(scratch.store, sessionId: sessionId)
+        XCTAssertEqual(transcript.map(\.speakerLabel), ["SPEAKER_00", "SPEAKER_01", "SPEAKER_02"])
+        XCTAssertEqual(transcript.map(\.personId), ["person-sarah", nil, "person-me"])
+        // Two `heard` lines with different labels are two people — more than `kind` alone can say,
+        // and the reason the label is kept even when no person matched.
+        XCTAssertEqual(transcript.prefix(2).map(\.kind), ["heard", "heard"])
+        XCTAssertNotEqual(transcript[0].speakerLabel, transcript[1].speakerLabel)
+    }
+
+    func testAnUnattributedLineStaysUnattributedRatherThanBecomingAClaim() throws {
+        // The seeded corpus predates the columns: every line in it was transcribed locally, where
+        // nothing diarizes and nobody is identified. None of it may come back carrying a speaker or
+        // a person — an absent attribution rendered as a present one is a quote put in someone's
+        // mouth, and this database is the durable record behind it.
+        // `recent` is measured from the wall clock and the corpus is anchored to a fixed epoch, so
+        // the window is deliberately wide enough to reach it however long from now this test runs.
+        let hits = try Queries.recall(fixture.store, query: "pricing")
+            + Queries.recent(fixture.store, minutes: 10 * 365 * 24 * 60)
+            + Queries.transcript(fixture.store, sessionId: fixture.sessionA)
+            + Queries.screen(fixture.store)
+
+        XCTAssertFalse(hits.isEmpty)
+        for hit in hits {
+            XCTAssertNil(hit.speakerLabel, "\(hit.kind) hit invented a speaker: \(hit.text)")
+            XCTAssertNil(hit.personId, "\(hit.kind) hit invented a person: \(hit.text)")
+        }
+        // And the sessions those lines belong to claim nobody either.
+        for summary in try Queries.sessions(fixture.store) {
+            XCTAssertEqual(summary.personIds, [], "session \(summary.id) invented an attendee")
+        }
+    }
+
+    func testSessionsReportWhoTheBackendResolvedInTheOrderTheySpoke() throws {
+        // "my call with Sarah" is the query this enables: pick the session by who was in it rather
+        // than by reading every transcript looking for a name.
+        let scratch = try makeEmptyFixture()
+        let sessionId = try scratch.store.openSession(at: Fixture.base, appHint: "zoom.us")
+        try addSegment(
+            scratch, session: sessionId, at: Fixture.base + 10, "morning both",
+            source: .mic, speakerLabel: "SPEAKER_02", personId: "person-me")
+        try addSegment(
+            scratch, session: sessionId, at: Fixture.base + 30, "I will send the contract tonight",
+            source: .system, speakerLabel: "SPEAKER_00", personId: "person-sarah")
+        // An unmatched voice contributes nothing to the roster: a diarization label is not a person,
+        // and listing it as one would be exactly the claim the id-only design refuses to make.
+        try addSegment(
+            scratch, session: sessionId, at: Fixture.base + 40, "can we push it to Monday",
+            source: .system, speakerLabel: "SPEAKER_01")
+        // Sarah again, later: the roster is who was there, not how often they spoke.
+        try addSegment(
+            scratch, session: sessionId, at: Fixture.base + 60, "Monday works for me",
+            source: .system, speakerLabel: "SPEAKER_00", personId: "person-sarah")
+
+        // A second session with nobody resolved, to prove the field is per session and that an
+        // ordinary local conversation still reports an empty roster rather than the previous one.
+        let localSessionId = try scratch.store.openSession(at: Fixture.base + 7_200, appHint: "Slack")
+        try scratch.addSegment(
+            session: localSessionId, at: Fixture.base + 7_210, source: .mic,
+            "thinking out loud about the roadmap")
+
+        let summaries = try Queries.sessions(scratch.store)
+        let byID = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0) })
+
+        let call = try XCTUnwrap(byID[sessionId])
+        // Order is first-spoken, so the roster reads like the conversation did.
+        XCTAssertEqual(call.personIds, ["person-me", "person-sarah"])
+        XCTAssertEqual(call.lineCount, 4, "the roster query disturbed the header counts")
+        XCTAssertTrue(call.bothSidesPresent)
+
+        let local = try XCTUnwrap(byID[localSessionId])
+        XCTAssertEqual(local.personIds, [])
+        // Empty is "nobody was identified", never "the user was alone" — that is a different field.
+        XCTAssertFalse(local.bothSidesPresent)
     }
 
     // MARK: - Recent and screen
@@ -389,5 +561,28 @@ final class QueriesTests: XCTestCase {
                 source: .mic,
                 text: text,
                 confidence: confidence))
+    }
+
+    /// A line the backend attributed. `Fixture.addSegment` writes the locally transcribed shape —
+    /// no speaker, no person, which is the truth everywhere else in the corpus — so the attribution
+    /// tests build theirs here.
+    private func addSegment(
+        _ fixture: Fixture,
+        session: Int64,
+        at startedAt: Double,
+        _ text: String,
+        source: SegmentSource,
+        speakerLabel: String?,
+        personId: String? = nil
+    ) throws {
+        _ = try fixture.store.insertSegment(
+            Segment(
+                sessionId: session,
+                startedAt: startedAt,
+                endedAt: startedAt + 5,
+                source: source,
+                text: text,
+                speakerLabel: speakerLabel,
+                personId: personId))
     }
 }

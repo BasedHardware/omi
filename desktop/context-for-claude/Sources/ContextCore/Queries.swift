@@ -34,6 +34,29 @@ public enum Queries {
     // Screen hits have no score at all: OCR is a different pipeline with a different failure mode,
     // and inventing a confidence for it would be worse than admitting there is none.
 
+    // MARK: - Attribution
+    //
+    // Speech hits carry the backend's diarization label and its matched person id, and `sessions`
+    // reports the people a conversation contained. All of it is **ids, never names**, and that is a
+    // deliberate boundary rather than an omission.
+    //
+    // A name is a current property of the user's Omi account: people get renamed, merged, and
+    // re-enrolled, and none of that comes back to rewrite rows written months earlier. A name copied
+    // into a row at capture time is therefore a claim that decays with nothing to correct it — and
+    // the failure it produces is the worst one this layer can produce, a model quoting the wrong
+    // person by name with a durable local database behind it. An id ages into whoever the person
+    // becomes.
+    //
+    // Resolution belongs one layer up, and already lives there: the MCP reader holds its own Omi
+    // credential and already renders account-side speaker names. Caching names here as well would
+    // create two copies that disagree, and the stale one would be the one that looks authoritative.
+    // It would also turn a local file the user is invited to delete into a list of their contacts'
+    // names rather than opaque handles.
+    //
+    // What the reader gets without any credential is still real: lines sharing a person id are the
+    // same person, and lines with different diarization labels are different voices. Absent stays
+    // absent — a line nothing identified must render exactly as it did before any of this existed.
+
     // MARK: - Recall ranking
     //
     // `recall` used to OR every query term together and then sort purely by recency. Searching
@@ -48,7 +71,7 @@ public enum Queries {
     // ranking bug into a confident false statement. So relevance decides the order and recency only
     // breaks near-ties.
     //
-    //     coverage  = distinct query terms present in the document / distinct query terms   (0, 1]
+    //     coverage  = distinct query words present in the document / distinct query words   (0, 1]
     //     lexical   = max(0, -bm25) / best max(0, -bm25) in the *same* FTS table            [0, 1]
     //     relevance = 0.6 * coverage + 0.4 * lexical                                        [0, 1]
     //     recency   = exp(-(newestCandidateAt - at) / 3 days)                               (0, 1]
@@ -270,6 +293,28 @@ public enum Queries {
         return cap(newestFirst(screenMoments(rows)), to: limit)
     }
 
+    /// `screen`, plus whether the answer was truncated.
+    ///
+    /// The distinction matters more than it looks: "these are the 40 observations" and "these are
+    /// the newest 40 of more" license different conclusions, and only the second is true when a
+    /// cap was hit. A caller that cannot tell them apart will report a bounded slice as complete.
+    public static func screenPage(
+        _ store: ContextStore,
+        since: Double? = nil,
+        until: Double? = nil,
+        app: String? = nil,
+        limit: Int = 60
+    ) throws -> (hits: [Hit], truncated: Bool) {
+        guard limit > 0 else { return ([], false) }
+        // Asks for one more than it will return. Capping exactly at the limit makes a truncated
+        // answer indistinguishable from a complete one — the caller counts `limit` hits and cannot
+        // tell whether that was all there was, so it renders a bounded slice as the whole record.
+        // The extra moment is discarded; its existence is the entire signal. `screen` keeps its
+        // contract of returning at most `limit`, because callers depend on that.
+        let overFetched = try screen(store, since: since, until: until, app: app, limit: limit + 1)
+        return (cap(overFetched, to: limit), overFetched.count > limit)
+    }
+
     // MARK: - Conversations
 
     /// Session headers, newest first. Enough for a reader to decide which transcript to pull.
@@ -334,7 +379,8 @@ public enum Queries {
                     appHint: appHint,
                     lineCount: rawLineCount ?? 0,
                     bothSidesPresent: (rawHasMic ?? 0) > 0 && (rawHasSystem ?? 0) > 0,
-                    preview: try preview(db, sessionId: id)
+                    preview: try preview(db, sessionId: id),
+                    personIds: try people(db, sessionId: id)
                 )
             }
         }
@@ -346,7 +392,8 @@ public enum Queries {
             try Row.fetchAll(
                 db,
                 sql: """
-                    SELECT startedAt AS at, source, text, sessionId, confidence
+                    SELECT startedAt AS at, source, text, sessionId, confidence,
+                           speakerLabel, personId
                     FROM segments
                     WHERE sessionId = ?
                     ORDER BY startedAt ASC, id ASC
@@ -426,7 +473,9 @@ public enum Queries {
 
     // MARK: - FTS sanitization
 
-    /// Characters that make FTS5 read a human phrase as syntax.
+    /// Characters that make FTS5 read a human phrase as syntax — and, because `porter unicode61`
+    /// breaks a token on every one of them too, the places a typed word splits into the terms the
+    /// index actually holds. See `readings(of:)`.
     private static let ftsOperatorCharacters = CharacterSet(charactersIn: "\"*:^()-")
     /// FTS5 keywords. Compared case-insensitively so `"and"` can never survive into an expression.
     private static let ftsOperatorWords: Set<String> = ["AND", "OR", "NOT", "NEAR"]
@@ -444,34 +493,94 @@ public enum Queries {
         return terms.joined(separator: " OR ")
     }
 
-    /// The terms behind `ftsExpression`, in query order and with duplicates left intact so the
-    /// expression it builds is byte-for-byte what it always was.
+    /// The terms behind `ftsExpression`, in query order.
     ///
     /// Extracted rather than duplicated: the coverage boost has to score the exact set of terms the
     /// MATCH searched for, or a document could be credited for a term the index never looked at.
     private static func sanitizedTerms(in query: String) -> [String] {
-        query
-            .split(whereSeparator: { $0.isWhitespace })
-            .map { token -> String in
-                let kept = token.unicodeScalars.filter { !ftsOperatorCharacters.contains($0) }
-                return String(kept.map { Character($0) })
-            }
-            .filter { term in
-                // A term with no letter or digit tokenizes to nothing, and an empty FTS5 phrase is
-                // itself a syntax error.
-                guard term.rangeOfCharacter(from: .alphanumerics) != nil else { return false }
-                return !ftsOperatorWords.contains(term.uppercased())
-            }
+        queryReadings(in: query).flatMap { $0 }
     }
 
-    /// Case-folded distinct terms: the denominator of the coverage boost. Typing a word twice must
-    /// not make a document that contains it look twice as relevant.
-    private static func distinctTerms(in query: String) -> [String] {
-        var seen: Set<String> = []
-        return sanitizedTerms(in: query).compactMap { term in
-            let folded = term.lowercased()
-            return seen.insert(folded).inserted ? folded : nil
+    /// The terms behind `ftsExpression`, grouped by the word the user typed.
+    private static func queryReadings(in query: String) -> [[String]] {
+        query
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(readings(of:))
+            .filter { !$0.isEmpty }
+    }
+
+    /// Every reading of one typed word that the index could be holding it under.
+    ///
+    /// `porter unicode61` tokenises `SCA-219` into `sca` and `219`. The sanitizer used to *strip*
+    /// the hyphen and search for `sca219`, a token no document the index built can ever contain — so
+    /// every ticket id, version string, hyphenated name and URL fragment was unfindable by the exact
+    /// string a person would type. That is worse than a missing result: the miss comes back phrased
+    /// as a searched-and-found-nothing negative, which is the licence a reader has to conclude the
+    /// thing never happened.
+    ///
+    /// A word is therefore read the way `documentTokens` already reads a document — both ways at
+    /// once. An operator character splits the word in one reading and is spanned in the other, so
+    /// `SCA-219` searches for `sca`, `219` *and* `sca219`, and a document that wrote the identifier
+    /// either way is found. Any other punctuation is a break in both readings, because unicode61
+    /// does not join across it either: `Priyanka's` has to reach `priyanka`, not ask for the
+    /// two-token phrase `priyanka s` that no document says.
+    ///
+    /// Every reading is a run of alphanumerics, so the quoted phrase `ftsExpression` builds from one
+    /// cannot contain FTS5 syntax — hostile input has nothing left to smuggle through.
+    private static func readings(of token: Substring) -> [String] {
+        var split: [String] = []
+        var spanning: [String] = []
+        var piece = ""
+        var run = ""
+
+        func endPiece() {
+            guard !piece.isEmpty else { return }
+            split.append(piece)
+            piece = ""
         }
+        func endRun() {
+            guard !run.isEmpty else { return }
+            spanning.append(run)
+            run = ""
+        }
+
+        for scalar in token.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) {
+                piece.unicodeScalars.append(scalar)
+                run.unicodeScalars.append(scalar)
+            } else if ftsOperatorCharacters.contains(scalar) {
+                endPiece()
+            } else {
+                endPiece()
+                endRun()
+            }
+        }
+        endPiece()
+        endRun()
+
+        var seen: Set<String> = []
+        return (split + spanning).filter { term in
+            // An FTS5 keyword that survived would be read as syntax rather than as the word the
+            // user typed.
+            guard !ftsOperatorWords.contains(term.uppercased()) else { return false }
+            // An unpunctuated word reads the same both ways; searching for it twice would only
+            // double its weight in bm25.
+            return seen.insert(term.lowercased()).inserted
+        }
+    }
+
+    /// Case-folded distinct readings, still grouped by typed word: the denominator of the coverage
+    /// boost counts *words*, not the terms they split into. Typing a word twice must not make a
+    /// document that contains it look twice as relevant — and neither must typing one with a hyphen
+    /// in it, which is the whole reason the grouping survives this far down.
+    private static func distinctTerms(in query: String) -> [[String]] {
+        var seen: Set<String> = []
+        var groups: [[String]] = []
+        for group in queryReadings(in: query) {
+            let folded = group.map { $0.lowercased() }.filter { seen.insert($0).inserted }
+            if !folded.isEmpty { groups.append(folded) }
+        }
+        return groups
     }
 
     // MARK: - Row fetching
@@ -479,7 +588,7 @@ public enum Queries {
     private static func matchedSegments(
         _ db: Database,
         match: String,
-        terms: [String],
+        terms: [[String]],
         since: Double?,
         until: Double?,
         limit: Int
@@ -487,6 +596,7 @@ public enum Queries {
         var sql = """
             SELECT s.startedAt AS at, s.source AS source, s.text AS text, s.sessionId AS sessionId,
                    s.confidence AS confidence,
+                   s.speakerLabel AS speakerLabel, s.personId AS personId,
                    bm25(segments_fts) AS bm25Score
             FROM segments_fts
             JOIN segments s ON s.rowid = segments_fts.rowid
@@ -521,7 +631,7 @@ public enum Queries {
     private static func matchedFrames(
         _ db: Database,
         match: String,
-        terms: [String],
+        terms: [[String]],
         since: Double?,
         until: Double?,
         limit: Int
@@ -563,7 +673,7 @@ public enum Queries {
 
     private static func segmentRows(_ db: Database, since: Double?, until: Double?, limit: Int) throws -> [Row] {
         var sql = """
-            SELECT startedAt AS at, source, text, sessionId, confidence
+            SELECT startedAt AS at, source, text, sessionId, confidence, speakerLabel, personId
             FROM segments
             """
         var args: [(any DatabaseValueConvertible)?] = []
@@ -642,6 +752,29 @@ public enum Queries {
         return truncate(lines.joined(separator: " / "), to: sessionPreviewLimit)
     }
 
+    /// The distinct Omi people the backend identified in one session, in the order they first spoke.
+    ///
+    /// A second small query per session rather than a `group_concat` in the header query: the ids
+    /// are opaque strings from another system, and a delimiter that turns out to occur inside one
+    /// would silently split a person in two. `preview` already reads per session on the same index,
+    /// and both are bounded by `limit`.
+    ///
+    /// Ids, never names. What the account currently calls a person is a fact about the account and
+    /// is answered by whoever holds the credential to ask it — this layer reports who was captured,
+    /// and it has to still be right after a rename.
+    private static func people(_ db: Database, sessionId: Int64) throws -> [String] {
+        try String.fetchAll(
+            db,
+            sql: """
+                SELECT personId
+                FROM segments
+                WHERE sessionId = ? AND personId IS NOT NULL AND TRIM(personId) <> ''
+                GROUP BY personId
+                ORDER BY MIN(startedAt) ASC, personId ASC
+                """,
+            arguments: [sessionId])
+    }
+
     // MARK: - Ranking
 
     /// A hit plus the two comparable relevance signals derived from it. `lexical` is already
@@ -659,7 +792,7 @@ public enum Queries {
     /// Turns one table's matched rows into candidates, normalising bm25 within that table.
     private static func candidates(
         _ rows: [Row],
-        terms: [String],
+        terms: [[String]],
         hit: (Row) -> Hit,
         document: (Row) -> String,
         signature: (Row) -> FrameSignature?
@@ -772,32 +905,42 @@ public enum Queries {
         return result
     }
 
-    /// Fraction of the distinct query terms this document actually contains.
+    /// Fraction of the distinct query *words* this document actually contains.
     ///
     /// The point of the OR expression is that nothing is lost; the point of this number is that a
-    /// document matching three of four terms outranks one matching a single incidental word. Never
-    /// returns zero: the row is in the result set because FTS matched *something*, so a zero here
-    /// would only ever mean our tokenizer and the porter-stemmed index disagreed.
-    private static func coverage(of document: String, terms: [String]) -> Double {
+    /// document matching three of four words outranks one matching a single incidental word.
+    ///
+    /// A word the index split into several terms is still one word: a document holding `SCA-219` in
+    /// full covers it, one holding only `219` covers part of it. Counting the terms instead would
+    /// let a hyphen buy a query word two votes, which is a ranking change smuggled in behind a
+    /// tokenizer fix.
+    ///
+    /// Never returns zero: the row is in the result set because FTS matched *something*, so a zero
+    /// here would only ever mean our tokenizer and the porter-stemmed index disagreed — and an
+    /// under-credited match is the direction that costs a true hit its place.
+    private static func coverage(of document: String, terms: [[String]]) -> Double {
         guard !terms.isEmpty else { return 1 }
         let tokens = documentTokens(document)
-        let matched = terms.reduce(into: 0) { total, term in
-            if tokens.contains(term) || tokens.contains(where: { inflected($0, matches: term) }) {
-                total += 1
+        let matched = terms.reduce(into: 0.0) { total, readings in
+            let found = readings.filter { term in
+                tokens.contains(term) || tokens.contains(where: { inflected($0, matches: term) })
             }
+            total += Double(found.count) / Double(readings.count)
         }
-        return Double(max(1, matched)) / Double(terms.count)
+        // The floor is for the disagreement case only. Raising a genuine partial credit to a whole
+        // word would throw away exactly the distinction the grouping just bought.
+        return (matched > 0 ? matched : 1) / Double(terms.count)
     }
 
     /// Lowercased word tokens of a document, indexed under *both* readings of a punctuated
     /// identifier.
     ///
-    /// The query side strips FTS operator characters, so `SCA-219` arrives as the term `sca219`; the
-    /// unicode61 tokenizer splits on them, so the index holds `sca` and `219`. Emitting only one
-    /// reading loses coverage credit for a document the index genuinely matched — `SCA-219` under
-    /// the split reading, `omi-eng` under the joined one — and under-credited coverage is the
-    /// direction that costs a true match its place, which is the whole bug. Emitting both can only
-    /// credit terms that FTS itself matched.
+    /// The unicode61 tokenizer splits on an operator character, so the index holds `sca` and `219`
+    /// for a document that wrote `SCA-219`; a query can arrive carrying either that split reading or
+    /// the joined `sca219`. Emitting only one reading here loses coverage credit for a document the
+    /// index genuinely matched, and under-credited coverage is the direction that costs a true match
+    /// its place. `readings(of:)` does the same on the query side, so the two now agree by
+    /// construction rather than by luck.
     private static func documentTokens(_ document: String) -> Set<String> {
         var tokens: Set<String> = []
         var joined = ""
@@ -1032,7 +1175,9 @@ public enum Queries {
             sessionId: representative.sessionId,
             // Nil in practice — only frames are collapsed — but carried rather than defaulted, so a
             // rebuilt hit can never quietly lose what the one it stands for knew.
-            confidence: representative.confidence
+            confidence: representative.confidence,
+            speakerLabel: representative.speakerLabel,
+            personId: representative.personId
         )
     }
 
@@ -1067,9 +1212,24 @@ public enum Queries {
         // ask for the column. Both mean "unknown", which is what a nil confidence says — the one
         // reading it must never be allowed to decay into "low".
         let confidence: Double? = row["confidence"]
+        // Same discipline for attribution, and a sharper edge on it: a locally transcribed line has
+        // no diarization and no matched person, so nil is the honest answer and the only safe one.
+        // Inventing a label here would turn "we did not identify anyone" into "we identified
+        // someone", which is the one error a record of who said what cannot survive.
+        let speakerLabel: String? = row["speakerLabel"]
+        let personId: String? = row["personId"]
+        // `kind` still comes from the capture side, never from the person: which side of the
+        // microphone a line arrived on is a fact this app observed itself, and it stays true even
+        // when the backend has a better name for the voice.
         let kind = SegmentSource(rawValue: source ?? "") == .mic ? "said" : "heard"
         return Hit(
-            kind: kind, at: at ?? 0, text: text ?? "", sessionId: sessionId, confidence: confidence)
+            kind: kind,
+            at: at ?? 0,
+            text: text ?? "",
+            sessionId: sessionId,
+            confidence: confidence,
+            speakerLabel: speakerLabel,
+            personId: personId)
     }
 
     private static func frameHit(_ row: Row) -> Hit {

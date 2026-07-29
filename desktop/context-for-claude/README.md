@@ -102,6 +102,18 @@ Hermetic — no network, no live services. Note that `OmiKeyResolver` deliberate
 any credential while XCTest is loaded; without that the suite quietly picks up a developer's own key
 and starts querying a real Omi account.
 
+```bash
+python3 scripts/eval.py   # answer quality, scored
+```
+
+`swift test` proves the code does what it was written to do. The eval asks the shipping
+`context-for-claude-mcp` binary real questions over stdio against a seeded throwaway database, and
+scores ten classes of answer — mostly honesty under adversarial conditions: no confabulation,
+filter integrity, uncertainty marking, coverage-window honesty. It prints a per-class score, one
+overall number, and a diff against the previous run, and exits non-zero on a regression. Run it
+after every change that could move what a model reads. What each class measures and how to read a
+regression: `docs/evals.md`.
+
 ## Known issues
 
 - **Screen sync returns HTTP 500.** Omi's Rust desktop-backend fails to authenticate itself to

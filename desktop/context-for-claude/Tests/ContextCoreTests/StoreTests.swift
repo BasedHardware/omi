@@ -91,9 +91,9 @@ final class StoreTests: XCTestCase {
         let applied: [String] = try upgraded.read { db in
             try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
         }
-        // Exactly the two the store's own migrator registers. A missing entry would mean the
+        // Exactly the ones the store's own migrator registers. A missing entry would mean the
         // migration re-runs on every launch and fails on the second one.
-        XCTAssertEqual(applied, ["v1", "v3-segment-confidence"])
+        XCTAssertEqual(applied, ["v1", "v3-segment-confidence", "v4-segment-speaker"])
 
         // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
         // migrator and skips itself when its identifier is already recorded. Proving the two live
@@ -102,7 +102,9 @@ final class StoreTests: XCTestCase {
         let coexisting: Set<String> = try upgraded.read { db in
             Set(try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations"))
         }
-        XCTAssertEqual(coexisting, ["v1", "v3-segment-confidence", UploadQueue.migrationIdentifier])
+        XCTAssertEqual(
+            coexisting,
+            ["v1", "v3-segment-confidence", "v4-segment-speaker", UploadQueue.migrationIdentifier])
         XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
 
         let segments: [Segment] = try upgraded.read { try Segment.fetchAll($0) }
@@ -144,6 +146,113 @@ final class StoreTests: XCTestCase {
             try Segment.fetchOne(db, sql: "SELECT * FROM segments WHERE id = ?", arguments: [scoredId])
         }
         XCTAssertEqual(try XCTUnwrap(scored).confidence, 0.91)
+    }
+
+    func testSpeakerMigrationAddsBothColumnsWithoutDisturbingExistingRows() throws {
+        // Same rewind as the confidence test, and for the same reason: the upgrade that matters is
+        // the one a user with months of transcript performs, not the schema a fresh database is
+        // born with.
+        let url = fixture.root.appendingPathComponent("pre-speaker.db")
+        let legacySessionId: Int64
+        let legacySegmentId: Int64
+        do {
+            let legacy = try ContextStore(url: url)
+            legacySessionId = try legacy.openSession(at: Fixture.base, appHint: "zoom.us")
+            legacySegmentId = try legacy.insertSegment(
+                Segment(
+                    sessionId: legacySessionId,
+                    startedAt: Fixture.base + 10,
+                    endedAt: Fixture.base + 14,
+                    source: .system,
+                    text: "twas brillig and the slithy toves",
+                    confidence: 0.88))
+            try legacy.write { db in
+                try db.execute(sql: "ALTER TABLE segments DROP COLUMN speakerLabel")
+                try db.execute(sql: "ALTER TABLE segments DROP COLUMN personId")
+                try db.execute(
+                    sql: "DELETE FROM grdb_migrations WHERE identifier = ?",
+                    arguments: ["v4-segment-speaker"])
+            }
+            let before = try columns(of: "segments", in: legacy)
+            XCTAssertFalse(
+                before.contains("speakerLabel"),
+                "the fixture failed to rewind: this test would prove nothing")
+            XCTAssertFalse(before.contains("personId"), "the fixture failed to rewind")
+        }
+
+        let upgraded = try ContextStore(url: url)
+
+        let after = try columns(of: "segments", in: upgraded)
+        XCTAssertTrue(after.contains("speakerLabel"))
+        XCTAssertTrue(after.contains("personId"))
+
+        let applied: [String] = try upgraded.read { db in
+            try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
+        }
+        // Exactly what this migrator registers, in order. A fresh identifier rather than a reused
+        // one is the whole point: a duplicate would be skipped forever and the columns would simply
+        // never appear.
+        XCTAssertEqual(applied, ["v1", "v3-segment-confidence", "v4-segment-speaker"])
+
+        // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
+        // migrator. Proving they still coexist is the only way to know `v4-` did not claim a slot
+        // that was already spoken for.
+        try UploadQueue.prepare(upgraded)
+        let coexisting: Set<String> = try upgraded.read { db in
+            Set(try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations"))
+        }
+        XCTAssertEqual(
+            coexisting,
+            ["v1", "v3-segment-confidence", "v4-segment-speaker", UploadQueue.migrationIdentifier])
+        XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
+
+        let segments: [Segment] = try upgraded.read { try Segment.fetchAll($0) }
+        let segment = try XCTUnwrap(segments.first)
+        XCTAssertEqual(segments.count, 1, "the migration lost or duplicated a row")
+        XCTAssertEqual(segment.id, legacySegmentId)
+        XCTAssertEqual(segment.sessionId, legacySessionId)
+        XCTAssertEqual(segment.startedAt, Fixture.base + 10)
+        XCTAssertEqual(segment.endedAt, Fixture.base + 14)
+        XCTAssertEqual(segment.source, SegmentSource.system.rawValue)
+        XCTAssertEqual(segment.speaker, "them")
+        XCTAssertEqual(segment.text, "twas brillig and the slithy toves")
+        // The column added beside them must not disturb the one added before it.
+        XCTAssertEqual(segment.confidence, 0.88)
+        // A line captured before the backend diarized anything was never attributed to a person,
+        // and the upgrade must not invent one for it.
+        XCTAssertNil(segment.speakerLabel)
+        XCTAssertNil(segment.personId)
+        XCTAssertEqual(
+            try unattributedCount(in: upgraded), 1,
+            "an existing row was backfilled with attribution nobody produced")
+
+        // Search has to survive the alter: `segments_fts` is external-content over `segments`, so
+        // two columns added under it must leave the sync triggers and the index intact.
+        let matches: Int = try upgraded.read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM segments_fts WHERE segments_fts MATCH ?",
+                arguments: ["brillig"]) ?? 0
+        }
+        XCTAssertEqual(matches, 1, "the migration broke the segments FTS index")
+
+        // And the upgraded database has to accept an attributed line, which is what the columns are
+        // for.
+        let attributedId = try upgraded.insertSegment(
+            Segment(
+                sessionId: legacySessionId,
+                startedAt: Fixture.base + 20,
+                endedAt: Fixture.base + 24,
+                source: .system,
+                text: "mimsy were the borogoves",
+                speakerLabel: "SPEAKER_01",
+                personId: "person-sarah"))
+        let attributed: Segment? = try upgraded.read { db in
+            try Segment.fetchOne(db, sql: "SELECT * FROM segments WHERE id = ?", arguments: [attributedId])
+        }
+        let stored = try XCTUnwrap(attributed)
+        XCTAssertEqual(stored.speakerLabel, "SPEAKER_01")
+        XCTAssertEqual(stored.personId, "person-sarah")
     }
 
     // MARK: - Round trips
@@ -243,6 +352,66 @@ final class StoreTests: XCTestCase {
                 db, sql: "SELECT confidence FROM segments WHERE confidence IS NOT NULL ORDER BY startedAt")
         }
         XCTAssertEqual(stored, [0.57, 0.98])
+    }
+
+    func testSegmentSpeakerAttributionRoundTripsAndAnAbsentPersonStaysNull() throws {
+        let store = fixture.store
+        let sessionId = try store.openSession(at: Fixture.base, appHint: "zoom.us")
+        // What the backend actually sends: a diarization label per voice, and a person id only for
+        // the voices an enrolled speech profile matched.
+        let namedId = try store.insertSegment(
+            Segment(
+                sessionId: sessionId, startedAt: Fixture.base + 10, endedAt: Fixture.base + 14,
+                source: .system, text: "I will send the contract tonight",
+                speakerLabel: "SPEAKER_00", personId: "person-sarah"))
+        // A second voice on the same call: diarized apart, but nobody the account knows. The whole
+        // reason the label is stored separately from the person.
+        let anonymousId = try store.insertSegment(
+            Segment(
+                sessionId: sessionId, startedAt: Fixture.base + 30, endedAt: Fixture.base + 34,
+                source: .system, text: "can we push it to Monday",
+                speakerLabel: "SPEAKER_01"))
+        // A locally transcribed line: no diarizer ran, so neither field has an answer.
+        let localId = try store.insertSegment(
+            Segment(
+                sessionId: sessionId, startedAt: Fixture.base + 50, endedAt: Fixture.base + 54,
+                source: .mic, text: "let me check the calendar"))
+        // Blank is the same absence as missing — the wire is full of empty strings, and two
+        // readings of "unattributed" in one column is how a `personId IS NOT NULL` query and a
+        // `!= nil` check come to disagree.
+        let blankId = try store.insertSegment(
+            Segment(
+                sessionId: sessionId, startedAt: Fixture.base + 70, endedAt: Fixture.base + 74,
+                source: .system, text: "sounds good", speakerLabel: "  ", personId: ""))
+
+        let byID: [Int64: Segment] = try store.read { db in
+            try Segment.fetchAll(db).reduce(into: [:]) { $0[$1.id ?? -1] = $1 }
+        }
+
+        XCTAssertEqual(byID[namedId]?.speakerLabel, "SPEAKER_00")
+        XCTAssertEqual(byID[namedId]?.personId, "person-sarah")
+        // Source-derived attribution is untouched by any of this: it is what the app observed
+        // itself, and it stays true whatever the backend knows about the voice.
+        XCTAssertEqual(byID[namedId]?.speaker, "them")
+
+        XCTAssertEqual(byID[anonymousId]?.speakerLabel, "SPEAKER_01")
+        XCTAssertNil(try XCTUnwrap(byID[anonymousId]).personId)
+
+        XCTAssertNil(try XCTUnwrap(byID[localId]).speakerLabel)
+        XCTAssertNil(try XCTUnwrap(byID[localId]).personId)
+
+        XCTAssertNil(try XCTUnwrap(byID[blankId]).speakerLabel)
+        XCTAssertNil(try XCTUnwrap(byID[blankId]).personId)
+
+        // Through the columns themselves, not only through the decoder: an empty string stored as a
+        // value would still decode to `Optional("")` and pass a nil-check written any less
+        // carefully, and would make this row look like an identified person to SQL.
+        XCTAssertEqual(try unattributedCount(in: store), 3)
+        let people: [String] = try store.read { db in
+            try String.fetchAll(
+                db, sql: "SELECT personId FROM segments WHERE personId IS NOT NULL ORDER BY startedAt")
+        }
+        XCTAssertEqual(people, ["person-sarah"])
     }
 
     func testClosingAnUnknownSessionIsANoOp() throws {
@@ -570,6 +739,13 @@ final class StoreTests: XCTestCase {
 
     private func tableExists(_ name: String, in store: ContextStore) throws -> Bool {
         try store.read { db in try db.tableExists(name) }
+    }
+
+    /// Rows with no matched person, counted in SQL so an empty string cannot pass for absence.
+    private func unattributedCount(in store: ContextStore) throws -> Int {
+        try store.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM segments WHERE personId IS NULL") ?? -1
+        }
     }
 
     private func nullConfidenceCount(in store: ContextStore) throws -> Int {
