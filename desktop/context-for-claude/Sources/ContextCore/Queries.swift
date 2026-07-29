@@ -1,3 +1,4 @@
+import ContextCoreCxx
 import Foundation
 import GRDB
 
@@ -71,40 +72,9 @@ public enum Queries {
     // ranking bug into a confident false statement. So relevance decides the order and recency only
     // breaks near-ties.
     //
-    //     coverage  = distinct query words present in the document / distinct query words   (0, 1]
-    //     lexical   = max(0, -bm25) / best max(0, -bm25) in the *same* FTS table            [0, 1]
-    //     relevance = 0.6 * coverage + 0.4 * lexical                                        [0, 1]
-    //     recency   = exp(-(newestCandidateAt - at) / 3 days)                               (0, 1]
-    //     score     = relevance * (0.75 + 0.25 * recency)                                   [0, 1]
-    //
-    // Coverage carries the larger weight because it is the only term that means the same thing in
-    // both tables: bm25 magnitudes depend on each table's row count, average document length, and
-    // term distribution, so a raw score is comparable only against other scores from the same table.
-    // Normalising within a table and then blending on coverage is what makes a merged ranking honest
-    // rather than a coin toss between two different scales.
-    //
-    // Recency is a multiplier capped at `recencyPull`, not an additive term, so it is bounded by
-    // construction: an infinitely old hit still keeps 75% of its relevance. A newer hit can therefore
-    // only overturn a relevance gap smaller than 25% — the bookmark-bar captures were fresher than
-    // the real match and must never win on that alone.
-    private static let coverageWeight = 0.6
-    private static let lexicalWeight = 0.4
-    /// The most of a hit's relevance that age is allowed to take away.
-    private static let recencyPull = 0.25
-    /// e-folding time. Three days is roughly the horizon over which "I was just looking at this"
-    /// stops being a reason to prefer one match over a better one.
-    private static let recencyDecaySeconds: Double = 3 * 24 * 60 * 60
-
-    /// Hits scoring below this fraction of the best hit are dropped instead of padding the result to
-    /// `limit`. Relative rather than absolute because scores are only meaningful within one query:
-    /// there is no absolute number that separates "relevant" from "noise" across every corpus.
-    ///
-    /// 0.40 is chosen against the floor of a full-coverage hit. A document containing *every*
-    /// distinct query term scores at least `0.6 * 1.0 * 0.75 = 0.45`, and no score can exceed 1.0, so
-    /// the floor can never remove a hit that matched the whole query however old it is. It only ever
-    /// trims partial-coverage hits — which is exactly the bookmark bar, and exactly the case where
-    /// padding to `limit` misleads a reader into thinking the database is full of matches.
-    private static let relevanceFloorFraction = 0.4
+    // The scoring formula and floor live in the portable C++ core (`ctx_recall_score` and
+    // `ctx_relevance_floor`) so every host — macOS, Windows, or any future one — agrees on the same
+    // answer. The constants are documented in `core/include/context_core/context_core.h`.
 
     /// bm25 column weights for `frames_fts(ocrText, windowTitle, appName)`.
     ///
@@ -137,71 +107,14 @@ public enum Queries {
     // It carries the whole run's time span and the number of frames it stands for, so collapsing
     // hides nothing: a reader can always ask `screen` for the span itself and get the frames back.
     //
-    // **Grouping.** Frames are keyed on `(app, window title reduced to its words)` and grouped in
-    // time order. Reducing the title to words is not cosmetic: Warp's Claude Code spinner cycles
-    // ✳/⠂/⠐ *inside the title* between consecutive frames, so exact title matching shatters one
-    // 2.8-hour terminal session into ~150 one-frame "moments". The same normalisation absorbs
-    // unsaved-changes dots and unread badges.
-    //
-    // Grouping is per key rather than strictly adjacent, because a person alternates between two
-    // windows every few frames; adjacency would restart both moments on every switch and dedupe
-    // almost nothing (measured: 2× versus 5× on this machine's corpus).
-    //
-    // **Materiality.** A moment ends when the next frame of that window arrives `momentGapSeconds`
-    // or more later, or when it shows materially new text. "Materially" cannot be a fixed similarity
-    // threshold, because the two cases that must come out differently look the same to one: a static
-    // page re-OCR'd and a chat window that gained a message both overlap their predecessor by ~95%.
-    // What separates them is *novelty* — words the moment has never contained — and how much novelty
-    // is normal **for that window**. A terminal that rewrites a third of itself every three seconds
-    // is not starting a new moment every three seconds; a page that has been still and suddenly
-    // gains a paragraph is.
-    //
-    // So the bar is `max(momentNoveltyFloor, momentChurnMultiple × the window's own recent churn)`,
-    // cleared in both fraction and absolute words, plus one escape hatch
-    // (`momentNoveltyDominantFraction`) for a frame too short to ever reach the word minimum.
-    // Calibrated against four labelled runs from this machine's real capture, all of which the
-    // constants below satisfy:
-    //
-    //   still marketing page, Arc, 7 frames   0–2 novel words per frame          → 1 moment
-    //   still article, Arc, 8 frames          0–1 novel words per frame          → 1 moment
-    //   iMessage thread, 9 frames             19 novel at 15% vs a 12.5% bar     → 2 moments
-    //   editor, file switched, 32 frames      254 novel at 54% vs a 27% bar      → 3 moments
-    //
-    // The third row is the one that decides the design: 15% overlap-loss is indistinguishable from a
-    // re-OCR by any fixed threshold, and only reads as material because that chat had been sitting
-    // at 4% churn.
-    //
-    // Cost is one pass: a hashed word set per frame, one subtraction against the moment's running
-    // set. 1,128 frames — this machine's entire history — group in well under a tenth of a second.
+    // The grouping algorithm lives in the portable C++ core (`ctx_moment_groups`) so every host
+    // agrees on the same answer. The constants are documented in
+    // `core/include/context_core/context_core.h`. This Swift layer builds flat buffers from
+    // `[MomentInput]` and delegates to the C ABI.
 
-    /// Ten minutes. Deliberately generous: the frames being grouped are already filtered (by a
-    /// search term, or by `app`), so "the next matching frame" is not "the next frame" — a person
-    /// can sit in one window for minutes between two frames that mention the thing being searched
-    /// for. Longer than this and they went and did something else.
-    private static let momentGapSeconds: Double = 600
-    /// The novelty bar for a window with no established churn, and the floor under every bar. Below
-    /// this is OCR wobble: the same page read twice never agrees to the word.
-    private static let momentNoveltyFloor = 0.10
-    /// A fraction alone would let one new word split a nine-word window. This is roughly a sentence:
-    /// the least new text a reader would call a different thing.
-    private static let momentNoveltyMinimumWords = 12
-    /// A frame this fraction new is a new moment however few words it has — the escape hatch for a
-    /// window too short to ever clear `momentNoveltyMinimumWords`.
-    ///
-    /// Deliberately near the top of the range: it is meant to fire only for "almost nothing here was
-    /// here before", leaving every ordinary content change to the churn-relative bar. Measured, 0.6
-    /// costs a fifth of the collapse (1128 frames → 267 moments rather than 214) for cases that bar
-    /// already catches; 0.8 costs 3 moments in 1128.
-    private static let momentNoveltyDominantFraction = 0.8
-    /// How far above a window's own churn a frame must land to count as a new moment. Calibrated
-    /// against the four labelled cases in the notes above; at 4.0 the new-message case stops firing
-    /// and at 2.5 the collapse gets measurably worse for nothing.
-    private static let momentChurnMultiple = 3.0
-    /// EWMA weight on the newest observation. High enough to follow a window that changes character,
-    /// low enough that one garbled OCR pass does not move the bar.
-    private static let momentChurnSmoothing = 0.3
     /// Distinct words compared per frame. Bounds the pass over a pathological page; real captures on
-    /// this machine peak around 500.
+    /// this machine peak around 500. Stays in Swift because it caps the word extraction
+    /// (`words(in:)`), not the grouping — `ctx_moment_groups` trusts the caller's word arrays.
     private static let momentWordCeiling = 800
 
     /// Raw frames to read before collapsing, when the caller asked for `limit` moments.
@@ -829,13 +742,15 @@ public enum Queries {
 
         // Recency is measured against the newest candidate rather than the wall clock, so the same
         // corpus always ranks the same way however long ago it was captured.
+        //
+        // The formula lives in the portable C++ core so every host agrees: `ctx_recall_score`
+        // blends coverage, lexical quality, and an age penalty; `ctx_relevance_floor` computes
+        // the threshold below which partial-coverage hits are dropped.
         let scored = pool.map { candidate -> Scored in
-            let relevance = coverageWeight * candidate.coverage + lexicalWeight * candidate.lexical
             let age = max(0, newest - candidate.hit.at)
-            let recency = exp(-age / recencyDecaySeconds)
             return Scored(
                 hit: candidate.hit,
-                score: relevance * (1 - recencyPull + recencyPull * recency),
+                score: ctx_recall_score(candidate.coverage, candidate.lexical, age),
                 frame: candidate.frame)
         }
 
@@ -845,7 +760,7 @@ public enum Queries {
         let moments = collapsedMoments(scored)
 
         guard let best = moments.map(\.score).max() else { return [] }
-        let floor = relevanceFloorFraction * best
+        let floor = ctx_relevance_floor(best)
 
         return moments
             .filter { $0.score >= floor }
@@ -1002,83 +917,68 @@ public enum Queries {
         let signature: FrameSignature
     }
 
-    /// A window with a moment currently open. `churn` outlives the moment on purpose: how much a
-    /// window normally changes is a property of the window, not of the stretch being grouped, and
-    /// resetting it on every break makes the bar collapse to `momentNoveltyFloor` and shatter the
-    /// next moment in the same way.
-    private struct OpenMoment {
-        var group: Int
-        var lastAt: Double
-        var words: Set<Int>
-        var churn: Double?
-    }
-
-    /// Groups frames into moments, returning the indices belonging to each.
+    // MARK: - Moment grouping
     ///
     /// `frames` must be in ascending time order. Groups come back in the order they opened, and
     /// every index appears in exactly one — nothing is dropped here, only gathered.
+    ///
+    /// Delegates to `ctx_moment_groups` in the portable C++ core. This layer builds flat buffers
+    /// (key bytes, word hashes, frame descriptors) from the Swift structures and converts the
+    /// per-frame group assignments back into index groups.
     private static func momentGroups(_ frames: [MomentInput]) -> [[Int]] {
-        var groups: [[Int]] = []
-        // Parallel arrays keyed by window: mutating `open[slot].words` in place is what keeps the
-        // running set from being copied on every frame.
-        var open: [OpenMoment] = []
-        var slots: [String: Int] = [:]
+        guard !frames.isEmpty else { return [] }
 
-        for (index, frame) in frames.enumerated() {
-            let key = frame.signature.key
-            guard let slot = slots[key] else {
-                groups.append([index])
-                open.append(
-                    OpenMoment(
-                        group: groups.count - 1,
-                        lastAt: frame.at,
-                        words: frame.signature.words,
-                        churn: nil))
-                slots[key] = open.count - 1
-                continue
+        // Build flat buffers for the C ABI.
+        var keyData = Data()
+        var allWords = [Int64]()
+        var cFrames = [ctx_moment_frame]()
+        cFrames.reserveCapacity(frames.count)
+
+        for input in frames {
+            let keyBytes = Array(input.signature.key.utf8)
+            let keyStart = keyData.count
+            keyData.append(contentsOf: keyBytes)
+
+            let wordStart = allWords.count
+            for word in input.signature.words {
+                allWords.append(Int64(truncatingIfNeeded: word))
             }
 
-            var startsMoment = frame.at - open[slot].lastAt >= momentGapSeconds
-            if !startsMoment, !frame.signature.words.isEmpty {
-                var novel = 0
-                for word in frame.signature.words where !open[slot].words.contains(word) {
-                    novel += 1
-                }
-                let fraction = Double(novel) / Double(frame.signature.words.count)
-                // The first comparison a window ever gets cannot end a moment: there is no churn to
-                // judge it against, and it is exactly the frame most likely to be a half-rendered
-                // page. Measured, this alone is the difference between the still Periphery site
-                // reading as one moment and reading as two.
-                if let churn = open[slot].churn {
-                    // Two ways to be new, because the word minimum alone has a hole. Requiring 12
-                    // novel words stops a re-OCR of a long page from breaking on jitter — but it
-                    // also means a *short* frame can never break at all, however different it is. A
-                    // chat window whose whole content is "ok sounds good" is three words: entirely
-                    // new, and silently swallowed into the previous moment. So a frame that is
-                    // overwhelmingly novel counts regardless of how few words it has.
-                    let bar = max(momentNoveltyFloor, momentChurnMultiple * churn)
-                    if fraction >= momentNoveltyDominantFraction
-                        || (novel >= momentNoveltyMinimumWords && fraction > bar) {
-                        startsMoment = true
+            var frame = ctx_moment_frame()
+            frame.at = input.at
+            frame.key_offset = keyStart
+            frame.key_length = keyBytes.count
+            frame.word_offset = wordStart
+            frame.word_count = input.signature.words.count
+            cFrames.append(frame)
+        }
+
+        var outGroupOfFrame = [Int32](repeating: 0, count: frames.count)
+
+        // Capture lengths before entering the nested closures to avoid overlapping access violations.
+        let cFrameCount = cFrames.count
+        let keyDataLength = keyData.count
+        let wordsCount = allWords.count
+
+        let groupCount = cFrames.withUnsafeBufferPointer { framesPtr in
+            keyData.withUnsafeMutableBytes { rawKeyPtr in
+                allWords.withUnsafeBufferPointer { wordsPtr in
+                    outGroupOfFrame.withUnsafeMutableBufferPointer { outPtr in
+                        ctx_moment_groups(
+                            framesPtr.baseAddress, cFrameCount,
+                            rawKeyPtr.baseAddress?.assumingMemoryBound(to: CChar.self), keyDataLength,
+                            wordsPtr.baseAddress, wordsCount,
+                            outPtr.baseAddress)
                     }
                 }
-                // The bar learns from every frame, including the one that just broke the moment:
-                // that frame is evidence about the window too.
-                open[slot].churn = open[slot].churn
-                    .map { (1 - momentChurnSmoothing) * $0 + momentChurnSmoothing * fraction }
-                    ?? fraction
             }
+        }
 
-            if startsMoment {
-                groups.append([index])
-                open[slot].group = groups.count - 1
-                open[slot].lastAt = frame.at
-                open[slot].words = frame.signature.words
-            } else {
-                groups[open[slot].group].append(index)
-                open[slot].lastAt = frame.at
-                open[slot].words.formUnion(frame.signature.words)
-            }
+        guard groupCount > 0 else { return [] }
+
+        var groups = [[Int]](repeating: [], count: Int(groupCount))
+        for (index, group) in outGroupOfFrame.enumerated() {
+            groups[Int(group)].append(index)
         }
         return groups
     }
