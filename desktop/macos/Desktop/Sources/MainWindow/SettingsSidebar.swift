@@ -554,7 +554,7 @@ struct SettingsSidebarItem: View {
               .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
               .lineLimit(1)
-              .fixedSize(horizontal: true, vertical: false)
+              .truncationMode(.tail)
               .layoutPriority(1)
 
             Spacer()

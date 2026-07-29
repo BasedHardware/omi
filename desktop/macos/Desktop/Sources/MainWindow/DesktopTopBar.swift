@@ -341,10 +341,22 @@ private struct TopNavigationBarRowLayout: Layout {
     let settingsX = bounds.maxX
     let controlsX = settingsX - sizes.settings.width - Self.controlsToSettingsSpacing
 
+    // Cap navigation to the space available before the persistent controls so
+    // that an enlarged font scale (where even the compact fallback overflows)
+    // constrains navigation instead of overlapping capture/settings controls.
+    let availableNavigationWidth = max(
+      0,
+      controlsX - Self.navigationToControlsSpacing - bounds.minX
+    )
+    let navigationProposal = CGSize(
+      width: min(sizes.navigation.width, availableNavigationWidth),
+      height: sizes.navigation.height
+    )
+
     subviews[0].place(
       at: CGPoint(x: bounds.minX, y: bounds.midY),
       anchor: .leading,
-      proposal: ProposedViewSize(sizes.navigation)
+      proposal: ProposedViewSize(navigationProposal)
     )
     subviews[1].place(
       at: CGPoint(x: controlsX, y: bounds.midY),
