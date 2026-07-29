@@ -1341,6 +1341,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
   }
 
+  @MainActor
   func testSettledMessageBodyEnablesSelectionWhileStreamingBodyDoesNot() {
     // Behavioral coverage for the production selection branch. The source
     // inspection tripwire above guards the forbidden patterns; this test
@@ -1359,6 +1360,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
   }
 
+  @MainActor
   func testSelectableMarkdownRendersWithStableLayout() {
     // Render a settled (selectable) message body in a real hosting view and
     // verify the SelectionOverlay-backed content produces a finite, stable size
