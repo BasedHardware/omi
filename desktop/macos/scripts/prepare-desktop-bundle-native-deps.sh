@@ -88,7 +88,9 @@ strip_main_executable() {
     return 0
   fi
 
-  if ! command -v strip >/dev/null 2>&1; then
+  local strip_bin
+  strip_bin="$(xcrun --find strip 2>/dev/null || true)"
+  if [[ -z "$strip_bin" ]]; then
     echo "WARNING: strip not found; leaving main app executable unstripped" >&2
     return 0
   fi
@@ -120,7 +122,7 @@ strip_main_executable() {
   before_bytes="$(file_size_bytes "$executable_path")"
   before_arches="$(macho_arches "$executable_path")"
   chmod u+w "$executable_path" 2>/dev/null || true
-  strip -x "$executable_path"
+  "$strip_bin" -x "$executable_path"
   after_bytes="$(file_size_bytes "$executable_path")"
   after_arches="$(macho_arches "$executable_path")"
 

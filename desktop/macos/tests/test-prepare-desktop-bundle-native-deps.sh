@@ -47,13 +47,28 @@ perl -e 'truncate $ARGV[0], $ARGV[1] or die "truncate: $!"' "$target" "$after"
 EOF
 chmod +x "$fakebin/strip"
 
+cat > "$fakebin/xcrun" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$TEST_XCRUN_CALLS"
+if [[ "${1:-}" == "--find" && "${2:-}" == "strip" ]]; then
+  printf '%s/strip\n' "$(dirname "$0")"
+  exit 0
+fi
+exit 1
+EOF
+chmod +x "$fakebin/xcrun"
+
 head -c 4096 /dev/zero > "$main_binary"
 chmod +x "$main_binary"
 
 before="$(wc -c < "$main_binary" | tr -d ' ')"
-output="$(PATH="$fakebin:$PATH" "$MACOS_DIR/scripts/prepare-desktop-bundle-native-deps.sh" "$app_bundle")"
+xcrun_calls="$tmpdir/xcrun-calls"
+output="$(PATH="$fakebin:$PATH" TEST_XCRUN_CALLS="$xcrun_calls" "$MACOS_DIR/scripts/prepare-desktop-bundle-native-deps.sh" "$app_bundle")"
 after="$(wc -c < "$main_binary" | tr -d ' ')"
 
+if [[ "$(cat "$xcrun_calls")" != "--find strip" ]]; then
+  fail "main executable strip must resolve the Apple strip tool through xcrun"
+fi
 if [ "$after" -ge "$before" ]; then
   fail "main executable was not stripped: before=$before after=$after"
 fi
