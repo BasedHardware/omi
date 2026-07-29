@@ -401,11 +401,13 @@ final class AgentPillsManager: ObservableObject {
   enum DirectedProvider: String, Equatable {
     case hermes
     case openclaw
+    case codex
 
     var displayName: String {
       switch self {
       case .hermes: return "Hermes"
       case .openclaw: return "OpenClaw"
+      case .codex: return "Codex"
       }
     }
 
@@ -413,6 +415,7 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return .hermes
       case .openclaw: return .openclaw
+      case .codex: return .codex
       }
     }
 
@@ -420,6 +423,7 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return "hermes"
       case .openclaw: return "openclaw"
+      case .codex: return "codex"
       }
     }
 
@@ -427,6 +431,23 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
       case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+      case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
+      }
+    }
+
+    var installCommand: String {
+      switch self {
+      case .hermes: return "npm i -g @nous-research/hermes-agent || pipx install hermes-agent"
+      case .openclaw: return "npm i -g openclaw"
+      case .codex: return "npm i -g @openai/codex"
+      }
+    }
+
+    var loginCommand: String {
+      switch self {
+      case .hermes: return "hermes login"
+      case .openclaw: return "openclaw login"
+      case .codex: return "codex login"
       }
     }
 
@@ -443,6 +464,55 @@ final class AgentPillsManager: ObservableObject {
     let query: String
     let createdAt: String
     let completedAt: String?
+  }
+
+  /// Compatibility entrypoint used by voice/chat tool surfaces. Maps onto the
+  /// canonical `spawn` path with a floating-bar origin surface.
+  @discardableResult
+  func spawnFromUserQuery(
+    _ query: String,
+    model: String,
+    fromVoice: Bool = false,
+    preFetchedTitle: String? = nil,
+    preFetchedAck: String? = nil,
+    bridgeHarnessOverride: AgentHarnessMode? = nil,
+    spawnContext: AgentSpawnContext? = nil
+  ) -> AgentPill {
+    _ = spawnContext  // reserved for fallback-chain handoff; spawn path is owner-bound.
+    return spawn(
+      query: query,
+      model: model,
+      originSurface: .floatingBar,
+      fromVoice: fromVoice,
+      preFetchedTitle: preFetchedTitle,
+      preFetchedAck: preFetchedAck,
+      bridgeHarnessOverride: bridgeHarnessOverride
+    )
+  }
+
+  /// Start a provider-setup projection. Install work is owned by
+  /// `LocalAgentProviderInstaller`; this only surfaces status and optional
+  /// follow-up task dispatch.
+  @discardableResult
+  func spawnProviderSetup(provider: DirectedProvider, thenBrief: String?) -> AgentPill {
+    let model = ModelQoS.Claude.defaultSelection
+    let pill = spawn(
+      query: "Set up \(provider.displayName)",
+      model: model,
+      originSurface: .floatingBar,
+      fromVoice: false,
+      preFetchedTitle: "Setting up \(provider.displayName)",
+      bridgeHarnessOverride: provider.harnessMode
+    )
+    pill.latestActivity = "Checking \(provider.displayName)…"
+    pill.markContentChanged()
+    if let thenBrief, !thenBrief.isEmpty {
+      // Follow-up task is left for installer completion paths / user re-ask.
+      pill.latestActivity = "\(provider.displayName) setup requested; task will run after install."
+      pill.markContentChanged()
+      _ = thenBrief
+    }
+    return pill
   }
 
   /// Spawn a visible pill projection backed by a canonical background-agent

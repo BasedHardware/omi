@@ -21,7 +21,7 @@ let package = Package(
     // against the now-truncated upstream tag set.
     .package(
       url: "https://github.com/FluidInference/FluidAudio.git",
-      revision: "19600a485baa4998812e4654b70d2bab8f2c9949"
+      revision: "baa11f65daa3003daf4401308786b1dcdeddd84e"
     ),
   ],
   targets: [
@@ -153,7 +153,9 @@ let package = Package(
       ],
       path: "Tests/VoiceTurnDomainTests"
     ),
-    .testTarget(
+    // Compile-only sentinels (not XCTest). Must be a regular target so
+    // `swift build --target SemanticFeatureSentinels` works on Swift 6.4+.
+    .target(
       name: "SemanticFeatureSentinels",
       dependencies: [],
       path: "Tests/SemanticFeatureSentinels",

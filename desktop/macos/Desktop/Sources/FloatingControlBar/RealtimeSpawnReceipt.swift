@@ -121,6 +121,37 @@ struct RealtimeSpawnJournalReceipt: Equatable {
   }
 }
 
+/// Grants at most one open-turn continuation after a failed `spawn_agent` so
+/// the realtime model can relay setup instructions or retry with a different
+/// installed agent in the same turn. The second failure in a turn terminates
+/// it, so a looping model can never spin on spawn retries. Tracks the failed
+/// provider so a successful same-turn retry can emit fallback telemetry.
+struct RealtimeSpawnFailureContinuationPolicy {
+  private var continuedTurnIDs: Set<UUID> = []
+  private var lastFailedProviderByTurnID: [UUID: String] = [:]
+
+  /// Returns true when this turn may stay open after the failure (first
+  /// spawn failure of the turn); false when it must terminate (repeat).
+  mutating func beginContinuationIfAllowed(turnID: UUID, failedProvider: String?) -> Bool {
+    if continuedTurnIDs.count > 16 {
+      continuedTurnIDs.removeAll()
+      lastFailedProviderByTurnID.removeAll()
+    }
+    guard !continuedTurnIDs.contains(turnID) else { return false }
+    continuedTurnIDs.insert(turnID)
+    if let failedProvider {
+      lastFailedProviderByTurnID[turnID] = failedProvider
+    }
+    return true
+  }
+
+  /// Consumes and returns the provider whose spawn failed earlier in this
+  /// turn, if a continuation was granted — the "from" side of a fallback.
+  mutating func takeFailedProvider(turnID: UUID) -> String? {
+    lastFailedProviderByTurnID.removeValue(forKey: turnID)
+  }
+}
+
 /// A realtime provider may receive a transport-level success for a control
 /// tool whose semantic result is still a rejection (`{"ok":false,...}`).  A
 /// spawn is accepted only when the kernel returns its canonical journal

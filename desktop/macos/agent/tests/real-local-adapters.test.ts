@@ -4,6 +4,7 @@ import { spawn } from "child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HermesRuntimeAdapter } from "../src/adapters/hermes.js";
 import { OpenClawRuntimeAdapter } from "../src/adapters/openclaw.js";
+import { CodexRuntimeAdapter } from "../src/adapters/codex.js";
 import type { AdapterAttemptContext, AdapterBindingHandle } from "../src/adapters/interface.js";
 
 vi.mock("child_process", async () => {
@@ -62,6 +63,11 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
     vi.mocked(spawn).mockReset();
     delete process.env.OMI_HERMES_ADAPTER_COMMAND;
     delete process.env.OMI_OPENCLAW_ADAPTER_COMMAND;
+    delete process.env.OMI_CODEX_ADAPTER_COMMAND;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.CODEX_API_KEY;
+    delete process.env.NO_BROWSER;
+    delete process.env.INITIAL_AGENT_MODE;
   });
 
   it("runs Hermes through its real ACP command", async () => {
@@ -318,6 +324,113 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
     expect(requests.map((request) => request.method)).not.toContain("session/set_model");
     expect(requests.find((request) => request.method === "session/resume")?.params).toMatchObject({ mcpServers: [] });
     expect(secondProcessRequests.map((request) => request.method)).not.toContain("session/new");
+    await adapter.stop();
+  });
+
+  it("runs Codex through its real codex-acp command", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    process.env.OMI_CODEX_ADAPTER_COMMAND = "npx -y @agentclientprotocol/codex-acp";
+    // Auth + headless + non-blocking permissions are provided via env; the
+    // adapter must forward these to the untrusted subprocess.
+    process.env.OPENAI_API_KEY = "sk-omi-test-key";
+    process.env.NO_BROWSER = "1";
+    process.env.INITIAL_AGENT_MODE = "agent-full-access";
+    const adapter = new CodexRuntimeAdapter();
+    const requests: Record<string, unknown>[] = [];
+
+    collectJsonRpc(proc, (request) => {
+      requests.push(request);
+      if (request.method === "initialize") {
+        // codex-acp returns acp.PROTOCOL_VERSION (1 today).
+        writeJsonRpcResult(proc, request, { protocolVersion: 1 });
+      }
+      if (request.method === "session/new") {
+        writeJsonRpcResult(proc, request, { sessionId: "codex-native-session" });
+      }
+      if (request.method === "session/prompt") {
+        proc.stdout.write(`${JSON.stringify({
+          jsonrpc: "2.0",
+          method: "session/update",
+          params: {
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: "OMI_CODEX_DOGFOOD_OK" },
+            },
+          },
+        })}\n`);
+        // codex-acp reports token usage but NOT costUsd.
+        writeJsonRpcResult(proc, request, {
+          stopReason: "end_turn",
+          usage: { inputTokens: 7, outputTokens: 9, cachedReadTokens: 3 },
+        });
+      }
+    });
+
+    await adapter.start();
+
+    // Codex is an external adapter, so the constrained permission policy must
+    // still reject a permanent-only auto-approval request.
+    proc.stdout.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 77,
+      method: "session/request_permission",
+      params: { options: [{ kind: "allow_always", optionId: "allow" }] },
+    })}\n`);
+    await vi.waitUntil(() => requests.some((request) => request.id === 77 && "error" in request));
+    expect(requests.find((request) => request.id === 77)).toMatchObject({ error: { code: -32001 } });
+
+    // The subprocess env must carry the Codex auth/config vars (allowlist fix),
+    // but never leak them for a non-Codex adapter.
+    const spawnEnv = vi.mocked(spawn).mock.calls[0][1]?.env as NodeJS.ProcessEnv;
+    expect(spawnEnv).toMatchObject({
+      OMI_ADAPTER_ID: "codex",
+      OPENAI_API_KEY: "sk-omi-test-key",
+      NO_BROWSER: "1",
+      INITIAL_AGENT_MODE: "agent-full-access",
+    });
+
+    const binding = await adapter.openBinding({
+      sessionId: "omi-session",
+      cwd: "/tmp/work",
+      model: "gpt-5.2[high]",
+    });
+    const result = await adapter.executeAttempt(
+      {
+        ...makeOpenClawContext(binding),
+        prompt: "Reply exactly: OMI_CODEX_DOGFOOD_OK",
+        model: "gpt-5.2[high]",
+      },
+      () => {},
+      new AbortController().signal
+    );
+
+    expect(binding).toMatchObject({
+      adapterId: "codex",
+      adapterNativeSessionId: "codex-native-session",
+      resumeFidelity: "none",
+    });
+    expect(result).toMatchObject({
+      text: "OMI_CODEX_DOGFOOD_OK",
+      adapterSessionId: "codex-native-session",
+      terminalStatus: "succeeded",
+      inputTokens: 7,
+      outputTokens: 9,
+      cacheReadTokens: 3,
+      costUsd: 0,
+    });
+    expect(spawn).toHaveBeenCalledWith(
+      "npx -y @agentclientprotocol/codex-acp",
+      expect.objectContaining({ shell: true, stdio: ["pipe", "pipe", "pipe"] })
+    );
+    // codex-acp has no standard session/set_model, so the adapter must not send it,
+    // and it must send an empty per-session MCP server list.
+    expect(requests.map((request) => request.method).filter(Boolean)).toEqual([
+      "initialize",
+      "session/new",
+      "session/prompt",
+    ]);
+    expect(requests.find((request) => request.method === "session/new")?.params).toMatchObject({ mcpServers: [] });
     await adapter.stop();
   });
 });

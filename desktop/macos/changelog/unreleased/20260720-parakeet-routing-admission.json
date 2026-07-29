@@ -1,0 +1,3 @@
+{
+  "change": "Repaired live transcription routing so Parakeet admission failures fall back to Modulate instead of leaving the stream without a provider"
+}

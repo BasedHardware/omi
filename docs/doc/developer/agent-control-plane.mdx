@@ -12,7 +12,7 @@ For the short enforceable contract used by reviewers and guard tests, see
 
 ## 1. Executive decision
 
-Omi is the agent control plane. ACP, pi-mono, Hermes, OpenClaw, AgentVM, A2A agents, and future runtimes are execution adapters beneath it.
+Omi is the agent control plane. ACP, pi-mono, Hermes, OpenClaw, Codex, AgentVM, A2A agents, and future runtimes are execution adapters beneath it.
 
 The canonical product object is an Omi `AgentSession`. Every user turn or delegated objective is an Omi `AgentRun`. Every concrete execution or retry of that run is a `RunAttempt`. Runtime-native session IDs are opaque `AdapterBinding` data and are never Omi session IDs.
 
@@ -84,7 +84,7 @@ flowchart TB
     Scheduler[Scheduler and adapter pools]
     ACP[ACP adapter pool]
     Pi[pi-mono adapter pool]
-    Future[Hermes / OpenClaw / AgentVM / A2A adapters]
+    Future[Hermes / OpenClaw / Codex / AgentVM / A2A adapters]
     Broker[Omi capability broker and MCP]
     Journal[Conversation journal and backend outbox]
     Context[Execution profiles and context snapshots]
@@ -113,7 +113,7 @@ The Node daemon may own multiple bounded adapter subprocesses. Consolidating lif
 
 Before the first owner-scoped RPC, every harness sends the signed-in owner to
 the daemon. Managed pi-mono sessions may establish it with `refresh_token`;
-local ACP, Hermes, and OpenClaw sessions use the token-free `refresh_owner`
+local ACP, Hermes, OpenClaw, and Codex sessions use the token-free `refresh_owner`
 handshake. The daemon's startup placeholder owner is never request authority.
 
 ### 4.2 Worker pools
