@@ -179,17 +179,87 @@ if [[ -e "$CACHE_DIR" && ! -d "$CACHE_DIR" ]]; then
   exit 1
 fi
 
+# Materialize an exact-SHA detached checkout into $1.
+# Prefer a local no-hardlinks clone of the Actions/worktree source (fast, offline).
+# Trusted M1 Actions checkouts are often partial/promisor clones; cloning them
+# locally inherits the promisor and fails checkout with:
+#   could not fetch … from promisor remote / possible repository corruption (exit 128)
+# Fall back to fetching the exact SHA from the source's origin URL when local
+# materialization fails and origin is configured (incident #10809 / v0.12.143).
+materialize_exact_source_checkout() {
+  local dest="$1"
+  local err_log="$TEMP_DIR/materialize-exact-source.err"
+  local origin_url=""
+  local force_origin=0
+
+  case "${OMI_QUALIFICATION_SWIFT_CACHE_CLONE_MODE:-auto}" in
+    origin) force_origin=1 ;;
+    local | auto) ;;
+    *)
+      echo "qualification Swift cache: invalid OMI_QUALIFICATION_SWIFT_CACHE_CLONE_MODE=${OMI_QUALIFICATION_SWIFT_CACHE_CLONE_MODE}" >&2
+      return 2
+      ;;
+  esac
+
+  rm -rf "$dest"
+  : >"$err_log"
+
+  try_local_clone() {
+    rm -rf "$dest"
+    git clone --quiet --no-hardlinks --no-checkout "$SOURCE_REPOSITORY" "$dest" 2>>"$err_log" \
+      && git -C "$dest" checkout --quiet --detach "$SOURCE_SHA" 2>>"$err_log" \
+      && [[ "$(git -C "$dest" rev-parse HEAD 2>/dev/null || true)" == "$SOURCE_SHA" ]]
+  }
+
+  try_origin_fetch() {
+    origin_url="$(git -C "$SOURCE_REPOSITORY" remote get-url origin 2>/dev/null || true)"
+    if [[ -z "$origin_url" ]]; then
+      echo "qualification Swift cache: cannot fall back to origin fetch; source has no origin remote" >&2
+      return 1
+    fi
+    echo "qualification Swift cache: materializing exact source via origin fetch" >&2
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    git -C "$dest" init -q
+    git -C "$dest" remote add origin "$origin_url"
+    # Prefer a single-SHA fetch; widen only if the host rejects depth on that ref.
+    if ! git -C "$dest" fetch --quiet --depth=1 origin "$SOURCE_SHA" 2>>"$err_log"; then
+      git -C "$dest" fetch --quiet origin "$SOURCE_SHA" 2>>"$err_log" || return 1
+    fi
+    git -C "$dest" checkout --quiet --detach "$SOURCE_SHA" 2>>"$err_log" || return 1
+    [[ "$(git -C "$dest" rev-parse HEAD 2>/dev/null || true)" == "$SOURCE_SHA" ]]
+  }
+
+  if [[ "$force_origin" -eq 1 ]]; then
+    try_origin_fetch || {
+      echo "qualification Swift cache: origin exact-source materialization failed for $SOURCE_SHA" >&2
+      cat "$err_log" >&2 || true
+      return 1
+    }
+  elif try_local_clone; then
+    :
+  else
+    echo "qualification Swift cache: local exact-source clone failed; trying origin fetch fallback" >&2
+    cat "$err_log" >&2 || true
+    : >"$err_log"
+    try_origin_fetch || {
+      echo "qualification Swift cache: exact-source materialization failed for $SOURCE_SHA" >&2
+      cat "$err_log" >&2 || true
+      return 1
+    }
+  fi
+
+  [[ "$(git -C "$dest" rev-parse HEAD)" == "$SOURCE_SHA" ]] || {
+    echo "qualification Swift cache: cloned source SHA does not match candidate $SOURCE_SHA" >&2
+    return 1
+  }
+}
+
 CACHE_STATE="HIT"
 if [[ ! -e "$CACHE_DIR" ]]; then
   CACHE_STATE="MISS"
   TEMP_DIR="$(mktemp -d "$CACHE_ROOT/.${SOURCE_SHA}.prepare.XXXXXX")"
-  mkdir "$TEMP_DIR/source"
-  git clone --quiet --no-hardlinks --no-checkout "$SOURCE_REPOSITORY" "$TEMP_DIR/source"
-  git -C "$TEMP_DIR/source" checkout --quiet --detach "$SOURCE_SHA"
-  [[ "$(git -C "$TEMP_DIR/source" rev-parse HEAD)" == "$SOURCE_SHA" ]] || {
-    echo "qualification Swift cache: cloned source SHA does not match candidate $SOURCE_SHA" >&2
-    exit 1
-  }
+  materialize_exact_source_checkout "$TEMP_DIR/source" || exit 1
   mkdir -p "$TEMP_DIR/source/desktop/macos/Desktop/.build"
   CACHE_DIR="$TEMP_DIR"
   PERSISTENT_SOURCE="$CACHE_DIR/source"
