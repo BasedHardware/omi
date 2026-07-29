@@ -42,6 +42,11 @@ void monitor_inc_tx_queue_write(void);
 void monitor_inc_storage_write(void);
 
 /**
+ * @brief Increment the storage frame rejection counter
+ */
+void monitor_inc_storage_write_failed(void);
+
+/**
  * @brief Log all current metrics
  */
 void monitor_log_metrics(void);

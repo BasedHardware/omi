@@ -21,6 +21,7 @@
 #include <zephyr/sys/ring_buffer.h>
 
 #include "accel.h"
+#include "audio_storage_packer.h"
 #include "button.h"
 #include "config.h"
 #include "features.h"
@@ -29,6 +30,7 @@
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
 #endif
+#include "ring_transfer_integrity.h"
 #include "rtc.h"
 #include "sd_card.h"
 #include "settings.h"
@@ -42,7 +44,18 @@ static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
 extern bool storage_is_on;
-static bool storage_full_warned = false;
+static atomic_t storage_flush_requested;
+static atomic_t storage_snapshot_ready;
+static atomic_t shutdown_force_storage;
+static atomic_t shutdown_drain_requested;
+static atomic_t shutdown_storage_committed;
+static atomic_t shutdown_drain_result;
+#define STORAGE_SNAPSHOT_RETRY_MS 500U
+#define STORAGE_SHUTDOWN_TIMEOUT_MS 45000U
+#define STORAGE_PACKER_FLUSH_TIMEOUT_MS 5000U
+static void storage_snapshot_retry_work_handler(struct k_work *work);
+K_WORK_DELAYABLE_DEFINE(storage_snapshot_retry_work, storage_snapshot_retry_work_handler);
+K_SEM_DEFINE(shutdown_drain_complete, 0, 1);
 #endif
 
 extern bool is_connected;
@@ -50,8 +63,11 @@ extern bool is_connected;
 extern bool is_charging;
 #endif
 static atomic_t pusher_stop_flag;
+K_SEM_DEFINE(tx_queue_sem, 0, NETWORK_RING_BUF_SIZE);
+K_MUTEX_DEFINE(current_connection_mutex);
+K_MUTEX_DEFINE(pusher_delivery_mutex);
 
-struct bt_conn *current_connection = NULL;
+static struct bt_conn *current_connection;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
 
@@ -97,6 +113,9 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
                                               uint16_t len,
                                               uint16_t offset);
 static void charging_status_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+static void set_current_connection(struct bt_conn *conn);
+static struct bt_conn *take_current_connection(void);
+static bool set_mtu_for_current_connection(struct bt_conn *conn, uint16_t mtu);
 static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
                                                      const struct bt_gatt_attr *attr,
                                                      void *buf,
@@ -106,22 +125,38 @@ static int notify_charging_status(struct bt_conn *conn, bool force_notify);
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
-// Forward declarations for update functions and callbacks
-static void update_phy(struct bt_conn *conn);
-static void update_data_length(struct bt_conn *conn);
-static void update_mtu(struct bt_conn *conn);
-static void update_conn_params(struct bt_conn *conn);
-static void schedule_mtu_recheck(void);
-static void mtu_recheck_work_handler(struct k_work *work);
+// Forward declarations for staged, non-blocking link setup.
+static int update_phy(struct bt_conn *conn);
+static int update_data_length(struct bt_conn *conn);
+static int update_mtu(struct bt_conn *conn);
+static int update_conn_params(struct bt_conn *conn);
+static void link_setup_work_handler(struct k_work *work);
+static void bulk_link_restore_work_handler(struct k_work *work);
 static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_exchange_params *params);
 
 // --- GATT Exchange MTU Params ---
 static struct bt_gatt_exchange_params exchange_params;
 
-#define MTU_RECHECK_DELAY_MS 800
-#define MTU_RECHECK_MAX_ATTEMPTS 6
-static uint8_t mtu_recheck_attempts = 0;
-K_WORK_DELAYABLE_DEFINE(mtu_recheck_work, mtu_recheck_work_handler);
+typedef enum {
+    LINK_SETUP_CONN_PARAMS = 0,
+    LINK_SETUP_PHY,
+    LINK_SETUP_DATA_LENGTH,
+    LINK_SETUP_MTU,
+    LINK_SETUP_DONE,
+} link_setup_stage_t;
+
+#define LINK_SETUP_STAGE_DELAY_MS 300U
+#define LINK_SETUP_RETRY_DELAY_MS 250U
+#define LINK_SETUP_MAX_ATTEMPTS 3U
+static link_setup_stage_t link_setup_stage = LINK_SETUP_DONE;
+static uint8_t link_setup_attempts;
+static atomic_t link_setup_generation;
+K_WORK_DELAYABLE_DEFINE(link_setup_work, link_setup_work_handler);
+
+#define BULK_LINK_IDLE_RESTORE_MS 8000U
+static struct k_spinlock bulk_link_policy_lock;
+static ring_bulk_link_policy_t bulk_link_policy;
+K_WORK_DELAYABLE_DEFINE(bulk_link_restore_work, bulk_link_restore_work_handler);
 
 //
 // Service and Characteristic
@@ -325,8 +360,10 @@ static void charging_status_ccc_config_changed_handler(const struct bt_gatt_attr
 
     if (value == BT_GATT_CCC_NOTIFY) {
         LOG_INF("Client subscribed for charging status notifications");
-        if (current_connection != NULL) {
-            (void) notify_charging_status(current_connection, true);
+        struct bt_conn *conn = get_current_connection();
+        if (conn) {
+            (void) notify_charging_status(conn, true);
+            bt_conn_unref(conn);
         }
     } else if (value == 0) {
         LOG_INF("Client unsubscribed from charging status notifications");
@@ -496,14 +533,16 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
 // --- MTU Update Callback ---
 static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_exchange_params *params)
 {
+    ARG_UNUSED(params);
     if (att_err) {
         LOG_ERR("MTU exchange failed (err %u)", att_err);
     } else {
         uint16_t mtu = bt_gatt_get_mtu(conn);
+        if (!set_mtu_for_current_connection(conn, mtu)) {
+            LOG_DBG("Ignoring MTU callback from stale connection");
+            return;
+        }
         LOG_INF("MTU exchange successful. New MTU: %u (Payload: %u)", mtu, mtu - 3);
-        // Update current_mtu based on the negotiated value, considering header
-        // Note: bt_gatt_get_mtu includes the ATT header (3 bytes)
-        current_mtu = mtu; // Store the full MTU size
     }
 }
 
@@ -551,22 +590,22 @@ void broadcast_battery_level(struct k_work *work_item)
 {
     (void) work_item;
     uint16_t battery_millivolt;
-    uint32_t next_refresh_interval = (is_connected && current_connection != NULL)
-                                         ? BATTERY_REFRESH_INTERVAL_CONNECTED
-                                         : BATTERY_REFRESH_INTERVAL_DISCONNECTED;
+    struct bt_conn *conn = get_current_connection();
+    uint32_t next_refresh_interval =
+        (is_connected && conn) ? BATTERY_REFRESH_INTERVAL_CONNECTED : BATTERY_REFRESH_INTERVAL_DISCONNECTED;
 
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
-        if (is_connected && current_connection != NULL) {
+        if (is_connected && conn) {
             /* Report battery even during an SD sync. It's 1 byte at most every few
              * seconds and AUDIO_TX_RESERVED_SLOTS keeps TX buffers free for
              * non-audio notifications, so it can't starve the sync/audio stream.
              * The old storage_transfer_active() early-return meant the app never
              * got a battery update for the whole (often long) duration of a sync. */
-            (void) notify_charging_status(current_connection, false);
+            (void) notify_charging_status(conn, false);
 
             // Use the Zephyr BAS function to set (and notify) the battery level
             int err = bt_bas_set_battery_level(battery_percentage);
@@ -581,6 +620,9 @@ void broadcast_battery_level(struct k_work *work_item)
     } else {
         LOG_ERR("Failed to read battery level");
     }
+    if (conn) {
+        bt_conn_unref(conn);
+    }
 
     k_work_reschedule(&battery_work, K_MSEC(next_refresh_interval));
 }
@@ -593,26 +635,40 @@ void broadcast_battery_level(struct k_work *work_item)
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     struct bt_conn_info info = {0};
+
+    if (err != 0U) {
+        LOG_ERR("Bluetooth connection failed (err %u)", err);
+        return;
+    }
+
+    int info_err = bt_conn_get_info(conn, &info);
+    if (info_err) {
+        LOG_ERR("Failed to get connection info (err %d)", info_err);
+        return;
+    }
+
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     storage_is_on = true;
 #endif
 
-    err = bt_conn_get_info(conn, &info);
-    if (err) {
-        LOG_ERR("Failed to get connection info (err %d)", err);
-        bt_conn_unref(conn);
-        return;
-    }
-
     LOG_INF("bluetooth activated");
-    current_connection = bt_conn_ref(conn);
+    set_current_connection(conn);
     uint16_t mtu = bt_gatt_get_mtu(conn);
-    current_mtu = mtu;
+    (void) set_mtu_for_current_connection(conn, mtu);
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     /* Kick the SD remount immediately (it may be off from offline AAD sleep) so
      * it is mounted well before the app fires its one-shot sync command. */
     sd_request_power(true);
+    /*
+     * The frame packer can hold a sub-440-byte tail from offline capture.
+     * Wake its sole owner (the pusher thread) so that tail enters the SD queue
+     * before the phone discovers the backlog.
+     */
+    atomic_clear(&storage_snapshot_ready);
+    k_work_cancel_delayable(&storage_snapshot_retry_work);
+    atomic_set(&storage_flush_requested, 1);
+    k_sem_give(&tx_queue_sem);
 #endif
 
     LOG_INF("Transport connected");
@@ -625,24 +681,15 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
             info.le.latency,
             supervision_timeout);
     LOG_INF("Initial MTU: %u", mtu);
-    mtu_recheck_attempts = 0;
-
-    // Request aggressive connection params for higher BLE sync throughput.
-    update_conn_params(current_connection);
-
-    // Delay a bit before PHY request to avoid early HCI race on some phones.
-    k_sleep(K_MSEC(300));
-
-    // Initiate PHY, Data Length, and MTU updates
-    update_phy(current_connection);
-
-    // Add a delay before data length and MTU updates as per Nordic example
-    k_sleep(K_MSEC(1000));
-    update_data_length(current_connection);
-    update_mtu(current_connection);
-    schedule_mtu_recheck();
-
     is_connected = true;
+    k_work_cancel_delayable(&bulk_link_restore_work);
+    k_spinlock_key_t bulk_policy_key = k_spin_lock(&bulk_link_policy_lock);
+    ring_bulk_link_policy_reset(&bulk_link_policy);
+    k_spin_unlock(&bulk_link_policy_lock, bulk_policy_key);
+    atomic_inc(&link_setup_generation);
+    link_setup_stage = LINK_SETUP_CONN_PARAMS;
+    link_setup_attempts = 0U;
+    k_work_reschedule(&link_setup_work, K_MSEC(LINK_SETUP_STAGE_DELAY_MS));
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         shell_bt_nus_enable(conn);
@@ -668,8 +715,14 @@ K_SEM_DEFINE(audio_tx_sem,
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
-    k_work_cancel_delayable(&mtu_recheck_work);
-    mtu_recheck_attempts = 0;
+    atomic_inc(&link_setup_generation);
+    k_work_cancel_delayable(&link_setup_work);
+    k_work_cancel_delayable(&bulk_link_restore_work);
+    k_spinlock_key_t bulk_policy_key = k_spin_lock(&bulk_link_policy_lock);
+    ring_bulk_link_policy_reset(&bulk_link_policy);
+    k_spin_unlock(&bulk_link_policy_lock, bulk_policy_key);
+    link_setup_stage = LINK_SETUP_DONE;
+    link_setup_attempts = 0U;
 
     is_connected = false;
 
@@ -681,6 +734,7 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(false);
     storage_is_on = false;
+    k_work_cancel_delayable(&storage_snapshot_retry_work);
     /* No phone left to sync: if the mic is idle in AAD sleep, drop SD power again
      * (it was kept on for the connection). */
     if (mic_in_aad_sleep()) {
@@ -690,9 +744,9 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 
     LOG_INF("Transport disconnected");
 
-    if (current_connection != NULL) {
-        bt_conn_unref(current_connection);
-        current_connection = NULL;
+    struct bt_conn *held_connection = take_current_connection();
+    if (held_connection) {
+        bt_conn_unref(held_connection);
     }
     current_mtu = 0;
     charging_status_last_notified = -1;
@@ -715,17 +769,14 @@ static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 
 static void _le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t latency, uint16_t timeout)
 {
+    ARG_UNUSED(conn);
+
     double connection_interval = interval * 1.25; // in ms
     uint16_t supervision_timeout = timeout * 10;  // in ms
     LOG_INF("Connection parameters updated: interval %.2f ms, latency %d intervals, timeout %d ms",
             connection_interval,
             latency,
             supervision_timeout);
-
-    if (interval > 24) {
-        LOG_WRN("Connection interval still high (%u units). Re-requesting preferred params.", interval);
-        update_conn_params(conn);
-    }
 }
 
 static void _le_phy_updated(struct bt_conn *conn, struct bt_conn_le_phy_info *param)
@@ -752,11 +803,7 @@ static void _le_data_length_updated(struct bt_conn *conn, struct bt_conn_le_data
             info->tx_max_time,
             info->rx_max_len,
             info->rx_max_time);
-    // Note: current_mtu is updated in exchange_func after MTU negotiation
-
-    if (current_mtu <= 23) {
-        schedule_mtu_recheck();
-    }
+    // current_mtu is updated in exchange_func after MTU negotiation.
 }
 
 static struct bt_conn_cb _callback_references = {
@@ -770,42 +817,102 @@ static struct bt_conn_cb _callback_references = {
 
 // --- Update Request Functions ---
 
-#define PHY_UPDATE_RETRY_COUNT 3
-#define PHY_UPDATE_RETRY_DELAY_MS 150
-#define MTU_UPDATE_RETRY_COUNT 3
-#define MTU_UPDATE_RETRY_DELAY_MS 120
-#define CONN_PARAM_RETRY_COUNT 3
-#define CONN_PARAM_RETRY_DELAY_MS 300
-
-static void update_conn_params(struct bt_conn *conn)
+static int update_conn_params(struct bt_conn *conn)
 {
-    int err = 0;
     const struct bt_le_conn_param preferred_param = {
-        .interval_min = 6,
-        .interval_max = 12,
+        .interval_min = 12,
+        .interval_max = 24,
         .latency = 0,
-        .timeout = 400,
+        .timeout = 600,
     };
 
-    LOG_INF("Requesting conn params update (7.5-15ms, latency 0)...");
-    for (int attempt = 1; attempt <= CONN_PARAM_RETRY_COUNT; attempt++) {
-        err = bt_conn_le_param_update(conn, &preferred_param);
-        if (!err) {
-            return;
-        }
-
-        if (attempt < CONN_PARAM_RETRY_COUNT) {
-            LOG_WRN("bt_conn_le_param_update() failed (err %d), retry %d/%d", err, attempt, CONN_PARAM_RETRY_COUNT);
-            k_sleep(K_MSEC(CONN_PARAM_RETRY_DELAY_MS));
-        }
+    LOG_INF("Requesting conn params update (15-30ms, latency 0)...");
+    int err = bt_conn_le_param_update(conn, &preferred_param);
+    if (err) {
+        LOG_WRN("bt_conn_le_param_update() failed (err %d)", err);
     }
-
-    LOG_WRN("bt_conn_le_param_update() still failed after retries (last err %d)", err);
+    return err;
 }
 
-static void update_phy(struct bt_conn *conn)
+static int update_bulk_conn_params(struct bt_conn *conn)
 {
-    int err = 0;
+    const struct bt_le_conn_param bulk_param = {
+        .interval_min = 12,
+        .interval_max = 12,
+        .latency = 0,
+        .timeout = 600,
+    };
+
+    LOG_INF("Requesting bulk-sync conn params update (15ms, latency 0)...");
+    int err = bt_conn_le_param_update(conn, &bulk_param);
+    if (err) {
+        LOG_WRN("Bulk-sync conn params update was not accepted (err %d); continuing", err);
+    }
+    return err;
+}
+
+static void apply_bulk_link_action(ring_bulk_link_action_t action)
+{
+    if (action == RING_BULK_LINK_ACTION_NONE) {
+        return;
+    }
+
+    struct bt_conn *conn = get_current_connection();
+    if (!conn) {
+        return;
+    }
+
+    if (action == RING_BULK_LINK_ACTION_REQUEST_BULK) {
+        (void) update_bulk_conn_params(conn);
+    } else {
+        (void) update_conn_params(conn);
+    }
+    bt_conn_unref(conn);
+}
+
+void transport_bulk_sync_begin(void)
+{
+    k_work_cancel_delayable(&bulk_link_restore_work);
+
+    k_spinlock_key_t key = k_spin_lock(&bulk_link_policy_lock);
+    ring_bulk_link_action_t action = ring_bulk_link_policy_on_read(&bulk_link_policy);
+    k_spin_unlock(&bulk_link_policy_lock, key);
+
+    apply_bulk_link_action(action);
+}
+
+void transport_bulk_sync_end(bool immediate)
+{
+    ring_bulk_link_action_t action = RING_BULK_LINK_ACTION_NONE;
+
+    if (immediate) {
+        k_work_cancel_delayable(&bulk_link_restore_work);
+        k_spinlock_key_t key = k_spin_lock(&bulk_link_policy_lock);
+        action = ring_bulk_link_policy_on_stop(&bulk_link_policy);
+        k_spin_unlock(&bulk_link_policy_lock, key);
+    } else {
+        k_spinlock_key_t key = k_spin_lock(&bulk_link_policy_lock);
+        ring_bulk_link_policy_on_idle(&bulk_link_policy);
+        k_spin_unlock(&bulk_link_policy_lock, key);
+        k_work_reschedule(&bulk_link_restore_work, K_MSEC(BULK_LINK_IDLE_RESTORE_MS));
+    }
+
+    apply_bulk_link_action(action);
+}
+
+static void bulk_link_restore_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    k_spinlock_key_t key = k_spin_lock(&bulk_link_policy_lock);
+    ring_bulk_link_action_t action = ring_bulk_link_policy_on_restore_timeout(&bulk_link_policy);
+    k_spin_unlock(&bulk_link_policy_lock, key);
+
+    apply_bulk_link_action(action);
+}
+
+static int update_phy(struct bt_conn *conn)
+{
     // Prefer 2M PHY for higher throughput
     const struct bt_conn_le_phy_param preferred_phy = {
         .options = BT_CONN_LE_PHY_OPT_NONE,
@@ -814,106 +921,95 @@ static void update_phy(struct bt_conn *conn)
     };
 
     LOG_INF("Requesting PHY update...");
-    for (int attempt = 1; attempt <= PHY_UPDATE_RETRY_COUNT; attempt++) {
-        err = bt_conn_le_phy_update(conn, &preferred_phy);
-        if (!err) {
-            if (attempt > 1) {
-                LOG_INF("PHY update request accepted on retry %d", attempt);
-            }
-            return;
-        }
-
-        if (attempt < PHY_UPDATE_RETRY_COUNT) {
-            LOG_WRN("bt_conn_le_phy_update() failed (err %d), retry %d/%d", err, attempt, PHY_UPDATE_RETRY_COUNT);
-            k_sleep(K_MSEC(PHY_UPDATE_RETRY_DELAY_MS));
-        }
+    int err = bt_conn_le_phy_update(conn, &preferred_phy);
+    if (err) {
+        LOG_WRN("bt_conn_le_phy_update() failed (err %d)", err);
     }
-
-    LOG_ERR("bt_conn_le_phy_update() failed after %d retries (last err %d)", PHY_UPDATE_RETRY_COUNT, err);
+    return err;
 }
 
-static void update_data_length(struct bt_conn *conn)
+static int update_data_length(struct bt_conn *conn)
 {
-    int err;
     // Request maximum data length
     struct bt_conn_le_data_len_param data_len_param = {
         .tx_max_len = BT_GAP_DATA_LEN_MAX,
         .tx_max_time = BT_GAP_DATA_TIME_MAX,
     };
     LOG_INF("Requesting data length update...");
-    err = bt_conn_le_data_len_update(conn, &data_len_param);
+    int err = bt_conn_le_data_len_update(conn, &data_len_param);
     if (err) {
-        LOG_ERR("bt_conn_le_data_len_update() failed (err %d)", err);
+        LOG_WRN("bt_conn_le_data_len_update() failed (err %d)", err);
     }
+    return err;
 }
 
-static void schedule_mtu_recheck(void)
+static int update_mtu(struct bt_conn *conn)
 {
-    if (mtu_recheck_attempts >= MTU_RECHECK_MAX_ATTEMPTS) {
-        return;
-    }
-
-    k_work_reschedule(&mtu_recheck_work, K_MSEC(MTU_RECHECK_DELAY_MS));
-}
-
-static void mtu_recheck_work_handler(struct k_work *work)
-{
-    ARG_UNUSED(work);
-
-    struct bt_conn *conn = current_connection;
-    if (!conn) {
-        mtu_recheck_attempts = 0;
-        return;
-    }
-
-    uint16_t mtu = bt_gatt_get_mtu(conn);
-    current_mtu = mtu;
-    if (mtu > 23) {
-        LOG_INF("MTU recheck success: negotiated MTU is now %u (payload %u)", mtu, mtu - 3);
-        mtu_recheck_attempts = 0;
-        return;
-    }
-
-    mtu_recheck_attempts++;
-    LOG_WRN("MTU still %u, re-requesting exchange (%u/%u)", mtu, mtu_recheck_attempts, MTU_RECHECK_MAX_ATTEMPTS);
-    update_mtu(conn);
-
-    if (mtu_recheck_attempts < MTU_RECHECK_MAX_ATTEMPTS) {
-        schedule_mtu_recheck();
-    }
-}
-
-static void update_mtu(struct bt_conn *conn)
-{
-    int err = 0;
     exchange_params.func = exchange_func; // Set the callback function
 
     LOG_INF("Requesting MTU exchange...");
 
-    for (int attempt = 1; attempt <= MTU_UPDATE_RETRY_COUNT; attempt++) {
-        err = bt_gatt_exchange_mtu(conn, &exchange_params);
-        if (!err) {
-            return;
-        }
+    int err = bt_gatt_exchange_mtu(conn, &exchange_params);
+    if (err == -EALREADY) {
+        uint16_t mtu = bt_gatt_get_mtu(conn);
+        (void) set_mtu_for_current_connection(conn, mtu);
+        LOG_INF("MTU exchange already in progress/done. Using MTU: %u", mtu);
+        return 0;
+    }
+    if (err) {
+        LOG_WRN("bt_gatt_exchange_mtu() failed (err %d)", err);
+    }
+    return err;
+}
 
-        if (err == -EALREADY) {
-            uint16_t mtu = bt_gatt_get_mtu(conn);
-            current_mtu = mtu;
-            LOG_INF("MTU exchange already in progress/done (err %d). Using MTU: %u", err, mtu);
-            return;
-        }
+static void link_setup_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    atomic_val_t generation = atomic_get(&link_setup_generation);
 
-        if ((err == -EBUSY || err == -EAGAIN) && attempt < MTU_UPDATE_RETRY_COUNT) {
-            LOG_WRN("bt_gatt_exchange_mtu() busy (err %d), retry %d/%d", err, attempt, MTU_UPDATE_RETRY_COUNT);
-            k_sleep(K_MSEC(MTU_UPDATE_RETRY_DELAY_MS));
-            continue;
+    struct bt_conn *conn = get_current_connection();
+    if (!conn || link_setup_stage == LINK_SETUP_DONE) {
+        if (conn) {
+            bt_conn_unref(conn);
         }
-
-        LOG_ERR("bt_gatt_exchange_mtu() failed (err %d)", err);
         return;
     }
 
-    LOG_ERR("bt_gatt_exchange_mtu() failed after retries (last err %d)", err);
+    int err;
+    switch (link_setup_stage) {
+    case LINK_SETUP_CONN_PARAMS:
+        err = update_conn_params(conn);
+        break;
+    case LINK_SETUP_PHY:
+        err = update_phy(conn);
+        break;
+    case LINK_SETUP_DATA_LENGTH:
+        err = update_data_length(conn);
+        break;
+    case LINK_SETUP_MTU:
+        err = update_mtu(conn);
+        break;
+    case LINK_SETUP_DONE:
+    default:
+        err = 0;
+        break;
+    }
+    bt_conn_unref(conn);
+
+    if (generation != atomic_get(&link_setup_generation)) {
+        return;
+    }
+
+    if ((err == -EBUSY || err == -EAGAIN) && ++link_setup_attempts < LINK_SETUP_MAX_ATTEMPTS) {
+        k_work_reschedule(&link_setup_work, K_MSEC(LINK_SETUP_RETRY_DELAY_MS));
+        return;
+    }
+
+    link_setup_stage = (link_setup_stage_t) (link_setup_stage + 1);
+    link_setup_attempts = 0U;
+    if (link_setup_stage < LINK_SETUP_DONE) {
+        k_work_reschedule(&link_setup_work, K_MSEC(LINK_SETUP_STAGE_DELAY_MS));
+    }
 }
 
 static void log_local_ble_addresses(void)
@@ -971,13 +1067,15 @@ static int ensure_local_ble_identity(void)
 //
 
 #define NET_BUFFER_HEADER_SIZE 3
+#define ATT_NOTIFICATION_OVERHEAD_SIZE 3
 #define RING_BUFFER_HEADER_SIZE 2
 static uint8_t tx_queue[NETWORK_RING_BUF_SIZE * (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)];
 static uint8_t tx_buffer[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
 static uint8_t tx_buffer_2[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
 static uint32_t tx_buffer_size = 0;
 static struct ring_buf ring_buf;
-K_SEM_DEFINE(tx_queue_sem, 0, NETWORK_RING_BUF_SIZE);
+static uint32_t tx_queue_full_frames;
+static int64_t tx_queue_drop_log_deadline_ms;
 
 static bool write_to_tx_queue(uint8_t *data, size_t size)
 {
@@ -1001,6 +1099,13 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
                      tx_buffer_2,
                      (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE) {
+        tx_queue_full_frames++;
+        int64_t now = k_uptime_get();
+        if (now >= tx_queue_drop_log_deadline_ms) {
+            LOG_WRN(
+                "Audio TX queue full: fallback attempts=%u, capacity=%u", tx_queue_full_frames, NETWORK_RING_BUF_SIZE);
+            tx_queue_drop_log_deadline_ms = now + 2000;
+        }
         return false;
     } else {
         k_sem_give(&tx_queue_sem);
@@ -1071,13 +1176,31 @@ static bool push_to_gatt(struct bt_conn *conn)
     int retry_count = 0;
     const int max_retries = 3;
 
-    while (offset < tx_buffer_size) {
-        uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+    /*
+     * The app treats one notification as one Opus frame; it does not
+     * reassemble the packet index field. Never emit a partial frame. ATT uses
+     * three MTU bytes for the notification opcode and handle, and the Omi
+     * protocol uses another three bytes for its frame header.
+     */
+    if (current_mtu <= ATT_NOTIFICATION_OVERHEAD_SIZE + NET_BUFFER_HEADER_SIZE ||
+        tx_buffer_size > current_mtu - ATT_NOTIFICATION_OVERHEAD_SIZE - NET_BUFFER_HEADER_SIZE) {
+        LOG_DBG("MTU %u cannot carry complete %u-byte audio frame", current_mtu, (unsigned int) tx_buffer_size);
+        return false;
+    }
 
-        // Block until a throttle slot is available. This preserves every audio
-        // packet while still guaranteeing AUDIO_TX_RESERVED_SLOTS remain free
-        // for battery/diagnostic/status notifications at all times.
-        k_sem_take(&audio_tx_sem, K_FOREVER);
+    while (offset < tx_buffer_size) {
+        uint32_t packet_size =
+            MIN(current_mtu - ATT_NOTIFICATION_OVERHEAD_SIZE - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+
+        /*
+         * Bound the wait so a stalled controller cannot pin the pusher forever.
+         * A timeout routes this frame to durable storage through the same
+         * failure path as a rejected GATT enqueue.
+         */
+        if (k_sem_take(&audio_tx_sem, K_MSEC(500)) != 0) {
+            LOG_WRN("Timed out waiting for live audio TX slot");
+            return false;
+        }
 
         uint32_t id = packet_next_index++;
         pusher_temp_data[0] = id & 0xFF;
@@ -1130,47 +1253,94 @@ static bool push_to_gatt(struct bt_conn *conn)
     return true;
 }
 
-#define OPUS_PREFIX_LENGTH 1
-#define OPUS_PADDED_LENGTH 80
-static uint32_t offset = 0;
-static uint16_t buffer_offset = 0;
-
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-static uint8_t storage_temp_data[MAX_WRITE_SIZE];
-bool write_to_storage(void)
+BUILD_ASSERT(AUDIO_STORAGE_RECORD_BYTES == MAX_WRITE_SIZE, "audio storage record size mismatch");
+
+static audio_storage_packer_t storage_packer;
+K_MUTEX_DEFINE(storage_packer_mutex);
+static uint32_t storage_rejected_frames;
+static int64_t storage_rejection_log_deadline_ms;
+
+static void record_storage_rejection(const char *reason)
 {
-    uint8_t *buffer = tx_buffer + 2;
-    uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
+    storage_rejected_frames++;
+#ifdef CONFIG_OMI_ENABLE_MONITOR
+    monitor_inc_storage_write_failed();
+#endif
 
-    // buffer_offset = buffer_offset+amount_to_fill;
-    // check if adding the new packet will cause a overflow
-    if (buffer_offset + packet_size > MAX_WRITE_SIZE - 1) {
+    int64_t now = k_uptime_get();
+    if (now >= storage_rejection_log_deadline_ms) {
+        LOG_ERR("Audio storage rejected frame: %s, rejected=%u", reason, storage_rejected_frames);
+        storage_rejection_log_deadline_ms = now + 2000;
+    }
+}
 
-        storage_temp_data[buffer_offset] = tx_buffer_size;
-        uint8_t *write_ptr = storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
+static size_t enqueue_storage_record(const uint8_t *record, size_t length, void *context)
+{
+    ARG_UNUSED(context);
+    return write_to_file(record, (uint32_t) length);
+}
 
-        buffer_offset = packet_size;
-        storage_temp_data[0] = tx_buffer_size;
-        memcpy(storage_temp_data + 1, buffer, tx_buffer_size);
+static audio_storage_packer_result_t try_write_frame_to_storage(const uint8_t *frame, size_t frame_size)
+{
+    k_mutex_lock(&storage_packer_mutex, K_FOREVER);
+    audio_storage_packer_result_t result =
+        audio_storage_packer_push(&storage_packer, frame, frame_size, enqueue_storage_record, NULL);
+    k_mutex_unlock(&storage_packer_mutex);
 
-    } else if (buffer_offset + packet_size == MAX_WRITE_SIZE - 1) {
-        // exact frame needed
-        storage_temp_data[buffer_offset] = tx_buffer_size;
-        memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
-        buffer_offset = 0;
-        uint8_t *write_ptr = (uint8_t *) storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
-    } else {
-        storage_temp_data[buffer_offset] = tx_buffer_size;
-        memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
-        buffer_offset = buffer_offset + packet_size;
+    if (result == AUDIO_STORAGE_PACKER_ACCEPTED) {
+#ifdef CONFIG_OMI_ENABLE_MONITOR
+        monitor_inc_storage_write();
+#endif
+    } else if (result == AUDIO_STORAGE_PACKER_INVALID) {
+        record_storage_rejection("invalid encoded frame");
+    }
+    return result;
+}
+
+static bool write_current_frame_to_storage(void)
+{
+    return try_write_frame_to_storage(tx_buffer + RING_BUFFER_HEADER_SIZE, tx_buffer_size) ==
+           AUDIO_STORAGE_PACKER_ACCEPTED;
+}
+
+static bool flush_storage_tail_for_sync(void)
+{
+    int64_t deadline = k_uptime_get() + STORAGE_PACKER_FLUSH_TIMEOUT_MS;
+    bool flushed = false;
+
+    while (!atomic_get(&pusher_stop_flag) && is_sd_on()) {
+        k_mutex_lock(&storage_packer_mutex, K_FOREVER);
+        flushed = audio_storage_packer_flush(&storage_packer, enqueue_storage_record, NULL);
+        k_mutex_unlock(&storage_packer_mutex);
+        if (flushed || k_uptime_get() >= deadline) {
+            break;
+        }
+        k_sleep(K_MSEC(5));
     }
 
-#ifdef CONFIG_OMI_ENABLE_MONITOR
-    monitor_inc_storage_write();
-#endif
-    return true;
+    if (flushed) {
+        int ret = sd_flush_current_file();
+        if (ret < 0) {
+            LOG_ERR("Failed to commit offline tail before sync snapshot: %d", ret);
+            return false;
+        }
+        return true;
+    } else {
+        record_storage_rejection("could not flush offline tail before sync");
+        return false;
+    }
+}
+
+static void storage_snapshot_retry_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    if (!storage_is_on || atomic_get(&pusher_stop_flag)) {
+        return;
+    }
+
+    atomic_set(&storage_flush_requested, 1);
+    k_sem_give(&tx_queue_sem);
 }
 #endif
 
@@ -1185,10 +1355,7 @@ void test_pusher(void)
     uint32_t runs_count = 0;
     while (1) {
         k_sleep(K_MSEC(1));
-        struct bt_conn *conn = current_connection;
-        if (conn) {
-            conn = bt_conn_ref(conn);
-        }
+        struct bt_conn *conn = get_current_connection();
         bool valid = true;
         if (current_mtu < MINIMAL_PACKET_SIZE) {
             valid = false;
@@ -1214,6 +1381,8 @@ void test_pusher(void)
 
 void pusher(void)
 {
+    bool retained_tx_frame = false;
+
     k_msleep(500);
     while (!atomic_get(&pusher_stop_flag)) {
         k_sem_take(&tx_queue_sem, K_FOREVER);
@@ -1221,41 +1390,200 @@ void pusher(void)
             break;
         }
 
-        while (read_from_tx_queue()) {
-            struct bt_conn *conn = current_connection;
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        bool flush_after_drain = atomic_cas(&storage_flush_requested, 1, 0);
+#endif
+
+        while (retained_tx_frame || read_from_tx_queue()) {
+            retained_tx_frame = false;
+            k_mutex_lock(&pusher_delivery_mutex, K_FOREVER);
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+            bool force_storage = atomic_get(&shutdown_force_storage) != 0;
+#else
+            bool force_storage = false;
+#endif
+            struct bt_conn *conn = get_current_connection();
             bool is_subscribed = false;
-            if (conn) {
-                conn = bt_conn_ref(conn);
+            if (conn && !force_storage) {
                 if (current_mtu >= MINIMAL_PACKET_SIZE) {
                     is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
                 }
             }
 
-            if (conn && is_subscribed) {
-                push_to_gatt(conn);
-                bt_conn_unref(conn);
-            } else if (!conn) {
+            bool storage_available = false;
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-                if (is_sd_on()) {
-                    storage_full_warned = false;
-                    write_to_storage();
-                } else {
-                    if (!storage_full_warned) {
-                        LOG_WRN("Offline storage unavailable");
-                        storage_full_warned = true;
-                    }
+            storage_available = is_sd_on();
+#endif
+            bool live_available = conn && is_subscribed;
+            audio_delivery_route_t route = audio_delivery_route(live_available, storage_available);
+            if (route == AUDIO_DELIVERY_STORAGE || route == AUDIO_DELIVERY_LIVE_AND_STORAGE) {
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+                /*
+                 * Establish durable ownership before attempting the live
+                 * notification. Controller acceptance is only flow control;
+                 * the app's explicit ring ADVANCE is the reclaim authority.
+                 */
+                if (!write_current_frame_to_storage()) {
+                    /*
+                     * Keep the popped frame in tx_buffer and yield ownership
+                     * of the CPU. The next pusher pass retries this exact frame
+                     * before dequeuing newer audio.
+                     */
+                    retained_tx_frame = true;
+                } else if (route == AUDIO_DELIVERY_LIVE_AND_STORAGE) {
+                    /*
+                     * Live delivery is a best-effort low-latency duplicate.
+                     * A rejected enqueue needs no retry here because the ring
+                     * already owns the frame for duplicate-safe recovery.
+                     */
+                    (void) push_to_gatt(conn);
                 }
 #endif
-            } else {
+            } else if (route == AUDIO_DELIVERY_DROP) {
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+                record_storage_rejection("SD unavailable; refusing live-only delivery");
+                retained_tx_frame = true;
+#endif
+            }
+
+            if (conn) {
                 bt_conn_unref(conn);
-                k_sleep(K_MSEC(10));
+            }
+            k_mutex_unlock(&pusher_delivery_mutex);
+
+            if (retained_tx_frame) {
+                break;
             }
         }
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        if (retained_tx_frame) {
+            if (flush_after_drain) {
+                atomic_set(&storage_flush_requested, 1);
+            }
+            k_sleep(K_MSEC(50));
+            k_sem_give(&tx_queue_sem);
+            continue;
+        }
+
+        /*
+         * A connect request must flush after all frames that were already in
+         * the TX queue. Flushing before this drain leaves a fresh partial
+         * packer tail that the phone's first ring snapshot cannot see.
+         */
+        if (flush_after_drain) {
+            bool committed = flush_storage_tail_for_sync();
+            atomic_set(&storage_snapshot_ready, committed);
+            if (ring_snapshot_retry_required(storage_is_on, committed)) {
+                k_work_reschedule(&storage_snapshot_retry_work, K_MSEC(STORAGE_SNAPSHOT_RETRY_MS));
+            }
+        }
+
+        if (atomic_get(&shutdown_drain_requested)) {
+            bool committed = flush_storage_tail_for_sync();
+            atomic_set(&shutdown_storage_committed, committed);
+            atomic_set(&shutdown_drain_result, committed ? 0 : -EIO);
+            atomic_clear(&shutdown_drain_requested);
+            k_sem_give(&shutdown_drain_complete);
+        }
+#endif
     }
+}
+
+int transport_begin_shutdown(void)
+{
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    if (atomic_get(&shutdown_storage_committed)) {
+        return 0;
+    }
+    if (atomic_get(&shutdown_force_storage)) {
+        return 0;
+    }
+    if (atomic_get(&pusher_stop_flag)) {
+        return -ESHUTDOWN;
+    }
+
+    /*
+     * Linearize with the pusher before any potentially blocking SD request or
+     * producer pause. Frames already in flight after this point are retained
+     * for storage even while the SD worker is still powering the card.
+     */
+    k_mutex_lock(&pusher_delivery_mutex, K_FOREVER);
+    atomic_set(&shutdown_force_storage, 1);
+    k_mutex_unlock(&pusher_delivery_mutex);
+
+    int power_ret = sd_request_power(true);
+    if (power_ret < 0) {
+        k_mutex_lock(&pusher_delivery_mutex, K_FOREVER);
+        atomic_clear(&shutdown_force_storage);
+        k_mutex_unlock(&pusher_delivery_mutex);
+        LOG_ERR("Refusing shutdown because SD power-on request failed: %d", power_ret);
+        return power_ret;
+    }
+    return 0;
+#else
+    return 0;
+#endif
+}
+
+void transport_cancel_shutdown(void)
+{
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    k_mutex_lock(&pusher_delivery_mutex, K_FOREVER);
+    atomic_clear(&shutdown_force_storage);
+    atomic_clear(&shutdown_drain_requested);
+    atomic_clear(&shutdown_storage_committed);
+    k_mutex_unlock(&pusher_delivery_mutex);
+#endif
+}
+
+int transport_prepare_shutdown(void)
+{
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    if (atomic_get(&shutdown_storage_committed)) {
+        return 0;
+    }
+
+    int begin_ret = transport_begin_shutdown();
+    if (begin_ret < 0) {
+        return begin_ret;
+    }
+
+    k_sem_reset(&shutdown_drain_complete);
+    atomic_set(&shutdown_drain_result, -EINPROGRESS);
+    atomic_set(&shutdown_drain_requested, 1);
+    k_sem_give(&tx_queue_sem);
+
+    if (k_sem_take(&shutdown_drain_complete, K_MSEC(STORAGE_SHUTDOWN_TIMEOUT_MS)) != 0) {
+        atomic_clear(&shutdown_drain_requested);
+        LOG_ERR("Timed out committing audio before shutdown");
+        return -ETIMEDOUT;
+    }
+
+    int result = atomic_get(&shutdown_drain_result);
+    if (result < 0) {
+        LOG_ERR("Refusing shutdown because audio commit failed: %d", result);
+    }
+    return result;
+#else
+    return 0;
+#endif
 }
 
 int transport_off()
 {
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    int prepare_ret = transport_prepare_shutdown();
+    if (prepare_ret < 0) {
+        return prepare_ret;
+    }
+#endif
+
+    atomic_inc(&link_setup_generation);
+    k_work_cancel_delayable(&link_setup_work);
+    link_setup_stage = LINK_SETUP_DONE;
+    link_setup_attempts = 0U;
+
     // Stop pusher thread when transport is turned off
     atomic_set(&pusher_stop_flag, 1);
     k_sem_give(&tx_queue_sem);
@@ -1267,10 +1595,10 @@ int transport_off()
     }
 
     // First disconnect any active connections
-    if (current_connection != NULL) {
-        bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-        bt_conn_unref(current_connection);
-        current_connection = NULL;
+    struct bt_conn *conn = take_current_connection();
+    if (conn) {
+        bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        bt_conn_unref(conn);
     }
 
     // Stop advertising
@@ -1298,7 +1626,9 @@ int transport_off()
     current_mtu = 0;
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    k_work_cancel_delayable(&storage_snapshot_retry_work);
     storage_is_on = false;
+    atomic_clear(&shutdown_force_storage);
 #endif
 
     return 0;
@@ -1308,6 +1638,14 @@ int transport_off()
 int transport_start()
 {
     int err = 0;
+
+    atomic_clear(&pusher_stop_flag);
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    atomic_clear(&shutdown_force_storage);
+    atomic_clear(&shutdown_drain_requested);
+    atomic_clear(&shutdown_storage_committed);
+    atomic_set(&shutdown_drain_result, -EINPROGRESS);
+#endif
 
     // Pull the nfsw control high
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -1358,7 +1696,7 @@ int transport_start()
         LOG_INF("Accelerometer failed to activate\n");
     } else {
         LOG_INF("Accelerometer initialized");
-        register_accel_service(current_connection);
+        register_accel_service(NULL);
     }
 #endif
     //  Enable button
@@ -1394,7 +1732,7 @@ int transport_start()
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     // Register storage service for offline audio
-    memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
+    audio_storage_packer_init(&storage_packer);
     bt_gatt_service_register(&storage_service);
 #endif
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
@@ -1446,15 +1784,78 @@ int transport_start()
     return 0;
 }
 
-struct bt_conn *get_current_connection()
+static void set_current_connection(struct bt_conn *conn)
 {
-    return current_connection;
+    k_mutex_lock(&current_connection_mutex, K_FOREVER);
+    struct bt_conn *previous = current_connection;
+    current_connection = conn ? bt_conn_ref(conn) : NULL;
+    k_mutex_unlock(&current_connection_mutex);
+
+    if (previous) {
+        bt_conn_unref(previous);
+    }
+}
+
+static struct bt_conn *take_current_connection(void)
+{
+    k_mutex_lock(&current_connection_mutex, K_FOREVER);
+    struct bt_conn *conn = current_connection;
+    current_connection = NULL;
+    k_mutex_unlock(&current_connection_mutex);
+    return conn;
+}
+
+static bool set_mtu_for_current_connection(struct bt_conn *conn, uint16_t mtu)
+{
+    k_mutex_lock(&current_connection_mutex, K_FOREVER);
+    bool is_current = conn && current_connection == conn;
+    if (is_current) {
+        current_mtu = mtu;
+    }
+    k_mutex_unlock(&current_connection_mutex);
+    return is_current;
+}
+
+struct bt_conn *get_current_connection(void)
+{
+    k_mutex_lock(&current_connection_mutex, K_FOREVER);
+    struct bt_conn *conn = current_connection ? bt_conn_ref(current_connection) : NULL;
+    k_mutex_unlock(&current_connection_mutex);
+    return conn;
+}
+
+bool transport_storage_snapshot_ready(void)
+{
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    return atomic_get(&storage_snapshot_ready) != 0;
+#else
+    return true;
+#endif
 }
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
 {
-    if (!write_to_tx_queue(buffer, size)) {
-        return -1;
+    if (!buffer || size == 0U || size > CODEC_OUTPUT_MAX_BYTES) {
+        return -EINVAL;
     }
-    return 0;
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    atomic_clear(&shutdown_storage_committed);
+#endif
+
+    /*
+     * The codec has produced an accepted whole frame, but the live queue is
+     * saturated. Apply sleeping backpressure until the ordered TX queue takes
+     * ownership. Its sole consumer then routes the frame to live BLE or the
+     * transactional SD packer. Bypassing older queued frames and writing this
+     * newer frame directly to SD would corrupt ring chronology on disconnect.
+     */
+    while (!atomic_get(&pusher_stop_flag)) {
+        if (write_to_tx_queue(buffer, size)) {
+            return 0;
+        }
+        k_sleep(K_MSEC(5));
+    }
+
+    return -ESHUTDOWN;
 }

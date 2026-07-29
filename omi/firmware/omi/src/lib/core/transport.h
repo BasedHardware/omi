@@ -23,6 +23,27 @@ int transport_start();
 int transport_off();
 
 /**
+ * Force subsequent audio delivery to SD before draining upstream producers.
+ */
+int transport_begin_shutdown(void);
+
+/**
+ * Restore normal live/storage routing after a cancelled shutdown.
+ */
+void transport_cancel_shutdown(void);
+
+/**
+ * @brief Durably drain accepted audio before system shutdown
+ *
+ * The microphone must be stopped before calling this function. It forces all
+ * queued frames to offline storage, flushes the packer tail, and waits for the
+ * SD worker to sync the media.
+ *
+ * @return 0 if every accepted frame is durable, negative errno code otherwise
+ */
+int transport_prepare_shutdown(void);
+
+/**
  * @brief Broadcast audio packets over BLE
  *
  * @param buffer Buffer containing audio data
@@ -32,11 +53,31 @@ int transport_off();
 int broadcast_audio_packets(uint8_t *buffer, size_t size);
 
 /**
- * @brief Get the current BLE connection
+ * @brief Acquire a referenced snapshot of the current BLE connection
  *
- * @return Pointer to current connection, or NULL if not connected
+ * The caller must release a non-NULL result with bt_conn_unref().
+ *
+ * @return Referenced connection, or NULL if not connected
  */
-struct bt_conn *get_current_connection();
+struct bt_conn *get_current_connection(void);
+
+/**
+ * @brief True after the connect-time audio queue and packer tail have been
+ * committed to the SD ring.
+ *
+ * Ring INFO/READ must wait for this barrier so their first snapshot cannot
+ * omit audio that was already queued before the connection.
+ */
+bool transport_storage_snapshot_ready(void);
+
+/**
+ * Prefer a fixed 15 ms interval while adjacent durable ring ranges are being
+ * drained. The request is best-effort; rejected updates never fail the sync.
+ * Normal 15-30 ms parameters are restored after an idle grace period, or
+ * immediately when the client explicitly stops.
+ */
+void transport_bulk_sync_begin(void);
+void transport_bulk_sync_end(bool immediate);
 
 /**
  * @brief Acquire / release a shared BLE TX-throttle slot.

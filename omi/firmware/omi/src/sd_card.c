@@ -13,6 +13,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 
+#include "lib/core/ring_transfer_integrity.h"
 #include "rtc.h"
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
@@ -124,6 +125,7 @@ typedef struct {
         struct {
             uint8_t buf[MAX_WRITE_SIZE];
             size_t len;
+            uint32_t timestamp;
         } write;
         struct {
             uint64_t start_seq;
@@ -160,12 +162,18 @@ static atomic_t sd_boot_ready;
 static atomic_t sd_io_low_power = ATOMIC_INIT(0);
 static atomic_t sd_dev_pm_supported = ATOMIC_INIT(1);
 static atomic_t pending_flush_on_ble_connect;
+static atomic_t pending_power_on;
+static atomic_t pending_idle_power_off;
+static atomic_t desired_sd_power_on = ATOMIC_INIT(1);
+#define SD_POWER_ON_RETRY_MS 250U
+#define SD_POWER_OFF_RETRY_MS 1000U
+static int64_t power_on_retry_deadline_ms;
+static int64_t idle_power_off_retry_deadline_ms;
 
 static bool is_mounted;
 static bool sd_enabled;
 static bool sd_shutdown_in_progress;
 static bool sd_write_blocked;
-static bool sd_write_paused;
 static bool ble_connected;
 
 static uint32_t disk_sector_count;
@@ -184,12 +192,15 @@ static struct raw_batch_header cached_read_batch_header;
 static bool current_batch_loaded;
 static bool current_batch_dirty;
 static bool cached_read_batch_valid;
-static int64_t last_batch_activity_ms;
+static int64_t next_batch_flush_attempt_ms;
 static uint8_t writing_error_counter;
 
-static uint32_t write_drop_packets;
-static uint32_t write_drop_bytes;
+static uint32_t write_rejected_records;
 static int64_t last_write_blocked_log_ms;
+static sd_req_t retained_write_req;
+static bool retained_write_pending;
+static uint32_t retained_write_retry_delay_ms;
+static int64_t retained_write_retry_deadline_ms;
 
 static char compat_current_name[MAX_FILENAME_LEN];
 static char compat_saved_name[MAX_FILENAME_LEN];
@@ -198,6 +209,7 @@ static uint32_t compat_saved_offset;
 static void sd_worker_thread(void);
 static void sd_set_io_low_power(bool enable);
 static int flush_current_batch(bool sync_media);
+static int sd_mount(void);
 
 static void invalidate_read_batch_cache(void)
 {
@@ -258,6 +270,7 @@ static void start_empty_batch(uint64_t base_seq)
     current_batch_packets = 0;
     current_batch_loaded = true;
     current_batch_dirty = false;
+    next_batch_flush_attempt_ms = 0;
 }
 
 static int sync_media(void)
@@ -475,17 +488,30 @@ static int restore_tail_batch(void)
     return 0;
 }
 
+static void retain_current_batch_for_retry(void)
+{
+    writing_error_counter++;
+    next_batch_flush_attempt_ms = k_uptime_get() + RAW_FLUSH_INTERVAL_MS;
+    if (writing_error_counter > ERROR_THRESHOLD) {
+        sd_write_blocked = true;
+    }
+}
+
 static int flush_current_batch(bool sync_requested)
 {
     /* SD is powered off (idle): keep the batch buffered in RAM, do not touch the
      * disk. It will be flushed after the next remount. */
     if (!is_mounted) {
-        return 0;
+        return sync_requested ? -ENODEV : 0;
     }
 
     if (!current_batch_loaded || !current_batch_dirty || current_batch_packets == 0U) {
         if (sync_requested) {
-            (void) sync_media();
+            int sync_ret = sync_media();
+            if (sync_ret < 0) {
+                LOG_ERR("media sync failed with no dirty batch: %d", sync_ret);
+                return sync_ret;
+            }
         }
         return 0;
     }
@@ -502,11 +528,8 @@ static int flush_current_batch(bool sync_requested)
     uint32_t sector = batch_sector_for_base_seq(current_batch_base_seq);
     int ret = disk_access_write(DISK_DRIVE_NAME, current_batch, sector, RAW_BATCH_SECTORS);
     if (ret != 0) {
-        writing_error_counter++;
+        retain_current_batch_for_retry();
         LOG_ERR("batch write failed at sector %u: %d", sector, ret);
-        if (writing_error_counter > ERROR_THRESHOLD) {
-            sd_write_blocked = true;
-        }
         return -EIO;
     }
 
@@ -529,16 +552,24 @@ static int flush_current_batch(bool sync_requested)
 
     ret = persist_ring_metadata();
     if (ret < 0) {
+        retain_current_batch_for_retry();
         return ret;
     }
 
     if (sync_requested) {
-        (void) sync_media();
+        ret = sync_media();
+        if (ret < 0) {
+            retain_current_batch_for_retry();
+            LOG_ERR("media sync failed for retained dirty batch: %d", ret);
+            return ret;
+        }
     }
 
     current_batch_dirty = false;
     invalidate_read_batch_cache();
     writing_error_counter = 0;
+    sd_write_blocked = false;
+    next_batch_flush_attempt_ms = 0;
 
     if (current_batch_packets >= RAW_PACKETS_PER_BATCH) {
         start_empty_batch(ring_state.write_seq);
@@ -643,47 +674,53 @@ static int read_packets_internal(uint64_t start_seq,
     return 0;
 }
 
-static int advance_read_seq_internal(uint64_t new_read_seq, bool sync_requested)
+static int advance_read_seq_durably_internal(uint64_t new_read_seq)
 {
-    if (new_read_seq < ring_state.read_seq || new_read_seq > ring_state.write_seq) {
+    ring_advance_action_t action = ring_advance_action(ring_state.read_seq, ring_state.write_seq, new_read_seq);
+    if (action == RING_ADVANCE_INVALID) {
         return -ERANGE;
     }
 
-    if (new_read_seq == ring_state.read_seq) {
+    if (action == RING_ADVANCE_IDEMPOTENT) {
         return 0;
     }
 
+    uint64_t previous_read_seq = ring_state.read_seq;
     ring_state.read_seq = new_read_seq;
     int ret = persist_ring_metadata();
     if (ret < 0) {
+        ring_state.read_seq = previous_read_seq;
         return ret;
     }
 
-    if (sync_requested) {
-        (void) sync_media();
+    ret = sync_media();
+    if (ret < 0) {
+        LOG_ERR("failed to sync advanced read watermark: %d", ret);
+        return ret;
     }
 
     return 0;
 }
 
-static void process_write_data_req(const sd_req_t *req)
+static bool process_write_data_req(const sd_req_t *req)
 {
-    if (sd_write_blocked || sd_write_paused || !req) {
-        return;
+    if (!req) {
+        return true;
+    }
+
+    /*
+     * Do not stage accepted audio in current_batch while the card is
+     * unmounted. A later successful sd_mount() restores the on-media tail into
+     * that same buffer and would overwrite the staged records. The retained
+     * request path remounts first, then retries this exact request.
+     */
+    if (!is_mounted) {
+        return false;
     }
 
     if (req->u.write.len != MAX_WRITE_SIZE) {
-        LOG_WRN("unexpected write size %u", (unsigned) req->u.write.len);
-        return;
-    }
-
-    if (!rtc_is_valid()) {
-        return;
-    }
-
-    uint32_t timestamp = get_utc_time();
-    if (timestamp == 0U || timestamp < 1700000000U) {
-        return;
+        LOG_ERR("unexpected accepted write size %u", (unsigned) req->u.write.len);
+        return true;
     }
 
     if (!current_batch_loaded) {
@@ -691,27 +728,89 @@ static void process_write_data_req(const sd_req_t *req)
     }
 
     if (current_batch_packets >= RAW_PACKETS_PER_BATCH) {
-        start_empty_batch(ring_state.write_seq);
+        sd_set_io_low_power(false);
+        int ret = flush_current_batch(false);
+        sd_set_io_low_power(true);
+        if (ret < 0 || current_batch_packets >= RAW_PACKETS_PER_BATCH) {
+            /*
+             * This request has already been accepted by write_to_file(), but
+             * has not been copied into the batch. Its caller must retain and
+             * retry this exact request before dequeuing newer audio.
+             */
+            return false;
+        }
     }
 
     size_t dst_offset = RAW_BATCH_HEADER_BYTES + ((size_t) current_batch_packets * RAW_AUDIO_PACKET_BYTES);
-    sys_put_be32(timestamp, current_batch + dst_offset);
+    sys_put_be32(req->u.write.timestamp, current_batch + dst_offset);
     memcpy(current_batch + dst_offset + RAW_AUDIO_TIMESTAMP_BYTES, req->u.write.buf, MAX_WRITE_SIZE);
     current_batch_packets++;
     current_batch_dirty = true;
-    last_batch_activity_ms = k_uptime_get();
-    format_timestamp_name(timestamp, compat_current_name, sizeof(compat_current_name));
+    next_batch_flush_attempt_ms = k_uptime_get() + RAW_FLUSH_INTERVAL_MS;
+    format_timestamp_name(req->u.write.timestamp, compat_current_name, sizeof(compat_current_name));
 
     bool queue_pressure_high = k_msgq_num_used_get(&sd_msgq) >= (SD_REQ_QUEUE_MSGS / 3);
     if (current_batch_packets >= RAW_PACKETS_PER_BATCH || queue_pressure_high) {
         sd_set_io_low_power(false);
-        (void) flush_current_batch(false);
+        int ret = flush_current_batch(false);
         sd_set_io_low_power(true);
+        if (ret < 0) {
+            LOG_ERR("accepted audio retained in dirty batch after flush failure: %d", ret);
+        }
     }
+
+    return true;
 }
 
-static void drain_pending_write_queue_for_shutdown(void)
+static bool process_or_retain_accepted_write(const sd_req_t *req)
 {
+    if (process_write_data_req(req)) {
+        return true;
+    }
+
+    retained_write_req = *req;
+    retained_write_pending = true;
+    retained_write_retry_delay_ms =
+        retained_write_retry_delay_ms == 0U ? 50U : MIN(retained_write_retry_delay_ms * 2U, RAW_FLUSH_INTERVAL_MS);
+    retained_write_retry_deadline_ms = k_uptime_get() + retained_write_retry_delay_ms;
+    return false;
+}
+
+static bool retry_retained_write(bool force)
+{
+    if (!retained_write_pending) {
+        return true;
+    }
+
+    int64_t now = k_uptime_get();
+    if (!force && now < retained_write_retry_deadline_ms) {
+        return false;
+    }
+
+    if (!is_mounted && sd_mount() < 0) {
+        retained_write_retry_deadline_ms = now + retained_write_retry_delay_ms;
+        return false;
+    }
+
+    if (!process_write_data_req(&retained_write_req)) {
+        retained_write_retry_delay_ms =
+            MIN(retained_write_retry_delay_ms == 0U ? 50U : retained_write_retry_delay_ms * 2U, RAW_FLUSH_INTERVAL_MS);
+        retained_write_retry_deadline_ms = k_uptime_get() + retained_write_retry_delay_ms;
+        return false;
+    }
+
+    retained_write_pending = false;
+    retained_write_retry_delay_ms = 0U;
+    retained_write_retry_deadline_ms = 0;
+    return true;
+}
+
+static int drain_pending_write_queue(void)
+{
+    if (!retry_retained_write(true)) {
+        return -EAGAIN;
+    }
+
     while (1) {
         sd_req_t pending_req;
         if (k_msgq_get(&sd_msgq, &pending_req, K_NO_WAIT) != 0) {
@@ -719,9 +818,26 @@ static void drain_pending_write_queue_for_shutdown(void)
         }
 
         if (pending_req.type == REQ_WRITE_DATA) {
-            process_write_data_req(&pending_req);
+            if (!process_or_retain_accepted_write(&pending_req)) {
+                return -EAGAIN;
+            }
         }
     }
+
+    return 0;
+}
+
+static int commit_pending_writes_for_snapshot(void)
+{
+    int drain_ret = drain_pending_write_queue();
+    if (drain_ret < 0) {
+        return drain_ret;
+    }
+    if (!current_batch_dirty) {
+        return 0;
+    }
+
+    return flush_current_batch(false);
 }
 
 static void sd_set_io_low_power(bool enable)
@@ -874,18 +990,26 @@ static int sd_mount(void)
 
 static int sd_unmount(void)
 {
-    if (current_batch_dirty) {
-        (void) flush_current_batch(true);
-    } else {
-        (void) sync_media();
+    int ret = flush_current_batch(true);
+    if (ret < 0) {
+        LOG_ERR("Raw SD ring unmount aborted: flush/sync failed: %d", ret);
+        return ret;
     }
 
     if (is_mounted) {
-        (void) disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_CTRL_DEINIT, NULL);
+        ret = disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_CTRL_DEINIT, NULL);
+        if (ret < 0) {
+            LOG_ERR("Raw SD ring unmount aborted: deinit failed: %d", ret);
+            return ret;
+        }
         is_mounted = false;
     }
 
-    sd_enable_power(false);
+    ret = sd_enable_power(false);
+    if (ret < 0) {
+        LOG_ERR("Raw SD ring power-off failed: %d", ret);
+        return ret;
+    }
     LOG_INF("Raw SD ring unmounted");
     return 0;
 }
@@ -912,18 +1036,35 @@ void sd_worker_thread(void)
 {
     sd_req_t req;
 
-    int res = sd_mount();
-    if (res != 0) {
-        LOG_ERR("[SD_WORK] mount failed: %d", res);
+    int res;
+    uint32_t mount_retry_ms = 250U;
+    while ((res = sd_mount()) != 0) {
         sd_write_blocked = true;
-        return;
+        LOG_ERR("[SD_WORK] mount failed: %d; retrying in %u ms", res, mount_retry_ms);
+        if (sd_shutdown_in_progress) {
+            return;
+        }
+        k_msleep(mount_retry_ms);
+        mount_retry_ms = MIN(mount_retry_ms * 2U, 5000U);
     }
 
+    sd_write_blocked = false;
+    atomic_clear(&pending_power_on);
     atomic_set(&sd_boot_ready, 1);
     LOG_INF("[SD_BOOT] raw ring ready (used=%llu bytes)", (unsigned long long) ring_used_bytes());
     sd_set_io_low_power(true);
 
     while (1) {
+        if (atomic_get(&pending_power_on)) {
+            if (!atomic_get(&desired_sd_power_on) || sd_shutdown_in_progress) {
+                atomic_clear(&pending_power_on);
+            } else if (k_uptime_get() >= power_on_retry_deadline_ms) {
+                atomic_clear(&pending_power_on);
+                req.type = REQ_POWER_ON;
+                goto handle_req;
+            }
+        }
+
         if (atomic_cas(&pending_flush_on_ble_connect, 1, 0)) {
             req.type = REQ_FLUSH;
             req.u.status.resp = NULL;
@@ -934,9 +1075,29 @@ void sd_worker_thread(void)
             goto handle_req;
         }
 
+        if (atomic_get(&pending_idle_power_off) && !atomic_get(&desired_sd_power_on) &&
+            k_uptime_get() >= idle_power_off_retry_deadline_ms) {
+            atomic_clear(&pending_idle_power_off);
+            req.type = REQ_POWER_OFF;
+            goto handle_req;
+        }
+
+        if (retained_write_pending) {
+            (void) retry_retained_write(false);
+            if (retained_write_pending) {
+                int64_t retry_wait_ms = retained_write_retry_deadline_ms - k_uptime_get();
+                retry_wait_ms = CLAMP(retry_wait_ms, 1, 250);
+                if (k_msgq_get(&sd_prio_msgq, &req, K_MSEC(retry_wait_ms)) == 0) {
+                    goto handle_req;
+                }
+                continue;
+            }
+        }
+
         k_timeout_t write_wait = ble_connected ? K_MSEC(50) : K_MSEC(250);
         if (k_msgq_get(&sd_msgq, &req, write_wait) != 0) {
-            if (current_batch_dirty && (k_uptime_get() - last_batch_activity_ms) >= RAW_FLUSH_INTERVAL_MS) {
+            int64_t now = k_uptime_get();
+            if (ring_storage_flush_retry_due(current_batch_dirty, now, next_batch_flush_attempt_ms)) {
                 sd_set_io_low_power(false);
                 (void) flush_current_batch(false);
                 sd_set_io_low_power(true);
@@ -962,7 +1123,9 @@ void sd_worker_thread(void)
                 gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
                 (void) sd_mount();
             }
-            process_write_data_req(&req);
+            if (!process_or_retain_accepted_write(&req)) {
+                break;
+            }
             for (int i = 0; i < WRITE_DRAIN_BURST; i++) {
                 if (k_msgq_num_used_get(&sd_prio_msgq) > 0) {
                     break;
@@ -974,18 +1137,23 @@ void sd_worker_thread(void)
                 }
 
                 if (next_req.type == REQ_WRITE_DATA) {
-                    process_write_data_req(&next_req);
+                    if (!process_or_retain_accepted_write(&next_req)) {
+                        break;
+                    }
                 }
             }
             break;
 
         case REQ_GET_RING_INFO:
-            if (current_batch_dirty) {
-                (void) flush_current_batch(false);
-            }
+            /* Priority commands can overtake regular write requests. Drain
+             * accepted audio first so the returned snapshot includes the
+             * packer tail queued at BLE connect. */
             if (req.u.info.resp) {
-                req.u.info.resp->info = ring_state;
-                req.u.info.resp->res = 0;
+                int commit_res = commit_pending_writes_for_snapshot();
+                if (commit_res == 0) {
+                    req.u.info.resp->info = ring_state;
+                }
+                req.u.info.resp->res = commit_res;
                 k_sem_give(&req.u.info.resp->sem);
                 release_resp_busy(req.u.info.resp->busy_flag);
             }
@@ -993,27 +1161,25 @@ void sd_worker_thread(void)
 
         case REQ_READ_PACKETS:
             if (req.u.read.resp) {
-                req.u.read.resp->res = read_packets_internal(req.u.read.start_seq,
-                                                             req.u.read.out_buf,
-                                                             req.u.read.max_bytes,
-                                                             &req.u.read.resp->bytes_read,
-                                                             &req.u.read.resp->packets_read);
+                int commit_res = commit_pending_writes_for_snapshot();
+                req.u.read.resp->res = commit_res < 0 ? commit_res
+                                                      : read_packets_internal(req.u.read.start_seq,
+                                                                              req.u.read.out_buf,
+                                                                              req.u.read.max_bytes,
+                                                                              &req.u.read.resp->bytes_read,
+                                                                              &req.u.read.resp->packets_read);
                 k_sem_give(&req.u.read.resp->sem);
                 release_resp_busy(req.u.read.resp->busy_flag);
             }
             break;
 
-        case REQ_ADVANCE_READ: {
-            /* Perform the advance regardless; a NULL resp is a fire-and-forget
-             * (async) request from the sync checkpoint that must not block. */
-            int adv_res = advance_read_seq_internal(req.u.advance.new_read_seq, false);
+        case REQ_ADVANCE_READ:
             if (req.u.advance.resp) {
-                req.u.advance.resp->res = adv_res;
+                req.u.advance.resp->res = advance_read_seq_durably_internal(req.u.advance.new_read_seq);
                 k_sem_give(&req.u.advance.resp->sem);
                 release_resp_busy(req.u.advance.resp->busy_flag);
             }
             break;
-        }
 
         case REQ_CLEAR_RING:
             if (req.u.status.resp) {
@@ -1024,18 +1190,22 @@ void sd_worker_thread(void)
             break;
 
         case REQ_FLUSH:
+            res = drain_pending_write_queue();
+            if (res == 0) {
+                res = flush_current_batch(true);
+            }
             if (req.u.status.resp) {
-                req.u.status.resp->res = flush_current_batch(true);
+                req.u.status.resp->res = res;
                 k_sem_give(&req.u.status.resp->sem);
                 release_resp_busy(req.u.status.resp->busy_flag);
-            } else {
-                (void) flush_current_batch(true);
             }
             break;
 
         case REQ_UNMOUNT:
-            drain_pending_write_queue_for_shutdown();
-            res = sd_unmount();
+            res = drain_pending_write_queue();
+            if (res == 0) {
+                res = sd_unmount();
+            }
             if (req.u.status.resp) {
                 req.u.status.resp->res = res;
                 k_sem_give(&req.u.status.resp->sem);
@@ -1047,9 +1217,25 @@ void sd_worker_thread(void)
             /* Idle (mic asleep): flush, unmount and cut SD power to save current.
              * Drain buffered writes first (like the shutdown path) so audio queued
              * just before idle is not lost when we unmount. */
+            if (atomic_get(&desired_sd_power_on)) {
+                atomic_clear(&pending_idle_power_off);
+                break;
+            }
             if (is_mounted) {
-                drain_pending_write_queue_for_shutdown();
-                (void) sd_unmount();
+                res = drain_pending_write_queue();
+                if (res < 0) {
+                    LOG_WRN("SD power-off deferred while accepted audio is retained: %d", res);
+                    atomic_set(&pending_idle_power_off, 1);
+                    idle_power_off_retry_deadline_ms = k_uptime_get() + SD_POWER_OFF_RETRY_MS;
+                    break;
+                }
+                res = sd_unmount();
+                if (res < 0) {
+                    LOG_ERR("SD power-off aborted after flush/sync failure: %d", res);
+                    atomic_set(&pending_idle_power_off, 1);
+                    idle_power_off_retry_deadline_ms = k_uptime_get() + SD_POWER_OFF_RETRY_MS;
+                    break;
+                }
                 /* Park the SD chip-select at physical 0 V. The SPI driver otherwise
                  * idles it HIGH, which forward-biases the unpowered card's input
                  * clamp and leaks current. Use *_raw so the driver's active-low
@@ -1057,11 +1243,17 @@ void sd_worker_thread(void)
                  * driver (do NOT disconnect) so the card still re-inits on wake.
                  * SCK/MOSI/MISO are shared with the OTA flash on spi3, not parked. */
                 gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 0);
+                atomic_clear(&pending_idle_power_off);
                 LOG_INF("SD powered off (idle, CS parked low)");
             }
             break;
 
         case REQ_POWER_ON:
+            if (!atomic_get(&desired_sd_power_on) || sd_shutdown_in_progress) {
+                atomic_clear(&pending_power_on);
+                break;
+            }
+            atomic_clear(&pending_idle_power_off);
             /* Mic woke: power on + remount. Handled via the prio queue so it runs
              * before any buffered write is dequeued from sd_msgq. */
             if (!is_mounted) {
@@ -1070,9 +1262,14 @@ void sd_worker_thread(void)
                 gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
                 int mret = sd_mount();
                 if (mret == 0) {
+                    atomic_clear(&pending_power_on);
                     LOG_INF("SD powered on + remounted");
                 } else {
                     LOG_ERR("SD remount failed: %d", mret);
+                    if (ring_power_on_reconcile_required(atomic_get(&desired_sd_power_on) != 0, is_mounted, mret)) {
+                        power_on_retry_deadline_ms = k_uptime_get() + SD_POWER_ON_RETRY_MS;
+                        atomic_set(&pending_power_on, 1);
+                    }
                 }
             }
             break;
@@ -1088,7 +1285,6 @@ int app_sd_init(void)
 {
     sd_shutdown_in_progress = false;
     sd_write_blocked = false;
-    sd_write_paused = false;
     if (!sd_worker_tid) {
         sd_worker_tid = k_thread_create(&sd_worker_thread_data,
                                         sd_worker_stack,
@@ -1107,13 +1303,24 @@ int app_sd_init(void)
 
 int app_sd_off(void)
 {
+    static struct status_resp resp;
+    static atomic_t shutdown_in_flight = ATOMIC_INIT(0);
+
+    if (!atomic_cas(&shutdown_in_flight, 0, 1)) {
+        return -EBUSY;
+    }
+
+    /* Supersede any queued idle power-off; this path owns the final unmount. */
+    atomic_set(&desired_sd_power_on, 1);
+    atomic_clear(&pending_power_on);
+    atomic_clear(&pending_idle_power_off);
     sd_shutdown_in_progress = true;
     bool unmount_completed = false;
+    int shutdown_error = 0;
 
     if (is_mounted && sd_worker_tid) {
-        struct status_resp resp;
         k_sem_init(&resp.sem, 0, 1);
-        resp.busy_flag = NULL;
+        resp.busy_flag = &shutdown_in_flight;
         resp.res = 0;
 
         sd_req_t req = {0};
@@ -1126,15 +1333,31 @@ int app_sd_off(void)
                 unmount_completed = true;
             } else {
                 LOG_ERR("Timeout waiting for raw ring unmount");
+                shutdown_error = resp.res < 0 ? resp.res : -ETIMEDOUT;
             }
         } else {
             LOG_ERR("Failed to queue raw ring unmount request: %d", qret);
+            shutdown_error = qret;
+            resp.busy_flag = NULL;
+            atomic_clear(&shutdown_in_flight);
         }
+    } else {
+        atomic_clear(&shutdown_in_flight);
+    }
+
+    if (is_mounted && !unmount_completed) {
+        sd_shutdown_in_progress = false;
+        return shutdown_error != 0 ? shutdown_error : -EIO;
     }
 
     if (unmount_completed || !is_mounted) {
         if (sd_enabled) {
-            sd_enable_power(false);
+            int power_ret = sd_enable_power(false);
+            if (power_ret < 0) {
+                sd_shutdown_in_progress = false;
+                atomic_clear(&shutdown_in_flight);
+                return power_ret;
+            }
         }
         sd_enabled = false;
 
@@ -1151,6 +1374,7 @@ int app_sd_off(void)
         }
     }
 
+    atomic_clear(&shutdown_in_flight);
     return 0;
 }
 
@@ -1166,15 +1390,22 @@ bool sd_is_ready(void)
     return sd_enabled && is_mounted;
 }
 
-void sd_write_pause(bool pause)
-{
-    sd_write_paused = pause;
-}
-
-void sd_request_power(bool on)
+int sd_request_power(bool on)
 {
     sd_req_t req = {0};
     req.type = on ? REQ_POWER_ON : REQ_POWER_OFF;
+
+    /*
+     * Publish intent before waking the worker. A queued stale POWER_OFF then
+     * observes a newer POWER_ON and becomes a no-op instead of racing the mic
+     * wake path.
+     */
+    atomic_set(&desired_sd_power_on, on ? 1 : 0);
+    if (on) {
+        atomic_clear(&pending_idle_power_off);
+    } else {
+        atomic_clear(&pending_power_on);
+    }
 
     /* Queue with a timeout and check the result (like the other prio-queue
      * callers). A silently dropped REQ_POWER_ON would leave sd_enabled=true with
@@ -1182,15 +1413,23 @@ void sd_request_power(bool on)
     int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
         LOG_ERR("sd_request_power(%s) failed to queue: %d", on ? "on" : "off", ret);
-        return;
+        if (ring_power_on_reconcile_required(on, is_mounted, ret)) {
+            power_on_retry_deadline_ms = k_uptime_get() + SD_POWER_ON_RETRY_MS;
+            atomic_set(&pending_power_on, 1);
+        } else if (!on) {
+            atomic_set(&pending_idle_power_off, 1);
+        }
+        return ret;
     }
 
     if (on) {
+        atomic_clear(&pending_power_on);
         /* Only after the POWER_ON is queued: mark SD available so the audio
          * pusher keeps writing; the writes buffer in sd_msgq until the remount
          * (prio request) completes. */
         sd_enabled = true;
     }
+    return 0;
 }
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
@@ -1215,7 +1454,7 @@ void sd_notify_ble_state(bool connected)
     ble_connected = connected;
 }
 
-uint32_t write_to_file(uint8_t *data, uint32_t length)
+uint32_t write_to_file(const uint8_t *data, uint32_t length)
 {
     static int64_t last_write_err_log_ms;
     static int64_t last_shutdown_drop_log_ms;
@@ -1230,7 +1469,7 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
         return 0;
     }
 
-    if (sd_shutdown_in_progress || sd_write_paused) {
+    if (sd_shutdown_in_progress) {
         int64_t now = k_uptime_get();
         if (now - last_shutdown_drop_log_ms > 1000) {
             LOG_WRN("write_to_file dropped: SD paused/shutdown");
@@ -1256,6 +1495,7 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     req.type = REQ_WRITE_DATA;
     memcpy(req.u.write.buf, data, length);
     req.u.write.len = length;
+    req.u.write.timestamp = ring_record_timestamp_or_zero(rtc_is_valid(), get_utc_time());
 
     int ret = k_msgq_put(&sd_msgq, &req, K_NO_WAIT);
     if (ret != 0) {
@@ -1263,14 +1503,12 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     }
 
     if (ret != 0) {
-        write_drop_packets++;
-        write_drop_bytes += length;
+        write_rejected_records++;
         int64_t now = k_uptime_get();
         if (now - last_write_err_log_ms > 2000) {
-            LOG_WRN("Write queue full, dropping audio data (%d), dropped=%u pkts (%u bytes)",
+            LOG_WRN("Write queue full, record rejected for ordered retry (%d), rejected attempts=%u",
                     ret,
-                    write_drop_packets,
-                    write_drop_bytes);
+                    write_rejected_records);
             last_write_err_log_ms = now;
         }
         return 0;
@@ -1387,19 +1625,6 @@ int sd_ring_advance(uint64_t new_read_seq)
     }
 
     return resp.res;
-}
-
-int sd_ring_advance_async(uint64_t new_read_seq)
-{
-    /* Fire-and-forget: queue the advance on the priority queue and return
-     * immediately (no worker round-trip). Used by the sync checkpoint so the
-     * BLE send stream is never stalled. Persist happens in the worker; if it
-     * fails the next checkpoint / the final blocking advance re-persists. */
-    sd_req_t req = {0};
-    req.type = REQ_ADVANCE_READ;
-    req.u.advance.new_read_seq = new_read_seq;
-    req.u.advance.resp = NULL;
-    return k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
 }
 
 int sd_ring_clear(void)

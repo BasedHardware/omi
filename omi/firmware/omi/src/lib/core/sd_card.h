@@ -22,7 +22,6 @@ typedef struct {
 
 int app_sd_init(void);
 int app_sd_off(void);
-void sd_write_pause(bool pause);
 bool is_sd_on(void);
 /** @brief True when the SD is powered AND mounted (ring reads/writes will work). */
 bool sd_is_ready(void);
@@ -34,16 +33,15 @@ bool sd_is_ready(void);
  * immediately so audio keeps being queued and buffers in the write queue until
  * the remount completes. Used to cut SD power while the mic is in AAD sleep.
  */
-void sd_request_power(bool on);
+int sd_request_power(bool on);
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 
-uint32_t write_to_file(uint8_t *data, uint32_t length);
+uint32_t write_to_file(const uint8_t *data, uint32_t length);
 
 int sd_ring_get_info(sd_ring_info_t *info);
 int sd_ring_read(uint64_t start_seq, uint8_t *buf, uint32_t max_bytes, uint32_t *bytes_read, uint32_t *packets_read);
 int sd_ring_advance(uint64_t new_read_seq);
-int sd_ring_advance_async(uint64_t new_read_seq);
 int sd_ring_clear(void);
 
 uint32_t get_file_size(void);
