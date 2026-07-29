@@ -71,7 +71,11 @@ def stub_reads(monkeypatch):
     )
     monkeypatch.setattr(generation_module, 'read_evidence', lambda uid: packet)
     monkeypatch.setattr(generation_module, 'read_previous_projections', lambda uid, limit: [])
-    monkeypatch.setattr(generation_module, '_store_image', lambda image_bytes, projection_id: 'https://img/x.png')
+    monkeypatch.setattr(
+        generation_module,
+        '_store_image',
+        lambda image_bytes, uid, projection_id: f'{uid}/{projection_id}.png',
+    )
     monkeypatch.setattr(generation_module, 'rate_emotions', lambda subject, evidence, material: PROFILE)
     return packet
 
@@ -93,7 +97,8 @@ def test_the_image_is_rendered_from_the_selected_subject(stub_reads):
     assert STAGE_IMAGERY[SUBJECT.stage].composition in prompt
     assert projection['generation']['prompt'] == prompt
     assert projection['imperative'] == SUBJECT.imperative
-    assert projection['image_url'] == 'https://img/x.png'
+    assert projection['image_url'].endswith(f"/v1/projection-images/{projection['id']}.png")
+    assert projection['image_path'] == f"uid-1/{projection['id']}.png"
 
 
 def test_the_persisted_document_records_what_produced_it(stub_reads):

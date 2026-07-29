@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -16,10 +17,12 @@ struct ProjectionPage: View {
     ScrollView {
       VStack(spacing: 20) {
         content
-        Button(action: { Task { await viewModel.generate() } }) {
-          Text(viewModel.isGenerating ? "Generating…" : "Generate")
+        if AppBuild.isNonProduction {
+          Button(action: { Task { await viewModel.generate() } }) {
+            Text(viewModel.isGenerating ? "Generating…" : "Generate")
+          }
+          .disabled(viewModel.isGenerating)
         }
-        .disabled(viewModel.isGenerating)
       }
       .frame(maxWidth: contentMaxWidth)
       .frame(maxWidth: .infinity)
@@ -28,13 +31,17 @@ struct ProjectionPage: View {
     }
     .background(OmiColors.backgroundPrimary)
     .task { await viewModel.load() }
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      viewModel.ownerDidChange()
+      Task { await viewModel.load() }
+    }
   }
 
   @ViewBuilder
   private var content: some View {
     if let projection = viewModel.projection {
       VStack(alignment: .leading, spacing: 16) {
-        projectionImage(projection)
+        projectionImage
         Text(projection.imperative)
           .font(.system(size: 20, weight: .semibold))
           .fixedSize(horizontal: false, vertical: true)
@@ -49,25 +56,22 @@ struct ProjectionPage: View {
   }
 
   @ViewBuilder
-  private func projectionImage(_ projection: Projection) -> some View {
-    if let url = projection.imageURL {
-      AsyncImage(url: url) { phase in
-        switch phase {
-        case .success(let image):
-          // Bounded so the imperative stays on screen: the generated image is 1024x1536,
-          // and unbounded it pushes the line it exists to deliver below the fold.
-          image.resizable().scaledToFit().frame(maxHeight: imageMaxHeight)
-        case .failure:
-          placeholder(systemName: "exclamationmark.triangle")
-        default:
-          ProgressView()
-            .frame(maxWidth: .infinity, minHeight: 240)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
-        }
-      }
-      .clipShape(RoundedRectangle(cornerRadius: 12))
+  private var projectionImage: some View {
+    if let image = viewModel.image {
+      // Bounded so the imperative stays on screen: the generated image is 1024x1536,
+      // and unbounded it pushes the line it exists to deliver below the fold.
+      Image(nsImage: image)
+        .resizable()
+        .scaledToFit()
+        .frame(maxHeight: imageMaxHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    } else if viewModel.isImageLoading {
+      ProgressView()
+        .frame(maxWidth: .infinity, minHeight: 240)
+        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     } else {
-      placeholder(systemName: "photo")
+      placeholder(systemName: viewModel.imageLoadFailed ? "exclamationmark.triangle" : "photo")
     }
   }
 
@@ -81,32 +85,179 @@ struct ProjectionPage: View {
   }
 }
 
+protocol ProjectionClient: Sendable {
+  func getProjections(
+    limit: Int,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> [Projection]
+
+  func generateProjection(
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> Projection?
+
+  func getProjectionImage(
+    from url: URL,
+    expectedOwnerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> Data
+}
+
+extension APIClient: ProjectionClient {}
+
 @MainActor
 final class ProjectionViewModel: ObservableObject {
   @Published private(set) var projection: Projection?
+  @Published private(set) var image: NSImage?
   @Published private(set) var isLoading = false
   @Published private(set) var isGenerating = false
+  @Published private(set) var isImageLoading = false
+  @Published private(set) var imageLoadFailed = false
   @Published private(set) var errorMessage: String?
 
+  private let client: any ProjectionClient
+  private let captureAuthorization: () -> RuntimeOwnerAuthorizationSnapshot?
+  private let authorizationIsCurrent: (RuntimeOwnerAuthorizationSnapshot) -> Bool
+  private var requestGeneration: UInt64 = 0
+
+  init(
+    client: any ProjectionClient = APIClient.shared,
+    captureAuthorization: @escaping () -> RuntimeOwnerAuthorizationSnapshot? = {
+      RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    },
+    authorizationIsCurrent: @escaping (RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      RuntimeOwnerIdentity.isAuthorizationCurrent($0)
+    }
+  ) {
+    self.client = client
+    self.captureAuthorization = captureAuthorization
+    self.authorizationIsCurrent = authorizationIsCurrent
+  }
+
   func load() async {
+    guard let authorization = captureAuthorization() else {
+      clearOwnerState()
+      return
+    }
+    let request = beginRequest()
     isLoading = true
-    defer { isLoading = false }
+    defer {
+      if requestGeneration == request { isLoading = false }
+    }
     do {
-      projection = try await APIClient.shared.getProjections(limit: 1).first
+      let nextProjection = try await client.getProjections(
+        limit: 1,
+        expectedOwnerId: authorization.ownerID,
+        authorizationSnapshot: authorization
+      ).first
+      guard canApply(request, authorization: authorization) else { return }
+      await apply(nextProjection, request: request, authorization: authorization)
+      guard canApply(request, authorization: authorization) else { return }
       errorMessage = nil
     } catch {
+      guard canApply(request, authorization: authorization) else { return }
+      projection = nil
+      image = nil
       errorMessage = "Could not load projections: \(error.localizedDescription)"
     }
   }
 
   func generate() async {
+    guard let authorization = captureAuthorization() else {
+      clearOwnerState()
+      return
+    }
+    let request = beginRequest()
     isGenerating = true
-    defer { isGenerating = false }
+    defer {
+      if requestGeneration == request { isGenerating = false }
+    }
     do {
-      projection = try await APIClient.shared.generateProjection()
+      let nextProjection = try await client.generateProjection(
+        expectedOwnerId: authorization.ownerID,
+        authorizationSnapshot: authorization)
+      guard canApply(request, authorization: authorization) else { return }
+      await apply(nextProjection, request: request, authorization: authorization)
+      guard canApply(request, authorization: authorization) else { return }
       errorMessage = nil
     } catch {
+      guard canApply(request, authorization: authorization) else { return }
+      projection = nil
+      image = nil
       errorMessage = "Could not generate a projection: \(error.localizedDescription)"
     }
+  }
+
+  func ownerDidChange() {
+    clearOwnerState()
+  }
+
+  private func apply(
+    _ nextProjection: Projection?,
+    request: UInt64,
+    authorization: RuntimeOwnerAuthorizationSnapshot
+  ) async {
+    guard let nextProjection else {
+      projection = nil
+      image = nil
+      imageLoadFailed = false
+      return
+    }
+    guard let imageURL = nextProjection.imageURL else {
+      projection = nextProjection
+      image = nil
+      imageLoadFailed = true
+      return
+    }
+
+    isImageLoading = true
+    defer {
+      if requestGeneration == request { isImageLoading = false }
+    }
+    do {
+      let data = try await client.getProjectionImage(
+        from: imageURL,
+        expectedOwnerId: authorization.ownerID,
+        authorizationSnapshot: authorization)
+      guard canApply(request, authorization: authorization) else { return }
+      guard let loadedImage = NSImage(data: data) else {
+        projection = nextProjection
+        image = nil
+        imageLoadFailed = true
+        return
+      }
+      projection = nextProjection
+      image = loadedImage
+      imageLoadFailed = false
+    } catch {
+      guard canApply(request, authorization: authorization) else { return }
+      projection = nextProjection
+      image = nil
+      imageLoadFailed = true
+    }
+  }
+
+  private func beginRequest() -> UInt64 {
+    requestGeneration &+= 1
+    return requestGeneration
+  }
+
+  private func canApply(
+    _ request: UInt64,
+    authorization: RuntimeOwnerAuthorizationSnapshot
+  ) -> Bool {
+    requestGeneration == request && authorizationIsCurrent(authorization)
+  }
+
+  private func clearOwnerState() {
+    requestGeneration &+= 1
+    projection = nil
+    image = nil
+    isLoading = false
+    isGenerating = false
+    isImageLoading = false
+    imageLoadFailed = false
+    errorMessage = nil
   }
 }

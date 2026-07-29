@@ -9,6 +9,12 @@ struct Projection: Identifiable, Sendable {
   let imperative: String
   let imageURL: URL?
 
+  init(id: String, imperative: String, imageURL: URL?) {
+    self.id = id
+    self.imperative = imperative
+    self.imageURL = imageURL
+  }
+
   init?(_ dto: OmiAPI.ProjectionResponse) {
     guard let id = dto.id else { return nil }
     self.id = id
@@ -44,5 +50,37 @@ extension APIClient {
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)
     return Projection(response)
+  }
+
+  /// Loads private image bytes through the same owner-bound Firebase session as
+  /// the projection document. The backend performs the final uid ownership check.
+  func getProjectionImage(
+    from url: URL,
+    expectedOwnerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> Data {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    try validateExpectedOwner(authPolicy)
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true,
+      includeBYOK: false,
+      expectedAuthOwnerId: authPolicy.expectedAuthOwnerId)
+    try validateExpectedOwner(authPolicy)
+
+    let (data, response) = try await performAuthenticatedData(
+      for: request,
+      authPolicy: authPolicy)
+    guard (200...299).contains(response.statusCode) else {
+      let detail = OmiHTTPTransport.extractErrorDetail(from: data)
+      throw APIError.httpError(statusCode: response.statusCode, detail: detail)
+    }
+    guard !data.isEmpty else { throw APIError.invalidResponse }
+    try validateExpectedOwner(authPolicy)
+    return data
   }
 }

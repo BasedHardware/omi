@@ -17,16 +17,20 @@ import os
 import tempfile
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Mapping, cast
 
 from utils.llm.gateway_client import generate_image_via_gateway
 from utils.observability.fallback import record_fallback
-from utils.other import storage
 from utils.projections.emotions import rate_emotions
 from utils.projections.image_prompt import build_image_prompt
 from utils.projections.selector import MAX_PREVIOUS, select_subject
 from utils.projections.sources import read_evidence, read_previous_projections
+from utils.projections.storage import (
+    local_projection_image_path,
+    projection_image_path,
+    upload_projection_image,
+    uses_gcs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,34 +40,23 @@ PROJECTION_IMAGE_QUALITY = 'medium'
 PROJECTION_USAGE_FEATURE = 'projection_image'
 
 
-def _local_image_root() -> Path:
-    root = Path(os.getenv('PROJECTION_LOCAL_IMAGE_DIR') or Path(tempfile.gettempdir()) / 'omi-projection-images')
-    root.mkdir(parents=True, exist_ok=True)
-    return root
-
-
-def local_projection_image_path(projection_id: str) -> Path:
-    """Path of a locally stored projection image, used when no GCS bucket is configured."""
-    return _local_image_root() / f'{projection_id}.png'
-
-
 def _public_base_url() -> str:
     return (os.getenv('BASE_API_URL') or 'http://127.0.0.1:8080').rstrip('/')
 
 
-def _store_image(image_bytes: bytes, projection_id: str) -> str:
-    """Persist the image and return the URL the client will load it from.
+def _store_image(image_bytes: bytes, uid: str, projection_id: str) -> str:
+    """Persist an owner-scoped private image and return its storage reference.
 
-    Production stores in GCS and returns the public object URL. When no bucket is
-    configured — the local development case, which has no GCS credentials — the image is
-    written to disk and served by this backend at an equivalently unguessable URL.
+    Production stores in private GCS without object ACL changes. Local development stores
+    under a hashed owner directory. Neither storage path is itself a delivery authority:
+    the authenticated image route verifies the projection belongs to the requesting uid.
     """
-    if storage.projection_images_bucket:
+    if uses_gcs():
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as handle:
             handle.write(image_bytes)
             temp_path = handle.name
         try:
-            return storage.upload_projection_image(temp_path, projection_id)
+            return upload_projection_image(temp_path, uid, projection_id)
         finally:
             os.unlink(temp_path)
 
@@ -75,8 +68,10 @@ def _store_image(image_bytes: bytes, projection_id: str) -> str:
         outcome='degraded',
         log=logger,
     )
-    local_projection_image_path(projection_id).write_bytes(image_bytes)
-    return f'{_public_base_url()}/v1/projection-images/{projection_id}.png'
+    path = local_projection_image_path(uid, projection_id)
+    path.write_bytes(image_bytes)
+    path.chmod(0o600)
+    return projection_image_path(uid, projection_id)
 
 
 def generate_projection(uid: str) -> dict[str, Any]:
@@ -98,7 +93,7 @@ def generate_projection(uid: str) -> dict[str, Any]:
     emotions = rate_emotions(subject.subject, subject.evidence, packet.as_prompt_text())
 
     image_prompt = build_image_prompt(subject, emotions)
-    image_url = _store_image(_generate_image(image_prompt), projection_id)
+    image_path = _store_image(_generate_image(image_prompt), uid, projection_id)
     logger.info(
         'generated projection uid=%s projection_id=%s stage=%s fell_through=%s',
         uid,
@@ -111,7 +106,8 @@ def generate_projection(uid: str) -> dict[str, Any]:
         'id': projection_id,
         'created_at': datetime.now(timezone.utc),
         'imperative': subject.imperative,
-        'image_url': image_url,
+        'image_url': f'{_public_base_url()}/v1/projection-images/{projection_id}.png',
+        'image_path': image_path,
         'subject': subject.subject,
         'stage': subject.stage.value,
         'projection': subject.projection,

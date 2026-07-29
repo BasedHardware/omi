@@ -10,12 +10,14 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
+from google.cloud.exceptions import NotFound as BlobNotFound
 from pydantic import BaseModel, ConfigDict, Field
 
 from database import projections as projections_db
 from utils.other import endpoints as auth
 from utils.projections import NoProjectionSubject, generate_projection, local_projection_image_path
+from utils.projections import storage as projection_storage
 
 router = APIRouter()
 
@@ -49,7 +51,7 @@ class ProjectionsResponse(BaseModel):
 # of the user's own week — so a page of thirty projections would ship thirty copies of it.
 # The response model allows extra keys, so these have to be dropped explicitly rather than
 # relied on to be filtered by the schema.
-INTERNAL_PROJECTION_FIELDS = ('selection', 'projection', 'evidence', 'setting', 'tone', 'emotions')
+INTERNAL_PROJECTION_FIELDS = ('selection', 'projection', 'evidence', 'setting', 'tone', 'emotions', 'image_path')
 
 
 def _served(projection: Dict[str, Any]) -> Dict[str, Any]:
@@ -95,18 +97,30 @@ def get_projection_endpoint(projection_id: str, uid: str = Depends(auth.get_curr
 
 
 @router.get('/v1/projection-images/{projection_id}.png', tags=['v1'], include_in_schema=False)
-def get_projection_image(projection_id: str) -> FileResponse:
-    """Serve a locally stored projection image.
-
-    Only reachable when no `BUCKET_PROJECTION_IMAGES` is configured; with a bucket, images
-    are public GCS objects and this backend never serves the bytes. Like those objects, the
-    URL is unauthenticated and unguessable rather than uid-scoped.
-    """
+def get_projection_image(projection_id: str, uid: str = Depends(auth.get_current_user_uid)) -> Response:
+    """Serve private image bytes only to the projection's authenticated owner."""
     try:
         uuid.UUID(projection_id)
     except ValueError:
         raise HTTPException(status_code=404, detail='Projection image not found')
-    path = local_projection_image_path(projection_id)
-    if not path.is_file():
+
+    projection = projections_db.get_projection(uid, projection_id)
+    if not projection:
         raise HTTPException(status_code=404, detail='Projection image not found')
-    return FileResponse(path, media_type='image/png')
+
+    try:
+        if projection_storage.uses_gcs():
+            image_bytes = projection_storage.download_projection_image(uid, projection_id)
+        else:
+            path = local_projection_image_path(uid, projection_id)
+            if not path.is_file():
+                raise FileNotFoundError
+            image_bytes = path.read_bytes()
+    except (BlobNotFound, FileNotFoundError):
+        raise HTTPException(status_code=404, detail='Projection image not found')
+
+    return Response(
+        content=image_bytes,
+        media_type='image/png',
+        headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'},
+    )

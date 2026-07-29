@@ -6,7 +6,7 @@
     "backend/utils/memory/canonical_memory_adapter.py": 2012,
     "backend/utils/memory/legacy_backfill.py": 1723,
     "backend/utils/memory_ingestion/pipeline.py": 1711,
-    "backend/utils/other/storage.py": 1594,
+    "backend/utils/other/storage.py": 1585,
     "backend/utils/retrieval/tools/calendar_tools.py": 1513,
     "backend/utils/sync/pipeline.py": 2491
   },

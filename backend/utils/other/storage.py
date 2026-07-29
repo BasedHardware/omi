@@ -1502,15 +1502,6 @@ def upload_app_logo(file_path: str, app_id: str):
     return f'https://storage.googleapis.com/{omi_apps_bucket}/{path}'
 
 
-def upload_projection_image(file_path: str, projection_id: str) -> str:
-    bucket = _get_storage_client().bucket(projection_images_bucket)
-    path = f'{projection_id}.png'
-    blob = bucket.blob(path)
-    blob.cache_control = 'public, no-cache'
-    blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{projection_images_bucket}/{path}'
-
-
 def delete_app_logo(img_url: str):
     prefix = f'https://storage.googleapis.com/{omi_apps_bucket}/'
     # Require the URL to START WITH the app-logo prefix, not merely contain it: a foreign-bucket URL
