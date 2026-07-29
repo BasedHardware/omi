@@ -1295,11 +1295,12 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
   }
 
-  func testChatSelectionDoesNotWrapStackChromeInSelectionOverlay() throws {
+  func testChatSelectionIsLimitedToSettledMessageBodies() throws {
     // Mechanical guard for the omi-chat-continuity main-thread freeze:
     // ChatMessagesView used to apply `.textSelection(.enabled)` on the LazyVStack,
     // wrapping every agent-card header Text in SelectionOverlay and thrashing
-    // GraphHost via setFont → invalidateIntrinsicContentSize.
+    // GraphHost via setFont → invalidateIntrinsicContentSize. Settled message
+    // bodies may opt in; streaming content and stack chrome must not.
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -1321,13 +1322,16 @@ final class ChatTimelineContinuityTests: XCTestCase {
       messagesSource.contains(".textSelection(.enabled)"),
       "chat message stack must not enable selection on chrome Text views"
     )
-    XCTAssertFalse(
-      markdownSource.contains(".textSelection(.enabled)"),
-      "chat Markdown must not create SelectionOverlay views that can loop while scrolling"
+    XCTAssertTrue(
+      markdownSource.contains("if textSelectionEnabled {")
+        && markdownSource.contains(".textSelection(.enabled)")
+        && markdownSource.contains(".textSelection(.disabled)"),
+      "the markdown boundary must make body selection an explicit opt-in"
     )
     XCTAssertTrue(
-      markdownSource.contains(".textSelection(.disabled)"),
-      "the OmiMarkdown boundary must explicitly suppress inherited text selection"
+      bubbleSource.contains("isStreaming: message.isStreaming")
+        && markdownSource.contains("self.textSelectionEnabled = !isStreaming"),
+      "main-chat message bodies must enable native selection only after streaming finishes"
     )
     XCTAssertTrue(
       bubbleSource.contains(".textSelection(.disabled)"),
