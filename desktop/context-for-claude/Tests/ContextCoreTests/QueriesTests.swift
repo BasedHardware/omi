@@ -100,6 +100,91 @@ final class QueriesTests: XCTestCase {
         }
     }
 
+    // MARK: - Confidence
+
+    func testHitsCarryTheTranscriberConfidenceAndMarkTheUncertainOnes() throws {
+        let scratch = try makeEmptyFixture()
+        let sessionId = try scratch.store.openSession(at: Fixture.base, appHint: "zoom.us")
+        // 0.57 is the real score from the dogfooding session where background music came back as
+        // the user's own first-person speech; 0.94 is where an ordinary clean line lands.
+        try addSegment(scratch, session: sessionId, at: Fixture.base + 10,
+                       "and I will always love you hallway", confidence: 0.57)
+        try addSegment(scratch, session: sessionId, at: Fixture.base + 30,
+                       "we agreed on the hallway conversation", confidence: 0.94)
+
+        let byText = try Dictionary(
+            uniqueKeysWithValues: Queries.recall(scratch.store, query: "hallway").map { ($0.text, $0) })
+        XCTAssertEqual(byText.count, 2, "recall lost a line")
+
+        let uncertain = try XCTUnwrap(byText["and I will always love you hallway"])
+        let certain = try XCTUnwrap(byText["we agreed on the hallway conversation"])
+        XCTAssertEqual(uncertain.confidence, 0.57)
+        XCTAssertEqual(certain.confidence, 0.94)
+        // Marked, not removed: the reader is told the line is shaky and still gets to see it.
+        XCTAssertTrue(uncertain.isLowConfidence)
+        XCTAssertFalse(certain.isLowConfidence)
+
+        // The same value has to survive every path that builds a speech hit, or a reader gets one
+        // answer from `recall` and a different one from `transcript` about the same line.
+        let transcript = try Queries.transcript(scratch.store, sessionId: sessionId)
+        XCTAssertEqual(transcript.map(\.confidence), [0.57, 0.94])
+        XCTAssertEqual(transcript.map(\.isLowConfidence), [true, false])
+    }
+
+    func testLowConfidenceLinesAreMarkedRatherThanFilteredOut() throws {
+        let scratch = try makeEmptyFixture()
+        let now = ContextTime.now
+        let sessionId = try scratch.store.openSession(at: now - 600, appHint: nil)
+        // Everything the transcriber has ever emitted sits at or above ~0.5, so this is the whole
+        // bottom of the observed range — the case most tempting to hide, and the one that must not
+        // be hidden. A record that looks cleaner than the capture actually was is a lie.
+        try addSegment(scratch, session: sessionId, at: now - 300, "barely audible aside", confidence: 0.5)
+        try addSegment(scratch, session: sessionId, at: now - 120, "clearly stated decision", confidence: 0.97)
+
+        let recall = try Queries.recall(scratch.store, query: "barely audible aside")
+        XCTAssertEqual(recall.map(\.text), ["barely audible aside"], "recall dropped a low-confidence line")
+        XCTAssertTrue(try XCTUnwrap(recall.first).isLowConfidence)
+
+        let recent = try Queries.recent(scratch.store, minutes: 30)
+        XCTAssertEqual(recent.map(\.text), ["clearly stated decision", "barely audible aside"])
+        XCTAssertEqual(recent.map(\.isLowConfidence), [false, true])
+        XCTAssertEqual(recent.map(\.confidence), [0.97, 0.5])
+
+        XCTAssertEqual(try Queries.transcript(scratch.store, sessionId: sessionId).count, 2)
+    }
+
+    func testAnUnscoredLineIsUnknownRatherThanLowConfidence() throws {
+        // The seeded corpus predates the column: every one of its lines has a NULL confidence, which
+        // is exactly the state of a database captured before this shipped. None of it may come back
+        // flagged — an absent score is not a bad one, and marking a year of good transcript as
+        // doubtful would discredit the record as thoroughly as presenting music as speech.
+        let hits = try Queries.recall(fixture.store, query: "pricing")
+            + Queries.transcript(fixture.store, sessionId: fixture.sessionA)
+            + Queries.screen(fixture.store)
+
+        XCTAssertFalse(hits.isEmpty)
+        for hit in hits {
+            XCTAssertNil(hit.confidence, "\(hit.kind) hit invented a score: \(hit.text)")
+            XCTAssertFalse(hit.isLowConfidence, "an unscored line was marked uncertain: \(hit.text)")
+        }
+    }
+
+    func testTheConfidenceFloorSitsBetweenTheMusicBandAndOrdinarySpeech() throws {
+        // Guards the number itself. Scores in this app's logs run ~0.5–0.99 and the music lines sat
+        // low; a floor that drifted below 0.57 would stop catching them, and one that drifted up
+        // into the 0.9s would flag nearly everything and mean nothing.
+        XCTAssertGreaterThan(Hit.lowConfidenceFloor, 0.57)
+        XCTAssertLessThan(Hit.lowConfidenceFloor, 0.9)
+
+        let below = Hit(kind: "said", at: Fixture.base, text: "x", confidence: Hit.lowConfidenceFloor - 0.01)
+        let onTheFloor = Hit(kind: "said", at: Fixture.base, text: "x", confidence: Hit.lowConfidenceFloor)
+        let unscored = Hit(kind: "said", at: Fixture.base, text: "x")
+        XCTAssertTrue(below.isLowConfidence)
+        XCTAssertFalse(onTheFloor.isLowConfidence, "the floor itself is not below the floor")
+        XCTAssertFalse(unscored.isLowConfidence)
+        XCTAssertNil(unscored.confidence)
+    }
+
     // MARK: - Recent and screen
 
     func testRecentWindowIsMinutesNotSeconds() throws {
@@ -285,5 +370,24 @@ final class QueriesTests: XCTestCase {
         let scratch = try Fixture(seeded: false)
         addTeardownBlock { scratch.tearDown() }
         return scratch
+    }
+
+    /// A scored line. `Fixture.addSegment` writes the shape the rest of the corpus needs — no score,
+    /// which is the right default everywhere else — so the confidence tests build theirs here.
+    private func addSegment(
+        _ fixture: Fixture,
+        session: Int64,
+        at startedAt: Double,
+        _ text: String,
+        confidence: Double?
+    ) throws {
+        _ = try fixture.store.insertSegment(
+            Segment(
+                sessionId: session,
+                startedAt: startedAt,
+                endedAt: startedAt + 5,
+                source: .mic,
+                text: text,
+                confidence: confidence))
     }
 }

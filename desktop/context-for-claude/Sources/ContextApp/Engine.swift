@@ -86,6 +86,12 @@ private enum CaptureComponent: CaseIterable {
 final class Engine: ObservableObject {
     /// Keeps the sign-in subscription that provisions the MCP key alive.
     private var keyProvisioning: Set<AnyCancellable> = []
+    /// Sums mic and system into the single stream the backend transcribes.
+    private let mixer = AudioMixer()
+    /// The latest text seen per backend segment id, so a revised segment replaces rather than
+    /// duplicates. Cleared whenever the server rolls to a new conversation.
+    private var cloudSegmentText: [String: String] = [:]
+    private var cloudConversationId: String?
 
     static let shared = Engine()
 
@@ -169,6 +175,10 @@ final class Engine: ObservableObject {
         // 2. Permissions and the transcript consumer: what the sensors need in order to start.
         capabilities = Permissions.report()
         startLineConsumer()
+        // Started with capture, not with the account. The socket reports `.idle` until there is a
+        // session and connects when one lands, so putting it behind the sign-in restore would only
+        // make it inherit that call's latency.
+        startCloudTranscription()
 
         // 3. Sensors, before storage and before the account. Nothing they produce is lost while the
         //    database opens — `EngineStore` holds it, bounded, until there is somewhere to put it.
@@ -241,10 +251,80 @@ final class Engine: ObservableObject {
         }
     }
 
+    /// Streams mixed audio to the Omi backend, which transcribes it with real diarization and the
+    /// user's own speech profile — attribution this app can only approximate locally as
+    /// "mic is me, system is everyone else".
+    ///
+    /// The local transcriber is deliberately left running underneath. Cloud transcription needs a
+    /// network and an account in good standing; when either is missing the socket reports it and
+    /// the local path is already producing lines, so the failure costs transcript *quality* rather
+    /// than the recording itself.
+    func mixerInput(mic: Data? = nil, system: Data? = nil) {
+        if let mic { mixer.setMicAudio(mic) }
+        if let system { mixer.setSystemAudio(system) }
+    }
+
+    private func startCloudTranscription() {
+        mixer.start { chunk in
+            ListenSocket.shared.send(chunk)
+        }
+
+        ListenSocket.shared.onConversationId = { [weak self] id in
+            guard let self else { return }
+            if self.cloudConversationId != id {
+                self.cloudConversationId = id
+                self.cloudSegmentText.removeAll()
+            }
+        }
+
+        ListenSocket.shared.onSegments = { [weak self] segments in
+            guard let self else { return }
+            for segment in segments where !segment.text.isEmpty {
+                self.acceptCloudLine(segment)
+            }
+        }
+
+        Task { await ListenSocket.shared.start() }
+    }
+
+    /// A line the backend transcribed, written on the same path as a local one so sessions,
+    /// upload and search see no difference between the two sources.
+    ///
+    /// Two things here are not obvious and both were wrong first time.
+    ///
+    /// `segment.start` is **seconds from the start of the conversation**, not a Unix epoch — the
+    /// server applies its own offset before sending. Treating it as an epoch put every cloud line
+    /// in January 1970, and `SessionPolicy` then saw a 56-year gap before each one and opened a
+    /// fresh session per line. The conversation's own anchor puts them back on the real clock.
+    ///
+    /// And the backend **re-sends a segment under the same id** when punctuation, diarization or a
+    /// speech-profile match improves it. Appending on every batch stores the same sentence over and
+    /// over, so a revision replaces its predecessor instead.
+    private func acceptCloudLine(_ segment: CloudSegment) {
+        let base = ListenSocket.shared.conversationStartedAt ?? ContextTime.now
+        if let id = segment.id {
+            if cloudSegmentText[id] == segment.text { return }
+            cloudSegmentText[id] = segment.text
+        }
+        let line = TranscriptLine(
+            text: segment.text,
+            startedAt: base + segment.start,
+            endedAt: base + segment.end,
+            source: segment.isUser ? .mic : .system
+        )
+        lastLine = line.text
+        lineFeed?.yield(line)
+    }
+
     func pause() {
         guard !isPaused else { return }
         isPaused = true
         stopAllSources()
+        // The socket has to close with the capture. Left open with no audio arriving, the server
+        // hangs up at 90 s and the client reconnects on backoff for as long as the app is paused —
+        // a reconnect loop against the backend for a user who deliberately stopped recording.
+        ListenSocket.shared.stop()
+        mixer.stop()
         // Ends the conversation, not just the capture. The app delegate also routes quit through
         // here, and a session left open reports a recording that stopped hours ago.
         store.closeOpenSession()
@@ -253,6 +333,7 @@ final class Engine: ObservableObject {
     }
 
     func resume() {
+        startCloudTranscription()
         guard isPaused else { return }
         isPaused = false
         // Reasons recorded before the pause describe a pipeline that no longer exists. Storage is
@@ -352,7 +433,20 @@ final class Engine: ObservableObject {
                 // entered, so the capture begins now and the backlog decodes once the model lands.
                 let modelReady = Task { try await transcriber.start() }
                 self?.pumps[component] = Task.detached(priority: .userInitiated) {
-                    for await chunk in chunks { await transcriber.append(chunk) }
+                    for await chunk in chunks {
+                        // Both paths see every chunk. The cloud is preferred — it diarises and
+                        // matches against the user's speech profile, which this app cannot do — but
+                        // the local transcriber keeps running so a dropped network or a paywalled
+                        // account degrades to a worse transcript rather than to silence.
+                        await MainActor.run {
+                            switch component {
+                            case .microphone: Engine.shared.mixerInput(mic: chunk)
+                            case .systemAudio: Engine.shared.mixerInput(system: chunk)
+                            default: break
+                            }
+                        }
+                        await transcriber.append(chunk)
+                    }
                 }
                 try await device.start(onChunk: { feed.yield($0) }, onLevel: { _ in })
                 try await modelReady.value

@@ -56,6 +56,96 @@ final class StoreTests: XCTestCase {
         }
     }
 
+    func testConfidenceMigrationAddsTheColumnWithoutDisturbingExistingRows() throws {
+        // Rewinds a populated database to the shape it had before per-line confidence existed —
+        // column gone, ledger entry forgotten — and reopens it. That is the upgrade a user with
+        // months of transcript actually performs, and the only way to prove the migration adds the
+        // column *to rows that are already there* rather than only to a database it created itself.
+        let url = fixture.root.appendingPathComponent("legacy.db")
+        let legacySessionId: Int64
+        let legacySegmentId: Int64
+        do {
+            let legacy = try ContextStore(url: url)
+            legacySessionId = try legacy.openSession(at: Fixture.base, appHint: "zoom.us")
+            legacySegmentId = try legacy.insertSegment(
+                Segment(
+                    sessionId: legacySessionId,
+                    startedAt: Fixture.base + 10,
+                    endedAt: Fixture.base + 14,
+                    source: .mic,
+                    text: "twas brillig and the slithy toves"))
+            try legacy.write { db in
+                try db.execute(sql: "ALTER TABLE segments DROP COLUMN confidence")
+                try db.execute(
+                    sql: "DELETE FROM grdb_migrations WHERE identifier = ?",
+                    arguments: ["v3-segment-confidence"])
+            }
+            XCTAssertFalse(
+                try columns(of: "segments", in: legacy).contains("confidence"),
+                "the fixture failed to rewind: this test would prove nothing")
+        }
+
+        let upgraded = try ContextStore(url: url)
+
+        XCTAssertTrue(try columns(of: "segments", in: upgraded).contains("confidence"))
+        let applied: [String] = try upgraded.read { db in
+            try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
+        }
+        // Exactly the two the store's own migrator registers. A missing entry would mean the
+        // migration re-runs on every launch and fails on the second one.
+        XCTAssertEqual(applied, ["v1", "v3-segment-confidence"])
+
+        // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
+        // migrator and skips itself when its identifier is already recorded. Proving the two live
+        // together is the only way to know the new identifier did not quietly claim its slot.
+        try UploadQueue.prepare(upgraded)
+        let coexisting: Set<String> = try upgraded.read { db in
+            Set(try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations"))
+        }
+        XCTAssertEqual(coexisting, ["v1", "v3-segment-confidence", UploadQueue.migrationIdentifier])
+        XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
+
+        let segments: [Segment] = try upgraded.read { try Segment.fetchAll($0) }
+        let segment = try XCTUnwrap(segments.first)
+        XCTAssertEqual(segments.count, 1, "the migration lost or duplicated a row")
+        XCTAssertEqual(segment.id, legacySegmentId)
+        XCTAssertEqual(segment.sessionId, legacySessionId)
+        XCTAssertEqual(segment.startedAt, Fixture.base + 10)
+        XCTAssertEqual(segment.endedAt, Fixture.base + 14)
+        XCTAssertEqual(segment.source, SegmentSource.mic.rawValue)
+        XCTAssertEqual(segment.text, "twas brillig and the slithy toves")
+        // The whole point of the column being nullable: a line captured before scores existed is
+        // unknown, not doubtful.
+        XCTAssertNil(segment.confidence)
+        XCTAssertEqual(
+            try nullConfidenceCount(in: upgraded), 1,
+            "an existing row was backfilled with a number the model never produced")
+
+        // Search has to survive the alter: the FTS index is external-content over `segments`, so a
+        // column added under it must leave the sync triggers and the index intact.
+        let matches: Int = try upgraded.read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM segments_fts WHERE segments_fts MATCH ?",
+                arguments: ["brillig"]) ?? 0
+        }
+        XCTAssertEqual(matches, 1, "the migration broke the segments FTS index")
+
+        // And the upgraded database has to accept a scored line, which is what the column is for.
+        let scoredId = try upgraded.insertSegment(
+            Segment(
+                sessionId: legacySessionId,
+                startedAt: Fixture.base + 20,
+                endedAt: Fixture.base + 24,
+                source: .mic,
+                text: "mimsy were the borogoves",
+                confidence: 0.91))
+        let scored: Segment? = try upgraded.read { db in
+            try Segment.fetchOne(db, sql: "SELECT * FROM segments WHERE id = ?", arguments: [scoredId])
+        }
+        XCTAssertEqual(try XCTUnwrap(scored).confidence, 0.91)
+    }
+
     // MARK: - Round trips
 
     func testSessionSegmentAndFrameRoundTrip() throws {
@@ -112,6 +202,47 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(frame.windowTitle, "Pricing — Notion")
         XCTAssertEqual(frame.ocrText, "pricing change rollout notes")
         XCTAssertEqual(frame.imagePath, imagePath)
+    }
+
+    func testSegmentConfidenceRoundTripsAndAnAbsentScoreStaysNull() throws {
+        let store = fixture.store
+        let sessionId = try store.openSession(at: Fixture.base, appHint: nil)
+        // 0.57 is the real number from the dogfooding session: background music transcribed through
+        // the microphone as the user's own first-person speech.
+        let uncertainId = try store.insertSegment(
+            Segment(
+                sessionId: sessionId, startedAt: Fixture.base + 10, endedAt: Fixture.base + 14,
+                source: .mic, text: "and I will always love you", confidence: 0.57))
+        let certainId = try store.insertSegment(
+            Segment(
+                sessionId: sessionId, startedAt: Fixture.base + 30, endedAt: Fixture.base + 34,
+                source: .mic, text: "let us ship the pricing change on Friday", confidence: 0.98))
+        // A caller that has no score — every writer before this column existed, and any future one
+        // whose engine cannot produce one.
+        let unscoredId = try store.insertSegment(
+            Segment(
+                sessionId: sessionId, startedAt: Fixture.base + 50, endedAt: Fixture.base + 54,
+                source: .system, text: "sounds good, I will draft the plan"))
+
+        let byID: [Int64: Segment] = try store.read { db in
+            try Segment.fetchAll(db).reduce(into: [:]) { $0[$1.id ?? -1] = $1 }
+        }
+
+        XCTAssertEqual(byID[uncertainId]?.confidence, 0.57)
+        XCTAssertEqual(byID[certainId]?.confidence, 0.98)
+        // The assertion the whole design turns on: an unscored line reads as unknown, and never as
+        // a zero that would libel a line the model transcribed perfectly well.
+        XCTAssertNil(try XCTUnwrap(byID[unscoredId]).confidence)
+        XCTAssertNotEqual(byID[unscoredId]?.confidence, 0)
+
+        // Through the column itself, not only through the decoder: a NULL that arrived as 0.0 would
+        // still decode to `Optional(0.0)` and pass a nil-check written any less carefully.
+        XCTAssertEqual(try nullConfidenceCount(in: store), 1)
+        let stored: [Double] = try store.read { db in
+            try Double.fetchAll(
+                db, sql: "SELECT confidence FROM segments WHERE confidence IS NOT NULL ORDER BY startedAt")
+        }
+        XCTAssertEqual(stored, [0.57, 0.98])
     }
 
     func testClosingAnUnknownSessionIsANoOp() throws {
@@ -426,6 +557,25 @@ final class StoreTests: XCTestCase {
         data.append(Data(repeating: 0, count: max(0, bytes - data.count)))
         try data.write(to: url)
         return url.path
+    }
+
+    /// Column names as SQLite itself reports them, so a schema assertion cannot be satisfied by a
+    /// record type that merely claims to have the property.
+    private func columns(of table: String, in store: ContextStore) throws -> Set<String> {
+        try store.read { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))")
+            return Set(rows.compactMap { row -> String? in row["name"] })
+        }
+    }
+
+    private func tableExists(_ name: String, in store: ContextStore) throws -> Bool {
+        try store.read { db in try db.tableExists(name) }
+    }
+
+    private func nullConfidenceCount(in store: ContextStore) throws -> Int {
+        try store.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM segments WHERE confidence IS NULL") ?? -1
+        }
     }
 
     private func count(of table: String) throws -> Int {

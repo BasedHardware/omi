@@ -350,12 +350,38 @@ actor Transcriber {
 
         let samples = PCM.floatSamples(int16LE: window)
 
-        // Songs, TV and videos come through the system tap exactly like a call does. Apple's
-        // on-device classifier is the only thing that tells them apart, and it runs before Parakeet
-        // so music also costs no transcription. Never applied to the mic: the user's own voice is
-        // always worth keeping, including when they sing.
-        if source == .system, await Self.windowIsMusic(samples) {
-            ContextLog.info("system window skipped as music/video (rms \(String(format: "%.4f", rms)))", "stt")
+        // Songs, TV and videos come through the system tap exactly like a call does — and a speaker
+        // in the room reaches the mic exactly like the user does. Apple's on-device classifier is
+        // the only thing that tells them apart, and it runs before Parakeet so music also costs no
+        // transcription.
+        //
+        // Both channels are gated. The mic used to be exempt, on the reasoning that the user's own
+        // voice is always worth keeping including when they sing, and that exemption is what let a
+        // stereo in the room be transcribed and filed under `speaker == "me"`. That is the one
+        // failure this app cannot absorb: a lyric stored as first-person speech is indistinguishable
+        // from something the user actually said, `recall` hands it to Claude as evidence about their
+        // life, and the product's own framing ("empty inside the coverage window means it did not
+        // happen") makes it *more* credible rather than less. Losing the user's own singing is the
+        // price of that, and it is the right way round — a sung line dropped is a gap in a
+        // transcript, a sung line kept is a sentence they never said.
+        //
+        // The thresholds differ per channel and both are biased hard towards keeping: see
+        // ``minimumMusicShare`` and ``MusicTally``.
+        //
+        // Skipping is safe for the timeline because `samplesConsumed` was advanced above, before any
+        // gate could return — the clock counts audio that *left the buffer*, decoded or not, so a
+        // dropped window leaves a hole rather than shifting every later timestamp.
+        let verdict = await Self.windowIsMusic(samples, minimumMusicShare: minimumMusicShare)
+        if verdict.isMusic {
+            // Metrics only, and the tally counts specifically so a future retune has something to
+            // read: this gate spent its whole life returning `false` for a mechanical reason (see
+            // ``classifyAsMusic``) and a log line that only said "skipped" could never have shown it.
+            ContextLog.info(
+                String(
+                    format: "%@ window skipped as music (rms %.4f, music %d/%d frames, "
+                        + "speech %d frames, peak speech %.2f)",
+                    source.rawValue, rms, verdict.musicFrames, verdict.frames, verdict.speechFrames,
+                    verdict.peakSpeechConfidence), "stt")
             return
         }
 
@@ -404,25 +430,68 @@ actor Transcriber {
 
     // MARK: - Music gate
 
-    /// True when a window is music or singing rather than speech.
+    /// How much of a window must come back as music before it is dropped, per channel.
+    ///
+    /// The two channels hear music over different paths, and one number does not fit both. System
+    /// audio *is* the recording: full level, no room, no noise. The mic hears a speaker across a
+    /// room — reverberant, low-passed, mixed with room tone, then levelled by the mic's own AGC.
+    ///
+    /// Measured, that path does the opposite of what it sounds like it should. Rendering seven
+    /// tracks through a room impulse plus room tone recorded on this machine's own mic raised the
+    /// average music-classified frames from 5.2 of 9 (played clean) to 8.2 of 9. Reverb and HF
+    /// rolloff smear a signal towards "music"; they do not hide it. What the room path *does* hide
+    /// is speech — which makes the system channel's one-third bar dangerous here, not conservative.
+    /// Reusing it on the mic dropped 88 of 96 windows that contained a real 1.5–4 s utterance spoken
+    /// over room music: it would have deleted nearly every short thing the user said with a speaker
+    /// on.
+    ///
+    /// Two-thirds is close to free on real music (65 of 84 room-music windows still drop, against 66
+    /// at one-third) and is much harder to clear by accident, so the mic pays the higher bar.
+    private var minimumMusicShare: Double {
+        switch source {
+        case .system: 1.0 / 3.0
+        case .mic: 2.0 / 3.0
+        }
+    }
+
+    /// Classifies one window as music/singing rather than speech.
     ///
     /// Runs off the actor: `SNAudioFileAnalyzer.analyze()` is synchronous and would otherwise block
     /// every `append` for its duration. Fails *open* — any error means "not music", because a
     /// misclassification that drops real speech is unrecoverable and one that transcribes a song is
     /// merely untidy.
-    private static func windowIsMusic(_ samples: [Float]) async -> Bool {
+    ///
+    /// Cost, measured on this machine over 25 warm runs of a full 240 000-sample window: 0.7 ms to
+    /// write the WAV and 112 ms to analyse it, median 112.5 ms end to end. At the 15 s window cadence
+    /// that is 240 windows an hour per channel, so gating both channels costs 54 s of CPU an hour at
+    /// full duty — 1.5 % of one core, on `.utility` QoS, which is to say the efficiency cores. It is
+    /// also self-limiting: the RMS gate above has already removed the silent windows, and every
+    /// window this *does* catch skips a Parakeet pass that costs more than the classification did.
+    ///
+    /// So it is left running on every window, and deliberately not sampled or made conditional.
+    /// Sampling every Nth window would let (N−1)/N of the lyrics through, which does not fix the
+    /// defect — the harm here is per-line, one fabricated first-person sentence at a time. Gating on
+    /// low transducer confidence would be worse than useless: it would have to run Parakeet first,
+    /// forfeiting the "music costs no transcription" saving, and music does not decode with low
+    /// confidence — the lyrics that prompted this fix came through as fluent, well-formed,
+    /// high-confidence sentences.
+    private static func windowIsMusic(_ samples: [Float], minimumMusicShare: Double) async
+        -> MusicVerdict
+    {
         await Task.detached(priority: .utility) {
-            Transcriber.classifyAsMusic(samples)
+            Transcriber.classifyAsMusic(samples, minimumMusicShare: minimumMusicShare)
         }.value
     }
 
-    private static func classifyAsMusic(_ samples: [Float]) -> Bool {
+    private static func classifyAsMusic(_ samples: [Float], minimumMusicShare: Double)
+        -> MusicVerdict
+    {
         guard samples.count >= sampleRate,  // under ~1 s the classifier is a coin flip
             let format = AVAudioFormat(
                 commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRate), channels: 1, interleaved: false),
             let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)),
             let channel = buffer.floatChannelData
-        else { return false }
+        else { return .inconclusive }
 
         buffer.frameLength = AVAudioFrameCount(samples.count)
         samples.withUnsafeBufferPointer { channel[0].update(from: $0.baseAddress!, count: samples.count) }
@@ -443,19 +512,42 @@ actor Transcriber {
                 AVLinearPCMIsFloatKey: false,
                 AVLinearPCMIsBigEndianKey: false,
             ]
-            let file = try AVAudioFile(forWriting: url, settings: settings)
-            try file.write(from: buffer)
+            // Scoped so the writer is closed before the analyzer opens the file, and this is load
+            // bearing. `AVAudioFile` finalises the WAV header — the data-chunk length above all — in
+            // its deinit, so a file still held open reads back as zero-length audio: `analyze()`
+            // returns having produced no results at all, the tally sees `frames == 0`, and the gate
+            // answers "not music" for every window ever handed to it. That is why music was reaching
+            // the transcript on *both* channels rather than only the ungated one, and why the gate
+            // had never once fired since it was written. Verified directly: same window, same
+            // analyzer, 0 frames with the writer alive and 9 with it closed.
+            do {
+                let file = try AVAudioFile(forWriting: url, settings: settings)
+                try file.write(from: buffer)
+            }
 
             let analyzer = try SNAudioFileAnalyzer(url: url)
             let request = try SNClassifySoundRequest(classifierIdentifier: .version1)
             let tally = MusicTally()
             try analyzer.add(request, withObserver: tally)
             analyzer.analyze()  // synchronous: the tally is complete before this returns
-            return tally.isMusic
+            return tally.verdict(minimumMusicShare: minimumMusicShare)
         } catch {
-            return false
+            return .inconclusive
         }
     }
+}
+
+/// What the classifier made of one window. Counts only — no audio, nothing quotable, safe to log.
+private struct MusicVerdict: Sendable {
+    let isMusic: Bool
+    let frames: Int
+    let musicFrames: Int
+    let speechFrames: Int
+    let peakSpeechConfidence: Double
+
+    /// The fail-open answer: the classifier could not be run, so nothing is suppressed.
+    static let inconclusive = MusicVerdict(
+        isMusic: false, frames: 0, musicFrames: 0, speechFrames: 0, peakSpeechConfidence: 0)
 }
 
 /// Tallies SoundAnalysis frames across one window to decide music/singing vs speech.
@@ -464,17 +556,38 @@ actor Transcriber {
 /// analyzer, so every mutation happens before `analyze()` returns and there is no concurrent access
 /// to guard.
 private final class MusicTally: NSObject, SNResultsObserving {
+    /// Any single frame this sure it heard speech keeps the whole window, whatever else is in it.
+    ///
+    /// Picked from the wrong side deliberately. Across 299 windows built to contain real speech — a
+    /// person talking across the room, someone talking over a song, a single 1.5 s sentence dropped
+    /// into 15 s of room music — the lowest peak speech confidence any of them reached was 0.48.
+    /// Sitting at 0.4 clears every one of them with margin to spare, and buys that margin for three
+    /// points of recall on real music (65 of 84 room-music windows still drop, against 67 at 0.45).
+    ///
+    /// The asymmetry is the point. A window wrongly kept is a stray lyric in a transcript, visible
+    /// and ignorable. A window wrongly dropped is a sentence the user really said that now exists
+    /// nowhere, and `recall` will report the silence as evidence it never happened.
+    private static let speechVetoConfidence = 0.4
+
     private var frames = 0
     private var musicFrames = 0
     private var speechFrames = 0
+    private var peakSpeechConfidence = 0.0
 
     func request(_ request: SNRequest, didProduce result: SNResult) {
-        guard let classification = result as? SNClassificationResult,
-            let top = classification.classifications.first
-        else { return }
-
+        guard let classification = result as? SNClassificationResult else { return }
         frames += 1
-        guard top.confidence > 0.3 else { return }
+
+        // Read speech confidence *before* the top-1 test rather than after. SoundAnalysis scores
+        // every class independently instead of splitting one budget between them, so a frame can be
+        // 0.9 music and 0.7 speech at the same time. Counting speech only when it wins the frame
+        // throws away precisely the evidence that matters here — someone talking *over* the music,
+        // where music wins nearly every frame and the speech never surfaces as top-1 at all.
+        if let speech = classification.classification(forIdentifier: "speech") {
+            peakSpeechConfidence = max(peakSpeechConfidence, speech.confidence)
+        }
+
+        guard let top = classification.classifications.first, top.confidence > 0.3 else { return }
 
         let identifier = top.identifier.lowercased()
         if identifier == "speech" {
@@ -484,13 +597,30 @@ private final class MusicTally: NSObject, SNResultsObserving {
         }
     }
 
-    /// Music has to both beat speech *and* hold a real share of the window.
+    /// Music has to hold a real share of the window *and* the window has to hold no speech at all.
     ///
-    /// The second half of that is what keeps a call: the other party's voice through the system tap
-    /// picks up stray music frames from hold music, notification chimes and background noise, and
-    /// requiring a third of the window to be music means those never outvote a conversation. A song
-    /// clears it easily.
-    var isMusic: Bool { frames > 0 && musicFrames > speechFrames && musicFrames * 3 >= frames }
+    /// Three conditions, and only the last is about music. The first two are the ones that keep a
+    /// conversation: any frame where speech won outright, or any frame merely confident that speech
+    /// was present, and the window survives regardless of how musical the rest of it looked. That is
+    /// what makes "when a window contains both music and speech, keep it" a property of the rule
+    /// rather than a hope about the thresholds.
+    ///
+    /// Measured over 299 speech-bearing windows it suppresses 0, including 0 of the 96 holding only
+    /// a brief utterance over room music. The previous rule — music merely outvoting speech and
+    /// holding a third of the window — suppressed 163 of those 299 when pointed at a microphone.
+    ///
+    /// `frames > 0` is the fail-open case: no frames means the classifier told us nothing, and a
+    /// gate that knows nothing must not delete anything.
+    func verdict(minimumMusicShare: Double) -> MusicVerdict {
+        let musical = Double(musicFrames) >= Double(frames) * minimumMusicShare
+        let heardSpeech = speechFrames > 0 || peakSpeechConfidence >= Self.speechVetoConfidence
+        return MusicVerdict(
+            isMusic: frames > 0 && !heardSpeech && musical,
+            frames: frames,
+            musicFrames: musicFrames,
+            speechFrames: speechFrames,
+            peakSpeechConfidence: peakSpeechConfidence)
+    }
 }
 
 

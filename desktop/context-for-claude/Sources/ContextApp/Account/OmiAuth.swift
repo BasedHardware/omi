@@ -79,8 +79,23 @@ final class OmiAuth: ObservableObject {
 
     /// Loads whatever the last launch stored. An expired ID token is still a signed-in state — the
     /// refresh token is the credential that matters, and it is spent lazily on the first call.
+    /// Loads any stored session, reading the Keychain **off the main actor**.
+    ///
+    /// `SecItemCopyMatching` is not a fast local read. When the app's code signature changes — every
+    /// rebuild during development, every update in the field — the Keychain ACL no longer matches
+    /// and macOS puts an authorization prompt in front of it. An `LSUIElement` app has no window to
+    /// show that prompt in, so the call simply does not return: once measured at 22 minutes. Doing
+    /// it on the main actor took the whole app down with it, and everything sequenced behind this
+    /// call inherited the wait.
     func restore() {
-        guard let stored = SessionStore.load() else {
+        Task { [weak self] in
+            let stored = await Task.detached(priority: .userInitiated) { SessionStore.load() }.value
+            await MainActor.run { self?.adoptRestored(stored) }
+        }
+    }
+
+    private func adoptRestored(_ stored: OmiSession?) {
+        guard let stored else {
             ContextLog.info("No stored Omi session", "auth")
             return
         }
