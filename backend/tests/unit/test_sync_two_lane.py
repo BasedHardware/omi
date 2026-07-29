@@ -7,6 +7,7 @@ from google.cloud import firestore
 
 from database import sync_ledger, user_usage
 from scripts.render_cloud_run_clone_env import clone_environment
+from tests.store_fakes import FakeDocumentStore
 from utils.sync import backfill, capture_manifest, content_id, lanes
 
 
@@ -782,28 +783,26 @@ def test_completion_transaction_accepts_success_and_expected_silence():
         assert transaction.writes[0][1]['result'] == result
 
 
-def test_hourly_usage_increment_and_ledger_marker_share_one_transaction():
-    transaction = _Transaction()
-    marker_ref = _Ref({'status': 'processing'})
-    usage_ref = _Ref()
+def test_hourly_usage_increment_and_ledger_marker_share_one_transaction(monkeypatch):
+    """The idempotency marker and the hourly-usage increment are committed together, and a
+    replay under the same content key is a no-op (drives the neutral storage-port seam, WP2)."""
+    store = FakeDocumentStore()
+    monkeypatch.setattr(user_usage, '_store', lambda: store)
 
-    recorded = user_usage._update_hourly_usage_once_transaction.to_wrap(
-        transaction,
-        marker_ref,
-        usage_ref,
-        {'transcription_seconds': 5},
-    )
-    duplicate = user_usage._update_hourly_usage_once_transaction.to_wrap(
-        _Transaction(),
-        _Ref({'usage_committed_at': datetime.now(timezone.utc)}),
-        usage_ref,
-        {'transcription_seconds': 5},
-    )
+    date = datetime(2026, 6, 23, 14, tzinfo=timezone.utc)
+
+    recorded = user_usage.update_hourly_usage_once('uid', date, {'transcription_seconds': 5}, 'key-1')
+    # Replaying the same idempotency key must not increment a second time.
+    duplicate = user_usage.update_hourly_usage_once('uid', date, {'transcription_seconds': 5}, 'key-1')
 
     assert recorded is True
-    assert len(transaction.writes) == 2
-    assert transaction.writes[0][1].get('usage_committed_at') is not None
     assert duplicate is False
+
+    marker = store.get('users/uid/sync_content_ledger/key-1')
+    assert marker.exists and marker.to_dict().get('usage_committed_at') is not None
+
+    usage = store.get('users/uid/hourly_usage/2026-06-23-14')
+    assert usage.to_dict()['transcription_seconds'] == 5
 
 
 def test_durable_processed_segment_is_not_added_twice():

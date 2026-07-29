@@ -383,7 +383,12 @@ def store(monkeypatch):
     fake = FakeDocumentStore()
     monkeypatch.setattr(users_db, '_store', lambda: fake)
     monkeypatch.setattr(chat_db, '_store', lambda: fake)
+    monkeypatch.setattr(llm_usage_db, '_store', lambda: fake)
     return fake
+
+
+def _llm_usage_today_id() -> str:
+    return datetime.now(timezone.utc).strftime('%Y-%m-%d')
 
 
 class TestNotificationSettingsWireCompat:
@@ -866,46 +871,37 @@ class TestDeleteMessagesCount:
 class TestLlmUsageBucketParam:
     """Verify configurable bucket parameter in LLM usage functions."""
 
-    def test_custom_bucket_dual_writes(self):
+    def test_custom_bucket_dual_writes(self, store):
         """record_llm_usage_bucket with custom bucket writes to both bucket and bucket_account."""
-        mock_ref = MagicMock()
+        llm_usage_db.record_llm_usage_bucket(
+            'uid',
+            input_tokens=10,
+            output_tokens=20,
+            bucket='custom_feature',
+            account='openai',
+        )
 
-        with patch.object(llm_usage_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_ref
-            )
-            llm_usage_db.record_llm_usage_bucket(
-                'uid',
-                input_tokens=10,
-                output_tokens=20,
-                bucket='custom_feature',
-                account='openai',
-            )
-
-        set_call = mock_ref.set.call_args
-        update_data = set_call[0][0]
+        data = store.get(f'users/uid/llm_usage/{_llm_usage_today_id()}').to_dict()
         # Primary bucket
-        assert 'custom_feature.input_tokens' in update_data
-        assert 'custom_feature.output_tokens' in update_data
-        assert 'custom_feature.call_count' in update_data
+        assert data['custom_feature']['input_tokens'] == 10
+        assert data['custom_feature']['output_tokens'] == 20
+        assert data['custom_feature']['call_count'] == 1
         # Per-account bucket
-        assert 'custom_feature_openai.input_tokens' in update_data
-        assert 'custom_feature_openai.output_tokens' in update_data
+        assert data['custom_feature_openai']['input_tokens'] == 10
+        assert data['custom_feature_openai']['output_tokens'] == 20
 
-    def test_get_total_llm_cost_custom_bucket(self):
+    def test_get_total_llm_cost_custom_bucket(self, store):
         """get_total_llm_cost with custom bucket reads from the specified bucket only."""
-        mock_doc1 = MagicMock()
-        mock_doc1.to_dict.return_value = {
-            'custom_feature': {'cost_usd': 0.5},
-            'custom_feature_openai': {'cost_usd': 0.5},  # Should NOT be double-counted
-            'desktop_chat': {'cost_usd': 1.0},  # Different bucket, should be excluded
-        }
-        mock_col = MagicMock()
-        mock_col.stream.return_value = [mock_doc1]
+        store.set(
+            'users/uid/llm_usage/2025-01-15',
+            {
+                'custom_feature': {'cost_usd': 0.5},
+                'custom_feature_openai': {'cost_usd': 0.5},  # Should NOT be double-counted
+                'desktop_chat': {'cost_usd': 1.0},  # Different bucket, should be excluded
+            },
+        )
 
-        with patch.object(llm_usage_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            result = llm_usage_db.get_total_llm_cost('uid', bucket='custom_feature')
+        result = llm_usage_db.get_total_llm_cost('uid', bucket='custom_feature')
 
         assert result == 0.5  # Only custom_feature, not custom_feature_openai or desktop_chat
 
@@ -1163,83 +1159,58 @@ class TestScoreComputation:
 class TestLlmUsage:
     """Verify LLM usage dual-write and cost summation."""
 
-    def test_record_dual_writes_desktop_chat_and_account(self):
+    def test_record_dual_writes_desktop_chat_and_account(self, store):
         """record_llm_usage_bucket dual-writes both 'desktop_chat' and 'desktop_chat_{account}'."""
-        mock_ref = MagicMock()
-        with patch.object(llm_usage_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_ref
-            )
-            llm_usage_db.record_llm_usage_bucket(
-                'test-uid',
-                input_tokens=100,
-                output_tokens=50,
-                account='anthropic',
-            )
+        llm_usage_db.record_llm_usage_bucket(
+            'test-uid',
+            input_tokens=100,
+            output_tokens=50,
+            account='anthropic',
+        )
 
-        # Verify set(merge=True) was called
-        mock_ref.set.assert_called_once()
-        update_data = mock_ref.set.call_args[0][0]
-        assert mock_ref.set.call_args[1] == {'merge': True}
+        data = store.get(f'users/test-uid/llm_usage/{_llm_usage_today_id()}').to_dict()
+        # Both desktop_chat and desktop_chat_anthropic buckets are written.
+        assert 'desktop_chat' in data
+        assert 'desktop_chat_anthropic' in data
+        # input_tokens increment is present for both buckets
+        assert data['desktop_chat']['input_tokens'] == 100
+        assert data['desktop_chat_anthropic']['input_tokens'] == 100
 
-        # Must have both desktop_chat and desktop_chat_anthropic keys
-        desktop_chat_keys = [k for k in update_data if k.startswith('desktop_chat.')]
-        desktop_chat_acct_keys = [k for k in update_data if k.startswith('desktop_chat_anthropic.')]
-        assert len(desktop_chat_keys) > 0, "Missing desktop_chat.* keys"
-        assert len(desktop_chat_acct_keys) > 0, "Missing desktop_chat_anthropic.* keys"
-
-        # Verify input_tokens increment is present for both buckets
-        assert 'desktop_chat.input_tokens' in update_data
-        assert 'desktop_chat_anthropic.input_tokens' in update_data
-
-    def test_record_default_account_omi(self):
+    def test_record_default_account_omi(self, store):
         """Default account produces desktop_chat_omi keys."""
-        mock_ref = MagicMock()
-        with patch.object(llm_usage_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_ref
-            )
-            llm_usage_db.record_llm_usage_bucket('test-uid', input_tokens=10, output_tokens=5)
+        llm_usage_db.record_llm_usage_bucket('test-uid', input_tokens=10, output_tokens=5)
 
-        update_data = mock_ref.set.call_args[0][0]
-        assert 'desktop_chat_omi.input_tokens' in update_data
+        data = store.get(f'users/test-uid/llm_usage/{_llm_usage_today_id()}').to_dict()
+        assert data['desktop_chat_omi']['input_tokens'] == 10
 
-    def test_get_total_cost_only_sums_desktop_chat_bucket(self):
+    def test_get_total_cost_only_sums_desktop_chat_bucket(self, store):
         """get_total_llm_cost only sums the desktop_chat bucket, not desktop_chat_{account}."""
-        doc1 = MagicMock()
-        doc1.to_dict.return_value = {
-            'desktop_chat': {'cost_usd': 0.05, 'call_count': 10},
-            'desktop_chat_anthropic': {'cost_usd': 0.05, 'call_count': 10},
-        }
-        doc2 = MagicMock()
-        doc2.to_dict.return_value = {
-            'desktop_chat': {'cost_usd': 0.03, 'call_count': 5},
-            'desktop_chat_omi': {'cost_usd': 0.03, 'call_count': 5},
-        }
+        store.set(
+            'users/test-uid/llm_usage/day-1',
+            {
+                'desktop_chat': {'cost_usd': 0.05, 'call_count': 10},
+                'desktop_chat_anthropic': {'cost_usd': 0.05, 'call_count': 10},
+            },
+        )
+        store.set(
+            'users/test-uid/llm_usage/day-2',
+            {
+                'desktop_chat': {'cost_usd': 0.03, 'call_count': 5},
+                'desktop_chat_omi': {'cost_usd': 0.03, 'call_count': 5},
+            },
+        )
 
-        mock_col = MagicMock()
-        mock_col.stream.return_value = [doc1, doc2]
-
-        with patch.object(llm_usage_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            total = llm_usage_db.get_total_llm_cost('test-uid')
+        total = llm_usage_db.get_total_llm_cost('test-uid')
 
         # Should only sum desktop_chat: 0.05 + 0.03 = 0.08
         assert total == round(0.08, 6)
 
-    def test_get_total_cost_ignores_non_dict_desktop_chat(self):
+    def test_get_total_cost_ignores_non_dict_desktop_chat(self, store):
         """get_total_llm_cost handles docs where desktop_chat is not a dict."""
-        doc1 = MagicMock()
-        doc1.to_dict.return_value = {'desktop_chat': 'corrupted', 'other_key': 123}
-        doc2 = MagicMock()
-        doc2.to_dict.return_value = {'desktop_chat': {'cost_usd': 0.01}}
+        store.set('users/test-uid/llm_usage/day-1', {'desktop_chat': 'corrupted', 'other_key': 123})
+        store.set('users/test-uid/llm_usage/day-2', {'desktop_chat': {'cost_usd': 0.01}})
 
-        mock_col = MagicMock()
-        mock_col.stream.return_value = [doc1, doc2]
-
-        with patch.object(llm_usage_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
-            total = llm_usage_db.get_total_llm_cost('test-uid')
+        total = llm_usage_db.get_total_llm_cost('test-uid')
 
         assert total == 0.01
 
@@ -1608,30 +1579,23 @@ class TestSessionScopedPrecedence:
 class TestLlmDualWritePayloadParity:
     """Verify all fields are written to both primary and per-account buckets."""
 
-    def test_all_fields_written_to_both_buckets(self):
-        """record_llm_usage_bucket writes all fields to both desktop_chat and desktop_chat_omi in single set()."""
-        mock_ref = MagicMock()
-        with patch.object(llm_usage_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_ref
-            )
-            llm_usage_db.record_llm_usage_bucket(
-                uid='uid',
-                input_tokens=100,
-                output_tokens=50,
-                cache_read_tokens=20,
-                cache_write_tokens=10,
-                total_tokens=180,
-                cost_usd=0.05,
-                bucket='desktop_chat',
-                account='omi',
-            )
+    def test_all_fields_written_to_both_buckets(self, store):
+        """record_llm_usage_bucket writes all fields to both desktop_chat and desktop_chat_omi."""
+        llm_usage_db.record_llm_usage_bucket(
+            uid='uid',
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_tokens=20,
+            cache_write_tokens=10,
+            total_tokens=180,
+            cost_usd=0.05,
+            bucket='desktop_chat',
+            account='omi',
+        )
 
-        # Single set(merge=True) call containing both bucket prefixes
-        mock_ref.set.assert_called_once()
-        data = mock_ref.set.call_args[0][0]
+        data = store.get(f'users/uid/llm_usage/{_llm_usage_today_id()}').to_dict()
 
-        # Check all fields for primary bucket
+        # Check all fields are present under both the primary and per-account buckets.
         expected_fields = [
             'input_tokens',
             'output_tokens',
@@ -1642,8 +1606,8 @@ class TestLlmDualWritePayloadParity:
             'call_count',
         ]
         for field in expected_fields:
-            assert f'desktop_chat.{field}' in data, f"Missing desktop_chat.{field}"
-            assert f'desktop_chat_omi.{field}' in data, f"Missing desktop_chat_omi.{field}"
+            assert field in data['desktop_chat'], f"Missing desktop_chat.{field}"
+            assert field in data['desktop_chat_omi'], f"Missing desktop_chat_omi.{field}"
 
         # Verify shared metadata fields
         assert 'date' in data

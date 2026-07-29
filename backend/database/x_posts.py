@@ -12,10 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
-from google.cloud import firestore
-from google.cloud.firestore_v1 import FieldFilter
-
-from ._client import db
+from database.store import get_document_store
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +27,12 @@ KIND_BOOKMARK = 'bookmark'
 KIND_LIKE = 'like'
 
 
-def _posts_ref(uid: str) -> Any:
-    return db.collection(users_collection).document(uid).collection(x_posts_collection)
+def _store():
+    return get_document_store()
+
+
+def _posts_path(uid: str) -> str:
+    return f'{users_collection}/{uid}/{x_posts_collection}'
 
 
 def save_x_posts(uid: str, posts: List[Dict[str, Any]]) -> int:
@@ -44,18 +45,18 @@ def save_x_posts(uid: str, posts: List[Dict[str, Any]]) -> int:
     if not posts:
         return 0
 
-    coll = _posts_ref(uid)
+    coll = _posts_path(uid)
     # Find which ids already exist so we can report an accurate delta and avoid
     # clobbering `ingested_at` on re-sync.
     ids = [str(p['id']) for p in posts if p.get('id') is not None]
     existing: set[str] = set()
-    # get_all is efficient for the modest page sizes the connector pulls (<=100).
-    for snap in db.get_all([coll.document(i) for i in ids]):
-        if getattr(snap, "exists", False):
+    # get_many is efficient for the modest page sizes the connector pulls (<=100).
+    for snap in _store().get_many(coll, ids):
+        if snap.exists:
             existing.add(str(snap.id))
 
     now = datetime.now(timezone.utc)
-    batch = db.batch()
+    batch = _store().batch()
     new_count = 0
     for p in posts:
         pid = str(p.get('id')) if p.get('id') is not None else None
@@ -70,7 +71,7 @@ def save_x_posts(uid: str, posts: List[Dict[str, Any]]) -> int:
             # until every memory write for its extraction batch succeeds.
             doc['memory_extraction_status'] = MEMORY_EXTRACTION_PENDING
             new_count += 1
-        batch.set(coll.document(pid), doc, merge=True)
+        batch.set(f'{coll}/{pid}', doc, merge=True)
     batch.commit()
     logger.info(f'save_x_posts uid={uid} received={len(posts)} new={new_count}')
     return new_count
@@ -85,7 +86,7 @@ def get_pending_memory_extraction_posts(uid: str, limit: int = 200) -> List[Dict
     """
     bounded_limit = max(1, min(limit, 500))
     pending: List[Dict[str, Any]] = []
-    for snapshot in _posts_ref(uid).stream():
+    for snapshot in _store().query(_posts_path(uid)):
         raw = snapshot.to_dict()
         if not isinstance(raw, dict) or raw.get('memory_extraction_status') == MEMORY_EXTRACTION_COMPLETED:
             continue
@@ -102,10 +103,11 @@ def mark_memory_extraction_completed(uid: str, post_ids: List[str]) -> None:
     if not post_ids:
         return
     now = datetime.now(timezone.utc)
-    batch = db.batch()
+    coll = _posts_path(uid)
+    batch = _store().batch()
     for post_id in post_ids:
         batch.set(
-            _posts_ref(uid).document(str(post_id)),
+            f'{coll}/{str(post_id)}',
             {
                 'memory_extraction_status': MEMORY_EXTRACTION_COMPLETED,
                 'memory_extracted_at': now,
@@ -123,18 +125,17 @@ def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[
     by kind we use the single-field equality query (auto-indexed) and sort in
     Python — post volumes per user are small enough for this to be cheap.
     """
-    coll = _posts_ref(uid)
+    coll = _posts_path(uid)
     if kind:
         docs: List[Dict[str, Any]] = []
-        for d in coll.where(filter=FieldFilter('kind', '==', kind)).stream():
+        for d in _store().query(coll, filters=[('kind', '==', kind)]):
             raw: object = d.to_dict()
             if isinstance(raw, dict):
                 docs.append(cast(Dict[str, Any], raw))
         docs.sort(key=lambda x: str(x.get('created_at') or ''), reverse=True)
         return docs[:limit]
-    query = coll.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
     out: List[Dict[str, Any]] = []
-    for d in query.stream():
+    for d in _store().query(coll, order_by='created_at', direction='desc', limit=limit):
         raw = d.to_dict()
         if isinstance(raw, dict):
             out.append(cast(Dict[str, Any], raw))
@@ -145,10 +146,9 @@ def get_x_posts_by_ids(uid: str, ids: List[str]) -> List[Dict[str, Any]]:
     """Fetch specific posts by id (used by semantic search to hydrate matches)."""
     if not ids:
         return []
-    coll = _posts_ref(uid)
     out: List[Dict[str, Any]] = []
-    for snap in db.get_all([coll.document(str(i)) for i in ids]):
-        if getattr(snap, "exists", False):
+    for snap in _store().get_many(_posts_path(uid), [str(i) for i in ids]):
+        if snap.exists:
             raw: object = snap.to_dict()
             if isinstance(raw, dict):
                 out.append(cast(Dict[str, Any], raw))
@@ -157,12 +157,7 @@ def get_x_posts_by_ids(uid: str, ids: List[str]) -> List[Dict[str, Any]]:
 
 def count_x_posts(uid: str) -> int:
     """Total number of stored X posts for the user."""
-    agg = _posts_ref(uid).count().get()
-    # Firestore aggregation returns a list of AggregationResult rows.
-    try:
-        return int(agg[0][0].value)
-    except Exception:
-        return len(list(_posts_ref(uid).stream()))
+    return _store().count(_posts_path(uid))
 
 
 def get_newest_tweet_id(uid: str) -> Optional[str]:
@@ -172,7 +167,7 @@ def get_newest_tweet_id(uid: str) -> Optional[str]:
     zero-padded, but they're numeric strings of equal-ish length so we compare
     as ints to be safe.
     """
-    docs = list(_posts_ref(uid).where(filter=FieldFilter('kind', '==', KIND_TWEET)).stream())
+    docs = _store().query(_posts_path(uid), filters=[('kind', '==', KIND_TWEET)])
     best: Optional[int] = None
     for d in docs:
         try:

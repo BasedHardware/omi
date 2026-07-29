@@ -2,122 +2,67 @@
 
 It read datetime.fromisoformat(data['created_at']) directly, so a record missing created_at (KeyError) or
 storing it as a non-string (TypeError) crashed POST /v1/phone/numbers/verify/check with a 500. It now
-treats a malformed record as expired. database/phone_calls.py has a heavy import graph, so we import it
-under a stub finder and patch the Firestore client.
+treats a malformed record as expired. Migrated to the WP2 storage port (ADR-0002): the getter reads
+through the injected `_store` seam, so the tests seed a FakeDocumentStore at the pending_verifications
+path and patch `_store`.
 """
 
-import importlib.abc
-import importlib.machinery
-import importlib.util
 import os
-import sys
-import types
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
-_STUB = ('database._client', 'database.redis_db', 'database.helpers', 'utils', 'firebase_admin', 'google', 'sentry_sdk')
+import database.phone_calls as phone_db
+from tests.store_fakes import FakeDocumentStore
+
+PHONE = '+15551234567'
 
 
-def _is_stubbed_name(name):
-    return any(name == p or name.startswith(p + '.') for p in _STUB)
+def _bind(monkeypatch, data):
+    """Seed a FakeDocumentStore at the pending_verifications doc for PHONE and patch the seam."""
+    store = FakeDocumentStore()
+    if data is not None:
+        doc_id = phone_db._hash_phone_number(PHONE)
+        store.set(f'{phone_db.pending_verifications_collection}/{doc_id}', data)
+    monkeypatch.setattr(phone_db, '_store', lambda: store)
+    return store
 
 
-def _snapshot():
-    return {name: module for name, module in sys.modules.items() if _is_stubbed_name(name)}
+def test_missing_created_at_returns_none_not_500(monkeypatch):
+    _bind(monkeypatch, {'uid': 'u1'})  # no created_at
+    assert phone_db.get_pending_verification_uid(PHONE) is None
 
 
-def _clear():
-    for name in list(sys.modules):
-        if _is_stubbed_name(name):
-            sys.modules.pop(name, None)
+def test_non_string_created_at_returns_none_not_500(monkeypatch):
+    _bind(monkeypatch, {'created_at': 12345, 'uid': 'u1'})
+    assert phone_db.get_pending_verification_uid(PHONE) is None
 
 
-def _restore(snapshot):
-    for name in list(sys.modules):
-        if _is_stubbed_name(name) and name not in snapshot:
-            sys.modules.pop(name, None)
-    sys.modules.update(snapshot)
-
-
-class _AutoMock(types.ModuleType):
-    __path__ = []
-
-    def __getattr__(self, name):
-        if name.startswith('__') and name.endswith('__'):
-            raise AttributeError(name)
-        m = MagicMock()
-        setattr(self, name, m)
-        return m
-
-
-class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
-    def find_spec(self, name, path=None, target=None):
-        if _is_stubbed_name(name):
-            return importlib.machinery.ModuleSpec(name, self, is_package=True)
-        return None
-
-    def create_module(self, spec):
-        return _AutoMock(spec.name)
-
-    def exec_module(self, module):
-        pass
-
-
-_finder = _Finder()
-_snap = _snapshot()
-_clear()
-sys.meta_path.insert(0, _finder)
-try:
-    import database.phone_calls as phone_db
-finally:
-    sys.meta_path.remove(_finder)
-    _restore(_snap)
-
-
-def _doc(data):
-    doc = MagicMock()
-    doc.exists = True
-    doc.to_dict.return_value = data
-    return doc
-
-
-def _db_returning(doc):
-    fake = MagicMock()
-    fake.collection.return_value.document.return_value.get.return_value = doc
-    return fake
-
-
-def test_missing_created_at_returns_none_not_500():
-    with patch.object(phone_db, 'db', _db_returning(_doc({'uid': 'u1'}))):  # no created_at
-        result = phone_db.get_pending_verification_uid('+15551234567')
-    assert result is None
-
-
-def test_non_string_created_at_returns_none_not_500():
-    with patch.object(phone_db, 'db', _db_returning(_doc({'created_at': 12345, 'uid': 'u1'}))):
-        result = phone_db.get_pending_verification_uid('+15551234567')
-    assert result is None
-
-
-def test_valid_recent_created_at_returns_uid():
+def test_valid_recent_created_at_returns_uid(monkeypatch):
     now_iso = datetime.now(timezone.utc).isoformat()
-    with patch.object(phone_db, 'db', _db_returning(_doc({'created_at': now_iso, 'uid': 'u1'}))):
-        result = phone_db.get_pending_verification_uid('+15551234567')
-    assert result == 'u1'
+    _bind(monkeypatch, {'created_at': now_iso, 'uid': 'u1'})
+    assert phone_db.get_pending_verification_uid(PHONE) == 'u1'
 
 
-def test_naive_recent_created_at_returns_uid_not_500():
+def test_naive_recent_created_at_returns_uid_not_500(monkeypatch):
     # A parseable but timezone-naive recent created_at must not crash the aware-minus-naive subtraction.
     naive_recent = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-    with patch.object(phone_db, 'db', _db_returning(_doc({'created_at': naive_recent, 'uid': 'u1'}))):
-        result = phone_db.get_pending_verification_uid('+15551234567')
-    assert result == 'u1'
+    _bind(monkeypatch, {'created_at': naive_recent, 'uid': 'u1'})
+    assert phone_db.get_pending_verification_uid(PHONE) == 'u1'
 
 
-def test_naive_old_created_at_treated_expired_not_500():
+def test_naive_old_created_at_treated_expired_not_500(monkeypatch):
     naive_old = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=365)).isoformat()
-    with patch.object(phone_db, 'db', _db_returning(_doc({'created_at': naive_old, 'uid': 'u1'}))):
-        result = phone_db.get_pending_verification_uid('+15551234567')
-    assert result is None
+    _bind(monkeypatch, {'created_at': naive_old, 'uid': 'u1'})
+    assert phone_db.get_pending_verification_uid(PHONE) is None
+
+
+def test_expired_record_is_deleted(monkeypatch):
+    # An expired (aware) record is treated as absent AND purged from the store.
+    old_iso = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    store = _bind(monkeypatch, {'created_at': old_iso, 'uid': 'u1'})
+    doc_id = phone_db._hash_phone_number(PHONE)
+    path = f'{phone_db.pending_verifications_collection}/{doc_id}'
+    assert store.exists(path)
+    assert phone_db.get_pending_verification_uid(PHONE) is None
+    assert not store.exists(path)

@@ -1,47 +1,28 @@
 """Regression test: get_x_posts(kind=...) must not crash on mixed datetime/str created_at.
 
 database.x_posts.get_x_posts sorts the kind-filtered branch with
-`docs.sort(key=lambda x: x.get('created_at') or '', reverse=True)`. Tweets are stored with a
-datetime created_at while other rows store '' or omit it, so a mixed result set raises
-`TypeError: '<' not supported between instances of 'datetime.datetime' and 'str'` (a 500). Line 96
-of the same file already guards the identical pattern with str(); line 133 was the asymmetry.
-The key now coerces to str, matching line 96.
+`docs.sort(key=lambda x: str(x.get('created_at') or ''), reverse=True)`. Tweets are stored with a
+datetime created_at while other rows store '' or omit it. Without the `str()` coercion a mixed
+result set would raise
+`TypeError: '<' not supported between instances of 'datetime.datetime' and 'str'` (a 500).
+
+Migrated to the neutral storage port (WP2, ADR-0002/0022): the module reads through
+``_store().query(...)``; this test seeds a FakeDocumentStore with a datetime post and a
+created_at-less post and asserts the sort does not raise and orders newest-first.
 """
 
 import datetime
 
 import database.x_posts as x_posts
-
-
-class _FakeDoc:
-    def __init__(self, data):
-        self._data = data
-
-    def to_dict(self):
-        return self._data
-
-
-class _FakeQuery:
-    def __init__(self, docs):
-        self._docs = docs
-
-    def where(self, **kwargs):
-        return self
-
-    def limit(self, n):
-        return self
-
-    def stream(self):
-        return iter(self._docs)
+from tests.store_fakes import FakeDocumentStore
 
 
 def test_kind_branch_sorts_mixed_datetime_and_missing(monkeypatch):
     dt = datetime.datetime(2024, 1, 2, tzinfo=datetime.timezone.utc)
-    docs = [
-        _FakeDoc({'id': 'a', 'kind': 'tweet', 'created_at': dt}),
-        _FakeDoc({'id': 'b', 'kind': 'tweet'}),  # missing created_at
-    ]
-    monkeypatch.setattr(x_posts, '_posts_ref', lambda uid: _FakeQuery(docs))
+    store = FakeDocumentStore()
+    store.set('users/u1/x_posts/a', {'id': 'a', 'kind': 'tweet', 'created_at': dt})
+    store.set('users/u1/x_posts/b', {'id': 'b', 'kind': 'tweet'})  # missing created_at
+    monkeypatch.setattr(x_posts, '_store', lambda: store)
 
     result = x_posts.get_x_posts('u1', kind='tweet')  # must not raise
 

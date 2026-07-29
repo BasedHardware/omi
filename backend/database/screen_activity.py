@@ -1,9 +1,7 @@
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union, cast
 
-from google.cloud import firestore
-
-from ._client import db
+from database.store import Filter, get_document_store
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,12 +13,19 @@ USERS_COLLECTION = 'users'
 DateInput = Union[datetime, str]
 
 
+def _store():
+    return get_document_store()
+
+
+def _collection_path(uid: str) -> str:
+    return f'{USERS_COLLECTION}/{uid}/{SCREEN_ACTIVITY_COLLECTION}'
+
+
 def get_screen_activity_ids(uid: str) -> List[str]:
     """Return all screen activity document IDs for a user (IDs-only projection).
 
     Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
-    coll = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
-    return [str(doc.id) for doc in coll.select([]).stream()]
+    return [str(doc_id) for doc_id in _store().list_ids(_collection_path(uid))]
 
 
 def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
@@ -28,13 +33,14 @@ def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
     if not rows:
         return 0
 
-    collection_ref = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+    collection_path = _collection_path(uid)
+    store = _store()
     written = 0
 
-    # Firestore batch limit is 500
+    # Chunked for throughput (adapters honor their own batch limits; Firestore caps at 500).
     for i in range(0, len(rows), 500):
         chunk = rows[i : i + 500]
-        batch = db.batch()
+        batch = store.batch()
         for row in chunk:
             doc_id = str(row['id'])
             doc_data = {
@@ -43,7 +49,7 @@ def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
                 'windowTitle': row.get('windowTitle', ''),
                 'ocrText': (row.get('ocrText') or '')[:1000],
             }
-            batch.set(collection_ref.document(doc_id), doc_data)
+            batch.set(f'{collection_path}/{doc_id}', doc_data)
         batch.commit()
         written += len(chunk)
 
@@ -58,24 +64,27 @@ def get_screen_activity(
     limit: int = 500,
 ) -> List[Dict[str, Any]]:
     """Query screen activity by date range with optional app filter."""
-    collection_ref = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+    collection_path = _collection_path(uid)
 
-    query = collection_ref.order_by('timestamp', direction=firestore.Query.ASCENDING)
-
+    filters: List[Filter] = []
     if start_date:
         # Timestamps stored as 'YYYY-MM-DD HH:MM:SS.mmm' strings — must match format for comparison
         ts = start_date.strftime('%Y-%m-%d %H:%M:%S.000') if isinstance(start_date, datetime) else str(start_date)
-        query = query.where(filter=firestore.FieldFilter('timestamp', '>=', ts))
+        filters.append(('timestamp', '>=', ts))
     if end_date:
         ts = end_date.strftime('%Y-%m-%d %H:%M:%S.999') if isinstance(end_date, datetime) else str(end_date)
-        query = query.where(filter=firestore.FieldFilter('timestamp', '<=', ts))
+        filters.append(('timestamp', '<=', ts))
     if app_filter:
-        query = query.where(filter=firestore.FieldFilter('appName', '==', app_filter))
-
-    query = query.limit(limit)
+        filters.append(('appName', '==', app_filter))
 
     results: List[Dict[str, Any]] = []
-    for doc in query.stream():
+    for doc in _store().query(
+        collection_path,
+        filters=filters,
+        order_by='timestamp',
+        direction='asc',
+        limit=limit,
+    ):
         raw: object = doc.to_dict()
         data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         data['id'] = doc.id
@@ -128,14 +137,8 @@ def get_screen_activity_ocr_text(uid: str, sid: str, max_len: int = 200) -> str:
 
     Returns '' if the document is missing or has no OCR text.
     """
-    doc = (
-        db.collection(USERS_COLLECTION)
-        .document(uid)
-        .collection(SCREEN_ACTIVITY_COLLECTION)
-        .document(str(sid))
-        .get()
-    )
-    if getattr(doc, 'exists', False):
+    doc = _store().get(f'{_collection_path(uid)}/{str(sid)}')
+    if doc.exists:
         data = cast(Dict[str, Any], doc.to_dict() or {})
         return (data.get('ocrText', '') or '')[:max_len]
     return ''
