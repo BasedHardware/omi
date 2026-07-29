@@ -11,24 +11,37 @@ export function parakeetWsUrl(apiUrl: string, sampleRate = 16000): string {
   return `${base}/v3/stream?sample_rate=${sampleRate}`;
 }
 
-export function deepgramWsUrl(apiKey: string, sampleRate = 16000): string {
+export function deepgramWsUrl(sampleRate = 16000): string {
   return (
     `wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US` +
-    `&encoding=linear16&sample_rate=${sampleRate}&channels=1` +
-    `&token=${encodeURIComponent(apiKey)}`
+    `&encoding=linear16&sample_rate=${sampleRate}&channels=1`
   );
 }
 
+/** @deprecated Use deepgramWsUrl() without the apiKey parameter — token-in-URL leaks
+ *  into server logs. Inject a createWebSocket factory instead. */
+export function deepgramWsUrlWithToken(apiKey: string, sampleRate = 16000): string {
+  return deepgramWsUrl(sampleRate) + `&token=${encodeURIComponent(apiKey)}`;
+}
+
 export function createDeepgramTranscriber(opts: {
-  apiKey: string;
+  apiKey?: string;
   sampleRate?: number;
   onTranscript: TranscriptHandler;
   WebSocketImpl?: typeof WebSocket;
+  /** Authenticated WebSocket factory. When provided, apiKey is ignored and
+   *  the factory must handle Deepgram auth (e.g. via token header or proxy).
+   *  Prefer this over apiKey to avoid leaking tokens in server/proxy logs. */
+  createWebSocket?: (url: string) => WebSocket;
 }): StreamingTranscriber {
-  const WS = opts.WebSocketImpl ?? WebSocket;
   const sampleRate = opts.sampleRate ?? 16000;
-  const url = deepgramWsUrl(opts.apiKey, sampleRate);
-  const ws = new WS(url);
+  const url: string = opts.createWebSocket
+    ? deepgramWsUrl(sampleRate)
+    : deepgramWsUrlWithToken(opts.apiKey ?? '', sampleRate);
+  const WS = opts.WebSocketImpl ?? WebSocket;
+  const ws: WebSocket = opts.createWebSocket
+    ? opts.createWebSocket(url)
+    : new WS(url);
   ws.binaryType = 'arraybuffer';
   ws.onmessage = (event: MessageEvent) => {
     try {

@@ -63,6 +63,7 @@ export {
   createParakeetTranscriber,
   createWhisperTranscriber,
   deepgramWsUrl,
+  deepgramWsUrlWithToken,
   parakeetWsUrl,
 } from './stt/index';
 export type { SttEngine, StreamingTranscriber, TranscriptHandler } from './stt/index';
