@@ -117,6 +117,7 @@ web/app/public/firebase-messaging-sw.js
 *.lock
 # After *.lock: the last matching pattern wins, so a re-include must follow it.
 !web/app/bun.lock
+!desktop/Cargo.lock
 *.log
 *.swo
 *.swp
