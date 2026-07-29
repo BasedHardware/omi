@@ -97,11 +97,11 @@ extension RealtimeHubController {
 
   func awaitTurnPersistenceFence() async {
     while !Task.isCancelled {
-      let turnGeneration = turnPersistenceLedger.generation
+      let persistenceGeneration = turnPersistenceLedger.generation
       let streamGeneration = streamingJournalWriteLedger.generation
       await turnPersistenceLedger.awaitPendingObligations()
       await streamingJournalWriteLedger.awaitPendingWrites()
-      guard turnGeneration == turnPersistenceLedger.generation,
+      guard persistenceGeneration == turnPersistenceLedger.generation,
         streamGeneration == streamingJournalWriteLedger.generation
       else { continue }
       return
