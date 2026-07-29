@@ -18,10 +18,23 @@ let package = Package(
         ),
     ],
     targets: [
+        // The portable decision rules, shared verbatim with the Windows CMake build in `windows/`.
+        // Sources live under `core/` and are compiled twice on purpose: once here for the macOS
+        // app and MCP binary, once by `core/CMakeLists.txt` for Windows and for CI on any host.
+        .target(
+            name: "ContextCoreCxx",
+            path: "core",
+            exclude: ["CMakeLists.txt", "README.md", "tests"],
+            sources: ["src"],
+            publicHeadersPath: "include"
+        ),
         // Storage, queries, and every pure policy the app and the MCP server share.
         .target(
             name: "ContextCore",
-            dependencies: [.product(name: "GRDB", package: "GRDB.swift")],
+            dependencies: [
+                "ContextCoreCxx",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // MCP protocol + tool dispatch, kept out of the executable so it is testable.
