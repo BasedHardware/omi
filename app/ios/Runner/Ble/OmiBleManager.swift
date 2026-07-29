@@ -135,11 +135,7 @@ final class OmiBleManager: NSObject {
         manuallyDisconnected.remove(uuid)
 
         if let peripheral = peripherals[uuid] {
-            if peripheral.state == .connected {
-                NSLog("[OmiBle] connectPeripheral: \(uuid) already connected, skipping")
-                return
-            }
-            centralManager.connect(peripheral, options: nil)
+            connectOrRevalidate(peripheral, uuid: uuid)
             return
         }
 
@@ -149,6 +145,23 @@ final class OmiBleManager: NSObject {
         if let peripheral = retrieved.first {
             peripheral.delegate = self
             peripherals[uuid] = peripheral
+            connectOrRevalidate(peripheral, uuid: uuid)
+        }
+    }
+
+    private func connectOrRevalidate(_ peripheral: CBPeripheral, uuid: String) {
+        switch BleKnownPeripheralConnectionPolicy.action(
+            isConnected: peripheral.state == .connected
+        ) {
+        case .rediscoverServices:
+            // CoreBluetooth may keep the link alive across process relaunch
+            // without replaying didConnect. Rediscovery republishes onDeviceReady
+            // after Flutter installs its callback, restoring the canonical ring
+            // stream instead of leaving a connected-but-inert session.
+            NSLog("[OmiBle] connectPeripheral: \(uuid) already connected; rediscovering services")
+            peripheral.delegate = self
+            peripheral.discoverServices(nil)
+        case .connect:
             centralManager.connect(peripheral, options: nil)
         }
     }

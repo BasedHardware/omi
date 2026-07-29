@@ -37,6 +37,34 @@ or recording filename: they contain account and complete device identifiers.
 | iOS Bluetooth Settings off/on | Not run | WebDriverAgent compiled and signed, but XCTest timed out while enabling automation mode before a session existed. An app-process outage is not a substitute for a radio-toggle result. |
 | Battery | Observation only | The displayed drop from 56% to 54% includes build, reconnect, automation, TTS, upload, and processing time; it is not a controlled battery benchmark. |
 
+## Rebased process-relaunch rerun
+
+A second isolated build from the rebased PR reproduced an iOS-only readiness
+gap before the fix. CoreBluetooth retained the physical pendant link across
+process termination, so the relaunched app observed the peripheral as
+`connected`. `connectPeripheral` returned without rediscovering services, no
+notification transitions followed, and Dart never received a fresh
+`onDeviceReady`. This is the concrete "connected but no live preview" failure;
+it is not a difference in the phone-side canonical assembler.
+
+The fixed build treats an already-connected peripheral as a GATT recovery
+request. It reassigns the delegate and rediscovers services, which republishes
+readiness after Flutter has installed its callback. On the physical rerun:
+
+- app launch began at `16:38:34`;
+- native revalidation began at `16:38:35.779`;
+- required notification transitions completed between `16:38:36.414` and
+  `16:38:37.645`;
+- no manual device selection or reconnect was required.
+
+The redwood / offline cedar / post-reconnect sequoia marker interval produced
+20 immutable ring WALs containing 2,253 Opus frames. Their pendant sequence
+ranges formed one exact contiguous interval, `[1490992, 1491492)`, including
+the audio captured while the app process was absent. This rerun proves
+transport recovery and durable source coverage. It does not replace the
+earlier canonical/server chronology test: production still lacks the backend
+replacement contract described below.
+
 ## Timeline-defect diagnosis
 
 The app requests a canonical transcript replacement by adding
@@ -62,6 +90,9 @@ contract is implemented and tested end to end.
 - `/tmp/omi-ios-offline-window.txt`
 - `/tmp/omi-ios-post-window.txt`
 - `/tmp/omi-ios-reconnect-conversation.png`
+- `/tmp/omi-ios-storage-first-rebased-reconnect-live-20260729.log`
+- `/tmp/omi-ios-storage-first-recoveryfix-reconnect-live-20260729.log`
+- `/tmp/omi-ios-wals-after-reconnectfix-20260729.json`
 
 ## Remaining acceptance work
 
