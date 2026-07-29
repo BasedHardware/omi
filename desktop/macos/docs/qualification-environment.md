@@ -5,6 +5,10 @@ recorded local lease before it starts the dev harness. It is deliberately
 separate from ordinary `make dev-up`: normal development keeps the standard
 ports and has no qualification lease.
 
+For provisioning a new macOS qualification runner, see
+[Runner provisioning](#runner-provisioning) below. Deprecated per-version host
+artifacts are listed in `qualification-cleanup.md`.
+
 ## Variables
 
 - `OMI_QUALIFICATION_LEASE_ROOT` — root for lease metadata, owned state, and
@@ -154,3 +158,182 @@ classification, status, and duration in milliseconds, plus an explicit
 exit trap, so the report distinguishes time spent in artifact/security,
 user-visible behavior, and runner hygiene. The 20-minute target is measured from
 this report; no Tier-2 or fault UX gate is skipped to meet it.
+
+## Runner provisioning
+
+Use this section when bringing up a new macOS ARM64 host as a desktop
+qualification runner. Official Beta qualification (`desktop_qualify_beta.yml`)
+only admits jobs that land on the M1 Studio label set; additional hosts may
+share the `omi-desktop-qualification` pool for non-gating work but cannot
+replace `omi-qual-m1-studio`.
+
+### Hardware
+
+| Requirement | Guidance |
+|---|---|
+| Architecture | Apple Silicon (ARM64) only |
+| RAM | ≥ 32 GiB recommended; qualification rebuilds SwiftPM + hermetic harness |
+| Free disk | ≥ 64 GiB usable, with a hard gate of 32 GiB free blocks and 65,536 free inodes before each run (`qualification-runner-self-clean.py`) |
+| OS | Current macOS with a full GUI login session (launchd KeepAlive agents need a logged-in user) |
+
+### Software prerequisites
+
+Install and verify before registering the runner:
+
+- Xcode Command Line Tools (`xcode-select --install`) and the pinned CI Xcode
+  app expected by `desktop/macos/scripts/run-swift-ci.sh` (currently
+  `/Applications/Xcode_16.4.app` when that path is used for Swift CI)
+- Docker Desktop (daemon running; `docker info` must succeed)
+- GitHub CLI (`gh`) authenticated to an account that can create repo runner
+  registration tokens for `BasedHardware/omi`
+- Python 3.11+ on `PATH` (`python3 --version`)
+- Node.js 20+ on `PATH` (`node --version`)
+- Flutter SDK on `PATH` (`flutter --version`) for monorepo tooling that still
+  touches shared packages
+- `make`, `curl`, `jq`, `git` on `PATH`
+- Homebrew tools commonly needed by the harness (`/opt/homebrew/bin` on PATH)
+
+### Clone and Omi setup
+
+```bash
+# Durable cache clone used by local evidence-only services and worktrees
+mkdir -p ~/.cache/hermes
+git clone --filter=blob:none git@github.com:BasedHardware/omi.git ~/.cache/hermes/omi
+cd ~/.cache/hermes/omi
+make setup          # hooks + backend pre-push env
+make setup-backend  # if you need the desktop Python backend venv immediately
+```
+
+Dev-harness prerequisites for local/manual qualification:
+
+```bash
+make dev-check
+# optional smoke of the hermetic stack on this host
+make dev-up && make dev-status && make dev-down
+```
+
+### GitHub Actions runner registration
+
+Download the latest macOS ARM64 actions runner into a durable home (example:
+`~/.local/share/omi-actions-runner`), then register it with `config.sh`.
+
+Labels required by `.github/workflows/desktop_qualify_beta.yml` for the
+official qualifier:
+
+```text
+self-hosted, macOS, ARM64, omi-desktop-qualification, omi-qual-m1-studio
+```
+
+`self-hosted`, `macOS`, and `ARM64` are applied by the runner binary. Pass the
+Omi-specific labels explicitly:
+
+```bash
+RUNNER_HOME=~/.local/share/omi-actions-runner
+REPO=BasedHardware/omi
+NAME=m1-mac-studio-qualification
+LABELS=omi-desktop-qualification,omi-qual-m1-studio
+
+api_token=$(gh auth token)
+registration_token=$(curl -fsS -X POST \
+  -H "Authorization: Bearer $api_token" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/${REPO}/actions/runners/registration-token" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+
+"$RUNNER_HOME/config.sh" --unattended \
+  --url "https://github.com/${REPO}" \
+  --token "$registration_token" \
+  --name "$NAME" \
+  --labels "$LABELS" \
+  --work _work
+```
+
+A secondary capacity host (for example the M4 Mini) may register with
+`omi-desktop-qualification` only (plus an optional host-specific label such as
+`omi-qual-m4-mini`). It will not receive `qualify-m1-studio` jobs.
+
+Keep the runner alive across reboots with a GUI-session launch agent that
+`exec`s `$RUNNER_HOME/run.sh` (`KeepAlive` + `RunAtLoad`). Export a PATH that
+includes the backend venv and Homebrew, and set `OMI_ALLOW_ADHOC_SIGN=1` only
+for the disposable `omi-qualification-*` bundles enforced by `run.sh`.
+
+### Network access
+
+The runner must reach:
+
+- `github.com` / `api.github.com` / Actions service endpoints (checkout, release
+  download/upload, app-token flows)
+- Live desktop-backend health used by the workflow
+  (`https://desktop-backend-hhibjajaja-uc.a.run.app/health`)
+- Docker Hub / GHCR as required by the hermetic harness images
+- Apple notarization is **not** required on the qualifier; signed candidate
+  assets arrive from Codemagic via the GitHub Release
+
+Outbound SMTP/Telegram is optional and only used by host-local notify helpers.
+
+### Local evidence-only service (optional)
+
+For host-local babysitting of a tagged candidate outside Actions, use the
+portable service (also installable at `~/.hermes/scripts/`):
+
+```bash
+# From a checkout, or via ~/.hermes/scripts/qualify-desktop-beta-service.py
+desktop/macos/scripts/qualify-desktop-beta-service.py \
+  --health-port 8765 \
+  v0.12.89+12089-macos
+```
+
+Behavior:
+
+- Tag is a CLI argument (no per-version hardcoding)
+- Discovers `git` / `gh` / `make` / Python at runtime (no `/Users/...` literals)
+- Dual-logs to stdout and `~/.hermes/logs/qualify-desktop-beta-<tag>.log`
+- Persists phase/attempt state under `~/.hermes/state/`
+- Retries with exponential backoff (5m base → 30m cap)
+- Serves `GET http://127.0.0.1:<port>/health` for watchdog probes
+- Stops cleanly on `SIGINT` / `SIGTERM`
+
+Pair long runs with `desktop/macos/scripts/qualification-watchdog.py` when you
+need heartbeat + bounded process-group enforcement.
+
+### Health verification
+
+```bash
+# Runner online with expected labels
+gh api repos/BasedHardware/omi/actions/runners \
+  --jq '.runners[] | {name,status,labels:[.labels[].name]}'
+
+# Launch agent / process
+launchctl print "gui/$(id -u)/com.omi.desktop-qualification-runner" | head
+pgrep -lf 'Runner.Listener|omi-actions-runner' || true
+
+# Capacity gate the workflow will enforce
+python3 desktop/macos/scripts/qualification-runner-self-clean.py \
+  --dry-run --report /tmp/runner-hygiene.json \
+  --repo-root "$PWD" \
+  --cache-root "${OMI_QUALIFICATION_SWIFT_CACHE_ROOT:-$HOME/Library/Caches/OmiDesktop/qualification-swiftpm-v2}" \
+  --qualification-lease-root "${OMI_QUALIFICATION_LEASE_ROOT:-${TMPDIR:-/tmp}/omi-desktop-qualification}" \
+  --stage-root "${RUNNER_TEMP:-/tmp}/desktop-beta-qualification" \
+  --fault-temp-root "${TMPDIR:-/tmp}" \
+  --capacity-path "${RUNNER_TEMP:-/tmp}" \
+  --current-run-id dry-run \
+  --minimum-free-kib 33554432 \
+  --minimum-free-inodes 65536
+
+# Optional local service health
+curl -fsS http://127.0.0.1:8765/health | jq .
+```
+
+### Security notes
+
+- `desktop_qualify_beta.yml` elevates `contents: write` on the M1 job so it can
+  upload qualification evidence to the release. Treat the runner host as a
+  secrets boundary: anyone who can execute on it can act with that write scope
+  for the duration of a job.
+- Runner registration tokens and `gh auth` credentials must stay on the host;
+  do not commit them, and prefer short-lived app tokens inside workflows.
+- Ad-hoc signing (`OMI_ALLOW_ADHOC_SIGN=1`) is restricted by `run.sh` to named
+  disposable qualification bundles — never broaden that allowlist on a shared
+  machine.
+- Keep `/Applications/Omi.app` and `Omi Beta.app` out of qualification cleanup
+  targets; the self-clean entrypoint already refuses them.
