@@ -40,9 +40,18 @@ describe('analytics capture contract', () => {
     }
   )
 
-  it('pins ingestion host to the CSP-allowed origin (not VITE_POSTHOG_HOST)', () => {
-    const source = readFileSync(resolve(__dirname, './analytics.ts'), 'utf8')
-    expect(source).toMatch(/const POSTHOG_HOST = 'https:\/\/us\.i\.posthog\.com'/)
-    expect(source).not.toMatch(/VITE_POSTHOG_HOST/)
+  // A VITE_POSTHOG_HOST override used to be honoured here, which sent capture to
+  // an origin the renderer CSP does not allow. Assert the runtime behaviour, not
+  // the source text: a set override must not reach fetch.
+  it('ignores a VITE_POSTHOG_HOST override and posts to the CSP-allowed origin', async () => {
+    vi.stubEnv('VITE_POSTHOG_HOST', 'https://not-in-csp.example.com')
+    vi.resetModules()
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response())
+
+    const { trackEvent: trackWithOverride } = await import('./analytics')
+    trackWithOverride('App Launched')
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://us.i.posthog.com/i/v0/e/')
+    vi.unstubAllEnvs()
   })
 })
