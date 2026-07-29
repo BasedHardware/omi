@@ -648,7 +648,6 @@ def request_finalization(
     force_process: bool = False,
     extra_updates: Mapping[str, Any] | None = None,
     require_cloud_tasks: bool = False,
-    firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
     if require_cloud_tasks and not is_listen_finalization_dispatch_configured():
@@ -665,7 +664,6 @@ def request_finalization(
             finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
             force_process=force_process,
             extra_updates=extra_updates,
-            firestore_client=firestore_client,
         )
     except FirestoreContentionExhausted as error:
         # An exhausted contention budget is a clean retry boundary: no outbox
@@ -690,7 +688,7 @@ def request_finalization(
                 log=logger,
             )
             return dict(intent) | {'route': 'blocked_byok'}
-        resumed = jobs_db.resume_blocked_byok_job_for_live_session(intent['job_id'], firestore_client=firestore_client)
+        resumed = jobs_db.resume_blocked_byok_job_for_live_session(intent['job_id'])
         return dict(resumed) | {'route': 'pusher'}
 
     if not is_listen_finalization_dispatch_enabled():

@@ -253,7 +253,6 @@ def _merge_required_promotion_duplicate(
             "corroboration_count": existing.corroboration_count + 1,
             "last_corroborated_at": now.isoformat(),
         },
-        db_client=db_client,
     )
     if merge_result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         raise RuntimeError(
@@ -316,7 +315,6 @@ def _merge_required_promotion_duplicate(
             "promotion_audit": source_promotion,
             "superseded_by": existing.memory_id,
         },
-        db_client=db_client,
     )
     if supersede_result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         raise RuntimeError(
@@ -546,7 +544,6 @@ def promote_short_term_item_via_apply(
         uid=uid,
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
-        db_client=db_client,
     )
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         raise RuntimeError(f"promotion apply failed for {item.memory_id}: {result.status} ({result.reason})")

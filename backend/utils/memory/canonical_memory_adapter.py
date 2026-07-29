@@ -92,7 +92,7 @@ def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str], *, db_c
         return
     if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return
-    pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids, db_client=db_client)
+    pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids)
     logger.info(
         "kg_citations_pruned uid=%s retracted_memory_count=%d pruned_entities=%d",
         uid,
@@ -439,9 +439,9 @@ def _persist_evidence(uid: str, evidence: MemoryEvidence, *, db_client: Any) -> 
     document_store.set_document(path, active_evidence.model_dump(mode="json"))
 
 
-def _bump_source_generation(uid: str, *, db_client: Any) -> MemoryControlState:
+def _bump_source_generation(uid: str) -> MemoryControlState:
     """Advance source_generation so re-extract gets a fresh operation identity space (Q7)."""
-    return atomic_bump_source_generation(uid, db_client=db_client)
+    return atomic_bump_source_generation(uid)
 
 
 def _resolve_initial_tier_value(data: Dict[str, Any]) -> str:
@@ -633,7 +633,6 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         uid=uid,
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
-        db_client=db_client,
     )
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         raise RuntimeError(f"canonical write failed: {result.status} ({result.reason})")
@@ -827,7 +826,6 @@ def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_
             uid=uid,
             operation_id=operation.operation_id,
             patch_payload=patch_payload,
-            db_client=db_client,
         )
         if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
             updated = (
@@ -934,7 +932,7 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client: Any, reason
 
     delete_canonical_memory_vector(uid, item.memory_id)
     delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
-    purge_stale_review_conflicts_for_memories(uid, [item.memory_id], reason=reason, db_client=db_client)
+    purge_stale_review_conflicts_for_memories(uid, [item.memory_id], reason=reason)
 
 
 def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_client: Any = None) -> Dict[str, Any]:
@@ -950,7 +948,7 @@ def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_
         _tombstone_memory_item(uid, item, db_client=db_client, reason="conversation_reprocess_retract")
         retracted_ids.append(item.memory_id)
 
-    bumped_control = _bump_source_generation(uid, db_client=db_client)
+    bumped_control = _bump_source_generation(uid)
     invalidate_kg_for_memory_retraction(uid, retracted_ids, db_client=db_client)
 
     return {
@@ -1094,7 +1092,7 @@ def purge_canonical_derived_user_data(uid: str, *, db_client: Any = None) -> Dic
             raise RuntimeError(f"canonical vector purge only deleted {vector_deleted}/{len(vector_ids)} vectors")
 
     keyword_deleted = purge_user_atom_keyword_index(uid, db_client=db_client, force=True, raise_on_failure=True)
-    kg_db.delete_knowledge_graph(uid, db_client=db_client)
+    kg_db.delete_knowledge_graph(uid)
 
     trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1

@@ -287,6 +287,9 @@ def test_canonical_write_uses_apply_and_not_legacy_save(monkeypatch):
         }
     )
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
 
     monkeypatch.setattr(
         canonical_memory_adapter_module,
@@ -336,6 +339,9 @@ def test_canonical_read_returns_default_visible_items(monkeypatch):
     item = _fresh_short_term_item(uid=uid, memory_id=memory_id, conversation_id=conversation_id, content=content)
     db = _FakeDb({f"users/{uid}/memory_items/{memory_id}": _stored_item(item)})
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
 
     memories = read_canonical_memories(uid, db_client=db)
     assert len(memories) == 1
@@ -353,6 +359,9 @@ def test_canonical_read_hides_restricted_sensitivity(monkeypatch):
     restricted = item.model_copy(update={"sensitivity_labels": ["credential"]})
     db = _FakeDb({f"users/{uid}/memory_items/{memory_id}": _stored_item(restricted)})
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
 
     assert read_canonical_memories(uid, db_client=db) == []
 
@@ -416,6 +425,9 @@ def test_reprocess_retract_then_rewrite_restores_active_memory(monkeypatch):
         }
     )
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
 
     monkeypatch.setattr(
         canonical_memory_adapter_module,
@@ -705,6 +717,9 @@ def test_canonical_external_write_preserves_public_visibility_and_manual_flag(mo
         }
     )
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(
         canonical_memory_adapter_module,
         "read_memory_v3_trusted_account_generation",

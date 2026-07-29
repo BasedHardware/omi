@@ -4,17 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from functools import wraps
-from typing import Any, Callable, Dict, Iterable, List, Optional, TypeVar, TypedDict, cast
+from typing import Any, Dict, Iterable, List, Optional, TypeVar, TypedDict, cast
 
 from pydantic import BaseModel
 
-try:
-    from google.cloud.firestore_v1 import transactional as _firestore_transactional  # type: ignore[reportAssignmentType,reportUnknownMemberType]  # firebase_admin firestore_v1 untyped
-except ImportError:  # pragma: no cover - local unit tests mock Firestore.
-    _firestore_transactional = None
-
-from database._client import db
+from database.store import Transaction, get_document_store
 from database.memory_collections import MemoryCollections
 from database.read_boundary import parse_snapshot_strict
 from models.memory_evidence import MemoryEvidence
@@ -28,6 +22,10 @@ from models.memory_apply import (
 from models.memory_operations import MemoryOperation
 from models.product_memory import MemoryItemStatus, MemoryItem
 from models.memory_state_head import trusted_memory_state_head_fields
+
+
+def _store():
+    return get_document_store()
 
 
 class MemoryFirestoreApplyError(Exception):
@@ -140,42 +138,11 @@ class MemoryApplyDoc(TypedDict, total=False):
     source: str
 
 
-F = TypeVar("F", bound=Callable[..., Any])
 M = TypeVar("M", bound=BaseModel)
 
 
-def transactional(func: F) -> F:
-    """Typed facade over ``google.cloud.firestore_v1.transactional``.
-
-    Delegates to the real Firestore decorator when the SDK is importable;
-    otherwise falls back to a transaction-lifecycle simulator used by local
-    unit tests that mock Firestore.
-    """
-    if _firestore_transactional is not None:
-        return cast("F", _firestore_transactional(func))
-
-    @wraps(func)
-    def wrapper(transaction: Any, *args: Any, **kwargs: Any) -> Any:
-        if hasattr(transaction, "_begin"):
-            transaction._begin()
-        try:
-            result: Any = func(transaction, *args, **kwargs)
-            if hasattr(transaction, "_commit"):
-                transaction._commit()
-            return result
-        except Exception:
-            if hasattr(transaction, "_rollback"):
-                transaction._rollback()
-            raise
-        finally:
-            if hasattr(transaction, "_clean_up"):
-                transaction._clean_up()
-
-    return cast("F", wrapper)
-
-
 def _typed_doc(doc: Any) -> Dict[str, Any]:
-    """Typed adapter for Firestore ``DocumentSnapshot.to_dict()`` reads."""
+    """Typed adapter for the storage port ``StoredDocument.to_dict()`` reads."""
     raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
@@ -185,41 +152,32 @@ def apply_long_term_patch_firestore(
     uid: str,
     operation_id: str,
     patch_payload: Dict[str, Any],
-    db_client: Any = db,
 ) -> ApplyResult:
-    """Apply a memory Long-term patch through the Firestore transaction boundary.
+    """Apply a memory Long-term patch through the storage-port transaction boundary.
 
     The pure contract in `models.memory_apply` stays dependency-free. This
-    adapter owns authoritative Firestore reads/writes and never trusts caller
+    adapter owns authoritative store reads/writes and never trusts caller
     snapshots for control state, operation state, or evidence/source state.
     """
-    transaction = db_client.transaction()
-    return _apply_long_term_patch_firestore_transaction(
-        transaction,
-        db_client,
-        uid,
-        operation_id,
-        patch_payload,
+    return _store().run_transaction(
+        lambda tx: _apply_long_term_patch_firestore_transaction(tx, uid, operation_id, patch_payload)
     )
 
 
-def atomic_bump_source_generation(uid: str, *, db_client: Any) -> MemoryControlState:
+def atomic_bump_source_generation(uid: str) -> MemoryControlState:
     """Atomically advance canonical apply ``source_generation`` (Q7 reprocess)."""
-    transaction = db_client.transaction()
-    return _atomic_bump_source_generation_transaction(transaction, db_client, uid)
+    return _store().run_transaction(lambda tx: _atomic_bump_source_generation_transaction(tx, uid))
 
 
-@transactional
 def _atomic_bump_source_generation_transaction(
-    transaction: Any,
-    db_client: Any,
+    tx: Transaction,
     uid: str,
 ) -> MemoryControlState:
     now = datetime.now(timezone.utc)
     collections = MemoryCollections(uid=uid)
-    control_ref = db_client.document(collections.memory_apply_control_state)
-    snapshot = control_ref.get(transaction=transaction)
-    if not getattr(snapshot, "exists", False):
+    control_path = collections.memory_apply_control_state
+    snapshot = tx.get(control_path)
+    if not snapshot.exists:
         control = MemoryControlState(
             uid=uid,
             head_commit_id="head0",
@@ -235,31 +193,29 @@ def _atomic_bump_source_generation_transaction(
             "updated_at": now,
         }
     )
-    transaction.set(control_ref, _firestore_data(bumped))
+    tx.set(control_path, _firestore_data(bumped))
     return bumped
 
 
-@transactional
 def _apply_long_term_patch_firestore_transaction(
-    transaction: Any,
-    db_client: Any,
+    tx: Transaction,
     uid: str,
     operation_id: str,
     patch_payload: Dict[str, Any],
 ) -> ApplyResult:
     collections = MemoryCollections(uid=uid)
-    control_ref = db_client.document(collections.memory_apply_control_state)
-    operation_ref = db_client.document(f"{collections.memory_operations}/{operation_id}")
+    control_path = collections.memory_apply_control_state
+    operation_path = f"{collections.memory_operations}/{operation_id}"
 
     control_state = _required_model(
-        ref=control_ref,
-        transaction=transaction,
+        tx=tx,
+        path=control_path,
         model=MemoryControlState,
         label="memory control state",
     )
     operation = _required_model(
-        ref=operation_ref,
-        transaction=transaction,
+        tx=tx,
+        path=operation_path,
         model=MemoryOperation,
         label="memory operation",
     )
@@ -279,24 +235,21 @@ def _apply_long_term_patch_firestore_transaction(
         return committed_replay
 
     evidence_items = _read_authoritative_evidence(
-        db_client=db_client,
-        transaction=transaction,
+        tx=tx,
         collections=collections,
         evidence_ids=operation.evidence_ids,
     )
     target_validation = _validate_authoritative_targets(
-        db_client=db_client,
-        transaction=transaction,
+        tx=tx,
         collections=collections,
         operation=operation,
         control_state=control_state,
     )
     if target_validation is not None:
         _write_apply_result(
-            transaction=transaction,
-            db_client=db_client,
+            tx=tx,
             collections=collections,
-            operation_ref=operation_ref,
+            operation_path=operation_path,
             result=target_validation,
         )
         return target_validation
@@ -304,8 +257,7 @@ def _apply_long_term_patch_firestore_transaction(
     authoritative_payload: Dict[str, Any] = dict(patch_payload)
     authoritative_payload["evidence"] = evidence_items
     existing_item = _read_authoritative_target_item(
-        db_client=db_client,
-        transaction=transaction,
+        tx=tx,
         collections=collections,
         operation=operation,
     )
@@ -318,10 +270,9 @@ def _apply_long_term_patch_firestore_transaction(
         patch_payload=authoritative_payload,
     )
     _write_apply_result(
-        transaction=transaction,
-        db_client=db_client,
+        tx=tx,
         collections=collections,
-        operation_ref=operation_ref,
+        operation_path=operation_path,
         result=result,
     )
     return result
@@ -329,17 +280,15 @@ def _apply_long_term_patch_firestore_transaction(
 
 def _read_authoritative_evidence(
     *,
-    db_client: Any,
-    transaction: Any,
+    tx: Transaction,
     collections: MemoryCollections,
     evidence_ids: Iterable[str],
 ) -> List[MemoryEvidence]:
     evidence_items: List[MemoryEvidence] = []
     for evidence_id in evidence_ids:
-        evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence_id}")
         evidence = _required_model(
-            ref=evidence_ref,
-            transaction=transaction,
+            tx=tx,
+            path=f"{collections.memory_evidence}/{evidence_id}",
             model=MemoryEvidence,
             label="memory evidence",
         )
@@ -349,8 +298,7 @@ def _read_authoritative_evidence(
 
 def _read_authoritative_target_item(
     *,
-    db_client: Any,
-    transaction: Any,
+    tx: Transaction,
     collections: MemoryCollections,
     operation: MemoryOperation,
 ) -> Optional[MemoryItem]:
@@ -359,8 +307,7 @@ def _read_authoritative_target_item(
     target_id = operation.logical_payload.target_memory_id or operation.target_memory_id
     if not target_id:
         return None
-    target_ref = db_client.document(f"{collections.memory_items}/{target_id}")
-    snapshot = target_ref.get(transaction=transaction)
+    snapshot = tx.get(f"{collections.memory_items}/{target_id}")
     if not snapshot.exists:
         return None
     return parse_snapshot_strict(MemoryItem, snapshot, payload_from_snapshot=_typed_doc)
@@ -368,16 +315,14 @@ def _read_authoritative_target_item(
 
 def _validate_authoritative_targets(
     *,
-    db_client: Any,
-    transaction: Any,
+    tx: Transaction,
     collections: MemoryCollections,
     operation: MemoryOperation,
     control_state: MemoryControlState,
 ) -> Optional[ApplyResult]:
     target_ids = _operation_target_ids(operation)
     for target_id in target_ids:
-        target_ref = db_client.document(f"{collections.memory_items}/{target_id}")
-        snapshot = target_ref.get(transaction=transaction)
+        snapshot = tx.get(f"{collections.memory_items}/{target_id}")
         if not snapshot.exists:
             return _target_not_active(control_state, operation, f"missing target memory item: {target_id}")
         target = parse_snapshot_strict(MemoryItem, snapshot, payload_from_snapshot=_typed_doc)
@@ -411,21 +356,20 @@ def _target_not_active(control_state: MemoryControlState, operation: MemoryOpera
 
 def _write_apply_result(
     *,
-    transaction: Any,
-    db_client: Any,
+    tx: Transaction,
     collections: MemoryCollections,
-    operation_ref: Any,
+    operation_path: str,
     result: ApplyResult,
 ) -> None:
-    transaction.set(operation_ref, _firestore_data(result.operation))
+    tx.set(operation_path, _firestore_data(result.operation))
     if result.status != ApplyStatus.committed:
         return
 
-    control_ref = db_client.document(collections.memory_apply_control_state)
-    commit_ref = db_client.document(f"{collections.memory_commits}/{result.control_state.head_commit_id}")
-    state_head_ref = db_client.document(collections.memory_state_head)
-    transaction.set(control_ref, _firestore_data(result.control_state))
-    transaction.set(state_head_ref, _firestore_data(_memory_state_head_from_control(result.control_state)))
+    control_path = collections.memory_apply_control_state
+    commit_path = f"{collections.memory_commits}/{result.control_state.head_commit_id}"
+    state_head_path = collections.memory_state_head
+    tx.set(control_path, _firestore_data(result.control_state))
+    tx.set(state_head_path, _firestore_data(_memory_state_head_from_control(result.control_state)))
     commit_doc: MemoryApplyDoc = {
         "commit_id": result.control_state.head_commit_id,
         "uid": result.control_state.uid,
@@ -437,13 +381,11 @@ def _write_apply_result(
         "outbox_event_ids": [event.event_id for event in result.outbox_events],
         "updated_at": result.control_state.updated_at,
     }
-    transaction.set(commit_ref, _firestore_data(commit_doc))
+    tx.set(commit_path, _firestore_data(commit_doc))
     for item in result.memory_items:
-        item_ref = db_client.document(f"{collections.memory_items}/{item.memory_id}")
-        transaction.set(item_ref, _firestore_data(item))
+        tx.set(f"{collections.memory_items}/{item.memory_id}", _firestore_data(item))
     for event in result.outbox_events:
-        event_ref = db_client.document(f"{collections.memory_outbox}/{event.event_id}")
-        transaction.set(event_ref, _firestore_data(event))
+        tx.set(f"{collections.memory_outbox}/{event.event_id}", _firestore_data(event))
 
 
 def _memory_state_head_from_control(control_state: MemoryControlState) -> MemoryApplyDoc:
@@ -458,10 +400,10 @@ def _memory_state_head_from_control(control_state: MemoryControlState) -> Memory
     return cast(MemoryApplyDoc, {**trusted_fields, "updated_at": control_state.updated_at})
 
 
-def _required_model(*, ref: Any, transaction: Any, model: type[M], label: str) -> M:
-    snapshot = ref.get(transaction=transaction)
+def _required_model(*, tx: Transaction, path: str, model: type[M], label: str) -> M:
+    snapshot = tx.get(path)
     if not snapshot.exists:
-        raise MissingMemoryDocument(f"missing {label}: {ref.path}")
+        raise MissingMemoryDocument(f"missing {label}: {path}")
     return parse_snapshot_strict(model, snapshot, payload_from_snapshot=_typed_doc)
 
 

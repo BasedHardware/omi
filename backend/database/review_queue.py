@@ -11,7 +11,12 @@ from database.memory_non_active_routes import (
     NonActiveRouteOutcome,
     persist_non_active_route_outcome,
 )
-from ._client import db
+from database.store import get_document_store
+
+
+def _store():
+    return get_document_store()
+
 
 users_collection = 'users'
 review_queue_collection = 'memory_review_queue'
@@ -83,7 +88,7 @@ def create_review_conflict(
         'expires_at': now + timedelta(hours=ttl_hours),
         'permitted_uses': sorted(permitted_uses('pending_review')),
     }
-    db.collection(users_collection).document(uid).collection(review_queue_collection).document(review_id).set(item)
+    _store().set(f'{users_collection}/{uid}/{review_queue_collection}/{review_id}', item)
     return item
 
 
@@ -92,7 +97,6 @@ def purge_stale_review_conflicts_for_memories(
     memory_ids: List[str],
     *,
     reason: str = "source_memory_deleted",
-    db_client: Any = None,
 ) -> List[str]:
     """Drop pending review items that reference tombstoned/superseded/deleted memories."""
     target_ids = {memory_id for memory_id in memory_ids if memory_id}
@@ -101,13 +105,7 @@ def purge_stale_review_conflicts_for_memories(
 
     now = datetime.now(timezone.utc)
     purged: List[str] = []
-    client = db_client if db_client is not None else db
-    users_ref = client.collection(users_collection)
-    if hasattr(users_ref, 'document'):
-        queue_ref = users_ref.document(uid).collection(review_queue_collection)
-    else:
-        queue_ref = client.collection(f'{users_collection}/{uid}/{review_queue_collection}')
-    for doc in queue_ref.stream():
+    for doc in _store().query(f'{users_collection}/{uid}/{review_queue_collection}'):
         raw: object = doc.to_dict()
         item: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         if item.get('status') not in ('pending', 'pending_review'):
@@ -123,14 +121,15 @@ def purge_stale_review_conflicts_for_memories(
         if not referenced & target_ids:
             continue
         review_id: str = item.get('review_id') or doc.id
-        doc.reference.update(
+        _store().update(
+            doc.path,
             {
                 'status': 'dropped',
                 'decision': 'drop',
                 'reason': reason,
                 'resolved_at': now,
                 'updated_at': now,
-            }
+            },
         )
         purged.append(review_id)
     return purged
@@ -145,9 +144,8 @@ def _review_conflict_sort_key(item: Dict[str, Any]) -> tuple[float, datetime]:
 
 
 def list_review_conflicts(uid: str, status: str = 'pending', limit: int = 100) -> List[Dict[str, Any]]:
-    queue_ref = db.collection(users_collection).document(uid).collection(review_queue_collection)
     items: List[Dict[str, Any]] = []
-    for doc in queue_ref.stream():
+    for doc in _store().query(f'{users_collection}/{uid}/{review_queue_collection}'):
         raw: object = doc.to_dict()
         item: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
         if status and item.get('status') != status:
@@ -159,7 +157,7 @@ def list_review_conflicts(uid: str, status: str = 'pending', limit: int = 100) -
 
 
 def get_review_conflict(uid: str, review_id: str) -> Optional[Dict[str, Any]]:
-    doc = db.collection(users_collection).document(uid).collection(review_queue_collection).document(review_id).get()
+    doc = _store().get(f'{users_collection}/{uid}/{review_queue_collection}/{review_id}')
     if not doc.exists:
         return None
     raw: object = doc.to_dict()
@@ -232,7 +230,7 @@ def record_correction(
         'reason': reason,
         'created_at': now,
     }
-    db.collection(users_collection).document(uid).collection(corrections_collection).document(correction_id).set(record)
+    _store().set(f'{users_collection}/{uid}/{corrections_collection}/{correction_id}', record)
     return record
 
 
@@ -281,7 +279,7 @@ def resolve_review_conflict(
         'updated_at': now,
         'resolution_commit_id': commit_obj.get('commit_id'),
     }
-    db.collection(users_collection).document(uid).collection(review_queue_collection).document(review_id).update(update)
+    _store().update(f'{users_collection}/{uid}/{review_queue_collection}/{review_id}', update)
     if item.get('source_short_term_id'):
         short_term_db.mark_consolidated(uid, item['source_short_term_id'], update.get('resolution_commit_id'))
 
@@ -396,12 +394,12 @@ def append_resolution_commit(
     if decision == 'reject':
         now = datetime.now(timezone.utc)
         fact_id: Any = item.get('fact_id')
-        memory_ref = db.collection(users_collection).document(uid).collection(memories_collection).document(fact_id)
+        memory_path = f'{users_collection}/{uid}/{memories_collection}/{fact_id}'
 
-        def write_projection(transaction: Any) -> None:
-            snapshot = memory_ref.get(transaction=transaction)
+        def write_projection(tx: Any) -> None:
+            snapshot = tx.get(memory_path)
             if snapshot.exists:
-                transaction.update(memory_ref, {'invalid_at': now, 'updated_at': now, 'review_status': 'rejected'})
+                tx.update(memory_path, {'invalid_at': now, 'updated_at': now, 'review_status': 'rejected'})
 
         return memory_ledger.append_commit(
             uid,

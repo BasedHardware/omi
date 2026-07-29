@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
+from tests.store_fakes import FakeDocumentStore
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -59,60 +60,6 @@ def review_queue():
         yield module
 
 
-class _FakeDocRef:
-    def __init__(self, store, full_path):
-        self._store = store
-        self._full_path = full_path
-
-    def update(self, payload):
-        self._store[self._full_path].update(payload)
-
-
-class _FakeDoc:
-    def __init__(self, store, full_path, doc_id, data):
-        self.id = doc_id
-        self._store = store
-        self._full_path = full_path
-        self._data = data
-
-    def to_dict(self):
-        return dict(self._data)
-
-    @property
-    def reference(self):
-        return _FakeDocRef(self._store, self._full_path)
-
-
-class _FakeCollection:
-    def __init__(self, store, path_prefix):
-        self._store = store
-        self._path_prefix = path_prefix
-
-    def stream(self):
-        prefix = f"{self._path_prefix}/"
-        for key, data in sorted(self._store.items()):
-            if key.startswith(prefix):
-                doc_id = key[len(prefix) :]
-                yield _FakeDoc(self._store, key, doc_id, data)
-
-
-class _FakeUserDoc:
-    def __init__(self, store, uid):
-        self._store = store
-        self._uid = uid
-
-    def collection(self, name):
-        return _FakeCollection(self._store, f"users/{self._uid}/{name}")
-
-
-class _FakeUsers:
-    def __init__(self, store):
-        self._store = store
-
-    def document(self, uid):
-        return _FakeUserDoc(self._store, uid)
-
-
 def _seed_queue(store, uid: str, items: dict) -> None:
     base = f"users/{uid}/memory_review_queue"
     for doc_id, data in items.items():
@@ -152,11 +99,7 @@ def test_purge_drops_pending_items_referencing_deleted_memory(monkeypatch, revie
         },
     )
 
-    user_ref = MagicMock()
-    user_ref.collection.return_value = _FakeCollection(store, f"users/{uid}/memory_review_queue")
-    users_ref = MagicMock()
-    users_ref.document.return_value = user_ref
-    monkeypatch.setattr(review_queue, "db", MagicMock(collection=MagicMock(return_value=users_ref)))
+    monkeypatch.setattr(review_queue, "_store", lambda: FakeDocumentStore(backing=store))
 
     purged = review_queue.purge_stale_review_conflicts_for_memories(uid, ["mem_deleted"])
 

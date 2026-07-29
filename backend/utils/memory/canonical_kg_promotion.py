@@ -30,8 +30,8 @@ def _current_memory_is_user_rejected(uid: str, memory_id: str, *, db_client: Any
     return isinstance(promotion, dict) and promotion.get("user_review") is False
 
 
-def _remove_rejected_kg_projection(uid: str, memory_id: str, *, db_client: Any) -> None:
-    kg_db.prune_memory_citations_from_kg(uid, [memory_id], db_client=db_client)
+def _remove_rejected_kg_projection(uid: str, memory_id: str) -> None:
+    kg_db.prune_memory_citations_from_kg(uid, [memory_id])
     document_store.set_document(
         f"{MemoryCollections(uid=uid).memory_items}/{memory_id}",
         {"kg_extracted": False},
@@ -127,7 +127,6 @@ def extract_kg_for_promoted_memory(
             content_for_kg,
             item.memory_id,
             user_name=user_name,
-            db_client=db_client,
             strict_parse=True,
         )
     except Exception:
@@ -137,14 +136,14 @@ def extract_kg_for_promoted_memory(
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="extractor_failed")
     race_check_enabled = db_client is not None
     if race_check_enabled and _current_memory_is_user_rejected(uid, item.memory_id, db_client=db_client):
-        _remove_rejected_kg_projection(uid, item.memory_id, db_client=db_client)
+        _remove_rejected_kg_projection(uid, item.memory_id)
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="user_rejected")
     if preserve_item_updated_at:
         set_canonical_memory_kg_extracted_without_touching_updated_at(uid, item.memory_id, db_client=db_client)
     else:
         set_canonical_memory_kg_extracted(uid, item.memory_id, db_client=db_client)
     if race_check_enabled and _current_memory_is_user_rejected(uid, item.memory_id, db_client=db_client):
-        _remove_rejected_kg_projection(uid, item.memory_id, db_client=db_client)
+        _remove_rejected_kg_projection(uid, item.memory_id)
         return CanonicalKgPromotionResult(attempted=True, skipped_reason="user_rejected")
     node_count = len(result.get("nodes") or [])
     edge_count = len(result.get("edges") or [])

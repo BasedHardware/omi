@@ -620,7 +620,6 @@ def _archive_legacy_backfill_item_via_apply(
             "expected_content_hash": item.content_hash,
             "promotion_audit": promotion,
         },
-        db_client=db_client,
     )
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         raise RuntimeError(f"archive remediation failed: {result.status} ({result.reason})")
@@ -1037,7 +1036,6 @@ def _upgrade_pending_admission_candidate(
             "promotion_audit": promotion,
             "expires_at": (item.expires_at or datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
         },
-        db_client=db_client,
     )
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         raise RuntimeError(f"legacy admission upgrade failed: {result.status} ({result.reason})")
@@ -1201,7 +1199,6 @@ def _apply_one_legacy_row(
         uid=uid,
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
-        db_client=db_client,
     )
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         raise RuntimeError(f"legacy backfill apply failed for {legacy_id}: {result.status} ({result.reason})")

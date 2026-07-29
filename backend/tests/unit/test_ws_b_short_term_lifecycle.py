@@ -330,6 +330,9 @@ def _clear_canonical_cohort_fixture(monkeypatch):
     _load_ws_b_runtime_modules()
     clear_canonical_cohort(monkeypatch)
     monkeypatch.setattr(document_store, "_store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.review_queue._store", lambda: _DOC_STORE_HOLDER["store"])
     monkeypatch.setattr(
         "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
         lambda *_, **__: CanonicalKgPromotionResult(attempted=True, success=True),

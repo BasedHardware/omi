@@ -12,6 +12,9 @@ contains ``value``. Field transforms use the neutral sentinels in ``database.sto
 ``query`` scopes to one containing collection (a single parent); ``query_group`` scopes to every
 collection sharing a leaf name across all parents (a Firestore collection-group query), returning
 records whose ``path`` is the full logical path so callers can recover the parent (e.g. the uid).
+``query_group``'s ``start_after`` is a document-name keyset (a full logical path): results are
+ordered by document name ascending and resume strictly after that path — the portable form of a
+Firestore collection-group cursor, for bounded resumable cross-parent sweeps.
 """
 
 from __future__ import annotations
@@ -89,6 +92,7 @@ class DocumentStore(Protocol):
         direction: str = "asc",
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        start_after: Optional[str] = None,
     ) -> List[StoredDocument]: ...  # cross-parent collection-group query; results carry full paths
     def get_many(self, collection: str, ids: Sequence[str]) -> List[StoredDocument]: ...
     def list_ids(self, collection: str) -> List[str]: ...

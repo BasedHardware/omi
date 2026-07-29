@@ -279,6 +279,9 @@ def canonical_db(monkeypatch):
     # the injected Firestore-shaped fake. Point its ``_store`` seam at a FakeDocumentStore sharing the
     # fake's backing dict so seeded data and writes stay consistent between the two.
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     return db
 
 
@@ -348,7 +351,7 @@ def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch,
     expected_vector_id = neutral_vector_id_for_memory(memory_id)
     assert expected_vector_id in result["vector_ids"]
     assert expected_vector_id in deleted_vector_ids
-    delete_graph.assert_called_once_with(uid, db_client=canonical_db)
+    delete_graph.assert_called_once_with(uid)
 
     outbox_paths = [path for path in canonical_db.docs if f"users/{uid}/memory_outbox/" in path]
     assert outbox_paths, "account delete should enqueue durable vector purge outbox records"
@@ -389,6 +392,9 @@ def test_canonical_account_delete_purge_raises_on_partial_vector_delete(monkeypa
 def test_legacy_account_delete_purge_skips_canonical_path(monkeypatch):
     db = _legacy_db_with_control()
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY
 
     delete_by_id = MagicMock()
@@ -412,6 +418,9 @@ def test_legacy_purge_derived_user_data_still_purges_legacy_vectors(monkeypatch)
     """Canonical neutral-id purge is inert for a real legacy uid; legacy batch path stays separate."""
     db = _legacy_db_with_control()
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY
 
     delete_by_id = MagicMock()

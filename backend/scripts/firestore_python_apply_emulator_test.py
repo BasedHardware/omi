@@ -93,7 +93,6 @@ def main() -> int:
         uid=uid,
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
-        db_client=db_client,
     )
     if result.status != ApplyStatus.committed:
         raise AssertionError(f"expected committed apply result, got {result.status}: {result.reason}")
@@ -148,7 +147,6 @@ def main() -> int:
         uid=uid,
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
-        db_client=db_client,
     )
     if retry.status != ApplyStatus.idempotent_skip:
         raise AssertionError(f"expected idempotent replay on retry, got {retry.status}")

@@ -209,6 +209,9 @@ def _seed_legacy_evidence(db: _PromotionFakeDb, rows: list[dict]) -> None:
 @pytest.fixture(autouse=True)
 def _route_document_store_to_fake(monkeypatch):
     monkeypatch.setattr(document_store, "_store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: _DOC_STORE_HOLDER["store"])
+    monkeypatch.setattr("database.review_queue._store", lambda: _DOC_STORE_HOLDER["store"])
 
 
 @pytest.fixture(autouse=True)

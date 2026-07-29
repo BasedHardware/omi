@@ -178,32 +178,34 @@ def test_get_action_items_skips_deleted_in_active_bucket(ai_mod, monkeypatch):
 
 def test_knowledge_graph_get_is_bounded(monkeypatch):
     import database.knowledge_graph as kg
+    from tests.store_fakes import FakeDocumentStore
 
-    class _StreamColl:
-        def __init__(self, n):
-            self.n = n
-            self.limit_n = None
+    captured: dict = {}
 
-        def limit(self, n):
-            self.limit_n = n
-            return self
+    class _RecordingStore(FakeDocumentStore):
+        def query(self, collection, **kwargs):
+            captured[collection.rsplit('/', 1)[-1]] = kwargs.get('limit')
+            return super().query(collection, **kwargs)
 
-        def stream(self):
-            for i in range(self.limit_n if self.limit_n is not None else self.n):
-                yield SimpleNamespace(to_dict=lambda i=i: {'id': f'n{i}', 'label': f'L{i}'})
+    fake = _RecordingStore()
+    for i in range(kg.MAX_KNOWLEDGE_GRAPH_NODES + 1):
+        fake._docs[f'users/uid/knowledge_nodes/n{i}'] = {'id': f'n{i}', 'label': f'L{i}'}
+    for i in range(kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1):
+        fake._docs[f'users/uid/knowledge_edges/e{i}'] = {
+            'id': f'e{i}',
+            'source_id': 'x',
+            'target_id': 'y',
+            'label': 'r',
+        }
+    monkeypatch.setattr(kg, '_store', lambda: fake)
 
-    nodes = _StreamColl(10000)
-    edges = _StreamColl(10000)
-
-    user_ref = SimpleNamespace(collection=lambda name: nodes if name == kg.knowledge_nodes_collection else edges)
-    client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
-
-    graph = kg.get_knowledge_graph('uid', db_client=client)
+    graph = kg.get_knowledge_graph('uid')
     assert len(graph['nodes']) == kg.MAX_KNOWLEDGE_GRAPH_NODES
     assert len(graph['edges']) == kg.MAX_KNOWLEDGE_GRAPH_EDGES
     assert graph['truncated'] is True
-    assert nodes.limit_n == kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
-    assert edges.limit_n == kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
+    # The reader fetches exactly one past the cap to detect truncation without a count().
+    assert captured['knowledge_nodes'] == kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
+    assert captured['knowledge_edges'] == kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
 
 
 def test_legacy_get_memories_no_first_page_5000_force():

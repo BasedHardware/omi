@@ -601,7 +601,6 @@ def _apply_superseded_item(
         uid=uid,
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
-        db_client=db_client,
     )
     if result.status == ApplyStatus.target_not_active:
         raise ConsolidationApplySkipped(f"supersede target not active for {memory_id}: {result.reason}")
@@ -617,7 +616,7 @@ def _apply_superseded_item(
         delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
     delete_canonical_memory_vector(uid, memory_id)
     invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=db_client)
-    purge_stale_review_conflicts_for_memories(uid, [memory_id], reason="memory_superseded", db_client=db_client)
+    purge_stale_review_conflicts_for_memories(uid, [memory_id], reason="memory_superseded")
 
 
 def _escalate_to_review_queue(
@@ -625,7 +624,6 @@ def _escalate_to_review_queue(
     *,
     decision: ConsolidationAgentDecision,
     survivor: MemoryItem,
-    db_client: Any,
 ) -> None:
     conflict_ids = decision.conflict_with or decision.supersedes
     fact = {
@@ -708,7 +706,7 @@ def apply_consolidation_decision(
     if decision.decision == "review" or decision.review_required:
         survivor = pending_by_id.get(decision.survivor_memory_id)
         if survivor is not None:
-            _escalate_to_review_queue(uid, decision=decision, survivor=survivor, db_client=db_client)
+            _escalate_to_review_queue(uid, decision=decision, survivor=survivor)
         return []
 
     durable_decision = DurablePatchDecision(decision.decision)
@@ -782,7 +780,6 @@ def apply_consolidation_decision(
         uid=uid,
         operation_id=operation.operation_id,
         patch_payload=patch_payload,
-        db_client=db_client,
     )
     if result.status == ApplyStatus.target_not_active:
         raise ConsolidationApplySkipped(
@@ -928,7 +925,7 @@ def run_canonical_consolidation(
             if decision.decision == "review" or decision.review_required:
                 survivor = pending_by_id.get(decision.survivor_memory_id)
                 if survivor is not None:
-                    _escalate_to_review_queue(uid, decision=decision, survivor=survivor, db_client=db_client)
+                    _escalate_to_review_queue(uid, decision=decision, survivor=survivor)
                     report.review_escalations += 1
                 continue
             control = _read_control_state(uid, db_client=db_client)

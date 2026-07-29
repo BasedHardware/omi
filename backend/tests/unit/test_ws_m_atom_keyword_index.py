@@ -250,6 +250,9 @@ def mock_typesense():
     with (
         patch("utils.memory.atom_keyword_index._typesense_client", return_value=typesense_client),
         patch.object(document_store, "_store", lambda: FakeDocumentStore(backing=user_docs)),
+        patch("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=user_docs)),
+        patch("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=user_docs)),
+        patch("database.review_queue._store", lambda: FakeDocumentStore(backing=user_docs)),
     ):
         yield typesense_client, docs_store
 
@@ -493,7 +496,7 @@ class TestPurgeAndRebuild:
         assert result["purged"] is True
         assert result["keyword_docs_deleted"] >= 0
         assert item.memory_id not in docs_store
-        delete_kg.assert_called_once_with(CANONICAL_UID, db_client=db_client)
+        delete_kg.assert_called_once_with(CANONICAL_UID)
 
     def test_conversation_cascade_deletes_keyword_doc(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense

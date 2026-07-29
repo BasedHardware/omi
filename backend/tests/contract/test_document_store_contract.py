@@ -178,6 +178,24 @@ def test_query_group_spans_parents(store, uid):
     assert {d.path for d in hits} == {f"users/{uid}/widgets/w1", f"users/{uid}-other/widgets/w2"}
 
 
+def test_query_group_start_after_keyset(store, uid):
+    # document-name keyset over a collection-group: ordered by full logical path ascending,
+    # resume strictly after the cursor path — the portable form of a Firestore __name__ cursor.
+    # Uses a kind marker unique to this test so the cross-parent query isolates its own docs.
+    for n in ("w1", "w2", "w3"):
+        store.set(f"users/{uid}/widgets/{n}", {"kind": "ks"})
+    mine = [f"users/{uid}/widgets/{n}" for n in ("w1", "w2", "w3")]
+
+    paths = sorted(d.path for d in store.query_group("widgets", filters=[("kind", "==", "ks")]))
+    assert paths == mine
+
+    after_first = store.query_group("widgets", filters=[("kind", "==", "ks")], start_after=mine[0])
+    assert [d.path for d in after_first] == mine[1:]
+
+    page = store.query_group("widgets", filters=[("kind", "==", "ks")], start_after=mine[0], limit=1)
+    assert [d.path for d in page] == [mine[1]]
+
+
 def test_query_array_contains(store, uid):
     base = f"users/{uid}/people"
     store.set(f"{base}/p1", {"name": "p1", "tags": ["persona", "audio"]})

@@ -239,6 +239,11 @@ def _canonical_cohort_for_apply(monkeypatch):
         "_store",
         lambda: FakeDocumentStore(backing=_FakeDb._latest.docs),
     )
+    # apply_long_term_patch_firestore now runs through the storage port, not the injected db_client.
+    monkeypatch.setattr(
+        "database.memory_apply_store._store",
+        lambda: FakeDocumentStore(backing=_FakeDb._latest.docs),
+    )
     monkeypatch.setattr(
         "utils.memory.canonical_consolidation.resolve_memory_system",
         lambda uid, db_client=None: MemorySystem.CANONICAL,
@@ -361,7 +366,6 @@ def test_consolidation_apply_is_idempotent_on_operation_retry():
         uid=UID,
         operation_id=operation_id,
         patch_payload=patch_payload,
-        db_client=db,
     )
     assert retry.status == ApplyStatus.idempotent_skip
     after_retry = db.docs[f"users/{UID}/memory_items/mem_survivor"]

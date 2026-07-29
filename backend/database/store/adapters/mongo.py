@@ -294,6 +294,7 @@ class MongoDocumentStore:
         direction: str = "asc",
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        start_after: Optional[str] = None,
     ) -> List[StoredDocument]:
         # A collection-group query is the whole Mongo collection named after the leaf (``group``),
         # with NO ``_parent`` scope — docs from every parent live there already (see the path model).
@@ -304,11 +305,18 @@ class MongoDocumentStore:
             else:
                 mongo_filter.setdefault("d." + field, {})[_OP[op]] = value
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
+        if start_after is not None:
+            # Document-name keyset: ``_id`` is the full logical path (mirrors Firestore __name__).
+            mongo_filter["_id"] = {"$gt": start_after}
         cursor = self._db[group].find(mongo_filter)
         if specs:
             sort_spec = [("d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs]
             sort_spec.append(("_id", ASCENDING if specs[-1][1] == "asc" else DESCENDING))
             cursor = cursor.sort(sort_spec)
+        else:
+            # No explicit order_by: sort by ``_id`` (full path) ascending, matching Firestore's
+            # implicit __name__ order so a keyset ``start_after`` pages consistently from page one.
+            cursor = cursor.sort([("_id", ASCENDING)])
         if offset is not None:
             cursor = cursor.skip(offset)
         if limit is not None:

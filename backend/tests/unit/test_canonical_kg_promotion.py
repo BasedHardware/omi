@@ -126,12 +126,12 @@ def test_extract_kg_on_promotion(monkeypatch):
         assert result.success is True
         assert result.node_count == 1
         mock_flag.assert_called_once_with("uid-canonical", "mem_lt", db_client=db)
+        # extract_knowledge_from_memory no longer takes db_client (storage-port migration).
         mock_extract.assert_called_once_with(
             "uid-canonical",
             "User works at Omi",
             "mem_lt",
             user_name="User",
-            db_client=db,
             strict_parse=True,
         )
 
@@ -286,4 +286,5 @@ def test_invalidate_kg_prunes_citations(monkeypatch):
     invalidate_kg_for_memory_retraction("uid-canonical", ["mem_a", "mem_b"])
     mock_prune.assert_called_once()
     assert mock_prune.call_args.args == ("uid-canonical", ["mem_a", "mem_b"])
-    assert "db_client" in mock_prune.call_args.kwargs
+    # prune_memory_citations_from_kg no longer accepts db_client (storage-port migration).
+    assert "db_client" not in mock_prune.call_args.kwargs

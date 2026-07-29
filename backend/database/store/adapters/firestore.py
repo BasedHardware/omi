@@ -232,6 +232,7 @@ class FirestoreDocumentStore:
         direction: str = "asc",
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        start_after: Optional[str] = None,
     ) -> List[StoredDocument]:
         query: Any = self._client.collection_group(group)
         for field, op, value in filters or ():
@@ -239,6 +240,13 @@ class FirestoreDocumentStore:
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         for _field, _dir in specs:
             query = query.order_by(_field, direction=_DIRECTION[_dir])
+        if start_after is not None:
+            # Document-name keyset: order by __name__ and resume after the cursor path's position.
+            # The cursor is a list of values matching the order fields (here just __name__), whose
+            # value is a DocumentReference — it positions the cursor by path even if the document no
+            # longer exists. Passing the ref bare (not in a list) breaks the SDK cursor normalization.
+            query = query.order_by('__name__')
+            query = query.start_after([self._client.document(start_after)])
         if offset is not None:
             query = query.offset(offset)
         if limit is not None:

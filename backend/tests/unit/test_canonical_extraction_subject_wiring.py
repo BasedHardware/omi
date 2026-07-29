@@ -109,6 +109,9 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
 
     db = _FakeDb(_control_seed(uid))
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     service = MemoryService(db_client=db)
     with patch(
         "utils.memory.memory_service.canonical_write_decision",
@@ -137,6 +140,9 @@ def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_
     memory_db.id = "mem_manual_device_wire"
     db = _FakeDb(_control_seed(uid))
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     service = MemoryService(db_client=db)
 
     with patch(
@@ -178,6 +184,9 @@ def test_write_mode_rollout_doc_does_not_collide_with_apply_control_state(monkey
     }
     db = _FakeDb({f"users/{uid}/memory_control/state": _rollout_control_doc(uid)})
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     service = MemoryService(db_client=db)
 
     with patch(
@@ -255,6 +264,9 @@ def test_write_canonical_extraction_memory_threads_explicit_triple_fields(monkey
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     payload = {
         "id": "mem_explicit",
         "uid": uid,

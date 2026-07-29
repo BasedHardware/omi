@@ -303,7 +303,6 @@ def _apply_processed_result(
             "arguments": processed.arguments,
             "sensitivity_labels": processed.sensitivity_labels,
         },
-        db_client=db_client,
     )
     return result.status
 

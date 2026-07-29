@@ -230,6 +230,7 @@ class FakeDocumentStore:
         direction: str = "asc",
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        start_after: Optional[str] = None,
     ) -> List[StoredDocument]:
         # Collection-group scope: every doc whose containing collection's leaf name == ``group``,
         # regardless of parent (e.g. ``users/{uid}/fair_use_state/current`` matches ``fair_use_state``).
@@ -237,13 +238,19 @@ class FakeDocumentStore:
         for field, op, value in filters or ():
             rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
         reverse = direction == "desc"
-        if order_by is None or isinstance(order_by, str):
-            if order_by is not None:
-                rows.sort(key=lambda pd: (pd[1].get(order_by), pd[0]), reverse=reverse)
-        else:
+        if isinstance(order_by, str):
+            rows.sort(key=lambda pd: (pd[1].get(order_by), pd[0]), reverse=reverse)
+        elif order_by is not None:
             rows.sort(key=lambda pd: pd[0])
             for field, fdir in reversed(list(order_by)):
                 rows.sort(key=lambda pd, f=field: pd[1].get(f), reverse=(fdir == "desc"))
+        else:
+            # No explicit order_by: document-name (full path) ascending, matching Firestore's
+            # implicit __name__ order so a keyset ``start_after`` pages consistently from page one.
+            rows.sort(key=lambda pd: pd[0])
+        if start_after is not None:
+            # Document-name keyset (mirrors the adapters): resume strictly after the cursor path.
+            rows = [pd for pd in rows if pd[0] > start_after]
         if offset is not None:
             rows = rows[offset:]
         if limit is not None:

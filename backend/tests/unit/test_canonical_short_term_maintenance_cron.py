@@ -182,6 +182,9 @@ def test_cohort_runner_uses_real_maintenance_with_fake_firestore(monkeypatch):
     monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
 
     summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-test-2")
 
@@ -196,6 +199,9 @@ def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch
     monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     memory_id = _seed_canonical_short_term(
         db,
@@ -227,6 +233,9 @@ def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch, _consolidation
     monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     threshold = promotion_batch_threshold()
     for index in range(threshold):
@@ -249,6 +258,9 @@ def test_daily_cadence_after_first_promotion_run(monkeypatch, _consolidation_dis
     monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.memory_apply_store._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.knowledge_graph._store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr("database.review_queue._store", lambda: FakeDocumentStore(backing=db.docs))
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     threshold = promotion_batch_threshold()
     for index in range(threshold):

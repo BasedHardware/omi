@@ -2,9 +2,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, TypedDict, cast
 import uuid
 
-from google.cloud.firestore_v1 import FieldFilter
-
-from ._client import db
+from database.store import get_document_store
 
 users_collection = 'users'
 knowledge_nodes_collection = 'knowledge_nodes'
@@ -15,8 +13,8 @@ MAX_KNOWLEDGE_GRAPH_NODES = 2000
 MAX_KNOWLEDGE_GRAPH_EDGES = 5000
 
 
-def _firestore_client(db_client: Any = None) -> Any:
-    return db_client if db_client is not None else db
+def _store():
+    return get_document_store()
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -133,37 +131,29 @@ class KnowledgeEdge:
 def get_knowledge_nodes(
     uid: str,
     *,
-    db_client: Any = None,
     limit: int = MAX_KNOWLEDGE_GRAPH_NODES,
 ) -> List[Dict[str, Any]]:
-    client = _firestore_client(db_client)
-    user_ref = client.collection(users_collection).document(uid)
-    nodes_ref = user_ref.collection(knowledge_nodes_collection)
+    nodes_collection = f'{users_collection}/{uid}/{knowledge_nodes_collection}'
     # Allow callers (get_knowledge_graph) to request one past the public cap for truncation probes.
     capped = max(0, min(int(limit), MAX_KNOWLEDGE_GRAPH_NODES + 1))
     if capped == 0:
         return []
-    return [_typed_doc(doc) for doc in nodes_ref.limit(capped).stream()]
+    return [_typed_doc(doc) for doc in _store().query(nodes_collection, limit=capped)]
 
 
-def get_knowledge_node(uid: str, node_id: str, *, db_client: Any = None) -> Optional[Dict[str, Any]]:
-    client = _firestore_client(db_client)
-    user_ref = client.collection(users_collection).document(uid)
-    node_ref = user_ref.collection(knowledge_nodes_collection).document(node_id)
-    doc = node_ref.get()
+def get_knowledge_node(uid: str, node_id: str) -> Optional[Dict[str, Any]]:
+    doc = _store().get(f'{users_collection}/{uid}/{knowledge_nodes_collection}/{node_id}')
     if not doc.exists:
         return None
     return _typed_doc(doc)
 
 
-def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client: Any = None) -> Dict[str, Any]:
-    client = _firestore_client(db_client)
-    user_ref = client.collection(users_collection).document(uid)
-    nodes_ref = user_ref.collection(knowledge_nodes_collection)
+def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]:
+    nodes_collection = f'{users_collection}/{uid}/{knowledge_nodes_collection}'
 
     node_id = node_data.get('id')
     if not node_id:
-        existing_node = find_node_by_label_or_alias(uid, node_data.get('label', ''), db_client=client)
+        existing_node = find_node_by_label_or_alias(uid, node_data.get('label', ''))
         if existing_node:
             node_id = existing_node['id']
             node_data['id'] = node_id
@@ -171,16 +161,14 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client: Any
             node_id = str(uuid.uuid4())
         node_data['id'] = node_id
 
-    node_ref = nodes_ref.document(node_id)
-    existing = node_ref.get()
+    existing = _store().get(f'{nodes_collection}/{node_id}')
 
     if not existing.exists:
-        existing_node_by_label = find_node_by_label_or_alias(uid, node_data.get('label', ''), db_client=client)
+        existing_node_by_label = find_node_by_label_or_alias(uid, node_data.get('label', ''))
         if existing_node_by_label:
             node_id = existing_node_by_label['id']
             node_data['id'] = node_id
-            node_ref = nodes_ref.document(node_id)
-            existing = node_ref.get()
+            existing = _store().get(f'{nodes_collection}/{node_id}')
 
     if existing.exists:
         existing_data: KnowledgeNodeDoc = cast(KnowledgeNodeDoc, _typed_doc(existing))
@@ -204,25 +192,22 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any], *, db_client: Any
         node_data['label_lower'] = node_data.get('label', '').lower()
         node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
 
-    node_ref.set(node_data)
+    _store().set(f'{nodes_collection}/{node_id}', node_data)
     return node_data
 
 
-def find_node_by_label_or_alias(uid: str, label: str, *, db_client: Any = None) -> Optional[Dict[str, Any]]:
+def find_node_by_label_or_alias(uid: str, label: str) -> Optional[Dict[str, Any]]:
     if not label:
         return None
 
-    client = _firestore_client(db_client)
-    nodes_ref = client.collection(users_collection).document(uid).collection(knowledge_nodes_collection)
+    nodes_collection = f'{users_collection}/{uid}/{knowledge_nodes_collection}'
     label_lower = label.lower()
 
-    query = nodes_ref.where(filter=FieldFilter('label_lower', '==', label_lower)).limit(1)
-    results = list(query.stream())
+    results = _store().query(nodes_collection, filters=[('label_lower', '==', label_lower)], limit=1)
     if results:
         return _typed_doc(results[0])
 
-    query = nodes_ref.where(filter=FieldFilter('aliases_lower', 'array_contains', label_lower)).limit(1)
-    results = list(query.stream())
+    results = _store().query(nodes_collection, filters=[('aliases_lower', 'array_contains', label_lower)], limit=1)
     if results:
         return _typed_doc(results[0])
 
@@ -232,22 +217,17 @@ def find_node_by_label_or_alias(uid: str, label: str, *, db_client: Any = None) 
 def get_knowledge_edges(
     uid: str,
     *,
-    db_client: Any = None,
     limit: int = MAX_KNOWLEDGE_GRAPH_EDGES,
 ) -> List[Dict[str, Any]]:
-    client = _firestore_client(db_client)
-    user_ref = client.collection(users_collection).document(uid)
-    edges_ref = user_ref.collection(knowledge_edges_collection)
+    edges_collection = f'{users_collection}/{uid}/{knowledge_edges_collection}'
     capped = max(0, min(int(limit), MAX_KNOWLEDGE_GRAPH_EDGES + 1))
     if capped == 0:
         return []
-    return [_typed_doc(doc) for doc in edges_ref.limit(capped).stream()]
+    return [_typed_doc(doc) for doc in _store().query(edges_collection, limit=capped)]
 
 
-def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any = None) -> Dict[str, Any]:
-    client = _firestore_client(db_client)
-    user_ref = client.collection(users_collection).document(uid)
-    edges_ref = user_ref.collection(knowledge_edges_collection)
+def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]:
+    edges_collection = f'{users_collection}/{uid}/{knowledge_edges_collection}'
 
     edge_id = edge_data.get('id')
     if not edge_id:
@@ -255,8 +235,7 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any
     edge_id = edge_id.replace('/', '_')
     edge_data['id'] = edge_id
 
-    edge_ref = edges_ref.document(edge_id)
-    existing = edge_ref.get()
+    existing = _store().get(f'{edges_collection}/{edge_id}')
 
     if existing.exists:
         existing_data: KnowledgeEdgeDoc = cast(KnowledgeEdgeDoc, _typed_doc(existing))
@@ -269,21 +248,20 @@ def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any], *, db_client: Any
     else:
         edge_data['created_at'] = datetime.now(timezone.utc)
 
-    edge_ref.set(edge_data)
+    _store().set(f'{edges_collection}/{edge_id}', edge_data)
     return edge_data
 
 
-def get_knowledge_graph(uid: str, *, db_client: Any = None) -> Dict[str, Any]:
+def get_knowledge_graph(uid: str) -> Dict[str, Any]:
     """Return a bounded graph snapshot for GET /v1/knowledge-graph.
 
     Full-collection streams of nodes+edges previously unbounded-read large accounts
     into the 30s GET timeout. Caps keep the response bounded; `truncated` signals
     that denser graphs need a follow-up pagination/summarization API.
     """
-    client = _firestore_client(db_client)
     # Fetch one extra row past the cap to detect truncation without a count() round-trip.
-    nodes = get_knowledge_nodes(uid, db_client=client, limit=MAX_KNOWLEDGE_GRAPH_NODES + 1)
-    edges = get_knowledge_edges(uid, db_client=client, limit=MAX_KNOWLEDGE_GRAPH_EDGES + 1)
+    nodes = get_knowledge_nodes(uid, limit=MAX_KNOWLEDGE_GRAPH_NODES + 1)
+    edges = get_knowledge_edges(uid, limit=MAX_KNOWLEDGE_GRAPH_EDGES + 1)
     nodes_truncated = len(nodes) > MAX_KNOWLEDGE_GRAPH_NODES
     edges_truncated = len(edges) > MAX_KNOWLEDGE_GRAPH_EDGES
     if nodes_truncated:
@@ -299,60 +277,52 @@ def get_knowledge_graph(uid: str, *, db_client: Any = None) -> Dict[str, Any]:
     }
 
 
-def delete_knowledge_graph(uid: str, *, db_client: Any = None) -> None:
-    client = _firestore_client(db_client)
-    user_ref = client.collection(users_collection).document(uid)
-
-    def _batch_delete(coll_ref: Any) -> None:
+def delete_knowledge_graph(uid: str) -> None:
+    def _batch_delete(collection: str) -> None:
         while True:
-            docs: List[Any] = list(coll_ref.limit(500).stream())
+            docs = _store().query(collection, limit=500)
             if not docs:
                 break
-            batch: Any = client.batch()
+            batch = _store().batch()
             for doc in docs:
-                batch.delete(doc.reference)
+                batch.delete(doc.path)
             batch.commit()
 
-    nodes_ref = user_ref.collection(knowledge_nodes_collection)
-    _batch_delete(nodes_ref)
-
-    edges_ref = user_ref.collection(knowledge_edges_collection)
-    _batch_delete(edges_ref)
+    _batch_delete(f'{users_collection}/{uid}/{knowledge_nodes_collection}')
+    _batch_delete(f'{users_collection}/{uid}/{knowledge_edges_collection}')
 
 
-def prune_memory_citations_from_kg(uid: str, memory_ids: List[str], *, db_client: Any = None) -> int:
+def prune_memory_citations_from_kg(uid: str, memory_ids: List[str]) -> int:
     """Remove memory_ids from KG nodes/edges; delete entities with no remaining citations."""
     if not memory_ids:
         return 0
     retracted = set(memory_ids)
-    client = _firestore_client(db_client)
-    user_ref = client.collection(users_collection).document(uid)
-    nodes_ref = user_ref.collection(knowledge_nodes_collection)
-    edges_ref = user_ref.collection(knowledge_edges_collection)
+    nodes_collection = f'{users_collection}/{uid}/{knowledge_nodes_collection}'
+    edges_collection = f'{users_collection}/{uid}/{knowledge_edges_collection}'
     pruned = 0
 
-    for doc in nodes_ref.stream():
+    for doc in _store().query(nodes_collection):
         node_doc: KnowledgeNodeDoc = cast(KnowledgeNodeDoc, _typed_doc(doc))
         existing_ids = set(node_doc.get("memory_ids") or [])
         if not existing_ids.intersection(retracted):
             continue
         remaining = sorted(existing_ids - retracted)
         if remaining:
-            doc.reference.set(
-                {**node_doc, "memory_ids": remaining, "updated_at": datetime.now(timezone.utc)}, merge=True
+            _store().set(
+                doc.path, {**node_doc, "memory_ids": remaining, "updated_at": datetime.now(timezone.utc)}, merge=True
             )
         else:
-            doc.reference.delete()
+            _store().delete(doc.path)
         pruned += 1
 
-    surviving_node_ids: set[str] = {cast(str, doc.id) for doc in nodes_ref.stream()}
+    surviving_node_ids: set[str] = set(_store().list_ids(nodes_collection))
 
-    for doc in edges_ref.stream():
+    for doc in _store().query(edges_collection):
         edge_doc: KnowledgeEdgeDoc = cast(KnowledgeEdgeDoc, _typed_doc(doc))
         source_id = edge_doc.get("source_id")
         target_id = edge_doc.get("target_id")
         if source_id not in surviving_node_ids or target_id not in surviving_node_ids:
-            doc.reference.delete()
+            _store().delete(doc.path)
             pruned += 1
             continue
         existing_ids = set(edge_doc.get("memory_ids") or [])
@@ -360,9 +330,9 @@ def prune_memory_citations_from_kg(uid: str, memory_ids: List[str], *, db_client
             continue
         remaining = sorted(existing_ids - retracted)
         if remaining:
-            doc.reference.set({**edge_doc, "memory_ids": remaining}, merge=True)
+            _store().set(doc.path, {**edge_doc, "memory_ids": remaining}, merge=True)
         else:
-            doc.reference.delete()
+            _store().delete(doc.path)
         pruned += 1
 
     return pruned

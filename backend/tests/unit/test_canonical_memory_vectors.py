@@ -55,6 +55,9 @@ from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTi
 from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 
 from database import document_store
+import database.memory_apply_store as _mas_store
+import database.knowledge_graph as _kg_store
+import database.review_queue as _rq_store
 from tests.store_fakes import FakeDocumentStore
 
 _FIXTURE_NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
@@ -451,6 +454,9 @@ def test_write_path_syncs_vector_on_idempotent_skip(monkeypatch):
     # document_store now reads/writes through the neutral port, not the injected Firestore fake.
     # Share the fake's backing dict so the seeded committed item is visible to document_store.
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(_mas_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(_kg_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(_rq_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     apply_result = SimpleNamespace(
         status=ApplyStatus.idempotent_skip,
         memory_items=[],
@@ -534,6 +540,9 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
     # start empty, and have the (patched) apply materialize the committed item in the store.
     backfill_store_docs: dict = {}
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
+    monkeypatch.setattr(_mas_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
+    monkeypatch.setattr(_kg_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
+    monkeypatch.setattr(_rq_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
 
     def _apply_materializes_item(**_kwargs):
         backfill_store_docs[f"users/{uid}/memory_items/{canonical_memory_id}"] = committed_item.model_dump(
@@ -594,6 +603,9 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
     # (the neutral port), not the injected db_client fake. Seed the long_term item there.
     promotion_store_docs = {f"users/{uid}/memory_items/{memory_id}": long_item.model_dump(mode="json")}
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=promotion_store_docs))
+    monkeypatch.setattr(_mas_store, "_store", lambda: FakeDocumentStore(backing=promotion_store_docs))
+    monkeypatch.setattr(_kg_store, "_store", lambda: FakeDocumentStore(backing=promotion_store_docs))
+    monkeypatch.setattr(_rq_store, "_store", lambda: FakeDocumentStore(backing=promotion_store_docs))
 
     class _PromotionDb:
         def document(self, path):
@@ -719,6 +731,9 @@ def test_promotion_vector_sync_failure_increments_report(monkeypatch):
     # document_store now persists through the neutral port; share the fake's dict so seeded
     # short_term items are found and promoted writes land where the assertions read (db.docs).
     monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(_mas_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(_kg_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    monkeypatch.setattr(_rq_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     threshold = 25
     for index in range(threshold):
         _seed_canonical_short_term(
