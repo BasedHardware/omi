@@ -19,6 +19,7 @@ from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -1221,8 +1222,11 @@ def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, li
     client = firestore_client or get_firestore_client()
     user_ref = client.collection('users').document(uid)
     conversations_ref = (
-        user_ref.collection(conversations_collection)
-        .where(filter=FieldFilter('status', '==', 'in_progress'))
+        STALE_IN_PROGRESS_CONVERSATIONS_QUERY.build(
+            user_ref.collection(conversations_collection),
+            {'status': ConversationStatus.in_progress.value},
+            field_filter_factory=FieldFilter,
+        )
         .order_by('finished_at', direction=firestore.Query.ASCENDING)
         .limit(limit)
     )
