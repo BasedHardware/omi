@@ -7,7 +7,7 @@
     "backend/tests/unit/test_desktop_proxy.py"
   ],
   "evidence_prs": [
-    10847
+    10848
   ],
   "scope_hints": [
     "backend/routers/desktop_proxy.py",
