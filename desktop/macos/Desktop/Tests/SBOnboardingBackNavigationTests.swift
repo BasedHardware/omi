@@ -93,4 +93,38 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertFalse(model.screenDemoPTTReady)
     XCTAssertTrue(model.screenDemoPTTUnavailable)
   }
+
+  func testShortcutSuggestionRecordsTheNextOpenChord() throws {
+    let settings = ShortcutSettings.shared
+    let previousShortcut = settings.askOmiShortcut
+    let previousEnabled = settings.askOmiEnabled
+    defer {
+      settings.askOmiShortcut = previousShortcut
+      settings.askOmiEnabled = previousEnabled
+    }
+
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .shortcutOpen
+    model.beginShortcutRecording(isTalk: false)
+    let event = try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: .command,
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        characters: "j",
+        charactersIgnoringModifiers: "j",
+        isARepeat: false,
+        keyCode: 38
+      ))
+
+    XCTAssertTrue(model.recordShortcut(from: event))
+    XCTAssertFalse(model.shortcutRecording)
+    XCTAssertEqual(model.chosenShortcut?.keyCode, 38)
+    XCTAssertEqual(settings.askOmiShortcut.keyCode, 38)
+  }
+
 }
