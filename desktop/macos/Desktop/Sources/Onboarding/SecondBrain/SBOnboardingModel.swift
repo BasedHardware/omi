@@ -95,6 +95,7 @@ final class SBOnboardingModel: ObservableObject {
   @Published var shortcutTokens: [String] = []
   @Published var shortcutPicked = false
   @Published var shortcutPressed = false
+  @Published var shortcutRecording = false
   /// The chosen shortcut + which mechanism it uses (key hotkey vs modifier-hold).
   var chosenShortcut: ShortcutSettings.KeyboardShortcut?
   var chosenShortcutIsPTT = false
@@ -229,7 +230,7 @@ final class SBOnboardingModel: ObservableObject {
     case .automation:
       return "Turn on Automation, so I can help with tasks in the apps you choose."
     case .shortcutOpen:
-      return "How do you want to open me? Just press one of these to set it."
+      return "How do you want to open me? Just press any key, or one of these to set it."
     case .shortcutTalk:
       return "And to talk to me, hands-free? Just hold one of these and say something."
     case .screenDemo:
@@ -250,6 +251,14 @@ final class SBOnboardingModel: ObservableObject {
     if !n.isEmpty { return n.components(separatedBy: " ").first ?? n }
     if !stored.isEmpty { return stored }
     return "friend"
+  }
+
+  var selectedResponseLanguageName: String {
+    let code = AssistantSettings.shared.voiceLanguages.first ?? "en"
+    let baseCode = AssistantSettings.baseLanguageCode(code)
+    return AssistantSettings.supportedLanguages.first {
+      AssistantSettings.baseLanguageCode($0.code) == baseCode
+    }?.name ?? code
   }
 
   // MARK: lifecycle
