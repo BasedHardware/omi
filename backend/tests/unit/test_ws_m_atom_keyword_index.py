@@ -97,6 +97,9 @@ from utils.memory.canonical_memory_adapter import (
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
+
 CANONICAL_UID = "uid-canonical-ws-m"
 LEGACY_UID = "uid-legacy-ws-m"
 NEEDLE = "CONFIRM-XYZZY-99182"
@@ -239,9 +242,14 @@ def mock_typesense():
     typesense_client.collections.__getitem__.return_value = memories_collection
     typesense_client.collections.create.return_value = None
 
+    # ``document_store`` now reads the user's data_protection_level through the neutral storage port
+    # (ADR-0022), no longer through an injected Firestore client. Seed a shared in-memory store so
+    # the cohort user reads as ``enhanced`` (Typesense-eligible, not e2ee).
+    user_docs: dict = {f"users/{CANONICAL_UID}": {"data_protection_level": "enhanced"}}
+
     with (
         patch("utils.memory.atom_keyword_index._typesense_client", return_value=typesense_client),
-        patch("database.document_store.db", _data_protection_db()),
+        patch.object(document_store, "_store", lambda: FakeDocumentStore(backing=user_docs)),
     ):
         yield typesense_client, docs_store
 
@@ -275,13 +283,19 @@ class TestKeywordSearchAndHybrid:
         assert memories_collection_name() == "canonical_memory_atoms"
         assert typesense_client.collections.__getitem__.call_args_list[-1].args[0] == "canonical_memory_atoms"
 
-    def test_e2ee_user_skips_index_using_explicit_db_client(self, mock_typesense):
+    def test_e2ee_user_skips_index(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
-        db_client = _data_protection_db("e2ee")
+        # Data protection is now sourced from the storage port (ADR-0022): mark the cohort user
+        # e2ee in the shared store and assert the atom is not indexed (behavioral, not a check on
+        # which Firestore client method was called).
+        monkeypatch.setattr(
+            document_store,
+            "_store",
+            lambda: FakeDocumentStore(backing={f"users/{CANONICAL_UID}": {"data_protection_level": "e2ee"}}),
+        )
 
-        assert upsert_atom_keyword_doc(_long_term_item(), db_client=db_client) is False
+        assert upsert_atom_keyword_doc(_long_term_item()) is False
         assert docs_store == {}
-        db_client.document.assert_called_with(f"users/{CANONICAL_UID}")
 
     def test_existing_wrong_typesense_schema_does_not_index(self, mock_typesense):
         typesense_client, docs_store = mock_typesense

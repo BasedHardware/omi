@@ -270,7 +270,7 @@ class _ProductionV3Adapters:
 
 
 def _read_doc_dict(db_client: Any, path: str) -> MemoryDbItem | None:
-    snapshot: Any = document_store.get_document(db_client, path)
+    snapshot: Any = document_store.get_document(path)
     if getattr(snapshot, 'exists', False) is False:
         return None
     data: object = snapshot.to_dict()

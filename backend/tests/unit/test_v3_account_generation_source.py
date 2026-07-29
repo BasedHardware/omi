@@ -2,7 +2,9 @@ from datetime import datetime, timezone
 
 import pytest
 
+from database import document_store
 from database.memory_compatibility_projection import read_v3_compatibility_projection_page
+from tests.store_fakes import FakeDocumentStore
 from utils.memory.v3.account_generation_source import (
     V3AccountGenerationFailureReason,
     V3TrustedAccountGenerationReadError,
@@ -21,6 +23,33 @@ from utils.memory.v3.projection_reader_contract import (
 from tests.unit.fake_firestore import FakeDocumentReference as _FakeDocumentRef
 from tests.unit.fake_firestore import FakeFirestore as _FakeDb
 from tests.unit.fake_firestore import FakeSnapshot as _FakeSnapshot
+
+
+class _RecordingDocumentStore(FakeDocumentStore):
+    """Neutral document store sharing the injected Firestore fake's backing dict.
+
+    ``document_store`` now reads through the neutral port (ADR-0022), not the injected
+    ``db_client``. This store shares the fake's ``.docs`` so seeded data stays visible, records
+    read paths for behavioral assertions, and re-raises a stored exception the way the Firestore
+    fake's ``.get()`` did — keeping the READ_FAILED path covered.
+    """
+
+    def __init__(self, *, backing):
+        super().__init__(backing=backing)
+        self.reads: list[str] = []
+
+    def get(self, path, *, fields=None):
+        self.reads.append(path)
+        value = self._docs.get(path)
+        if isinstance(value, BaseException):
+            raise value
+        return super().get(path, fields=fields)
+
+
+def _install_document_store(monkeypatch, db):
+    store = _RecordingDocumentStore(backing=db.docs)
+    monkeypatch.setattr(document_store, "_store", lambda: store)
+    return store
 
 
 def _head_doc(**overrides):
@@ -63,8 +92,9 @@ def _projection_state(**overrides):
     return data
 
 
-def test_trusted_account_generation_reads_independent_memory_state_head_path():
+def test_trusted_account_generation_reads_independent_memory_state_head_path(monkeypatch):
     db = _FakeDb({"users/u1/memory_state/head": _head_doc(account_generation=8)})
+    store = _install_document_store(monkeypatch, db)
 
     result = read_memory_v3_trusted_account_generation(uid="u1", db_client=db)
 
@@ -73,7 +103,7 @@ def test_trusted_account_generation_reads_independent_memory_state_head_path():
     assert result.head_commit_id == "head7"
     assert result.source == "memory_state_head"
     assert result.read_error_reason is None
-    assert db.document_reads == ["users/u1/memory_state/head"]
+    assert store.reads == ["users/u1/memory_state/head"]
 
 
 @pytest.mark.parametrize(
@@ -108,8 +138,10 @@ def test_trusted_account_generation_reads_independent_memory_state_head_path():
         ({"users/u1/memory_state/head": RuntimeError("boom")}, V3AccountGenerationFailureReason.READ_FAILED),
     ],
 )
-def test_trusted_account_generation_fails_closed_for_missing_malformed_or_untrusted_head(docs, reason):
-    result = read_memory_v3_trusted_account_generation(uid="u1", db_client=_FakeDb(docs))
+def test_trusted_account_generation_fails_closed_for_missing_malformed_or_untrusted_head(docs, reason, monkeypatch):
+    db = _FakeDb(docs)
+    _install_document_store(monkeypatch, db)
+    result = read_memory_v3_trusted_account_generation(uid="u1", db_client=db)
 
     assert result.account_generation is None
     assert result.read_error_reason == reason
@@ -118,7 +150,7 @@ def test_trusted_account_generation_fails_closed_for_missing_malformed_or_untrus
     assert exc.value.reason == reason
 
 
-def test_projection_expected_generation_must_come_from_trusted_head_not_control_or_projection_self_compare():
+def test_projection_expected_generation_must_come_from_trusted_head_not_control_or_projection_self_compare(monkeypatch):
     db = _FakeDb(
         {
             "users/u1/memory_state/head": _head_doc(account_generation=9),
@@ -128,6 +160,7 @@ def test_projection_expected_generation_must_come_from_trusted_head_not_control_
             ),
         }
     )
+    _install_document_store(monkeypatch, db)
 
     trusted = read_memory_v3_trusted_account_generation(uid="u1", db_client=db)
     assert trusted.account_generation == 9
@@ -145,7 +178,7 @@ def test_projection_expected_generation_must_come_from_trusted_head_not_control_
     assert exc.value.reason == V3ProjectionFailureReason.ACCOUNT_GENERATION_MISMATCH
 
 
-def test_trusted_head_control_projection_and_cursor_generations_can_be_compared_as_distinct_sources():
+def test_trusted_head_control_projection_and_cursor_generations_can_be_compared_as_distinct_sources(monkeypatch):
     db = _FakeDb(
         {
             "users/u1/memory_state/head": _head_doc(account_generation=7),
@@ -155,6 +188,7 @@ def test_trusted_head_control_projection_and_cursor_generations_can_be_compared_
             ),
         }
     )
+    store = _install_document_store(monkeypatch, db)
 
     trusted = read_memory_v3_trusted_account_generation(uid="u1", db_client=db)
     page = read_v3_compatibility_projection_page(
@@ -169,4 +203,7 @@ def test_trusted_head_control_projection_and_cursor_generations_can_be_compared_
     assert page.items == []
     assert trusted.account_generation == 7
     assert page.account_generation == 7
-    assert "users/u1/memory_control/state" not in db.document_reads[:1]
+    # Trusted generation is read from the independent state-head source, never derived from
+    # the memory control decision document.
+    assert store.reads[0] == "users/u1/memory_state/head"
+    assert "users/u1/memory_control/state" not in store.reads

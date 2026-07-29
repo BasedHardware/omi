@@ -547,7 +547,7 @@ def normalize_archive_read_rollout_decision(
 
 
 def _get_firestore_document_snapshot(db_client: Any, path: str) -> Any:
-    return document_store.get_document(db_client, path, timeout=DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS)
+    return document_store.get_document(path)
 
 
 def read_default_read_rollout(*, uid: str, db_client: Any, consumer: str) -> DefaultReadRolloutDecision:

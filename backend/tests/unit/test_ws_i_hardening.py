@@ -48,6 +48,8 @@ def _ws_i_hardening_import_isolation():
 
 
 ensure_utils_memory_packages_importable()
+from database import document_store  # noqa: E402
+from tests.store_fakes import FakeDocumentStore  # noqa: E402
 from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation  # noqa: E402
 from models.memory_evidence import (  # noqa: E402
     ArtifactPreservationState,
@@ -128,6 +130,7 @@ def test_retract_path_bumps_source_generation_via_transaction(monkeypatch):
         }
     )
 
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
@@ -194,6 +197,7 @@ def test_persist_evidence_preserves_redaction_status_on_reprocess_rewrite(monkey
         }
     )
 
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
@@ -241,6 +245,7 @@ def test_persist_evidence_defaults_redaction_when_no_prior_value(monkeypatch):
         }
     )
 
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),

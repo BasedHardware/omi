@@ -12,6 +12,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -132,9 +135,16 @@ class _FakeTransaction:
 
 
 class _FakeDb:
+    # Tracks the most-recently constructed fake so the ``document_store._store`` seam (patched in
+    # ``_canonical_cohort_for_apply``) can resolve the current test's backing dict lazily. After the
+    # WP2/ADR-0022 migration ``document_store`` reads/writes through the neutral port, not through
+    # this Firestore-shaped fake; sharing ``.docs`` keeps both views of the store consistent.
+    _latest: Optional["_FakeDb"] = None
+
     def __init__(self, docs):
         self.docs = docs
         self.transaction_obj = _FakeTransaction(self)
+        _FakeDb._latest = self
 
     def transaction(self):
         return self.transaction_obj
@@ -221,6 +231,14 @@ def _stored_item(db: _FakeDb, memory_id: str) -> MemoryItem:
 
 @pytest.fixture(autouse=True)
 def _canonical_cohort_for_apply(monkeypatch):
+    # Point ``document_store`` at a ``FakeDocumentStore`` that shares the current test's Firestore
+    # fake ``.docs`` dict (ADR-0022): document_store no longer flows through the injected db_client,
+    # so this seam keeps its reads/writes consistent with the fake the service functions still use.
+    monkeypatch.setattr(
+        document_store,
+        "_store",
+        lambda: FakeDocumentStore(backing=_FakeDb._latest.docs),
+    )
     monkeypatch.setattr(
         "utils.memory.canonical_consolidation.resolve_memory_system",
         lambda uid, db_client=None: MemorySystem.CANONICAL,
@@ -501,21 +519,24 @@ def test_consolidation_watermark_persist_preserves_apply_head_fields():
     db = _FakeDb({f"users/{uid}/memory_state/apply_control": _stored(control)})
     pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(2)]
 
-    original_set = _FakeDocumentRef.set
+    original_set = FakeDocumentStore.set
 
-    def concurrent_apply_before_watermark(self, data, merge=False):
+    def concurrent_apply_before_watermark(self, path, data, *, merge=False):
+        # Simulate another writer landing apply-head fields on the control doc just before the
+        # merge=True watermark persist; the persist must not clobber them (ADR-0022: the persist
+        # now flows through the neutral store's ``set``, not the Firestore-shaped fake's ref).
         if merge:
-            current = dict(self._db.docs[self.path])
+            current = dict(self._docs[path])
             current.update({"head_commit_id": "head-concurrent", "commit_sequence": 42})
-            self._db.docs[self.path] = current
-        return original_set(self, data, merge=merge)
+            self._docs[path] = current
+        return original_set(self, path, data, merge=merge)
 
     with (
         patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
         patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
         patch("utils.memory.canonical_consolidation.invoke_consolidation_agent") as mock_agent,
-        patch.object(_FakeDocumentRef, "set", concurrent_apply_before_watermark),
+        patch.object(FakeDocumentStore, "set", concurrent_apply_before_watermark),
     ):
         mock_gather.return_value = MagicMock(uid=uid, pending_items=pending[:10], candidates_by_anchor={})
         mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="no_changes")

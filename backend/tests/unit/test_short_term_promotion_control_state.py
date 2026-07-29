@@ -11,7 +11,9 @@ the consolidation writer.
 
 from datetime import datetime, timezone
 
+from database import document_store
 from models.memory_apply import MemoryControlState
+from tests.store_fakes import FakeDocumentStore
 from utils.memory.short_term_promotion import _persist_control_state
 
 
@@ -37,7 +39,7 @@ class _FakeDb:
         return _DocRef(self, path)
 
 
-def test_persist_control_state_preserves_concurrently_advanced_head():
+def test_persist_control_state_preserves_concurrently_advanced_head(monkeypatch):
     uid = "user-promo"
     control_path = f"memory_apply/{uid}/state/control"
 
@@ -57,6 +59,11 @@ def test_persist_control_state_preserves_concurrently_advanced_head():
             }
         }
     )
+
+    # document_store now reads/writes through get_document_store(); point its seam at a
+    # FakeDocumentStore that shares the injected fake's backing dict so seeded data and the
+    # merge write stay consistent between the two views.
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     # Promotion stamps only its two owned fields, carrying a STALE head snapshot.
     now = datetime(2026, 7, 12, 3, 0, 0, tzinfo=timezone.utc)

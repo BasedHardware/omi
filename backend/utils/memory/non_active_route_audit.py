@@ -171,7 +171,7 @@ def fetch_non_active_route_audit_report(
 def _fetch_non_active_route_docs(uid: str, *, run_id: Optional[str], db_client: Any) -> List[Dict[str, Any]]:
     collection_path = MemoryCollections(uid=uid).non_active_memory_routes
     if run_id:
-        snapshots = document_store.stream_collection_where(db_client, collection_path, "run_id", "==", run_id)
+        snapshots = document_store.stream_collection_where(collection_path, "run_id", "==", run_id)
     else:
-        snapshots = document_store.stream_collection(db_client, collection_path)
+        snapshots = document_store.stream_collection(collection_path)
     return [snapshot.to_dict() or {} for snapshot in snapshots]

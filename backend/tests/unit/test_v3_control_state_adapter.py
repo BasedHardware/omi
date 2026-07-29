@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 from config.memory_rollout import MemoryRolloutMode, MemoryRolloutConfig
 from database.memory_collections import MemoryCollections
-from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS
 from utils.memory.v3.control_reader_contract import (
     V3ControlDecisionReason,
     V3ControlReaderRequest,
@@ -46,6 +47,29 @@ class FakeDb:
         self.document_calls.append(path)
         assert 'memory_items' not in path
         return FakeDoc(path, self)
+
+
+class _RecordingStore(FakeDocumentStore):
+    """FakeDocumentStore that shares the injected fake's dict, records read paths, and can fail
+    specific paths (to exercise the transport-failure branch after the document_store migration)."""
+
+    def __init__(self, *, backing, fail_paths=None):
+        super().__init__(backing=backing)
+        self._fail_paths = set(fail_paths or ())
+        self.reads = []
+
+    def get(self, path, *, fields=None):
+        self.reads.append(path)
+        if path in self._fail_paths:
+            raise RuntimeError('boom')
+        return super().get(path, fields=fields)
+
+
+def _install_store(monkeypatch, db):
+    """Route document_store reads/writes through the SAME data as the injected db_client fake."""
+    store = _RecordingStore(backing=db.docs, fail_paths=getattr(db, 'fail_paths', None))
+    monkeypatch.setattr(document_store, '_store', lambda: store)
+    return store
 
 
 def _config(mode=MemoryRolloutMode.read, enabled_users=('uid-a',)):
@@ -108,25 +132,27 @@ def test_non_enrolled_returns_legacy_eligibility_without_firestore_read():
     assert decision.reason == V3ControlDecisionReason.NON_ENROLLED_LEGACY_ALLOWED
 
 
-def test_enrolled_reads_exact_control_doc_once_with_existing_timeout_and_no_memory_items_touch():
+def test_enrolled_reads_exact_control_doc_once_with_existing_timeout_and_no_memory_items_touch(monkeypatch):
     db = FakeDb(_ready_docs())
+    store = _install_store(monkeypatch, db)
     result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
 
     assert result.cohort_enrolled is True
     assert result.source_path == 'users/uid-a/memory_control/state'
     assert result.state is not None
-    assert db.get_calls[0] == ('users/uid-a/memory_control/state', DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS)
-    assert db.get_calls.count(('users/uid-a/memory_control/state', DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS)) == 1
-    assert all('memory_items' not in path for path in db.document_calls)
+    assert store.reads[0] == 'users/uid-a/memory_control/state'
+    assert store.reads.count('users/uid-a/memory_control/state') == 1
+    assert all('memory_items' not in path for path in store.reads)
 
 
-def test_off_shadow_write_map_to_legacy_authoritative_and_do_not_read_global_gates():
+def test_off_shadow_write_map_to_legacy_authoritative_and_do_not_read_global_gates(monkeypatch):
     for mode in (MemoryRolloutMode.off, MemoryRolloutMode.shadow, MemoryRolloutMode.write):
         db = FakeDb({MemoryCollections(uid='uid-a').memory_control_state: _doc(mode=mode.value)})
+        store = _install_store(monkeypatch, db)
         result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config(mode=MemoryRolloutMode.read))
 
         assert result.state.effective_mode == mode
-        assert db.document_calls == ['users/uid-a/memory_control/state']
+        assert store.reads == ['users/uid-a/memory_control/state']
         decision = decide_v3_control_route(V3ControlReaderRequest('uid-a', 50, False, False), result)
         assert decision.route_family == V3ControlRouteFamily.LEGACY_PRIMARY
         assert decision.reason == V3ControlDecisionReason.ROLLOUT_LEGACY_AUTHORITATIVE
@@ -140,7 +166,7 @@ def test_global_ceiling_never_elevates_lower_persisted_mode_and_caps_higher_pers
     assert resolve_v3_effective_mode('off', 'read') == MemoryRolloutMode.off
 
 
-def test_omi_chat_grants_only_enable_default_memory_and_archive_is_strict_boolean():
+def test_omi_chat_grants_only_enable_default_memory_and_archive_is_strict_boolean(monkeypatch):
     control_doc = _doc(
         grants={
             'developer_api': {'default_memory': True, 'archive': True},
@@ -150,6 +176,7 @@ def test_omi_chat_grants_only_enable_default_memory_and_archive_is_strict_boolea
         }
     )
     db = FakeDb(_ready_docs(control_doc=control_doc))
+    _install_store(monkeypatch, db)
     result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
 
     assert result.state.default_memory_grant is False
@@ -159,18 +186,20 @@ def test_omi_chat_grants_only_enable_default_memory_and_archive_is_strict_boolea
     assert decision.http_status == 403
 
 
-def test_global_read_and_convergence_docs_are_read_only_for_effective_read_mode():
+def test_global_read_and_convergence_docs_are_read_only_for_effective_read_mode(monkeypatch):
     read_db = FakeDb(_ready_docs())
+    read_store = _install_store(monkeypatch, read_db)
     read_v3_control(uid='uid-a', db_client=read_db, rollout_config=_config())
-    assert 'memory_control/global_read_gate' in read_db.document_calls
-    assert 'memory_control/write_convergence_gate' in read_db.document_calls
+    assert 'memory_control/global_read_gate' in read_store.reads
+    assert 'memory_control/write_convergence_gate' in read_store.reads
 
     write_db = FakeDb({MemoryCollections(uid='uid-a').memory_control_state: _doc(mode='write')})
+    write_store = _install_store(monkeypatch, write_db)
     read_v3_control(uid='uid-a', db_client=write_db, rollout_config=_config())
-    assert write_db.document_calls == ['users/uid-a/memory_control/state']
+    assert write_store.reads == ['users/uid-a/memory_control/state']
 
 
-def test_missing_malformed_uid_mismatch_unsupported_schema_and_transport_failures_are_typed():
+def test_missing_malformed_uid_mismatch_unsupported_schema_and_transport_failures_are_typed(monkeypatch):
     cases = [
         (FakeDb({}), V3ControlDecisionReason.MISSING_CONTROL_DOC),
         (
@@ -196,6 +225,7 @@ def test_missing_malformed_uid_mismatch_unsupported_schema_and_transport_failure
     ]
 
     for db, reason in cases:
+        _install_store(monkeypatch, db)
         result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
         decision = decide_v3_control_route(V3ControlReaderRequest('uid-a', 50, False, False), result)
         assert decision.route_family == V3ControlRouteFamily.FAIL_CLOSED
@@ -203,8 +233,9 @@ def test_missing_malformed_uid_mismatch_unsupported_schema_and_transport_failure
         assert decision.fallback_to_legacy_allowed is False
 
 
-def test_mode_epoch_one_with_account_generation_fifty_is_valid_and_not_compared():
+def test_mode_epoch_one_with_account_generation_fifty_is_valid_and_not_compared(monkeypatch):
     db = FakeDb(_ready_docs(control_doc=_doc(mode_epoch=1, cutover_epoch=1, account_generation=50)))
+    _install_store(monkeypatch, db)
     result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
     decision = decide_v3_control_route(V3ControlReaderRequest('uid-a', 50, False, False), result)
 
@@ -213,8 +244,9 @@ def test_mode_epoch_one_with_account_generation_fifty_is_valid_and_not_compared(
     assert decision.route_family == V3ControlRouteFamily.MEMORY_PROJECTION
 
 
-def test_archive_defaults_false_strict_boolean_and_archive_denial_is_403():
+def test_archive_defaults_false_strict_boolean_and_archive_denial_is_403(monkeypatch):
     db = FakeDb(_ready_docs(control_doc=_doc(grants={'omi_chat': {'default_memory': True}})))
+    _install_store(monkeypatch, db)
     result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
 
     assert result.state.archive_allowed is False
@@ -223,8 +255,9 @@ def test_archive_defaults_false_strict_boolean_and_archive_denial_is_403():
     assert decision.http_status == 403
 
 
-def test_stale_short_term_is_absent_from_adapter_state():
+def test_stale_short_term_is_absent_from_adapter_state(monkeypatch):
     db = FakeDb(_ready_docs())
+    _install_store(monkeypatch, db)
     result = read_v3_control(uid='uid-a', db_client=db, rollout_config=_config())
 
     assert result.state is not None

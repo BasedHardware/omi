@@ -10,6 +10,9 @@ import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
+
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 from models.memory_apply import ApplyStatus, MemoryControlState
@@ -232,9 +235,12 @@ def _target_item(**overrides):
     return MemoryItem(**data)
 
 
-def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_operation_and_outbox_atomically(store):
+def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_operation_and_outbox_atomically(
+    store, monkeypatch
+):
     operation = _operation()
     db = _db_with(operation=operation)
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     result = store.apply_long_term_patch_firestore(
         uid="u1",

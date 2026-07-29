@@ -182,7 +182,7 @@ def _exact_long_term_duplicate(uid: str, item: MemoryItem, *, db_client: Any) ->
     if not normalized_content:
         return None
     snapshots = document_store.stream_collection_where(
-        db_client, MemoryCollections(uid=uid).memory_items, "tier", "==", MemoryLayer.long_term.value
+        MemoryCollections(uid=uid).memory_items, "tier", "==", MemoryLayer.long_term.value
     )
     for snapshot in snapshots:
         payload = _snapshot_payload(snapshot)
@@ -349,13 +349,13 @@ def _ensure_required_promotion_update_operation(
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    if not document_store.document_exists(db_client, op_path):
-        document_store.set_document(db_client, op_path, operation.model_dump(mode="json"))
+    if not document_store.document_exists(op_path):
+        document_store.set_document(op_path, operation.model_dump(mode="json"))
     return operation
 
 
 def _read_memory_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
-    payload = _snapshot_payload(document_store.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"))
+    payload = _snapshot_payload(document_store.get_document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"))
     if not payload:
         return None
     return MemoryItem(**payload)
@@ -406,11 +406,11 @@ def promotion_trigger_reason(
 def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
     path = collections.memory_apply_control_state
-    payload = _snapshot_payload(document_store.get_document(db_client, path))
+    payload = _snapshot_payload(document_store.get_document(path))
     if payload:
         return MemoryControlState(**payload)
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    document_store.set_document(db_client, path, control.model_dump(mode="json"))
+    document_store.set_document(path, control.model_dump(mode="json"))
     return control
 
 
@@ -422,7 +422,6 @@ def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> No
     # vector watermarks silently reverted (lost update). Mirrors the consolidation
     # writer (canonical_consolidation._persist_control_state).
     document_store.set_document(
-        db_client,
         MemoryCollections(uid=control.uid).memory_apply_control_state,
         {
             "last_promotion_run_at": (
@@ -460,8 +459,8 @@ def _ensure_promotion_operation(
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    if not document_store.document_exists(db_client, op_path):
-        document_store.set_document(db_client, op_path, operation.model_dump(mode="json"))
+    if not document_store.document_exists(op_path):
+        document_store.set_document(op_path, operation.model_dump(mode="json"))
     return operation
 
 
@@ -555,7 +554,7 @@ def promote_short_term_item_via_apply(
     promoted = result.memory_items[0] if result.memory_items else item
     if result.status == ApplyStatus.idempotent_skip:
         payload = _snapshot_payload(
-            document_store.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}")
+            document_store.get_document(f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}")
         )
         if payload:
             promoted = MemoryItem(**payload)

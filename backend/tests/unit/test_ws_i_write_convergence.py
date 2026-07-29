@@ -73,6 +73,8 @@ from models.memories import Memory, MemoryDB, MemoryCategory
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from database.memory_apply_store import apply_long_term_patch_firestore
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 import utils.memory.canonical_memory_adapter as canonical_memory_adapter_module
 from utils.memory.canonical_memory_adapter import (
     extraction_memory_id,
@@ -284,6 +286,7 @@ def test_canonical_write_uses_apply_and_not_legacy_save(monkeypatch):
             ).model_dump(mode="json"),
         }
     )
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     monkeypatch.setattr(
         canonical_memory_adapter_module,
@@ -325,13 +328,14 @@ def test_canonical_write_uses_apply_and_not_legacy_save(monkeypatch):
     assert memories[0].content == content
 
 
-def test_canonical_read_returns_default_visible_items():
+def test_canonical_read_returns_default_visible_items(monkeypatch):
     uid = "uid-canonical"
     conversation_id = "conv-1"
     content = "User enjoys hiking"
     memory_id = extraction_memory_id(uid=uid, source_id=conversation_id, content=content)
     item = _fresh_short_term_item(uid=uid, memory_id=memory_id, conversation_id=conversation_id, content=content)
     db = _FakeDb({f"users/{uid}/memory_items/{memory_id}": _stored_item(item)})
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     memories = read_canonical_memories(uid, db_client=db)
     assert len(memories) == 1
@@ -340,7 +344,7 @@ def test_canonical_read_returns_default_visible_items():
     assert memories[0].memory_tier == MemoryTier.short_term
 
 
-def test_canonical_read_hides_restricted_sensitivity():
+def test_canonical_read_hides_restricted_sensitivity(monkeypatch):
     uid = "uid-canonical"
     conversation_id = "conv-1"
     content = "password is secret123"
@@ -348,6 +352,7 @@ def test_canonical_read_hides_restricted_sensitivity():
     item = _fresh_short_term_item(uid=uid, memory_id=memory_id, conversation_id=conversation_id, content=content)
     restricted = item.model_copy(update={"sensitivity_labels": ["credential"]})
     db = _FakeDb({f"users/{uid}/memory_items/{memory_id}": _stored_item(restricted)})
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     assert read_canonical_memories(uid, db_client=db) == []
 
@@ -410,6 +415,7 @@ def test_reprocess_retract_then_rewrite_restores_active_memory(monkeypatch):
             ).model_dump(mode="json"),
         }
     )
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     monkeypatch.setattr(
         canonical_memory_adapter_module,
@@ -698,6 +704,7 @@ def test_canonical_external_write_preserves_public_visibility_and_manual_flag(mo
             ).model_dump(mode="json"),
         }
     )
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     monkeypatch.setattr(
         canonical_memory_adapter_module,
         "read_memory_v3_trusted_account_generation",

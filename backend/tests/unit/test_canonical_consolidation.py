@@ -29,6 +29,8 @@ from utils.memory.canonical_consolidation import (
     run_canonical_consolidation,
 )
 from utils.memory.memory_system import MemorySystem
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
 
@@ -159,7 +161,7 @@ def test_consolidation_trigger_batch_and_daily():
     )
 
 
-def test_gather_excludes_superseded_candidates():
+def test_gather_excludes_superseded_candidates(monkeypatch):
     uid = "uid-canonical"
     active = _item("mem_a", "Lives in Seattle")
     superseded = _item("mem_old", "Lives in NYC")
@@ -170,6 +172,7 @@ def test_gather_excludes_superseded_candidates():
             f"users/{uid}/memory_items/mem_old": superseded.model_dump(mode="python"),
         }
     )
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     hit = MagicMock()
     hit.memory_id = "mem_old"
@@ -196,7 +199,7 @@ def test_legacy_cohort_is_noop():
     assert report.skipped_reason == "not_canonical_cohort"
 
 
-def test_supersede_golden_path_with_mock_agent():
+def test_supersede_golden_path_with_mock_agent(monkeypatch):
     uid = "uid-canonical"
     old = _item("mem_old", "Loves ice cream")
     new = _item("mem_new", "Hates ice cream")
@@ -208,6 +211,7 @@ def test_supersede_golden_path_with_mock_agent():
             f"users/{uid}/memory_items/mem_new": new.model_dump(mode="python"),
         }
     )
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     agent_response = ConsolidationAgentBatch(
         decisions=[
@@ -254,7 +258,7 @@ def test_supersede_golden_path_with_mock_agent():
     assert "mem_old" in report.superseded_memory_ids
 
 
-def test_recurrence_handoff_failure_blocks_watermark_advance():
+def test_recurrence_handoff_failure_blocks_watermark_advance(monkeypatch):
     uid = 'uid-canonical'
     item = _item('mem_loop', 'Investor update is still unresolved')
     control = MemoryControlState(uid=uid, head_commit_id='head0', account_generation=1, source_generation=1)
@@ -264,6 +268,7 @@ def test_recurrence_handoff_failure_blocks_watermark_advance():
             f'users/{uid}/memory_items/mem_loop': item.model_dump(mode='python'),
         }
     )
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     signal = CanonicalRecurrenceSignal(
         signal_id='observation-1',
         title='Investor update',
@@ -299,12 +304,13 @@ def test_recurrence_handoff_failure_blocks_watermark_advance():
     assert report.last_consolidation_run_at is None
 
 
-def test_ambiguous_contradiction_escalates_to_review_queue():
+def test_ambiguous_contradiction_escalates_to_review_queue(monkeypatch):
     uid = "uid-canonical"
     survivor = _item("mem_new", "Maybe lives in LA")
     existing = _item("mem_old", "Lives in NYC")
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{uid}/memory_state/apply_control": control.model_dump(mode="python")})
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
 
     agent_response = ConsolidationAgentBatch(
         decisions=[

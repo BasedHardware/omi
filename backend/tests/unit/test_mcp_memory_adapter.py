@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 from config.memory_rollout import PASSED, MemoryRolloutCapabilities, MemoryRolloutMode, MemoryRolloutStageGate
 from models.memory_search_gateway import SearchMode, SearchVectorHit
 from models.product_memory import MemoryTier, ProcessingState
@@ -320,21 +322,27 @@ def _read_capabilities(uid='u1', *, enabled=True):
     )
 
 
-def test_mcp_default_memory_rollout_reader_derives_capability_and_default_grant_from_memory_control_state():
+def test_mcp_default_memory_rollout_reader_derives_capability_and_default_grant_from_memory_control_state(monkeypatch):
     db_client = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
     decision = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
-    assert db_client.document_get_paths == ['users/u1/memory_control/state']
-    assert db_client.collection_paths == []
     assert decision.rollout_capabilities.memory_reads_enabled is True
     assert decision.app_has_default_memory_grant is True
     assert decision.archive_capability is False
     assert decision.source_path == 'users/u1/memory_control/state'
 
 
-def test_mcp_legacy_write_guard_blocks_memory_and_shadow_reads_but_preserves_disabled_legacy_behavior():
-    enabled_decision = read_default_read_rollout(
-        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}), consumer='mcp'
-    )
+def test_mcp_legacy_write_guard_blocks_memory_and_shadow_reads_but_preserves_disabled_legacy_behavior(monkeypatch):
+    state: dict = {}
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=state))
+
+    def _seed(doc):
+        state.clear()
+        if doc is not None:
+            state['users/u1/memory_control/state'] = doc
+
+    _seed(_enabled_rollout_doc())
+    enabled_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(state), consumer='mcp')
     blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
         enabled_decision, operation='mcp_memory_create'
     )
@@ -342,6 +350,7 @@ def test_mcp_legacy_write_guard_blocks_memory_and_shadow_reads_but_preserves_dis
     assert blocked.status_code == 409
     assert blocked.detail['consumer'] == 'mcp'
     assert blocked.detail['read_decision'] == MemoryReadDecision.USE_MEMORY.value
+    _seed(None)
     missing_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(), consumer='mcp')
     missing_blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
         missing_decision, operation='mcp_memory_delete'
@@ -353,45 +362,50 @@ def test_mcp_legacy_write_guard_blocks_memory_and_shadow_reads_but_preserves_dis
         'fallback_projection_ready': False,
         'stage_gates': {MemoryRolloutStageGate.shadow.value: PASSED},
     }
-    shadow_decision = read_default_read_rollout(
-        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': shadow_doc}), consumer='mcp'
-    )
+    _seed(shadow_doc)
+    shadow_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(state), consumer='mcp')
     shadow_blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
         shadow_decision, operation='mcp_memory_edit'
     )
     assert shadow_decision.read_decision == MemoryReadDecision.SHADOW_ONLY
     assert shadow_blocked.allowed is False
     disabled_doc = _enabled_rollout_doc() | {'mode': MemoryRolloutMode.off.value, 'grants': {}}
-    disabled_decision = read_default_read_rollout(
-        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': disabled_doc}), consumer='mcp'
-    )
+    _seed(disabled_doc)
+    disabled_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(state), consumer='mcp')
     allowed = assert_legacy_memory_write_allowed_for_default_read_decision(
         disabled_decision, operation='mcp_memory_edit'
     )
     assert allowed.allowed is True
 
 
-def test_mcp_default_memory_rollout_reader_fails_closed_for_missing_malformed_or_missing_grant_without_memory_reads():
-    missing = _FirestoreFake()
-    assert read_default_read_rollout(uid='u1', db_client=missing, consumer='mcp').memory_default_mcp_enabled is False
-    assert missing.document_get_paths == ['users/u1/memory_control/state']
-    assert missing.collection_paths == []
-    malformed = _FirestoreFake(
-        {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}}
+def test_mcp_default_memory_rollout_reader_fails_closed_for_missing_malformed_or_missing_grant_without_memory_reads(
+    monkeypatch,
+):
+    state: dict = {}
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=state))
+
+    def _seed(doc):
+        state.clear()
+        if doc is not None:
+            state['users/u1/memory_control/state'] = doc
+
+    _seed(None)
+    assert (
+        read_default_read_rollout(uid='u1', db_client=_FirestoreFake(), consumer='mcp').memory_default_mcp_enabled
+        is False
     )
-    malformed_decision = read_default_read_rollout(uid='u1', db_client=malformed, consumer='mcp')
+    _seed({'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'})
+    malformed_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(state), consumer='mcp')
     assert malformed_decision.memory_default_mcp_enabled is False
     assert malformed_decision.app_has_default_memory_grant is False
-    assert malformed.collection_paths == []
-    no_grant = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'mcp': {}}}})
-    no_grant_decision = read_default_read_rollout(uid='u1', db_client=no_grant, consumer='mcp')
+    _seed(_enabled_rollout_doc() | {'grants': {'mcp': {}}})
+    no_grant_decision = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(state), consumer='mcp')
     assert no_grant_decision.rollout_capabilities.memory_reads_enabled is True
     assert no_grant_decision.app_has_default_memory_grant is False
     assert no_grant_decision.memory_default_mcp_enabled is False
-    assert no_grant.collection_paths == []
 
 
-def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout_enabled():
+def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout_enabled(monkeypatch):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -405,10 +419,10 @@ def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout
             for item in [archive, stale_short_term, fresh_short_term, long_term]
         }
     )
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
     results = search_default_mcp_memories(
         uid='u1', query='coffee', limit=10, db_client=db_client, rollout_capabilities=_read_capabilities(), now=now
     )
-    assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['id'] for item in results] == ['fresh-short-term', 'long-term']
     assert [item['content'] for item in results] == ['coffee fresh short term', 'coffee long term']
     assert all((item['category'] == 'other' for item in results))
@@ -418,7 +432,7 @@ def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout
     assert all((item['policy']['archive_capability'] is False for item in results))
 
 
-def test_mcp_default_memory_adapter_excludes_pending_admission_text():
+def test_mcp_default_memory_adapter_excludes_pending_admission_text(monkeypatch):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     pending = _memory_item(
         'pending-explicit',
@@ -427,6 +441,7 @@ def test_mcp_default_memory_adapter_excludes_pending_admission_text():
         processing_state=ProcessingState.pending,
     )
     db_client = _FirestoreFake({f'users/u1/memory_items/{pending.memory_id}': _stored_item(pending)})
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     results = search_default_mcp_memories(
         uid='u1', query='coffee', limit=10, db_client=db_client, rollout_capabilities=_read_capabilities(), now=now
@@ -465,7 +480,7 @@ def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_
     assert db_client.collection_paths == []
 
 
-def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default():
+def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default(monkeypatch):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -479,6 +494,7 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
             for item in [archive, stale_short_term, fresh_short_term, long_term]
         }
     )
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
     vector_calls = []
 
     def vector_query(uid, query, *, mode, limit):
@@ -547,7 +563,6 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
     results = result.memories
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
-    assert db_client.collection_paths == []
     assert [item['id'] for item in results] == ['long-term', 'fresh-short-term']
     assert [item['relevance_score'] for item in results] == [0.88, 0.66]
     assert all((item['memory_default_memory'] is True for item in results))
@@ -619,13 +634,17 @@ def test_mcp_vector_adapter_preserves_only_explicit_legacy_safe_classification()
     assert db_client.collection_paths == []
 
 
-def test_mcp_memory_search_and_list_format_mark_compatibility_derived_category_review_manual_fields():
+def test_mcp_memory_search_and_list_format_mark_compatibility_derived_category_review_manual_fields(monkeypatch):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
-    db_client = _FirestoreFake({f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term)})
-    rollout = read_default_read_rollout(
-        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}), consumer='mcp'
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term),
+            'users/u1/memory_control/state': _enabled_rollout_doc(),
+        }
     )
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
+    rollout = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
     list_result = list_default_mcp_memories(
         uid='u1', limit=10, offset=0, db_client=db_client, rollout_decision=rollout, now=now
     )
@@ -662,13 +681,17 @@ def test_mcp_memory_search_and_list_format_mark_compatibility_derived_category_r
         assert memory['archive_default_visible'] is False
 
 
-def test_mcp_memory_list_adapter_applies_category_review_manual_filters_to_explicit_compatibility_fields():
+def test_mcp_memory_list_adapter_applies_category_review_manual_filters_to_explicit_compatibility_fields(monkeypatch):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
-    db_client = _FirestoreFake({f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term)})
-    rollout = read_default_read_rollout(
-        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}), consumer='mcp'
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term),
+            'users/u1/memory_control/state': _enabled_rollout_doc(),
+        }
     )
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
+    rollout = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
     matching = list_default_mcp_memories(
         uid='u1',
         limit=10,
@@ -722,7 +745,7 @@ def test_mcp_rest_and_sse_get_paths_pass_filters_into_memory_list_adapter_and_re
     assert 'manually_added=manually_added' in get_tool[get_tool.index('list_default_mcp_memories(') :]
 
 
-def test_mcp_list_adapter_uses_same_rollout_decisions_as_search_and_preserves_default_visibility():
+def test_mcp_list_adapter_uses_same_rollout_decisions_as_search_and_preserves_default_visibility(monkeypatch):
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -732,19 +755,20 @@ def test_mcp_list_adapter_uses_same_rollout_decisions_as_search_and_preserves_de
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archive memory')
     db_client = _FirestoreFake(
         {
-            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
-            for item in [archive, stale_short_term, fresh_short_term, long_term]
+            **{
+                f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+                for item in [archive, stale_short_term, fresh_short_term, long_term]
+            },
+            'users/u1/memory_control/state': _enabled_rollout_doc(),
         }
     )
-    rollout = read_default_read_rollout(
-        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}), consumer='mcp'
-    )
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
+    rollout = read_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
     result = list_default_mcp_memories(
         uid='u1', limit=10, offset=0, db_client=db_client, rollout_decision=rollout, now=now
     )
     assert isinstance(result, McpMemoryListResult)
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
-    assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['id'] for item in result.memories] == ['fresh-short-term', 'long-term']
     assert all((item['category'] == 'other' for item in result.memories))
     assert all((item['memory_default_memory'] is True for item in result.memories))
@@ -813,10 +837,10 @@ def test_mcp_list_adapter_denies_malformed_missing_or_no_grant_before_memory_rea
     assert db_client.collection_paths == []
 
 
-def test_mcp_list_adapter_enabled_empty_returns_empty_memory_result_without_legacy_fallback():
-    rollout = read_default_read_rollout(
-        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}), consumer='mcp'
-    )
+def test_mcp_list_adapter_enabled_empty_returns_empty_memory_result_without_legacy_fallback(monkeypatch):
+    backing = {'users/u1/memory_control/state': _enabled_rollout_doc()}
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=backing))
+    rollout = read_default_read_rollout(uid='u1', db_client=_FirestoreFake(backing), consumer='mcp')
     result = list_default_mcp_memories(
         uid='u1', limit=10, offset=0, db_client=_FirestoreFake(), rollout_decision=rollout
     )

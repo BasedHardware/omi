@@ -120,8 +120,11 @@ class _FakeTransaction:
 class FakeDocumentStore:
     """Backend-neutral in-memory document store for tests."""
 
-    def __init__(self) -> None:
-        self._docs: Dict[str, Dict[str, Any]] = {}
+    def __init__(self, *, backing: Optional[Dict[str, Dict[str, Any]]] = None) -> None:
+        # ``backing`` lets a test share its own path->data dict (e.g. a Firestore-shaped fake's
+        # ``.docs``) so ``document_store`` reads/writes and the injected ``db_client`` fake see the
+        # same store during the D1 migration (ADR-0022). Absent → a fresh in-memory dict.
+        self._docs: Dict[str, Dict[str, Any]] = backing if backing is not None else {}
         self._updated: Dict[str, datetime] = {}
         # Strictly-increasing stamps (base + counter) so a later write always has a greater revision.
         self._clock = itertools.count()

@@ -33,6 +33,8 @@ from routers import memories as mem_mod  # noqa: E402
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState  # noqa: E402
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState  # noqa: E402
 from utils.memory import canonical_memory_adapter as canonical_adapter  # noqa: E402
+from database import document_store  # noqa: E402
+from tests.store_fakes import FakeDocumentStore  # noqa: E402
 
 
 def _force_legacy(monkeypatch):
@@ -253,36 +255,12 @@ class TestBatchDeleteCanonicalCohort:
             )
 
     def test_atomic_adapter_reads_entire_batch_before_queuing_writes(self, monkeypatch):
-        class Snapshot:
-            def __init__(self, payload=None):
-                self.exists = payload is not None
-                self._payload = payload
-
-            def to_dict(self):
-                return self._payload
-
-        class Document:
-            def __init__(self, path):
-                self.path = path
-
-            def get(self, transaction=None):
-                payload = _canonical_item('valid').model_dump(mode='json') if self.path.endswith('/valid') else None
-                return Snapshot(payload)
-
-        transaction = MagicMock()
-        client = MagicMock()
-        client.transaction.return_value = transaction
-        client.document.side_effect = Document
-
-        def transactional_for_test(function):
-            def run(txn):
-                result = function(txn)
-                txn.commit()
-                return result
-
-            return run
-
-        monkeypatch.setattr(canonical_adapter, 'transactional', transactional_for_test)
+        # The transaction body must read every id in the batch before it queues any
+        # write, so a later missing id aborts with nothing mutated — no per-id fallback
+        # that could tombstone "valid" before discovering "missing".
+        valid_path = 'users/u1/memory_items/valid'
+        docs = {valid_path: _canonical_item('valid').model_dump(mode='json')}
+        monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=docs))
         monkeypatch.setattr(
             canonical_adapter,
             'read_memory_v3_trusted_account_generation',
@@ -293,11 +271,13 @@ class TestBatchDeleteCanonicalCohort:
             canonical_adapter.delete_canonical_memories_batch(
                 'u1',
                 ['valid', 'missing'],
-                db_client=client,
+                db_client=mem_mod.db,
             )
 
-        transaction.set.assert_not_called()
-        transaction.commit.assert_not_called()
+        # The earlier valid id must be left untouched (still active, content intact):
+        # if the batch wrote as it read, "valid" would already be tombstoned here.
+        assert docs[valid_path]['status'] == MemoryItemStatus.active.value
+        assert docs[valid_path]['content'] == 'fact valid'
 
 
 class TestBatchDeleteRequestModel:

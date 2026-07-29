@@ -327,7 +327,7 @@ def _hydrate_vector_candidate_items_by_id(
         if candidate_hydration_read_count >= max_candidate_hydration_reads:
             hydration_read_budget_exhausted = True
             break
-        snapshot = document_store.get_document(db_client, f'users/{uid}/memory_items/{hit.memory_id}')
+        snapshot = document_store.get_document(f'users/{uid}/memory_items/{hit.memory_id}')
         candidate_hydration_read_count += 1
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}

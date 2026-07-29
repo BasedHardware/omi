@@ -81,8 +81,10 @@ from utils.memory.legacy_backfill import (
     live_extraction_memory_id_for_legacy_row,
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from database import document_store
 from tests.unit.test_ws_b_short_term_lifecycle import (
     NOW,
+    _DOC_STORE_HOLDER,
     _PromotionFakeDb,
     _canonical_db_with_control,
     _seed_canonical_short_term,
@@ -197,6 +199,16 @@ def _seed_legacy_evidence(db: _PromotionFakeDb, rows: list[dict]) -> None:
                     "artifact_preservation": "preserved",
                     "source_state": "active",
                 }
+
+
+# Post-D1 (ADR-0022) ``document_store`` reads/writes through ``get_document_store()``, not through
+# the injected Firestore-shaped ``db_client`` fake. The ``_PromotionFakeDb`` constructor (shared with
+# test_ws_b) rebinds ``_DOC_STORE_HOLDER["store"]`` to a ``FakeDocumentStore`` sharing the fake's
+# backing ``.docs`` dict; this autouse fixture patches the ``_store`` seam to read from it so seeded
+# data and writes stay consistent between the two.
+@pytest.fixture(autouse=True)
+def _route_document_store_to_fake(monkeypatch):
+    monkeypatch.setattr(document_store, "_store", lambda: _DOC_STORE_HOLDER["store"])
 
 
 @pytest.fixture(autouse=True)

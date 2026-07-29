@@ -79,6 +79,9 @@ from utils.memory.canonical_memory_adapter import (
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
+
 
 def _refresh_canonical_memory_adapter_runtime() -> None:
     canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
@@ -260,9 +263,9 @@ def _sample_memory_payload(*, uid: str, conversation_id: str, content: str) -> d
 
 
 @pytest.fixture
-def canonical_db():
+def canonical_db(monkeypatch):
     uid = "uid-canonical-ws-j"
-    return _FakeDb(
+    db = _FakeDb(
         {
             f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid,
@@ -272,6 +275,11 @@ def canonical_db():
             ).model_dump(mode="json"),
         }
     )
+    # document_store now reads/writes through the neutral storage port (WP2, ADR-0022), not through
+    # the injected Firestore-shaped fake. Point its ``_store`` seam at a FakeDocumentStore sharing the
+    # fake's backing dict so seeded data and writes stay consistent between the two.
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    return db
 
 
 def test_neutral_vector_id_is_deterministic_and_distinct_from_legacy_and_memory():
@@ -380,6 +388,7 @@ def test_canonical_account_delete_purge_raises_on_partial_vector_delete(monkeypa
 
 def test_legacy_account_delete_purge_skips_canonical_path(monkeypatch):
     db = _legacy_db_with_control()
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY
 
     delete_by_id = MagicMock()
@@ -402,6 +411,7 @@ def test_legacy_account_delete_purge_skips_canonical_path(monkeypatch):
 def test_legacy_purge_derived_user_data_still_purges_legacy_vectors(monkeypatch):
     """Canonical neutral-id purge is inert for a real legacy uid; legacy batch path stays separate."""
     db = _legacy_db_with_control()
+    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
     assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY
 
     delete_by_id = MagicMock()

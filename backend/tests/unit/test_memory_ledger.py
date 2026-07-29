@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 from google.api_core.exceptions import Aborted
 import pytest
 
-from database import firestore_transaction_retry
+from database import document_store, firestore_transaction_retry
 from tests.store_fakes import FakeDocumentStore
 from tests.unit.fake_firestore import FakeFirestore
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
@@ -78,6 +78,7 @@ def store(monkeypatch):
     fake = FakeDocumentStore()
     monkeypatch.setattr(memory_ledger, "_store", lambda: fake)
     monkeypatch.setattr(projection_repair, "_store", lambda: fake)
+    monkeypatch.setattr(document_store, "_store", lambda: fake)
     return fake
 
 

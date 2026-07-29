@@ -78,7 +78,7 @@ def read_memory_v3_trusted_account_generation(*, uid: str, db_client: Any) -> V3
 
     source_path = MemoryCollections(uid=uid).memory_state_head
     try:
-        data = _snapshot_data(document_store.get_document(db_client, source_path))
+        data = _snapshot_data(document_store.get_document(source_path))
     except Exception:
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.READ_FAILED)
 

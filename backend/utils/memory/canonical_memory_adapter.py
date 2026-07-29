@@ -21,7 +21,7 @@ from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import filter_items_by_device_scope
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.memory_collections import MemoryCollections
-from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation, transactional
+from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
@@ -335,12 +335,12 @@ def search_canonical_memories(
 def _ensure_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
     path = collections.memory_apply_control_state
-    snapshot = document_store.get_document(db_client, path)
+    snapshot = document_store.get_document(path)
     if getattr(snapshot, "exists", False):
         return MemoryControlState(**_snapshot_payload(snapshot))
 
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    document_store.set_document(db_client, path, control.model_dump(mode="json"))
+    document_store.set_document(path, control.model_dump(mode="json"))
     return control
 
 
@@ -428,7 +428,7 @@ def _preserved_evidence_security_fields(existing_data: Dict[str, Any]) -> Dict[s
 def _persist_evidence(uid: str, evidence: MemoryEvidence, *, db_client: Any) -> None:
     collections = MemoryCollections(uid=uid)
     path = f"{collections.memory_evidence}/{evidence.evidence_id}"
-    snapshot = document_store.get_document(db_client, path)
+    snapshot = document_store.get_document(path)
     reactivation_updates: Dict[str, Any] = {
         "source_state": SourceState.active,
         "source_state_reason": None,
@@ -436,7 +436,7 @@ def _persist_evidence(uid: str, evidence: MemoryEvidence, *, db_client: Any) -> 
     if getattr(snapshot, "exists", False):
         reactivation_updates.update(_preserved_evidence_security_fields(_snapshot_payload(snapshot)))
     active_evidence = evidence.model_copy(update=reactivation_updates)
-    document_store.set_document(db_client, path, active_evidence.model_dump(mode="json"))
+    document_store.set_document(path, active_evidence.model_dump(mode="json"))
 
 
 def _bump_source_generation(uid: str, *, db_client: Any) -> MemoryControlState:
@@ -503,7 +503,7 @@ def _validate_memory_item_for_write(item: MemoryItem) -> MemoryItem:
 def _persist_memory_item(uid: str, item: MemoryItem, *, db_client: Any) -> None:
     item = _validate_memory_item_for_write(item)
     path = f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}"
-    document_store.set_document(db_client, path, item.model_dump(mode="json"))
+    document_store.set_document(path, item.model_dump(mode="json"))
 
 
 def _validated_memory_item_copy(item: MemoryItem, updates: Dict[str, Any]) -> MemoryItem:
@@ -547,7 +547,7 @@ def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
 
 def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    snapshot = document_store.get_document(db_client, path)
+    snapshot = document_store.get_document(path)
     if not getattr(snapshot, "exists", False):
         return None
     item = MemoryItem(**_snapshot_payload(snapshot))
@@ -600,8 +600,8 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    if not document_store.document_exists(db_client, op_path):
-        document_store.set_document(db_client, op_path, operation.model_dump(mode="json"))
+    if not document_store.document_exists(op_path):
+        document_store.set_document(op_path, operation.model_dump(mode="json"))
 
     patch_payload = {
         "patch_id": f"patch_{idempotency_key[:24]}",
@@ -646,7 +646,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
 
     item = result.memory_items[0] if result.memory_items else None
     if item is None and result.status == ApplyStatus.idempotent_skip:
-        snapshot = document_store.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{committed_id}")
+        snapshot = document_store.get_document(f"{MemoryCollections(uid=uid).memory_items}/{committed_id}")
         if getattr(snapshot, "exists", False):
             item = MemoryItem(**_snapshot_payload(snapshot))
 
@@ -666,7 +666,6 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         device_ids, primary_device = _ordered_capture_devices_from_evidence(raw_evidence)
         if device_ids:
             document_store.set_document(
-                db_client,
                 f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}",
                 {
                     "capture_device_ids": device_ids,
@@ -799,8 +798,8 @@ def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_
             observed_head_commit_id=control.head_commit_id,
         )
         op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-        if not document_store.document_exists(db_client, op_path):
-            document_store.set_document(db_client, op_path, operation.model_dump(mode="json"))
+        if not document_store.document_exists(op_path):
+            document_store.set_document(op_path, operation.model_dump(mode="json"))
         idempotency_key = deterministic_contract_id(
             "canonical-memory-user-review",
             {
@@ -905,8 +904,8 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client: Any, reason
         )
         tombstoned_evidence.append(next_evidence)
         ev_path = f"{collections.memory_evidence}/{evidence.evidence_id}"
-        if document_store.document_exists(db_client, ev_path):
-            document_store.set_document(db_client, ev_path, next_evidence.model_dump(mode="json"))
+        if document_store.document_exists(ev_path):
+            document_store.set_document(ev_path, next_evidence.model_dump(mode="json"))
 
     updated_item = _validated_memory_item_copy(
         item,
@@ -931,7 +930,7 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client: Any, reason
         }
     ]
     for record in build_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
-        document_store.set_document(db_client, record["outbox_path"], record)
+        document_store.set_document(record["outbox_path"], record)
 
     delete_canonical_memory_vector(uid, item.memory_id)
     delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
@@ -985,13 +984,10 @@ def delete_canonical_memories_batch(uid: str, memory_ids: List[str], *, db_clien
     trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
     projection_commit_id = trusted.head_commit_id or "head0"
-    transaction = document_store.new_transaction(db_client)
-
-    @transactional
     def apply_batch(write_transaction: Any) -> None:
         items: List[MemoryItem] = []
         for memory_id in memory_ids:
-            snapshot = document_store.tx_get(write_transaction, db_client, f"{collections.memory_items}/{memory_id}")
+            snapshot = write_transaction.get(f"{collections.memory_items}/{memory_id}")
             if not getattr(snapshot, "exists", False):
                 raise CanonicalMemoryNotFoundError(f"canonical memory not found: {memory_id}")
             item = MemoryItem(**_snapshot_payload(snapshot))
@@ -1016,7 +1012,7 @@ def delete_canonical_memories_batch(uid: str, memory_ids: List[str], *, db_clien
                     }
                 )
                 tombstoned_evidence.append(next_evidence)
-                document_store.tx_set(write_transaction, db_client, f"{collections.memory_evidence}/{evidence.evidence_id}", next_evidence.model_dump(mode="json"))
+                write_transaction.set(f"{collections.memory_evidence}/{evidence.evidence_id}", next_evidence.model_dump(mode="json"))
 
             updated_item = _validated_memory_item_copy(
                 item,
@@ -1028,7 +1024,7 @@ def delete_canonical_memories_batch(uid: str, memory_ids: List[str], *, db_clien
                     "updated_at": now,
                 },
             )
-            document_store.tx_set(write_transaction, db_client, f"{collections.memory_items}/{item.memory_id}", updated_item.model_dump(mode="json"))
+            write_transaction.set(f"{collections.memory_items}/{item.memory_id}", updated_item.model_dump(mode="json"))
 
             purge_candidates = [
                 {
@@ -1041,9 +1037,9 @@ def delete_canonical_memories_batch(uid: str, memory_ids: List[str], *, db_clien
                 }
             ]
             for record in build_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
-                document_store.tx_set(write_transaction, db_client, record["outbox_path"], record)
+                write_transaction.set(record["outbox_path"], record)
 
-    apply_batch(transaction)
+    document_store.run_transaction(apply_batch)
 
     for memory_id in memory_ids:
         try:
@@ -1115,7 +1111,7 @@ def purge_canonical_derived_user_data(uid: str, *, db_client: Any = None) -> Dic
             }
         ]
         for record in build_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
-            document_store.set_document(db_client, record["outbox_path"], record)
+            document_store.set_document(record["outbox_path"], record)
 
     return {
         "purged": True,

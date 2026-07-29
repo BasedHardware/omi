@@ -130,26 +130,20 @@ class FirestoreShortTermLifecycleTransitionStore:
     def persist_short_term_lifecycle_transition(
         self, record: ShortTermLifecycleTransitionRecord
     ) -> ShortTermLifecyclePersistResult:
-        transaction = document_store.new_transaction(self._db_client)
-        return _run_short_term_lifecycle_transaction(
-            transaction,
-            _persist_short_term_lifecycle_transition_transaction,
-            self._db_client,
-            record,
-            self._now,
+        return document_store.run_transaction(
+            lambda tx: _persist_short_term_lifecycle_transition_transaction(tx, record, self._now)
         )
 
 
 def _persist_short_term_lifecycle_transition_transaction(
-    transaction: Any,
-    db_client: Any,
+    tx: Any,
     record: ShortTermLifecycleTransitionRecord,
     now: Optional[datetime],
 ) -> ShortTermLifecyclePersistResult:
     transition_id = _stable_transition_id(record.uid, record.idempotency_key)
     collections = MemoryCollections(uid=record.uid)
     transition_path = f'{collections.short_term_lifecycle_transitions}/{transition_id}'
-    snapshot = document_store.tx_get(transaction, db_client, transition_path)
+    snapshot = tx.get(transition_path)
 
     if snapshot.exists:
         data = cast(JsonDict, snapshot.to_dict() or {})
@@ -158,29 +152,8 @@ def _persist_short_term_lifecycle_transition_transaction(
         return ShortTermLifecyclePersistResult(record=_record_from_firestore_data(data), created=False)
 
     payload = _firestore_transition_payload(record, transition_id=transition_id, now=now)
-    document_store.tx_set(transaction, db_client, transition_path, payload)
+    tx.set(transition_path, payload)
     return ShortTermLifecyclePersistResult(record=record, created=True)
-
-
-def _run_short_term_lifecycle_transaction(
-    transaction: Any,
-    func: Callable[..., ShortTermLifecyclePersistResult],
-    *args: Any,
-) -> ShortTermLifecyclePersistResult:
-    if hasattr(transaction, '_begin'):
-        transaction._begin()
-    try:
-        result = func(transaction, *args)
-        if hasattr(transaction, '_commit'):
-            transaction._commit()
-        return result
-    except Exception:
-        if hasattr(transaction, '_rollback'):
-            transaction._rollback()
-        raise
-    finally:
-        if hasattr(transaction, '_clean_up'):
-            transaction._clean_up()
 
 
 def _current_time(now: Optional[datetime]) -> datetime:
@@ -212,7 +185,7 @@ def fetch_short_term_memory_items_firestore(
         raise ValueError('short-term lifecycle firestore fetch limit must be positive')
 
     snapshots = document_store.stream_collection_where(
-        db_client, MemoryCollections(uid=uid).memory_items, 'tier', '==', MemoryTier.short_term.value
+        MemoryCollections(uid=uid).memory_items, 'tier', '==', MemoryTier.short_term.value
     )
     items: List[MemoryItem] = []
     for snapshot in snapshots:

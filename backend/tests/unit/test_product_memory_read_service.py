@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import (
     MemoryAccessPolicy,
@@ -95,7 +97,7 @@ def _stored_item(item):
     return item.model_dump(mode='json')
 
 
-def test_fetch_default_product_memory_search_reads_authoritative_items_and_filters_default_visibility():
+def test_fetch_default_product_memory_search_reads_authoritative_items_and_filters_default_visibility(monkeypatch):
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -111,6 +113,7 @@ def test_fetch_default_product_memory_search_reads_authoritative_items_and_filte
             f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term),
         }
     )
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     response = fetch_default_product_memory_search(
         uid='u1',
@@ -120,7 +123,6 @@ def test_fetch_default_product_memory_search_reads_authoritative_items_and_filte
         db_client=db_client,
     )
 
-    assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['memory_id'] for item in response['items']] == ['fresh-short-term', 'long-term']
     assert response['total_count'] == 2
     assert response['returned_count'] == 2
@@ -131,7 +133,7 @@ def test_fetch_default_product_memory_search_reads_authoritative_items_and_filte
     assert response['items'][1]['tier'] == 'long_term'
 
 
-def test_fetch_default_product_memory_search_excludes_pending_short_term_text():
+def test_fetch_default_product_memory_search_excludes_pending_short_term_text(monkeypatch):
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     pending = _memory_item(
         'pending-explicit',
@@ -140,6 +142,7 @@ def test_fetch_default_product_memory_search_excludes_pending_short_term_text():
         processing_state=ProcessingState.pending,
     )
     db_client = _FirestoreFake({f'users/u1/memory_items/{pending.memory_id}': _stored_item(pending)})
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     response = fetch_default_product_memory_search(
         uid='u1',
@@ -153,7 +156,7 @@ def test_fetch_default_product_memory_search_excludes_pending_short_term_text():
     assert response['total_count'] == 0
 
 
-def test_fetch_default_product_memory_search_paginates_after_filtering_with_deterministic_order():
+def test_fetch_default_product_memory_search_paginates_after_filtering_with_deterministic_order(monkeypatch):
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     first = _memory_item('a-fresh', now=now, updated_at=now - timedelta(minutes=1), content='coffee alpha')
     stale = _memory_item(
@@ -168,6 +171,7 @@ def test_fetch_default_product_memory_search_paginates_after_filtering_with_dete
     db_client = _FirestoreFake(
         {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [third, stale, second, first]}
     )
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     response = fetch_default_product_memory_search(
         uid='u1',
@@ -186,10 +190,11 @@ def test_fetch_default_product_memory_search_paginates_after_filtering_with_dete
     assert response['limit'] == 2
 
 
-def test_fetch_default_product_memory_search_rejects_uid_mismatches():
+def test_fetch_default_product_memory_search_rejects_uid_mismatches(monkeypatch):
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     item = _memory_item('wrong-uid', now=now, uid='other-user')
     db_client = _FirestoreFake({f'users/u1/memory_items/{item.memory_id}': _stored_item(item)})
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     with pytest.raises(ValueError, match='memory item uid mismatch'):
         fetch_default_product_memory_search(
@@ -201,7 +206,7 @@ def test_fetch_default_product_memory_search_rejects_uid_mismatches():
         )
 
 
-def test_fetch_archive_product_memory_search_requires_archive_capability_and_keeps_default_separate():
+def test_fetch_archive_product_memory_search_requires_archive_capability_and_keeps_default_separate(monkeypatch):
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
@@ -212,6 +217,7 @@ def test_fetch_archive_product_memory_search_requires_archive_capability_and_kee
             for item in [archive, fresh_short_term, long_term]
         }
     )
+    monkeypatch.setattr(document_store, '_store', lambda: FakeDocumentStore(backing=db_client.docs))
 
     denied = fetch_archive_product_memory_search(
         uid='u1',

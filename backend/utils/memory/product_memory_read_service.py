@@ -98,7 +98,7 @@ def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> Lis
 
     collection_path = MemoryCollections(uid=uid).memory_items
     items: List[MemoryItem] = []
-    for snapshot in document_store.stream_collection(db_client, collection_path):
+    for snapshot in document_store.stream_collection(collection_path):
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         item = MemoryItem.model_validate(payload)

@@ -328,7 +328,7 @@ def semantic_materialization_key(*, uid: str, legacy_row: LegacyRow) -> Optional
 
 def _load_canonical_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    payload = _snapshot_payload(document_store.get_document(db_client, path))
+    payload = _snapshot_payload(document_store.get_document(path))
     if not payload:
         return None
     return MemoryItem.model_validate(payload)
@@ -585,8 +585,8 @@ def _archive_legacy_backfill_item_via_apply(
         observed_head_commit_id=control.head_commit_id,
     )
     operation_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    if not document_store.document_exists(db_client, operation_path):
-        document_store.set_document(db_client, operation_path, operation.model_dump(mode="json"))
+    if not document_store.document_exists(operation_path):
+        document_store.set_document(operation_path, operation.model_dump(mode="json"))
     idempotency_key = deterministic_contract_id(
         "legacy-backfill-remediation-archive",
         {
@@ -849,18 +849,17 @@ def _fetch_active_legacy_memories(
 def _read_control_state(uid: str, *, db_client: Any, create_if_missing: bool = True) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
     path = collections.memory_apply_control_state
-    payload = _snapshot_payload(document_store.get_document(db_client, path))
+    payload = _snapshot_payload(document_store.get_document(path))
     if payload:
         return MemoryControlState(**payload)
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
     if create_if_missing:
-        document_store.set_document(db_client, path, control.model_dump(mode="json"))
+        document_store.set_document(path, control.model_dump(mode="json"))
     return control
 
 
 def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
     document_store.set_document(
-        db_client,
         MemoryCollections(uid=control.uid).memory_apply_control_state,
         control.model_dump(mode="json"),
     )
@@ -914,8 +913,8 @@ def _build_backfill_evidence(
 def _persist_evidence(uid: str, evidence: MemoryEvidence, *, db_client: Any) -> None:
     collections = MemoryCollections(uid=uid)
     path = f"{collections.memory_evidence}/{evidence.evidence_id}"
-    if not document_store.document_exists(db_client, path):
-        document_store.set_document(db_client, path, evidence.model_dump(mode="json"))
+    if not document_store.document_exists(path):
+        document_store.set_document(path, evidence.model_dump(mode="json"))
 
 
 def _ensure_backfill_operation(
@@ -951,8 +950,8 @@ def _ensure_backfill_operation(
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    if not document_store.document_exists(db_client, op_path):
-        document_store.set_document(db_client, op_path, operation.model_dump(mode="json"))
+    if not document_store.document_exists(op_path):
+        document_store.set_document(op_path, operation.model_dump(mode="json"))
     return operation
 
 
@@ -1011,8 +1010,8 @@ def _upgrade_pending_admission_candidate(
         observed_head_commit_id=control.head_commit_id,
     )
     op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    if not document_store.document_exists(db_client, op_path):
-        document_store.set_document(db_client, op_path, operation.model_dump(mode="json"))
+    if not document_store.document_exists(op_path):
+        document_store.set_document(op_path, operation.model_dump(mode="json"))
     idempotency_key = deterministic_contract_id(
         "legacy-backfill-admission-upgrade",
         {
@@ -1210,7 +1209,7 @@ def _apply_one_legacy_row(
     item = result.memory_items[0] if result.memory_items else None
     if item is None and result.status == ApplyStatus.idempotent_skip:
         payload = _snapshot_payload(
-            document_store.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{canonical_memory_id}")
+            document_store.get_document(f"{MemoryCollections(uid=uid).memory_items}/{canonical_memory_id}")
         )
         if payload:
             item = MemoryItem(**payload)

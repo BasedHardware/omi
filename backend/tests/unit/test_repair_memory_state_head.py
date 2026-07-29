@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
@@ -61,7 +63,7 @@ def test_repair_plan_rejects_control_without_trusted_fields(script):
     assert plan.trusted_fields is None
 
 
-def test_repair_transaction_preserves_legacy_fields_and_restores_v3_trusted_head(script):
+def test_repair_transaction_preserves_legacy_fields_and_restores_v3_trusted_head(script, monkeypatch):
     db = StrictFirestore(
         {
             ("users", "u1", "memory_state", "head"): {
@@ -86,6 +88,15 @@ def test_repair_transaction_preserves_legacy_fields_and_restores_v3_trusted_head
     assert state_head["account_generation"] == 7
     assert state_head["head_commit_id"] == "canonical-head-7"
     assert state_head["commit_sequence"] == 11
+
+    # ``read_memory_v3_trusted_account_generation`` now reads via ``document_store`` (the neutral
+    # port), not the injected ``db_client`` (ADR-0022). Point ``document_store`` at the same data the
+    # StrictFirestore fake holds, translating its tuple keys to logical path strings.
+    monkeypatch.setattr(
+        document_store,
+        "_store",
+        lambda: FakeDocumentStore(backing={"/".join(k): v for k, v in db.rows.items()}),
+    )
 
     trusted = read_memory_v3_trusted_account_generation(uid="u1", db_client=client)
     assert trusted.read_error_reason is None

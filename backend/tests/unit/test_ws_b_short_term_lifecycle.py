@@ -110,6 +110,8 @@ def _ws_b_import_isolation():
     _clear_ws_b_runtime_modules()
 
 
+from database import document_store
+from tests.store_fakes import FakeDocumentStore
 from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_apply import MemoryControlState
@@ -228,10 +230,23 @@ class _FakeTransaction:
         self._id = None
 
 
+# Post-D1 (ADR-0022) ``document_store`` reads/writes through ``get_document_store()``, not through
+# the injected Firestore-shaped ``db_client`` fake. Share the fake's backing ``.docs`` dict with a
+# ``FakeDocumentStore`` so seeded data and writes stay consistent between the two. The holder is
+# rebound each time a fake db is constructed; the autouse fixture patches the ``_store`` seam to
+# read from it.
+_DOC_STORE_HOLDER: dict = {}
+
+
+def _bind_document_store_backing(docs) -> None:
+    _DOC_STORE_HOLDER["store"] = FakeDocumentStore(backing=docs)
+
+
 class _PromotionFakeDb(_FakeDb):
     def __init__(self, docs=None):
         super().__init__(docs)
         self.transaction_obj = _FakeTransaction(self)
+        _bind_document_store_backing(self.docs)
 
     def collection(self, path):
         return _CollectionRef(self, path)
@@ -314,6 +329,7 @@ def _clear_canonical_cohort_fixture(monkeypatch):
 
     _load_ws_b_runtime_modules()
     clear_canonical_cohort(monkeypatch)
+    monkeypatch.setattr(document_store, "_store", lambda: _DOC_STORE_HOLDER["store"])
     monkeypatch.setattr(
         "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
         lambda *_, **__: CanonicalKgPromotionResult(attempted=True, success=True),

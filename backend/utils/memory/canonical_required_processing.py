@@ -112,11 +112,11 @@ def _snapshot_payload(snapshot: Any) -> Dict[str, Any]:
 
 def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
     path = MemoryCollections(uid=uid).memory_apply_control_state
-    snapshot = document_store.get_document(db_client, path)
+    snapshot = document_store.get_document(path)
     if getattr(snapshot, "exists", False):
         return MemoryControlState(**_snapshot_payload(snapshot))
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    document_store.set_document(db_client, path, control.model_dump(mode="json"))
+    document_store.set_document(path, control.model_dump(mode="json"))
     return control
 
 
@@ -139,7 +139,7 @@ def list_pending_required_processing_items(
     db_client: Any = None,
     limit: int = 25,
 ) -> List[MemoryItem]:
-    snapshots = document_store.stream_collection(db_client, MemoryCollections(uid=uid).memory_items)
+    snapshots = document_store.stream_collection(MemoryCollections(uid=uid).memory_items)
     pending: List[MemoryItem] = []
     for snapshot in snapshots:
         payload = _snapshot_payload(snapshot)
@@ -207,7 +207,7 @@ def _processing_receipt(
 
 
 def _read_current_item(item: MemoryItem, *, db_client: Any) -> Optional[MemoryItem]:
-    snapshot = document_store.get_document(db_client, f"{MemoryCollections(uid=item.uid).memory_items}/{item.memory_id}")
+    snapshot = document_store.get_document(f"{MemoryCollections(uid=item.uid).memory_items}/{item.memory_id}")
     payload = _snapshot_payload(snapshot)
     return MemoryItem(**payload) if payload else None
 
@@ -273,8 +273,8 @@ def _apply_processed_result(
         observed_head_commit_id=control.head_commit_id,
     )
     operation_path = f"{MemoryCollections(uid=item.uid).memory_operations}/{operation.operation_id}"
-    if not document_store.document_exists(db_client, operation_path):
-        document_store.set_document(db_client, operation_path, operation.model_dump(mode="json"))
+    if not document_store.document_exists(operation_path):
+        document_store.set_document(operation_path, operation.model_dump(mode="json"))
     idempotency_key = deterministic_contract_id(
         "canonical-required-processing",
         {
@@ -318,7 +318,7 @@ def process_required_memory_item(
 ) -> RequiredMemoryProcessingResult:
     if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_canonical_cohort")
-    snapshot = document_store.get_document(db_client, f"{MemoryCollections(uid=uid).memory_items}/{memory_id}")
+    snapshot = document_store.get_document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}")
     payload = _snapshot_payload(snapshot)
     if not payload:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="memory_not_found")
