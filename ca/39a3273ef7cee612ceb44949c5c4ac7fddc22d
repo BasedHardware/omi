@@ -1,0 +1,19 @@
+desktop/context-for-claude/Sources/ContextMCPKit/Tools.swift
+  s_b5d52d5f05403b::t_2d5ed7c943989b 1268-1276
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ca39a3273ef7cee612ceb44949c5c4ac7fddc22d",
+  "prompts": {},
+  "sessions": {
+    "s_b5d52d5f05403b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82d7239f-7b04-40bc-b1d8-8737cb48399a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
