@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -13,6 +14,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE_TAG = "v0.12.124+12124-macos"
+
+
+def clean_git_environment(env: dict[str, str]) -> dict[str, str]:
+    """Keep hook-local Git state out of isolated qualification fixtures."""
+    return {key: value for key, value in env.items() if not key.startswith("GIT_")}
 
 
 class DesktopReleaseFlowContractTests(unittest.TestCase):
@@ -54,7 +60,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         source = root / "candidate-source"
         remote.parent.mkdir(parents=True)
         source.mkdir()
-        git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        git_env = clean_git_environment(dict(os.environ))
 
         def git(*args: str, cwd: Path = source) -> str:
             result = subprocess.run(
@@ -71,7 +77,20 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         git("config", "user.name", "Qualification Contract")
         git("config", "user.email", "qualification-contract@example.com")
         (source / "candidate.txt").write_text("immutable candidate\n", encoding="utf-8")
-        git("add", "candidate.txt")
+        reclaim_source = ROOT / "desktop/macos/scripts/qualification-cache-reclaim.py"
+        reclaim_target = source / "desktop/macos/scripts/qualification-cache-reclaim.py"
+        reclaim_target.parent.mkdir(parents=True)
+        reclaim_target.write_bytes(reclaim_source.read_bytes())
+        reclaim_target.chmod(0o755)
+        for name in ("qualification-runner-self-clean.py", "qualification-watchdog.py"):
+            target = reclaim_target.parent / name
+            target.write_bytes((reclaim_source.parent / name).read_bytes())
+            target.chmod(0o755)
+        shutil.copytree(
+            ROOT / "scripts/dev-harness/dev_harness",
+            source / "scripts/dev-harness/dev_harness",
+        )
+        git("add", "candidate.txt", "desktop/macos/scripts", "scripts/dev-harness/dev_harness")
         git("-c", "core.hooksPath=/dev/null", "commit", "--quiet", "-m", "candidate")
         candidate_sha = git("rev-parse", "HEAD")
         git("tag", "-a", RELEASE_TAG, "-m", "candidate")
@@ -97,11 +116,24 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             'git rev-parse "$RELEASE_TAG^{commit}"',
             "git rev-parse 'HEAD^{commit}'",
             "check-desktop-auto-beta-candidate.py",
-            "--automatic --github-actions-artifact",
+            "--automatic",
+            "--github-actions-artifact",
             "group: desktop-beta-qualification-m1",
             "cancel-in-progress: false",
         ):
             self.assertIn(fragment, self.workflow)
+
+    def test_m1_qualification_requires_live_desktop_backend_contract(self) -> None:
+        for fragment in (
+            "Verify live desktop-backend chat compatibility",
+            '.chat_contract_version == "1"',
+            "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+            "desktop-backend-compatibility.json",
+        ):
+            self.assertIn(fragment, self.workflow)
+        compatibility = self.workflow.index("Verify live desktop-backend chat compatibility")
+        qualify = self.workflow.index("Qualify exact candidate on the M1 Studio hermetic stack")
+        self.assertLess(compatibility, qualify)
 
     def test_release_process_guard_accepts_the_run_isolated_tag_checkout(self) -> None:
         tree = ast.parse(self.release_guard)
@@ -113,7 +145,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
         fragments = {
             node.value for node in ast.walk(guard) if isinstance(node, ast.Constant) and isinstance(node.value, str)
         }
-        self.assertIn('checkout --quiet --detach "refs/tags/$RELEASE_TAG"', fragments)
+        self.assertIn('git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"', fragments)
         self.assertNotIn("ref: ${{ inputs.release_tag }}", fragments)
 
     def test_run_staging_evidence_and_cleanup_are_isolated_and_rerun_safe(self) -> None:
@@ -124,8 +156,12 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             "Finalize only this authenticated qualification lease",
             "if: always()",
             "qualification-lease-command.sh\" release",
-            "runner-capacity.json",
-            "M1 qualification runner capacity guard refused to start",
+            "runner-hygiene.json",
+            "qualification-runner-self-clean.py",
+            "qualification-watchdog.py",
+            "--minimum-age-seconds 3600",
+            "--max-entries 16",
+            "--max-reclaim-kib 134217728",
             "33554432",
             "desktop-qualification-evidence-${{ inputs.release_tag }}-m1-${{ github.run_id }}-${{ github.run_attempt }}",
             "overwrite: false",
@@ -135,7 +171,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
 
     def test_checkout_ignores_stale_shared_workspace_and_uses_fresh_run_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             server, candidate_sha = self._create_candidate_remote(root)
             runner_temp = root / "runner-temp"
             runner_temp.mkdir()
@@ -156,6 +192,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             env = {
                 **os.environ,
                 "RUNNER_TEMP": str(runner_temp),
+                "TMPDIR": str(runner_temp),
                 "GITHUB_RUN_ID": run_id,
                 "GITHUB_RUN_ATTEMPT": run_attempt,
                 "QUALIFICATION_STAGE": str(stage),
@@ -165,6 +202,8 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
                 "ref": RELEASE_TAG,
                 "OMI_QUALIFICATION_MINIMUM_FREE_KIB": "1",
                 "OMI_QUALIFICATION_MINIMUM_FREE_INODES": "1",
+                "OMI_QUALIFICATION_SWIFT_CACHE_ROOT": str(root / "qualification-swiftpm-v2"),
+                "OMI_QUALIFICATION_LEASE_ROOT": str(root / "omi-desktop-qualification"),
             }
             stage_result = self._run_workflow_script(
                 "Create run-isolated qualification staging",
@@ -172,8 +211,20 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
                 env=env,
             )
             self.assertEqual(stage_result.returncode, 0, stage_result.stderr)
+            authority_result = self._run_workflow_script(
+                "Checkout cache reclaim authority from exact candidate",
+                cwd=stale_workspace,
+                env=env,
+            )
+            self.assertEqual(authority_result.returncode, 0, authority_result.stderr)
+            capacity_result = self._run_workflow_script(
+                "Reclaim idle qualification cache and enforce runner capacity",
+                cwd=stale_workspace,
+                env=env,
+            )
+            self.assertEqual(capacity_result.returncode, 0, capacity_result.stderr)
             checkout_result = self._run_workflow_script(
-                "Checkout candidate into this run only",
+                "Expand exact candidate checkout",
                 cwd=stale_workspace,
                 env=env,
             )
@@ -199,7 +250,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
 
     def test_pre_checkout_failure_writes_cleanup_evidence_only_under_run_stage(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             runner_temp = root / "runner-temp"
             runner_temp.mkdir()
             run_id = "30179386741"
@@ -208,6 +259,7 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             env = {
                 **os.environ,
                 "RUNNER_TEMP": str(runner_temp),
+                "TMPDIR": str(runner_temp),
                 "GITHUB_RUN_ID": run_id,
                 "GITHUB_RUN_ATTEMPT": run_attempt,
                 "QUALIFICATION_STAGE": str(stage),
@@ -243,7 +295,8 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
 
     def test_low_runner_capacity_fails_before_checkout_with_durable_cleanup_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
+            server, _candidate_sha = self._create_candidate_remote(root)
             runner_temp = root / "runner-temp"
             runner_temp.mkdir()
             run_id = "30185755794"
@@ -252,27 +305,49 @@ class DesktopReleaseFlowContractTests(unittest.TestCase):
             env = {
                 **os.environ,
                 "RUNNER_TEMP": str(runner_temp),
+                "TMPDIR": str(runner_temp),
                 "GITHUB_RUN_ID": run_id,
                 "GITHUB_RUN_ATTEMPT": run_attempt,
                 "QUALIFICATION_STAGE": str(stage),
+                "GITHUB_SERVER_URL": server.as_uri(),
+                "GITHUB_REPOSITORY": "BasedHardware/omi",
+                "RELEASE_TAG": RELEASE_TAG,
+                "ref": RELEASE_TAG,
                 "OMI_QUALIFICATION_MINIMUM_FREE_KIB": str(2**63 - 1),
                 "OMI_QUALIFICATION_MINIMUM_FREE_INODES": "1",
+                "OMI_QUALIFICATION_SWIFT_CACHE_ROOT": str(root / "qualification-swiftpm-v2"),
+                "OMI_QUALIFICATION_LEASE_ROOT": str(root / "omi-desktop-qualification"),
             }
 
-            capacity_result = self._run_workflow_script(
+            stage_result = self._run_workflow_script(
                 "Create run-isolated qualification staging",
                 cwd=runner_temp,
                 env=env,
             )
+            self.assertEqual(stage_result.returncode, 0, stage_result.stderr)
+            authority_result = self._run_workflow_script(
+                "Checkout cache reclaim authority from exact candidate",
+                cwd=runner_temp,
+                env=env,
+            )
+            self.assertEqual(authority_result.returncode, 0, authority_result.stderr)
+            capacity_result = self._run_workflow_script(
+                "Reclaim idle qualification cache and enforce runner capacity",
+                cwd=runner_temp,
+                env=env,
+            )
             self.assertNotEqual(capacity_result.returncode, 0)
-            self.assertIn("M1 qualification runner capacity guard refused to start", capacity_result.stdout)
-            self.assertFalse((stage / "source").exists(), "capacity failure must precede candidate checkout")
-            capacity = json.loads((stage / "runner-capacity.json").read_text(encoding="utf-8"))
-            self.assertEqual(capacity["status"], "failed")
-            self.assertEqual(capacity["guard"], "runner-capacity-preflight")
-            self.assertNotIn("failure_class", capacity)
-            self.assertIn("insufficient-free-kib", capacity["failure_reasons"])
-            self.assertEqual(capacity["minimum_free_kib"], 2**63 - 1)
+            self.assertIn("qualification runner self-clean failed", capacity_result.stdout)
+            self.assertFalse(
+                (stage / "source/candidate.txt").exists(),
+                "capacity failure must precede expansion of the candidate checkout",
+            )
+            hygiene = json.loads((stage / "runner-hygiene.json").read_text(encoding="utf-8"))
+            self.assertEqual(hygiene["status"], "failed")
+            self.assertEqual(hygiene["guard"], "qualification-runner-self-clean")
+            self.assertNotIn("failure_class", hygiene)
+            self.assertIn("insufficient-free-kib", hygiene["capacity"]["failure_reasons"])
+            self.assertEqual(hygiene["capacity"]["minimum_free_kib"], 2**63 - 1)
 
             finalize_result = self._run_workflow_script(
                 "Finalize only this authenticated qualification lease",

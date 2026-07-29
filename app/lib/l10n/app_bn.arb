@@ -5490,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "১,২০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড",
+    "basicPlanDescription": "৩০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7265,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
+    "premiumMinutesInfo": "প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7376,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
+    "premiumMinutesMonth": "প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },

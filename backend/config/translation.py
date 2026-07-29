@@ -9,13 +9,15 @@ from typing import Mapping
 
 
 class TranslationProvider(str, Enum):
-    google = 'google'
+    gemini = 'gemini'
+    # Internal compatibility alias: this must never produce "google" telemetry.
+    google = 'gemini'
     nllb = 'nllb'
 
     @staticmethod
     def get_display_name(value: 'TranslationProvider') -> str:
-        if value == TranslationProvider.google:
-            return 'Google Cloud Translation V3'
+        if value == TranslationProvider.gemini:
+            return 'Gemini 2.5 Flash-Lite via LLM gateway'
         if value == TranslationProvider.nllb:
             return 'NLLB-200 (self-hosted)'
         return str(value)
@@ -28,7 +30,6 @@ class TranslationProfile:
     providers: tuple[TranslationProvider, ...]
     nllb_url: str
     nllb_timeout_seconds: float
-    google_project_id: str | None
     cache_ttl_seconds: int
     negative_cache_ttl_seconds: int
     configured_providers: tuple[TranslationProvider, ...] = ()
@@ -45,7 +46,7 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
     """Resolve mutable environment at the translation call boundary.
 
     The configured list is an ordered provider policy. Unavailable providers
-    are filtered, unsupported tokens are retained as diagnostics, and Google is
+    are filtered, unsupported tokens are retained as diagnostics, and Gemini is
     used only when the list is empty or no configured provider is usable.
     """
 
@@ -61,8 +62,8 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
         token = raw_token.strip().lower()
         if not token:
             continue
-        if token == TranslationProvider.google.value:
-            provider = TranslationProvider.google
+        if token in {TranslationProvider.gemini.value, 'google'}:
+            provider = TranslationProvider.gemini
         elif token == TranslationProvider.nllb.value:
             provider = TranslationProvider.nllb
         else:
@@ -78,7 +79,7 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
         if provider not in usable_providers:
             usable_providers.append(provider)
 
-    providers = tuple(usable_providers) or (TranslationProvider.google,)
+    providers = tuple(usable_providers) or (TranslationProvider.gemini,)
 
     timeout = _positive_float(values.get('TRANSLATION_NLLB_TIMEOUT_SECONDS', '5.0'), 'TRANSLATION_NLLB_TIMEOUT_SECONDS')
     cache_ttl = _positive_int(values.get('TRANSLATION_CACHE_TTL', str(60 * 60 * 24 * 14)), 'TRANSLATION_CACHE_TTL')
@@ -91,7 +92,6 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
         providers=providers,
         nllb_url=nllb_url,
         nllb_timeout_seconds=timeout,
-        google_project_id=values.get('GOOGLE_CLOUD_PROJECT') or None,
         cache_ttl_seconds=cache_ttl,
         negative_cache_ttl_seconds=negative_ttl,
         configured_providers=tuple(configured_providers),

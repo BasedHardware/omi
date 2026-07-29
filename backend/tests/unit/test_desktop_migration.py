@@ -127,6 +127,7 @@ sys.modules["google.cloud.firestore_v1"].transactional = lambda f: f
 
 redis_stub = sys.modules["database.redis_db"]
 redis_stub.r = MagicMock()
+redis_stub.delete_cached_user_geolocation = MagicMock()
 setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
@@ -141,6 +142,7 @@ mock_db = MagicMock()
 client_stub.db = mock_db
 client_stub.delete_collection_recursive = MagicMock()
 client_stub.document_id_from_seed = MagicMock(return_value="seed-id")
+client_stub.get_firestore_client = MagicMock(return_value=mock_db)
 
 # Stub database.helpers (used by chat.py)
 helpers_stub = _stub_module("database.helpers")
@@ -155,6 +157,10 @@ models_users_stub.Subscription = MagicMock()
 models_users_stub.PlanLimits = MagicMock()
 models_users_stub.PlanType = MagicMock()
 models_users_stub.SubscriptionStatus = MagicMock()
+models_users_stub.LocationContextConsent = MagicMock()
+models_users_stub.LocationContextConsentStatus = MagicMock()
+models_users_stub.LOCATION_CONTEXT_DISCLOSED_PROVIDERS = ()
+models_users_stub.LOCATION_CONTEXT_PURPOSE = "city_context"
 
 _stub_package("utils")
 _stub_package("utils.other")
@@ -182,6 +188,7 @@ request_validation_stub = _stub_module("utils.request_validation")
 request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
 redis_stub = _stub_module("database.redis_db")
 redis_stub.r = MagicMock()
+redis_stub.delete_cached_user_geolocation = MagicMock()
 setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 

@@ -101,6 +101,12 @@ export interface UpdateJournalTurnInput {
   nowMs?: number;
 }
 
+export interface RepairOrphanedJournalTurnsInput {
+  ownerId: string;
+  turnIds: readonly string[];
+  nowMs?: number;
+}
+
 export interface TerminalizeJournalTurnInput {
   ownerId: string;
   conversationId: string;
@@ -616,6 +622,47 @@ export function bindProducingJournalTurn(
       nowMs: input.nowMs,
     });
   });
+}
+
+/**
+ * Repair assistant turns after their UI projection releases its send lock.
+ *
+ * Turn IDs are globally unique, so this resolves the canonical conversation
+ * from the producing turn instead of trusting the caller's selected surface.
+ * Active runs retain mutation authority.
+ */
+export function repairOrphanedJournalTurns(
+  store: AgentStore,
+  input: RepairOrphanedJournalTurnsInput,
+): ConversationTurn[] {
+  const turnIds = [...new Set(input.turnIds.map((turnId) => turnId.trim()).filter(Boolean))].slice(0, 100);
+  const repaired: ConversationTurn[] = [];
+  for (const turnId of turnIds) {
+    const current = findJournalTurnById(store, turnId);
+    if (!current) continue;
+    assertConversationOwner(store, current.conversationId, input.ownerId);
+    if (current.role !== "assistant" || terminalTurnStatus(current.status)) continue;
+
+    const producingRun = current.producingRunId === null
+      ? null
+      : store.getOptionalRow("SELECT status FROM runs WHERE run_id = ?", [current.producingRunId]);
+    const runStatus = producingRun ? String(producingRun.status) : null;
+    if (
+      runStatus !== null
+      && ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"].includes(runStatus)
+    ) {
+      continue;
+    }
+
+    repaired.push(updateJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId: current.conversationId,
+      turnId,
+      status: runStatus === "succeeded" ? "completed" : "failed",
+      nowMs: input.nowMs,
+    }));
+  }
+  return repaired;
 }
 
 export function assertPublicJournalUpdatePolicy(

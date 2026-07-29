@@ -18,7 +18,7 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
-from ._client import db, delete_collection_recursive, get_firestore_client
+from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -378,9 +378,20 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             # Processing owns generated content, while these fields are explicitly
             # user-owned. The transaction retries if a concurrent mutation lands,
             # so an older in-memory Conversation cannot clobber that edit.
+            # A null existing value means "never user-set" (stub docs dump None
+            # fields), so only non-null values are preserved — otherwise the
+            # stub's folder_id: None would revert every AI folder assignment.
             for field in ('starred', 'folder_id', 'visibility', 'user_title'):
-                if field in existing:
+                if existing.get(field) is not None:
                     write_data[field] = existing[field]
+
+            # folder_id is user-owned even when explicitly cleared: the folder
+            # move endpoints stamp folder_user_set, so "no folder" chosen by the
+            # user (folder_id None + marker) must survive processing output.
+            # Only a stub's never-user-touched None may be overwritten by the
+            # AI folder assignment above.
+            if existing.get('folder_user_set'):
+                write_data['folder_id'] = existing.get('folder_id')
 
             user_title = existing.get('user_title')
             if isinstance(user_title, str):
@@ -441,9 +452,20 @@ def persist_processing_result_with_lifecycle(
         existing = existing_snapshot.to_dict() or {}
 
         # Generated processing content never owns user-managed fields.
+        # A null existing value means "never user-set" (stub docs dump None
+        # fields), so only non-null values are preserved — otherwise the
+        # stub's folder_id: None would revert every AI folder assignment.
         for field in ('starred', 'folder_id', 'visibility', 'user_title'):
-            if field in existing:
+            if existing.get(field) is not None:
                 write_data[field] = existing[field]
+
+        # folder_id is user-owned even when explicitly cleared: the folder
+        # move endpoints stamp folder_user_set, so "no folder" chosen by the
+        # user (folder_id None + marker) must survive processing output.
+        # Only a stub's never-user-touched None may be overwritten by the
+        # AI folder assignment above.
+        if existing.get('folder_user_set'):
+            write_data['folder_id'] = existing.get('folder_id')
 
         user_title = existing.get('user_title')
         if isinstance(user_title, str):
@@ -1402,7 +1424,6 @@ def update_conversation_segments(
 ):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    transaction = client.transaction()
 
     @firestore.transactional
     def _write_segments(transaction) -> bool:
@@ -1425,7 +1446,7 @@ def update_conversation_segments(
         transaction.update(doc_ref, prepared_payload)
         return True
 
-    return _write_segments(transaction)
+    return run_transactional(client, _write_segments)
 
 
 # ***********************************

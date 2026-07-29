@@ -75,6 +75,10 @@ class ReviewResolutionResponse(BaseModel):
 # Hard cap on memories per batch request. Keep aligned with the corresponding
 # Pydantic max_length validator below and with the Swift client chunker.
 MEMORIES_BATCH_MAX = 100
+# The released API contract accepts 100 IDs. Canonical deletion atomically
+# fences each item and journals durable projection deletes; derived graph
+# assertions are removed by the retryable outbox after reads fail closed.
+MEMORIES_BATCH_DELETE_MAX = 100
 
 V3GetSourceDecision = Literal['disabled', 'legacy_primary', 'memory_read']
 
@@ -148,7 +152,7 @@ class BatchMemoriesResponse(BaseModel):
 class BatchDeleteMemoriesRequest(BaseModel):
     memory_ids: List[str] = Field(
         description="Memory IDs to delete in a single batch request",
-        max_length=MEMORIES_BATCH_MAX,
+        max_length=MEMORIES_BATCH_DELETE_MAX,
     )
 
 
@@ -209,12 +213,10 @@ async def _guard_import_memory_write(request: Request, *, endpoint: str, uid: st
 def _legacy_get_memories(uid: str, limit: int, offset: int) -> List[MemoryDB]:
     # Clamp pagination so an out-of-range value cannot reach Firestore .limit()/.offset(), which raises
     # on a negative argument and would otherwise 500 the request.
+    # Do NOT force first-page limit=5000: that unbounded first load caused prod GET /v3/memories
+    # to hit HTTP_GET_TIMEOUT (30s) → 504 on large accounts. Callers must page via limit/offset.
     offset = max(0, offset)
-    # Use high limits for the first page
-    # Warn: should remove
-    if offset == 0:
-        limit = 5000
-    limit = max(1, min(limit, 5000))
+    limit = max(1, min(limit, 500))
     memories = memories_db.get_memories(uid, limit, offset)
 
     valid_memories: List[MemoryDB] = []
@@ -731,14 +733,9 @@ def get_memories(
         # slice the visible list incorrectly — e.g. limit=-1 returning nearly
         # the entire list or negative offsets producing inconsistent pages.
         clamped_offset = max(0, offset)
-        clamped_limit = max(1, min(limit, 5000))
-        # Preserve the historical first-page load for the mobile MemoriesProvider,
-        # which calls getMemoriesResult() with its default limit and has no
-        # load-more path. Legacy users get this expansion via _legacy_get_memories;
-        # canonical users must get the same first-page behavior so accounts with
-        # more than 100 memories do not silently see only the newest 100.
-        if clamped_offset == 0:
-            clamped_limit = 5000
+        # Bound canonical list reads. The historical first-page force to 5000 caused
+        # prod 30s GET 504s; clients should page (limit default 100, hard max 500).
+        clamped_limit = max(1, min(limit, 500))
         return MemoryService(db_client=db_client).read(
             uid,
             limit=clamped_limit,
@@ -914,6 +911,8 @@ def delete_memory(
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         try:
             MemoryService(db_client=db_client).delete(uid, memory_id)
+        except CanonicalBatchMutationLimitError:
+            raise HTTPException(status_code=413, detail='Memory lineage is too large to delete atomically')
         except ValueError:
             raise HTTPException(status_code=404, detail='Memory not found')
         _mirror_delete_into_legacy(uid, [memory_id], db_client=db_client)

@@ -8,7 +8,7 @@ import sys
 import types
 import uuid
 from types import ModuleType
-from typing import Callable, Iterable, Mapping, MutableMapping, Sequence
+from typing import Callable, Iterable, Mapping, Sequence
 from unittest.mock import MagicMock
 
 _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -396,6 +396,7 @@ def install_ws_j_heavy_import_stubs() -> list[str]:
     vector_db_mod.find_similar_memories = MagicMock(return_value=[])
     vector_db_mod.upsert_memory_vector = MagicMock()
     vector_db_mod.delete_memory_vector = MagicMock()
+    vector_db_mod.delete_canonical_memory_vectors = MagicMock(return_value=True)
     vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
     vector_db_mod.delete_memory_vectors_batch = MagicMock()
     sys.modules["database.vector_db"] = vector_db_mod
@@ -477,6 +478,7 @@ def install_ws_m_heavy_import_stubs() -> list[str]:
     vector_db_mod = AutoMockModule("database.vector_db")
     vector_db_mod.find_similar_memories = MagicMock(return_value=[])
     vector_db_mod.query_memory_vector_candidates = MagicMock(return_value=_EmptyVectorResult())
+    vector_db_mod.delete_canonical_memory_vectors = MagicMock(return_value=True)
     vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
     sys.modules["database.vector_db"] = vector_db_mod
     touched.append("database.vector_db")
@@ -607,7 +609,7 @@ def install_consolidation_apply_stubs() -> list[str]:
     touched.append("database.review_queue")
 
     jobs_mod = AutoMockModule("jobs.short_term_lifecycle_worker")
-    jobs_mod.fetch_short_term_memory_items_firestore = MagicMock(return_value=[])
+    jobs_mod.fetch_expired_short_term_memory_items_firestore = MagicMock(return_value=[])
     sys.modules["jobs.short_term_lifecycle_worker"] = jobs_mod
     touched.append("jobs.short_term_lifecycle_worker")
 

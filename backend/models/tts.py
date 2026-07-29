@@ -1,7 +1,6 @@
 """Pydantic models for the TTS (text-to-speech) proxy endpoint.
 
-Mirrors the request shape of `desktop/macos/Backend-Rust/src/routes/tts.rs` so the
-mobile and desktop clients can share contract expectations.
+Defines the request shape shared by mobile and desktop clients.
 """
 
 from typing import Optional

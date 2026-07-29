@@ -34,6 +34,38 @@ class AnalyticsManager {
     memoryAssistantTelemetryCaptureForTests?(event, properties)
   }
 
+  /// Scoped observation of the privacy-safe live-suggestion funnel. This lives
+  /// at the same production boundary as PostHog so tests can assert the real
+  /// event payload without initializing analytics or exposing a mutable global.
+  private var suggestionAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setSuggestionAssistantTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    suggestionAssistantTelemetryCaptureForTests = capture
+  }
+
+  private func captureSuggestionAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
+    suggestionAssistantTelemetryCaptureForTests?(event, properties)
+  }
+
+  /// Test observer for integration-connect telemetry. Mirrors the
+  /// MemoryAssistant seam: nil in production; tests install a scoped capture
+  /// to observe the real event/payload without a mutable unsafe global.
+  private var integrationConnectTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  /// Install a scoped test observer for integration-connect telemetry. Tests
+  /// must clear it in teardown; production behavior remains the PostHog call.
+  func setIntegrationConnectTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    integrationConnectTelemetryCaptureForTests = capture
+  }
+
+  private func captureIntegrationConnectTelemetryForTests(_ event: String, properties: [String: Any]) {
+    integrationConnectTelemetryCaptureForTests?(event, properties)
+  }
+
   // MARK: - Initialization
 
   func initialize() {
@@ -141,6 +173,66 @@ class AnalyticsManager {
 
   func signedOut() {
     PostHogManager.shared.signedOut()
+  }
+
+  // MARK: - Integration Connect Events
+
+  /// Privacy-safe macOS integration-connect funnel. Mirrors the Flutter
+  /// `Integration Connect Attempted/Succeeded/Failed` event names for
+  /// cross-platform PostHog aggregation; dimensions are bounded by
+  /// ``IntegrationConnectTelemetry``. See that type for the full contract.
+  func integrationConnectAttempted(
+    integrationName: String,
+    connectorID: String,
+    surface: IntegrationConnectTelemetry.Surface,
+    stage: String
+  ) {
+    let payload = IntegrationConnectTelemetry.attemptedPayload(
+      integrationName: integrationName, connectorID: connectorID,
+      surface: surface, stage: stage)
+    captureIntegrationConnectTelemetryForTests(
+      IntegrationConnectTelemetry.attemptedEventName, properties: payload)
+    PostHogManager.shared.track(
+      IntegrationConnectTelemetry.attemptedEventName, properties: payload)
+  }
+
+  func integrationConnectSucceeded(
+    integrationName: String,
+    connectorID: String,
+    surface: IntegrationConnectTelemetry.Surface,
+    stage: String,
+    durationMs: Int? = nil,
+    sourceCount: Int? = nil,
+    memoryCount: Int? = nil,
+    wasFirstSync: Bool = false
+  ) {
+    let payload = IntegrationConnectTelemetry.succeededPayload(
+      integrationName: integrationName, connectorID: connectorID,
+      surface: surface, stage: stage, durationMs: durationMs,
+      sourceCount: sourceCount, memoryCount: memoryCount, wasFirstSync: wasFirstSync)
+    captureIntegrationConnectTelemetryForTests(
+      IntegrationConnectTelemetry.succeededEventName, properties: payload)
+    PostHogManager.shared.track(
+      IntegrationConnectTelemetry.succeededEventName, properties: payload)
+  }
+
+  func integrationConnectFailed(
+    integrationName: String,
+    connectorID: String,
+    surface: IntegrationConnectTelemetry.Surface,
+    stage: String,
+    errorClass: IntegrationConnectTelemetry.ErrorClass,
+    durationMs: Int? = nil,
+    wasFirstSync: Bool = false
+  ) {
+    let payload = IntegrationConnectTelemetry.failedPayload(
+      integrationName: integrationName, connectorID: connectorID,
+      surface: surface, stage: stage, errorClass: errorClass,
+      durationMs: durationMs, wasFirstSync: wasFirstSync)
+    captureIntegrationConnectTelemetryForTests(
+      IntegrationConnectTelemetry.failedEventName, properties: payload)
+    PostHogManager.shared.track(
+      IntegrationConnectTelemetry.failedEventName, properties: payload)
   }
 
   // MARK: - Monitoring Events
@@ -584,7 +676,7 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
-    if case .failed(_, _, let errorClass, _, _) = event {
+    if case .failed(_, _, let errorClass, _, _, _) = event {
       DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
     }
     let diagnosticKeys = [
@@ -853,6 +945,95 @@ class AnalyticsManager {
     PostHogManager.shared.memoryAssistantAnalysisRun(outcome: outcome, confidence: confidence)
   }
 
+  // MARK: - Suggestion Assistant Telemetry
+
+  func suggestionAssistantSettingChanged(setting: SuggestionAssistantTelemetry.Setting, value: Bool) {
+    let payload = SuggestionAssistantTelemetry.settingChangedPayload(setting: setting, value: value)
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.settingChangedEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantSettingChanged(setting: setting, value: value)
+  }
+
+  func suggestionAssistantGateOutcome(_ outcome: SuggestionAssistantTelemetry.GateOutcome) {
+    let payload = SuggestionAssistantTelemetry.gateOutcomePayload(outcome)
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.gateOutcomeEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantGateOutcome(outcome)
+  }
+
+  func suggestionAssistantEvaluationStarted(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape
+  ) {
+    let payload = SuggestionAssistantTelemetry.evaluationStartedPayload(identity: identity, shape: shape)
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.evaluationStartedEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantEvaluationStarted(identity: identity, shape: shape)
+  }
+
+  func suggestionAssistantEvaluationCompleted(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape,
+    latency: TimeInterval,
+    producedSuggestion: Bool
+  ) {
+    let payload = SuggestionAssistantTelemetry.evaluationCompletedPayload(
+      identity: identity,
+      shape: shape,
+      latency: latency,
+      producedSuggestion: producedSuggestion
+    )
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.evaluationCompletedEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantEvaluationCompleted(
+      identity: identity,
+      shape: shape,
+      latency: latency,
+      producedSuggestion: producedSuggestion
+    )
+  }
+
+  func suggestionAssistantEvaluationFailed(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape,
+    latency: TimeInterval
+  ) {
+    let payload = SuggestionAssistantTelemetry.evaluationFailedPayload(
+      identity: identity,
+      shape: shape,
+      latency: latency
+    )
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.evaluationFailedEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantEvaluationFailed(
+      identity: identity,
+      shape: shape,
+      latency: latency
+    )
+  }
+
+  func suggestionAssistantDeliveryOutcome(
+    _ outcome: SuggestionAssistantTelemetry.DeliveryOutcome,
+    identity: SuggestionAssistantTelemetry.NotificationIdentity
+  ) {
+    let payload = SuggestionAssistantTelemetry.deliveryOutcomePayload(outcome, identity: identity)
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.deliveryOutcomeEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantDeliveryOutcome(outcome, identity: identity)
+  }
+
   func insightGenerated(category: String?) {
     PostHogManager.shared.insightGenerated(category: category)
   }
@@ -915,19 +1096,70 @@ class AnalyticsManager {
 
   // MARK: - Notification Events
 
-  func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationSent(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    if let suggestionIdentity {
+      captureSuggestionAssistantTelemetryForTests(
+        "Notification Sent",
+        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      )
+    }
     PostHogManager.shared.notificationSent(
-      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface,
+      suggestionIdentity: suggestionIdentity
+    )
   }
 
-  func notificationClicked(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationClicked(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    if let suggestionIdentity {
+      captureSuggestionAssistantTelemetryForTests(
+        "Notification Clicked",
+        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      )
+    }
     PostHogManager.shared.notificationClicked(
-      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface,
+      suggestionIdentity: suggestionIdentity
+    )
   }
 
-  func notificationDismissed(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationDismissed(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    if let suggestionIdentity {
+      captureSuggestionAssistantTelemetryForTests(
+        "Notification Dismissed",
+        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      )
+    }
     PostHogManager.shared.notificationDismissed(
-      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface,
+      suggestionIdentity: suggestionIdentity
+    )
   }
 
   func notificationWillPresent(notificationId: String, title: String) {

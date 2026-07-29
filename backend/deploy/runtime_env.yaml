@@ -152,11 +152,8 @@ environments:
           MEMORY_V3_GET_ENABLED:
             value: 'true'
             category: memory_rollout
-          MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             value: 'false'
-            category: memory_rollout
-          MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-            value: 'true'
             category: memory_rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
@@ -230,14 +227,13 @@ environments:
           STT_SERVICE_MODELS:
             value: modulate-velma-2,parakeet
             category: stt_policy
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware-dev
+            category: runtime
           GOOGLE_CLIENT_SECRET:
             secret:
               name: dev-omi-backend-secrets
               key: GOOGLE_CLIENT_SECRET
-          GOOGLE_APPLICATION_CREDENTIALS:
-            secret:
-              name: dev-omi-backend-secrets
-              key: GOOGLE_APPLICATION_CREDENTIALS
           ENCRYPTION_SECRET:
             secret:
               name: dev-omi-backend-secrets
@@ -384,11 +380,8 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: 'true'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -503,11 +496,8 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: 'true'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -607,11 +597,8 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: 'true'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -674,6 +661,7 @@ environments:
             --task-timeout: 3600s
             --cpu: '2'
             --memory: 2Gi
+            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
@@ -690,10 +678,7 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'true'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
@@ -903,10 +888,7 @@ environments:
           MEMORY_V3_GET_ENABLED:
             value: 'false'
             category: memory_rollout
-          MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-            value: 'false'
-            category: memory_rollout
-          MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             value: 'false'
             category: memory_rollout
           MEMORY_TYPESENSE_COLLECTION:
@@ -1056,10 +1038,7 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'false'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
@@ -1210,10 +1189,7 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'false'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
@@ -1311,10 +1287,7 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'false'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
@@ -1360,6 +1333,8 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
         memory-maintenance-job:
+          flags:
+            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
             OMI_ENV_STAGE:
               value: prod
@@ -1373,10 +1348,7 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'false'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
@@ -1384,6 +1356,12 @@ environments:
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
+              category: memory_rollout
+            TYPESENSE_HOST_PORT:
+              value: '443'
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              value: memories-backend
               category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:

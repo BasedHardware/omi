@@ -56,12 +56,17 @@ from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_s
 from llm_gateway.gateway.providers import ProviderFailure
 from llm_gateway.gateway.request_context import request_id_for
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
-from llm_gateway.gateway.schemas import RouteArtifact
+from llm_gateway.gateway.schemas import FailureClass, RouteArtifact
 from llm_gateway.gateway.sse import SSEEventDecoder
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 
 router = APIRouter()
 _image_generation_client: httpx.AsyncClient | None = None
+
+# The provider throttled the caller's own key. These reach the router as a
+# credential failure, but they are not a bad credential: answering 401 tells
+# callers the key is invalid and makes a transient failure look permanent.
+_THROTTLED_FAILURE_CLASSES = frozenset({FailureClass.BYOK_RATE_LIMIT, FailureClass.BYOK_QUOTA})
 
 
 @router.post('/v1/chat/completions', response_model=None)
@@ -244,7 +249,7 @@ def _error_response(exc: GatewayError) -> JSONResponse:
     content: dict[str, object] = {
         'error': {
             'message': exc.message,
-            'type': _error_type_for_code(exc.code),
+            'type': _error_type_for_code(exc.code, exc.failure_class),
             'param': exc.param,
             'code': exc.code.value,
         }
@@ -255,13 +260,15 @@ def _error_response(exc: GatewayError) -> JSONResponse:
     )
 
 
-def _error_type_for_code(code: GatewayErrorCode) -> str:
+def _error_type_for_code(code: GatewayErrorCode, failure_class: FailureClass | None = None) -> str:
     """Map an internal error code to an OpenAI API error category.
 
     OpenAI distinguishes ``type`` (a broad error category) from ``code`` (the
     specific identifier). Without this distinction clients that categorize
     errors by ``type`` cannot classify them correctly.
     """
+    if failure_class in _THROTTLED_FAILURE_CLASSES:
+        return 'rate_limit_error'
     if code == GatewayErrorCode.CREDENTIAL_FAILURE:
         return 'authentication_error'
     if code in {
@@ -276,6 +283,8 @@ def _error_type_for_code(code: GatewayErrorCode) -> str:
 
 
 def _status_code_for_error(exc: GatewayError) -> int:
+    if exc.failure_class in _THROTTLED_FAILURE_CLASSES:
+        return 429
     if exc.code == GatewayErrorCode.MODEL_NOT_FOUND:
         return 404
     if exc.code in {

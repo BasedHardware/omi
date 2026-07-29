@@ -11,7 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path, PurePosixPath, PureWindowsPath
-
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHECKER_PATH = REPO_ROOT / ".github" / "scripts" / "check_deployment_secret_boundary.py"
@@ -49,7 +49,7 @@ class DeploymentSecretBoundaryFixture(unittest.TestCase):
             ["git", "config", "user.name", "Boundary Test"], cwd=self.root, check=True, env=git_environment()
         )
         self.write("config/deployment-setting-classification.json", json.dumps(POLICY))
-        self.write(".github/workflows/deploy.yml", "name: test\n")
+        self.write(".github/workflows/deploy.yml", "name: test\n# utf-8 guard: \u2603\n")
         self.commit("baseline")
 
     def tearDown(self) -> None:
@@ -90,7 +90,9 @@ jobs:
     def test_rejects_public_build_setting_from_github_secret(self) -> None:
         self.write(".github/workflows/deploy.yml", "BUILD: ${{ secrets.FAKE_PUBLIC_BUILD }}\n")
 
-        self.assertIn("public_build setting FAKE_PUBLIC_BUILD must use vars.FAKE_PUBLIC_BUILD", "\n".join(self.errors()))
+        self.assertIn(
+            "public_build setting FAKE_PUBLIC_BUILD must use vars.FAKE_PUBLIC_BUILD", "\n".join(self.errors())
+        )
 
     def test_rejects_config_external_secret_mapping(self) -> None:
         self.write(
@@ -102,12 +104,17 @@ jobs:
 """,
         )
 
-        self.assertIn("external_secret binding FAKE_RUNTIME_CONFIG is config; expected secret", "\n".join(self.errors()))
+        self.assertIn(
+            "external_secret binding FAKE_RUNTIME_CONFIG is config; expected secret", "\n".join(self.errors())
+        )
 
     def test_rejects_secret_from_github_variable(self) -> None:
         self.write(".github/workflows/deploy.yml", "TOKEN: ${{ vars.FAKE_SERVER_SECRET }}\n")
 
-        self.assertIn("github_vars binding FAKE_SERVER_SECRET is secret; expected config or public_build", "\n".join(self.errors()))
+        self.assertIn(
+            "github_vars binding FAKE_SERVER_SECRET is secret; expected config or public_build",
+            "\n".join(self.errors()),
+        )
 
     def test_rejects_config_loaded_from_secret_manager(self) -> None:
         self.write(
@@ -133,7 +140,9 @@ jobs:
         policy["exceptions"] = {"FAKE_RUNTIME_CONFIG": {"owner": "platform"}}
         self.write("config/deployment-setting-classification.json", json.dumps(policy))
 
-        errors = CHECKER.validate_policy(CHECKER.load_policy(self.root / "config/deployment-setting-classification.json"))
+        errors = CHECKER.validate_policy(
+            CHECKER.load_policy(self.root / "config/deployment-setting-classification.json")
+        )
 
         self.assertIn("exception FAKE_RUNTIME_CONFIG is missing reason", errors)
         self.assertIn("exception FAKE_RUNTIME_CONFIG is missing expires", errors)
@@ -150,6 +159,22 @@ jobs:
             CHECKER.repository_relative_path(windows_path, windows_root),
             CHECKER.repository_relative_path(posix_path, posix_root),
         )
+
+    @mock.patch.object(CHECKER.subprocess, "run")
+    def test_base_git_reads_decode_utf8_explicitly(self, run: mock.Mock) -> None:
+        run.side_effect = [
+            subprocess.CompletedProcess([], 0, stdout=".github/workflows/deploy.yml\n"),
+            subprocess.CompletedProcess([], 0, stdout="# utf-8 guard: \u2603\n"),
+        ]
+
+        self.assertEqual(CHECKER._base_paths(self.root, "HEAD"), {".github/workflows/deploy.yml"})
+        self.assertEqual(
+            CHECKER._read_base_file(self.root, "HEAD", ".github/workflows/deploy.yml"),
+            "# utf-8 guard: \u2603\n",
+        )
+        self.assertEqual(len(run.call_args_list), 2)
+        for call in run.call_args_list:
+            self.assertEqual(call.kwargs["encoding"], "utf-8")
 
 
 if __name__ == "__main__":

@@ -130,10 +130,18 @@ For this lane, checked-in dev runtime config may persist:
 - `MEMORY_MODE=read`;
 - `MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23`;
 - `MEMORY_V3_GET_ENABLED=true`;
-- request-path `MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false` (cron lives only on `memory-maintenance-job`);
-- `MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true`.
+- request-path `MEMORY_CANONICAL_MAINTENANCE_ENABLED=false`
+  (maintenance lives only on `memory-maintenance-job`).
 
-Hourly ST→LT maintenance (TTL → consolidation → promotion) is hosted by `memory-maintenance-job` and must receive the same whitelist-scoped flags via the runtime env contract. Production must remain off with an empty cohort and `MEMORY_V3_GET_ENABLED=false` until Gate 2 and Gate 3 requirements are satisfied. Gate 3 must flip `cloud_run.jobs.memory-maintenance-job` together with request-path `MEMORY_MODE=read`; `validate-backend-runtime-env.py` fails if request-path read mode is enabled while the job stays off.
+Hourly canonical maintenance (required normalization → TTL audit → one terminal
+consolidation route per pending item) is hosted by `memory-maintenance-job` and
+must receive the same whitelist-scoped flags plus
+`MEMORY_CANONICAL_MAINTENANCE_ENABLED=true`; Cloud Scheduler owns cadence.
+Production must remain off with an empty cohort and
+`MEMORY_V3_GET_ENABLED=false` until Gate 2 and Gate 3 requirements are
+satisfied. Gate 3 must flip `cloud_run.jobs.memory-maintenance-job` together
+with request-path `MEMORY_MODE=read`; `validate-backend-runtime-env.py` fails if
+request-path read mode is enabled while the job stays off.
 
 First-user projection tooling may write only the compatibility projection state/items for the same UID after an explicit apply confirmation. Its dry-run and apply output must redact content and include a rollback manifest with exact touched doc paths. The first-user E2E proof is read-only and must report non-`/v3/memories` read surfaces as `not_checked` when they cannot be generically exercised.
 

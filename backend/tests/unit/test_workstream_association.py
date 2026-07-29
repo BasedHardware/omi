@@ -323,7 +323,7 @@ def test_canonical_consolidation_emits_neutral_recurrence_contract_only():
 
 def test_maintenance_orchestrator_hands_recurrence_to_workflow_callback(monkeypatch):
     signal = _recurrence_signal(distinct_days=3)
-    monkeypatch.setenv('MEMORY_CANONICAL_PROMOTION_CRON_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_CANONICAL_MAINTENANCE_ENABLED', 'true')
     monkeypatch.setattr(maintenance_cron, 'list_canonical_cohort_uids', lambda: ['uid-1'])
     maintenance_kwargs = {}
 

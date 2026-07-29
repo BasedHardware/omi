@@ -345,7 +345,14 @@ def get_cached_signed_url(blob_path: str) -> str:
 
 
 def cache_user_geolocation(uid: str, geolocation: Dict[str, Any]) -> None:
-    r.set(f'users:{uid}:geolocation', _serialize_cache_value(geolocation))
+    # Unset optional fields are dropped rather than serialized as JSON ``null``.
+    # This key is written by the API tier and read by pusher, which deploys on its
+    # own cadence; a reader still on the pre-JSON ``eval()`` reader raises
+    # ``NameError: name 'null' is not defined`` and discards the conversation it
+    # was finalizing. Every reader rebuilds ``Geolocation`` from this dict, whose
+    # optional fields already default to ``None`` when absent.
+    present_fields = {key: value for key, value in geolocation.items() if value is not None}
+    r.set(f'users:{uid}:geolocation', _serialize_cache_value(present_fields))
     r.expire(f'users:{uid}:geolocation', 60 * 30)  # FIXME: too much?
 
 
@@ -355,6 +362,10 @@ def get_cached_user_geolocation(uid: str) -> Optional[Dict[str, Any]]:
         return None
     loaded = _deserialize_cache_value(raw)
     return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else None
+
+
+def delete_cached_user_geolocation(uid: str) -> None:
+    r.delete(f'users:{uid}:geolocation')
 
 
 # DAILY SUMMARY UID LOOKUP

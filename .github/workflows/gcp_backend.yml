@@ -113,7 +113,7 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - name: Validate Environment Input
         run: |
@@ -167,7 +167,7 @@ jobs:
     permissions:
       actions: 'read'
       contents: 'read'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
       break_glass: ${{ steps.admitted_source.outputs.break_glass }}
@@ -338,7 +338,7 @@ jobs:
       contents: 'read'
       id-token: 'write'
 
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - name: Validate Environment Input
         run: |
@@ -657,6 +657,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             ${{ github.event.inputs.environment == 'development' && format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) || '' }}
+            --remove-env-vars=MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -691,7 +692,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
+            --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: |-
             ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
@@ -755,7 +756,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
+            --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}

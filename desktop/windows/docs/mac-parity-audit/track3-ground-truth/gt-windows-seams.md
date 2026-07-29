@@ -87,17 +87,16 @@ existing callers and tests are unchanged).
 
 ## 2. Gemini vision — fully unblocked, zero new transport code
 
-- The proxy is on the **Rust desktop backend** (`VITE_OMI_DESKTOP_API_BASE`), NOT the Python
-  backend (grep of `backend/` for `proxy/gemini` → zero hits).
+- The proxy is on the **Python desktop backend** (`VITE_OMI_DESKTOP_API_BASE`).
 - Route: `POST /v1/proxy/gemini/models/{model}:generateContent`
-  (`desktop/macos/Backend-Rust/src/routes/proxy.rs:1085`).
+  (`backend/routers/desktop_proxy.py`).
 - Auth: Firebase Bearer token + paywall check (`PaywalledAuthUser`). The server holds the
   Gemini key; no key ever on device.
 - Guards: action allowlist (`generateContent` ✓), model allowlist (**`gemini-2.5-flash` ✓**,
   `gemini-2.5-pro` ✓), **5 MB body limit** whose source comment reads *"Normal app payloads are
   300-600 KB (base64 JPEG + prompt)"* — the image path is the designed use. `thinkingBudget`
   defaults to 1024 if absent (Mac's Focus sets it to 0).
-- **✅ NO `X-App-Platform` handling anywhere in the Rust backend** (grep: zero matches). It does
+- **✅ NO `X-App-Platform` handling anywhere in the Python backend**. It does
   not branch on, gate, or reject platform `windows`. The prior "backend doesn't recognize
   platform 'windows'" bug was the *Python* backend's plan catalog and **does not apply here**.
 

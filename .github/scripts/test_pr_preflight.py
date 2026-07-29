@@ -7,6 +7,7 @@ from contextlib import redirect_stderr
 import io
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -14,8 +15,9 @@ import time
 import unittest
 import urllib.error
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+import preflight_runner
 from pr_metadata import TransientPRMetadataError, load_from_api, load_from_event_file
 from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, select_checks
 
@@ -176,6 +178,72 @@ class SelectionTests(unittest.TestCase):
             "--diff-filter=ACMRTD",
             "base...head",
         )
+
+    def test_stale_event_payload_base_widens_diff_scope_past_the_live_base(self) -> None:
+        """Behavioral regression for FC-stale-event-payload-diff-base (#10758).
+
+        Exercises the real changed_files() git seam end to end: a base SHA
+        captured once (standing in for github.event.pull_request.base.sha) and
+        never refreshed goes stale as the target branch keeps advancing, so a
+        downstream merge-ref diff against it silently picks up unrelated
+        commits. A live-resolved base ref does not.
+        """
+        # Disposable repo must not inherit the caller's git context: under a
+        # pre-commit/pre-push hook, GIT_DIR points at the real checkout and its
+        # commit-msg hook would reject these throwaway messages.
+        git_isolation = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+
+        def run(*args: str, cwd: Path) -> None:
+            subprocess.run(["git", *git_isolation, *args], cwd=cwd, check=True, capture_output=True, text=True)
+
+        def rev_parse(cwd: Path, ref: str = "HEAD") -> str:
+            result = subprocess.run(
+                ["git", *git_isolation, "rev-parse", ref], cwd=cwd, check=True, capture_output=True, text=True
+            )
+            return result.stdout.strip()
+
+        def commit(cwd: Path, path: str, content: str, message: str) -> str:
+            (cwd / path).write_text(content, encoding="utf-8")
+            run("add", path, cwd=cwd)
+            run("commit", "-q", "-m", message, cwd=cwd)
+            return rev_parse(cwd)
+
+        with patch.dict(os.environ):
+            for key in list(os.environ):
+                if key.startswith("GIT_"):
+                    del os.environ[key]
+
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                run("init", "-q", "-b", "main", cwd=root)
+                run("config", "user.email", "test@example.com", cwd=root)
+                run("config", "user.name", "Test", cwd=root)
+
+                # The SHA a PR event payload would have captured at PR-open time.
+                stale_base_sha = commit(root, "root.txt", "root", "root commit")
+
+                run("checkout", "-q", "-b", "pr", cwd=root)
+                commit(root, "pr_file.txt", "pr change", "touch pr_file.txt")
+                run("checkout", "-q", "main", cwd=root)
+
+                # main keeps moving after the PR branched. This is what makes
+                # stale_base_sha stale: no event ever refreshes it past here.
+                commit(root, "unrelated_file.txt", "v1", "unrelated main commit 1")
+                commit(root, "unrelated_file.txt", "v2", "unrelated main commit 2")
+
+                # GitHub's refs/pull/N/merge: the PR branch merged onto main's
+                # *current* tip, on its own ref — main itself does not move.
+                run("checkout", "-q", "-b", "merge_ref", "main", cwd=root)
+                run("merge", "--no-ff", "-q", "-m", "merge pr into main", "pr", cwd=root)
+                merge_sha = rev_parse(root)
+
+                stale_diff = changed_files(root, stale_base_sha, merge_sha)
+                # "main" stands in for a freshly fetched origin/<base_ref>: a
+                # live ref, not a value captured once and carried across events.
+                live_diff = changed_files(root, "main", merge_sha)
+
+                self.assertEqual(sorted(live_diff), ["pr_file.txt"])
+                self.assertEqual(sorted(stale_diff), ["pr_file.txt", "unrelated_file.txt"])
 
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
         result = subprocess.run(
@@ -351,7 +419,13 @@ class SelectionTests(unittest.TestCase):
             self.assertIn(event, changes_job)
             self.assertIn(event, hygiene_job)
         self.assertIn("scripts/pr-preflight", metadata_job)
-        self.assertIn("github.event.pull_request.base.sha", metadata_job)
+        # Static tripwire only: confirms the workflow text wires --base to the
+        # live ref rather than the stale event-payload SHA. It does not exercise
+        # changed_files() itself — see
+        # test_stale_event_payload_base_widens_diff_scope_past_the_live_base for
+        # the behavioral regression backing FC-stale-event-payload-diff-base.
+        self.assertNotIn("github.event.pull_request.base.sha", metadata_job)
+        self.assertIn('--base "origin/${{ github.base_ref }}"', metadata_job)
         self.assertIn("astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84", metadata_job)
         self.assertLess(metadata_job.index("Set up uv"), metadata_job.index("Run current PR metadata preflight"))
         self.assertIn("github.event_name != 'pull_request'", changes_job)
@@ -492,6 +566,60 @@ class SingleFlightTests(unittest.TestCase):
                 first.stdout.read()
                 first.stdout.close()
             self.assertEqual(first.wait(), 0)
+
+
+class SignalPortabilityTests(unittest.TestCase):
+    """The single-flight wrapper must start on hosts without POSIX signal APIs.
+
+    Windows Python defines neither ``signal.SIGHUP`` nor ``os.killpg``. Building the
+    handler map from a hard-coded tuple containing SIGHUP raised AttributeError inside
+    ``run_owned()``, so every ``git push`` failed before the pre-push checks began.
+    These exercise the selection/forwarding seams directly — no real signal is sent.
+    """
+
+    def test_forwardable_signals_omits_signals_absent_on_host(self) -> None:
+        had_sighup = hasattr(signal, "SIGHUP")
+        original = getattr(signal, "SIGHUP", None)
+        try:
+            if had_sighup:
+                delattr(signal, "SIGHUP")  # simulate Windows
+            selected = preflight_runner.forwardable_signals()
+        finally:
+            if had_sighup:
+                signal.SIGHUP = original
+        self.assertIn(signal.SIGINT, selected)
+        self.assertIn(signal.SIGTERM, selected)
+        self.assertTrue(all(signum is not None for signum in selected))
+
+    @unittest.skipUnless(hasattr(signal, "SIGHUP"), "POSIX-only")
+    def test_forwardable_signals_includes_sighup_on_posix(self) -> None:
+        self.assertIn(signal.SIGHUP, preflight_runner.forwardable_signals())
+
+    @unittest.skipUnless(hasattr(os, "killpg"), "POSIX-only")
+    def test_forwards_to_process_group_when_available(self) -> None:
+        child = Mock(pid=4321)
+        with patch.object(os, "killpg") as killpg:
+            preflight_runner.signal_child(child, signal.SIGTERM)
+        killpg.assert_called_once_with(4321, signal.SIGTERM)
+        child.send_signal.assert_not_called()
+
+    def test_forwards_via_send_signal_when_process_groups_unavailable(self) -> None:
+        child = Mock(pid=4321)
+        had_killpg = hasattr(os, "killpg")
+        original = getattr(os, "killpg", None)
+        try:
+            if had_killpg:
+                delattr(os, "killpg")  # simulate Windows
+            preflight_runner.signal_child(child, signal.SIGTERM)
+        finally:
+            if had_killpg:
+                os.killpg = original
+        child.send_signal.assert_called_once_with(signal.SIGTERM)
+
+    def test_forwarding_swallows_dead_child(self) -> None:
+        child = Mock(pid=4321)
+        with patch.object(os, "killpg", side_effect=ProcessLookupError):
+            preflight_runner.signal_child(child, signal.SIGTERM)  # must not raise
 
 
 if __name__ == "__main__":

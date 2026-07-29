@@ -15,6 +15,7 @@ on:
       - 'backend/utils/**'
       - 'backend/pusher/**'
       - 'backend/charts/pusher/**'
+      - '.dockerignore'
       - 'backend/scripts/verify_pusher_source_closure.py'
       - 'backend/scripts/verify_pusher_live_deployment_gate.py'
       - 'backend/scripts/verify_pusher_dev_observability.py'

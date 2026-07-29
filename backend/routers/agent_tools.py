@@ -28,6 +28,8 @@ from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_res
 from utils.retrieval.tools.app_tools import load_app_tools
 from utils.log_sanitizer import sanitize
 
+from utils.observability.fallback import record_fallback
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -70,11 +72,18 @@ def _get_gce_access_token() -> str:
 
 
 async def _check_gce_status(vm_name: str, zone: str) -> str:
-    """Check the actual GCE instance status (RUNNING, TERMINATED, STOPPED, etc.)."""
+    """Check the actual GCE instance status (RUNNING, TERMINATED, STOPPED, etc.).
+
+    A 404 is reported as `NOT_FOUND`, not folded into `UNKNOWN`: the instance is
+    gone (the agent-vm reaper deletes aged TERMINATED VMs) and the stale record
+    must be cleared, whereas `UNKNOWN` means "could not tell" and must leave it.
+    """
     token = await run_blocking(db_executor, _get_gce_access_token)
     url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code == 404:
+            return "NOT_FOUND"
         if resp.status_code != 200:
             logger.error(f"[gce] Failed to get instance status: {resp.status_code} {sanitize(resp.text)}")
             return "UNKNOWN"
@@ -180,6 +189,19 @@ def _update_firestore_vm(uid: str, ip: str | None, status: str):
     firestore_db.collection('users').document(uid).update(update)
 
 
+def _clear_agent_vm(uid: str):
+    """Delete the user's agentVm record once its GCE instance is gone.
+
+    Nothing can restart a deleted instance, and while the record is present the
+    provision endpoint reports `exists`, so keeping it leaves the user's agent
+    permanently broken. Clearing it is what lets a replacement be provisioned.
+    """
+    from google.cloud import firestore
+    from database.users import db as firestore_db
+
+    firestore_db.collection('users').document(uid).update({"agentVm": firestore.DELETE_FIELD})
+
+
 async def _restart_vm_background(uid: str, vm_name: str, zone: str):
     """Background task: start stopped VM, update Firestore with new IP when ready."""
     try:
@@ -229,6 +251,14 @@ async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_cu
         except Exception as e:
             logger.error(f"[vm-ensure] GCE status check failed: {e}")
             return {"has_vm": True, "status": fs_status}
+
+        if gce_status == "NOT_FOUND":
+            # The instance was deleted (reaper), so no restart can recover it and
+            # reporting the stored status sends the client at a dead address for a
+            # full health timeout. Clear the record so a new VM can be provisioned.
+            logger.warning(f"[vm-ensure] VM {vm_name} no longer exists in GCE — clearing stale agentVm record")
+            await run_blocking(db_executor, _clear_agent_vm, uid)
+            return {"has_vm": False}
 
         if gce_status in ("TERMINATED", "STOPPED"):
             logger.info(f"[vm-ensure] VM {vm_name} is {gce_status}, restarting...")
@@ -306,12 +336,29 @@ def list_tools(uid: str = Depends(get_current_user_uid)):
     for t in CORE_TOOLS:
         tools.append(_tool_schema(t))
 
+    degraded = False
     try:
         app_tools = load_app_tools(uid)
-        for t in app_tools:
+    except Exception:
+        # Whole app-tool lane unavailable — core tools still serve.
+        logger.error("⚠️ Error loading app tools for agent_tools", exc_info=True)
+        app_tools = []
+        degraded = True
+    for t in app_tools:
+        try:
             tools.append(_tool_schema(t))
-    except Exception as e:
-        logger.error(f"⚠️ Error loading app tools for agent_tools: {e}")
+        except Exception:
+            # One malformed schema must not drop the remaining app tools.
+            logger.error(f"⚠️ Skipping app tool with malformed schema: {getattr(t, 'name', '?')}", exc_info=True)
+            degraded = True
+    if degraded:
+        record_fallback(
+            component='agent_tools',
+            from_mode='full_toolset',
+            to_mode='partial_toolset',
+            reason='malformed_doc',
+            outcome='degraded',
+        )
 
     return {"tools": tools}
 
@@ -349,6 +396,13 @@ async def execute_tool(
         all_tools.extend(app_tools)
     except Exception as error:
         logger.error("⚠️ Error loading app tools error_type=%s", type(error).__name__)
+        record_fallback(
+            component='agent_tools',
+            from_mode='full_toolset',
+            to_mode='partial_toolset',
+            reason='other',
+            outcome='degraded',
+        )
 
     target = None
     for t in all_tools:

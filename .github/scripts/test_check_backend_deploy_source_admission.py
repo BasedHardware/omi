@@ -253,8 +253,8 @@ class WorkflowContractTests(unittest.TestCase):
             ),
             (
                 "cloud authentication",
-                "    runs-on: ubuntu-latest-m\n    outputs:",
-                "    runs-on: ubuntu-latest-m\n    steps:\n      - uses: google-github-actions/auth@v3\n    outputs:",
+                "    runs-on: ubuntu-latest\n    outputs:",
+                "    runs-on: ubuntu-latest\n    steps:\n      - uses: google-github-actions/auth@v3\n    outputs:",
                 "auto backend scope decision must not authenticate to cloud services",
             ),
         )

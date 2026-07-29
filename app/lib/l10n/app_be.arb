@@ -5490,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1 200 прэміум мін + неабмежавана на прыладзе",
+    "basicPlanDescription": "300 прэміум мін + неабмежавана на прыладзе",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },

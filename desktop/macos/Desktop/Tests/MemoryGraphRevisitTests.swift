@@ -12,9 +12,12 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertTrue(graph.contains("@ObservedObject var viewModel: MemoryGraphViewModel"))
     XCTAssertTrue(container.contains("let memoryGraphViewModel = MemoryGraphViewModel()"))
     XCTAssertTrue(container.contains("memoryGraphViewModel.resetSessionState()"))
+    // The Brain Map is reachable only from its own hub tab now — the inline
+    // Memories card is gone — so MemoriesPage no longer receives the graph view
+    // model at all. Both the canonical destination and legacy fallback must use
+    // the persistent, container-owned instance.
     XCTAssertTrue(home.contains("graphViewModel: viewModelContainer.memoryGraphViewModel"))
-    // The Brain Map moved from an inline Memories card to its own hub tab, still
-    // driven by the persistent, container-owned view model.
+    XCTAssertTrue(home.contains("viewModel: viewModelContainer.memoryGraphViewModel"))
     XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
     // Static wiring tripwire: the Memory menu keeps the shared destination
     // owner while the graph remains a dedicated spatial surface.
@@ -147,6 +150,26 @@ final class MemoryGraphRevisitTests: XCTestCase {
         conversationID: "conversation-1",
         presentedConversationID: "conversation-1",
         transcriptDrawerOpen: true
+      ))
+  }
+
+  func testOpeningAMemoryIntoTheSidePanelReleasesTheReadableWidthCap() {
+    // The memory detail is a side panel rather than a modal, so with the cap
+    // still applied the panel would take its 360pt out of the list's 900pt
+    // column instead of out of the window.
+    XCTAssertTrue(
+      MemoryHubLayoutPolicy.usesAvailableWidth(
+        conversationID: nil,
+        presentedConversationID: nil,
+        transcriptDrawerOpen: false,
+        memoryDetailOpen: true
+      ))
+    XCTAssertFalse(
+      MemoryHubLayoutPolicy.usesAvailableWidth(
+        conversationID: nil,
+        presentedConversationID: nil,
+        transcriptDrawerOpen: false,
+        memoryDetailOpen: false
       ))
   }
 

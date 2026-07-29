@@ -1197,6 +1197,47 @@ def stamp_processing_admission_if_absent(uid: str, conversation_id: str, *, fire
     return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
 
 
+def _complete_unstampable_orphan_conversation_txn(
+    transaction: Any, conversation_ref: Any, stale_before: datetime
+) -> bool:
+    """Terminalize a legacy orphan whose admission fence can never be stamped.
+
+    A conversation sitting at Firestore's 1 MiB document ceiling rejects every
+    growing write, so ``stamp_processing_admission_if_absent`` can never migrate
+    it: the row would stay ``processing`` for good while the sweep retries it
+    forever. The snapshot's server-owned ``update_time`` stands in for the fence
+    the document cannot carry — only a row no writer (including a live processor,
+    which is equally unable to write to it) has touched since ``stale_before`` is
+    terminalized. Every other ownership fence still applies, and the terminal
+    write only shrinks the document, so it fits where the stamp did not.
+    """
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('status') != 'processing':
+        return False
+    if data.get('discarded') or data.get('deferred') or data.get('finalization_job_id'):
+        return False
+    if isinstance(data.get('processing_admitted_at'), datetime):
+        return False  # no longer a legacy row: the admission-fenced path owns it
+    last_written = getattr(snapshot, 'update_time', None)
+    if not isinstance(last_written, datetime) or last_written > stale_before:
+        return False
+    transaction.update(conversation_ref, {'status': 'completed'})
+    return True
+
+
+def complete_unstampable_orphan_conversation(
+    uid: str, conversation_id: str, *, stale_after: timedelta, firestore_client: Any = None
+) -> bool:
+    """Terminalize a legacy orphan that is too large to accept the admission fence."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_complete_unstampable_orphan_conversation_txn)
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now() - stale_after)
+
+
 def _complete_orphan_conversation_txn(
     transaction: Any, conversation_ref: Any, expected_admitted_at: datetime | None, now: datetime
 ) -> bool:

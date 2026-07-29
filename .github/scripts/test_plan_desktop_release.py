@@ -171,7 +171,9 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             ".github/scripts/plan-desktop-release.py",
             ".github/scripts/desktop-release-source-identity.py",
             ".github/scripts/publish-desktop-candidate-tag.py",
+            ".github/scripts/verify-pre-tag-readiness.py",
             ".github/workflows/desktop_auto_release.yml",
+            ".github/workflows/desktop_qualify_beta.yml",
             ".github/workflows/desktop-swift-ci.yml",
         ]
 
@@ -467,13 +469,16 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
 
     def test_workflow_has_no_input_manual_trigger_and_tags_only_the_merged_main_source(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        # workflow_dispatch stays bare (no manual inputs). Continuous deployment:
-        # auto-release fires on macOS-affecting merges to main (push); the schedule
-        # remains a backstop. No `inputs:` may appear in the trigger block.
+        # Manual candidate publication only. Automatic push/schedule tagging was
+        # retired so merges no longer mint a new macOS version tag per CI run.
+        # workflow_dispatch stays bare (no manual inputs). No `inputs:` may appear
+        # in the trigger block.
         self.assertIn("  workflow_dispatch:\n", workflow)
         self.assertNotIn("inputs:", workflow.split("\njobs:", 1)[0])
-        self.assertIn("  push:\n    branches: [main]", workflow)
-        self.assertIn("- cron: '*/15 * * * *'", workflow)
+        trigger = workflow.split("\njobs:", 1)[0]
+        self.assertNotIn("\n  push:", trigger)
+        self.assertNotIn("schedule:", trigger)
+        self.assertNotIn("cron:", trigger)
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
@@ -498,39 +503,33 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn('python3 .github/scripts/publish-desktop-candidate-tag.py', workflow)
         self.assertIn('test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"', workflow)
 
-    def test_candidate_creation_has_no_selfhosted_pre_tag_gate(self) -> None:
-        # Continuous deployment: candidate creation (tag-release) must depend only
-        # on the hosted planner gate, NOT on a self-hosted pre-candidate readiness
-        # job. A self-hosted gate before immutable tag creation was a single point
-        # of failure (a down runner blocked ALL releases) and contradicted "create
-        # on every change, then qualify". Heavy validation belongs to
-        # desktop_qualify_beta.yml, which runs AFTER the candidate exists.
+    def test_tag_release_runs_readiness_verification_and_publish_in_one_m1_transaction(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertNotIn("pre-tag-readiness:", workflow)
-        self.assertNotIn("desktop-pre-tag-readiness-evidence", workflow)
-        self.assertNotIn("verify-pre-tag-readiness.py", workflow)
-        tag_release = workflow.split("\n  tag-release:\n", 1)[1].split("\n  ", 1)[0]
-        self.assertIn("needs: [plan-release]", tag_release)
+        self.assertNotIn("pre-tag-readiness:\n", workflow)
+        self.assertNotIn("needs: pre-tag-readiness", workflow)
+        tag_release = workflow.split("\n  tag-release:\n", 1)[1]
+        self.assertIn("runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]", tag_release)
+        self.assertIn("group: desktop-auto-release-tag-main", tag_release)
+        self.assertIn("cancel-in-progress: false", tag_release)
+        self.assertIn("desktop/macos/scripts/pre-tag-readiness.sh", tag_release)
+        self.assertIn(".github/scripts/verify-pre-tag-readiness.py verify", tag_release)
+        self.assertIn(".github/scripts/publish-desktop-candidate-tag.py", tag_release)
+        self.assertLess(tag_release.index("Bind immutable planner evidence to fresh main"), tag_release.index("pre-tag-readiness.sh"))
+        self.assertLess(tag_release.index("pre-tag-readiness.sh"), tag_release.index("verify-pre-tag-readiness.py verify"))
+        self.assertLess(tag_release.index("verify-pre-tag-readiness.py verify"), tag_release.index("publish-desktop-candidate-tag.py"))
+        self.assertIn("if: always()", tag_release)
+        self.assertIn("desktop-pre-tag-readiness", tag_release)
 
-    def test_push_paths_cover_releasable_desktop_paths(self) -> None:
-        # Continuous deployment: every releasable desktop input the planner
-        # recognizes must also be in the workflow's push filter, or a merge
-        # touching only that input would be releasable yet never get the immediate
-        # push trigger (only the schedule backstop would catch it). A directory
-        # entry maps to '<dir>/**'.
-        #
-        # Parse the push filter without PyYAML: this check runs in the `local` and
-        # `ci` lanes across environments that do not all ship PyYAML.
-        branches, push_paths = _parse_push_filter(WORKFLOW.read_text(encoding="utf-8"))
-        self.assertEqual(branches, ["main"])
-        for path in planner.DESKTOP_RELEASE_PATHS:
-            expected = f"{path}/**" if (ROOT / path).is_dir() else path
-            self.assertIn(
-                expected,
-                push_paths,
-                f"releasable desktop path {path!r} (expected push filter {expected!r}) "
-                "is missing from desktop_auto_release.yml push.paths",
-            )
+    def test_auto_release_is_manual_only(self) -> None:
+        # Candidate tags must not fire on push/schedule. The planner may still
+        # gate a manual run; continuous path filters are intentionally gone.
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        trigger = workflow.split("\njobs:", 1)[0]
+        self.assertIn("workflow_dispatch:", trigger)
+        self.assertNotIn("\n  push:", trigger)
+        self.assertNotIn("schedule:", trigger)
+        with self.assertRaises(AssertionError):
+            _parse_push_filter(workflow)
 
 
 if __name__ == "__main__":

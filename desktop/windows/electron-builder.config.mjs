@@ -166,10 +166,10 @@ export default {
   // --- AUTO-UPDATE ---
   // electron-updater is wired in src/main/updater.ts (packaged builds only; silent
   // download + install-on-next-quit; NSIS differential updates stay default-on).
-  // The production feed is the GitHub releases where the macOS beta channel lives.
-  // Local testing uses dev-app-update.yml + OMI_UPDATER_DEV=1 (forceDevUpdateConfig)
-  // instead of this feed. releaseType 'release' means only non-prerelease GitHub
-  // releases are served as updates.
+  // This GitHub config makes electron-builder emit latest.yml and app-update.yml.
+  // Before every production check, updater.ts replaces the repository-wide GitHub
+  // provider with the backend-selected immutable Windows release directory. Local
+  // testing keeps dev-app-update.yml + OMI_UPDATER_DEV=1 (forceDevUpdateConfig).
   //
   // NOTE: this block is the UPDATE FEED only — it must never be used as an upload
   // target. electron-builder auto-publishes to it when CI + a git tag are detected,

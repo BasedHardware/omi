@@ -152,7 +152,122 @@ describe('RewindCaptureHost — dead capture track', () => {
     await tick(INTERVAL_MS)
     expect(saveFrame).toHaveBeenCalledTimes(1)
   })
+})
 
+// #10489: every frame was captured at 720p and encoded at 0.6 no matter the
+// display, so OCR could not read normal on-screen text — and nothing in the app
+// could raise it. Quality is now a setting, and each tier has to reach the
+// stream, the sampled canvas AND the encode to be worth anything.
+describe('RewindCaptureHost — capture quality', () => {
+  /** Sample a 1440p display, so a tier that downscales is visible in the canvas. */
+  function displayIs1440p(): void {
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', {
+      configurable: true,
+      get: () => 2560
+    })
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', {
+      configurable: true,
+      get: () => 1440
+    })
+  }
+
+  function setQuality(captureQuality: string): void {
+    ;(
+      window as unknown as { omi: { rewindGetSettings: () => Promise<unknown> } }
+    ).omi.rewindGetSettings = async () => ({
+      captureEnabled: true,
+      intervalMs: INTERVAL_MS,
+      captureQuality
+    })
+  }
+
+  /** The stream constraints of the nth getUserMedia call. */
+  function constraints(call: number): { maxWidth: number; maxHeight: number } {
+    return (
+      getUserMedia.mock.calls[call][0] as {
+        video: { mandatory: { maxWidth: number; maxHeight: number } }
+      }
+    ).video.mandatory
+  }
+
+  /** Canvas size + JPEG quality of each encode. */
+  let encodes: { width: number; height: number; quality: number }[]
+  beforeEach(() => {
+    encodes = []
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function (
+      this: HTMLCanvasElement,
+      cb,
+      _type,
+      quality
+    ) {
+      encodes.push({ width: this.width, height: this.height, quality: quality as number })
+      cb({ arrayBuffer: async () => new ArrayBuffer(8) } as Blob)
+    })
+  })
+
+  it('defaults to the proven 720p tier when no quality is persisted', async () => {
+    displayIs1440p()
+    render(<RewindCaptureHost />)
+    await settle()
+    await tick(INTERVAL_MS)
+
+    expect(constraints(0)).toMatchObject({ maxWidth: 1280, maxHeight: 720 })
+    expect(encodes[0]).toEqual({ width: 1600, height: 900, quality: 0.6 })
+  })
+
+  it('captures a 1440p display at full size and a higher JPEG quality on "max"', async () => {
+    displayIs1440p()
+    setQuality('max')
+    render(<RewindCaptureHost />)
+    await settle()
+    await tick(INTERVAL_MS)
+
+    expect(constraints(0)).toMatchObject({ maxWidth: 2560, maxHeight: 1440 })
+    // Not downscaled by the sampler either — the whole point is readable text.
+    expect(encodes[0]).toEqual({ width: 2560, height: 1440, quality: 0.82 })
+  })
+
+  it('raises the stream to 1080p on "high"', async () => {
+    setQuality('high')
+    render(<RewindCaptureHost />)
+    await settle()
+
+    expect(constraints(0)).toMatchObject({ maxWidth: 1920, maxHeight: 1080 })
+  })
+
+  it('re-opens the stream when the quality setting changes', async () => {
+    // Resolution is a stream constraint, so a live change has to tear the stream
+    // down — otherwise the new tier would only apply at the next launch.
+    let push: (s: unknown) => void = () => undefined
+    ;(
+      window as unknown as { omi: { onRewindSettings: (cb: (s: unknown) => void) => () => void } }
+    ).omi.onRewindSettings = (cb) => {
+      push = cb
+      return () => undefined
+    }
+    render(<RewindCaptureHost />)
+    await settle()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      push({ captureEnabled: true, intervalMs: INTERVAL_MS, captureQuality: 'high' })
+    })
+    await settle()
+
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+    expect(constraints(1)).toMatchObject({ maxWidth: 1920, maxHeight: 1080 })
+  })
+
+  it('falls back to the default tier for an unknown persisted value', async () => {
+    setQuality('ultra')
+    render(<RewindCaptureHost />)
+    await settle()
+
+    expect(constraints(0)).toMatchObject({ maxWidth: 1280, maxHeight: 720 })
+  })
+})
+
+describe('RewindCaptureHost — unmount', () => {
   it('does not reopen the stream after unmount', async () => {
     const view = render(<RewindCaptureHost />)
     await settle()

@@ -29,7 +29,27 @@ final class DesktopChatDriftGuardTests: XCTestCase {
   func testChatComposerUsesAThinUniformShellAndTranscriptFade() {
     XCTAssertEqual(ChatComposerLayout.shellInset, 8)
     XCTAssertEqual(ChatComposerLayout.pageMargin, 16)
+    XCTAssertEqual(ChatComposerLayout.transcriptEdgeInset, ChatComposerLayout.pageMargin)
     XCTAssertGreaterThan(ChatComposerLayout.fadeHeight, ChatComposerLayout.shellInset)
+    XCTAssertLessThanOrEqual(ChatComposerLayout.fadeHeight, 12)
+  }
+
+  func testOnlyConsecutiveUserRowsUseCompactSpacing() {
+    let messages = [
+      ChatMessage(id: "a0", text: "Answer", sender: .ai),
+      ChatMessage(id: "u0", text: "First", sender: .user),
+      ChatMessage(id: "u1", text: "Second", sender: .user),
+      ChatMessage(id: "a1", text: "Answer", sender: .ai),
+    ]
+
+    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 0, in: messages), 0)
+    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 1, in: messages), 0)
+    XCTAssertEqual(
+      ChatTranscriptLayout.regularRowSpacing
+        + ChatTranscriptLayout.topAdjustment(at: 2, in: messages),
+      ChatTranscriptLayout.consecutiveUserRowSpacing
+    )
+    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 3, in: messages), 0)
   }
 
   func testMainAndNotchChatShareTheTranscriptFade() throws {

@@ -12,11 +12,6 @@ on:
       - "backend/test.sh"
       - "backend/utils/encryption.py"
       - "contract_tests/**"
-      - "desktop/macos/Backend-Rust/Cargo.lock"
-      - "desktop/macos/Backend-Rust/Cargo.toml"
-      - "desktop/macos/Backend-Rust/src/models/**"
-      - "desktop/macos/Backend-Rust/src/services/firestore.rs"
-      - "desktop/macos/Backend-Rust/src/services/firestore/**"
       - "desktop/macos/scripts/desktop-core-harness.sh"
       - "desktop/macos/scripts/desktop-flow-lint.py"
       - "desktop/macos/scripts/desktop_flow_contract.py"
@@ -69,14 +64,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/pylock*.toml
 
-      - uses: dtolnay/rust-toolchain@stable
-
       - name: Install Python contract dependencies
         working-directory: backend
         run: uv pip sync pylock.toml --system
 
       - name: Run Python desktop backend contracts
         run: python -m pytest backend/testing/contracts -v
-
-      - name: Run Rust desktop backend contracts
-        run: cargo test --manifest-path desktop/macos/Backend-Rust/Cargo.toml contract

@@ -179,6 +179,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
         "STT_SERVICE_MODELS": "modulate-velma-2,parakeet",

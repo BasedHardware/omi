@@ -27,7 +27,7 @@ jobs:
     # support a safe workflow-level paths filter, so inspect its immutable SHA.
     permissions:
       contents: 'read'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
     steps:
@@ -148,7 +148,7 @@ jobs:
     environment: development
     permissions:
       contents: 'read'
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
     steps:
@@ -244,7 +244,7 @@ jobs:
       contents: 'read'
       id-token: 'write'
 
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       # To workaround "no space left on device" issue of GitHub-hosted runner
       - name: Delete huge unnecessary tools folder
@@ -445,6 +445,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
+            --remove-env-vars=MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -481,7 +482,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
+            --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: |-
             ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
@@ -515,7 +516,7 @@ jobs:
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
+            --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}

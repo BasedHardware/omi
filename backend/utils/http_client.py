@@ -11,14 +11,111 @@ at application shutdown via ``close_all_clients()``.
 """
 
 import asyncio
+import ipaddress
 import logging
+import socket
 import time
 from collections import defaultdict
 from collections.abc import Callable
+from urllib.parse import urlparse
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+class UnsafeWebhookURLError(Exception):
+    """Raised when a developer-configured webhook/callback URL resolves to a
+    non-public address (private LAN, loopback, or the 169.254.169.254-style
+    cloud metadata range) — blocks SSRF via app webhook_url / setup_completed_url."""
+
+
+# RFC 6598 carrier-grade NAT shared address space (100.64.0.0/10). Python's
+# ipaddress flags neither is_private nor is_reserved for this range, so without
+# an explicit check a developer-configured webhook that resolves here would be
+# wrongly accepted as "public" — it is not globally reachable and must be
+# rejected for SSRF protection.
+_CGNAT_NETWORK = ipaddress.ip_network('100.64.0.0/10')
+
+
+def _is_unsafe_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(ip, ipaddress.IPv4Address) and ip in _CGNAT_NETWORK:
+        return True
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local  # covers the 169.254.169.254 cloud metadata address
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def assert_public_http_url(url: str) -> str:
+    """Reject webhook/callback URLs that don't point at a public host.
+
+    Returns the first resolved IP address (as a string). Callers that go on
+    to make the actual request MUST connect to that exact address (see
+    `pin_to_resolved_ip` / `safe_request_target`) rather than letting the
+    HTTP client re-resolve the hostname — otherwise a DNS record can be
+    swapped between this check and the real connect (DNS rebinding), and
+    this validation is worthless.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise UnsafeWebhookURLError(f'Unsupported URL scheme: {parsed.scheme!r}')
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise UnsafeWebhookURLError('URL has no hostname')
+
+    try:
+        addrinfo = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as e:
+        raise UnsafeWebhookURLError(f'Could not resolve host {hostname!r}: {e}')
+
+    first_safe_ip: str | None = None
+    for _family, _type, _proto, _canonname, sockaddr in addrinfo:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if _is_unsafe_ip(ip):
+            raise UnsafeWebhookURLError(f'{hostname!r} resolves to non-public address {ip}')
+        if first_safe_ip is None:
+            first_safe_ip = str(ip)
+
+    if first_safe_ip is None:
+        # getaddrinfo() succeeded but returned zero records — treat like a resolution failure.
+        raise UnsafeWebhookURLError(f'Could not resolve host {hostname!r}: no addresses returned')
+
+    return first_safe_ip
+
+
+def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
+    """Rewrite `url` to connect directly to `resolved_ip` instead of trusting
+    a second DNS lookup at connect time. Returns (pinned_url, extra) where
+    `extra` carries the `Host` header and TLS `sni_hostname` extension the
+    caller must merge into its request so the original hostname is still
+    used for virtual-host routing and certificate verification — the
+    connection targets the pinned IP, but looks and authenticates exactly
+    like a normal request to the original hostname.
+    """
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    netloc = f'[{resolved_ip}]' if ':' in resolved_ip else resolved_ip
+    if parsed.port:
+        netloc += f':{parsed.port}'
+    pinned_url = parsed._replace(netloc=netloc).geturl()
+    extra = {'headers': {'Host': hostname}, 'extensions': {'sni_hostname': hostname}}
+    return pinned_url, extra
+
+
+def safe_request_target(url: str) -> tuple[str, dict]:
+    """Validate `url` (see `assert_public_http_url`) and return the
+    (pinned_url, extra_kwargs) pair callers should actually request —
+    closing the DNS-rebinding gap in one step. Raises UnsafeWebhookURLError
+    for anything private/loopback/link-local/reserved/unresolvable."""
+    resolved_ip = assert_public_http_url(url)
+    return pin_to_resolved_ip(url, resolved_ip)
+
 
 # ---------------------------------------------------------------------------
 # Circuit breaker for webhook targets
@@ -201,9 +298,21 @@ def _get_semaphore(name: str, limit: int) -> asyncio.Semaphore:
     if key not in _semaphores:
         # Prune stale entries from destroyed loops when cache grows large
         if len(_semaphores) > _SEMAPHORE_CACHE_MAX:
-            _semaphores.clear()
+            _evict_foreign_loop_semaphores(id(loop))
         _semaphores[key] = asyncio.Semaphore(limit)
     return _semaphores[key]
+
+
+def _evict_foreign_loop_semaphores(live_loop_id: int) -> None:
+    """Drop semaphores belonging to loops other than the one running now.
+
+    Mirrors _evict_stale_circuit_breakers / _evict_stale_latest_wins: remove only what is
+    stale. A blanket clear() also dropped the running loop's own entry, so the next caller
+    got a fresh Semaphore while in-flight tasks still held permits on the old one — briefly
+    allowing twice the concurrency the limit exists to cap.
+    """
+    for key in [k for k in _semaphores if k[0] != live_loop_id]:
+        del _semaphores[key]
 
 
 def get_webhook_semaphore() -> asyncio.Semaphore:

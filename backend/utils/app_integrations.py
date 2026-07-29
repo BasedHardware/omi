@@ -7,6 +7,8 @@ import time
 import httpx
 
 from utils.http_client import (
+    safe_request_target,
+    UnsafeWebhookURLError,
     get_webhook_client,
     get_webhook_circuit_breaker,
     get_webhook_semaphore,
@@ -64,6 +66,7 @@ import database.conversations as conversations_db
 from utils.conversations.render import conversation_to_dict, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.mentor_notifications import process_mentor_notification
+from utils.observability.fallback import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -71,6 +74,17 @@ logger = logging.getLogger(__name__)
 
 class ExternalIntegrationFanoutError(RuntimeError):
     """At least one durable finalization webhook did not acknowledge delivery."""
+
+
+# A retry only helps when the destination may answer differently next time.
+# Webhook health tracking (`record_app_webhook_failure`) owns the permanent
+# case: it warns the app owner and auto-disables the webhook after 72h.
+_RETRYABLE_DELIVERY_STATUSES = frozenset({408, 425, 429})
+
+
+def _delivery_failure_is_retryable(status_code: int) -> bool:
+    """Whether a non-2xx webhook response leaves the finalization job retryable."""
+    return status_code >= 500 or status_code in _RETRYABLE_DELIVERY_STATUSES
 
 
 def _notify_app_owner(app_id: str, title: str, body: str):
@@ -133,7 +147,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
 
     def get_contents(path):
         url = f"https://api.github.com/repos/{repo}/contents/{path}"
-        response = httpx.get(url, headers=headers)
+        response = httpx.get(url, headers=headers, timeout=30.0)
 
         if response.status_code != 200:
             logger.error(f"Failed to fetch contents for {path}: {response.status_code}")
@@ -147,7 +161,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
         for item in contents:
             if item["type"] == "file" and (item["name"].endswith(".md") or item["name"].endswith(".mdx")):
                 # Get raw content for documentation files
-                raw_response = httpx.get(item["download_url"], headers=headers)
+                raw_response = httpx.get(item["download_url"], headers=headers, timeout=30.0)
                 if raw_response.status_code == 200:
                     docs_content[item["path"]] = raw_response.text
 
@@ -211,6 +225,18 @@ async def trigger_external_integrations(
         else:
             url += '?uid=' + uid
 
+        # SSRF guard: a developer-configured webhook that resolves to a
+        # private/loopback/link-local/metadata address is a configuration
+        # error, not a delivery failure — reject it without recording a
+        # failure, tripping the circuit breaker, or failing the durable
+        # fan-out. Resolution is a blocking getaddrinfo call, so offload it
+        # to the owned db executor rather than stalling the event loop.
+        try:
+            pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
+        except UnsafeWebhookURLError as e:
+            logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
+            return
+
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
             logger.info(f'trigger_external_integrations: circuit breaker open for {app.id}')
@@ -220,12 +246,17 @@ async def trigger_external_integrations(
 
         try:
             payload = serialize_datetimes(conversation_dict)
+            headers = dict(pin_kwargs['headers'])
+            if idempotency_key:
+                headers['X-Omi-Idempotency-Key'] = idempotency_key
             async with get_webhook_semaphore():
                 client = get_webhook_client()
                 response = await client.post(
-                    url,
+                    pinned_url,
                     json=payload,
-                    headers={'X-Omi-Idempotency-Key': idempotency_key} if idempotency_key else None,
+                    headers=headers,
+                    extensions=pin_kwargs['extensions'],
+                    follow_redirects=False,
                 )
             if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
@@ -238,7 +269,21 @@ async def trigger_external_integrations(
                     f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
                 )
                 if require_delivery:
-                    failed_deliveries.append(app.id)
+                    if _delivery_failure_is_retryable(response.status_code):
+                        failed_deliveries.append(app.id)
+                    else:
+                        # The destination rejected this payload permanently (expired
+                        # OAuth token, deleted target, malformed for that app). Every
+                        # retry repeats it verbatim, so keeping the conversation's
+                        # finalization job retryable would only strand the
+                        # conversation until the job dead-letters.
+                        record_fallback(
+                            component='webhook',
+                            from_mode='durable_delivery',
+                            to_mode='dropped',
+                            reason='auth' if response.status_code in (401, 403) else 'policy',
+                            outcome='degraded',
+                        )
                 return
 
             cb.record_success()
@@ -675,17 +720,32 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
         separator = '&' if '?' in url else '?'
         url += f'{separator}sample_rate={sample_rate}&uid={uid}'
 
+        # SSRF guard (see trigger_external_integrations): a non-public
+        # developer-configured webhook URL is a config error, not a delivery
+        # failure — reject without recording failure or tripping the breaker.
+        try:
+            pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
+        except UnsafeWebhookURLError as e:
+            logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
+            return
+
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
             return
 
         try:
+            headers = dict(pin_kwargs['headers'])
+            headers['Content-Type'] = 'application/octet-stream'
             async with get_webhook_semaphore():
                 if not latest_wins_check(uid, version):
                     return  # Check again after acquiring semaphore
                 client = get_webhook_client()
                 response = await client.post(
-                    url, content=bytes(data), headers={'Content-Type': 'application/octet-stream'}
+                    pinned_url,
+                    content=bytes(data),
+                    headers=headers,
+                    extensions=pin_kwargs['extensions'],
+                    follow_redirects=False,
                 )
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
@@ -767,6 +827,15 @@ async def _async_trigger_realtime_integrations(
         else:
             url += '?uid=' + uid
 
+        # SSRF guard (see trigger_external_integrations): a non-public
+        # developer-configured webhook URL is a config error, not a delivery
+        # failure — reject without recording failure or tripping the breaker.
+        try:
+            pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
+        except UnsafeWebhookURLError as e:
+            logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
+            return
+
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
             logger.info(f'trigger_realtime_integrations: circuit breaker open for {app.id}')
@@ -775,7 +844,13 @@ async def _async_trigger_realtime_integrations(
         try:
             async with get_webhook_semaphore():
                 client = get_webhook_client()
-                response = await client.post(url, json={"session_id": uid, "segments": segments})
+                response = await client.post(
+                    pinned_url,
+                    json={"session_id": uid, "segments": segments},
+                    headers=pin_kwargs['headers'],
+                    extensions=pin_kwargs['extensions'],
+                    follow_redirects=False,
+                )
             if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'

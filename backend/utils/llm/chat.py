@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import datetime, timezone
+from html import escape
 from typing import Any, List, Optional, cast
 from zoneinfo import ZoneInfo
 
@@ -480,7 +481,7 @@ def get_user_timezone(uid: str) -> str:
         return "UTC"
 
 
-def get_current_datetime_block(uid: str, tz: Optional[str] = None) -> str:
+def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Optional[str] = None) -> str:
     """Build the current-datetime block injected into the user turn.
 
     Kept out of the cached system prefix so the cached bytes stay stable across requests
@@ -497,10 +498,12 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None) -> str:
         tz = "UTC"
     current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
     current_datetime_iso = current_datetime_user.isoformat()
+    location_line = f"Current city-level location: {escape(location, quote=False)}\n" if location else ""
     return (
         "<current_datetime>\n"
         f"Current date time in {tz}: {current_datetime_str}\n"
         f"Current date time ISO format: {current_datetime_iso}\n"
+        f"{location_line}"
         "</current_datetime>"
     )
 

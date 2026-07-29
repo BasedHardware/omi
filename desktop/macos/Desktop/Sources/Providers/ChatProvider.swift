@@ -1553,9 +1553,9 @@ class ChatProvider: ObservableObject {
   }
 
   /// Pre-start the active bridge so the first query doesn't wait for process launch
-  func warmupBridge() async {
+  func warmupBridge() async -> Bool {
     await preparePromptContextIfNeeded()
-    _ = await ensureBridgeStarted()
+    return await ensureBridgeStarted()
   }
 
   /// Drop a cached agent surface so the next query recreates it with fresh prompt context.
@@ -4853,6 +4853,7 @@ class ChatProvider: ObservableObject {
           telemetryAttempt.fail(
             errorClass: errorClass,
             partialResponse: hadPartialResponse,
+            detail: .from(error),
             watchdogFired: watchdogFired
           )
           logError(
@@ -5140,8 +5141,28 @@ class ChatProvider: ObservableObject {
       &messages,
       hasActiveSendLock: sendLockOwnership.isHeld
     )
+    var repairGroups: [String: [String]] = [:]
     for messageID in terminalizedMessageIDs {
-      scheduleJournalUpdate(messageId: messageID)
+      if let ownerID = journalOwnerByMessageID[messageID] ?? runtimeOwnerId {
+        repairGroups[ownerID, default: []].append(messageID)
+      }
+    }
+    let repairSurface = mainChatSurfaceReference()
+    for (ownerID, messageIDs) in repairGroups {
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        let repaired = await self.kernelTurnProjection.repairNonterminalTurns(
+          surface: repairSurface,
+          turnIDs: messageIDs,
+          ownerID: ownerID
+        )
+        if repaired < messageIDs.count {
+          log(
+            "ChatProvider: canonical orphan repair deferred "
+              + "(requested=\(messageIDs.count), repaired=\(repaired))"
+          )
+        }
+      }
     }
     if !terminalizedMessageIDs.isEmpty {
       log("ChatProvider: terminalized \(terminalizedMessageIDs.count) orphaned streaming message(s) after send release")
@@ -5156,26 +5177,6 @@ class ChatProvider: ObservableObject {
         await self?.sendMessage(prompt)
       }
     }
-  }
-
-  /// A released send lock is the UI's terminal boundary. A transport failure
-  /// can otherwise leave an old tool row marked streaming while `isSending`
-  /// is already false, which makes later chat/PTT turns look stuck.
-  static func terminalizeOrphanedStreamingMessages(
-    _ messages: inout [ChatMessage],
-    hasActiveSendLock: Bool
-  ) -> [String] {
-    guard !hasActiveSendLock else { return [] }
-    var terminalizedMessageIDs: [String] = []
-    for index in messages.indices where messages[index].sender == .ai && messages[index].isStreaming {
-      messages[index].isStreaming = false
-      ToolCallBlockUpdater.completeRemainingToolCalls(
-        in: &messages[index].contentBlocks,
-        terminalStatus: .failed
-      )
-      terminalizedMessageIDs.append(messages[index].id)
-    }
-    return terminalizedMessageIDs
   }
 
   /// Generate a title for the session using LLM

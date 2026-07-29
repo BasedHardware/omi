@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 import routers.integrations as integrations_router
+from utils.integrations_registry import oauth_authorization_query, resolve_integration_provider
 from utils.retrieval.tools import gmail_tools
 from utils.retrieval.tools.google_utils import (
     GMAIL_READONLY_SCOPE,
@@ -51,8 +52,15 @@ def test_granted_scope_check_ignores_merely_requested_scopes():
 
 
 def test_connecting_google_requests_the_gmail_scope():
+    # The consent request is built by the integration registry (the inline
+    # AUTH_PROVIDERS table this used to read no longer exists). Assert against the
+    # query actually sent, so a scope that is gated at runtime is provably one the
+    # user was asked for.
+    _, provider = resolve_integration_provider('google_calendar')
+    requested = oauth_authorization_query(provider)['scope'].split()
+
     assert GMAIL_READONLY_SCOPE in GOOGLE_OAUTH_SCOPES
-    assert GMAIL_READONLY_SCOPE in integrations_router.AUTH_PROVIDERS['google_calendar']['query']['scope']
+    assert GMAIL_READONLY_SCOPE in requested
 
 
 def test_gmail_is_disconnected_without_a_google_grant(stored_grants):

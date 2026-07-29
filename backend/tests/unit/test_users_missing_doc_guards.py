@@ -46,6 +46,7 @@ def users():
             db=MagicMock(),
             delete_collection_recursive=MagicMock(),
             document_id_from_seed=lambda seed: "id",
+            get_firestore_client=MagicMock(),
         ),
         "database.firestore_cache": _module(
             "database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock()
@@ -54,6 +55,7 @@ def users():
             "database.redis_db",
             try_acquire_client_device_write_lock=MagicMock(return_value=True),
             try_acquire_user_platform_write_lock=MagicMock(return_value=True),
+            delete_cached_user_geolocation=MagicMock(),
         ),
         "models.users": _module(
             "models.users",
@@ -61,6 +63,10 @@ def users():
             PlanLimits=MagicMock(),
             PlanType=MagicMock(),
             SubscriptionStatus=MagicMock(),
+            LOCATION_CONTEXT_DISCLOSED_PROVIDERS=("Google Maps", "the configured AI chat provider"),
+            LOCATION_CONTEXT_PURPOSE="chat_city_context",
+            LocationContextConsent=MagicMock(),
+            LocationContextConsentStatus=MagicMock(),
         ),
         "utils.subscription": _module("utils.subscription", get_default_basic_subscription=MagicMock()),
         "models.other": _module("models.other", Person=MagicMock()),

@@ -7,6 +7,7 @@ import SwiftUI
 struct ChatBubble: View {
   let message: ChatMessage
   let app: OmiApp?
+  let showsOmiMark: Bool
   let onRate: (Int?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
   var isDuplicate: Bool = false
@@ -30,7 +31,7 @@ struct ChatBubble: View {
   @FocusState private var isMetadataControlFocused: Bool
 
   init(
-    message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
+    message: ChatMessage, app: OmiApp?, showsOmiMark: Bool, onRate: @escaping (Int?) -> Void,
     onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
     onCancelTurn: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
@@ -38,6 +39,7 @@ struct ChatBubble: View {
   ) {
     self.message = message
     self.app = app
+    self.showsOmiMark = showsOmiMark
     self.onRate = onRate
     self.onCitationTap = onCitationTap
     self.isDuplicate = isDuplicate
@@ -93,8 +95,8 @@ struct ChatBubble: View {
     )
 
     HStack(alignment: .top, spacing: OmiSpacing.md) {
-      // Omi texts you: its replies carry the Omi mark on the left, and it spins
-      // while it's thinking of a response. App personas keep their own image.
+      // App personas keep their own image. The Omi mark is mounted below as an
+      // overlay in the leading gutter so it never changes the reply's x origin.
       if message.sender == .ai {
         if let app = app {
           AsyncImage(url: URL(string: app.image)) { phase in
@@ -110,9 +112,6 @@ struct ChatBubble: View {
           }
           .frame(width: 32, height: 32)
           .clipShape(Circle())
-        } else {
-          SBLogo(size: 22, spinning: message.isStreaming)
-            .frame(width: 32, height: 32, alignment: .center)
         }
       }
 
@@ -126,7 +125,22 @@ struct ChatBubble: View {
         alignment: message.sender == .user ? .trailing : .leading
       )
     }
-    .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
+    .frame(
+      maxWidth: .infinity,
+      minHeight: ChatOmiMarkPlacement.rowHeight(
+        showsMark: message.sender == .ai && app == nil && showsOmiMark),
+      alignment: message.sender == .user ? .trailing : .leading
+    )
+    .overlay(alignment: .topLeading) {
+      if message.sender == .ai, app == nil, showsOmiMark {
+        ChatOmiMark(
+          motion: message.isStreaming ? ChatWorkingStatus.motion(for: message) : nil,
+          size: 24
+        )
+        .frame(width: 32, height: 32)
+        .offset(x: -(32 + OmiSpacing.md))
+      }
+    }
     .contentShape(Rectangle())
     .onHover { isRowHovering = $0 }
   }
@@ -891,6 +905,7 @@ extension ChatBubble: @preconcurrency Equatable {
       && lhs.message.text == rhs.message.text
       && lhs.message.rating == rhs.message.rating
       && lhs.app?.id == rhs.app?.id
+      && lhs.showsOmiMark == rhs.showsOmiMark
       && lhs.isDuplicate == rhs.isDuplicate
   }
 }

@@ -1386,15 +1386,7 @@ struct VoiceTurnReducer {
       cancel(.providerReconnect, in: &model, effects: &effects)
       model.turn?.providerConnection = .ready
       model.turn?.sessionID = sessionID
-      // A manager-owned warm capture still has PCM in PushToTalkManager's
-      // bounded buffer. Keep its route at `.hubWarmWait` until `hubReady`
-      // emits `prepareHubInput`; that effect is the one place which flushes
-      // that PCM into the now-admitted provider input window. Rewriting the
-      // route here would make the controller replay its own buffer while
-      // silently orphaning the manager buffer.
-      if turn.route != .hubWarmWait {
-        model.turn?.route = .hub(sessionID: sessionID)
-      }
+      bindProviderReadyHubRoute(sessionID: sessionID, in: &model)
       if shouldProjectProviderConnectionAsAwaitingResponse(turn) {
         model.turn?.phase = .awaitingResponse
       }
@@ -1472,7 +1464,7 @@ struct VoiceTurnReducer {
       cancel(.bargeInReplacement, in: &model, effects: &effects)
       model.turn?.providerConnection = .ready
       model.turn?.sessionID = sessionID
-      model.turn?.route = .hub(sessionID: sessionID)
+      bindProviderReadyHubRoute(sessionID: sessionID, in: &model)
       if shouldProjectProviderConnectionAsAwaitingResponse(turn) {
         model.turn?.phase = .awaitingResponse
       }
@@ -2065,6 +2057,31 @@ struct VoiceTurnReducer {
   /// response projection during connection churn.
   private func shouldProjectProviderConnectionAsAwaitingResponse(_ turn: VoiceTurn) -> Bool {
     acceptsProviderOutput(turn.phase) || turn.hubCommitPending
+  }
+
+  /// Binds a freshly ready provider session to the hub route without stealing a
+  /// manager-owned warm capture.
+  ///
+  /// `.hubWarmWait` is this reducer's record that `PushToTalkManager` — not the
+  /// controller — still holds the turn's PCM in its bounded buffer, and is
+  /// waiting for the `prepareHubInput` effect that only `hubReady` emits. That
+  /// effect is the single place which flushes the manager buffer and commits a
+  /// released turn. Rewriting the route to `.hub` from any other
+  /// provider-ready transition both orphans that buffer (the controller replays
+  /// its own, unrelated buffer) and silently disarms the `.hubWarm` rescue
+  /// deadline, because `deadlineMatchesCurrentState` admits `.hubWarm` only
+  /// while the route reads `.hubWarmWait`. The turn is then parked in
+  /// `.finalizing` with no remaining deadline until the provider's idle socket
+  /// teardown minutes later.
+  ///
+  /// Every provider-ready transition must bind the route through here so a new
+  /// admission path cannot reintroduce that clobber.
+  private func bindProviderReadyHubRoute(
+    sessionID: VoiceSessionID,
+    in model: inout VoiceTurnModel
+  ) {
+    guard model.turn?.route != .hubWarmWait else { return }
+    model.turn?.route = .hub(sessionID: sessionID)
   }
 
   private func completionFencesSatisfied(_ turn: VoiceTurn?) -> Bool {

@@ -1,38 +1,11 @@
 name: Build Desktop Release Candidate
 
 on:
+  # Manual only: automatic push/schedule tagging was cutting a new macOS candidate
+  # tag on nearly every desktop-affecting main merge and every 15 minutes. Plan and
+  # publish a candidate deliberately via workflow_dispatch; qualification/promotion
+  # workflows remain unchanged once a tag exists.
   workflow_dispatch:
-  # Continuous deployment: plan a beta candidate on every macOS-affecting merge to
-  # main. The candidate flows through the two-machine qualification pipeline
-  # (desktop_qualify_beta.yml: Codemagic primary lane + self-hosted qualify-m1-studio
-  # and qualify-m4-mini fallbacks); on qualification success desktop_promote_beta.yml
-  # advances the beta channel to the Codemagic-built, notarized, Sparkle-signed
-  # artifact. The push filter is intentionally coarse (the planner does the precise
-  # releasable-change check, excluding CHANGELOG/AGENTS/changelog/Backend-Rust); the
-  # quiet-window, exact-SHA, and one-active-release fences still admit at most one
-  # candidate at a time, so bursts collapse to the newest SHA. Keep these paths in
-  # lockstep with DESKTOP_RELEASE_PATHS in plan-desktop-release.py; the alignment is
-  # enforced by test_push_paths_cover_releasable_desktop_paths.
-  push:
-    branches: [main]
-    paths:
-      - 'desktop/macos/**'
-      - 'codemagic.yaml'
-      - 'scripts/dev-harness/dev_harness/qualification.py'
-      - '.github/scripts/plan-desktop-release.py'
-      - '.github/scripts/desktop-release-source-identity.py'
-      - '.github/scripts/publish-desktop-candidate-tag.py'
-      - '.github/workflows/desktop_auto_release.yml'
-      - '.github/workflows/desktop-swift-ci.yml'
-  schedule:
-    # Poll every 15 min. The push trigger fires immediately on merge, but at that
-    # instant the change is inside the quiet window AND its required CI checks
-    # (Build & Tests / Release Compile / Release Eligibility, ~10-20 min) are not
-    # yet green, so the planner fail-closes. This frequent backstop re-evaluates
-    # shortly after those checks settle and the active-release fence clears, so a
-    # candidate reliably cuts without waiting for the next hour. Builds stay
-    # serialized by the one-active-release fence, so this cannot pile up builds.
-    - cron: '*/15 * * * *'
 
 permissions:
   contents: write
@@ -74,34 +47,33 @@ jobs:
       - name: Show release plan
         run: echo "${{ steps.plan.outputs.reason }}"
 
-  # Continuous deployment: candidate creation is gated only by the cheap, hosted
-  # CI checks the planner verifies (`Release Eligibility`, `Desktop Swift Build &
-  # Tests`, `Desktop Swift Release Compile` on the exact source SHA). The heavy
-  # validation runs AFTER the candidate exists, in the two-machine qualification
-  # pipeline (desktop_qualify_beta.yml) — a candidate that fails qualification is
-  # simply never promoted to Beta, so no self-hosted pre-candidate gate is needed.
-  # (The former trusted-M1 pre-tag-readiness gate was a single point of failure in
-  # front of immutable tag creation and contradicted "create on every change, then
-  # qualify"; desktop/macos/scripts/pre-tag-readiness.sh remains for local use.)
+  # Candidate publication is one serialized trusted-M1 transaction: after the
+  # immutable final-source binding it runs offline readiness, verifies that
+  # receipt, then performs the only tag mutation. No cross-job handoff can leave
+  # a stale receipt or duplicate M1 lifecycle in the gap.
   tag-release:
     needs: [plan-release]
     if: needs.plan-release.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macos, omi-desktop-qualification, omi-qual-m1-studio]
     concurrency:
       group: desktop-auto-release-tag-main
       cancel-in-progress: false
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
       - name: Generate Omi Bot token
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      # The native tag must be pushed by the Omi Bot installation, rather than
+      # the workflow's GITHUB_TOKEN. GitHub suppresses recursively generated
+      # events for GITHUB_TOKEN, which leaves Codemagic no tag webhook to build.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Recheck desktop release queue before tagging
         id: recheck
@@ -124,6 +96,7 @@ jobs:
         with:
           ref: ${{ steps.recheck.outputs.source_sha }}
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Compute next version and consolidate changelog
         if: steps.recheck.outputs.should_release == 'true'
@@ -165,6 +138,8 @@ jobs:
       - name: Commit changelog and prepare sync branch
         if: steps.recheck.outputs.should_release == 'true'
         id: changelog
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
@@ -178,27 +153,74 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # A rerun for the same source must reuse its immutable branch commit.
-          # The source-qualified branch name intentionally ignores stale legacy
-          # `changelog/v<version>` branches from an older planner source.
+          # Partial tag-release recovery: changelog may already be on main while
+          # the source-qualified branch tip is an orphan rewrite. Prefer a
+          # main-reachable consolidate commit. Always drop consolidate dirt
+          # before any branch checkout so reuse cannot fail on a dirty tree.
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git reset --hard HEAD
+          git clean -fd -- desktop/macos/CHANGELOG.json desktop/macos/changelog || true
+
+          BRANCH_TIP=""
           if git ls-remote --exit-code origin "refs/heads/$BRANCH" >/dev/null; then
             git fetch --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
-            CHANGELOG_COMMIT="$(git rev-parse "origin/$BRANCH^{commit}")"
-            test "$(git rev-parse "${CHANGELOG_COMMIT}^1")" = "$PLANNED_SOURCE_SHA"
-            git checkout -B "$BRANCH" "$CHANGELOG_COMMIT"
+            BRANCH_TIP="$(git rev-parse "origin/$BRANCH^{commit}")"
+          fi
+
+          RESOLVE_ARGS=(
+            python3 .github/scripts/resolve-desktop-changelog-sync.py
+            --repository-root .
+            --planned-source-sha "$PLANNED_SOURCE_SHA"
+            --version "$VERSION"
+            --main-ref origin/main
+            --repository "${{ github.repository }}"
+            --github-output
+          )
+          if [ -n "$BRANCH_TIP" ]; then
+            RESOLVE_ARGS+=(--branch-tip "$BRANCH_TIP")
+          fi
+          # Capture resolve into step outputs via GITHUB_OUTPUT.
+          RESOLVE_OUT="$RUNNER_TEMP/desktop-changelog-resolve-outputs.txt"
+          : > "$RESOLVE_OUT"
+          GITHUB_OUTPUT="$RESOLVE_OUT" "${RESOLVE_ARGS[@]}"
+          RESOLVE_MODE="$(grep '^mode=' "$RESOLVE_OUT" | tail -1 | cut -d= -f2-)"
+          RESOLVE_COMMIT="$(grep '^commit=' "$RESOLVE_OUT" | tail -1 | cut -d= -f2-)"
+          RESOLVE_PR_URL="$(grep '^pr_url=' "$RESOLVE_OUT" | tail -1 | cut -d= -f2-)"
+          RESOLVE_MERGED_MAIN="$(grep '^merged_main_sha=' "$RESOLVE_OUT" | tail -1 | cut -d= -f2-)"
+          RESOLVE_ON_MAIN="$(grep '^already_on_main=' "$RESOLVE_OUT" | tail -1 | cut -d= -f2-)"
+
+          if [ -n "$RESOLVE_COMMIT" ]; then
+            # already-on-main recovery after tip-bumps: consolidate^1 is the
+            # original planned source, not the current tip. Only enforce the
+            # parent identity when reusing a not-yet-merged branch tip.
+            if [ "$RESOLVE_ON_MAIN" != "true" ]; then
+              test "$(git rev-parse "${RESOLVE_COMMIT}^1")" = "$PLANNED_SOURCE_SHA"
+            fi
+            git checkout -B "$BRANCH" "$RESOLVE_COMMIT"
             {
               echo "changed=true"
-              echo "commit=$CHANGELOG_COMMIT"
+              echo "commit=$RESOLVE_COMMIT"
               echo "reused=true"
+              echo "already_on_main=$RESOLVE_ON_MAIN"
+              echo "pr_url=$RESOLVE_PR_URL"
+              echo "merged_main_sha=$RESOLVE_MERGED_MAIN"
+              echo "resolve_mode=$RESOLVE_MODE"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          # Fresh consolidate path: rebuild from the planned source tree.
+          git checkout --detach "$PLANNED_SOURCE_SHA"
+          TODAY=$(date -u +%Y-%m-%d)
+          python3 .github/scripts/desktop-changelog.py consolidate \
+            --version "$VERSION" \
+            --date "$TODAY" \
+            --write
           git add desktop/macos/CHANGELOG.json desktop/macos/changelog
           if git diff --cached --quiet; then
-            # Nothing needed to move through a PR. The direct tag path below
-            # still requires the planner SHA to be the fresh main tip.
+            # Nothing to PR. Direct tag path admits later non-desktop main commits.
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "already_on_main=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -210,6 +232,10 @@ jobs:
             echo "changed=true"
             echo "commit=$CHANGELOG_COMMIT"
             echo "reused=false"
+            echo "already_on_main=false"
+            echo "pr_url="
+            echo "merged_main_sha="
+            echo "resolve_mode=created"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create and regular-merge PR to sync changelog back to main
@@ -227,6 +253,26 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           PLANNED_SOURCE_SHA="${{ steps.recheck.outputs.source_sha }}"
           BRANCH="changelog/v${VERSION}-${PLANNED_SOURCE_SHA:0:12}"
+          CHANGELOG_COMMIT="${{ steps.changelog.outputs.commit }}"
+
+          # Changelog already on main from a partial prior tag-release: do not
+          # open a second PR. Reuse the merge commit + PR URL from resolve.
+          if [ "${{ steps.changelog.outputs.already_on_main }}" = "true" ]; then
+            PR_URL="${{ steps.changelog.outputs.pr_url }}"
+            MERGED_MAIN_SHA="${{ steps.changelog.outputs.merged_main_sha }}"
+            if [ -z "$PR_URL" ] || [ -z "$MERGED_MAIN_SHA" ]; then
+              echo "Changelog commit is on main but merge PR evidence is missing."
+              exit 1
+            fi
+            test "$(git merge-base --is-ancestor "$CHANGELOG_COMMIT" origin/main && echo ok)" = "ok"
+            PR_NUMBER=$(echo "$PR_URL" | awk -F/ '{print $NF}')
+            {
+              echo "number=$PR_NUMBER"
+              echo "url=$PR_URL"
+              echo "merged_main_sha=$MERGED_MAIN_SHA"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           PR_NUMBER=$(gh pr list \
             --head "$BRANCH" \
@@ -365,6 +411,41 @@ jobs:
           if-no-files-found: error
           overwrite: false
 
+      - name: Run ownership-scoped M1 pre-tag readiness
+        if: steps.final-plan.outputs.should_release == 'true'
+        timeout-minutes: 130
+        env:
+          OMI_READINESS_LANE: ci
+        run: |
+          set -euo pipefail
+          python3 desktop/macos/scripts/qualification-watchdog.py \
+            --label m1-pre-tag-readiness \
+            --heartbeat-seconds 45 \
+            --timeout-seconds 7200 \
+            -- desktop/macos/scripts/pre-tag-readiness.sh \
+              --source-repository "$GITHUB_WORKSPACE" \
+              --evidence "$RUNNER_TEMP/desktop-pre-tag-readiness.json" \
+              "${{ steps.identity.outputs.candidate_sha }}"
+
+      - name: Verify M1 readiness receipt
+        if: steps.final-plan.outputs.should_release == 'true'
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/verify-pre-tag-readiness.py verify \
+            --evidence "$RUNNER_TEMP/desktop-pre-tag-readiness.json" \
+            --source-sha "${{ steps.identity.outputs.candidate_sha }}"
+
+      - name: Retain redacted M1 readiness receipt
+        if: always() && steps.final-plan.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-pre-tag-readiness-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/desktop-pre-tag-readiness.json
+            ${{ runner.temp }}/desktop-pre-tag-runner-hygiene-${{ github.run_id }}-${{ github.run_attempt }}.json
+          if-no-files-found: error
+          overwrite: false
+
       - name: Publish immutable tag from exact live main source
         if: steps.final-plan.outputs.should_release == 'true'
         env:
@@ -390,3 +471,30 @@ jobs:
 
           git fetch --no-tags origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"
+
+      - name: Verify native Codemagic tag intake or dispatch fenced fallback
+        if: steps.final-plan.outputs.should_release == 'true'
+        env:
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+        run: |
+          # The helper waits the complete native-intake budget first. It posts at
+          # most one tag-bound fallback only after a final all-state same-tag
+          # absence fence; any existing same-tag build remains canonical.
+          python3 .github/scripts/check-codemagic-tag-intake.py \
+            --app-id "66c95e6ec76853c447b8bcbb" \
+            --workflow-id "omi-desktop-swift-release" \
+            --release-tag "${{ steps.version.outputs.release_tag }}" \
+            --source-sha "${{ steps.identity.outputs.candidate_sha }}" \
+            --timeout-seconds 600 \
+            --poll-seconds 15 \
+            --dispatch-fallback-on-absence \
+            --evidence "$RUNNER_TEMP/codemagic-native-tag-intake.json"
+
+      - name: Retain native Codemagic tag intake evidence
+        if: always() && steps.final-plan.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: codemagic-native-tag-intake-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/codemagic-native-tag-intake.json
+          if-no-files-found: error
+          overwrite: false

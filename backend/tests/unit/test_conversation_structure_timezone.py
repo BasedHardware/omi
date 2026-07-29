@@ -131,6 +131,9 @@ _conversation_processing_stub = sys.modules.get("utils.llm.conversation_processi
 if _conversation_processing_stub is not None and not hasattr(_conversation_processing_stub, "_local_started_at_iso"):
     sys.modules.pop("utils.llm.conversation_processing", None)
 
+# discard_parser only needs pydantic and langchain_core, so load the real module.
+_load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm" / "discard_parser.py")
+
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",

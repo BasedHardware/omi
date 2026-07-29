@@ -18,6 +18,7 @@ from utils.memory.canonical_memory_adapter import (
     memory_item_to_memorydb,
     read_canonical_memory_item,
     read_canonical_memories,
+    replace_conversation_sourced_memories,
     retract_conversation_sourced_memories,
     search_canonical_memories,
     search_result_to_memorydb,
@@ -170,7 +171,8 @@ def _validate_memory_list(memories: List[MemoryPayload]) -> List[MemoryDB]:
 
 
 def _legacy_read_memories(uid: str, *, limit: int = 100, offset: int = 0) -> List[MemoryDB]:
-    effective_limit = 5000 if offset == 0 else limit
+    # Bound list reads; do not expand first page to 5000 (prod GET 504s).
+    effective_limit = max(1, min(limit if limit else 100, 500))
     memories = memories_db.get_memories(uid, effective_limit, offset)
     return _validate_memory_list(memories)
 
@@ -482,6 +484,37 @@ class MemoryService:
             now=now,
         )
 
+    def read_pinned(
+        self,
+        uid: str,
+        memory_system: MemorySystem,
+        limit: int = 100,
+        offset: int = 0,
+        *,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
+        now: Optional[datetime] = None,
+    ) -> List[MemoryDB]:
+        """Read from the backend already selected and authorized by a request route.
+
+        External list routes resolve their request-scoped memory-system pin only
+        after checking the caller's default-read grant. Re-running the rollout
+        control reader inside ``read`` can disagree with that pin and silently
+        serve the legacy store for a canonical account. This seam keeps the
+        route's authorized selection authoritative without weakening grants or
+        exposing canonical provenance fields.
+        """
+
+        backend = self._canonical if memory_system == MemorySystem.CANONICAL else self._legacy
+        return backend.read(
+            uid,
+            limit=limit,
+            offset=offset,
+            device_scope_request=device_scope_request,
+            include_pending_processing=include_pending_processing,
+            now=now,
+        )
+
     def search(
         self,
         uid: str,
@@ -545,6 +578,22 @@ class MemoryService:
         if backend is self._legacy:
             return None
         return retract_conversation_sourced_memories(uid, conversation_id, db_client=self._db_client)
+
+    def replace_conversation_memories(
+        self,
+        uid: str,
+        conversation_id: str,
+        items: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        backend = self._resolve_mutation_backend(uid)
+        if backend is self._legacy:
+            raise RuntimeError("atomic conversation replacement requires canonical memory")
+        return replace_conversation_sourced_memories(
+            uid,
+            conversation_id,
+            items,
+            db_client=self._db_client,
+        )
 
     def create_external_memory(
         self,

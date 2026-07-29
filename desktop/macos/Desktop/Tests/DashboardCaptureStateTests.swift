@@ -106,7 +106,14 @@ final class DashboardCaptureStateTests: XCTestCase {
   func testSecondaryHomePagesReturnHomeOnEscape() throws {
     let source = try desktopHomeSource()
 
-    XCTAssertTrue(source.contains(".onExitCommand {\n          navigateHomeOnEscapeIfNeeded()\n        }"))
+    // Matched without leading indentation: the escape handler's contract is that
+    // it calls navigateHomeOnEscapeIfNeeded, not how deeply the view hierarchy
+    // that carries it happens to be nested. Pinning the indent made this fail
+    // when the content container was extracted into its own `some View`.
+    XCTAssertTrue(
+      source.range(
+        of: #"\.onExitCommand\s*\{\s*navigateHomeOnEscapeIfNeeded\(\)\s*\}"#,
+        options: .regularExpression) != nil)
     XCTAssertTrue(source.contains("[.conversations, .memories, .tasks, .rewind].contains(item)"))
     XCTAssertTrue(source.contains("selectedIndex = SidebarNavItem.dashboard.rawValue"))
     XCTAssertFalse(source.contains("[.conversations, .chat, .memories, .tasks, .rewind]"))
@@ -268,7 +275,9 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("onSelectDestination(destination)"))
     XCTAssertTrue(source.contains("selectedExportDestination = destination"))
     XCTAssertTrue(source.contains("if appProvider.apps.isEmpty && !appProvider.isLoading"))
-    XCTAssertTrue(source.contains("ViewThatFits(in: .horizontal)"))
+    // Responsive layout was extracted into AppsHeaderRow (AppsPageHeaderControls.swift);
+    // AppsPage now delegates to it instead of inlining ViewThatFits.
+    XCTAssertTrue(source.contains("AppsHeaderRow("))
     XCTAssertTrue(source.contains("private var searchField: some View"))
     XCTAssertTrue(source.contains("private var filterControls: some View"))
     XCTAssertFalse(source.contains("struct AppsCatalogContent: View"))

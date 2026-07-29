@@ -340,6 +340,24 @@ extension MemoryRecord {
     // Use backendId if available, otherwise use local ID prefixed with "local_"
     let memoryId = backendId ?? "local_\(id ?? 0)"
 
+    // A blank-content row has nothing to show, so drop it here rather than
+    // render an empty card. The client does not create these — both write
+    // paths guard on non-empty text — so an empty row means the backend sent
+    // one, and every refresh re-persists it.
+    //
+    // Only the four UI-facing reads route through this conversion, so the
+    // SQLite row survives and sync still reconciles it; the cost is that the
+    // memory also stops being deletable from this surface. That is the same
+    // trade the malformed-tier guard below already makes, and an unreadable
+    // card is the worse of the two.
+    guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      logError(
+        "MemoryRecord: excluding memory \(memoryId) with empty persisted content",
+        error: MemoryStorageError.syncFailed("Empty persisted memory content")
+      )
+      return nil
+    }
+
     // Parse category
     let memoryCategory = MemoryCategory(rawValue: category) ?? .system
     guard let memoryLayer = MemoryLayer(rawValue: tier) else {

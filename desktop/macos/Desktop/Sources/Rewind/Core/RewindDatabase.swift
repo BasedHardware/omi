@@ -108,16 +108,43 @@ actor RewindDatabase {
 
   /// A sanitized SQLite corruption/I/O classifier. Avoid logging DB paths or row data.
   private func isRecoverableDatabaseError(_ error: Error) -> Bool {
-    guard let dbError = error as? DatabaseError else { return false }
-    if isBusyDatabaseError(error) { return false }
-    let code = dbError.resultCode
-    let extendedCode = dbError.extendedResultCode.rawValue
-    return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+    if let dbError = error as? DatabaseError {
+      if isBusyDatabaseError(error) { return false }
+      let code = dbError.resultCode
+      let extendedCode = dbError.extendedResultCode.rawValue
+      return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+    }
+
+    // GRDB can bridge a SQLite failure through NSError before a storage actor
+    // reports it. NSError.code is meaningful only with its domain, so restrict
+    // this to known SQLite/GRDB domains to avoid rotating local storage when an
+    // unrelated POSIX or application error happens to share a numeric code.
+    let nsError = error as NSError
+    if isKnownSQLiteDomain(nsError.domain),
+      nsError.code == 10 || nsError.code == 11 || nsError.code == 6922
+    {
+      return true
+    }
+    let description = error.localizedDescription.lowercased()
+    return description.contains("sqlite error 10")
+      || description.contains("sqlite error 11")
+      || description.contains("sqlite error 6922")
   }
 
   private func isBusyDatabaseError(_ error: Error) -> Bool {
     guard let dbError = error as? DatabaseError else { return false }
     return dbError.resultCode == .SQLITE_BUSY
+  }
+
+  /// NSError domains that carry canonical SQLite result codes. GRDB bridges
+  /// SQLite errors through these before the storage actor reports a typed
+  /// `DatabaseError`; other domains may reuse the same numeric codes for
+  /// unrelated POSIX or application failures.
+  private func isKnownSQLiteDomain(_ domain: String) -> Bool {
+    domain == "GRDB"
+      || domain == "GRDB.DatabaseError"
+      || domain == "SQLite3"
+      || domain == "NSSQLiteErrorDomain"
   }
 
   /// Handle corruption/I/O failures from cleanup and other maintenance operations.
@@ -3203,14 +3230,16 @@ actor RewindDatabase {
 
   /// Expand a search query by splitting compound words (camelCase, numbers)
   /// e.g., "ActivityPerformance" -> "(ActivityPerformance* OR Activity* OR Performance*)"
-  private func expandSearchQuery(_ query: String) -> String {
+  ///
+  /// Pure — depends on no actor state, so it is `nonisolated` and directly testable.
+  nonisolated func expandSearchQuery(_ query: String) -> String {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "" }
 
     // Split query into words
     let words = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
 
-    let expandedWords = words.map { word -> String in
+    let expandedWords = words.compactMap { word -> String? in
       var parts: [String] = [word]
 
       // Split camelCase: "ActivityPerformance" -> ["Activity", "Performance"]
@@ -3227,6 +3256,11 @@ actor RewindDatabase {
 
       // Remove duplicates and create OR query with prefix matching
       let uniqueParts = Array(Set(parts)).filter { $0.count >= 2 }
+      // A single-character word (e.g. the "2" and "1" in a "2.1.220" window title) leaves
+      // nothing to match on. Contribute no term rather than an empty group: emitting "()"
+      // makes the whole MATCH invalid with `fts5: syntax error near ")"`, which fails the
+      // entire search instead of just this word.
+      guard !uniqueParts.isEmpty else { return nil }
       if uniqueParts.count == 1 {
         return "\(uniqueParts[0])*"
       } else {
@@ -3239,7 +3273,7 @@ actor RewindDatabase {
   }
 
   /// Split camelCase string into parts
-  private func splitCamelCase(_ string: String) -> [String] {
+  nonisolated private func splitCamelCase(_ string: String) -> [String] {
     var parts: [String] = []
     var currentPart = ""
 
@@ -3260,7 +3294,7 @@ actor RewindDatabase {
   }
 
   /// Split string on number boundaries
-  private func splitOnNumbers(_ string: String) -> [String] {
+  nonisolated private func splitOnNumbers(_ string: String) -> [String] {
     var parts: [String] = []
     var currentPart = ""
     var wasDigit = false

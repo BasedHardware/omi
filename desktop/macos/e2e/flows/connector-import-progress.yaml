@@ -16,6 +16,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/APIClient+XConnector.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportOperations.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportRunner.swift
+  - desktop/macos/Desktop/Sources/Integrations/IntegrationConnectTelemetry.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingMemoryLogImportService.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift

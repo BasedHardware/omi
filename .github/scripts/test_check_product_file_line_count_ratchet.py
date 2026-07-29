@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location(
@@ -104,7 +105,6 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
             "backend/tests/test_big.py",
             "backend/routers/generated.gen.py",
             "desktop/macos/Desktop/Generated/Big.swift",
-            "desktop/macos/Backend-Rust/vendor/big.rs",
         ]
 
         for relative in excluded:
@@ -131,9 +131,7 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
             },
         )
         with self.assertRaisesRegex(ValueError, "belongs in"):
-            RATCHET.validate_baseline(
-                baseline({router: 1600}), RATCHET.baseline_shard_relative(floating_control_bar)
-            )
+            RATCHET.validate_baseline(baseline({router: 1600}), RATCHET.baseline_shard_relative(floating_control_bar))
         with self.assertRaisesRegex(ValueError, "duplicate baseline entry"):
             RATCHET.aggregate_baseline_shards(
                 {
@@ -141,6 +139,18 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
                     RATCHET.baseline_shard_relative(router): baseline({router: 1600}),
                 }
             )
+
+
+    def test_accepts_a_retired_shard_from_the_merge_base(self) -> None:
+        retired_shard = f"{RATCHET.BASELINE_DIRECTORY_RELATIVE}/desktop-rust.json"
+        retired_source = "desktop/macos/Retired/Large.rs"
+        retired_baseline = baseline({retired_source: 1600})
+
+        self.assertIsNone(RATCHET._expected_shard(retired_shard))
+        self.assertEqual(
+            RATCHET.aggregate_baseline_shards({retired_shard: retired_baseline}),
+            retired_baseline,
+        )
 
     def test_downward_update_writes_only_the_owning_shard(self) -> None:
         router = "backend/routers/large.py"
@@ -187,6 +197,29 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
 
         self.assertEqual(legacy_ref, legacy)
         self.assertEqual(sharded_ref, legacy)
+
+    def test_baseline_git_reads_decode_utf8_explicitly(self) -> None:
+        router = "backend/routers/large.py"
+        expected = baseline({router: 1600}, {router: "Unicode guard: \u96ea"})
+        shard_relative = RATCHET.baseline_shard_relative(router)
+        completed = subprocess.CompletedProcess
+
+        with patch.object(
+            RATCHET.subprocess,
+            "run",
+            side_effect=[
+                completed([], 0, stdout=f"{shard_relative}\n", stderr=""),
+                completed([], 0, stdout=RATCHET.serialize_baseline(expected), stderr=""),
+                completed([], 0, stdout="", stderr=""),
+                completed([], 0, stdout=RATCHET.serialize_baseline(expected), stderr=""),
+            ],
+        ) as run:
+            self.assertEqual(RATCHET.baseline_at_ref(self.root, "sharded"), expected)
+            self.assertEqual(RATCHET.baseline_at_ref(self.root, "legacy"), expected)
+
+        self.assertEqual(len(run.call_args_list), 4)
+        for call in run.call_args_list:
+            self.assertEqual(call.kwargs.get("encoding"), "utf-8")
 
 
 if __name__ == "__main__":

@@ -220,13 +220,31 @@ class MemoriesProvider extends ChangeNotifier {
 
     if (_filterThisDeviceOnly) {
       await _ensureClientDeviceInitialized();
-      if (generation != _sessionGeneration) return;
+      if (generation != _sessionGeneration) {
+        return;
+      }
     }
 
-    final result = await getMemoriesResult(limit: limit, thisDeviceOnly: _filterThisDeviceOnly);
-    if (generation != _sessionGeneration) return;
-    _memories = result.memories;
-    _deviceScopeSupported = result.deviceScopeSupported;
+    // Page until a short page: backend no longer expands the first page to 5000
+    // (prod GET /v3/memories 504s). Cap total fetch so a huge account cannot hang the UI.
+    const maxPages = 20;
+    final all = <Memory>[];
+    var offset = 0;
+    var deviceScopeSupported = true;
+    for (var page = 0; page < maxPages; page++) {
+      final result = await getMemoriesResult(limit: limit, offset: offset, thisDeviceOnly: _filterThisDeviceOnly);
+      if (generation != _sessionGeneration) {
+        return;
+      }
+      deviceScopeSupported = result.deviceScopeSupported;
+      all.addAll(result.memories);
+      if (result.memories.length < limit) {
+        break;
+      }
+      offset += result.memories.length;
+    }
+    _memories = all;
+    _deviceScopeSupported = deviceScopeSupported;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
