@@ -91,6 +91,10 @@ final class SBOnboardingModel: ObservableObject {
   /// kernel context. Showing the chord sooner invites a first PTT turn while its
   /// only response route is still cold.
   @Published var screenDemoPTTReady = false
+  /// Bridge startup can fail before an authenticated response route exists. In
+  /// that state, leave PTT unarmed and offer an explicit retry or skip instead
+  /// of presenting a shortcut which cannot answer.
+  @Published var screenDemoPTTUnavailable = false
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
   var screenDemoSetupTask: Task<Void, Never>?
@@ -110,6 +114,9 @@ final class SBOnboardingModel: ObservableObject {
   /// surfaces read. A context row is not connected until this store records a
   /// completed import, never merely because a browser session passed a probe.
   let importConnectorStatusStore: ImportConnectorStatusStore?
+  /// Backend writes for editable answers are per-field serialized. Revisiting a
+  /// question never lets an earlier request finish after the user's revision.
+  private let answerWriteGate = OnboardingAnswerWriteGate()
   private let onComplete: (() -> Void)?
   var streamTask: Task<Void, Never>?
   /// Permission-grant pollers, one per permission key. Keyed so requesting a
@@ -412,7 +419,9 @@ final class SBOnboardingModel: ObservableObject {
   func answerName() {
     let trimmed = nameDraft.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return }
-    Task { await AuthService.shared.updateGivenName(trimmed) }
+    answerWriteGate.enqueue(.name) { [trimmed] in
+      await AuthService.shared.updateGivenName(trimmed)
+    }
     advance(userAnswer: trimmed, to: .howHeard)
   }
 
@@ -422,7 +431,9 @@ final class SBOnboardingModel: ObservableObject {
     howHeard = source
     UserDefaults.standard.set(source, forKey: DefaultsKey.onboardingHowDidYouHearSource)
     AnalyticsManager.shared.onboardingHowDidYouHear(source: source)
-    Task { try? await APIClient.shared.updateOnboardingAcquisitionSource(source) }
+    answerWriteGate.enqueue(.acquisitionSource) { [source] in
+      _ = try? await APIClient.shared.updateOnboardingAcquisitionSource(source)
+    }
     advance(userAnswer: source, to: .language)
   }
 
@@ -432,7 +443,9 @@ final class SBOnboardingModel: ObservableObject {
     languageName = name
     languageDraft = name
     AssistantSettings.shared.voiceLanguages = [code]
-    Task { _ = try? await APIClient.shared.updateUserLanguage(code) }
+    answerWriteGate.enqueue(.language) { [code] in
+      _ = try? await APIClient.shared.updateUserLanguage(code)
+    }
     advance(userAnswer: name, to: .role)
   }
 

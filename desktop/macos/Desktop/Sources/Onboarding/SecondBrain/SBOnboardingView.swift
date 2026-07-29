@@ -520,6 +520,17 @@ struct SBOnboardingView: View {
           .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
           .fixedSize(horizontal: false, vertical: true)
         }
+      } else if model.screenDemoPTTUnavailable {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Voice setup isn't available yet. You can retry, or skip for now.")
+            .geist(size: 14).foregroundStyle(sb.ink(.w6))
+          Button("Try again") {
+            model.startScreenDemo()
+          }
+          .buttonStyle(.plain)
+          .geist(size: 14, weight: .medium)
+          .foregroundStyle(sb.ink(.w85))
+        }
       } else {
         HStack(spacing: 8) {
           ProgressView().controlSize(.small)

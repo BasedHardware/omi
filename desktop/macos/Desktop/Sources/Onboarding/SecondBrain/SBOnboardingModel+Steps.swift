@@ -469,6 +469,7 @@ extension SBOnboardingModel {
   func startScreenDemo() {
     screenDemoDone = false
     screenDemoPTTReady = false
+    screenDemoPTTUnavailable = false
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
     FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
     resetFloatingBarConversation()
@@ -493,11 +494,15 @@ extension SBOnboardingModel {
   /// boundary can be regression-tested: leaving the stage during a cold bridge
   /// start must not attach fresh event monitors to the next onboarding page.
   func activateScreenDemoPTTAfterBridgeWarmup(
-    warmup: @escaping @MainActor () async -> Void,
+    warmup: @escaping @MainActor () async -> Bool,
     activate: @escaping @MainActor () -> Void
   ) async {
-    await warmup()
+    let bridgeReady = await warmup()
     guard !Task.isCancelled, step == .screenDemo else { return }
+    guard bridgeReady else {
+      screenDemoPTTUnavailable = true
+      return
+    }
     activate()
   }
 
@@ -536,6 +541,7 @@ extension SBOnboardingModel {
     voiceCancellable = nil
     screenDemoDone = false
     screenDemoPTTReady = false
+    screenDemoPTTUnavailable = false
     ShortcutSettings.shared.pttTranscriptionModeDemoOverride = nil
     resetFloatingBarConversation()
     PushToTalkManager.shared.cleanup()

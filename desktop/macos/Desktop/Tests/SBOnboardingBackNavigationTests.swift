@@ -59,7 +59,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     var activated = false
 
     await model.activateScreenDemoPTTAfterBridgeWarmup(
-      warmup: {},
+      warmup: { true },
       activate: { activated = true }
     )
 
@@ -68,10 +68,29 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     activated = false
     model.step = .screenDemo
     await model.activateScreenDemoPTTAfterBridgeWarmup(
-      warmup: { model.step = .agents },
+      warmup: {
+        model.step = .agents
+        return true
+      },
       activate: { activated = true }
     )
 
     XCTAssertFalse(activated, "A late bridge warmup must not arm PTT after navigating away")
+  }
+
+  func testVoiceDemoKeepsPTTUnarmedWhenBridgeWarmupFails() async {
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .screenDemo
+    var activated = false
+
+    await model.activateScreenDemoPTTAfterBridgeWarmup(
+      warmup: { false },
+      activate: { activated = true }
+    )
+
+    XCTAssertFalse(activated)
+    XCTAssertFalse(model.screenDemoPTTReady)
+    XCTAssertTrue(model.screenDemoPTTUnavailable)
   }
 }

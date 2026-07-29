@@ -1553,9 +1553,9 @@ class ChatProvider: ObservableObject {
   }
 
   /// Pre-start the active bridge so the first query doesn't wait for process launch
-  func warmupBridge() async {
+  func warmupBridge() async -> Bool {
     await preparePromptContextIfNeeded()
-    _ = await ensureBridgeStarted()
+    return await ensureBridgeStarted()
   }
 
   /// Drop a cached agent surface so the next query recreates it with fresh prompt context.
