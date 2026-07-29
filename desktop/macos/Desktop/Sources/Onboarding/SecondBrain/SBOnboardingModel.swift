@@ -13,6 +13,24 @@ import Foundation
 /// `SBOnboardingModel+Steps.swift`.
 @MainActor
 final class SBOnboardingModel: ObservableObject {
+  enum CaptureSelection: Equatable {
+    case onlyDuringMeetings
+    case continuous
+
+    var systemAudioCaptureMode: AssistantSettings.SystemAudioCaptureMode {
+      switch self {
+      case .onlyDuringMeetings: .onlyDuringMeetings
+      case .continuous: .always
+      }
+    }
+
+    var startsListeningImmediately: Bool {
+      self == .continuous
+    }
+  }
+
+  static let defaultCaptureSelection: CaptureSelection = .onlyDuringMeetings
+
   enum Step: Int, CaseIterable {
     case promise, name, howHeard, language, role
     case mic, systemAudio, screen, files, accessibility, automation
@@ -210,8 +228,6 @@ final class SBOnboardingModel: ObservableObject {
     case .context:
       return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
-      // The shortcut chord is rendered as keycap chips in `captureWidget` (a
-      // streamed Text can't host inline keycap views), so it's omitted here.
       return
         "You're all set, \(name). One last thing: should I listen all the time, or only during your meetings?"
     }
@@ -224,10 +240,6 @@ final class SBOnboardingModel: ObservableObject {
     if !stored.isEmpty { return stored }
     return "friend"
   }
-
-  /// The chosen open-Omi chord as individual tokens, rendered as keycap chips in
-  /// `captureWidget` (e.g. ⌘ + O) rather than plain glyphs in the message copy.
-  var summonTokens: [String] { ShortcutSettings.shared.askOmiShortcut.displayTokens }
 
   // MARK: lifecycle
 
@@ -482,14 +494,9 @@ final class SBOnboardingModel: ObservableObject {
 
   // MARK: capture choice → completes onboarding
 
-  func captureContinuous() {
-    AssistantSettings.shared.systemAudioCaptureMode = .always
-    complete(startListening: true)
-  }
-
-  func captureMeetingsOnly() {
-    AssistantSettings.shared.systemAudioCaptureMode = .onlyDuringMeetings
-    complete(startListening: false)
+  func capture(_ selection: CaptureSelection) {
+    AssistantSettings.shared.systemAudioCaptureMode = selection.systemAudioCaptureMode
+    complete(startListening: selection.startsListeningImmediately)
   }
 
   /// Skip the rest of onboarding: mark it complete and drop straight to the Chat

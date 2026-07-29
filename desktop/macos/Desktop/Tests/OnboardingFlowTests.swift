@@ -425,6 +425,24 @@ final class OnboardingFlowTests: XCTestCase {
       "SBInkButton must wire opted-in proceed actions to Return")
   }
 
+  func testSecondBrainCaptureDefaultsToMeetingsWithoutShortcutReminder() throws {
+    // omi-test-quality: source-inspection -- static contract: verifies the SwiftUI capture-choice hierarchy and copy
+    let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
+    let defaultChoice = try XCTUnwrap(
+      secondBrainSource.range(of: "model.capture(SBOnboardingModel.defaultCaptureSelection)"))
+    let continuousChoice = try XCTUnwrap(secondBrainSource.range(of: "model.capture(.continuous)"))
+
+    XCTAssertLessThan(
+      defaultChoice.lowerBound,
+      continuousChoice.lowerBound,
+      "Meeting-only recording must be the first capture choice")
+    XCTAssertTrue(
+      secondBrainSource[defaultChoice.lowerBound..<continuousChoice.lowerBound]
+        .contains(".keyboardShortcut(.defaultAction)"),
+      "Return must choose the meeting-only capture default")
+    XCTAssertFalse(secondBrainSource.contains("reaches me anytime"))
+  }
+
   // Regression: arrow navigation must be computed from persisted step state and
   // applied by the mounted view — the NSEvent monitor's captured view copy drops
   // @AppStorage writes on some macOS versions. These cover the extracted

@@ -674,33 +674,24 @@ struct SBOnboardingView: View {
 
   private var captureWidget: some View {
     VStack(spacing: 8) {
-      // The chosen open-Omi chord as keycap chips (e.g. ⌘ O), matching the ⌥ keycap
-      // on the demo step — instead of plain "⌘O" glyphs buried in the message copy.
-      if !model.summonTokens.isEmpty {
-        HStack(spacing: 5) {
-          ForEach(model.summonTokens, id: \.self) { tok in keycap(tok) }
-          Text("reaches me anytime").geist(size: 14).foregroundStyle(sb.ink(.w85))
-          Spacer(minLength: 0)
-        }
-        .padding(.bottom, 2)
-      }
       Button {
-        model.captureContinuous()
-      } label: {
-        Text("● Start listening — continuously").geist(size: 14, weight: .semibold).foregroundStyle(sb.inkInverted)
-          .frame(maxWidth: .infinity).padding(.vertical, 11)
-          .background(RoundedRectangle(cornerRadius: 11).fill(sb.ink))
-      }
-      .buttonStyle(.plain)
-      Button {
-        model.captureMeetingsOnly()
+        model.capture(SBOnboardingModel.defaultCaptureSelection)
       } label: {
         HStack(spacing: 4) {
-          Text("Only during meetings").geist(size: 14).foregroundStyle(sb.ink(.w85))
-          Text("· from my calendar").geist(size: 12).foregroundStyle(sb.ink(.w4))
+          Text("● Only during meetings").geist(size: 14, weight: .semibold).foregroundStyle(sb.inkInverted)
+          Text("· from my calendar").geist(size: 12).foregroundStyle(sb.inkInverted.opacity(0.7))
         }
         .frame(maxWidth: .infinity).padding(.vertical, 11)
-        .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w18), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 11).fill(sb.ink))
+      }
+      .buttonStyle(.plain)
+      .keyboardShortcut(.defaultAction)
+      Button {
+        model.capture(.continuous)
+      } label: {
+        Text("Start listening — continuously").geist(size: 14).foregroundStyle(sb.ink(.w85))
+          .frame(maxWidth: .infinity).padding(.vertical, 11)
+          .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w18), lineWidth: 1))
       }
       .buttonStyle(.plain)
     }
