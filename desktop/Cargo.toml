@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "shared-rust",
-    "macos/Backend-Rust",
 ]
 resolver = "2"
 
