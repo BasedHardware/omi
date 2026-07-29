@@ -51,7 +51,7 @@ def _candidate(**overrides):
         'setting': 'the flat on Rua da Prata at eight in the morning, boxes against the wall',
         'tone': 'apprehension with relief underneath it',
         'imperative': 'Name the date out loud. The waiting is the only part that is optional.',
-        'evidence': ['Circling the move again (2026-07-26)'],
+        'evidence': ['conversation:conv-1'],
         'grounded': True,
     }
     candidate.update(overrides)
@@ -129,6 +129,44 @@ def test_claiming_grounded_while_citing_nothing_is_not_grounded():
     assert selection.metadata['fell_through'] == 1
 
 
+def test_fabricated_citation_text_cannot_assert_its_way_past_the_packet():
+    selection, _, _ = _run(
+        _packet(),
+        [
+            _candidate(subject='invented', evidence=['conversation:does-not-exist']),
+            _candidate(subject='the move'),
+        ],
+    )
+
+    assert selection.subject.subject == 'the move'
+    assert selection.metadata['fell_through_reasons'] == ['unknown_evidence_reference']
+
+
+def test_goal_context_alone_cannot_ground_a_candidate():
+    packet = assemble_packet(
+        conversations=[
+            {
+                'id': 'conv-1',
+                'created_at': NOW,
+                'structured': {'title': 'The move', 'overview': 'Circling the move again.'},
+            }
+        ],
+        action_items=[],
+        goal={'title': 'Make the move'},
+        now=NOW,
+    )
+    selection, _, _ = _run(
+        packet,
+        [
+            _candidate(subject='goal only', evidence=['goal:active']),
+            _candidate(subject='the move'),
+        ],
+    )
+
+    assert selection.subject.subject == 'the move'
+    assert selection.metadata['fell_through_reasons'] == ['no_grounding_reference']
+
+
 def test_a_blank_imperative_does_not_survive_the_gate():
     selection, _, _ = _run(
         _packet(),
@@ -174,6 +212,7 @@ def test_the_prompt_carries_the_evidence_and_the_builders_exemplars():
     prompt = fake.structured.prompts[0]
 
     assert 'Circling the move again.' in prompt
+    assert '[conversation:conv-1]' in prompt
     # The register is carried by the builder's own lines, not by an instruction about tone.
     assert 'The place you keep imagining is a decision, not a daydream.' in prompt
 

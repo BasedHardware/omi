@@ -79,6 +79,19 @@ class EvidencePacket:
     action_items: tuple[ActionItemEvidence, ...]
     goal: Optional[GoalEvidence]
 
+    def grounding_reference_ids(self) -> tuple[str, ...]:
+        """Stable references that can ground a subject, without copying personal prose."""
+        references = [f'conversation:{item.id}' for item in self.conversations if item.id]
+        references.extend(f'action_item:{item.id}' for item in self.action_items if item.id)
+        return tuple(references)
+
+    def reference_ids(self) -> tuple[str, ...]:
+        """Every reference the selector may cite, including goal context."""
+        references = list(self.grounding_reference_ids())
+        if self.goal is not None:
+            references.append('goal:active')
+        return tuple(references)
+
     def signal_summary(self) -> dict[str, Any]:
         """What this packet was built from, in a form that is safe to persist and log.
 
@@ -103,7 +116,10 @@ class EvidencePacket:
         if self.conversations:
             lines = ['CONVERSATIONS (oldest first):']
             for conversation in self.conversations:
-                lines.append(f'- [{_format_date(conversation.created_at)}] {conversation.title}')
+                lines.append(
+                    f'- [conversation:{conversation.id}] '
+                    f'[{_format_date(conversation.created_at)}] {conversation.title}'
+                )
                 lines.append(f'  {conversation.overview}')
             sections.append('\n'.join(lines))
 
@@ -112,11 +128,11 @@ class EvidencePacket:
             for item in self.action_items:
                 age = 'age unknown' if item.age_days is None else f'{item.age_days}d old'
                 overdue = '' if item.overdue_days is None else f', overdue {item.overdue_days}d'
-                lines.append(f'- {item.description} ({age}{overdue})')
+                lines.append(f'- [action_item:{item.id}] {item.description} ({age}{overdue})')
             sections.append('\n'.join(lines))
 
         if self.goal is not None:
-            lines = [f'ACTIVE GOAL: {self.goal.title}']
+            lines = [f'ACTIVE GOAL [goal:active]: {self.goal.title}']
             if self.goal.desired_outcome:
                 lines.append(f'  desired outcome: {self.goal.desired_outcome}')
             sections.append('\n'.join(lines))

@@ -36,7 +36,7 @@ def _subject(stage: ProjectionStage) -> SelectedSubject:
         setting=SETTING,
         tone=TONE,
         imperative='The place you keep imagining is a decision, not a daydream.',
-        evidence=('Circling the move again (2026-07-26)',),
+        evidence=('conversation:conv-1',),
     )
 
 

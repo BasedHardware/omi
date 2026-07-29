@@ -108,7 +108,7 @@ def select_subject(
 
     rejections: list[str] = []
     for index, candidate in enumerate(candidates):
-        selected, reason = _admit(candidate)
+        selected, reason = _admit(candidate, packet)
         if selected is None:
             rejections.append(reason or 'rejected')
             continue
@@ -139,7 +139,7 @@ def select_subject(
     )
 
 
-def _admit(candidate: SubjectCandidate) -> tuple[Optional[SelectedSubject], str]:
+def _admit(candidate: SubjectCandidate, packet: EvidencePacket) -> tuple[Optional[SelectedSubject], str]:
     """Apply the output gate. Returns `(None, reason)` for a candidate that does not survive."""
     if not candidate.grounded:
         return None, 'self_reported_ungrounded'
@@ -149,6 +149,11 @@ def _admit(candidate: SubjectCandidate) -> tuple[Optional[SelectedSubject], str]
     evidence = tuple(item.strip() for item in candidate.evidence if item and item.strip())
     if not evidence:
         return None, 'no_evidence_cited'
+    allowed_references = set(packet.reference_ids())
+    if any(reference not in allowed_references for reference in evidence):
+        return None, 'unknown_evidence_reference'
+    if not set(evidence).intersection(packet.grounding_reference_ids()):
+        return None, 'no_grounding_reference'
 
     subject = candidate.subject.strip()
     projection = candidate.projection.strip()
@@ -234,8 +239,10 @@ def build_selection_prompt(
             'exposed, and so on, with the shade of it that matters. Do not name colours; the '
             'light is derived from this.\n'
             '  imperative  — the line that ships beside the image\n'
-            '  evidence    — short references to the material below that produced this '
-            'candidate. Quote or point at the specific conversations and items.\n'
+            '  evidence    — one or more exact reference IDs from the material below, such '
+            'as conversation:abc or action_item:def. Return only those IDs, without brackets '
+            'or commentary. At least one conversation or action-item ID is required; '
+            'goal:active can add context but cannot ground a candidate by itself.\n'
             '  grounded    — true only if the imperative follows from the evidence you cited. '
             'If you had to supply the substance yourself, it is false. Say so; a later '
             'candidate will be used, and that is the correct outcome.'

@@ -28,7 +28,7 @@ SUBJECT = SelectedSubject(
     setting='the Lisbon kitchen at first light, the laptop open beside a cold coffee',
     tone='apprehension with something exhilarated underneath it',
     imperative='The place you keep imagining is a decision, not a daydream.',
-    evidence=('Circling the move again (2026-07-26)',),
+    evidence=('conversation:conv-1',),
 )
 
 PROFILE = EmotionProfile(
@@ -108,7 +108,7 @@ def test_the_persisted_document_records_what_produced_it(stub_reads):
 
     assert projection['subject'] == 'the move'
     assert projection['stage'] == 'threshold'
-    assert projection['evidence'] == ['Circling the move again (2026-07-26)']
+    assert projection['evidence'] == ['conversation:conv-1']
     assert projection['selection']['fell_through'] == 1
     assert projection['selection']['signals']['conversation_ids'] == ['conv-1']
     # The rated charge is recorded whole: the vector, the spread across completions and the

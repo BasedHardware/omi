@@ -58,6 +58,7 @@ def test_rich_corpus_carries_conversation_prose_oldest_first():
     rendered = packet.as_prompt_text()
     assert 'First mention of a move.' in rendered
     assert '2026-07-23' in rendered and '2026-07-27' in rendered
+    assert '[conversation:conv-5]' in rendered
 
 
 def test_discarded_and_overview_less_conversations_are_excluded():
@@ -92,6 +93,7 @@ def test_open_action_items_carry_computed_age_and_overdue_days():
     assert item.age_days == 14
     assert item.overdue_days == 13
     assert 'overdue 13' in packet.as_prompt_text()
+    assert '[action_item:item-Return company laptop]' in packet.as_prompt_text()
 
 
 def test_action_item_with_a_future_due_date_is_not_overdue():
@@ -165,3 +167,22 @@ def test_signal_summary_records_what_selected_from_without_copying_the_material(
     }
     # Metadata travels further than the packet does; it must not carry the prose itself.
     assert 'Talked about the move again.' not in str(summary)
+
+
+def test_reference_ids_distinguish_grounding_material_from_goal_context():
+    packet = assemble_packet(
+        conversations=[_conversation(1, 'Talked about the move again.')],
+        action_items=[_action_item('Return company laptop')],
+        goal={'title': 'Leave the job well'},
+        now=NOW,
+    )
+
+    assert packet.grounding_reference_ids() == (
+        'conversation:conv-1',
+        'action_item:item-Return company laptop',
+    )
+    assert packet.reference_ids() == (
+        'conversation:conv-1',
+        'action_item:item-Return company laptop',
+        'goal:active',
+    )
