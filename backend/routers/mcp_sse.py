@@ -1598,7 +1598,7 @@ def mcp_authorize(
 
 
 @router.post("/authorize", tags=["mcp"], response_model=McpAuthorizeConsentResponse)
-def mcp_authorize_consent(
+async def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
@@ -1610,10 +1610,22 @@ def mcp_authorize_consent(
     code_challenge_method: Optional[str] = Form(None),
 ):
     try:
-        _, scopes = _validate_authorize_request(
-            response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
+        _, scopes = await run_blocking(
+            db_executor,
+            _validate_authorize_request,
+            response_type,
+            client_id,
+            redirect_uri,
+            resource,
+            scope,
+            code_challenge,
+            code_challenge_method,
         )
-        decoded_token: Dict[str, Any] = firebase_admin.auth.verify_id_token(firebase_id_token)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+        decoded_token: Dict[str, Any] = await run_blocking(
+            critical_executor,
+            firebase_admin.auth.verify_id_token,  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+            firebase_id_token,
+        )
         uid = cast(str, decoded_token["uid"])
     except firebase_admin.auth.InvalidIdTokenError:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
@@ -1622,9 +1634,17 @@ def mcp_authorize_consent(
             return _oauth_error("invalid_request", str(e))
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
 
-    grant = mcp_oauth_db.create_or_update_grant(uid, client_id, resource, scopes)
-    code = mcp_oauth_db.issue_authorization_code(
-        uid, grant["id"], client_id, redirect_uri, resource, scopes, cast(str, code_challenge)
+    grant = await run_blocking(db_executor, mcp_oauth_db.create_or_update_grant, uid, client_id, resource, scopes)
+    code = await run_blocking(
+        db_executor,
+        mcp_oauth_db.issue_authorization_code,
+        uid,
+        grant["id"],
+        client_id,
+        redirect_uri,
+        resource,
+        scopes,
+        cast(str, code_challenge),
     )
     return {"redirect_uri": _redirect_with_code(redirect_uri, code, state)}
 

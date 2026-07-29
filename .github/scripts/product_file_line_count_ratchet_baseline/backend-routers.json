@@ -3,7 +3,7 @@
     "backend/routers/apps.py": 2387,
     "backend/routers/chat.py": 1588,
     "backend/routers/developer.py": 2263,
-    "backend/routers/mcp_sse.py": 1865,
+    "backend/routers/mcp_sse.py": 1885,
     "backend/routers/sync.py": 2058,
     "backend/routers/users.py": 2076
   },
@@ -11,7 +11,7 @@
     "backend/routers/apps.py": "POST /v1/apps/enable reads is_setup_completed through _setup_completed_from_response so a developer-controlled body that is non-JSON or not an object returns the intended 400 instead of a 500 (46 prod occurrences Jul 21-28); the guard stays in the route that owns the enable response contract.",
     "backend/routers/chat.py": "Merging the Windows-port chat surface with main combined the stream-error fallback (answered guard) with mains journey/attempt observability in the same SSE generators; +11 lines of combined guard flow, no new route.",
     "backend/routers/developer.py": "GET /v1/dev/user/memories and /vector/search both serve the authoritative legacy memories collection for legacy-cohort accounts with no rollout state (#9892/#10203), keeping the narrow deny/legacy-fallback decision in the route that owns the read contract.",
-    "backend/routers/mcp_sse.py": "MCP SSE memory reads route their legacy-fallback decision through the shared mcp_legacy_read_authorized helper (#9892); one import line. +7 so a refused memory read reports its reason instead of an empty success (#10735): the classification and wire shape live in utils/mcp_memories.mcp_denied_read_payload, leaving only the raise at the two tool branches that own the response contract.",
+    "backend/routers/mcp_sse.py": "MCP SSE memory reads route their legacy-fallback decision through the shared mcp_legacy_read_authorized helper (#9892); one import line. +7 so a refused memory read reports its reason instead of an empty success (#10735): the classification and wire shape live in utils/mcp_memories.mcp_denied_read_payload, leaving only the raise at the two tool branches that own the response contract. +20 keeps Firebase verification on the critical executor and consent validation/grant/code Firestore operations on the database executor, preserving the verified UID before a client-agnostic OAuth grant is minted.",
     "backend/routers/sync.py": "Fresh Sync's daily ceiling remains beside the existing fresh-admission gates, before staged audio or durable worker work is created. Lifecycle-fenced workers are terminalized at this Cloud Tasks boundary so released WAL clients do not retry an owner they no longer own; +2 for the queued-dispatch-lost stale finalization path (#10033).",
     "backend/routers/users.py": "GET /v1/users/subscription serializes the new mobile plus/max plans as `unlimited` for clients whose plan enum predates them, so day-one buyers read as paid instead of Free (mirrors the existing operator remap); real limits/grandfather are computed from the true plan first. +30 for the disclosed, expiring city-context consent routes and legacy geolocation input boundary; they remain with the authenticated user route owner to prevent invalid coordinates reaching cache/provider paths (SCA-174)."
   },

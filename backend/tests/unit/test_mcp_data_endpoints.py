@@ -246,6 +246,70 @@ async def test_token_request_parser_reads_form_body():
     assert await sse._get_token_request_data(_FormRequest(body)) == body
 
 
+@pytest.mark.asyncio
+async def test_mcp_consent_offloads_firebase_verification_and_uses_verified_uid():
+    calls = []
+
+    async def run_blocking(executor, func, *args, **kwargs):
+        calls.append((executor, func, args, kwargs))
+        return func(*args, **kwargs)
+
+    grant = {'id': 'grant-1'}
+    with (
+        patch.object(sse, '_validate_authorize_request', return_value=({}, ['memories.read'])) as validate_request,
+        patch.object(sse, 'run_blocking', side_effect=run_blocking),
+        patch.object(sse.firebase_admin.auth, 'verify_id_token', return_value={'uid': UID}) as verify_id_token,
+        patch.object(sse.mcp_oauth_db, 'create_or_update_grant', return_value=grant) as create_grant,
+        patch.object(sse.mcp_oauth_db, 'issue_authorization_code', return_value='code-1') as issue_code,
+    ):
+        response = await sse.mcp_authorize_consent(
+            response_type='code',
+            client_id='client-1',
+            redirect_uri='https://client.example/callback',
+            resource=sse.MCP_RESOURCE_URL,
+            firebase_id_token='firebase-token',
+            state=None,
+            scope='memories.read',
+            code_challenge='a' * 64,
+            code_challenge_method='S256',
+        )
+
+    assert response == {'redirect_uri': 'https://client.example/callback?code=code-1'}
+    assert calls == [
+        (
+            sse.db_executor,
+            validate_request,
+            (
+                'code',
+                'client-1',
+                'https://client.example/callback',
+                sse.MCP_RESOURCE_URL,
+                'memories.read',
+                'a' * 64,
+                'S256',
+            ),
+            {},
+        ),
+        (sse.critical_executor, verify_id_token, ('firebase-token',), {}),
+        (sse.db_executor, create_grant, (UID, 'client-1', sse.MCP_RESOURCE_URL, ['memories.read']), {}),
+        (
+            sse.db_executor,
+            issue_code,
+            (
+                UID,
+                'grant-1',
+                'client-1',
+                'https://client.example/callback',
+                sse.MCP_RESOURCE_URL,
+                ['memories.read'],
+                'a' * 64,
+            ),
+            {},
+        ),
+    ]
+    create_grant.assert_called_once_with(UID, 'client-1', sse.MCP_RESOURCE_URL, ['memories.read'])
+
+
 def test_sse_tools_list_filters_by_oauth_scopes():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     response, session_id = sse.handle_mcp_message(auth_context, {'id': 1, 'method': 'tools/list'})

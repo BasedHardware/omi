@@ -487,6 +487,23 @@ def test_refresh_token_rotates_and_old_refresh_reuse_revokes_grant():
     )
 
 
+def test_reconsent_replaces_grant_scopes_to_allow_downscoping():
+    broad_scopes = ['memories.read', 'memories.write']
+    narrowed_scopes = ['memories.read']
+    grant = mcp_oauth.create_or_update_grant(
+        'user-downscope', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, broad_scopes
+    )
+    token_pair = mcp_oauth.issue_token_pair(grant, scopes=broad_scopes)
+
+    updated_grant = mcp_oauth.create_or_update_grant(
+        'user-downscope', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, narrowed_scopes
+    )
+
+    assert updated_grant['id'] != grant['id']
+    assert updated_grant['scopes'] == narrowed_scopes
+    assert mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL) is None
+
+
 def test_revoke_user_grant_invalidates_tokens():
     scopes = ['memories.read']
     grant = mcp_oauth.create_or_update_grant('user-3', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)

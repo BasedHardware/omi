@@ -406,18 +406,26 @@ def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List
     ref = db.collection("mcp_oauth_grants").document(deterministic_grant_id)
     doc = ref.get()
     existing: Dict[str, Any] = _typed_doc(doc) if doc.exists else {}
+    existing_scopes = sorted(set(existing.get("scopes") or []))
+    granted_scopes = sorted(set(scopes))
     if existing and (existing.get("revoked_at") or existing.get("status") == "revoked"):
         ref = db.collection("mcp_oauth_grants").document(f"{deterministic_grant_id}:{uuid.uuid4()}")
         doc = ref.get()
         existing = {}
-    existing_scopes = set(existing.get("scopes") or [])
-    merged_scopes = sorted(existing_scopes.union(scopes))
+    elif existing and existing_scopes != granted_scopes:
+        # Consent is the complete current authorization for this client/resource.
+        # Rotating the grant on any scope change invalidates already-issued broad
+        # access and refresh tokens before the newly consented scope set is used.
+        ref.update({"revoked_at": now, "status": "revoked", "updated_at": now})
+        ref = db.collection("mcp_oauth_grants").document(f"{deterministic_grant_id}:{uuid.uuid4()}")
+        doc = ref.get()
+        existing = {}
     data: Dict[str, Any] = {
         "id": ref.id,
         "uid": uid,
         "client_id": client_id,
         "resource": resource,
-        "scopes": merged_scopes,
+        "scopes": granted_scopes,
         "updated_at": now,
         "last_used_at": now,
         "revoked_at": None,
