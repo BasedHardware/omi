@@ -3169,17 +3169,12 @@ class FloatingControlBarManager {
 
   /// Show the floating bar and persist the preference.
   func show() {
-    present(.explicitUserAction, persistEnabledPreference: true)
+    present(.explicitUserAction, preferenceMutation: .setEnabled(true))
   }
 
   /// Hide the floating bar and persist the preference.
   func hide() {
-    isEnabled = false
-    if let window {
-      window.retractIntoNotch { [weak window] in
-        window?.orderOut(nil)
-      }
-    }
+    retract(preferenceMutation: .setEnabled(false))
   }
 
   /// Show the floating bar temporarily without changing the user's persisted preference.

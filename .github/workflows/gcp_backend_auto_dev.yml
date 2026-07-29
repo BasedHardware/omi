@@ -200,6 +200,21 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Verify read-only Firestore credentials target the development runtime project
+        env:
+          RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          credential_project="$(gcloud config get-value project 2>/dev/null)"
+          if [[ -z "$credential_project" || "$credential_project" == "(unset)" ]]; then
+            echo "::error title=Missing Firestore credential project::The read-only Firestore credentials do not select a GCP project."
+            exit 1
+          fi
+          if [[ "$credential_project" != "$RUNTIME_GCP_PROJECT_ID" ]]; then
+            echo "::error title=Firestore project mismatch::Read-only Firestore credentials target $credential_project, but RUNTIME_GCP_PROJECT_ID is $RUNTIME_GCP_PROJECT_ID."
+            exit 1
+          fi
+
       - name: Verify serving Firestore indexes
         id: firestore_readiness
         env:

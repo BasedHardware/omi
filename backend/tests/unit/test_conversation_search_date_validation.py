@@ -307,6 +307,92 @@ def _conversation(conversation_id='conv-1', status=ConversationStatus.in_progres
     )
 
 
+def _conversation_dict(conversation_id, segments):
+    data = _conversation(conversation_id=conversation_id).model_dump(mode='json')
+    data['transcript_segments'] = segments
+    return data
+
+
+def _segment(*, is_user=False, person_id=None):
+    return {
+        'id': 'seg-1',
+        'text': 'hello',
+        'speaker': 'SPEAKER_00',
+        'is_user': is_user,
+        'person_id': person_id,
+        'start': 0.0,
+        'end': 1.0,
+    }
+
+
+@pytest.mark.parametrize(
+    'speaker_id,matching_segments',
+    [
+        ('user', [_segment(is_user=True)]),
+        ('person-1', [_segment(person_id='person-1')]),
+    ],
+)
+def test_speaker_filter_is_applied_after_hydration(speaker_id, matching_segments):
+    # The speaker filter used to be pushed to Typesense as transcript_segments.is_user / .person_id,
+    # which are not in the `conversations` schema -- Typesense answered 400 "Could not find a filter
+    # field named ... in the schema" and every speaker-filtered search 500'd. The filter now runs over
+    # the hydrated Firestore documents, which do carry transcript_segments.
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    hydrated = [
+        _conversation_dict('conv-match', matching_segments),
+        _conversation_dict('conv-other', [_segment(person_id='someone-else')]),
+    ]
+    with (
+        patch.object(conv, 'conversation_matches_speaker', real_matcher),
+        patch.object(conv.users_db, 'get_person', return_value={'id': speaker_id}),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={
+                'items': [{'id': 'conv-match'}, {'id': 'conv-other'}],
+                'total_pages': 1,
+                'current_page': 1,
+                'per_page': 10,
+            },
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'hi', 'speaker_id': speaker_id})
+
+    assert resp.status_code == 200
+    assert [item['id'] for item in resp.json()['items']] == ['conv-match']
+
+
+def test_search_without_speaker_keeps_every_hydrated_conversation():
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    hydrated = [
+        _conversation_dict('conv-1', [_segment(person_id='person-1')]),
+        _conversation_dict('conv-2', []),
+    ]
+    with (
+        patch.object(conv, 'conversation_matches_speaker', real_matcher),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={
+                'items': [{'id': 'conv-1'}, {'id': 'conv-2'}],
+                'total_pages': 1,
+                'current_page': 1,
+                'per_page': 10,
+            },
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'hi'})
+
+    assert resp.status_code == 200
+    assert [item['id'] for item in resp.json()['items']] == ['conv-1', 'conv-2']
+
+
 def _process_result(result, *, persisted: bool):
     def process(*_args, persistence_observer=None, **_kwargs):
         assert persistence_observer is not None

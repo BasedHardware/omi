@@ -263,7 +263,6 @@ def _get_structured(
         # For re-processing, we don't discard, just re-structure.
         if force_process:
             conv_started_at = cast(datetime, main_conv.started_at)
-            structured_conv = cast(Conversation, main_conv)
             # reprocess endpoint
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                 structured = get_reprocess_transcript_structure(
@@ -271,7 +270,6 @@ def _get_structured(
                     conv_started_at,
                     language_code,
                     tz_str,
-                    structured_conv.structured.title,
                     photos=main_conv.photos,
                     output_language_code=user_language,
                 )

@@ -69,8 +69,7 @@ extension SettingsContentView {
                   .scaledFont(size: OmiType.body, weight: .semibold)
               }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(OmiColors.error)
+            .buttonStyle(OmiButtonStyle(.destructive, size: .compact))
             .disabled(isDeletingAccount)
           }
 
@@ -348,11 +347,8 @@ extension SettingsContentView {
             }) {
               Text("Try Operator")
                 .scaledFont(size: OmiType.body, weight: .semibold)
-                .padding(.horizontal, OmiSpacing.lg)
-                .padding(.vertical, OmiSpacing.sm)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(OmiColors.success)
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
         }
       }
@@ -360,16 +356,6 @@ extension SettingsContentView {
       if shouldShowPlanPurchaseOptions {
         settingsCard(settingId: "planusage.purchase") {
           VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Choose a plan")
-                .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
-
-              Text("Pick one plan first. Billing options appear only after the card is selected.")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-
             // All plan cards share the row width — no horizontal scrolling.
             HStack(alignment: .top, spacing: OmiSpacing.lg) {
               ForEach(subscriptionPlansForDisplay) { plan in

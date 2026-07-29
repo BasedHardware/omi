@@ -790,14 +790,37 @@ phase_begin "desktop-preparation" "runner-hygiene-cleanup"
 rm -f "$LAUNCH_SIGNAL_FILE"
 
 DESKTOP_LAUNCH_REQUESTED=1
+# Run dev-up first in its own tracked subshell so the dev stack (backend,
+# desktop-backend, firestore, redis, typesense) stays alive even if the
+# subsequent desktop app launch fails.  Previously both commands shared one
+# subshell; set -e caused the subshell to exit on desktop-run-local (or any
+# post-dev-up) failure, which triggered the EXIT trap → cleanup → dev-down
+# → SIGINT to every harness service including the healthy backend.
+# See FC-qualification-sigint-cascade.
 (
   cd "$WORKTREE"
   OMI_HARNESS_OWNERSHIP_TOKEN="$QUALIFICATION_LEASE_TOKEN" PROVIDER_MODE=offline make dev-up
+) >"$LAUNCH_LOG" 2>&1 &
+DEV_UP_PID=$!
+
+# Wait for dev-up to complete (success or fail).
+if ! wait "$DEV_UP_PID"; then
+  phase_end failed
+  echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
+  tail -n 80 "$LAUNCH_LOG" >&2 || true
+  echo "qualification failed: dev stack startup failed" >&2
+  exit 1
+fi
+
+# Dev stack is up; launch the desktop app in a separate subshell.  Its
+# failure will NOT tear down the already-healthy dev stack.
+(
+  cd "$WORKTREE"
   OMI_DESKTOP_LAUNCH_SIGNAL_FILE="$LAUNCH_SIGNAL_FILE" \
     OMI_DESKTOP_LAUNCH_TOKEN="$DESKTOP_LAUNCH_TOKEN" \
     OMI_SKIP_SETTINGS_SEED=1 \
     make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
-) >"$LAUNCH_LOG" 2>&1 &
+) >>"$LAUNCH_LOG" 2>&1 &
 DESKTOP_LAUNCH_PID=$!
 
 if ! wait_for_desktop_launch "$LAUNCH_SIGNAL_FILE"; then

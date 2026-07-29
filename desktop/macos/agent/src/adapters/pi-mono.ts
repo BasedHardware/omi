@@ -498,13 +498,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       "omi",
       "--model",
       "omi-sonnet",
-      // Auto-discover extensions and MCP servers from the user's machine
-      // to maximize pi-mono's capabilities (e.g. Playwright, filesystem tools).
-      // SECURITY NOTE: auto-discovered extensions run in the pi subprocess and
-      // can read process.env (including OMI_API_KEY). This is acceptable because:
-      // 1. OMI_API_KEY is a short-lived Firebase ID token (~1 hour expiry)
-      // 2. Extensions are user-installed — the trust boundary is the user's machine
-      // 3. ANTHROPIC_API_KEY is always scrubbed (never exposed to extensions)
     ];
     // Pi has no set_system_prompt RPC — system prompt must be baked at spawn
     // time via the --system-prompt CLI flag. To change it, restart the process.
@@ -950,6 +943,38 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.process.stdin.write(JSON.stringify(cmd) + "\n");
   }
 
+  /** Reply on stdin without allocating a req-* id (must echo the request id). */
+  private writeRaw(cmd: PiRpcCommand): void {
+    if (!this.process?.stdin?.writable) return;
+    this.process.stdin.write(JSON.stringify(cmd) + "\n");
+  }
+
+  /**
+   * Pi extensions emit extension_ui_request for host UI. Desktop chat has no TUI,
+   * so fire-and-forget methods are ignored and blocking dialogs are cancelled.
+   * Leaving these unhandled hangs the turn (infinite loading).
+   */
+  private handleExtensionUIRequest(event: PiRpcEvent): void {
+    const method = typeof event.method === "string" ? event.method : "";
+    switch (method) {
+      case "notify":
+      case "setStatus":
+      case "setWidget":
+      case "setTitle":
+      case "set_editor_text":
+        return;
+      case "select":
+      case "confirm":
+      case "input":
+      case "editor":
+      default: {
+        const id = typeof event.id === "string" ? event.id : "";
+        if (!id) return;
+        this.writeRaw({ type: "extension_ui_response", id, cancelled: true });
+      }
+    }
+  }
+
   private writeRelayContext(context: PiMonoRelayContext | undefined): void {
     if (!context) {
       rmSync(this.contextFilePath, { force: true });
@@ -1043,6 +1068,10 @@ export class PiMonoAdapter implements HarnessAdapter {
         // subsequent turn_end is still authoritative for completion.
         // agent_settled is an upstream advisory event; only turn_end carries
         // the terminal result that can settle Omi's canonical run lifecycle.
+        break;
+
+      case "extension_ui_request":
+        this.handleExtensionUIRequest(event);
         break;
 
       default:

@@ -16,6 +16,8 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
+typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
+
 class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
   bool _loading = true;
@@ -32,6 +34,12 @@ class MemoriesProvider extends ChangeNotifier {
   ConnectivityProvider? _connectivityProvider;
   bool _isSyncing = false;
   int _sessionGeneration = 0;
+  final FetchMemoriesRequest _fetchMemoriesRequest;
+  final Future<bool> Function(String) _deleteMemoryRequest;
+
+  MemoriesProvider({FetchMemoriesRequest? fetchMemoriesRequest, Future<bool> Function(String)? deleteMemoryRequest})
+    : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
+      _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer;
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
@@ -64,7 +72,8 @@ class MemoriesProvider extends ChangeNotifier {
       // When the server does not support device_scope, legacy memories have no
       // primary_capture_device/capture_device_ids. Skip the local device filter
       // in that case to avoid hiding all legacy rows on the "This device" view.
-      final deviceMatch = !_filterThisDeviceOnly ||
+      final deviceMatch =
+          !_filterThisDeviceOnly ||
           !_deviceScopeSupported ||
           ClientDeviceService.instance.memoryMatchesThisDevice(
             primaryCaptureDevice: memory.primaryCaptureDevice,
@@ -72,8 +81,7 @@ class MemoriesProvider extends ChangeNotifier {
           );
 
       return matchesSearch && categoryMatch && deviceMatch;
-    }).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setFilterThisDeviceOnly(bool enabled) {
@@ -232,7 +240,7 @@ class MemoriesProvider extends ChangeNotifier {
     var offset = 0;
     var deviceScopeSupported = true;
     for (var page = 0; page < maxPages; page++) {
-      final result = await getMemoriesResult(limit: limit, offset: offset, thisDeviceOnly: _filterThisDeviceOnly);
+      final result = await _fetchMemoriesRequest(limit: limit, offset: offset, thisDeviceOnly: _filterThisDeviceOnly);
       if (generation != _sessionGeneration) {
         return;
       }
@@ -243,13 +251,15 @@ class MemoriesProvider extends ChangeNotifier {
       }
       offset += result.memories.length;
     }
-    _memories = all;
+    // Keep an optimistic delete hidden throughout its undo window. A refresh
+    // can otherwise reinsert the still-live server row before finalization.
+    _memories = all.where((memory) => memory.id != _pendingDeletionId).toList();
     _deviceScopeSupported = deviceScopeSupported;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     for (var pending in pendingMemories) {
-      if (!_memories.any((m) => m.id == pending.id)) {
+      if (pending.id != _pendingDeletionId && !_memories.any((m) => m.id == pending.id)) {
         _memories.add(pending);
       }
     }
@@ -337,16 +347,34 @@ class MemoriesProvider extends ChangeNotifier {
 
     final id = _pendingDeletionId!;
 
+    final deletedMemory = _lastDeletedMemory;
+    var deleteSucceeded = true;
+
     // If memory was created offline and not yet synced
     if (SharedPreferencesUtil().pendingMemories.any((m) => m.id == id)) {
       SharedPreferencesUtil().removePendingMemory(id);
     } else {
       // Memory exists on server
-      await deleteMemoryServer(id);
+      try {
+        deleteSucceeded = await _deleteMemoryRequest(id);
+      } catch (e) {
+        Logger.debug('MemoriesProvider: Failed to delete memory $id: $e');
+        deleteSucceeded = false;
+      }
     }
 
-    _pendingDeletionId = null;
-    _lastDeletedMemory = null;
+    if (!deleteSucceeded && _pendingDeletionId == id && deletedMemory?.id == id) {
+      if (!_memories.any((memory) => memory.id == id)) {
+        _memories.add(deletedMemory!);
+      }
+      _setCategories();
+      notifyListeners();
+    }
+
+    if (_pendingDeletionId == id) {
+      _pendingDeletionId = null;
+      _lastDeletedMemory = null;
+    }
   }
 
   Future<void> confirmPendingDeletion() async {
