@@ -104,21 +104,29 @@ curl -fsS http://localhost:8000/v1/health
 ## Testing the backend offline
 
 The box has only Docker (no host venv). Suites run in a **test image** = the WP0 backend image plus
-additive test dependencies:
-
-```dockerfile
-# Dockerfile.test — build from deploy/onprem (after `docker compose build`), then:
-FROM omi-onprem-backend:latest
-USER root
-RUN pip install --no-cache-dir aioresponses==0.7.8 fake-firestore==0.13.1 fakeredis==2.36.2 \
-    lupa==2.8 pytest-httpserver==1.1.5 werkzeug==3.1.8 pymongo==4.10.1 mongomock==4.3.0
-```
+additive test-only tooling (`git`, `helm`, and test Python deps). The image is reproducible from the
+committed [`Dockerfile.test`](Dockerfile.test):
 
 ```bash
 cd deploy/onprem
 docker compose build                                            # WP0 images (once)
 docker build -t omi-onprem-backend-test -f Dockerfile.test .    # test image
 ```
+
+### Mount the REPO ROOT, not just `backend/`
+
+A large set of contract tests resolve repo-root paths via `Path(__file__).resolve().parents[N]` and
+read `.github/`, `docs/`, `firestore.indexes.json`, `desktop/`, helm charts, etc. Mounting only
+`backend/` at `/app` flattens the tree so those walks overshoot to `/` and raise `FileNotFoundError`.
+Mount the **whole repo** so `backend/` sits at its real depth:
+
+```
+-v $(git rev-parse --show-toplevel):/repo -w /repo/backend
+```
+
+Do **not** set `OMI_ENV_STAGE=offline` for the unit sweep: that variable is for the runtime compose
+posture, and forcing it makes a couple of tests assert the wrong environment/stage. `LOCAL_DEVELOPMENT=true`
+is the signal the unit suite expects. (See the two known residuals at the end.)
 
 ### Run one suite — FILE-ISOLATED (mandatory)
 
@@ -127,9 +135,9 @@ The suite carries module-level state (`load_module_fresh`, monkeypatched clients
 Run **one process per file**:
 
 ```bash
-docker run --rm -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
+docker run --rm -v $(git rev-parse --show-toplevel):/repo -w /repo/backend \
   -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test \
-  -e PYTHONUTF8=1 -e OMP_NUM_THREADS=1 -e OMI_ENV_STAGE=offline -e LOCAL_DEVELOPMENT=true \
+  -e PYTHONUTF8=1 -e OMP_NUM_THREADS=1 -e LOCAL_DEVELOPMENT=true \
   omi-onprem-backend-test /opt/venv/bin/python -m pytest -q -o addopts="" tests/unit/<file>.py
 ```
 
@@ -139,23 +147,22 @@ Use `/opt/venv/bin/python` (not `bash -l`, which resets PATH and loses the venv)
 
 File isolation is a correctness requirement, but the outer loop parallelizes across cores: N
 concurrent `pytest <one-file>` invocations, **each still its own process** — identical isolation,
-identical verdicts, ~7.5x faster (measured full unit sweep ~17 min -> ~2.2 min on 20 cores). Do
+identical verdicts, ~7.5x faster (measured full unit sweep ~17 min -> ~2 min on 20 cores). Do
 **not** use `pytest-xdist -n … --dist loadfile`: xdist workers reuse a process across files, which
 brings the contamination back. Self-contained runner:
 
 ```bash
-docker run --rm -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
+docker run --rm -v $(git rev-parse --show-toplevel):/repo -w /repo/backend \
   -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test -e PYTHONUTF8=1 \
-  -e OMP_NUM_THREADS=1 -e OMI_ENV_STAGE=offline -e LOCAL_DEVELOPMENT=true \
+  -e OMP_NUM_THREADS=1 -e LOCAL_DEVELOPMENT=true \
   omi-onprem-backend-test bash -c '
     ls tests/unit/test_*.py tests/unit/utils/test_*.py | \
     xargs -P 16 -I{} sh -c '\''out=$(/opt/venv/bin/python -m pytest -q -o addopts="" -p no:cacheprovider "{}" 2>&1 | tail -1);
       echo "$out" | grep -qiE "failed|error" && echo "FAIL | {} | $out" || echo "PASS | {} | $out"'\'' '
 ```
 
-To gate a change for regressions, diff the FAIL set against a baseline built the same way from a
-clean branch-point worktree: a file failing in both is pre-existing (see the environmental-failures
-note below); a file failing only at HEAD is a regression to fix.
+With this harness the whole unit sweep is green except the two known residuals below. To gate a
+change, the FAIL set must equal that known-residual set; any other file failing is a regression to fix.
 
 ### Regression guard
 
@@ -181,10 +188,10 @@ docker exec wp2-mongo mongosh --quiet --eval \
 # 2. Firestore emulator in the same netns
 docker run -d --name wp2-emu --network container:wp2-mongo omi-onprem-firestore-emulator:latest
 # 3. Contract suite (same netns)
-docker run --rm --network container:wp2-mongo -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
+docker run --rm --network container:wp2-mongo -v $(git rev-parse --show-toplevel):/repo -w /repo/backend \
   -e FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 -e MONGO_URI="mongodb://127.0.0.1:27017/?replicaSet=rs0" \
   -e FIREBASE_PROJECT_ID=demo-omi-local -e GOOGLE_CLOUD_PROJECT=demo-omi-local \
-  -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test -e OMI_ENV_STAGE=offline \
+  -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test \
   omi-onprem-backend-test /opt/venv/bin/python -m pytest -q -o addopts="" \
   tests/contract/test_document_store_contract.py
 docker rm -f wp2-mongo wp2-emu    # cleanup
@@ -193,13 +200,18 @@ docker rm -f wp2-mongo wp2-emu    # cleanup
 Note: gRPC (Firestore) bypasses the Python socket guard; pymongo uses Python sockets but on loopback,
 which the guard permits.
 
-### Pre-existing environmental failures
+### Two known residual failures (not our code, not fixable via the harness)
 
-A set of unit files fails in this offline image independently of any self-host change — they read
-repo-root paths not mounted under `backend/` (`.github/`, helm, desktop, firestore-index config),
-run app-client codegen, or need a live service/network. They fail identically at the branch-point
-baseline, so the sweep's HEAD-vs-baseline diff classifies them as not-a-regression. Making the
-offline image fully green (mount the repo root, or mark them `integration`) is separate, optional work.
+With the harness above the offline unit sweep is green except two files, both pre-existing at the
+branch-point and unrelated to the self-host work:
+
+- `tests/unit/test_auto_dev_backend_scope.py` — one subtest extracts and executes the real
+  `.github/workflows/gcp_backend_auto_dev.yml` scope step's bash against a temp git repo; the
+  discrepancy is inside that CI workflow logic, not the backend.
+- `tests/unit/test_ws_auth_handshake.py` — one subtest asserts WebSocket auth *enforcement* (empty
+  bearer -> close 1008), which requires `LOCAL_DEVELOPMENT` unset. The unit sweep sets it because ~46
+  other files rely on the dev-auth bypass; a single global env cannot satisfy both. The file passes
+  in isolation with `LOCAL_DEVELOPMENT` unset.
 
 ## Git notes
 
