@@ -1,0 +1,3 @@
+{
+  "change": "Anchored post-interactive startup warmups to process launch so conversations, tasks, and memories load immediately when the main UI appears long after launch (e.g. right after onboarding)"
+}
