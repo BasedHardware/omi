@@ -70,6 +70,8 @@ protocol AppleEventKitStore: AnyObject {
   @discardableResult
   func saveReminder(_ reminder: EKReminder, commit: Bool) throws -> String
   func commit() throws
+  /// Last-modified time used for Apple-vs-Omi conflict direction. Production uses EventKit.
+  func lastModifiedDate(forReminderIdentifier identifier: String, reminder: EKReminder) -> Date?
 }
 
 @MainActor
@@ -90,6 +92,10 @@ extension EKEventStore: AppleEventKitStore {
   func saveReminder(_ reminder: EKReminder, commit: Bool) throws -> String {
     try save(reminder, commit: commit)
     return reminder.calendarItemIdentifier
+  }
+
+  func lastModifiedDate(forReminderIdentifier identifier: String, reminder: EKReminder) -> Date? {
+    reminder.lastModifiedDate
   }
 }
 
@@ -298,8 +304,9 @@ final class AppleEventKitReaderService {
       }
 
       let backendUpdatedAt = item.updatedAt.flatMap(Self.parseDate)
+      let appleModified = eventStore.lastModifiedDate(forReminderIdentifier: reminderID, reminder: reminder)
       let appleIsNewer =
-        reminder.lastModifiedDate.map { modified in
+        appleModified.map { modified in
           backendUpdatedAt.map { modified > $0 } ?? true
         } ?? false
       var update = AppleRemindersSyncUpdate(id: item.id)
@@ -315,8 +322,15 @@ final class AppleEventKitReaderService {
 
       if appleIsNewer {
         if let title = reminder.title, !title.isEmpty, title != item.description_ { update.description = title }
-        if let dueAt = reminder.dueDateComponents.flatMap({ Calendar.current.date(from: $0) }) {
-          update.dueAt = formatter.string(from: dueAt)
+        let appleDue = reminder.dueDateComponents.flatMap { Calendar.current.date(from: $0) }
+        if let dueAt = appleDue {
+          let backendDue = item.dueAt.flatMap(Self.parseDate)
+          if backendDue.map({ abs($0.timeIntervalSince(dueAt)) > 60 }) ?? true {
+            update.dueAt = formatter.string(from: dueAt)
+          }
+        } else if item.dueAt != nil {
+          // User cleared the due date in Apple Reminders — clear Omi too.
+          update.clearDueAt = true
         }
       } else {
         var needsSave = false
@@ -331,13 +345,19 @@ final class AppleEventKitReaderService {
               [.year, .month, .day, .hour, .minute], from: dueAt)
             needsSave = true
           }
+        } else if reminder.dueDateComponents != nil {
+          // Omi has no due date — clear the stale Apple Reminder due date.
+          reminder.dueDateComponents = nil
+          needsSave = true
         }
         if needsSave {
           try eventStore.saveReminder(reminder, commit: true)
           itemChanged = true
         }
       }
-      if update.description != nil || update.completed != nil || update.dueAt != nil {
+      if update.description != nil || update.completed != nil || update.dueAt != nil
+        || update.clearDueAt == true
+      {
         updates.append(update)
         itemChanged = true
       }

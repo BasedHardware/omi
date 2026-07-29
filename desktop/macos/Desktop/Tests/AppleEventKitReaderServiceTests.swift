@@ -223,6 +223,69 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
     XCTAssertEqual(sync.syncBatches[0].first?.completed, true)
     XCTAssertTrue(reminder.isCompleted)
   }
+
+  @MainActor
+  func testOmiDueDateClearRemovesAppleReminderDueDate() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    let due = Date(timeIntervalSince1970: 1_800_000_000)
+    let reminder = store.makeReminder(
+      id: "reminder-1",
+      title: "Ship it",
+      completed: false,
+      dueDate: due
+    )
+    // Apple has no last-modified override → Omi wins the conflict direction.
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [],
+        syncedItems: [
+          .fixture(
+            id: "item-1",
+            description: "Ship it",
+            appleReminderId: "reminder-1",
+            dueAt: nil,
+            updatedAt: "2026-07-20T12:00:00Z"
+          )
+        ]
+      )
+    )
+
+    let result = try await AppleEventKitReaderService(eventStore: store, remindersSync: sync).syncReminders()
+
+    XCTAssertEqual(result.updated, 1)
+    XCTAssertNil(reminder.dueDateComponents)
+    XCTAssertTrue(sync.syncBatches.isEmpty)
+  }
+
+  @MainActor
+  func testAppleDueDateClearPropagatesClearDueAtToBackend() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    _ = store.makeReminder(id: "reminder-1", title: "Ship it", completed: false, dueDate: nil)
+    // Apple is newer than the backend row that still has a due date.
+    store.lastModifiedByID["reminder-1"] = Date(timeIntervalSince1970: 1_900_000_000)
+    let sync = AppleRemindersSyncStub(
+      pending: AppleRemindersPendingSync(
+        pendingExport: [],
+        syncedItems: [
+          .fixture(
+            id: "item-1",
+            description: "Ship it",
+            appleReminderId: "reminder-1",
+            dueAt: "2026-07-20T15:00:00Z",
+            updatedAt: "2026-07-19T12:00:00Z"
+          )
+        ]
+      )
+    )
+
+    let result = try await AppleEventKitReaderService(eventStore: store, remindersSync: sync).syncReminders()
+
+    XCTAssertEqual(result.updated, 1)
+    XCTAssertEqual(sync.syncBatches.count, 1)
+    XCTAssertEqual(sync.syncBatches[0].first?.id, "item-1")
+    XCTAssertEqual(sync.syncBatches[0].first?.clearDueAt, true)
+    XCTAssertNil(sync.syncBatches[0].first?.dueAt)
+  }
 }
 
 @MainActor
@@ -233,6 +296,7 @@ private final class AppleEventKitStoreStub: AppleEventKitStore {
   var calendarAccessRequests = 0
   var defaultCalendar: EKCalendar?
   var remindersByID: [String: EKReminder] = [:]
+  var lastModifiedByID: [String: Date] = [:]
   private(set) var savedReminderTitles: [String] = []
   private var nextReminderIndex = 0
 
@@ -276,10 +340,18 @@ private final class AppleEventKitStoreStub: AppleEventKitStore {
 
   func commit() throws {}
 
-  func makeReminder(id: String, title: String, completed: Bool) -> EKReminder {
+  func lastModifiedDate(forReminderIdentifier identifier: String, reminder: EKReminder) -> Date? {
+    lastModifiedByID[identifier] ?? reminder.lastModifiedDate
+  }
+
+  func makeReminder(id: String, title: String, completed: Bool, dueDate: Date? = nil) -> EKReminder {
     let reminder = EKReminder(eventStore: EKEventStore())
     reminder.title = title
     reminder.isCompleted = completed
+    if let dueDate {
+      reminder.dueDateComponents = Calendar.current.dateComponents(
+        [.year, .month, .day, .hour, .minute], from: dueDate)
+    }
     remindersByID[id] = reminder
     return reminder
   }
@@ -331,7 +403,9 @@ extension OmiAPI.ActionItemResponse {
     id: String,
     description: String,
     completed: Bool = false,
-    appleReminderId: String? = nil
+    appleReminderId: String? = nil,
+    dueAt: String? = nil,
+    updatedAt: String? = nil
   ) -> Self {
     Self(
       appleReminderId: appleReminderId,
@@ -340,7 +414,7 @@ extension OmiAPI.ActionItemResponse {
       conversationId: nil,
       createdAt: nil,
       description_: description,
-      dueAt: nil,
+      dueAt: dueAt,
       dueConfidence: nil,
       exportDate: nil,
       exportPlatform: appleReminderId == nil ? nil : "apple_reminders",
@@ -359,7 +433,7 @@ extension OmiAPI.ActionItemResponse {
       status: nil,
       supersededBy: nil,
       taskId: nil,
-      updatedAt: nil,
+      updatedAt: updatedAt,
       workstreamId: nil
     )
   }
