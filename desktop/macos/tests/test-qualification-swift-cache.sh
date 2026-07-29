@@ -193,17 +193,63 @@ expect_rejected collision "exact-SHA cache destination collision" \
   "$CACHE_HELPER" prepare "$SHA_C" "$REPO_A" cache-collision "$$"
 
 # Origin-fetch path (Actions partial/promisor clone fallback; incident #10809).
+# Reproduce a real incomplete local materialization: blobless/promisor source where
+# checkout can set HEAD to the candidate SHA while package blobs stay missing
+# (worktree paths deleted). Auto mode must reject that and fall back to origin.
 ORIGIN_UPSTREAM="$TMP_ROOT/origin-upstream"
 ORIGIN_BARE="$TMP_ROOT/origin-upstream.git"
-ORIGIN_CLIENT="$TMP_ROOT/origin-client"
+PROMISOR_CLIENT="$TMP_ROOT/promisor-client"
 make_repo "$ORIGIN_UPSTREAM"
 git -C "$ORIGIN_UPSTREAM" clone --quiet --bare "$ORIGIN_UPSTREAM" "$ORIGIN_BARE"
-git -C "$ORIGIN_UPSTREAM" remote remove origin 2>/dev/null || true
+git -C "$ORIGIN_BARE" config uploadpack.allowFilter true
+git -C "$ORIGIN_BARE" config uploadpack.allowAnySHA1InWant true
+ORIGIN_SHA="$(git -C "$ORIGIN_UPSTREAM" rev-parse HEAD)"
+
+rm -rf "$PROMISOR_CLIENT"
+git clone --quiet --filter=blob:none --no-checkout "file://$ORIGIN_BARE" "$PROMISOR_CLIENT"
+git -C "$PROMISOR_CLIENT" fetch --quiet --filter=blob:none origin "$ORIGIN_SHA"
+# Checkout without a working promisor so blobs are not filled — HEAD can still move.
+git -C "$PROMISOR_CLIENT" remote set-url origin "file://$TMP_ROOT/missing-promisor.git"
+git -C "$PROMISOR_CLIENT" checkout --quiet --detach "$ORIGIN_SHA" 2>/dev/null || true
+# Restore origin to the full object store for the prepare() fallback path.
+git -C "$PROMISOR_CLIENT" remote set-url origin "file://$ORIGIN_BARE"
+
+# Sanity: naive local clone+checkout of this promisor source is incomplete.
+PROBE="$TMP_ROOT/promisor-local-probe"
+rm -rf "$PROBE"
+git clone --quiet --no-hardlinks --no-checkout "$PROMISOR_CLIENT" "$PROBE"
+git -C "$PROBE" checkout --quiet --detach "$ORIGIN_SHA" 2>/dev/null || true
+if [[ -f "$PROBE/desktop/macos/Desktop/Package.swift" ]] \
+  && git -C "$PROBE" diff-index --quiet HEAD -- 2>/dev/null \
+  && git -C "$PROBE" cat-file -e HEAD:desktop/macos/Desktop/Package.swift 2>/dev/null; then
+  fail "test fixture did not reproduce incomplete promisor materialization"
+fi
+
+PROMISOR_CACHE="$TMP_ROOT/promisor-cache"
+promisor_source="$(
+  env OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$PROMISOR_CACHE" \
+    OMI_QUALIFICATION_SWIFT_CACHE_CLONE_MODE=auto \
+    "$CACHE_HELPER" prepare "$ORIGIN_SHA" "$PROMISOR_CLIENT" cache-promisor-auto "$$" \
+    2>"$TMP_ROOT/promisor-auto.err" | source_from_json
+)"
+grep -Fq 'local exact-source clone failed; trying origin fetch fallback' "$TMP_ROOT/promisor-auto.err" \
+  || fail "auto mode did not fall back after incomplete local clone: $(cat "$TMP_ROOT/promisor-auto.err")"
+grep -Fq 'materializing exact source via origin fetch' "$TMP_ROOT/promisor-auto.err" \
+  || fail "auto mode did not materialize via origin fetch: $(cat "$TMP_ROOT/promisor-auto.err")"
+[[ "$(git -C "$promisor_source" rev-parse HEAD)" == "$ORIGIN_SHA" ]] \
+  || fail "promisor auto fallback did not detach at exact SHA"
+[[ -f "$promisor_source/desktop/macos/Desktop/Package.swift" ]] \
+  || fail "promisor auto fallback missing package identity files"
+git -C "$promisor_source" diff-index --quiet HEAD -- \
+  || fail "promisor auto fallback left a dirty/incomplete worktree"
+git -C "$promisor_source" cat-file -e HEAD:desktop/macos/Desktop/Package.swift \
+  || fail "promisor auto fallback missing Package.swift blob"
+
+# Forced origin mode still works against a full client with origin set.
+ORIGIN_CLIENT="$TMP_ROOT/origin-client"
 rm -rf "$ORIGIN_CLIENT"
 git clone --quiet "$ORIGIN_BARE" "$ORIGIN_CLIENT"
-# Point client origin at the bare full object store (file:// avoids local hardlink tricks).
 git -C "$ORIGIN_CLIENT" remote set-url origin "file://$ORIGIN_BARE"
-ORIGIN_SHA="$(git -C "$ORIGIN_CLIENT" rev-parse HEAD)"
 ORIGIN_CACHE="$TMP_ROOT/origin-cache"
 origin_source="$(
   env OMI_QUALIFICATION_SWIFT_CACHE_ROOT="$ORIGIN_CACHE" \

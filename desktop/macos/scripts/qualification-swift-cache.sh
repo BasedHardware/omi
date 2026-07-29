@@ -204,11 +204,32 @@ materialize_exact_source_checkout() {
   rm -rf "$dest"
   : >"$err_log"
 
+  # A blobless/promisor source can make `git checkout` report success and set HEAD
+  # while tracked blobs are still missing (worktree paths deleted / invalid objects).
+  # Reject that incomplete materialization so auto mode can fall back to origin.
+  local_checkout_is_complete() {
+    local tree="$1"
+    [[ "$(git -C "$tree" rev-parse HEAD 2>/dev/null || true)" == "$SOURCE_SHA" ]] || return 1
+    # Worktree must match HEAD (missing blobs often surface as deleted paths).
+    git -C "$tree" diff-index --quiet HEAD -- 2>>"$err_log" || return 1
+    # Critical package identity must resolve as a real blob + regular file.
+    git -C "$tree" cat-file -e "HEAD:desktop/macos/Desktop/Package.swift" 2>>"$err_log" || return 1
+    [[ -f "$tree/desktop/macos/Desktop/Package.swift" ]] || return 1
+    if git -C "$SOURCE_REPOSITORY" cat-file -e "$SOURCE_SHA:desktop/macos/Desktop/Package.resolved" 2>/dev/null; then
+      git -C "$tree" cat-file -e "HEAD:desktop/macos/Desktop/Package.resolved" 2>>"$err_log" || return 1
+      [[ -f "$tree/desktop/macos/Desktop/Package.resolved" ]] || return 1
+    fi
+    return 0
+  }
+
   try_local_clone() {
     rm -rf "$dest"
-    git clone --quiet --no-hardlinks --no-checkout "$SOURCE_REPOSITORY" "$dest" 2>>"$err_log" \
-      && git -C "$dest" checkout --quiet --detach "$SOURCE_SHA" 2>>"$err_log" \
-      && [[ "$(git -C "$dest" rev-parse HEAD 2>/dev/null || true)" == "$SOURCE_SHA" ]]
+    git clone --quiet --no-hardlinks --no-checkout "$SOURCE_REPOSITORY" "$dest" 2>>"$err_log" || return 1
+    # Reject checkout failures explicitly (do not treat partial success as OK).
+    if ! git -C "$dest" checkout --quiet --detach "$SOURCE_SHA" 2>>"$err_log"; then
+      return 1
+    fi
+    local_checkout_is_complete "$dest"
   }
 
   try_origin_fetch() {
@@ -227,7 +248,7 @@ materialize_exact_source_checkout() {
       git -C "$dest" fetch --quiet origin "$SOURCE_SHA" 2>>"$err_log" || return 1
     fi
     git -C "$dest" checkout --quiet --detach "$SOURCE_SHA" 2>>"$err_log" || return 1
-    [[ "$(git -C "$dest" rev-parse HEAD 2>/dev/null || true)" == "$SOURCE_SHA" ]]
+    local_checkout_is_complete "$dest"
   }
 
   if [[ "$force_origin" -eq 1 ]]; then
