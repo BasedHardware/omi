@@ -4,7 +4,9 @@
 // hardcodes it. Every call is fire-and-forget and never blocks or surfaces errors.
 import { auth } from './firebase'
 
-const POSTHOG_HOST = (import.meta.env.VITE_POSTHOG_HOST as string) || 'https://us.i.posthog.com'
+// Host is intentionally fixed to the CSP connect-src allowlist in renderer HTML.
+// A VITE_POSTHOG_HOST override would silently fail under Chromium if it diverged.
+const POSTHOG_HOST = 'https://us.i.posthog.com'
 const POSTHOG_KEY =
   (import.meta.env.VITE_POSTHOG_KEY as string) || 'phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y'
 

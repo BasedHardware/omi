@@ -39,4 +39,10 @@ describe('analytics capture contract', () => {
       expect(html).toMatch(/connect-src[\s\S]*https:\/\/us\.i\.posthog\.com[\s\S]*;/)
     }
   )
+
+  it('pins ingestion host to the CSP-allowed origin (not VITE_POSTHOG_HOST)', () => {
+    const source = readFileSync(resolve(__dirname, './analytics.ts'), 'utf8')
+    expect(source).toMatch(/const POSTHOG_HOST = 'https:\/\/us\.i\.posthog\.com'/)
+    expect(source).not.toMatch(/VITE_POSTHOG_HOST/)
+  })
 })

@@ -183,6 +183,11 @@ def _purge_failures(purge_result: object) -> tuple[list[PurgeFailure], list[Purg
     return failures('required_failures'), failures('best_effort_failures')
 
 
+# Service-level PostHog distinct_id only. Never re-identify a deleted Firebase UID
+# as a person profile (success path runs after Auth + Firestore wipe).
+_ACCOUNT_DELETION_TELEMETRY_DISTINCT_ID = 'omi-service:account-deletion'
+
+
 def _emit_deletion_telemetry(uid: str, event: str, properties: dict[str, object]) -> None:
     logger.info(
         'account_deletion_telemetry event=%s duration_seconds=%s vectors_deleted=%s recordings_deleted=%s '
@@ -197,7 +202,15 @@ def _emit_deletion_telemetry(uid: str, event: str, properties: dict[str, object]
         properties.get('retry_count'),
         properties.get('terminal'),
     )
-    emit_posthog_event(uid, event, properties)
+    # Drop any accidental uid-bearing keys; person processing is disabled so
+    # completion/failure cannot recreate a profile for the deleted account.
+    safe_properties = {
+        key: value
+        for key, value in properties.items()
+        if key not in {'uid', 'user_id', 'distinct_id'}
+    }
+    safe_properties['$process_person_profile'] = False
+    emit_posthog_event(_ACCOUNT_DELETION_TELEMETRY_DISTINCT_ID, event, safe_properties)
 
 
 def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = False) -> bool:

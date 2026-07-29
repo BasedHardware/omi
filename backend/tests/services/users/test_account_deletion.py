@@ -650,7 +650,7 @@ def test_background_wipe_emits_bounded_completion_telemetry(monkeypatch):
     assert account_deletion.background_wipe_user_data('uid1') is True
 
     emit.assert_called_once_with(
-        'uid1',
+        'omi-service:account-deletion',
         'Account Deletion Wipe Completed',
         {
             'duration_seconds': 2.346,
@@ -659,9 +659,42 @@ def test_background_wipe_emits_bounded_completion_telemetry(monkeypatch):
             'required_failure_count': 0,
             'best_effort_failure_count': 0,
             'failed_operations': [],
+            '$process_person_profile': False,
         },
     )
-    assert 'uid' not in emit.call_args.args[2]
+    props = emit.call_args.args[2]
+    assert 'uid' not in props
+    assert 'uid1' not in str(props)
+    assert emit.call_args.args[0] != 'uid1'
+
+
+def test_deletion_telemetry_never_uses_deleted_uid_as_distinct_id(monkeypatch):
+    """Account-deletion completion must not re-identify the wiped Firebase UID in PostHog."""
+    emit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'emit_posthog_event', emit)
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_derived_user_data',
+        MagicMock(return_value={'required_failures': [], 'best_effort_failures': []}),
+    )
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock(return_value={'status': 'ok'}))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
+
+    deleted_uid = 'firebase-user-to-wipe'
+    assert account_deletion.background_wipe_user_data(deleted_uid) is True
+
+    distinct_id, event, properties = emit.call_args.args
+    assert distinct_id == 'omi-service:account-deletion'
+    assert distinct_id != deleted_uid
+    assert event == 'Account Deletion Wipe Completed'
+    assert properties.get('$process_person_profile') is False
+    assert deleted_uid not in str(properties)
+    assert 'uid' not in properties
+    assert 'user_id' not in properties
 
 
 def test_background_wipe_emits_failed_operations_and_attempt_context(monkeypatch):
@@ -689,11 +722,18 @@ def test_background_wipe_emits_failed_operations_and_attempt_context(monkeypatch
     assert account_deletion.background_wipe_user_data('uid1', retry_count=2, terminal=True) is False
 
     emit.assert_called_once_with(
-        'uid1',
+        'omi-service:account-deletion',
         'Account Deletion Wipe Failed',
-        {'failed_operations': ['memory_vectors'], 'retry_count': 2, 'terminal': True},
+        {
+            'failed_operations': ['memory_vectors'],
+            'retry_count': 2,
+            'terminal': True,
+            '$process_person_profile': False,
+        },
     )
     assert 'secret provider body' not in str(emit.call_args)
+    assert emit.call_args.args[0] != 'uid1'
+    assert 'uid1' not in str(emit.call_args.args[2])
 
 
 def test_reconcile_pending_deletion_wipes_re_enqueues(monkeypatch):
@@ -729,10 +769,16 @@ def test_reconcile_emits_failure_when_stale_running_wipe_is_reclaimed(monkeypatc
     assert account_deletion.reconcile_pending_deletion_wipes() == {'requeued': 1, 'skipped': 0}
 
     emit.assert_called_once_with(
-        'uid1',
+        'omi-service:account-deletion',
         'Account Deletion Wipe Failed',
-        {'failed_operations': ['stale_running_wipe'], 'retry_count': 0, 'terminal': False},
+        {
+            'failed_operations': ['stale_running_wipe'],
+            'retry_count': 0,
+            'terminal': False,
+            '$process_person_profile': False,
+        },
     )
+    assert emit.call_args.args[0] != 'uid1'
 
 
 def test_reconcile_pending_deletion_wipes_enqueues_cloud_tasks(monkeypatch):
