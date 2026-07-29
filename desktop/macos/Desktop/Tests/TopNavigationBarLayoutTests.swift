@@ -53,6 +53,53 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertLessThanOrEqual(settings.maxX, 300.5)
   }
 
+  func testNavigationIsClippedRatherThanOverlappingPersistentControlsWhenCompactRowOverflows() {
+    // Expanded = 500pt nav, compact = 200pt nav, controls = 200pt, settings = 32pt.
+    // At a 300pt host the compact row (200 + spacing*3 + 200 + spacing + 32 ≈ 642)
+    // still overflows. Verify navigation does not overlap the persistent controls.
+    let recorder = TopNavigationLayoutRecorder()
+    let host = NSHostingView(
+      rootView: TopNavigationBarLayout(
+        expandedNavigation: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .expanded) {
+            Color.clear.frame(width: 500, height: 32)
+          }
+        },
+        compactNavigation: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .compact) {
+            Color.clear.frame(width: 200, height: 32)
+          }
+        },
+        persistentControls: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .persistentControls) {
+            Color.clear.frame(width: 200, height: 32)
+          }
+        },
+        settings: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .settings) {
+            Color.clear.frame(width: 32, height: 32)
+          }
+        }
+      )
+      .frame(width: 300, height: 44)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: 300, height: 44)
+    host.layoutSubtreeIfNeeded()
+
+    guard
+      let navigation = recorder.frame(of: .compact),
+      let controls = recorder.frame(of: .persistentControls)
+    else {
+      return XCTFail("expected compact navigation and persistent controls to be placed")
+    }
+    // Navigation's proposed width must not cause it to overlap the controls.
+    XCTAssertLessThanOrEqual(
+      navigation.maxX,
+      controls.minX,
+      "compact navigation must not overlap persistent controls even when the row overflows"
+    )
+  }
+
   func testCompactNavigationRetainsEveryPrimaryRouteAndMemoryDestination() {
     XCTAssertEqual(
       TopNavigationRoutes.primaryItems.map(\.index),

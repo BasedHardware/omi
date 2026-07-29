@@ -37,6 +37,30 @@ final class SettingsSidebarItemLayoutTests: XCTestCase {
     )
   }
 
+  func testNotificationsLabelTruncatesGracefullyAtConstrainedWidth() {
+    // At a narrower-than-default width the label must not overflow the row —
+    // it should truncate with an ellipsis rather than being clipped or wrapped.
+    let narrowWidth: CGFloat = 120
+    let host = NSHostingView(
+      rootView: SettingsSidebarItem(
+        section: .notifications,
+        isSelected: true,
+        iconWidth: 20,
+        onTap: {}
+      )
+      .frame(width: narrowWidth)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: narrowWidth, height: 100)
+    host.layoutSubtreeIfNeeded()
+
+    // The item should remain a single line (no wrapping) even when truncated.
+    XCTAssertLessThan(
+      host.fittingSize.height,
+      60,
+      "constrained sidebar label should stay on one line (truncate, not wrap)"
+    )
+  }
+
   private func itemHeight(isSelected: Bool) -> CGFloat {
     let host = NSHostingView(
       rootView: SettingsSidebarItem(
