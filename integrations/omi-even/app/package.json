@@ -1,0 +1,27 @@
+{
+  "name": "omi-even-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/unit-test.mjs",
+    "simulator": "evenhub-simulator http://localhost:5273",
+    "mock-bridge": "node scripts/mock-bridge.mjs",
+    "qr": "evenhub qr",
+    "verify": "node scripts/verify-simulator.mjs"
+  },
+  "devDependencies": {
+    "@evenrealities/evenhub-cli": "^0.1.13",
+    "@evenrealities/evenhub-simulator": "^0.8.0",
+    "@evenrealities/sim-darwin-arm64": "^0.8.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.1"
+  },
+  "dependencies": {
+    "@evenrealities/even_hub_sdk": "^0.0.12"
+  }
+}

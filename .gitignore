@@ -247,3 +247,11 @@ builds-snapshot.md
 .hermes/
 backend/.venv
 backend/.harness/
+
+# omi-even bridge local state
+integrations/omi-even/bridge/.env
+integrations/omi-even/bridge/add-agent-capture.log
+integrations/omi-even/bridge/.venv/
+integrations/omi-even/bridge/__pycache__/
+integrations/omi-even/bridge/.pytest_cache/
+integrations/omi-even/bridge/tests/__pycache__/

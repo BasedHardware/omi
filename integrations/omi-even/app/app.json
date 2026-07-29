@@ -1,0 +1,20 @@
+{
+  "package_id": "com.omi.omi",
+  "edition": "202601",
+  "name": "omi",
+  "version": "0.1.0",
+  "min_app_version": "2.0.0",
+  "min_sdk_version": "0.0.12",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Connects to the omi bridge running on your computer to answer questions and read your memories."
+    },
+    {
+      "name": "g2-microphone",
+      "desc": "Listens through the glasses microphone while you ask Omi a question, and when you turn Capture on."
+    }
+  ],
+  "supported_languages": ["en"]
+}
