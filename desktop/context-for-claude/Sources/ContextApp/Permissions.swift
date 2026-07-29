@@ -9,6 +9,7 @@ enum Capability: String, CaseIterable {
     case microphone
     case systemAudio
     case screen
+    case accessibility
 }
 
 extension Capability {
@@ -21,6 +22,8 @@ extension Capability {
             return "I would like to hear your calls, so I catch the other side too."
         case .screen:
             return "I would like to see your screen, so I know what you're working on."
+        case .accessibility:
+            return "I would like to read the text in your windows, so I quote it exactly instead of guessing."
         }
     }
 
@@ -36,6 +39,8 @@ extension Capability {
             return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
         case .screen:
             return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        case .accessibility:
+            return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         }
     }
 }
@@ -56,12 +61,14 @@ enum Permissions {
             // happens at launch.
             _ = screenGrantedAtLaunch
             return CGPreflightScreenCaptureAccess()
+        case .accessibility:
+            return AXElement.isTrusted
         }
     }
 
     /// Fixed order — the onboarding rows and the menu bar read this top to bottom.
     static func report() -> [CapabilityReport] {
-        let ordered: [Capability] = [.microphone, .systemAudio, .screen]
+        let ordered: [Capability] = [.microphone, .systemAudio, .screen, .accessibility]
         return ordered.map { c in
             let granted = check(c)
             return CapabilityReport(name: c.rawValue, granted: granted, detail: statusWord(for: c, granted: granted))
@@ -85,6 +92,13 @@ enum Permissions {
             return await requestSystemAudio()
         case .screen:
             return await requestScreen()
+        case .accessibility:
+            // There is no prompt to raise. macOS grants Accessibility only through System Settings,
+            // by hand, and `AXIsProcessTrustedWithOptions` merely nags with a dialog that leads
+            // there — so send the user straight to the row instead of showing a dialog about a
+            // dialog. Unlike Screen Recording this takes effect immediately, with no relaunch.
+            openSettings(for: c)
+            return AXElement.isTrusted
         }
     }
 
@@ -297,6 +311,11 @@ enum Permissions {
             return defaults.object(forKey: Key.systemAudioGranted) == nil ? Word.open : Word.actionRequired
         case .screen:
             return hasPrompted(.screen) ? Word.actionRequired : Word.open
+        case .accessibility:
+            // Always the same word, because there is no prompt whose absence could mean "not asked
+            // yet": the only path to this grant is the Settings row, so the action is identical
+            // whether or not the user has been sent there before.
+            return Word.actionRequired
         }
     }
 

@@ -138,8 +138,17 @@ public struct Frame: Codable, Sendable, Identifiable, FetchableRecord, MutablePe
     public var appName: String?
     public var windowTitle: String?
     public var ocrText: String?
-    /// Absolute path to the JPEG, if one was kept.
+    /// Absolute path to the stored image, if one was kept.
     public var imagePath: String?
+    /// The focused window's accessibility text, in reading order.
+    ///
+    /// Kept beside `ocrText` rather than replacing it, because the two fail differently: OCR sees
+    /// everything drawn and guesses at it, while this is exact but covers only what the application
+    /// chose to expose. A window rendered as one canvas has OCR text and no accessibility text; a
+    /// window of small dense type has both, and only one of them is right.
+    public var axText: String?
+    /// Content address of the captured tree, or nil when nothing was captured.
+    public var axRootHash: Data?
 
     public init(
         id: Int64? = nil,
@@ -147,7 +156,9 @@ public struct Frame: Codable, Sendable, Identifiable, FetchableRecord, MutablePe
         appName: String? = nil,
         windowTitle: String? = nil,
         ocrText: String? = nil,
-        imagePath: String? = nil
+        imagePath: String? = nil,
+        axText: String? = nil,
+        axRootHash: Data? = nil
     ) {
         self.id = id
         self.capturedAt = capturedAt
@@ -155,6 +166,8 @@ public struct Frame: Codable, Sendable, Identifiable, FetchableRecord, MutablePe
         self.windowTitle = windowTitle
         self.ocrText = ocrText
         self.imagePath = imagePath
+        self.axText = axText
+        self.axRootHash = axRootHash
     }
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {

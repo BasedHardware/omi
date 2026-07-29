@@ -37,6 +37,11 @@ final class ScreenWatcher {
     /// Called on the main actor for each frame worth storing. Ticks that change nothing call nothing.
     var onFrame: ((Frame) -> Void)?
 
+    /// The subtrees of a captured accessibility tree, handed over *before* the frame that references
+    /// them. Separate from `onFrame` because they are deduplicated against every earlier frame: most
+    /// ticks contribute a handful of new rows to a table that already holds the rest of the window.
+    var onAXNodes: (([AXNodeRecord]) -> Void)?
+
     // MARK: - Lifecycle
 
     private var loop: Task<Void, Never>?
@@ -206,12 +211,14 @@ final class ScreenWatcher {
         // the image is written, and `lastAppName`/`lastWindowTitle` belong to this actor.
         let repeatsLastStoredWindow = appName == lastAppName && windowTitle == lastWindowTitle
 
+        let pid = frontApp.processIdentifier
         let captured = CapturedImage(image: image)
         let processed = await Task.detached(priority: .utility) {
             ScreenPipeline.process(
                 captured,
                 capturedAt: capturedAt,
-                repeatsLastStoredWindow: repeatsLastStoredWindow
+                repeatsLastStoredWindow: repeatsLastStoredWindow,
+                pid: pid
             )
         }.value
 
@@ -223,13 +230,20 @@ final class ScreenWatcher {
             return
         }
 
+        // Nodes before the frame, always. The frame carries a root hash into a table those rows have
+        // to be in already, and both writes land on the same serialised queue in the order they are
+        // handed over — so a frame is never stored pointing at a subtree nobody wrote.
+        if !processed.axNodes.isEmpty { onAXNodes?(processed.axNodes) }
+
         emit(
             Frame(
                 capturedAt: capturedAt,
                 appName: appName,
                 windowTitle: windowTitle,
                 ocrText: processed.ocrText,
-                imagePath: processed.imagePath
+                imagePath: processed.imagePath,
+                axText: processed.axText,
+                axRootHash: processed.axRootHash
             )
         )
     }
@@ -350,6 +364,9 @@ private struct CapturedImage: @unchecked Sendable {
 private struct ProcessedFrame: Sendable {
     let ocrText: String?
     let imagePath: String?
+    let axText: String?
+    let axRootHash: Data?
+    let axNodes: [AXNodeRecord]
 }
 
 /// Vision writes its observations from inside `perform`, synchronously, before it returns — so this
@@ -409,6 +426,14 @@ private enum ScreenPipeline {
     /// (``ocrMaxPixelSize``) before this one is written and is untouched by this number. Keeping a
     /// month at lower fidelity beats keeping three weeks at higher fidelity and calling it a month.
     static let frameQuality: CGFloat = 0.20
+
+    /// Longest accessibility text stored per frame.
+    ///
+    /// Generous next to a window title and mean next to a document: the point is the labels, values
+    /// and controls a person was actually looking at, not the whole scrollback of a text view. The
+    /// walker's own per-node and total-text ceilings do most of this work already; this is the last
+    /// bound before the column.
+    static let maxAXTextCharacters = 8_000
     /// Titles can therefore lag reality by up to this long; the OCR text on the same row is always
     /// current, and the next tick corrects the title.
     static let shareableContentTTL: TimeInterval = 5
@@ -691,7 +716,8 @@ private enum ScreenPipeline {
     static func process(
         _ captured: CapturedImage,
         capturedAt: Double,
-        repeatsLastStoredWindow: Bool
+        repeatsLastStoredWindow: Bool,
+        pid: pid_t
     ) -> ProcessedFrame? {
         // Detached tasks run on the cooperative pool, which does not drain autorelease pools; the
         // CoreGraphics and Vision temporaries below would otherwise accumulate for the app's life.
@@ -706,7 +732,31 @@ private enum ScreenPipeline {
             }
 
             let path = writeFrameImage(captured.image, capturedAt: capturedAt)
-            return ProcessedFrame(ocrText: text, imagePath: path)
+
+            // The same window, read rather than looked at. Done here, off the main actor, because
+            // every attribute is a synchronous message to another process: an application that is
+            // beachballing would otherwise stall the tick that is trying to observe it. The walker's
+            // own wall-clock budget is what bounds that, and a window that answers nothing simply
+            // leaves these nil — OCR above has already produced a usable row either way.
+            var axText: String?
+            var axRootHash: Data?
+            var axNodes: [AXNodeRecord] = []
+            if Permissions.check(.accessibility),
+               let window = AXElement.focusedWindow(pid: pid),
+               let tree = AccessibilityTree.capture(window) {
+                axText = AccessibilityTree
+                    .flattenedText(of: tree, limit: maxAXTextCharacters)
+                    .nilIfEmpty
+                axRootHash = AccessibilityTree.rootHash(of: tree)
+                axNodes = AccessibilityTree.records(of: tree)
+            }
+
+            return ProcessedFrame(
+                ocrText: text,
+                imagePath: path,
+                axText: axText,
+                axRootHash: axRootHash,
+                axNodes: axNodes)
         }
     }
 

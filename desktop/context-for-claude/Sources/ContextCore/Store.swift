@@ -194,6 +194,30 @@ public final class ContextStore: @unchecked Sendable {
         }
     }
 
+    /// Stores the subtrees of one captured tree, skipping every one already held.
+    ///
+    /// `INSERT OR IGNORE` rather than a read-then-write: the whole point of a content address is that
+    /// a colliding hash means identical contents, so losing the race is the correct outcome and
+    /// checking first would only add a round trip. Returns how many rows were genuinely new, which is
+    /// the number worth logging — it is the dedup rate, measured rather than assumed.
+    @discardableResult
+    public func insertAXNodes(_ records: [AXNodeRecord], firstSeenFrameId: Int64?) throws -> Int {
+        guard !records.isEmpty else { return 0 }
+        return try write { db in
+            var inserted = 0
+            for record in records {
+                try db.execute(
+                    sql: """
+                    INSERT OR IGNORE INTO ax_nodes (hash, payload, firstSeenFrameId)
+                    VALUES (?, ?, ?)
+                    """,
+                    arguments: [record.hash, record.payload, firstSeenFrameId])
+                inserted += db.changesCount
+            }
+            return inserted
+        }
+    }
+
     /// Deletes frames (and their JPEGs) older than `days`. Transcripts are never pruned.
     ///
     /// Screenshots are the only thing here that grows without bound; text costs almost nothing, and
@@ -503,6 +527,39 @@ public final class ContextStore: @unchecked Sendable {
                 on: "segments",
                 columns: ["backendConversationId", "backendSegmentId"],
                 unique: true)
+        }
+
+        // The accessibility tree, stored the only way that is affordable: content-addressed.
+        //
+        // A naive design puts one tree blob on every frame row, and it does not survive contact with
+        // real capture — consecutive frames of the same window are almost identical, so nearly every
+        // byte would duplicate the byte before it. Addressing each subtree by the hash of its
+        // contents makes that repetition free: a window whose status line changed stores that label
+        // and its ancestors, and references everything else.
+        //
+        // `axText` is denormalised onto the frame deliberately. The nodes carry the structure, but
+        // search wants one flat string per frame, and reassembling it from the node graph on every
+        // query would trade a cheap column for a recursive join. It gets its own FTS table rather
+        // than a new column on `frames_fts`, because adding a column there means dropping and
+        // rebuilding that whole index — this way the existing one is never touched.
+        migrator.registerMigration("v6-accessibility-tree") { db in
+            try db.alter(table: "frames") { t in
+                t.add(column: "axText", .text)
+                t.add(column: "axRootHash", .blob)
+            }
+            try db.create(table: "ax_nodes") { t in
+                t.column("hash", .blob).primaryKey()
+                t.column("payload", .blob).notNull()
+                // Which frame first paid for this subtree. Diagnostic, not a foreign key: the node
+                // outlives that frame by design, and a cascade would delete rows still referenced by
+                // every later frame that shares them.
+                t.column("firstSeenFrameId", .integer)
+            }
+            try db.create(virtualTable: "frames_ax_fts", using: FTS5()) { t in
+                t.synchronize(withTable: "frames")
+                t.tokenizer = .porter(wrapping: .unicode61())
+                t.column("axText")
+            }
         }
 
         return migrator

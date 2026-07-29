@@ -127,6 +127,7 @@ struct StatusView: View {
         case .microphone: return "Microphone"
         case .systemAudio: return "Call audio"
         case .screen: return "Screen"
+        case .accessibility: return "Window text"
         }
     }
 

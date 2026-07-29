@@ -538,6 +538,7 @@ final class Engine: ObservableObject {
         let watcher = ScreenWatcher()
         let store = self.store
         watcher.onFrame = { frame in store.record(frame) }
+        watcher.onAXNodes = { records in store.record(axNodes: records) }
         watcher.start(interval: 3.0)
         screenWatcher = watcher
         running.insert(.screen)
@@ -771,6 +772,7 @@ private final class EngineStore: @unchecked Sendable {
     private enum PendingWrite {
         case line(TranscriptLine, appHint: String?)
         case frame(Frame)
+        case axNodes([AXNodeRecord])
     }
 
     /// Capture now starts before the store opens, so everything produced in that window has to go
@@ -822,6 +824,13 @@ private final class EngineStore: @unchecked Sendable {
         queue.async {
             guard let store = self.store else { return self.hold(.frame(frame)) }
             self.insert(frame, into: store)
+        }
+    }
+
+    func record(axNodes records: [AXNodeRecord]) {
+        queue.async {
+            guard let store = self.store else { return self.hold(.axNodes(records)) }
+            self.insert(axNodes: records, into: store)
         }
     }
 
@@ -909,6 +918,16 @@ private final class EngineStore: @unchecked Sendable {
         }
     }
 
+    /// Held in the same pen as frames and replayed in the same order, so the rows a frame's root hash
+    /// points at are always written before the frame itself — even across a store that opened late.
+    private func insert(axNodes records: [AXNodeRecord], into store: ContextStore) {
+        do {
+            try store.insertAXNodes(records, firstSeenFrameId: nil)
+        } catch {
+            ContextLog.error("Dropped an accessibility tree: \(error.localizedDescription)", "store")
+        }
+    }
+
     // MARK: - Holding pen (queue only)
 
     /// Queues one write until the store opens, dropping the oldest on overflow — and saying so.
@@ -935,6 +954,7 @@ private final class EngineStore: @unchecked Sendable {
             switch write {
             case .line(let line, let appHint): append(line, appHint: appHint, to: store)
             case .frame(let frame): insert(frame, into: store)
+            case .axNodes(let records): insert(axNodes: records, into: store)
             }
         }
         if droppedWhileOpening > 0 {
