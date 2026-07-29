@@ -451,6 +451,7 @@ final class ProjectionViewModel: ObservableObject {
           evidenceTier: "grounded",
           selectionRank: 1,
           uncertainty: ["Based on the evidence currently available."]))
+      image = automationFixtureImage()
       imageLoadFailed = false
       errorMessage = nil
     case "empty":
@@ -489,9 +490,24 @@ final class ProjectionViewModel: ObservableObject {
       "evidence_count": "\(projection?.whyThis?.evidence.count ?? 0)",
       "error_message": errorMessage ?? "",
       "generate_visible": AppBuild.isNonProduction ? "true" : "false",
+      "image_visible": image == nil ? "false" : "true",
       "why_this_visible": projection?.whyThis == nil ? "false" : "true",
       "feedback_visible": projection == nil ? "false" : "true",
     ]
+  }
+
+  private func automationFixtureImage() -> NSImage {
+    NSImage(size: NSSize(width: 640, height: 400), flipped: false) { bounds in
+      NSColor(calibratedWhite: 0.16, alpha: 1).setFill()
+      bounds.fill()
+      NSColor(calibratedWhite: 0.28, alpha: 1).setFill()
+      NSBezierPath(
+        roundedRect: bounds.insetBy(dx: 72, dy: 56),
+        xRadius: 36,
+        yRadius: 36
+      ).fill()
+      return true
+    }
   }
 
   private func clearOwnerState() {

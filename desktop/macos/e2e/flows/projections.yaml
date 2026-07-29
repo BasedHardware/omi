@@ -50,6 +50,7 @@ steps:
       result.detail.state: loaded
       result.detail.evidence_count: "1"
       result.detail.generate_visible: "true"
+      result.detail.image_visible: "true"
 
   - id: S5
     name: Assert the loaded projection presentation
@@ -60,6 +61,7 @@ steps:
       result.detail.why_this_visible: "true"
       result.detail.feedback_visible: "true"
       result.detail.generate_visible: "true"
+      result.detail.image_visible: "true"
 
   - id: S6
     name: Capture the loaded projection
@@ -97,6 +99,7 @@ steps:
     expect:
       result.detail.state: empty
       result.detail.error_message: ""
+      result.detail.image_visible: "false"
 
   - id: S10
     name: Assert the empty message
@@ -117,6 +120,7 @@ steps:
       result.detail.state: error
       result.detail.error_message:
         contains: "harness backend unavailable"
+      result.detail.image_visible: "false"
 
   - id: S12
     name: Assert the main error message
