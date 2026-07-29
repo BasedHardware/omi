@@ -63,7 +63,12 @@ CONTRACTS = (
         expected_env=(("OMI_ENV_STAGE", "{environment}"), ("GOOGLE_CLOUD_PROJECT", "{project}")),
         required_secret_name=True,
     ),
-    DeploymentContract(service="pusher", image_name="pusher", required_secret_name=True),
+    DeploymentContract(
+        service="pusher",
+        image_name="pusher",
+        expected_env=(("GOOGLE_CLOUD_PROJECT", "{project}"),),
+        required_secret_name=True,
+    ),
     DeploymentContract(
         service="agent-proxy",
         image_name="agent-proxy",
