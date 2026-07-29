@@ -240,12 +240,14 @@ class MongoDocumentStore:
         start_after: Optional[Dict[str, Any]] = None,
     ) -> List[StoredDocument]:
         mongo_filter = self._filter(collection, filters)
-        direction_i = ASCENDING if direction == "asc" else DESCENDING
+        # order_by is a single field name (str) or a list of (field, direction) tuples.
+        specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         if start_after is not None:
-            # Keyset with a full-path _id tiebreak (mirrors Firestore __name__), so ties on the
-            # order_by field neither skip nor duplicate a row across pages.
-            op = "$gt" if direction == "asc" else "$lt"
-            field_key = "d." + order_by
+            # Keyset is single-field (specs has one entry here). Full-path _id tiebreak mirrors
+            # Firestore __name__, so ties on the order_by field neither skip nor duplicate a row.
+            keyset_field, keyset_dir = specs[0]
+            op = "$gt" if keyset_dir == "asc" else "$lt"
+            field_key = "d." + keyset_field
             cursor_id = f"{collection}/{start_after['id']}"
             keyset = {
                 "$or": [
@@ -256,10 +258,12 @@ class MongoDocumentStore:
             mongo_filter = {"$and": [mongo_filter, keyset]}
         projection = {"d." + field: 1 for field in fields} if fields is not None else None
         cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=None)
-        if order_by is not None:
+        if specs:
             # Always tiebreak by _id (mirrors Firestore's implicit __name__ ordering) so tie order is
-            # stable across pages — the keyset cursor depends on that consistency.
-            cursor = cursor.sort([("d." + order_by, direction_i), ("_id", direction_i)])
+            # stable across pages — the keyset cursor depends on that consistency for single-field.
+            sort_spec = [("d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs]
+            sort_spec.append(("_id", ASCENDING if specs[-1][1] == "asc" else DESCENDING))
+            cursor = cursor.sort(sort_spec)
         if offset is not None:
             cursor = cursor.skip(offset)
         if limit is not None:

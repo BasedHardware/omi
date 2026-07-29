@@ -155,6 +155,17 @@ def test_query_equality_order_and_limit(store, uid):
     assert [d.id for d in limited] == ["p2"]
 
 
+def test_query_multi_field_order_by(store, uid):
+    base = f"users/{uid}/people"
+    # Same score for a,b (b created later); c lower score. Primary scoring desc, secondary created_at desc.
+    store.set(f"{base}/a", {"score": 5, "created_at": 100})
+    store.set(f"{base}/b", {"score": 5, "created_at": 200})
+    store.set(f"{base}/c", {"score": 9, "created_at": 50})
+
+    ordered = store.query(base, order_by=[("score", "desc"), ("created_at", "desc")])
+    assert [d.id for d in ordered] == ["c", "b", "a"]
+
+
 def test_query_array_contains(store, uid):
     base = f"users/{uid}/people"
     store.set(f"{base}/p1", {"name": "p1", "tags": ["persona", "audio"]})

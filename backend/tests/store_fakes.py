@@ -179,16 +179,27 @@ class FakeDocumentStore:
     ) -> List[StoredDocument]:
         rows = self._matching_rows(collection, filters)
         reverse = direction == "desc"
-        if order_by is not None:
-            # (value, path) key so the id tiebreak matches the adapters' keyset ordering.
-            rows.sort(key=lambda pd: (pd[1].get(order_by), pd[0]), reverse=reverse)
-        if start_after is not None:
-            cursor_key = (start_after["value"], f"{collection}/{start_after['id']}")
-            rows = [
-                pd
-                for pd in rows
-                if ((pd[1].get(order_by), pd[0]) < cursor_key if reverse else (pd[1].get(order_by), pd[0]) > cursor_key)
-            ]
+        if order_by is None or isinstance(order_by, str):
+            if order_by is not None:
+                # (value, path) key so the id tiebreak matches the adapters' keyset ordering.
+                rows.sort(key=lambda pd: (pd[1].get(order_by), pd[0]), reverse=reverse)
+            if start_after is not None:
+                cursor_key = (start_after["value"], f"{collection}/{start_after['id']}")
+                rows = [
+                    pd
+                    for pd in rows
+                    if (
+                        (pd[1].get(order_by), pd[0]) < cursor_key
+                        if reverse
+                        else (pd[1].get(order_by), pd[0]) > cursor_key
+                    )
+                ]
+        else:
+            # Multi-field order_by: [(field, direction), ...]. Stable sorts applied most-significant
+            # last, with an ascending path (id) tiebreak first (mirrors the adapters' _id/__name__).
+            rows.sort(key=lambda pd: pd[0])
+            for field, fdir in reversed(list(order_by)):
+                rows.sort(key=lambda pd, f=field: pd[1].get(f), reverse=(fdir == "desc"))
         if offset is not None:
             rows = rows[offset:]
         if limit is not None:

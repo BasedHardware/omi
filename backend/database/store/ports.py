@@ -19,6 +19,11 @@ from .records import StoredDocument
 # (field, op, value) — op is a neutral comparison operator, not a Firestore FieldFilter.
 Filter = Tuple[str, str, Any]
 
+# order_by is either a single field name (sorted per ``direction``) or, for multi-field ordering, a
+# sequence of (field, direction) pairs applied most-significant first. Keyset (``start_after``) is
+# single-field only.
+OrderBy = Any  # Union[str, Sequence[Tuple[str, str]]] — kept loose to avoid over-constraining callers.
+
 
 @runtime_checkable
 class Transaction(Protocol):
@@ -63,7 +68,7 @@ class DocumentStore(Protocol):
         collection: str,
         *,
         filters: Optional[Iterable[Filter]] = None,
-        order_by: Optional[str] = None,
+        order_by: Optional[OrderBy] = None,
         direction: str = "asc",
         limit: Optional[int] = None,
         offset: Optional[int] = None,

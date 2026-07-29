@@ -201,11 +201,12 @@ class FirestoreDocumentStore:
         query: Any = self._client.collection(collection)
         for field, op, value in filters or ():
             query = query.where(filter=FieldFilter(field, op, value))
-        if order_by is not None:
-            query = query.order_by(order_by, direction=_DIRECTION[direction])
+        specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
+        for _field, _dir in specs:
+            query = query.order_by(_field, direction=_DIRECTION[_dir])
         if start_after is not None:
-            # Keyset cursor with a document-id tiebreak so ties on order_by never skip/duplicate.
-            query = query.order_by('__name__', direction=_DIRECTION[direction])
+            # Keyset cursor (single order_by) with a document-id tiebreak so ties never skip/duplicate.
+            query = query.order_by('__name__', direction=_DIRECTION[specs[0][1]])
             query = query.start_after([start_after['value'], start_after['id']])
         if fields is not None:
             query = query.select(list(fields))
