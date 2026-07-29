@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import Cocoa
 import CoreGraphics
 @preconcurrency import UserNotifications
@@ -89,6 +90,12 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var externalCaptureYield = ProactiveExternalCaptureYield()
   private let screenshotAppBackoffDuration: TimeInterval = 10
   private let screenShareBackoffDuration: TimeInterval = 10
+
+  // Pause capture while macOS reports secure keyboard entry (a password field holds focus).
+  // See SecureInputCaptureGate.
+  private var secureInputGate = SecureInputCaptureGate()
+  private let secureInputBackoffDuration: TimeInterval = 2
+  private let secureInputStuckThreshold: TimeInterval = 300
 
   // Change-gated distribution: only distribute frames to assistants when context changes.
   // Eliminates continuous polling when the user stays on the same app/window.
@@ -534,6 +541,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     recoveryRetryCount = 0
     isInDelayPeriod = false
     externalCaptureYield.reset()
+    secureInputGate.reset()
     videoCallThrottleGate.reset()
     distributionGate.reset()
     captureTrigger.reset()
@@ -763,6 +771,23 @@ public class ProactiveAssistantsPlugin: NSObject {
       shareBackoffDuration: screenShareBackoffDuration
     ) {
       return
+    }
+
+    // Never capture pixels while a password field holds focus. Returning here — ahead of
+    // ScreenCaptureKit — means the credential is never imaged, not imaged then discarded.
+    switch secureInputGate.nextDecision(
+      isSecureInputActive: IsSecureEventInputEnabled(),
+      now: now,
+      backoffDuration: secureInputBackoffDuration,
+      stuckThreshold: secureInputStuckThreshold
+    ) {
+    case .skip(let reportStuck):
+      if reportStuck {
+        SecureInputCaptureGate.reportStuckFlag(threshold: secureInputStuckThreshold)
+      }
+      return
+    case .capture:
+      break
     }
 
     // Cheap early exits before resolving the active window.
