@@ -159,12 +159,16 @@ git init -q --bare "$TMPDIR/fallback-bare.git"
 # This contract also runs beneath `make preflight`; suppress nested Make's
 # directory banner so stdout remains the resolver value under both entrypoints.
 out="$(cd "$FB_ROOT" && env -u PYTHON GIT_DIR="$TMPDIR/fallback-bare.git" make --no-print-directory print-resolved-python 2>/dev/null)"
-# Resolve the physical path because Git Bash exposes /tmp as a logical mount
-# while BASH_SOURCE resolves the same directory through its Windows path.
+# Resolve both sides to physical paths because macOS exposes /tmp as a logical
+# alias for /private/tmp, while Git Bash can expose the same directory through
+# a Windows path. Comparing only one normalized side makes the test itself
+# platform-dependent.
+actual_path="${out#PYTHON=}"
+actual="PYTHON=$(cd "$(dirname "$actual_path")" && pwd -P)/$(basename "$actual_path")"
 expected="PYTHON=$(cd "$FB_ROOT" && pwd -P)/backend/.venv/bin/python"
-if [ "$out" != "$expected" ]; then
+if [ "$actual" != "$expected" ]; then
   echo "FAIL: Makefile repo-root resolution collapsed when show-toplevel could not resolve a work tree." >&2
-  printf 'Expected: %s\nGot:      %s\n' "$expected" "$out" >&2
+  printf 'Expected: %s\nGot:      %s\n' "$expected" "$actual" >&2
   exit 1
 fi
 echo "linked-worktree repo-root fallback test passed."
