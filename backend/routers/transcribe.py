@@ -21,14 +21,16 @@ from utils.client_device import (
     ClientDeviceContext,
     resolve_client_device_from_websocket_auth_message,
 )
-from database.user_product import _normalize_product
 from utils.other import endpoints as auth
 
 
 def _app_product_from_websocket(websocket: WebSocket) -> Optional[str]:
     headers = websocket.headers
     raw = headers.get('x-app-product') or headers.get('X-App-Product')
-    return _normalize_product(raw)
+    if not raw or not isinstance(raw, str):
+        return None
+    product = raw.strip()
+    return product or None
 
 
 logger = logging.getLogger(__name__)

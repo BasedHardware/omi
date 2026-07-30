@@ -41,7 +41,7 @@ async def get_current_user_id(
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
     try:
-        record_user_product(uid, x_app_product)
+        await run_blocking(critical_executor, record_user_product, uid, x_app_product)
     except Exception as e:  # noqa: BLE001
         logger.debug("record_user_product swallowed error for uid=%s: %s", uid, e)
 
@@ -73,7 +73,12 @@ async def get_uid_from_mcp_api_key(
     user_id = user_data["user_id"]
     try:
         # Prefer stamped key metadata; fall back to request header for legacy keys.
-        record_user_product(user_id, user_data.get("product") or x_app_product)
+        await run_blocking(
+            critical_executor,
+            record_user_product,
+            user_id,
+            user_data.get("product") or x_app_product,
+        )
     except Exception as e:  # noqa: BLE001
         logger.debug("record_user_product from mcp key swallowed error for uid=%s: %s", user_id, e)
     await _check_api_key_rate_limit_async(
@@ -113,7 +118,12 @@ async def get_mcp_api_key_auth(
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
     try:
-        record_user_product(user_data["user_id"], user_data.get("product") or x_app_product)
+        await run_blocking(
+            critical_executor,
+            record_user_product,
+            user_data["user_id"],
+            user_data.get("product") or x_app_product,
+        )
     except Exception as e:  # noqa: BLE001
         logger.debug(
             "record_user_product from mcp key auth swallowed error for uid=%s: %s",
