@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a chat freeze and runaway memory use when loading completed messages"
-}
