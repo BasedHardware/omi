@@ -96,7 +96,7 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(
             applied,
             ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity",
-             "v6-accessibility-tree"])
+             "v6-accessibility-tree", "v7-frame-bundle-id"])
 
         // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
         // migrator and skips itself when its identifier is already recorded. Proving the two live
@@ -108,7 +108,7 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(
             coexisting,
             ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity",
-             "v6-accessibility-tree", UploadQueue.migrationIdentifier])
+             "v6-accessibility-tree", "v7-frame-bundle-id", UploadQueue.migrationIdentifier])
         XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
 
         let segments: [Segment] = try upgraded.read { try Segment.fetchAll($0) }
@@ -199,7 +199,7 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(
             applied,
             ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity",
-             "v6-accessibility-tree"])
+             "v6-accessibility-tree", "v7-frame-bundle-id"])
 
         // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
         // migrator. Proving they still coexist is the only way to know `v4-` did not claim a slot
@@ -211,7 +211,7 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(
             coexisting,
             ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity",
-             "v6-accessibility-tree", UploadQueue.migrationIdentifier])
+             "v6-accessibility-tree", "v7-frame-bundle-id", UploadQueue.migrationIdentifier])
         XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
 
         let segments: [Segment] = try upgraded.read { try Segment.fetchAll($0) }

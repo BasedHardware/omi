@@ -136,6 +136,14 @@ public struct Frame: Codable, Sendable, Identifiable, FetchableRecord, MutablePe
     /// Unix epoch seconds.
     public var capturedAt: Double
     public var appName: String?
+    /// The owning application's bundle identifier, e.g. `com.todesktop.230313mzl4w4u92`.
+    ///
+    /// Kept alongside `appName` rather than instead of it, because the two answer different
+    /// questions and only one of them survives a rename: the display name is what a person reads
+    /// back on a timeline, and the identifier is the only thing that can find the app again on disk
+    /// to draw its icon. Nil for every row captured before the column existed, and nil means "not
+    /// recorded" — never "this app has no bundle".
+    public var bundleId: String?
     public var windowTitle: String?
     public var ocrText: String?
     /// Absolute path to the stored image, if one was kept.
@@ -154,6 +162,7 @@ public struct Frame: Codable, Sendable, Identifiable, FetchableRecord, MutablePe
         id: Int64? = nil,
         capturedAt: Double,
         appName: String? = nil,
+        bundleId: String? = nil,
         windowTitle: String? = nil,
         ocrText: String? = nil,
         imagePath: String? = nil,
@@ -163,6 +172,7 @@ public struct Frame: Codable, Sendable, Identifiable, FetchableRecord, MutablePe
         self.id = id
         self.capturedAt = capturedAt
         self.appName = appName
+        self.bundleId = bundleId
         self.windowTitle = windowTitle
         self.ocrText = ocrText
         self.imagePath = imagePath

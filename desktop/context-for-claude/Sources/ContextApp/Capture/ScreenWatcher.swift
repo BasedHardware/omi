@@ -194,7 +194,12 @@ final class ScreenWatcher {
             // to a different window — a duplicate row every 3 seconds would bury the timeline it is
             // meant to be.
             if appName != lastAppName || windowTitle != lastWindowTitle {
-                emit(Frame(capturedAt: capturedAt, appName: appName, windowTitle: windowTitle))
+                emit(
+                    Frame(
+                        capturedAt: capturedAt,
+                        appName: appName,
+                        bundleId: bundleID.nilIfEmpty,
+                        windowTitle: windowTitle))
             }
             return
         }
@@ -239,6 +244,11 @@ final class ScreenWatcher {
             Frame(
                 capturedAt: capturedAt,
                 appName: appName,
+                // Already read at the top of the tick for the exclusion checks and, until now,
+                // thrown away. It is the only reliable key back to the app on disk — the timeline
+                // draws its icon from it rather than guessing at `<appName>.app` in a list of
+                // directories. Empty becomes nil so "not recorded" stays one value in the column.
+                bundleId: bundleID.nilIfEmpty,
                 windowTitle: windowTitle,
                 ocrText: processed.ocrText,
                 imagePath: processed.imagePath,
