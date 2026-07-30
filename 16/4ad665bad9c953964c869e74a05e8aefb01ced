@@ -1,0 +1,24 @@
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindView.swift
+  s_18cae1c5af4258::t_09ca5ed035cdfb 324-327
+desktop/context-for-claude/Sources/ContextApp/Account/LoopbackCallbackServer.swift
+  s_18cae1c5af4258::t_39340f6e7a116e 295-299
+  s_18cae1c5af4258::t_f17bdc57bb6aa5 284,288
+  s_18cae1c5af4258::t_1cf1f3250824b8 254-261,264-265
+  s_18cae1c5af4258::t_157d874822e911 285-287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "164ad665bad9c953964c869e74a05e8aefb01ced",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
