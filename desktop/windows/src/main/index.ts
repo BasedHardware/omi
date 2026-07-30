@@ -122,6 +122,10 @@ import { startTaskPromotionService } from './assistants/tasks/promotionService'
 import { registerGoalGeneration } from './assistants/goals/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
+import {
+  startRewindForegroundCaptureTrigger,
+  stopRewindForegroundCaptureTrigger
+} from './rewind/foregroundCaptureTrigger'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindEmbedding } from './rewind/embeddingService'
 import { startRewindRetention } from './rewind/retentionRunner'
@@ -1149,6 +1153,10 @@ app.whenReady().then(async () => {
         // fresh install, and any change the user makes in Settings survives restarts.
         // OCR/retention loops are cheap no-ops until frames exist.
         { name: 'rewindCapture', run: () => startRewindCapture() },
+        {
+          name: 'rewindForegroundCapture',
+          run: () => startRewindForegroundCaptureTrigger()
+        },
         { name: 'rewindOcr', run: () => startRewindOcr() },
         // Semantic-search indexer (Track 4). Starts its flush timer here; the queue
         // and the launch backfill only move once the renderer relays a Firebase
@@ -1497,6 +1505,7 @@ app.on('will-quit', () => {
   flushPerfMarks()
   automationBridge.dispose()
   stopAutomationTargetTracker()
+  stopRewindForegroundCaptureTrigger()
   // Kill the long-running OCR/window-info helper subprocess. Without this it
   // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
   // pile up across launches (no production dispose() call site before this).

@@ -1014,7 +1014,13 @@ export type OmiBridgeApi = {
    *  deletes, idempotent). Resolves to the number of rows rebuilt. */
   rewindRebuildIndex: () => Promise<number>
   rewindPrimarySourceId: () => Promise<string | null>
-  rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
+  /** Display source containing the foreground window, with cursor/primary fallbacks. */
+  rewindCaptureSourceId: () => Promise<string | null>
+  rewindSaveFrame: (
+    data: Uint8Array,
+    sourceId: string
+  ) => Promise<{ captured: boolean; reason?: string }>
+  onRewindCaptureNow: (cb: () => void) => () => void
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
   /** Runtime capture directive (pause + effective cadence) the main process derives
    *  from OS power/lock state; the capture host prefers it over the base interval. */
