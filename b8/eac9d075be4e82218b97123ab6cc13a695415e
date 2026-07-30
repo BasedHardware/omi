@@ -1,0 +1,36 @@
+desktop/context-for-claude/scripts/make-dmg-background.sh
+  s_18cae1c5af4258::t_39fab9c1f0833d 1-38,43-52,62-76,92-107,118-122,125,132-133,141,146,149,155,159-161,164-165,167-169,172,178,183-191,198-201
+  s_18cae1c5af4258::t_c1490ce5d149e3 131
+  s_18cae1c5af4258::t_83a78734f76094 162-163
+  s_18cae1c5af4258::t_947420d0c4dda0 192-197
+  s_18cae1c5af4258::t_c3d16bd79086d8 77-91
+  s_18cae1c5af4258::t_42262b33182a47 108-117
+  s_18cae1c5af4258::t_8b2d3bdf009e69 166,170,179-182
+  s_18cae1c5af4258::t_90e56938dde31d 123-124,126-130,134-140,142-145,147-148,150-154,156-158
+  s_18cae1c5af4258::t_20e835f3241d05 174-177
+  s_18cae1c5af4258::t_cc68d34f42988f 39-42,53-61
+  s_18cae1c5af4258::t_5908fbd2688786 171,173
+desktop/context-for-claude/scripts/package-dmg.sh
+  s_18cae1c5af4258::t_70eacbb62c6f07 351-371,373-381,383-386,392,396-399
+  s_18cae1c5af4258::t_f462113f44db28 294-296
+  s_18cae1c5af4258::t_29364a26c64b3e 221
+  s_18cae1c5af4258::t_459f0d6e482f26 189-191,193
+  s_18cae1c5af4258::t_c289d1666befde 3,22-38,41-43,51-53,59-103,106-107,112-130,132-134,157-167,171-188,192,194-220,222-264,267-271,278-293,297-350,372,382,387-391,393-395,400-415
+  s_18cae1c5af4258::t_de4cfb4bffa915 168-170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "b8eac9d075be4e82218b97123ab6cc13a695415e",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
