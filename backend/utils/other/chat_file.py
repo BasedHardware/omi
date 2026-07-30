@@ -244,7 +244,7 @@ class FileChatTool:
                 cast(ChatCompletionMessageParam, {"role": "user", "content": contents})
             ]
             stream = await openai_client.chat.completions.create(
-                model="gpt-4.1",
+                model="gpt-5.6-luna",
                 messages=messages,
                 stream=True,
                 max_tokens=2048,
@@ -297,7 +297,7 @@ class FileChatTool:
                 assistant = openai.beta.assistants.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
                     name="File Reader",
                     instructions="You are a helpful assistant that answers questions about the provided file. Use the file_search tool to search the file contents when needed.",
-                    model="gpt-4.1",
+                    model="gpt-5.6-luna",
                     tools=[{"type": "file_search"}],
                     timeout=timeout,
                 )
