@@ -550,7 +550,26 @@ impl Runtime {
                 return;
             }
         };
-        // Cancel every active run bound to this session.
+        let run_ids = self
+            .running
+            .values()
+            .filter(|running| running.session_id == session_id && running.owner_id == owner_id)
+            .map(|running| running.run_id.clone())
+            .collect::<Vec<_>>();
+        let mut revoked_tool_claims = 0_u64;
+        for run_id in &run_ids {
+            match self
+                .tool_relay
+                .revoke_owner_run(&mut self.journal, &owner_id, Some(run_id))
+            {
+                Ok(revoked) => revoked_tool_claims += revoked,
+                Err(error) => {
+                    self.emit_error(None, None, "runtime_state", &error);
+                    return;
+                }
+            }
+        }
+        // Cancel every active run bound to this session only after revoking its claims.
         let mut cancelled = 0_u64;
         self.running.retain(|_request_id, running| {
             if running.session_id == session_id {
@@ -575,7 +594,8 @@ impl Runtime {
                     "externalRefId": external_ref_id,
                     "sessionId": session_id,
                     "invalidated": true,
-                    "cancelledRuns": cancelled
+                    "cancelledRuns": cancelled,
+                    "revokedToolClaims": revoked_tool_claims
                 }),
             ),
         );
@@ -1807,6 +1827,78 @@ mod tests {
         assert_eq!(invalidation.kind, "session_invalidated");
         assert_eq!(invalidation.fields["invalidated"], true);
         assert_eq!(invalidation.fields["sessionId"], session_id);
+    }
+
+    #[tokio::test]
+    async fn invalidating_a_session_revokes_its_pending_tool_claims() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        runtime.handle(parse_line(r#"{"type":"resolve_surface_session","requestId":"resolve","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("surface fixture must parse"));
+        let resolved = receiver.recv().await.expect("surface response must emit");
+        let session_id = resolved.fields["sessionId"]
+            .as_str()
+            .expect("session id must be present")
+            .to_owned();
+        let (cancel, _) = watch::channel(false);
+        runtime.running.insert(
+            "request".into(),
+            RunningQuery {
+                cancel,
+                owner_id: "owner".into(),
+                session_id: session_id.clone(),
+                run_id: "run".into(),
+                attempt_id: "attempt".into(),
+                profile_generation: 1,
+                surface_kind: "main_chat".into(),
+            },
+        );
+        runtime.authorize_tool_request(ToolRequest {
+            request_id: "request".into(),
+            client_id: "client".into(),
+            call: rx4::ToolCall {
+                id: "invoke-1".into(),
+                name: "search".into(),
+                arguments: r#"{"q":"omi"}"#.into(),
+            },
+        });
+        let authorized = receiver
+            .recv()
+            .await
+            .expect("authorized tool execution must emit");
+        runtime.handle(parse_line(r#"{"type":"invalidate_session","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("invalidation fixture must parse"));
+        let invalidation = receiver.recv().await.expect("invalidation must emit");
+        assert_eq!(invalidation.kind, "session_invalidated");
+        assert_eq!(invalidation.fields["revokedToolClaims"], 1);
+        let mut result = authorized.fields;
+        result.insert("type".into(), json!("authorized_tool_execution_result"));
+        result.insert("outcome".into(), json!("succeeded"));
+        result.insert("result".into(), json!("found"));
+        for key in [
+            "toolName",
+            "input",
+            "effectClass",
+            "retryPolicy",
+            "surfaceKind",
+            "externalRefKind",
+            "externalRefId",
+            "originatingUserText",
+            "precedingAssistantText",
+            "runMode",
+            "chatMode",
+            "requestId",
+            "clientId",
+        ] {
+            result.remove(key);
+        }
+        runtime.authorized_tool_execution_result(result);
+        let rejection = receiver.recv().await.expect("revoked claim must reject completion");
+        assert_eq!(rejection.kind, "error");
+        assert_eq!(rejection.fields["failure"]["failureCode"], "invalid_request");
     }
 
     #[tokio::test]
