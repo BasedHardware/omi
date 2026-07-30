@@ -19,13 +19,13 @@ rate_cards:
     cached_input_micro_usd_per_million: 20000
     output_micro_usd_per_million: 1250000
 
-  - rate_card_id: openai.gpt-5.6-luna.2026-07-17
+  - rate_card_id: openai.gpt-5.6-luna.2026-07-30
     provider: openai
     model: gpt-5.6-luna
-    input_micro_usd_per_million: 1000000
-    cached_input_micro_usd_per_million: 100000
-    output_micro_usd_per_million: 6000000
-    cache_write_micro_usd_per_million: 1250000
+    input_micro_usd_per_million: 200000
+    cached_input_micro_usd_per_million: 20000
+    output_micro_usd_per_million: 1200000
+    cache_write_micro_usd_per_million: 250000
 
   - rate_card_id: vertex.gemini-2.5-flash.2026-07-17
     provider: gemini

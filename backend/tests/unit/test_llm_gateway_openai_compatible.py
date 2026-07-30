@@ -82,10 +82,10 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'selected_route_artifact_id' not in body
     # The checked-in active route is in shadow rollout (percent 0), so live
     # traffic is served by the last-known-good route. The LKG primary uses the
-    # gateway-only chat_extraction policy (gpt-5.4-nano), leaving the legacy
-    # product route unchanged while shadow-only.
-    assert provider.calls[0].model == 'gpt-5.4-nano'
-    assert provider.calls[0].request['model'] == 'gpt-5.4-nano'
+    # gateway-only chat_extraction policy (gpt-5.6-luna), aligned with the
+    # direct product route while shadow-only.
+    assert provider.calls[0].model == 'gpt-5.6-luna'
+    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
     assert provider.calls[0].request['temperature'] == 0
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
@@ -132,7 +132,7 @@ def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
     error = recorded[0]['error']
     assert error.failure_class == failure_class
     assert error.provider == 'openai'
-    assert error.model == 'gpt-5.4-nano'
+    assert error.model == 'gpt-5.6-luna'
     assert error.provider_rejection == provider_rejection
 
 
@@ -195,7 +195,7 @@ def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attrib
                 'id': 'chatcmpl-accounted',
                 'object': 'chat.completion',
                 'created': 1,
-                'model': 'gpt-5.4-nano',
+                'model': 'gpt-5.6-luna',
                 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': '{}'}, 'finish_reason': 'stop'}],
                 'usage': {
                     'prompt_tokens': 100,
@@ -271,7 +271,7 @@ def test_gateway_provider_body_strips_gpt56_cache_fields_for_legacy_route():
         ],
     )
     resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
-    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.4-nano'))
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-4.1-mini'))
 
     assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
     assert 'prompt_cache_options' not in forwarded
@@ -685,7 +685,7 @@ async def test_streaming_midstream_provider_failure_records_error_exactly_once(m
         first_chunk=b'data: {"choices":[]}\n\n',
         stream=failing_stream(),
         provider='openai',
-        model='gpt-5.4-nano',
+        model='gpt-5.6-luna',
         fallback_used=False,
         fallback_reason=None,
     )
@@ -723,7 +723,7 @@ async def test_streaming_consumer_abandonment_records_cancelled_exactly_once(mon
             first_chunk=b'data: {"choices":[]}\n\n',
             stream=remaining_stream(),
             provider='openai',
-            model='gpt-5.4-nano',
+            model='gpt-5.6-luna',
             fallback_used=False,
             fallback_reason=None,
         ),
