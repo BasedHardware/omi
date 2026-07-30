@@ -157,7 +157,9 @@ struct TutorialCardView: View {
                 Text("is the chord.")
                     .inkStyle(InkType.prose, color: Ink.secondary)
             }
-            prose("No global shortcut is registered in this build, so this button is what opens it today.")
+            prose(TutorialModel.timelineChordIsArmed
+                  ? "Try it whenever you like — this button opens it too."
+                  : "That chord isn't live on this machine yet, so this button is what opens it today.")
         }
     }
 

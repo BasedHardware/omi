@@ -52,7 +52,10 @@ final class TutorialController {
             return
         }
 
-        let resolved = injected ?? (try? ContextStore(readOnly: true))
+        // The app's own writer first, a read-only WAL reader second. Two connections to one database
+        // are safe, but the engine's store is already open and already migrated — reaching for it means
+        // the tutorial reads exactly what capture just wrote, with no second open to go wrong.
+        let resolved = injected ?? Engine.shared.contextStore ?? (try? ContextStore(readOnly: true))
         if resolved == nil {
             ContextLog.error("tutorial: no capture store to read; steps that need it will say so", "tutorial")
         }
@@ -66,10 +69,18 @@ final class TutorialController {
         environment.dismissOverlay = { TutorialOverlay.shared.hide() }
         // The real timeline, with its real "Search All" button wired back into the step machine — so
         // G9 advances because the user pressed the actual control, not because they read about it.
+        // The same wiring the shell uses (`ContextApp.swift`), plus one extra: the pill also tells the
+        // step machine it was pressed, so G9 advances because the user pressed the real control.
+        //
+        // The pill deliberately does *not* open `SearchBarWindow` during the tutorial. That bar routes
+        // a question to Claude, which is the beat two steps later and is gated on `QueryStamp`; this
+        // beat is "find the moment again and jump back to it", which needs a result and a timestamp
+        // this app can actually show. Opening both would put two query fields on screen at once.
         environment.presentTimeline = { [weak self] in
             guard let store = self?.store else { return }
             RewindWindow.present(
                 store: store,
+                onOpenSettings: { SettingsWindow.present() },
                 onSearch: { _ in self?.model?.searchPillWasPressed() })
         }
 

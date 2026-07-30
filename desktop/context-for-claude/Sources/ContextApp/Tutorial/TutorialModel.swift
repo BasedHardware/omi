@@ -62,10 +62,20 @@ final class TutorialModel: ObservableObject {
     /// Claude that answers it has genuinely read the store rather than guessed.
     static let suggestedQuestion = "What was I reading about a few minutes ago?"
 
-    /// The chord the timeline opens on, as text. The shortcut layer is owned elsewhere; this string is
-    /// the label, and `openTimeline` never claims the chord worked — pressing continue opens the
-    /// window directly.
-    static let timelineChord = "⌥⌘R"
+    /// The chord the timeline really opens on, read from the shortcut layer that registers it rather
+    /// than written out here. A tutorial that taught a chord the app does not listen for would be
+    /// teaching a surface that does not exist — and the user can rebind it in Settings, after which a
+    /// literal string would be wrong for them specifically.
+    static var timelineChord: String {
+        GlobalShortcuts.shared.display(for: .openTimeline)
+    }
+
+    /// Whether that chord is actually live. When it is not — Accessibility not granted, a conflict, a
+    /// registration that was refused — the step says the button is what opens the window today instead
+    /// of implying the keys will work.
+    static var timelineChordIsArmed: Bool {
+        GlobalShortcuts.shared.readiness(for: .openTimeline) == .armed
+    }
 
     // MARK: - Published state
 
