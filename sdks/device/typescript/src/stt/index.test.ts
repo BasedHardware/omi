@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { createDeepgramTranscriber, createTranscriber, deepgramWsUrl } from './index.ts';
+import {
+  createDeepgramTranscriber,
+  createTranscriber,
+  createWhisperTranscriber,
+  deepgramWsUrl,
+} from './index.ts';
 
 describe('deepgramWsUrl', () => {
   test('returns base URL without token', () => {
@@ -76,5 +81,23 @@ describe('createDeepgramTranscriber', () => {
     });
 
     expect(openedUrl).not.toInclude('token=');
+  });
+});
+
+describe('createWhisperTranscriber', () => {
+  test('delivers buffered audio transcript when stopped before a batch fills', async () => {
+    const transcripts: string[] = [];
+    const transcriber = createWhisperTranscriber({
+      runner: () => 'final transcript',
+      onTranscript: (text) => transcripts.push(text),
+      batchSeconds: 5,
+    });
+
+    transcriber.appendPcm(new Uint8Array([1, 2, 3]));
+    transcriber.stop();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(transcripts).toEqual(['final transcript']);
   });
 });

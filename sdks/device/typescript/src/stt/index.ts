@@ -92,12 +92,12 @@ export function createWhisperTranscriber(opts: {
   const batchBytes = (opts.batchSeconds ?? 5) * 16000 * 2;
   let buffer = new Uint8Array(0);
   let stopped = false;
-  async function flush() {
+  async function flush(deliverWhenStopped = false) {
     if (!buffer.byteLength) return;
     const pcm = buffer;
     buffer = new Uint8Array(0);
     const text = await opts.runner(pcm);
-    if (text && !stopped) opts.onTranscript(text);
+    if (text && (!stopped || deliverWhenStopped)) opts.onTranscript(text);
   }
   return {
     appendPcm(chunk) {
@@ -111,7 +111,7 @@ export function createWhisperTranscriber(opts: {
     },
     stop() {
       stopped = true;
-      void flush();
+      void flush(true);
     },
   };
 }

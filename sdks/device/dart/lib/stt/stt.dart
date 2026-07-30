@@ -127,17 +127,17 @@ class WhisperTranscriber implements StreamingTranscriber {
     }
   }
 
-  Future<void> _flush() async {
+  Future<void> _flush({bool deliverWhenStopped = false}) async {
     final pcm = Uint8List.fromList(_buf.takeBytes());
     if (pcm.isEmpty) return;
     final text = await runner(pcm);
-    if (!_stopped && text.isNotEmpty) onTranscript(text);
+    if ((!_stopped || deliverWhenStopped) && text.isNotEmpty) onTranscript(text);
   }
 
   @override
   Future<void> stop() async {
     _stopped = true;
-    await _flush();
+    await _flush(deliverWhenStopped: true);
   }
 }
 

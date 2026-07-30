@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi_device/omi_device.dart';
 
@@ -17,5 +19,19 @@ void main() {
 
   test('whisper requires runner', () {
     expect(() => createTranscriber(engine: SttEngine.whisper, onTranscript: (_) {}), throwsA(isA<ArgumentError>()));
+  });
+
+  test('whisper stop delivers buffered audio transcript before the batch fills', () async {
+    final transcripts = <String>[];
+    final transcriber = createTranscriber(
+      engine: SttEngine.whisper,
+      onTranscript: transcripts.add,
+      whisperRunner: (_) => 'final transcript',
+    );
+
+    transcriber.appendPcm(Uint8List.fromList([1, 2, 3]));
+    await transcriber.stop();
+
+    expect(transcripts, ['final transcript']);
   });
 }
