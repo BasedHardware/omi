@@ -9,8 +9,7 @@ import {
   fetchOmiSubscriptions,
   groupByProduct,
   isAnnual,
-  productIdOf,
-  resolveProductNames,
+  OMI_PLAN_PRODUCTS,
 } from '@/lib/stripe-subscriptions';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 3600;
@@ -37,11 +36,6 @@ export async function computeSubscriptions() {
 
   const { subscriptions, partial } = await fetchOmiSubscriptions(stripe, MRR_STATUSES);
 
-  const productNames = await resolveProductNames(
-    stripe,
-    subscriptions.flatMap((subscription) => subscription.items.data.map(productIdOf)).filter((id): id is string => Boolean(id)),
-  );
-
   const annual = subscriptions.filter(isAnnual).length;
 
   // A trial is pipeline, not a paid subscription: counted, but never mixed into the paid totals.
@@ -61,7 +55,7 @@ export async function computeSubscriptions() {
     monthly: subscriptions.length - annual,
     annual,
     trialing,
-    byProduct: groupByProduct(subscriptions, productNames),
+    byProduct: groupByProduct(subscriptions, OMI_PLAN_PRODUCTS),
     partial: partial || trialPartial,
   };
 }

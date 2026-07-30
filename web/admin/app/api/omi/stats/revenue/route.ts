@@ -9,8 +9,7 @@ import {
   fetchOmiSubscriptions,
   groupByProduct,
   monthlyAmount,
-  productIdOf,
-  resolveProductNames,
+  OMI_PLAN_PRODUCTS,
 } from '@/lib/stripe-subscriptions';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 3600;
@@ -29,11 +28,6 @@ export async function computeRevenue() {
   }
 
   const { subscriptions, partial } = await fetchOmiSubscriptions(stripe, MRR_STATUSES);
-
-  const productNames = await resolveProductNames(
-    stripe,
-    subscriptions.flatMap((subscription) => subscription.items.data.map(productIdOf)).filter((id): id is string => Boolean(id)),
-  );
 
   const mrr = subscriptions.reduce((sum, subscription) => sum + monthlyAmount(subscription), 0);
 
@@ -54,7 +48,7 @@ export async function computeRevenue() {
     mrr,
     arr: mrr * 12,
     trialingSubscriptions,
-    byProduct: groupByProduct(subscriptions, productNames),
+    byProduct: groupByProduct(subscriptions, OMI_PLAN_PRODUCTS),
     partial: partial || trialPartial,
   };
 }

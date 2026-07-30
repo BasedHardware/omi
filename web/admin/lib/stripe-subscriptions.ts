@@ -35,19 +35,23 @@ export interface SubscriptionFetch {
 }
 
 /**
- * Stripe product ids for the Omi subscription plans, comma-separated. Metrics count these and
- * nothing else. One id per plan covers both its monthly and annual price, so launching a plan
- * is a one-value change here rather than a code change.
- *
- * Left unset, metrics fall back to every first-party subscription. That is wider than the plan
- * set — the same account also holds internal test products — so configure it in any environment
- * whose numbers are read as revenue.
+ * The Omi subscription plans. Metrics count these products and nothing else: the same Stripe
+ * account also holds marketplace apps and internal test products. Launching a plan adds a line.
  */
-export function omiProductIds(): string[] {
-  return (process.env.STRIPE_OMI_PRODUCT_IDS ?? '')
-    .split(',')
-    .map((id) => id.trim())
-    .filter(Boolean);
+export const OMI_PLAN_PRODUCTS: Record<string, string> = {
+  prod_SmpevIU38nIEUO: 'Omi Unlimited',
+  prod_Uu6nrHIKWnnTWL: 'Omi Unlimited v2',
+  prod_Uu5HDt3sygCK8N: 'Omi Plus',
+  prod_ULep5SEo0pSdaM: 'Operator',
+  prod_U8x5HNGnTF50X1: 'Omi Architect',
+  prod_UM0IIpZ4iOgfk5: 'Neo',
+};
+
+export function isOmiPlanSubscription(subscription: Stripe.Subscription): boolean {
+  return subscription.items.data.some((item) => {
+    const productId = productIdOf(item);
+    return productId !== null && productId in OMI_PLAN_PRODUCTS;
+  });
 }
 
 /** Thrown when every status leg fails, so callers never publish a fabricated zero. */
@@ -157,18 +161,9 @@ export async function fetchOmiSubscriptions(
     throw new AllSubscriptionSourcesFailedError('All subscription data sources failed');
   }
 
-  const allowedProducts = omiProductIds();
   const subscriptions = results
     .flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
-    .filter((subscription) => !isAppSubscription(subscription))
-    .filter(
-      (subscription) =>
-        allowedProducts.length === 0 ||
-        subscription.items.data.some((item) => {
-          const productId = productIdOf(item);
-          return productId !== null && allowedProducts.includes(productId);
-        }),
-    );
+    .filter((subscription) => !isAppSubscription(subscription) && isOmiPlanSubscription(subscription));
 
   return { subscriptions, partial: results.some((result) => result.status === 'rejected') };
 }
@@ -193,29 +188,4 @@ export function groupByProduct(
   }
 
   return Array.from(groups.values()).sort((a, b) => b.mrr - a.mrr);
-}
-
-/**
- * Best-effort product id → name map. Names are presentation only, so a failure here degrades to
- * bare ids rather than failing the metric.
- */
-export async function resolveProductNames(
-  stripe: Stripe,
-  productIds: string[],
-): Promise<Record<string, string>> {
-  const ids = Array.from(new Set(productIds)).filter((id) => id && id !== 'unknown');
-  if (ids.length === 0) return {};
-
-  const names: Record<string, string> = {};
-  for (let i = 0; i < ids.length; i += 100) {
-    try {
-      const page = await stripe.products.list({ ids: ids.slice(i, i + 100), limit: 100 });
-      for (const product of page.data) {
-        names[product.id] = product.name;
-      }
-    } catch (error) {
-      console.error('Error resolving Stripe product names:', error);
-    }
-  }
-  return names;
 }

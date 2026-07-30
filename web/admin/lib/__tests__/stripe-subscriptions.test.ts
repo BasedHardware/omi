@@ -8,11 +8,11 @@ import {
   fetchOmiSubscriptions,
   groupByProduct,
   isAnnual,
+  OMI_PLAN_PRODUCTS,
   isAppSubscription,
   listSubscriptions,
   monthlyAmount,
   productIdOf,
-  resolveProductNames,
 } from '../stripe-subscriptions';
 
 type PriceShape = {
@@ -179,44 +179,50 @@ describe('listSubscriptions', () => {
   });
 });
 
-describe('omi product scoping', () => {
-  it('counts only the configured Omi plans when the allowlist is set', async () => {
+describe('omi plan scoping', () => {
+  it('counts the plan products and nothing else', async () => {
+    const planProduct = Object.keys(OMI_PLAN_PRODUCTS)[0];
     const { stripe } = stripeWithPages({
-      active: [[
-        sub([{ unit_amount: 2000, product: 'prod_plus' }], { id: 'sub#0' }),
-        sub([{ unit_amount: 9900, product: 'prod_internal_test' }], { id: 'sub#1' }),
-      ]],
+      active: [
+        [
+          sub([{ unit_amount: 2000, product: planProduct }], { id: 'sub#0' }),
+          // First-party but not a plan: an internal test product is not revenue.
+          sub([{ unit_amount: 9900, product: 'prod_internal_test' }], { id: 'sub#1' }),
+          sub([{ unit_amount: 500, product: planProduct }], { id: 'sub#2', metadata: { app_id: 'app_1' } }),
+        ],
+      ],
       past_due: [[]],
     });
 
-    vi.stubEnv('STRIPE_OMI_PRODUCT_IDS', 'prod_plus, prod_operator');
     const { subscriptions } = await fetchOmiSubscriptions(stripe);
-    vi.unstubAllEnvs();
 
-    // The internal test product is first-party but is not a plan, so it is not revenue.
     expect(subscriptions).toHaveLength(1);
-    expect(productIdOf(subscriptions[0].items.data[0])).toBe('prod_plus');
+    expect(productIdOf(subscriptions[0].items.data[0])).toBe(planProduct);
   });
 
-  it('falls back to every first-party subscription when the allowlist is unset', async () => {
-    const { stripe } = stripeWithPages({
-      active: [[sub([{ unit_amount: 2000, product: 'prod_anything' }], { id: 'sub#0' })]],
-      past_due: [[]],
-    });
-
-    vi.stubEnv('STRIPE_OMI_PRODUCT_IDS', '');
-    const { subscriptions } = await fetchOmiSubscriptions(stripe);
-    vi.unstubAllEnvs();
-
-    expect(subscriptions).toHaveLength(1);
+  it('names every plan it counts', () => {
+    expect(Object.values(OMI_PLAN_PRODUCTS).sort()).toEqual([
+      'Neo',
+      'Omi Architect',
+      'Omi Plus',
+      'Omi Unlimited',
+      'Omi Unlimited v2',
+      'Operator',
+    ]);
   });
 });
 
 describe('fetchOmiSubscriptions', () => {
   it('merges the status legs and drops marketplace app subscriptions', async () => {
+    const plan = Object.keys(OMI_PLAN_PRODUCTS)[0];
     const { stripe } = stripeWithPages({
-      active: [[sub([{ unit_amount: 2000 }], { id: 'sub#0' }), sub([{ unit_amount: 500 }], { id: 'sub#1', metadata: { app_id: 'app_1' } })]],
-      past_due: [[sub([{ unit_amount: 2000 }], { id: 'sub#0' })]],
+      active: [
+        [
+          sub([{ unit_amount: 2000, product: plan }], { id: 'sub#0' }),
+          sub([{ unit_amount: 500, product: plan }], { id: 'sub#1', metadata: { app_id: 'app_1' } }),
+        ],
+      ],
+      past_due: [[sub([{ unit_amount: 2000, product: plan }], { id: 'sub#0' })]],
     });
 
     const { subscriptions, partial } = await fetchOmiSubscriptions(stripe);
@@ -229,7 +235,10 @@ describe('fetchOmiSubscriptions', () => {
   it('degrades to partial when one status leg fails', async () => {
     const list = vi.fn(async (params: Stripe.SubscriptionListParams) => {
       if (params.status === 'past_due') throw new Error('stripe down');
-      return { data: [sub([{ unit_amount: 2000 }], { id: 'sub#0' })], has_more: false };
+      return {
+        data: [sub([{ unit_amount: 2000, product: Object.keys(OMI_PLAN_PRODUCTS)[0] }], { id: 'sub#0' })],
+        has_more: false,
+      };
     });
     const stripe = { subscriptions: { list } } as unknown as Stripe;
 
@@ -246,22 +255,5 @@ describe('fetchOmiSubscriptions', () => {
     const stripe = { subscriptions: { list } } as unknown as Stripe;
 
     await expect(fetchOmiSubscriptions(stripe)).rejects.toBeInstanceOf(AllSubscriptionSourcesFailedError);
-  });
-});
-
-describe('resolveProductNames', () => {
-  it('batches ids and tolerates a lookup failure', async () => {
-    const ok = { subscriptions: { list: vi.fn() }, products: { list: vi.fn(async () => ({ data: [{ id: 'prod_a', name: 'Omi Plus' }] })) } } as unknown as Stripe;
-    await expect(resolveProductNames(ok, ['prod_a', 'prod_a'])).resolves.toEqual({ prod_a: 'Omi Plus' });
-
-    const failing = { products: { list: vi.fn(async () => { throw new Error('nope'); }) } } as unknown as Stripe;
-    await expect(resolveProductNames(failing, ['prod_a'])).resolves.toEqual({});
-  });
-
-  it('skips the API entirely when there is nothing to resolve', async () => {
-    const list = vi.fn();
-    const stripe = { products: { list } } as unknown as Stripe;
-    await expect(resolveProductNames(stripe, ['unknown', ''])).resolves.toEqual({});
-    expect(list).not.toHaveBeenCalled();
   });
 });

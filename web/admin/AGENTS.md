@@ -17,7 +17,7 @@ All fetches go through `hooks/useAuthToken.ts`. No direct `getIdToken()`, manual
 
 Subscription metrics read Stripe through `lib/stripe-subscriptions.ts`. Routes must not list subscriptions by hardcoded price id — that is how five of seven products became invisible to the dashboard.
 
-- **Scope**: `STRIPE_OMI_PRODUCT_IDS` (comma-separated Stripe product ids) selects the Omi subscription plans. One id per plan covers its monthly and annual price. Unset falls back to every first-party subscription, which also sweeps in internal test products.
+- **Scope**: `OMI_PLAN_PRODUCTS` in that module lists the subscription plans. Metrics count those products and nothing else — the account also holds marketplace apps and internal test products. Launching a plan adds a line.
 - **Marketplace apps** are excluded by `metadata.app_id`, which the backend stamps on app checkouts. Never split them off by price id.
 - **MRR** counts `active` + `past_due`. `trialing` is pipeline and is reported separately, never inside MRR.
 - **Amounts** normalise through each price's own `interval` and `interval_count`; never assume monthly-or-annual.
