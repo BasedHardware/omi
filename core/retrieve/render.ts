@@ -26,10 +26,34 @@ export interface RenderModelPort {
 export interface RenderOptions { strategy: string; model_version: string; prompt_version: string; policy_version: string; schema_version: string; }
 export type RenderCache = ReadonlyMap<string, RenderNode>;
 
-const rank = (value: string): number => value === "generic" ? 0 : 1;
+type PolicyDimension = keyof PolicyClass;
+// These are deliberately separate partial orders.  Unknown non-generic labels are
+// opaque peers: their only safe mixed join is the explicit top, "restricted".
+const chains: Readonly<Record<PolicyDimension, readonly string[]>> = {
+  subject_class: ["generic", "owner", "bystander", "restricted"],
+  sensitivity: ["generic", "private", "health", "restricted"],
+  capture_class: ["generic", "voice", "screen", "restricted"],
+};
+const dominates = (dimension: PolicyDimension, effective: string, contributor: string): boolean => {
+  if (effective === contributor || effective === "restricted" || contributor === "generic") return true;
+  const chain = chains[dimension];
+  const effectiveRank = chain.indexOf(effective), contributorRank = chain.indexOf(contributor);
+  return effectiveRank >= 0 && contributorRank >= 0 && effectiveRank >= contributorRank;
+};
+const joinDimension = (dimension: PolicyDimension, values: readonly string[]): string => values.reduce((effective, value) => {
+  if (dominates(dimension, effective, value)) return effective;
+  if (dominates(dimension, value, effective)) return value;
+  return "restricted";
+}, "generic");
+/** Least upper bound in the policy lattice, independent of member ordering. */
+export const restrictivePolicyJoin = (contributors: readonly PolicyClass[]): PolicyClass => ({
+  subject_class: joinDimension("subject_class", contributors.map((item) => item.subject_class)),
+  sensitivity: joinDimension("sensitivity", contributors.map((item) => item.sensitivity)),
+  capture_class: joinDimension("capture_class", contributors.map((item) => item.capture_class)),
+});
 /** A result may only be rendered at the same or a stricter policy in every partition dimension. */
 export const validateRestrictiveJoin = (effective: PolicyClass, contributors: readonly PolicyClass[]): boolean =>
-  contributors.every((item) => rank(effective.subject_class) >= rank(item.subject_class) && rank(effective.sensitivity) >= rank(item.sensitivity) && rank(effective.capture_class) >= rank(item.capture_class));
+  contributors.every((item) => (dominates("subject_class", effective.subject_class, item.subject_class) && dominates("sensitivity", effective.sensitivity, item.sensitivity) && dominates("capture_class", effective.capture_class, item.capture_class)));
 
 const nodeClaims = (node: StructuralNode, input: TreeInputSnapshot) => node.member_claim_revision_ids.map((id) => input.claims.find((claim) => claim.claim_revision_id === id)).filter((claim): claim is NonNullable<typeof claim> => claim !== undefined);
 
@@ -47,15 +71,18 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
     if (existing) return existing;
     const children = await Promise.all(node.child_node_ids.map((id) => visit(tree.nodes.find((item) => item.node_id === id)!)));
     const claims = nodeClaims(node, input);
-    const effective = claims[0]?.policy_class ?? { subject_class: "generic", sensitivity: "generic", capture_class: "generic" };
-    const manifest = { live_member_revisions: [...node.member_claim_revision_ids].sort(), child_render_hashes: children.map((child) => child.render_hash ?? "failed-child-render").sort() };
-    const rendered_from_digest = sha256CanonicalRedacted({ node_id: node.node_id, manifest, model_version: options.model_version, prompt_version: options.prompt_version, policy_version: options.policy_version, schema_version: options.schema_version });
+    const effective = restrictivePolicyJoin(claims.map((claim) => claim.policy_class));
+    // Populate the parent manifest before construction/request, rather than leaving
+    // tree.ts's seed manifest empty after child renders are known.
+    const nodeWithChildHashes = withChildRenderHashes(tree, children).nodes.find((candidate) => candidate.node_id === node.node_id)!;
+    const manifest = nodeWithChildHashes.dependency_manifest;
+    const rendered_from_digest = sha256CanonicalRedacted({ node_id: node.node_id, manifest, strategy: options.strategy, model_version: options.model_version, prompt_version: options.prompt_version, policy_version: options.policy_version, schema_version: options.schema_version });
+    if (!validateRestrictiveJoin(effective, claims.map((claim) => claim.policy_class))) throw new Error(`restrictive policy join failed for ${node.node_id}`);
     const cached = cache.get(rendered_from_digest);
     if (cached) { rendered.set(node.node_id, cached); return cached; }
     const childStale = children.some((child) => child.stale || child.status === "failed");
-    if (!validateRestrictiveJoin(effective, claims.map((claim) => claim.policy_class))) throw new Error(`restrictive policy join failed for ${node.node_id}`);
     try {
-      const response = await model.render({ strategy: options.strategy, version: options.model_version, input: { node, claims, child_summaries: children.map((child) => child.summary_text) } });
+      const response = await model.render({ strategy: options.strategy, version: options.model_version, input: { node: nodeWithChildHashes, claims, child_summaries: children.map((child) => child.summary_text) } });
       const status: RenderStatus = response.summary_text ? "ready" : "empty";
       const render_hash = sha256CanonicalRedacted({ rendered_from_digest, summary_text: response.summary_text, citations: [...response.citations].sort() });
       const result: RenderNode = { node_id: node.node_id, policy_partition_label: node.policy_partition_label,

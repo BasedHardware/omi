@@ -123,8 +123,8 @@ export class SqliteLedger implements LedgerPort {
 
   snapshot(ownerAccountId: string): GraphSnapshot {
     const head = this.db.query("SELECT sequence FROM graph_heads WHERE owner_account_id = ?").get(ownerAccountId) as { sequence: number } | null;
-    const claims = (this.db.query("SELECT revision_id, placement_status, content_json FROM claim_revisions WHERE owner_account_id = ? ORDER BY revision_id").all(ownerAccountId) as { revision_id: string; placement_status: ClaimRevision["placement_status"]; content_json: string }[])
-      .map((row) => ({ revision_id: row.revision_id, placement_status: row.placement_status, claim: JSON.parse(row.content_json) }));
+    const claims = (this.db.query("SELECT c.revision_id, c.placement_status, c.content_json, d.sequence AS commit_sequence FROM claim_revisions c JOIN derivation_commits d ON d.commit_id = c.commit_id WHERE c.owner_account_id = ? ORDER BY d.sequence, c.revision_id").all(ownerAccountId) as { revision_id: string; placement_status: ClaimRevision["placement_status"]; content_json: string; commit_sequence: number }[])
+      .map((row) => ({ revision_id: row.revision_id, placement_status: row.placement_status, claim: JSON.parse(row.content_json), commit_sequence: row.commit_sequence }));
     const entities = (this.db.query("SELECT revision_id, content_json FROM entity_revisions WHERE owner_account_id = ? ORDER BY revision_id").all(ownerAccountId) as { revision_id: string; content_json: string }[])
       .map((row) => ({ revision_id: row.revision_id, entity: JSON.parse(row.content_json) }));
     const identity_constraints = (this.db.query("SELECT revision_id, content_json FROM identity_revisions WHERE owner_account_id = ? ORDER BY revision_id").all(ownerAccountId) as { revision_id: string; content_json: string }[])

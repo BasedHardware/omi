@@ -7,6 +7,8 @@ export interface CommittedClaim {
   revision_id: string;
   claim: CanonicalClaim | ProvisionalClaim;
   placement_status: ClaimPlacementStatus;
+  /** Durable commit order supplied by persistence; never infer recency from an ID. */
+  commit_sequence?: number;
 }
 export interface CommittedEntity { revision_id: string; entity: Entity; }
 export interface CommittedIdentity { revision_id: string; constraint: IdentityConstraint; }
@@ -77,6 +79,14 @@ export interface TreeInputSnapshot {
   policy_classes: Readonly<Record<string, PolicyClass>>;
   liveness_hook_version: string;
   classifier_version: string;
+  /** Evidence-chain faults are visible to callers instead of being silently projected away. */
+  diagnostics: readonly ProjectionDiagnostic[];
+}
+export interface ProjectionDiagnostic {
+  kind: "missing_evidence" | "missing_event";
+  claim_revision_id: string;
+  evidence_ref: string;
+  message: string;
 }
 export interface TreeInputOptions {
   account_timezone: string;
@@ -111,9 +121,17 @@ export const liveCommittedClaims = (snapshot: GraphSnapshot, hook: TreeInputOpti
   const eligible = snapshot.claims.filter((item) => item.placement_status !== "consumed" && (hook?.include(item) ?? true));
   const rank = (item: CommittedClaim) => item.placement_status === "canonical" ? 2 : 1;
   const winners = new Map<string, CommittedClaim>();
+  const explicitlySupersedes = (newer: CommittedClaim, older: CommittedClaim): boolean => {
+    const sourceIds = newer.claim.lifecycle === "canonical" ? newer.claim.source_provisional_revision_ids : [];
+    const explicit = "supersedes_revision_ids" in newer.claim ? (newer.claim as { supersedes_revision_ids?: readonly string[] }).supersedes_revision_ids ?? [] : [];
+    return [...sourceIds, ...explicit].includes(older.revision_id);
+  };
   for (const item of eligible) {
     const current = winners.get(item.claim.claim_lineage_id);
-    if (!current || rank(item) > rank(current) || (rank(item) === rank(current) && item.revision_id > current.revision_id)) winners.set(item.claim.claim_lineage_id, item);
+    if (!current) { winners.set(item.claim.claim_lineage_id, item); continue; }
+    // Explicit lineage edges outrank all heuristics; otherwise persistence sequence is
+    // the only recency signal. Placement rank only resolves genuinely unordered ties.
+    if (explicitlySupersedes(item, current) || (!explicitlySupersedes(current, item) && ((item.commit_sequence ?? -1) > (current.commit_sequence ?? -1) || ((item.commit_sequence ?? -1) === (current.commit_sequence ?? -1) && rank(item) > rank(current))))) winners.set(item.claim.claim_lineage_id, item);
   }
   return [...winners.values()].sort((left, right) => left.revision_id.localeCompare(right.revision_id));
 };
@@ -123,16 +141,26 @@ export const projectTreeInputSnapshot = (snapshot: GraphSnapshot, options: TreeI
   const classifier = options.classifier ?? genericPolicyClassifier;
   const eventById = new Map<string, L1Event>();
   for (const item of snapshot.events ?? []) { eventById.set(item.revision_id, item.event); eventById.set(item.event.event_revision_id, item.event); }
-  const spans = (snapshot.evidence ?? []).map(({ evidence }) => ({
-    evidence_id: evidence.evidence_id, event_revision_id: evidence.event_revision_id,
-    capture_session_id: eventById.get(evidence.event_revision_id)?.capture_session_id ?? "unknown-capture",
-    excerpt: evidence.excerpt, range: evidence.range, policy_labels: evidence.policy_labels,
-  })).sort((left, right) => left.evidence_id.localeCompare(right.evidence_id));
+  const evidenceById = new Map((snapshot.evidence ?? []).map(({ evidence }) => [evidence.evidence_id, evidence]));
+  // Do not fabricate an "unknown" source: only a complete Evidence -> Event -> Capture
+  // lineage earns a span in the retrieval projection.
+  const spans = (snapshot.evidence ?? []).flatMap(({ evidence }) => {
+    const event = eventById.get(evidence.event_revision_id);
+    return event ? [{ evidence_id: evidence.evidence_id, event_revision_id: evidence.event_revision_id,
+      capture_session_id: event.capture_session_id, excerpt: evidence.excerpt, range: evidence.range, policy_labels: evidence.policy_labels }] : [];
+  }).sort((left, right) => left.evidence_id.localeCompare(right.evidence_id));
   const spanById = new Map(spans.map((span) => [span.evidence_id, span]));
   const canonicalIds = canonicalEntityIds(snapshot);
+  const diagnostics: ProjectionDiagnostic[] = [];
   const claims = liveCommittedClaims(snapshot, options.liveness_hook).map((item) => {
+    for (const ref of item.claim.evidence_refs) {
+      const evidence = evidenceById.get(ref);
+      if (!evidence) diagnostics.push({ kind: "missing_evidence", claim_revision_id: item.revision_id, evidence_ref: ref, message: `claim ${item.revision_id} references missing evidence ${ref}` });
+      else if (!eventById.has(evidence.event_revision_id)) diagnostics.push({ kind: "missing_event", claim_revision_id: item.revision_id, evidence_ref: ref, message: `evidence ${ref} references missing event ${evidence.event_revision_id}` });
+    }
     const evidence_spans = item.claim.evidence_refs.map((ref) => spanById.get(ref)).filter((span): span is EvidenceSpan => span !== undefined);
-    const policy_class = classifier.classify(item.claim, (snapshot.evidence ?? []).filter(({ evidence }) => item.claim.evidence_refs.includes(evidence.evidence_id)).map(({ evidence }) => evidence));
+    const policy_class = classifier.classify(item.claim, item.claim.evidence_refs.map((ref) => evidenceById.get(ref)).filter((evidence): evidence is Evidence => evidence !== undefined));
+    // valid_time remains a caller-supplied projection side-map; it is not claim content.
     const valid_time = options.valid_time_by_claim_revision?.[item.revision_id] ?? null;
     return {
       claim_revision_id: item.revision_id, canonical_claim_id: item.claim.lifecycle === "canonical" ? item.claim.canonical_claim_id : null,
@@ -148,7 +176,7 @@ export const projectTreeInputSnapshot = (snapshot: GraphSnapshot, options: TreeI
   return { owner_account_id: snapshot.owner_account_id, graph_generation: sha256CanonicalRedacted(generationSeed), account_timezone: options.account_timezone,
     claims, identity_constraints: snapshot.identity_constraints?.map((item) => item.constraint) ?? [], evidence_index: spans,
     policy_classes: Object.fromEntries(claims.map((claim) => [claim.claim_revision_id, claim.policy_class])),
-    liveness_hook_version: generationSeed.liveness_hook, classifier_version: classifier.version };
+    liveness_hook_version: generationSeed.liveness_hook, classifier_version: classifier.version, diagnostics };
 };
 
 export type RetrievalRequest =

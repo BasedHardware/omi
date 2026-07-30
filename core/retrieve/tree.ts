@@ -24,6 +24,19 @@ export interface StructuralTree {
   nodes: readonly StructuralNode[];
 }
 
+/**
+ * Stable structural content only.  The graph frontier is intentionally metadata: a
+ * new frontier must not invalidate an otherwise unchanged anchor.
+ */
+export const structuralRevision = (node: Pick<StructuralNode, "view_kind" | "anchor_key" | "policy_partition_label" | "member_claim_revision_ids" | "child_node_ids">): string =>
+  sha256CanonicalRedacted({
+    view_kind: node.view_kind,
+    anchor_key: node.anchor_key,
+    policy_partition_label: node.policy_partition_label,
+    member_claim_revision_ids: [...node.member_claim_revision_ids].sort(),
+    child_structural_refs: [...node.child_node_ids].sort(),
+  });
+
 /** Exact §8.3 derivation: no render, summary, membership, or prose enters this key. */
 export const nodeId = (owner_account_id: string, view_kind: ViewKind, anchor_key: string, policy_partition: string): string =>
   `retrieval-node-v1:${sha256CanonicalRedacted({ owner_account_id, view_kind, anchor_key, policy_partition })}`;
@@ -72,11 +85,11 @@ export const buildDeterministicAnchors = (input: TreeInputSnapshot): StructuralT
     const child_node_ids = draftValues.filter((candidate) => candidate.view_kind === draft.view_kind && candidate.parent_anchor === draft.anchor_key && candidate.partition === draft.partition)
       .map((candidate) => nodeId(input.owner_account_id, candidate.view_kind, candidate.anchor_key, candidate.partition)).sort();
     const dependency_manifest = { live_member_revisions: member_claim_revision_ids, child_render_hashes: [] };
-    return { node_id: id, view_kind: draft.view_kind, anchor_key: draft.anchor_key,
+    const partial = { node_id: id, view_kind: draft.view_kind, anchor_key: draft.anchor_key,
       parent_node_id: parent ? nodeId(input.owner_account_id, parent.view_kind, parent.anchor_key, parent.partition) : null,
       child_node_ids, order_key: draft.anchor_key, policy_partition_label: draft.partition, member_claim_revision_ids,
-      structural_revision: sha256CanonicalRedacted({ view_kind: draft.view_kind, anchor_key: draft.anchor_key, partition: draft.partition, member_claim_revision_ids, graph_generation: input.graph_generation }),
-      dependency_manifest, graph_generation: input.graph_generation } satisfies StructuralNode;
+      dependency_manifest, graph_generation: input.graph_generation };
+    return { ...partial, structural_revision: structuralRevision(partial) } satisfies StructuralNode;
   });
   return { input_generation: input.graph_generation, nodes: sorted(nodes, (node) => node.node_id) };
 };

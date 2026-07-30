@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { prepareDerivation, type AtomicGraphTransition, type DerivationVersions } from "../../core/ledger";
+import { projectTreeInputSnapshot } from "../../core/retrieve";
 import { IdempotencyConflictError, SqliteLedger } from "./index";
 
 const versions: DerivationVersions = { strategy_version: "placement-v1", model_version: "none", prompt_version: "none", policy_version: "p1", code_version: "c1", schema_version: "s1", tokenizer_version: "none", tool_version: "none" };
@@ -61,4 +62,16 @@ test("T10 SQLite entity retrieval keeps withheld claims in omission accounting, 
   const result = ledger.retrieve({ owner_account_id: "owner-1", kind: "entity", entity_id: "entity:alice" });
   expect(result.claims).toEqual([]);
   expect(result.omission_accounting).toMatchObject({ returned_canonical: 0, withheld_items: 1, omitted_items: 1 });
+});
+
+test("T9 SQLite round-trips claim evidence through Evidence, Event, Capture, and excerpt", () => {
+  const ledger = new SqliteLedger(new Database(":memory:"));
+  ledger.append(transition());
+  const event = { event_id: "event:e1", event_revision_id: "event:e1:r1", owner_account_id: "owner-1", capture_session_id: "capture:roundtrip", stream_id: "stream:roundtrip", event_kind: "text", payload_schema_ref: "text", schema_version: "v1", payload: {}, event_time: "2026-01-02", ingest_time: "2026-01-02", source_sequence: 7, evidence_addressable_refs: ["e-1"], source_trust: "test", policy_labels: [], canonical_redacted_hash: "event-hash" };
+  const evidence = { evidence_id: "e-1", event_revision_id: "event:e1:r1", source_unit_ref: "unit:1", range: { start: 4, end: 15 }, excerpt: "roundtrip span", source_local_speaker_ref: null, source_local_mention_ref: null, state: "active" as const, source_trust: "test", policy_labels: [], source_independence_key: "capture:roundtrip" };
+  const derivation = prepareDerivation({ attempt_id: "attempt:evidence", commit_id: "commit:evidence", owner_account_id: "owner-1", parent_commit: "commit:key-1", idempotency_key: "key-evidence", input_revisions: [], output_revisions: [{ revision_id: "event:e1:r1", content: event }, { revision_id: "e-1:r1", content: evidence }], versions, success_kind: "success" });
+  ledger.append({ placement: { offline_experiment: true, allocations: {}, results: [] }, derivation, revisions: [{ kind: "event", revision_id: "event:e1:r1", event }, { kind: "evidence", revision_id: "e-1:r1", evidence }], adjacency: [] });
+  const projected = projectTreeInputSnapshot(ledger.snapshot("owner-1"), { account_timezone: "UTC" });
+  expect(projected.claims.find((claim) => claim.claim_revision_id === "c-1")?.evidence_spans).toEqual([expect.objectContaining({ evidence_id: "e-1", event_revision_id: "event:e1:r1", capture_session_id: "capture:roundtrip", excerpt: "roundtrip span", range: { start: 4, end: 15 } })]);
+  expect(projected.diagnostics).toEqual([]);
 });

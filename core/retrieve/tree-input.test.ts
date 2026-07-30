@@ -12,8 +12,8 @@ const claim = (revision: string, lineage: string, subject = "entity:old", labels
 const graph = (): GraphSnapshot => ({
   owner_account_id: "owner",
   claims: [
-    { revision_id: "old", placement_status: "canonical", claim: claim("old", "lineage:one") },
-    { revision_id: "survivor", placement_status: "canonical", claim: claim("survivor", "lineage:one") },
+    { revision_id: "old", commit_sequence: 1, placement_status: "canonical", claim: claim("old", "lineage:one") },
+    { revision_id: "survivor", commit_sequence: 2, placement_status: "canonical", claim: claim("survivor", "lineage:one") },
   ],
   entities: [{ revision_id: "old:r1", entity: entity("entity:old", "zeta") }, { revision_id: "new:r1", entity: entity("entity:new", "alpha") }],
   identity_constraints: [{ revision_id: "merge:r1", constraint: { constraint_id: "merge", owner_account_id: "owner", left_handle: "zeta", right_handle: "alpha", relation: "same", evidence_refs: ["e1"], effective_at: 1, reversed_at: null } }],
@@ -36,4 +36,33 @@ test("R0 never guesses valid time and classifier changes create a new generation
   const changed: PolicyClassifier = { version: "policy-classifier-v2", classify: () => ({ subject_class: "generic", sensitivity: "generic", capture_class: "generic" }) };
   const two = projectTreeInputSnapshot(graph(), { account_timezone: "America/New_York", classifier: changed });
   expect(two.graph_generation).not.toBe(one.graph_generation);
+});
+
+test("R0 chooses later commit sequence over lexicographic revision IDs and reports broken evidence chains", () => {
+  const input = graph();
+  input.claims = [
+    { revision_id: "r10", commit_sequence: 4, placement_status: "canonical", claim: claim("r10", "lineage:one") },
+    { revision_id: "r2", commit_sequence: 5, placement_status: "canonical", claim: claim("r2", "lineage:one") },
+  ];
+  input.claims[1]!.claim.evidence_refs = ["missing-evidence"];
+  const projected = projectTreeInputSnapshot(input, { account_timezone: "UTC", valid_time_by_claim_revision: { r2: "2026-05-03T00:00:00Z" } });
+  expect(projected.claims.map((item) => item.claim_revision_id)).toEqual(["r2"]);
+  expect(projected.claims[0]!.valid_time).toBe("2026-05-03T00:00:00Z");
+  expect(projected.diagnostics).toEqual([expect.objectContaining({ kind: "missing_evidence", claim_revision_id: "r2", evidence_ref: "missing-evidence" })]);
+  // valid_time was supplied by this caller-side map; it does not exist on canonical claim content.
+  expect("valid_time" in input.claims[1]!.claim).toBe(false);
+  const explicit = graph();
+  explicit.claims = [
+    { revision_id: "r10", commit_sequence: 99, placement_status: "canonical", claim: claim("r10", "lineage:one") },
+    { revision_id: "r2", commit_sequence: 1, placement_status: "canonical", claim: { ...claim("r2", "lineage:one"), source_provisional_revision_ids: ["r10"] } },
+  ];
+  expect(projectTreeInputSnapshot(explicit, { account_timezone: "UTC" }).claims.map((item) => item.claim_revision_id)).toEqual(["r2"]);
+});
+
+test("R0 diagnoses evidence that exists but has no Event-to-Capture lineage", () => {
+  const input = graph();
+  input.events = [];
+  const projected = projectTreeInputSnapshot(input, { account_timezone: "UTC" });
+  expect(projected.claims[0]!.evidence_spans).toEqual([]);
+  expect(projected.diagnostics).toContainEqual(expect.objectContaining({ kind: "missing_event", evidence_ref: "e1" }));
 });

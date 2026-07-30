@@ -1,41 +1,68 @@
 import { expect, test } from "bun:test";
 import { projectTreeInputSnapshot } from "./index";
-import { renderStructuralTree, validateRestrictiveJoin } from "./render";
-import { buildDeterministicAnchors } from "./tree";
+import { renderStructuralTree, restrictivePolicyJoin, validateRestrictiveJoin } from "./render";
+import { incrementallyTransitionAnchors } from "./track-a";
+import { buildDeterministicAnchors, type StructuralTree } from "./tree";
 import { snapshot } from "./tree.fixture";
 
-const options = (model_version = "fake-v1") => ({ strategy: "summary", model_version, prompt_version: "p1", policy_version: "policy1", schema_version: "schema1" });
+const options = (model_version = "fake-v1", strategy = "summary") => ({ strategy, model_version, prompt_version: "p1", policy_version: "policy1", schema_version: "schema1" });
 /** Test-only deterministic fake; no network/model edge is reachable from this core test. */
 class DeterministicFakeModel {
+  calls = 0;
   constructor(private readonly response: (request: { input: unknown }) => { summary_text: string; citations: string[] }) {}
-  async render(request: { input: unknown }): Promise<{ summary_text: string; citations: readonly string[] }> { return this.response(request); }
+  async render(request: { input: unknown }): Promise<{ summary_text: string; citations: readonly string[] }> { this.calls++; return this.response(request); }
 }
-test("R2 renders each policy partition separately and model swaps do not churn structure", async () => {
+const inputAndTree = () => {
   const input = projectTreeInputSnapshot(snapshot(), { account_timezone: "UTC", valid_time_by_claim_revision: { a: "2026-01-02T10:00:00Z", private: "2026-01-02T10:00:00Z" } });
-  const tree = buildDeterministicAnchors(input);
-  const fake = new DeterministicFakeModel((request) => ({ summary_text: `summary:${(request.input as { node: { node_id: string } }).node.node_id}`, citations: ["e1"] }));
-  const first = await renderStructuralTree(tree, input, fake, options());
-  expect(first.filter((render) => render.node_id.includes("nope"))).toHaveLength(0);
-  expect(first.length).toBe(tree.nodes.length);
-  const second = await renderStructuralTree(tree, input, fake, options("fake-v2"));
-  expect(tree.nodes.map((node) => node.node_id)).toEqual(tree.nodes.map((node) => node.node_id));
-  expect(second.map((render) => render.render_generation)).not.toEqual(first.map((render) => render.render_generation));
+  return { input, tree: buildDeterministicAnchors(input) };
+};
+
+test("R2 rebuild/incremental-equivalent structure and render cache behavior are real", async () => {
+  const { input, tree } = inputAndTree();
+  const freshTree = buildDeterministicAnchors(input);
+  const previousInput = { ...input, graph_generation: "before-private", claims: [input.claims.find((claim) => claim.claim_revision_id === "a")!] };
+  const incremental = incrementallyTransitionAnchors(buildDeterministicAnchors(previousInput), { owner_account_id: input.owner_account_id, account_timezone: input.account_timezone, next_graph_generation: input.graph_generation, added_claims: [input.claims.find((claim) => claim.claim_revision_id === "private")!], removed_claim_revision_ids: [], changed_claims: [] });
+  expect(JSON.stringify(incremental.nodes)).toBe(JSON.stringify(freshTree.nodes));
+  const firstModel = new DeterministicFakeModel((request) => ({ summary_text: `summary:${(request.input as { node: { node_id: string } }).node.node_id}`, citations: ["e1"] }));
+  const first = await renderStructuralTree(tree, input, firstModel, options());
+  const cache = new Map(first.map((render) => [render.rendered_from_digest, render]));
+  const cacheModel = new DeterministicFakeModel(() => ({ summary_text: "SHOULD-NOT-RENDER", citations: [] }));
+  const reused = await renderStructuralTree(freshTree, input, cacheModel, options(), cache);
+  expect(cacheModel.calls).toBe(0);
+  expect(reused.map((render) => ({ node_id: render.node_id, summary_text: render.summary_text, rendered_from_digest: render.rendered_from_digest }))).toEqual(first.map((render) => ({ node_id: render.node_id, summary_text: render.summary_text, rendered_from_digest: render.rendered_from_digest })));
+  const newerModel = new DeterministicFakeModel(() => ({ summary_text: "new-model", citations: [] }));
+  const newer = await renderStructuralTree(freshTree, input, newerModel, options("fake-v2"), cache);
+  expect(newerModel.calls).toBeGreaterThan(0);
+  expect(newer.map((render) => render.render_generation)).not.toEqual(first.map((render) => render.render_generation));
+  const strategyModel = new DeterministicFakeModel(() => ({ summary_text: "new-strategy", citations: [] }));
+  await renderStructuralTree(freshTree, input, strategyModel, options("fake-v1", "extractive"), cache);
+  expect(strategyModel.calls).toBeGreaterThan(0);
 });
 
-test("R2 marks a parent stale when its child render is stale", async () => {
-  const input = projectTreeInputSnapshot(snapshot(), { account_timezone: "UTC", valid_time_by_claim_revision: { a: "2026-01-02T10:00:00Z" } });
-  const tree = buildDeterministicAnchors(input);
-  const fake = { render: async ({ input: request }: { input: unknown }) => {
-    const anchor = (request as { node: { anchor_key: string } }).node.anchor_key;
-    if (anchor.includes("day:")) throw new Error("child failure");
+test("R2 mixed structural node cannot use first-member policy and policy join is order-independent", async () => {
+  const { input, tree } = inputAndTree();
+  const seed = tree.nodes.find((node) => node.view_kind === "source" && node.policy_partition_label.includes("sensitivity=generic"))!;
+  const mixed = { ...seed, member_claim_revision_ids: ["a", "private"], dependency_manifest: { ...seed.dependency_manifest, live_member_revisions: ["a", "private"] } };
+  const mixedTree: StructuralTree = { ...tree, nodes: [mixed] };
+  const fake = new DeterministicFakeModel(() => ({ summary_text: "safe", citations: [] }));
+  const rendered = await renderStructuralTree(mixedTree, input, fake, options());
+  expect(rendered[0]!.effective_policy).toEqual({ subject_class: "generic", sensitivity: "private", capture_class: "generic" });
+  expect(restrictivePolicyJoin([input.claims[0]!.policy_class, input.claims[1]!.policy_class])).toEqual(restrictivePolicyJoin([input.claims[1]!.policy_class, input.claims[0]!.policy_class]));
+  // This is the naive first-claim answer from the adversarial mixed node: it must be rejected.
+  expect(validateRestrictiveJoin({ subject_class: "owner", sensitivity: "private", capture_class: "voice" }, [{ subject_class: "owner", sensitivity: "private", capture_class: "voice" }, { subject_class: "bystander", sensitivity: "health", capture_class: "screen" }])).toBe(false);
+});
+
+test("R2 stores child render hashes in the parent request manifest and stale children stale parents", async () => {
+  const { input, tree } = inputAndTree();
+  const seenParentManifests: unknown[] = [];
+  const fake = new DeterministicFakeModel((request) => {
+    const node = (request.input as { node: { anchor_key: string; dependency_manifest: unknown } }).node;
+    if (node.anchor_key.includes("day:")) throw new Error("child failure");
+    if (node.anchor_key.includes("month:")) seenParentManifests.push(node.dependency_manifest);
     return { summary_text: "ok", citations: [] };
-  } };
+  });
   const renders = await renderStructuralTree(tree, input, fake, options());
   const month = renders.find((render) => tree.nodes.find((node) => node.node_id === render.node_id)?.anchor_key.includes("month:"));
   expect(month?.stale).toBe(true);
-});
-
-test("R2 restrictive join rejects a less restrictive effective policy", () => {
-  expect(validateRestrictiveJoin({ subject_class: "generic", sensitivity: "generic", capture_class: "generic" }, [{ subject_class: "generic", sensitivity: "private", capture_class: "generic" }])).toBe(false);
-  expect(validateRestrictiveJoin({ subject_class: "generic", sensitivity: "private", capture_class: "generic" }, [{ subject_class: "generic", sensitivity: "generic", capture_class: "generic" }])).toBe(true);
+  expect(seenParentManifests).toContainEqual(expect.objectContaining({ child_render_hashes: ["missing-child-render"] }));
 });
