@@ -1,7 +1,7 @@
 {
   "files": {
     "backend/utils/apps.py": 1652,
-    "backend/utils/conversations/process_conversation.py": 1896,
+    "backend/utils/conversations/process_conversation.py": 1932,
     "backend/utils/memory/canonical_consolidation.py": 1935,
     "backend/utils/memory/canonical_memory_adapter.py": 2012,
     "backend/utils/memory/legacy_backfill.py": 1723,
@@ -12,7 +12,7 @@
   },
   "raise_justifications": {
     "backend/utils/apps.py": "get_available_app_model_by_id: the set-preferred-app availability authority as a validated App model, so the summary path honors what the setter admitted instead of re-deciding with the installed slice (#10074).",
-    "backend/utils/conversations/process_conversation.py": "Exclude own and merge-source conversation action items from reprocess/merge dedup candidates so tasks are not silently deleted.",
+    "backend/utils/conversations/process_conversation.py": "Free Context demand stubs share the deferred-title path but persist completed+deferred (MCP-listable) instead of processing-only Desktop defer; +36 for the product-aware stub gate and shared persist helper beside the existing process_conversation owner.",
     "backend/utils/memory/canonical_consolidation.py": "Candidate selection, bounded retry leases, atomic promotion planning, and batch-level duplicate-supersede rejection remain one canonical long-term admission authority; extracting them would permit competing admission state machines (FC-split-mutation-authority).",
     "backend/utils/memory/canonical_memory_adapter.py": "Canonical conversation replacement coordinates source-generation fencing, bounded lineage discovery, and atomic replacement application; splitting this state machine would duplicate lifecycle authority (FC-split-mutation-authority).",
     "backend/utils/other/storage.py": "delete_app_logo now requires an exact app-logo bucket prefix (startswith) so a foreign URL embedding the prefix later cannot delete an unrelated object on this deletion path (David review on #9873).",
