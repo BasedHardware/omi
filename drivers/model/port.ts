@@ -5,6 +5,9 @@ export interface ModelPort {
 
 /** Test-only deterministic adapter; it makes no network or real-model call. */
 export class DeterministicFakeModel implements ModelPort {
-  constructor(private readonly response: unknown) {}
-  async invoke(): Promise<unknown> { return structuredClone(this.response); }
+  constructor(private readonly response: unknown | ((request: { strategy: string; version: string; input: unknown }) => unknown)) {}
+  async invoke(request: { strategy: string; version: string; input: unknown }): Promise<unknown> {
+    const response = typeof this.response === "function" ? this.response(request) : this.response;
+    return structuredClone(response);
+  }
 }

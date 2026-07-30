@@ -3,6 +3,8 @@ import type { LocalHandle } from "./mentions";
 
 export interface EntityTable { owner_account_id: string; entities: readonly Entity[]; constraints: readonly IdentityConstraint[]; }
 export type EntityProposal = { decision: "same"; entity_id: string } | { decision: "distinct" } | { decision: "abstain" };
+/** Model-facing context only; resolution still authorizes targets by ID from the table. */
+export interface EntityResolutionCandidate { entity_id: string; handle: string; labels: readonly string[]; }
 export interface EntityResolutionRequest {
   strategy: "local-handle-durable-entity";
   version: "v1";
@@ -10,6 +12,7 @@ export interface EntityResolutionRequest {
   local_handle: LocalHandle;
   evidence_refs: readonly string[];
   candidate_entity_ids: readonly string[];
+  candidate_entities?: readonly EntityResolutionCandidate[];
 }
 export type EntityResolution =
   | { outcome: "same"; entity_id: string; blockers: readonly string[] }
@@ -17,8 +20,8 @@ export type EntityResolution =
   | { outcome: "abstain"; blockers: readonly string[] };
 
 /** Pure request construction. Candidate selection and any model response remain data. */
-export const buildEntityResolutionRequest = (owner_account_id: string, local_handle: LocalHandle, evidence_refs: readonly string[], candidate_entity_ids: readonly string[]): EntityResolutionRequest =>
-  ({ strategy: "local-handle-durable-entity", version: "v1", owner_account_id, local_handle, evidence_refs, candidate_entity_ids });
+export const buildEntityResolutionRequest = (owner_account_id: string, local_handle: LocalHandle, evidence_refs: readonly string[], candidate_entity_ids: readonly string[], candidate_entities?: readonly EntityResolutionCandidate[]): EntityResolutionRequest =>
+  ({ strategy: "local-handle-durable-entity", version: "v1", owner_account_id, local_handle, evidence_refs, candidate_entity_ids, ...(candidate_entities ? { candidate_entities } : {}) });
 
 const activeDistinct = (constraints: readonly IdentityConstraint[], left: string, right: string) => constraints.some((constraint) =>
   constraint.relation === "distinct" && constraint.reversed_at === null &&
