@@ -23,13 +23,19 @@ typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
   DateTime? endDate,
 });
 
+typedef DeleteActionItemRequest = Future<bool> Function(String id);
+
 class ActionItemsProvider extends ChangeNotifier {
-  ActionItemsProvider({ActionItemsFetcher? getActionItems})
-      : _getActionItems = getActionItems ?? api.tryGetActionItems {
+  ActionItemsProvider({
+    ActionItemsFetcher? getActionItems,
+    DeleteActionItemRequest? deleteActionItemRequest,
+  })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
+        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem {
     unawaited(_preload());
   }
 
   final ActionItemsFetcher _getActionItems;
+  final DeleteActionItemRequest _deleteActionItemRequest;
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
 
@@ -230,6 +236,14 @@ class ActionItemsProvider extends ChangeNotifier {
         if (_pendingDeletionIds.isNotEmpty) {
           _actionItems.removeWhere((item) => _pendingDeletionIds.contains(item.id));
         }
+        // Lazily retire tombstones once the server confirms the item is gone:
+        // any ID still tracked as pending-deletion that did not appear in the
+        // fresh server response can be cleared, because subsequent refreshes
+        // will no longer see it.
+        if (_pendingDeletionIds.isNotEmpty) {
+          final serverIds = response.actionItems.map((e) => e.id).toSet();
+          _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
+        }
         _hasMore = response.hasMore;
         loaded = true;
 
@@ -266,7 +280,8 @@ class ActionItemsProvider extends ChangeNotifier {
       );
 
       if (response != null) {
-        _actionItems.addAll(response.actionItems);
+        final filtered = response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+        _actionItems.addAll(filtered);
         _hasMore = response.hasMore;
       }
     } catch (e) {
@@ -468,15 +483,17 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final success = await api.deleteActionItem(item.id);
+      final success = await _deleteActionItemRequest(item.id);
 
       if (!success) {
         Logger.debug('Failed to delete action item on server');
         // On failure, remove from pending set so a future reload can re-fetch it
         _pendingDeletionIds.remove(item.id);
-      } else {
-        _pendingDeletionIds.remove(item.id);
       }
+      // On success, the tombstone is intentionally retained: a refresh that
+      // started before the server processed the deletion may still return the
+      // deleted item. It is cleaned up lazily in fetchActionItems() once the
+      // server confirms the item is gone.
       return success;
     } catch (e) {
       Logger.debug('Error deleting action item: $e');
