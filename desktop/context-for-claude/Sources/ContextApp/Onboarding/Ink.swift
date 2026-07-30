@@ -1,10 +1,17 @@
 //
 //  Ink.swift — the shared visual vocabulary for the onboarding window and the menu bar popover.
 //
-//  Every value here comes from docs/design-system.md, which in turn is the product site
-//  (archit-lal.github.io/Periphery) read as CSS custom properties. The app and the site are one
-//  product, so they are one palette: warm paper, warm near-black ink, a bronze accent, and Open
-//  Runde at 400/500/600 for every run of text.
+//  The palette is Anthropic's: ivory paper (#FAF9F5), near-black ink (#141413), and clay (#D97757)
+//  as the single accent, with the backdrop washed in the same clay/manilla/kraft neutrals. Type is
+//  Open Runde at 400/500/600, carried over from the product site — the one part of this system not
+//  yet on brand, because changing it means shipping different font files rather than different
+//  numbers.
+//
+//  The rest of the structure — role names, tracking, the rhythm ladder — still comes from
+//  docs/design-system.md, which reads the product site (archit-lal.github.io/Periphery) as CSS
+//  custom properties. What changed is which brand the values belong to: this app sits beside Claude
+//  in the same menu bar and hands its output to the same model, so it should look like it belongs
+//  there rather than like a separate product that integrates with it.
 //
 //  Roles are exposed as whole styles rather than loose numbers because the character of the type
 //  lives in the tracking as much as the point size — a caller that hand-assembles
@@ -114,16 +121,21 @@ extension Ink {
     /// colour is not. Every tone here is a warm neutral a step or two below `paper`, so blurred and
     /// composited over the paper scrim the field reads as shading on a sheet — a faint warm wash —
     /// rather than as nine coloured lights. Saturated colour on paper reads as a bug.
+    ///
+    /// Each is now a wash of Anthropic's own warm neutrals — clay, manilla, kraft — rather than the
+    /// bronze family the site used. This field is the largest coloured surface in the product, so
+    /// leaving it on the old palette while the accent moved would have made the window read as two
+    /// designs sharing a frame: the tokens say one brand and the backdrop says another.
     static let backdropBlobs: [InkBlob] = [
-        InkBlob(x: -1.25, y: -1.20, color: Color(hex: 0xE8D9C6)),
-        InkBlob(x: -0.25, y: -1.25, color: Color(hex: 0xF0E2D2)),
-        InkBlob(x: 0.35, y: -1.25, color: Color(hex: 0xEFE4D3)),
-        InkBlob(x: 1.20, y: -1.05, color: Color(hex: 0xE2DFD6)),
-        InkBlob(x: 1.25, y: 0.05, color: Color(hex: 0xE6E3D8)),
-        InkBlob(x: 1.20, y: 1.15, color: Color(hex: 0xEBE5D4)),
-        InkBlob(x: 0.05, y: 1.25, color: Color(hex: 0xF1E6D0)),
-        InkBlob(x: -0.75, y: 1.20, color: Color(hex: 0xEEDDCB)),
-        InkBlob(x: -1.25, y: 0.45, color: Color(hex: 0xE9DCCC)),
+        InkBlob(x: -1.25, y: -1.20, color: Color(hex: 0xEFDDD4)),
+        InkBlob(x: -0.25, y: -1.25, color: Color(hex: 0xF3E9DF)),
+        InkBlob(x: 0.35, y: -1.25, color: Color(hex: 0xF1EDE4)),
+        InkBlob(x: 1.20, y: -1.05, color: Color(hex: 0xEAE7DC)),
+        InkBlob(x: 1.25, y: 0.05, color: Color(hex: 0xEEEBE1)),
+        InkBlob(x: 1.20, y: 1.15, color: Color(hex: 0xF0E7D8)),
+        InkBlob(x: 0.05, y: 1.25, color: Color(hex: 0xF4EBDC)),
+        InkBlob(x: -0.75, y: 1.20, color: Color(hex: 0xEDDFD3)),
+        InkBlob(x: -1.25, y: 0.45, color: Color(hex: 0xE9E4D8)),
     ]
 }
 

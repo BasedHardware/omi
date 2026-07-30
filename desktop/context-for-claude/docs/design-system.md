@@ -1,7 +1,7 @@
 # Context for Claude — design system
 
 The app and the product site (`archit-lal.github.io/Periphery`) are one product, so they are one
-system: warm paper, warm near-black ink, a bronze accent, Open Runde throughout. The palette below
+system: Anthropic ivory, near-black ink, clay as the single accent, Open Runde throughout. The palette below
 is the site's `:root` block, copied value for value. Values are exact; do not round them.
 
 Implemented in `Sources/ContextApp/Onboarding/Ink.swift`. Every colour and every type role in the
@@ -12,12 +12,12 @@ app comes from there — a literal hex anywhere else is a bug.
 The site's seven variables, keeping the site's names:
 
 ```
-paper   #FBF8F4   every surface: the onboarding oval, the popover
-ink     #171412   primary type, the primary button fill, the granted checkbox
+paper   #FAF9F5   every surface: the onboarding oval, the popover
+ink     #141413   primary type, the primary button fill, the granted checkbox
 mid     #6B625B   secondary type: prose, the popover's status lines            5.6:1 on paper
 faint   #A39A92   tertiary type: a status word, a count, "Quit"                2.6:1 on paper
 line    #E6DFD6   rules and card hairlines
-bronze  #8F6420   the one accent — an actionable link, and nothing else
+bronze  #D97757   the one accent (Anthropic clay) — an actionable link, and nothing else
 red     #C9352B   the site's card outline; here, the error colour (`Ink.errorRed`)
 ```
 
@@ -177,7 +177,7 @@ popover in a dark shell.
 ## The sign-in callback page
 
 The loopback OAuth page in `LoopbackCallbackServer` is the app's one web surface, and it opens in
-the same browser as the product site. It is held to the site's palette: `#FBF8F4` ground, `#171412`
+the same browser as the product site. It is held to the palette: `#FAF9F5` ground, `#141413`
 heading, `#6B625B` body, `#C9352B` when sign-in failed, Open Runde first in the stack.
 
 ## Motion
@@ -254,7 +254,7 @@ Literata headlines over Inter body. Deliberately dropped, not overlooked:
 - **The intro hero's drop shadow** (black 50 %, blur 18, offset 0/1) and the whole `InkTextShadow`
   mechanism. A dark shadow under type on paper is grime; there is no shadow anywhere in the system
   now.
-- **`cursorBlue` `#96C4FF`.** The one actionable link is bronze. A light blue would be both
+- **`cursorBlue` `#96C4FF`.** The one actionable link is clay. A light blue would be both
   invisible on paper and off-palette.
 - **`errorRed` `#FFB4AB`**, a pale red tuned for a dark ground, replaced by the site's `#C9352B`.
 - **`NSVisualEffectView` behind the card**, already gone before this pass and not coming back: a
