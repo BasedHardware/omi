@@ -1,0 +1,21 @@
+desktop/context-for-claude/docs/requirements-checklist.md
+  s_18cae1c5af4258::t_eb2aaeda90159b 80
+desktop/context-for-claude/Sources/ContextCore/Exclusions.swift
+  s_18cae1c5af4258::t_9b6d48bc298b1c 502-507
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "fab3c34dc5c13f86ce0f3a5ded77f29e0a38af67",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
