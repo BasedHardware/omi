@@ -975,6 +975,7 @@ export interface ContinuationCheckpointUpsert {
 
 export interface Conversation {
   app_id?: string | null;
+  app_product?: string | null;
   apps_results?: Array<AppResult>;
   audio_files?: Array<AudioFile>;
   calendar_event?: CalendarEventLink | null;
@@ -2847,6 +2848,7 @@ export interface SharedChatMessagesResponse {
 
 export interface SharedConversationResponse {
   app_id?: string | null;
+  app_product?: string | null;
   apps_results?: Array<AppResult>;
   audio_files?: Array<AudioFile>;
   calendar_event?: CalendarEventLink | null;

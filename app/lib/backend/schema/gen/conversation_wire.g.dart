@@ -520,6 +520,7 @@ class GeneratedCalendarEventLink {
 
 class GeneratedConversation {
   final String? appId;
+  final String? appProduct;
   final List<GeneratedAppResult> appsResults;
   final List<GeneratedAudioFile> audioFiles;
   final GeneratedCalendarEventLink? calendarEvent;
@@ -556,6 +557,7 @@ class GeneratedConversation {
 
   const GeneratedConversation({
     this.appId,
+    this.appProduct,
     this.appsResults = const [],
     this.audioFiles = const [],
     this.calendarEvent,
@@ -594,6 +596,7 @@ class GeneratedConversation {
   factory GeneratedConversation.fromJson(Map<String, dynamic> json) {
     return GeneratedConversation(
       appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
+      appProduct: _readFieldValue<String>(_readField(json, const ["app_product"]), "app_product", _readString, requiredField: false, nullable: true),
       appsResults: _required(_readFieldValue<List<GeneratedAppResult>>(_readField(json, const ["apps_results"]), "apps_results", (value) => _readObjectList(value, GeneratedAppResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "apps_results"),
       audioFiles: _required(_readFieldValue<List<GeneratedAudioFile>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFile.fromJson), requiredField: false, nullable: false, defaultValue: const []), "audio_files"),
       calendarEvent: _readFieldValue<GeneratedCalendarEventLink>(_readField(json, const ["calendar_event"]), "calendar_event", (value) => _readObject(value, GeneratedCalendarEventLink.fromJson), requiredField: false, nullable: true),
@@ -633,6 +636,7 @@ class GeneratedConversation {
   Map<String, dynamic> toJson() {
     return {
       'app_id': appId,
+      'app_product': appProduct,
       'apps_results': appsResults.map((value) => value.toJson()).toList(),
       'audio_files': audioFiles.map((value) => value.toJson()).toList(),
       'calendar_event': calendarEvent?.toJson(),
