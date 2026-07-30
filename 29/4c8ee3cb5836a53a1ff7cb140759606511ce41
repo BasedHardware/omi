@@ -1,0 +1,27 @@
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsGeneralPane.swift
+  s_18cae1c5af4258::t_fa5ec8f7b869c0 1-15,146,153-155,161,163,178,180,187,202-212,266,283,288-289
+  s_18cae1c5af4258::t_701fa1f84d2051 16-145,147-152,156-160,162,164-177,179,181-186,188-201,213-265,267-282,284-287
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsCapturePane.swift
+  s_18cae1c5af4258::t_701fa1f84d2051 8,10-30,32,34-52,54-83,85,90-97
+  s_18cae1c5af4258::t_c48a9df4a091c0 1-7,9,31,33,53,84,86-89,98-99
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsAgentsPane.swift
+  s_18cae1c5af4258::t_717deea1dfdba1 1-13,15,20,36,38,53,80,91,94,113,120-121,129,139-142,146-149,151,165-166,174-182,222-223
+  s_18cae1c5af4258::t_f6a0ae59396c92 130
+  s_18cae1c5af4258::t_701fa1f84d2051 14,16-19,21-35,37,39-52,54-79,81-90,92-93,95-112,114-119,122-128,131-138,143-145,150,152-164,167-173,183-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "294c8ee3cb5836a53a1ff7cb140759606511ce41",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
