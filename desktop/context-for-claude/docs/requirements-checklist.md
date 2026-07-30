@@ -76,23 +76,23 @@ distrust.
 
 | # | Requirement | Status |
 |---|---|---|
-| G1 | "Learn how to use it" card with Start / Skip | MISSING |
-| G2 | Opens a page in the browser as the first step. **NOT Wikipedia, and not any Wikipedia URL** — direct user instruction. The chosen page is `https://www.lingscars.com/`: text-dense (good for the OCR beat), online for two decades, and absurd enough that Claude reporting it back is the joke. **It is Cloudflare-challenged: `curl` gets HTTP 403 and an interstitial, so never fetch or health-check it — open it with `NSWorkspace` and let the real browser pass the challenge.** Frame progress must key off frame *count*, never a specific captured word, because on a slow network the first frames may be the interstitial. | MISSING |
-| G3 | Asks the screen-recording permission at the right moment | MISSING |
-| G4 | Coach mark: "Scroll around on this page and collect your first frames" | MISSING |
-| G5 | A LIVE frame counter reading our own store — never a timer pretending | MISSING |
-| G6 | "It's time to open the timeline", showing the chord | MISSING |
-| G7 | The timeline/rewind window opens | Rewind DONE; tutorial step MISSING |
-| G8 | Coach mark with a left-scrolling animation: "scroll left to see the past" | MISSING |
-| G9 | Coach mark: "Find specific moments — click Search All" | MISSING |
-| G10 | A popup appears after clicking Search All | MISSING |
-| G11 | Coach mark: type a query and press Enter | MISSING |
-| G12 | Result appears, then "Found it! Tap the memory to jump back to that exact moment" | MISSING |
-| G13 | "You are all set" completion card | MISSING |
-| G14 | "One more thing — you can always find it up here in the menu bar" | MenuBarSpotlight EXISTS; tutorial step MISSING |
+| G1 | "Learn how to use it" card with Start / Skip | DONE — `Tutorial/TutorialCardView.swift` `invitation`; walked live |
+| G2 | Opens a page in the browser as the first step. **NOT Wikipedia, and not any Wikipedia URL** — direct user instruction. The chosen page is `https://www.lingscars.com/`: text-dense (good for the OCR beat), online for two decades, and absurd enough that Claude reporting it back is the joke. **It is Cloudflare-challenged: `curl` gets HTTP 403 and an interstitial, so never fetch or health-check it — open it with `NSWorkspace` and let the real browser pass the challenge.** Frame progress must key off frame *count*, never a specific captured word, because on a slow network the first frames may be the interstitial. | DONE — `TutorialModel.articleURL`, opened with `NSWorkspace.shared.open` and never fetched; no reachability probe exists in the tutorial. The frame gate counts frames only, and the search beat asks the user for a word they saw rather than testing for one this code guessed, so the interstitial case costs nothing. |
+| G3 | Asks the screen-recording permission at the right moment | DONE — `screenAccess` step, dropped from the plan when the grant already exists, advances on the real TCC answer. The ungranted path is unit-tested, not walked: this machine is granted |
+| G4 | Coach mark: "Scroll around on this page and collect your first frames" | DONE — anchored over the browser window's real frame from the window server; degrades to a centred card with no arrow when it cannot be found |
+| G5 | A LIVE frame counter reading our own store — never a timer pretending | DONE — assigned from `RewindQueries.frameCount` every tick; the model contains no increment. Measured live: 0 for the first 70 s on a static screen, then 1…5 by t=300 s. Mutating the gate into a 10 s timer fails `testTheFrameCounterReflectsTheStoreAndNeverElapsedTime` |
+| G6 | "It's time to open the timeline", showing the chord | DONE — chord read from `GlobalShortcuts.shared.display(for: .openTimeline)`, described as live only when `readiness == .armed` |
+| G7 | The timeline/rewind window opens | DONE — `RewindWindow.present` with the shell's own wiring; the step only claims the window is up when `isVisible` agrees |
+| G8 | Coach mark with a left-scrolling animation: "scroll left to see the past" | DONE — anchored above the real `RewindTrackView` frame (card bottom 803, track top ~817), arrow down; the animation collapses under Reduce Motion |
+| G9 | Coach mark: "Find specific moments — click Search All" | DONE — anchored under the pill's real accessibility frame (pill (182,171) 118×25 → card x=31, y=211, arrow up), and the step advances because the real pill was pressed |
+| G10 | A popup appears after clicking Search All | PARTIAL — the popup is the tutorial's own query card, not `SearchBarWindow`. Deliberate: that bar routes the question to Claude, which is the later proof beat, while G12 needs a memory row and a timestamp this app can show. Moving G10/G11 onto the real bar would move G12's gate to `QueryStamp` |
+| G11 | Coach mark: type a query and press Enter | DONE — real field, submits on Return, runs `Queries.recall` against the real store; an empty result keeps the step and says so |
+| G12 | Result appears, then "Found it! Tap the memory to jump back to that exact moment" | DONE — verified live on a real hit (a frame captured at 12:40:21 AM whose OCR carried the page title); tapping it loads that frame's real picture and labels it with the captured second. No button can satisfy the gate |
+| G13 | "You are all set" completion card | DONE — and its sentence changes when the frame gate was waived, so a waived run is never told its screen is searchable |
+| G14 | "One more thing — you can always find it up here in the menu bar" | DONE — the `menuBar` step calls `MenuBarSpotlight.show()`, and teardown hides it |
 | G15 | Shortcut-conflict notification with a one-click remedy | IN FLIGHT (shortcuts agent) |
-| G16 | Progress dots through the tutorial | MISSING |
-| G17 | Music throughout, click sounds on every step | MISSING |
+| G16 | Progress dots through the tutorial | DONE — `TutorialProgressDots`, counting this run's plan (13 beats when Screen Recording is already granted) |
+| G17 | Music throughout, click sounds on every step | DONE — `Sound.music.start()` at `begin()`, stopped by the one teardown; a click on every advance, a swoosh on the page and on the timeline, a chime on each earned gate |
 
 ## H. Rewind window
 
