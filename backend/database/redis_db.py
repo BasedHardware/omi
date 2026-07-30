@@ -1076,6 +1076,17 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     return result is not None
 
 
+def try_acquire_projection_generation_lock(uid: str, cadence_key: str, ttl: int = 60 * 60 * 2) -> bool:
+    """Best-effort lock around one user's expensive scheduled projection generation."""
+    result = r.set(f'users:{uid}:projection_generation_lock:{cadence_key}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def release_projection_generation_lock(uid: str, cadence_key: str) -> None:
+    """Release a failed projection attempt so the job runner may retry it."""
+    r.delete(f'users:{uid}:projection_generation_lock:{cadence_key}')
+
+
 @try_catch_decorator
 def set_credits_invalidation_signal(uid: str, ttl: int = 120) -> None:
     """Signal active WebSocket sessions to refresh credits immediately.
