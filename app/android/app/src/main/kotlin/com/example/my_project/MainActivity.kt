@@ -100,8 +100,16 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onDestroy() {
+        // The engine dies with the activity whether or not it is finishing, so these flags
+        // must clear outside the isFinishing guard — a system-initiated destroy otherwise
+        // leaves native deferring audio to an engine that is gone (issue #10847).
+        // configureFlutterEngine re-arms both on the next attach.
+        OmiBleManager.isFlutterAlive = false
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .edit()
+            .putBoolean("flutter.nativeBleForegroundReady", false)
+            .apply()
         if (isFinishing) {
-            OmiBleManager.isFlutterAlive = false
             // Engine + main isolate die with the activity; a live capture session must not outlive its consumer.
             if (PhoneMicController.isInitialized) PhoneMicController.instance.onFlutterEngineDestroyed()
             // Background Mode and Transcribe Later both need the foreground service to keep
