@@ -82,7 +82,11 @@ struct StatusView: View {
     }
 
     private var idlePlaceholder: String {
-        engine.isCapturing ? "waiting for something to hear" : "nothing is being captured"
+        if !engine.isCapturing { return "nothing is being captured" }
+        // A partial pipeline (paywalled speech, missing permission, …) already explains itself in
+        // `pausedReason` above — "waiting for something to hear" would contradict that.
+        if engine.pausedReason != nil { return "no transcript yet" }
+        return "waiting for something to hear"
     }
 
     private var todayLabel: String {

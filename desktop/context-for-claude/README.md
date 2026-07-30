@@ -67,27 +67,24 @@ as related rather than matching, and carry a caveat telling Claude to treat them
 ```
 Context for Claude.app                     context-for-claude-mcp
   mic ─┐                          (stdio, spawned by Claude)
-  sys ─┼→ Parakeet (on device) ─┐        │
- screen ┴→ Vision OCR ──────────┼→ context.db (SQLite, WAL, FTS5) ←┘ read-only
-                                └→ Omi account (from-segments + screen-activity)
+  sys ─┼→ /v4/listen (cloud STT) ─┐        │
+ screen ┴→ Vision OCR + AX tree ──┼→ context.db (SQLite, WAL, FTS5) ←┘ read-only
+                                  └→ Omi account (from-segments + screen-activity)
 ```
 
 Two processes, one database, no IPC. The MCP server is spawned per Claude session, holds no
 permissions, and works whether or not the app is running. A heartbeat file carries live capture
 state across.
 
-Capture is ported from `desktop/macos` rather than reinvented, keeping the details that are
-invisible until they bite: a CoreAudio IOProc on the default input device (not `AVAudioEngine`,
-whose implicit aggregate device degrades Bluetooth A2DP), CoreAudio process taps with drift
-compensation for system audio, and a fresh `TdtDecoderState` per window so the transducer does not
-loop.
+Capture is ported from `desktop/macos` rather than reinvented. Mic and system audio mix into one
+PCM stream for `wss://api.omi.me/v4/listen`, which diarizes and matches enrolled speech profiles;
+screen capture still runs Vision OCR (and an accessibility-tree pass) on device.
 
-Speaker attribution needs no diarization model: the mic is you, the system tap is everyone else.
+Speaker attribution comes from the backend: mic-vs-system heuristics are only a last resort when a
+line has no diarization label.
 
-Conversations upload through `POST /v1/conversations/from-segments`, not the `/v4/listen`
-websocket — the audio is already transcribed here, the finalize path websocket sessions end through
-is capped at 10 conversations/hour against 30 for from-segments, and `source: "phone"` gets memories
-extracted immediately where `source: "desktop"` defers them and opts into a trial paywall.
+Conversations still upload through `POST /v1/conversations/from-segments` for durable cloud storage
+and memory extraction; `/v4/listen` is the live transcription path, not the upload path.
 
 Detail: `ARCHITECTURE.md`. The interface contracts every file was built against: `CONTRACTS.md`.
 Exact visual values: `docs/design-system.md`.

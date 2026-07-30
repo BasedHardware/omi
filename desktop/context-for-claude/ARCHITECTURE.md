@@ -27,7 +27,7 @@ structural decision follows from it:
 | `ContextCore` | library | GRDB | Storage, queries, and every pure policy. No AppKit, no AVFoundation — it has to link into the MCP binary. |
 | `ContextMCPKit` | library | ContextCore | JSON-RPC framing, the seven tools, MCP handshake. |
 | `ContextMCP` | executable | ContextMCPKit | `main.swift`. Opens the store read-only, pumps stdio. |
-| `ContextApp` | executable | ContextCore, FluidAudio | Capture, transcription, menu bar, onboarding, Claude registration. |
+| `ContextApp` | executable | ContextCore | Capture, cloud transcription, menu bar, onboarding, Claude registration. |
 | `context_for_claude_windows_core_smoke` | Windows executable | `ContextForClaude::core`, swift-winrt | Calls the portable C ABI for a session decision and ranking score. |
 
 The library/executable split exists so the protocol layer is testable without a bundle and so the
@@ -47,25 +47,27 @@ OCR, storage, MCP, and the macOS UI remain outside this slice.
 ## Data flow
 
 ```
-MicCapture ────────→ Transcriber(mic)    ──┐
-  CoreAudio IOProc     FluidAudio Parakeet │
-                                           ├──→ Engine ──→ ContextStore ──→ context.db
-SystemAudioCapture ─→ Transcriber(system) ─┤    session      GRDB, WAL,
-  CoreAudio tap        FluidAudio Parakeet │    boundaries   FTS5
-                                           │
-ScreenWatcher ──────→ Vision OCR ──────────┘
+MicCapture ────────┐
+  AVAudioEngine    │
+                   ├──→ AudioMixer ──→ ListenSocket (/v4/listen) ──┐
+SystemAudioCapture ┘         PCM mix      cloud STT + diarization │
+  CoreAudio tap                                                   ├──→ Engine ──→ ContextStore
+                                                                  │    session      GRDB, WAL,
+ScreenWatcher ──────→ Vision OCR + AX tree ───────────────────────┘    boundaries   FTS5
   ScreenCaptureKit
 ```
 
-Audio flows as 16 kHz mono Int16 little-endian `Data` from capture to transcription — one format,
-agreed once, so a source and a transcriber can be swapped independently.
+Audio flows as 16 kHz mono Int16 little-endian `Data` from capture into one mixed stream for the
+backend. Speech transcripts come back as cloud segments; on-device understanding is screenshot OCR
+(and the accessibility tree), not Parakeet.
 
-Speaker attribution needs no diarization model: the mic is the user, the system tap is everyone
-else. Two transcribers, never mixed.
+Speaker attribution is the backend's: diarization labels plus enrolled speech profiles. Mic-vs-
+system is only a fallback when a line arrives without attribution.
 
 `Engine` owns the only writer. Each source runs in its own task and fails independently — a dead mic
-must not stop screen capture — and the reason surfaces in the menu bar *and* in the MCP `status`
-tool, so Claude can report a gap instead of fabricating over it.
+must not stop screen capture, and a paywalled `/v4/listen` socket must not pretend speech is still
+landing — and the reason surfaces in the menu bar *and* in the MCP `status` tool, so Claude can
+report a gap instead of fabricating over it.
 
 ## Storage
 
@@ -98,7 +100,7 @@ Sources/ContextMCPKit/   JSONRPC  MCPServer  Tools
 Sources/ContextMCP/      main
 Sources/ContextApp/      ContextApp  Engine  Permissions
                          Capture/    AudioSource  MicCapture  SystemAudioCapture  ScreenWatcher
-                         Transcribe/ Transcriber
+                         Backend/    ListenSocket  uploaders  OmiAPI
                          MenuBar/    StatusView
                          Onboarding/ Ink  Backdrop  RandomizedText  OnboardingWindow  OnboardingView
                          Integration/ClaudeRegistrar  LoginItem

@@ -653,6 +653,11 @@ checks:
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9454 weekly baseline health pulse parsing, JSONL record, and 30-day staleness detection"
+  - id: context-for-claude-core-tests
+    command: ["bash", "desktop/context-for-claude/scripts/test-core.sh"]
+    triggers: ["desktop/context-for-claude/core/**", "desktop/context-for-claude/scripts/test-core.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Context for Claude portable C++ session/ranking policy must stay hermetic on every host; the macOS Swift suite needs Xcode 26 and is not yet on the scarce runner"
 
 exempt:
   - path: ".github/scripts/guardrail_pulse.py"

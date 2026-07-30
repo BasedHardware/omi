@@ -215,6 +215,7 @@ final class MicCapture: AudioSource, @unchecked Sendable {
         resetWatchdog()
         try startEngineOnQueue()
         installDefaultDeviceListener()
+        installDeviceFormatListener()
     }
 
     private func startEngineOnQueue() throws {
@@ -590,6 +591,7 @@ final class MicCapture: AudioSource, @unchecked Sendable {
 
         resetWatchdog()
         installDefaultDeviceListener()
+        installDeviceFormatListener()
         isReconfiguring = false
         ContextLog.info("rebuilt AVAudioEngine mic capture", "mic")
     }

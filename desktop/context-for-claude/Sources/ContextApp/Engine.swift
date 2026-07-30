@@ -53,15 +53,18 @@ private final class HeartbeatSnapshot: @unchecked Sendable {
 
 /// The parts of the pipeline that fail independently. Storage is one of them: it is the single
 /// shared dependency, and a database that will not open makes capture pointless rather than partial.
+/// Speech is another: after the Parakeet cutover, `/v4/listen` can die (paywall, auth, refused
+/// codec) while mic and screen keep capturing — and that gap must surface like any other source.
 private enum CaptureComponent: CaseIterable {
     case storage
+    case speech
     case microphone
     case systemAudio
     case screen
 
     var capability: Capability? {
         switch self {
-        case .storage: return nil
+        case .storage, .speech: return nil
         case .microphone: return .microphone
         case .systemAudio: return .systemAudio
         case .screen: return .screen
@@ -71,6 +74,7 @@ private enum CaptureComponent: CaseIterable {
     var label: String {
         switch self {
         case .storage: return "Storage"
+        case .speech: return "Speech"
         case .microphone: return "Microphone"
         case .systemAudio: return "Call audio"
         case .screen: return "Screen"
@@ -95,6 +99,8 @@ private enum CaptureComponent: CaseIterable {
 final class Engine: ObservableObject {
     /// Keeps the sign-in subscription that provisions the MCP key alive.
     private var keyProvisioning: Set<AnyCancellable> = []
+    /// ListenSocket state and sign-in flips that change whether speech is actually landing.
+    private var listenObservations: Set<AnyCancellable> = []
     /// Sums mic and system into the single stream the backend transcribes.
     private let mixer = AudioMixer()
     /// The latest text seen per backend segment id, so a revised segment replaces rather than
@@ -287,7 +293,37 @@ final class Engine: ObservableObject {
             }
         }
 
+        // Subscribe once. Paywall / permanent failure / sign-out used to leave the popover saying
+        // "Listening" with "waiting for something to hear" forever after local Parakeet was removed.
+        if listenObservations.isEmpty {
+            ListenSocket.shared.$state
+                .sink { [weak self] state in
+                    self?.applyListenState(state)
+                }
+                .store(in: &listenObservations)
+            OmiAuth.shared.$isSignedIn
+                .removeDuplicates()
+                .sink { [weak self] _ in
+                    guard let self else { return }
+                    self.applyListenState(ListenSocket.shared.state)
+                }
+                .store(in: &listenObservations)
+        }
+
         Task { await ListenSocket.shared.start() }
+    }
+
+    /// Maps `/v4/listen` health onto the same per-source reason channel as mic/screen, so the menu
+    /// bar and MCP `status()` never claim speech is flowing when the socket is dead.
+    private func applyListenState(_ state: ListenSocket.State) {
+        if let reason = ListenSpeechStatus.reason(
+            state: state, signedIn: OmiAuth.shared.isSignedIn, isPaused: isPaused)
+        {
+            note(.speech, reason)
+        } else {
+            clear(.speech)
+        }
+        publishState()
     }
 
     /// A line the backend transcribed, written on the same path as a local one so sessions,
@@ -345,13 +381,13 @@ final class Engine: ObservableObject {
     }
 
     func resume() {
-        startCloudTranscription()
         guard isPaused else { return }
         isPaused = false
         // Reasons recorded before the pause describe a pipeline that no longer exists. Storage is
         // the exception: that failure is about the database, not about a source.
         reasons = reasons.filter { $0.key == .storage }
         capabilities = Permissions.groupedReport()
+        startCloudTranscription()
         startPermittedSources()
         ContextLog.info("Capture resumed", "engine")
         publishState()
@@ -464,7 +500,7 @@ final class Engine: ObservableObject {
             if #available(macOS 14.4, *) { return SystemAudioCapture() }
             note(component, "\(component.label) off — needs macOS 14.4 or later")
             return nil
-        case .storage, .screen:
+        case .storage, .screen, .speech:
             return nil
         }
     }
@@ -711,6 +747,28 @@ final class Engine: ObservableObject {
 /// understanding is limited to screenshot OCR.
 enum TranscriptOwnership {
     static func shouldFeedLocal() -> Bool { false }
+}
+
+/// Pure mapping from ListenSocket health → the reason string Engine publishes. Kept free of
+/// MainActor / ObservableObject so a regression test can pin paywall and sign-out without spinning
+/// up capture.
+enum ListenSpeechStatus {
+    static func reason(state: ListenSocket.State, signedIn: Bool, isPaused: Bool) -> String? {
+        guard !isPaused else { return nil }
+        switch state {
+        case .live, .connecting:
+            return nil
+        case .paywalled:
+            return "Speech off — Omi trial expired. Upgrade to keep transcribing."
+        case .failed(let message):
+            return message
+        case .idle:
+            // Signed-in idle is the brief window between stop and reconnect, or capture starting
+            // before the socket has asked to connect. Signed-out idle is the durable "no speech"
+            // state and must not look like healthy listening.
+            return signedIn ? nil : "Sign in to Omi to transcribe speech"
+        }
+    }
 }
 
 // MARK: - Store writer

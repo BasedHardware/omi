@@ -11,11 +11,6 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.24.0"),
-        // Tags were pulled upstream; pin the revision Omi desktop uses.
-        .package(
-            url: "https://github.com/FluidInference/FluidAudio.git",
-            revision: "19600a485baa4998812e4654b70d2bab8f2c9949"
-        ),
     ],
     targets: [
         // The portable decision rules, shared verbatim with the Windows CMake build in `windows/`.
@@ -50,10 +45,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "ContextApp",
-            dependencies: [
-                "ContextCore",
-                .product(name: "FluidAudio", package: "FluidAudio"),
-            ],
+            dependencies: ["ContextCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

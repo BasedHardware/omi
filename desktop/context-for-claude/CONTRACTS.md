@@ -349,25 +349,26 @@ frontmost app is a screenshot tool, Mission Control is up, or the screen is lock
 (quality 0.5, longest side ≤ 1600) into `ContextPaths.framesDirectory(for:)` and set `imagePath`.
 Record `appName` and `windowTitle` on every frame even when OCR is skipped.
 
-### `Sources/ContextApp/Transcribe/Transcriber.swift` — owner: **transcription agent**
+### `Sources/ContextApp/Backend/ListenSocket.swift` — owner: **transcription agent**
 
 ```swift
-actor Transcriber {
-    init(source: SegmentSource)
-    var onLine: (@Sendable (String, Double, Double) -> Void)?   // text, startEpoch, endEpoch
-    func setOnLine(_ handler: @escaping @Sendable (String, Double, Double) -> Void)
-    func start() async throws
-    func append(_ data: Data)       // 16 kHz mono Int16 LE
-    func finish() async
+@MainActor final class ListenSocket: ObservableObject {
+    nonisolated static let shared: ListenSocket
+    enum State: Equatable {
+        case idle, connecting, live, failed(String), paywalled
+    }
+    @Published private(set) var state: State
+    var onSegments: (([CloudSegment]) -> Void)?
+    var onConversationId: ((String) -> Void)?
+    func start() async
+    nonisolated func send(_ pcm: Data)   // 16 kHz mono Int16 LE
+    func stop()
 }
 ```
-FluidAudio Parakeet TDT, on-device. `AsrModels.downloadAndLoad(version:)` — `.v2` for English,
-`.v3` otherwise. 10 s windows drained by a 1 s pump. **A fresh `TdtDecoderState()` per window** —
-persisting it across windows makes the transducer loop and Title-Case everything. Use
-`TranscriptFilter.isSilent(rms:)` to skip dead windows before the model and `TranscriptFilter.clean`
-on the output. Model download is ~600 MB on first run: expose
-`static var isModelReady: Bool` and `static func prepareModels() async throws` so onboarding can
-warm it with progress rather than the first conversation silently dropping.
+Cloud speech via `wss://api.omi.me/v4/listen`. Mixed mic+system PCM goes up; diarized segments with
+optional person ids come back. Permanent failures (`paywalled`, auth refusal, rejected codec) must
+stop reconnecting and surface through `Engine` as a speech capability gap — never look like healthy
+listening with an empty transcript forever.
 
 ### `Sources/ContextApp/Engine.swift` — owner: **engine agent**
 
@@ -386,11 +387,12 @@ warm it with progress rather than the first conversation silently dropping.
     func refreshCapabilities()
 }
 ```
-Owns `MicCapture`, `SystemAudioCapture`, two `Transcriber`s, `ScreenWatcher`, and the `ContextStore`
-writer. Applies `SessionPolicy` to decide session boundaries, sets `appHint` from the frontmost app
-when opening one, and writes `CaptureState` to the heartbeat file every 30 s and on every state
-change. **Each source fails independently** — a dead mic must not stop screen capture; record the
-reason in `pausedReason` and keep the rest alive. Prunes frames older than 30 days on launch.
+Owns `MicCapture`, `SystemAudioCapture`, `ListenSocket` (via `AudioMixer`), `ScreenWatcher`, and the
+`ContextStore` writer. Applies `SessionPolicy` to decide session boundaries, sets `appHint` from the
+frontmost app when opening one, and writes `CaptureState` to the heartbeat file every 30 s and on
+every state change. **Each source fails independently** — a dead mic must not stop screen capture,
+and a dead `/v4/listen` must not pretend speech is flowing; record the reason in `pausedReason` and
+keep the rest alive. Prunes frames older than 30 days on launch.
 
 ### `Sources/ContextApp/Permissions.swift` — owner: **permissions agent**
 
