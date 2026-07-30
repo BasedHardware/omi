@@ -46,6 +46,43 @@ public struct SessionPolicy {
     }
 }
 
+// MARK: - Capture admission
+
+/// The one gate every screen capture passes through.
+///
+/// There were two halves of this decision before there was a Settings pane: the credential-surface
+/// rules in ``Redaction/isSensitiveWindow(app:title:)``, which are not negotiable, and nothing else.
+/// User exclusions are the second half, and they are composed here rather than filtered in the UI —
+/// a privacy control the capture path does not consult is a checkbox, not a control.
+///
+/// Both halves are asked with the same ``CaptureSubject`` so a caller cannot accidentally apply one
+/// and not the other, and both are pure: no clock, no disk, no window server. What the app has to do
+/// is call it — twice per tick, as `ScreenWatcher` already does, once before the window is resolved
+/// and once with the title in hand.
+public enum CapturePolicy {
+
+    /// Why this capture must not be read or stored, or nil if it may be.
+    ///
+    /// User exclusions are asked first because they carry the more specific answer: a locked password
+    /// manager should be reported as an excluded app and not as "a credential surface", which is what
+    /// the Settings pane has to be able to explain.
+    ///
+    /// ``Redaction`` is asked with both identifier forms because the display name catches the vendors
+    /// whose bundle id says nothing, and because a queued frame has only the display name left.
+    public static func exclusion(
+        for subject: CaptureSubject, using exclusions: ExclusionSet
+    ) -> ExclusionReason? {
+        if let reason = exclusions.reason(for: subject) { return reason }
+        if isCredentialSurface(subject) { return .credentialSurface }
+        return nil
+    }
+
+    private static func isCredentialSurface(_ subject: CaptureSubject) -> Bool {
+        Redaction.isSensitiveWindow(app: subject.bundleID, title: subject.windowTitle)
+            || Redaction.isSensitiveWindow(app: subject.appName, title: subject.windowTitle)
+    }
+}
+
 // MARK: - Transcript hygiene
 
 /// Rejects the noise a streaming transducer emits when nobody is talking.

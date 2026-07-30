@@ -230,6 +230,10 @@ extension Redaction {
     /// patterns above depend on. So the surfaces whose entire purpose is to show credentials are
     /// never read in the first place, and this is the check that decides which.
     ///
+    /// This is the half of the gate the user cannot turn off. The half they configure lives in
+    /// ``ExclusionSet``, and the two are composed in ``CapturePolicy/exclusion(for:using:)`` — call
+    /// that rather than this, unless there is genuinely no exclusion state to hand.
+    ///
     /// `app` is matched as **either** a bundle identifier or a display name: bundle ids drift across
     /// versions and rebrands while product names do not, and the caller usually has both. Callers
     /// with both should ask twice. `title` is matched on its own, because a credential surface is
@@ -264,42 +268,23 @@ extension Redaction {
     /// OCRing an unlocked vault would put real secrets in a plain-text database. The screenshot and
     /// screen-share tools are here because their windows are either our own capture UI reflected
     /// back or a picker showing someone else's screen.
-    private static let excludedBundleIdentifiers: Set<String> = [
-        // Password managers and secret stores.
-        "com.1password.1password",
-        "com.1password.browser-support",
-        "com.agilebits.onepassword7",
-        "com.agilebits.onepassword-osx",
-        "com.bitwarden.desktop",
-        "com.dashlane.Dashlane",
-        "com.lastpass.LastPass",
-        "com.lastpass.lastpassmacdesktop",
-        "org.keepassxc.keepassxc",
-        "in.sinew.Enpass-Desktop",
-        "com.nordpass.macos",
-        "me.proton.pass.electron",
-        "com.apple.keychainaccess",
-        "com.apple.Passwords",
-        // Authentication surfaces the system puts in front of the user.
-        "com.apple.SecurityAgent",
-        "com.apple.loginwindow",
-        // Screenshot / screen-share tooling.
-        "com.apple.screencaptureui",
-        "com.apple.ScreenSharing",
-        "com.apple.screensharing.agent",
-        "com.apple.screensharing.MessagesAgent",
-        "pl.maketheweb.cleanshotx",
-        "com.loom.desktop",
-        "cc.ffitch.shottr",
-        "com.monosnap.monosnap",
-        "com.skitch.skitch",
-    ]
+    ///
+    /// The membership itself lives in ``ExclusionCatalog`` rather than here, and that is load-bearing:
+    /// the Settings pane shows the same password managers and the same login screen as excluded and
+    /// *not user-removable*, and two copies of that list is how a checkbox the user cannot clear ends
+    /// up meaning nothing. This file consumes the catalog; it does not keep a second opinion of it.
+    private static let excludedBundleIdentifiers: Set<String> =
+        Set(ExclusionCatalog.lockedApps.map(\.bundleID))
+        .union(ExclusionCatalog.screenCaptureTools.map(\.bundleID))
 
     /// Bundle IDs drift between versions and rebrands; these product names do not.
-    private static let excludedNameFragments = [
-        "password", "keychain", "keepass", "bitwarden", "dashlane", "lastpass", "nordpass",
-        "enpass", "authenticator", "screenshot", "screen sharing", "snagit",
-    ]
+    ///
+    /// The password-manager fragments come from the catalog for the same reason as the identifiers
+    /// above. The three added here are screen-capture tooling, which is refused unconditionally and
+    /// deliberately never offered in Settings — nothing is gained by letting a user opt into
+    /// recording their own screen recorder.
+    private static let excludedNameFragments =
+        ExclusionCatalog.lockedNameFragments + ["screenshot", "screen sharing", "snagit"]
 
     private static let settingsIdentifiers: Set<String> = [
         "com.apple.systempreferences", "com.apple.systemsettings",
