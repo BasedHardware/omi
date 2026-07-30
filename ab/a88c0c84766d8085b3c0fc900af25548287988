@@ -1,0 +1,29 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_abe8283a0c57dd::t_94943d665aabb4 20-31
+  s_abe8283a0c57dd::t_a89f2713dde1d5 360-376
+  s_abe8283a0c57dd::t_b6fada31af86f4 326-335
+  s_abe8283a0c57dd::t_5d9e0edea9b4ef 557-558
+  s_abe8283a0c57dd::t_9e179cb2c35634 590-609
+  s_abe8283a0c57dd::t_bfff18eb70c440 615-619
+  s_abe8283a0c57dd::t_e8d0c24637c6b5 620-623,625-627,629-633,636-639
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Ink.swift
+  s_abe8283a0c57dd::t_f9fdc81ae4d46f 69-74
+  s_abe8283a0c57dd::t_c59279bef13f18 54-58,60
+  s_abe8283a0c57dd::t_86bfaa2c86a00b 87,90,94,96,99-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "aba88c0c84766d8085b3c0fc900af25548287988",
+  "prompts": {},
+  "sessions": {
+    "s_abe8283a0c57dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "87377558-5689-4a2d-aa25-ff41404d6e61",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
