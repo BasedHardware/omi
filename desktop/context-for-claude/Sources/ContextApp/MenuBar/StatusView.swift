@@ -9,6 +9,13 @@ import SwiftUI
 /// so this surface only has to answer three questions a person actually asks of a background
 /// recorder — is it on, can it hear and see, and does Claude know about it — plus how to stop it.
 /// If a second screen ever seems necessary, the product has drifted.
+///
+/// **This surface is a menu, so it is drawn like one.** Plain SF Pro at `NSFont.systemFontSize`,
+/// `Divider()` between groups, 22 pt rows, no fills, no tracking, no capsules and no cards. None of
+/// the onboarding sheet's type roles appear here: `.inkStyle` carries the letter-spacing that gives
+/// that sheet its character, and letter-spaced type in a menu bar panel is the single clearest tell
+/// that the panel was drawn by a website rather than by macOS. Colour is `Ink`, which is system
+/// semantics throughout, so the panel follows the menu bar's own appearance.
 struct StatusView: View {
     @ObservedObject private var engine = Engine.shared
     @ObservedObject private var auth = OmiAuth.shared
@@ -22,18 +29,28 @@ struct StatusView: View {
     /// with the popover, so this costs nothing the other 23 hours of the day.
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
+    /// A menu item's own font size, which is what every line on this surface is set in.
+    private static let menuFontSize = NSFont.systemFontSize
+    /// A menu's secondary line — the same size AppKit uses for a menu item's subtitle.
+    private static let menuSmallFontSize = NSFont.smallSystemFontSize
+    /// The height AppKit gives a menu item, matched by `InkPermissionRow`'s native row.
+    private static let rowHeight = InkPermissionRow.menuRowHeight
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 6) {
             statusBlock
-            hairline
+            Divider()
             capabilityRows
-            hairline
+            Divider()
             claudeLine
             accountLine
+            Divider()
             footer
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        // Menu insets: AppKit's own menus are tight horizontally and barely padded at all
+        // vertically, because the rows carry their own height.
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .frame(width: 320)
         .onAppear(perform: refresh)
         .onReceive(tick) { _ in engine.refreshCapabilities() }
@@ -42,43 +59,56 @@ struct StatusView: View {
     // MARK: - Status
 
     private var statusBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
                 Circle()
-                    .fill(engine.isCapturing ? Color(nsColor: .systemGreen) : Color(nsColor: .tertiaryLabelColor))
+                    .fill(engine.isCapturing ? Ink.listeningGreen : Ink.tertiary)
                     .frame(width: 7, height: 7)
+                    // The same column the capability rows hold open for their checkmark, so the dot
+                    // and the checkmarks share one left edge.
+                    .frame(width: 12, alignment: .leading)
 
                 Text(engine.isCapturing ? "Listening · \(todayLabel)" : "Paused")
-                    .inkStyle(.rowCopy)
-                    .foregroundStyle(Color(nsColor: .labelColor))
+                    .font(.system(size: Self.menuFontSize))
+                    .foregroundStyle(Ink.primary)
             }
+            .frame(height: Self.rowHeight)
 
             // Shown even while capturing: sources fail independently, so "Listening" plus "System
             // audio unavailable" is a real and important state. Claude reports the same gap through
             // `status()`, and the two must never disagree.
             if let reason = engine.pausedReason, !reason.isEmpty {
                 Text(reason)
-                    .inkStyle(.statusLabel)
-                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .font(.system(size: Self.menuSmallFontSize))
+                    .foregroundStyle(Ink.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, Self.rowTextInset)
             }
 
             lastLine
         }
+        .padding(.horizontal, 4)
     }
+
+    /// The one left edge every line of text on this surface shares — the 12 pt checkmark column
+    /// plus the 6 pt gap after it, which is where a menu item's title starts. Lines that sit outside
+    /// a row (the transcript line, the Claude line, the account line) are inset by hand to land on
+    /// it; a menu whose text has two left margins is the other half of looking counterfeit.
+    private static let rowTextInset: CGFloat = 18
 
     /// The single best proof-of-life in the product. A line landing here means the capture stack,
     /// the transcriber and the store are all alive — nothing else in this popover proves that.
     private var lastLine: some View {
         Text(engine.lastLine ?? idlePlaceholder)
-            .inkStyle(.statusLabel)
+            .font(.system(size: Self.menuSmallFontSize))
             .italic()
-            .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+            .foregroundStyle(Ink.secondary)
             .lineLimit(2)
             // The newest words are at the end of a transcript line, so keep the tail.
             .truncationMode(.head)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 28, alignment: .topLeading)
+            .padding(.leading, Self.rowTextInset)
     }
 
     private var idlePlaceholder: String {
@@ -97,7 +127,8 @@ struct StatusView: View {
     // MARK: - Capabilities
 
     private var capabilityRows: some View {
-        VStack(spacing: 8) {
+        // No spacing: menu rows abut, and each row already carries its own 22 pt height.
+        VStack(spacing: 0) {
             ForEach(reports, id: \.name) { report in
                 InkPermissionRow(
                     title: label(for: report.name),
@@ -154,32 +185,35 @@ struct StatusView: View {
     // MARK: - Claude
 
     private var claudeLine: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(claudeSummary)
-                    .inkStyle(.statusLabel)
-                    // Not connected is the state with something to do about it, so it is the
-                    // state that gets full ink. Settled recedes to `mid`.
-                    .foregroundStyle(isConnected ? Color(nsColor: .secondaryLabelColor) : Color(nsColor: .labelColor))
+                    .font(.system(size: Self.menuFontSize))
+                    // Not connected is the state with something to do about it, so it is the state
+                    // that gets full contrast. Settled recedes to secondary.
+                    .foregroundStyle(isConnected ? Ink.secondary : Ink.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
 
                 if !isConnected {
                     Button("Connect", action: connect)
                         .buttonStyle(.plain)
-                        .inkStyle(.statusLabel)
-                        .foregroundStyle(Color(nsColor: .controlAccentColor))
+                        .font(.system(size: Self.menuFontSize))
+                        .foregroundStyle(Ink.accent)
                 }
             }
+            .frame(minHeight: Self.rowHeight)
 
             if let claudeNote, !claudeNote.isEmpty {
                 Text(claudeNote)
-                    .inkStyle(.statusLabel)
-                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .font(.system(size: Self.menuSmallFontSize))
+                    .foregroundStyle(Ink.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .padding(.leading, Self.rowTextInset)
+        .padding(.trailing, 4)
     }
 
     /// Which Omi account the recordings land in, and whether anything is stuck on the way there.
@@ -189,27 +223,30 @@ struct StatusView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(accountSummary)
-                    .inkStyle(.statusLabel)
-                    .foregroundStyle(auth.isSignedIn ? Color(nsColor: .secondaryLabelColor) : Color(nsColor: .labelColor))
+                    .font(.system(size: Self.menuFontSize))
+                    .foregroundStyle(auth.isSignedIn ? Ink.secondary : Ink.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let note = uploadNote {
                     Text(note)
-                        .inkStyle(.statusLabel)
-                        .foregroundStyle(uploads.lastError == nil ? Color(nsColor: .secondaryLabelColor) : Color(nsColor: .systemRed))
+                        .font(.system(size: Self.menuSmallFontSize))
+                        .foregroundStyle(uploads.lastError == nil ? Ink.secondary : Ink.errorRed)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
 
             if auth.isSignedIn {
                 Button("Sign out") { auth.signOut() }
                     .buttonStyle(.plain)
-                    .inkStyle(.statusLabel)
-                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                    .font(.system(size: Self.menuFontSize))
+                    .foregroundStyle(Ink.tertiary)
             }
         }
+        .frame(minHeight: Self.rowHeight)
+        .padding(.leading, Self.rowTextInset)
+        .padding(.trailing, 4)
     }
 
     private var accountSummary: String {
@@ -244,9 +281,15 @@ struct StatusView: View {
 
     // MARK: - Controls
 
+    /// The two commands, as menu items rather than as a pill and a link.
+    ///
+    /// `InkButton`'s 42 pt stadium is the onboarding sheet's action shape and belongs there; a menu
+    /// has no buttons in it. Both commands take the full label colour a menu item takes — a command
+    /// set in `tertiaryLabelColor` inside a 22 pt row reads as disabled, which is the opposite of
+    /// what either of these is.
     private var footer: some View {
-        HStack(spacing: 12) {
-            InkButton(engine.isCapturing ? "Pause" : "Resume", kind: .secondary) {
+        VStack(spacing: 0) {
+            MenuCommand(title: engine.isCapturing ? "Pause" : "Resume") {
                 if engine.isCapturing {
                     engine.pause()
                 } else {
@@ -254,22 +297,9 @@ struct StatusView: View {
                 }
             }
 
-            Spacer(minLength: 0)
-
-            Button("Quit") { NSApp.terminate(nil) }
-                .buttonStyle(.plain)
-                .inkStyle(.statusLabel)
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+            MenuCommand(title: "Quit", shortcut: "⌘Q") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
-    }
-
-    // MARK: - Chrome
-
-    private var hairline: some View {
-        Rectangle()
-            .fill(Color(nsColor: .separatorColor))
-            .frame(height: 1)
     }
 
     /// Claude's two config files are edited by hand, by installers, and by Claude itself, so the
@@ -279,5 +309,50 @@ struct StatusView: View {
         engine.refreshCapabilities()
         claude = ClaudeRegistrar.status()
         claudeNote = nil
+    }
+}
+
+// MARK: - Menu command
+
+/// One command row, drawn the way AppKit draws a menu item: full-width hit target, 22 pt tall, the
+/// title at `NSFont.systemFontSize` in the label colour, an optional key-equivalent trailing in
+/// secondary, and a highlight only under the pointer.
+private struct MenuCommand: View {
+    let title: String
+    var shortcut: String?
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: NSFont.systemFontSize))
+                    .foregroundStyle(Ink.primary)
+                    // The same column the capability rows hold open for their checkmark, so every
+                    // row on this surface shares one left edge.
+                    .padding(.leading, 18)
+
+                Spacer(minLength: 8)
+
+                if let shortcut {
+                    Text(shortcut)
+                        .font(.system(size: NSFont.systemFontSize))
+                        .foregroundStyle(Ink.secondary)
+                }
+            }
+            .padding(.horizontal, 4)
+            .frame(height: InkPermissionRow.menuRowHeight)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(isHovering ? Ink.rowHover : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isHovering)
     }
 }

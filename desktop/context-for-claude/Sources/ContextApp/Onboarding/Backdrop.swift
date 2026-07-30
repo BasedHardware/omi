@@ -43,15 +43,15 @@ struct Backdrop<Content: View>: View {
 
     var body: some View {
         ZStack {
-            // A paper oval under the wash. The surface takes none of its brightness from the
-            // desktop behind it: without a floor of its own, ink type would sit on whatever the
-            // user happens to have open. This is the sheet — and it fades on the same falloff as
+            // A sheet under the wash. The surface takes almost none of its brightness from the
+            // desktop behind it: without a floor of its own, type would sit on whatever the user
+            // happens to have open. This is the sheet — and it fades on the same falloff as
             // everything else, so it adds substance without adding an edge.
             ZStack {
                 scrimLayer
                 fieldLayer
             }
-            // One ellipse over the whole painted surface. Every layer under it — the paper floor
+            // One ellipse over the whole painted surface. Every layer under it — the sheet floor
             // and the nine blobs — is rectangular on its own; this is the only thing standing
             // between that and a visible box on the desktop, so it masks the composite rather than
             // each layer separately. Alpha reaches zero before the frame edge, so there is nothing
@@ -103,14 +103,14 @@ struct Backdrop<Content: View>: View {
 
     // MARK: - The field
 
-    /// The paper floor, on the same elliptical falloff as the field so it dissolves rather than
+    /// The sheet floor, on the same elliptical falloff as the field so it dissolves rather than
     /// ends.
     private var scrimLayer: some View {
         // Flat on purpose: the composite ellipse above shapes it. Not fully opaque — the last few
         // per cent let the desktop through as a tint, which is what keeps the oval reading as a
         // sheet lying on the screen rather than a window pasted over it. Still opaque enough that
-        // ink type clears 14:1 over the darkest desktop.
-        Ink.paper.opacity(0.985)
+        // `Ink.primary` type keeps its full contrast over any desktop, in either appearance.
+        Ink.surface.opacity(0.985)
             .allowsHitTesting(false)
     }
 
@@ -262,9 +262,9 @@ private enum Spec {
     static let blobRadiusFraction = 0.65
     static let blurSigma: CGFloat = 24
 
-    /// Down from 0.74 with the dark system: the blobs are now warm neutrals a step below `paper`,
-    /// so this governs how much *shading* the sheet carries. Past ~0.6 the wash starts to read as
-    /// dirt on the paper rather than light across it.
+    /// Down from 0.74 with the dark system: the blobs are low-alpha washes of `Ink.primary`, so
+    /// this governs how much *shading* the sheet carries. Past ~0.6 the wash starts to read as dirt
+    /// on the sheet rather than light across it.
     static let peakOpacity = 0.55
     static let riseDistance = 0.72
 

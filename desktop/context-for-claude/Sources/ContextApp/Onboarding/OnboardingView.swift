@@ -136,7 +136,7 @@ struct OnboardingView: View {
                 style: .introHero,
                 // Colour is a parameter here, not the environment — `RandomizedText` builds one
                 // concatenated `Text` and per-word opacity has to ride on each run's colour.
-                color: Ink.ink
+                color: Ink.primary
             )
             .multilineTextAlignment(.center)
 
@@ -160,11 +160,11 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Here's what I do.")
                 .inkStyle(.firstTitle)
-                .foregroundStyle(Ink.ink)
+                .foregroundStyle(Ink.primary)
 
             Text("I watch and listen. It stays in your Omi account.")
                 .inkStyle(.prose)
-                .foregroundStyle(Ink.mid)
+                .foregroundStyle(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             InkButton("Go on") { go(to: .connector) }
@@ -182,17 +182,17 @@ struct OnboardingView: View {
         return VStack(alignment: .leading, spacing: 18) {
             Text(copy.title)
                 .inkStyle(.firstTitle)
-                .foregroundStyle(Ink.ink)
+                .foregroundStyle(Ink.primary)
 
             Text(copy.detail)
                 .inkStyle(.prose)
-                .foregroundStyle(Ink.mid)
+                .foregroundStyle(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let connectorMessage {
                 Text(connectorMessage)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(Ink.faint)
+                    .foregroundStyle(Ink.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -254,18 +254,18 @@ struct OnboardingView: View {
         VStack(spacing: 14) {
             Text("Which account is this?")
                 .inkStyle(.stepHeadline)
-                .foregroundStyle(Ink.ink)
+                .foregroundStyle(Ink.primary)
 
             Text("It all lands in your Omi account.")
                 .inkStyle(.prose)
-                .foregroundStyle(Ink.mid)
+                .foregroundStyle(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if isWaitingForBrowser {
                 VStack(spacing: 12) {
                     Text("Waiting for your browser…")
                         .inkStyle(.statusLabel)
-                        .foregroundStyle(Ink.faint)
+                        .foregroundStyle(Ink.tertiary)
 
                     InkButton("Cancel", kind: .secondary) { abandonedWait = true }
                 }
@@ -321,7 +321,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text(setupTitle)
                 .inkStyle(.firstTitle)
-                .foregroundStyle(Ink.ink)
+                .foregroundStyle(Ink.primary)
 
             // Said before the first dialog, never after. macOS asks in its own words — terse,
             // system-voiced, and identical to the prompt of every app that ever abused the same
@@ -330,7 +330,7 @@ struct OnboardingView: View {
             // in the app's own voice, is the difference between consenting and being startled.
             Text(setupPreamble)
                 .inkStyle(.prose)
-                .foregroundStyle(Ink.mid)
+                .foregroundStyle(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 8) {
@@ -387,13 +387,13 @@ struct OnboardingView: View {
         VStack(spacing: 14) {
             Text(isGranted(.screen) ? "I’m listening." : "One more thing.")
                 .inkStyle(.stepHeadline)
-                .foregroundStyle(Ink.ink)
+                .foregroundStyle(Ink.primary)
 
             Text(isGranted(.screen)
                  ? homeLine
                  : "Switch me on in Settings. I’ll do the rest.")
                 .inkStyle(.prose)
-                .foregroundStyle(Ink.mid)
+                .foregroundStyle(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if !isGranted(.screen) {
@@ -418,7 +418,7 @@ struct OnboardingView: View {
     private var menuBarCue: some View {
         Image(systemName: "chevron.up")
             .font(.system(size: 17, weight: .medium))
-            .foregroundStyle(Ink.mid)
+            .foregroundStyle(Ink.secondary)
             .offset(y: cueDrift ? -12 : 0)
             .opacity(cueDrift ? 0 : 1)
             .padding(.trailing, 18)
@@ -432,15 +432,16 @@ struct OnboardingView: View {
             }
     }
 
-    /// The finale: the sheet burns out from its edges. `plusLighter` over paper drives the outer
-    /// ring to white, so the card reads as overexposing on its way out rather than fading — which
-    /// on a light surface is the only exit that is visible at all.
+    /// The finale: the sheet burns out from its edges. `plusLighter` with `Ink.glow` — white, the
+    /// only value bright enough for an additive blend to have anywhere to go — drives the outer ring
+    /// to white, so the card reads as overexposing on its way out rather than fading. On a light
+    /// sheet a fade to transparent would just be the surface becoming the surface.
     private func edgeGlow(in size: CGSize) -> some View {
         RadialGradient(
             gradient: Gradient(stops: [
-                .init(color: Ink.paper.opacity(0), location: 0.3),
-                .init(color: Ink.paper.opacity(0.14), location: 0.7),
-                .init(color: Ink.paper.opacity(0.6), location: 1),
+                .init(color: Ink.glow.opacity(0), location: 0.3),
+                .init(color: Ink.glow.opacity(0.14), location: 0.7),
+                .init(color: Ink.glow.opacity(0.6), location: 1),
             ]),
             center: .center,
             startRadius: 0,

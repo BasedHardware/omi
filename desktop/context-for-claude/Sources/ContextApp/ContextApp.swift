@@ -42,13 +42,19 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         // every launch — the single most visible way this product could stop being ambient.
         NSApp.setActivationPolicy(.accessory)
 
-        // The product is paper. Every surface it draws is `Ink.paper` with `Ink.ink` on it, in both
-        // system appearances — so the AppKit chrome the app does not draw itself (the menu bar
-        // popover's window background and its corner rounding, focus rings, scrollers) has to be
-        // told the same thing, or a dark-mode Mac frames a light popover in a dark shell.
-        NSApp.appearance = NSAppearance(named: .aqua)
+        // Deliberately no `NSApp.appearance` override. Pinning the process to `.aqua` rendered a
+        // light popover inside a dark system menu — the single loudest reason the colours read as
+        // wrong — and it also overrode the appearance of every AppKit surface the app does not draw
+        // itself: focus rings, scrollers, the popover's own window background and corner rounding.
+        // Every colour the app draws now comes from a system semantic colour (`Ink`), so following
+        // the system is both correct and the smaller amount of code.
 
         registerBundledFonts()
+
+        // The bundled faces are only reachable after registration; anything that resolved a role
+        // before this point cached a system-font stand-in. Nothing draws this early today, and this
+        // keeps that true if something ever does.
+        InkFonts.invalidate()
 
         MainActor.assumeIsolated {
             // Before Engine.start(), so the icon exists the moment there is state to show — and

@@ -1,110 +1,111 @@
 //
 //  Ink.swift — the shared visual vocabulary for the onboarding window and the menu bar popover.
 //
-//  The palette is Anthropic's: ivory paper (#FAF9F5), near-black ink (#141413), and clay (#D97757)
-//  as the single accent, with the backdrop washed in the same clay/manilla/kraft neutrals. Type is
-//  Open Runde at 400/500/600, carried over from the product site — the one part of this system not
-//  yet on brand, because changing it means shipping different font files rather than different
-//  numbers.
+//  Every colour here is a macOS semantic colour, and the single accent is
+//  `NSColor.controlAccentColor` — the accent the user picked in System Settings. Nothing is
+//  hand-mixed, so there is exactly one palette in the product and it follows the system's
+//  appearance for free: no `NSApp.appearance` override, no light-only assumption, no second set of
+//  values for dark mode. The palette this replaces was Anthropic's own (ivory paper, clay accent),
+//  which made the app read as a piece of someone else's brand pasted into the menu bar.
 //
-//  The rest of the structure — role names, tracking, the rhythm ladder — still comes from
-//  docs/design-system.md, which reads the product site (archit-lal.github.io/Periphery) as CSS
-//  custom properties. What changed is which brand the values belong to: this app sits beside Claude
-//  in the same menu bar and hands its output to the same model, so it should look like it belongs
-//  there rather than like a separate product that integrates with it.
+//  Display type is Open Runde, bundled at `Resources/Fonts/OpenRunde-*.otf` and registered at
+//  launch by `ContextAppDelegate.registerBundledFonts()`. It is geometric and distinctive and it is
+//  ours; reading type stays SF Pro, which is what a native macOS app should be setting body copy
+//  in. One threshold (`Font.inkDisplayThreshold`) decides which is which, and a face that fails to
+//  register degrades to SF Pro rather than crashing.
 //
 //  Roles are exposed as whole styles rather than loose numbers because the character of the type
 //  lives in the tracking as much as the point size — a caller that hand-assembles
 //  `.font(.openRunde(32, .semiBold))` and forgets `.tracking(-1.12)` has quietly shipped a
 //  different product. `Text.inkStyle(_:)` makes that mistake unavailable.
 //
-//  Brand: warm neutrals and bronze only (INV-UI-1) — nothing off-brand anywhere in this file.
+//  Brand: system semantics and neutrals only. Never purple, anywhere (INV-UI-1) — and note that
+//  the accent is the *user's* choice rather than a value this file picks, which is the only way an
+//  accent can be native.
+//
+//  The full spec, including every value below, is docs/design-system.md.
 //
 
 import AppKit
 import SwiftUI
 
-// MARK: - Hex literals
-
-extension Color {
-    /// `Color(hex: 0xFBF8F4)` — sRGB, the space the design values were picked in.
-    init(hex: UInt32, opacity: Double = 1) {
-        self.init(
-            .sRGB,
-            red: Double((hex >> 16) & 0xFF) / 255,
-            green: Double((hex >> 8) & 0xFF) / 255,
-            blue: Double(hex & 0xFF) / 255,
-            opacity: opacity
-        )
-    }
-}
-
-extension NSColor {
-    /// AppKit twin of `Color(hex:)`, for the layers SwiftUI cannot reach: the window's root
-    /// `contentView.layer.backgroundColor`, the menu bar spotlight ring, the status item.
-    convenience init(hex: UInt32, alpha: CGFloat = 1) {
-        self.init(
-            srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
-            green: CGFloat((hex >> 8) & 0xFF) / 255,
-            blue: CGFloat(hex & 0xFF) / 255,
-            alpha: alpha
-        )
-    }
-}
-
 // MARK: - Colour
 
+/// The whole palette. Twelve roles, every one of them a system semantic colour — a colour literal
+/// anywhere else in the app is a bug.
 enum Ink {
-    // The site's seven variables, spelled the same way they are spelled in its `:root`.
+    // Surfaces.
 
-    /// `--paper`. Every surface in the app: the onboarding oval, the popover.
+    /// Every surface the app draws: the onboarding sheet, the popover ground.
     ///
-    /// Anthropic's ivory rather than the site's slightly pinker cream. This app sits beside Claude
-    /// in the same menu bar and hands its output to the same model, so reading as part of that
-    /// family is worth more than matching a marketing page — and the two were a hair apart anyway.
-    static let paper = Color(hex: 0xFAF9F5)
-    /// `--ink`. Primary type, the primary button's fill, the granted checkbox.
-    static let ink = Color(hex: 0x141413)
-    /// `--mid`. Secondary type: prose under a headline, the popover's status lines.
-    static let mid = Color(hex: 0x6B625B)
-    /// `--faint`. Tertiary type: a status word, a count, "Quit". Never a whole sentence someone
-    /// has to read — at 2.6:1 on paper this is a colour for glancing at.
-    static let faint = Color(hex: 0xA39A92)
-    /// `--line`. Rules and card hairlines. Barely there on purpose.
-    static let line = Color(hex: 0xE6DFD6)
-    /// `--bronze`. The one accent: an actionable link, and nothing else.
+    /// `controlBackgroundColor` rather than `windowBackgroundColor`: this is the ground *content*
+    /// sits on, which is white in Light and near-black in Dark — a sheet, in both appearances.
+    static let surface = Color(nsColor: .controlBackgroundColor)
+
+    // Type, in three steps and no fourth. Which step a run gets is decided by what the reader has
+    // to do with it, not by how deep it sits in a stack.
+
+    /// Headlines, row copy, the primary button's fill, the granted checkbox — and any state with
+    /// something to do about it.
+    static let primary = Color(nsColor: .labelColor)
+    /// A sentence someone reads: prose, a status line, an upload note.
+    static let secondary = Color(nsColor: .secondaryLabelColor)
+    /// A word someone glances at: `Granted`, `Quit`, `Sign out`. Never a whole sentence.
+    static let tertiary = Color(nsColor: .tertiaryLabelColor)
+
+    // Edges.
+
+    /// A rule between blocks. The popover uses `Divider()` instead, which draws this itself.
+    static let separator = Color(nsColor: .separatorColor)
+    /// The edge of something you are meant to press: the secondary button, the empty checkbox.
+    /// `separator` is right for a rule and too faint for a control's outline.
+    static let hairline = Color(nsColor: .labelColor).opacity(0.22)
+
+    /// The one accent, spent on the one thing that is actionable and is not already a button.
     ///
-    /// Anthropic's clay. Kept under the old name because it is still the same role — one accent,
-    /// spent on the one thing that is actionable — and renaming it would touch every call site to
-    /// say nothing new. Warmer and lighter than the bronze it replaces, so anything relying on it
-    /// for contrast against paper has to earn that with weight or size rather than with hue.
-    static let bronze = Color(hex: 0xD97757)
-    /// `--red`. The site draws its card outline in this; here it is the error colour, which is the
-    /// only place the app ever needs to raise its voice.
-    static let errorRed = Color(hex: 0xC9352B)
+    /// The user's own accent colour, so it can never be a borrowed brand — and it is not this
+    /// file's decision to make, which is the point. Anything relying on it for contrast has to earn
+    /// that with weight or size rather than with hue, because the value is not knowable here.
+    static let accent = Color(nsColor: .controlAccentColor)
 
-    /// The live indicator. The one hue outside the site palette, because "on" has to read as on at
-    /// 7 pt and the site never had to say it. Muted enough to sit on paper without shouting.
-    static let listeningGreen = Color(hex: 0x2E8B57)
+    /// The error colour: the only place the app ever raises its voice.
+    static let errorRed = Color(nsColor: .systemRed)
+    /// The live indicator. "On" has to read as on at 7 pt, and green is the only colour that says
+    /// it without a label.
+    static let listeningGreen = Color(nsColor: .systemGreen)
 
-    // Paper on paper. The site has no card fill, so these are derived: two steps of warm shading
-    // between `paper` and `line`, which is what lets a permission row read as a card without a
-    // border heavy enough to box it in.
-    /// Permission-row fill.
-    static let surface = Color(hex: 0xF0EEE6)
+    // Fills. Alpha on `labelColor` rather than a named fill colour, because these have to composite
+    // correctly over both the onboarding sheet and the popover's vibrant material: a wash that
+    // darkens in Light and lightens in Dark does, and a fixed grey does not.
+
+    /// Permission-row fill on the onboarding sheet. The menu bar popover has no row fill at all —
+    /// a real macOS menu does not fill its rows.
+    static let rowFill = Color(nsColor: .labelColor).opacity(0.045)
     /// The same row under the pointer. A tappable row has to say so, and macOS has no other
     /// affordance for it.
-    static let surfaceHover = Color(hex: 0xE8E5DA)
-
-    /// A drawn hairline: the secondary button's outline, the empty checkbox. `line` is right for a
-    /// rule between blocks and too faint for the edge of something you are meant to press.
-    static let inkHairline = Color(hex: 0x141413, opacity: 0.28)
+    static let rowFillHover = Color(nsColor: .labelColor).opacity(0.085)
+    /// A *menu* row under the pointer, on the popover. Fainter than `rowFillHover` and over nothing
+    /// at rest: the popover's material is already separating the panel from the window, so anything
+    /// heavier reads as a second, competing background.
+    static let rowHover = Color(nsColor: .tertiaryLabelColor).opacity(0.12)
     /// The pressed state of anything with no fill of its own.
-    static let inkWash = Color(hex: 0x141413, opacity: 0.06)
+    static let wash = Color(nsColor: .labelColor).opacity(0.06)
 
-    // AppKit twins for the layers below SwiftUI.
-    static let nsPaper = NSColor(hex: 0xFAF9F5)
-    static let nsInk = NSColor(hex: 0x141413)
+    /// The finale's overexposure, composited in `plusLighter`.
+    ///
+    /// Plain white and not `surface`: `plusLighter` only ever adds, so the exit has to be the
+    /// brightest thing available or there is nothing to burn out to — over a dark sheet, adding a
+    /// dark grey is invisible. White is also the neutral INV-UI-1 asks for.
+    static let glow = Color.white
+
+    // AppKit twins, for the layers SwiftUI cannot reach.
+
+    static let nsSurface = NSColor.controlBackgroundColor
+    static let nsPrimary = NSColor.labelColor
+    /// The onboarding spotlight ring. Drawn in the accent because it lands on the *menu bar* — the
+    /// system's own surface, which is routinely dark and routinely light, so neither end of the
+    /// label ladder can be relied on to show up there.
+    static let nsAccent = NSColor.controlAccentColor
 }
 
 /// One backdrop blob: a unit position relative to the frame, and its colour.
@@ -117,25 +118,31 @@ struct InkBlob: Equatable {
 }
 
 extension Ink {
-    /// The nine backdrop blobs, in paint order. Geometry is unchanged from the dark system; the
-    /// colour is not. Every tone here is a warm neutral a step or two below `paper`, so blurred and
-    /// composited over the paper scrim the field reads as shading on a sheet — a faint warm wash —
-    /// rather than as nine coloured lights. Saturated colour on paper reads as a bug.
+    /// The nine backdrop blobs, in paint order. The geometry has never changed; the colour has, and
+    /// this is the third palette it has worn.
     ///
-    /// Each is now a wash of Anthropic's own warm neutrals — clay, manilla, kraft — rather than the
-    /// bronze family the site used. This field is the largest coloured surface in the product, so
-    /// leaving it on the old palette while the accent moved would have made the window read as two
-    /// designs sharing a frame: the tokens say one brand and the backdrop says another.
+    /// Every blob is now the *same* colour — `labelColor` — and differs only in alpha, which is what
+    /// makes the field neutral rather than the warm clay wash it replaces. This is not a shortcut:
+    /// `labelColor` is near-black in Light and near-white in Dark, so a low-alpha wash of it darkens
+    /// a light sheet and lightens a dark one. Both directions read as *shading across a sheet*,
+    /// which is the whole intent of the field. Nine distinct hues could not do that — a fixed tone
+    /// tuned to look like light on paper looks like dirt on a dark ground.
+    ///
+    /// The alphas keep the old field's relative intensity (its tones sat 5–9% off `paper`, blurred
+    /// 24σ and composited at 0.55) and are nudged up a little, because a 3% wash that is legible as
+    /// shading on white is invisible as light on near-black.
+    ///
+    /// Saturated colour here would read as nine coloured lights, which is a bug and not a backdrop.
     static let backdropBlobs: [InkBlob] = [
-        InkBlob(x: -1.25, y: -1.20, color: Color(hex: 0xEFDDD4)),
-        InkBlob(x: -0.25, y: -1.25, color: Color(hex: 0xF3E9DF)),
-        InkBlob(x: 0.35, y: -1.25, color: Color(hex: 0xF1EDE4)),
-        InkBlob(x: 1.20, y: -1.05, color: Color(hex: 0xEAE7DC)),
-        InkBlob(x: 1.25, y: 0.05, color: Color(hex: 0xEEEBE1)),
-        InkBlob(x: 1.20, y: 1.15, color: Color(hex: 0xF0E7D8)),
-        InkBlob(x: 0.05, y: 1.25, color: Color(hex: 0xF4EBDC)),
-        InkBlob(x: -0.75, y: 1.20, color: Color(hex: 0xEDDFD3)),
-        InkBlob(x: -1.25, y: 0.45, color: Color(hex: 0xE9E4D8)),
+        InkBlob(x: -1.25, y: -1.20, color: primary.opacity(0.16)),
+        InkBlob(x: -0.25, y: -1.25, color: primary.opacity(0.11)),
+        InkBlob(x: 0.35, y: -1.25, color: primary.opacity(0.08)),
+        InkBlob(x: 1.20, y: -1.05, color: primary.opacity(0.15)),
+        InkBlob(x: 1.25, y: 0.05, color: primary.opacity(0.12)),
+        InkBlob(x: 1.20, y: 1.15, color: primary.opacity(0.14)),
+        InkBlob(x: 0.05, y: 1.25, color: primary.opacity(0.13)),
+        InkBlob(x: -0.75, y: 1.20, color: primary.opacity(0.17)),
+        InkBlob(x: -1.25, y: 0.45, color: primary.opacity(0.10)),
     ]
 }
 
@@ -307,27 +314,24 @@ enum InkFonts {
         font.ascender - font.descender + font.leading
     }
 
-    /// The pairing every role resolves through: New York for display, SF Pro for reading.
+    /// The pairing every role resolves through: Open Runde for display, SF Pro for reading.
     ///
     /// Drawn face and measured face are produced together and from the same decision, because the
-    /// two must never disagree — a serif headline whose line spacing was computed from a sans is
-    /// the kind of bug that looks like bad taste rather than like a defect.
-    static func system(size: CGFloat, weight: RundeWeight) -> Resolved {
-        let sans = NSFont.systemFont(ofSize: size, weight: weight.appKitWeight)
+    /// two must never disagree — a headline whose line spacing was computed from a different face is
+    /// the kind of bug that looks like bad taste rather than like a defect. `resolve` guarantees
+    /// that: when the bundled face is missing it returns the SF Pro font *and* SF Pro's metrics.
+    static func role(size: CGFloat, weight: RundeWeight) -> Resolved {
         guard size >= Font.inkDisplayThreshold else {
             return Resolved(
                 font: .system(size: size, weight: weight.swiftUIWeight),
-                metrics: sans,
+                metrics: NSFont.systemFont(ofSize: size, weight: weight.appKitWeight),
                 isCustom: false)
         }
-        // `withDesign` is the only supported route to New York; if a future macOS stops offering it,
-        // the sans metrics are still correct for the sans fallback SwiftUI would then draw.
-        let serifMetrics = sans.fontDescriptor.withDesign(.serif)
-            .flatMap { NSFont(descriptor: $0, size: size) } ?? sans
-        return Resolved(
-            font: .system(size: size, weight: weight.swiftUIWeight, design: .serif),
-            metrics: serifMetrics,
-            isCustom: false)
+        return resolve(
+            weight.fontName,
+            size: size,
+            weight: weight.swiftUIWeight,
+            appKitWeight: weight.appKitWeight)
     }
 }
 
@@ -339,22 +343,19 @@ extension Font {
     /// here and body copy is never 24.
     static let inkDisplayThreshold: CGFloat = 22
 
-    /// Anthropic's pairing, in the faces macOS actually ships.
+    /// Our own pairing: bundled Open Runde at display size, SF Pro for reading.
     ///
-    /// Their identity is an editorial serif over a quiet grotesque — Tiempos and Styrene — and
-    /// neither is licensable to bundle. New York is Apple's companion serif to SF and the closest
-    /// honest stand-in: same editorial weight in a headline, same warmth, no licence. Below the
-    /// display threshold the text falls to SF Pro, which is what a native macOS app should be
-    /// setting body copy in anyway.
+    /// Open Runde is a geometric sans with rounded terminals — distinctive, and ours rather than
+    /// borrowed. It replaces New York, which was reached for as a stand-in for Anthropic's editorial
+    /// serif and therefore carried a brand this app has no business wearing. Below the display
+    /// threshold the text is SF Pro, which is what a native macOS app should be setting body copy in
+    /// anyway, and which is also where a bundled face buys the least.
     ///
-    /// This replaces Open Runde, a rounded geometric carried over from the product site. It was the
-    /// single most off-brand thing left in the window: rounded terminals read as friendly-consumer,
-    /// which is a different company's voice entirely.
+    /// Goes through `InkFonts` rather than naming `.custom` directly, so an unregistered face falls
+    /// back to SF Pro at the same size and weight instead of resolving to whatever SwiftUI picks for
+    /// a font name it cannot find.
     static func openRunde(_ size: CGFloat, _ weight: RundeWeight = .regular) -> Font {
-        if size >= inkDisplayThreshold {
-            return .system(size: size, weight: weight.swiftUIWeight, design: .serif)
-        }
-        return .system(size: size, weight: weight.swiftUIWeight)
+        InkFonts.role(size: size, weight: weight).font
     }
 }
 
@@ -437,20 +438,20 @@ enum InkType {
     }
 
     /// Open Runde 15 / regular / −0.15 (−0.01 em) / 1.55 — the site's body (400 at 1.6). Pair with
-    /// `Ink.mid`.
+    /// `Ink.secondary`.
     static var prose: InkTextStyle {
         runde(15, .regular, tracking: -0.15, lineHeight: 1.55)
     }
 
     /// Open Runde 13 / medium / −0.13 / 1.40. Row copy and the popover's headline state. Medium,
-    /// not regular: at 13 pt on a paper card, regular goes weedy. Pair with `Ink.ink`.
+    /// not regular: at 13 pt on a card, regular goes weedy. Pair with `Ink.primary`.
     static var rowCopy: InkTextStyle {
         runde(13, .medium, tracking: -0.13, lineHeight: 1.40)
     }
 
     /// Open Runde 11 / regular. Every small line in the popover and the status word in a permission
     /// row. No tracking: below 12 pt, tightening a geometric sans only closes the counters. Pair
-    /// with `Ink.mid`, or `Ink.faint` for a single glanceable word.
+    /// with `Ink.secondary`, or `Ink.tertiary` for a single glanceable word.
     static var statusLabel: InkTextStyle {
         runde(11, .regular)
     }
@@ -474,7 +475,7 @@ enum InkType {
     ) -> InkTextStyle {
         InkTextStyle(
             size: size,
-            resolved: InkFonts.system(size: size, weight: weight),
+            resolved: InkFonts.role(size: size, weight: weight),
             tracking: tracking,
             lineHeightMultiple: lineHeight
         )
@@ -540,9 +541,9 @@ extension Text {
 /// The only action shape in the app: a full stadium, never a rounded rectangle.
 struct InkButton: View {
     enum Kind {
-        /// Ink fill, paper label.
+        /// `Ink.primary` fill, `Ink.surface` label — the label ladder inverted.
         case primary
-        /// Clear fill, ink label, 1 pt ink hairline.
+        /// Clear fill, `Ink.primary` label, 1 pt `Ink.hairline`.
         case secondary
     }
 
@@ -583,17 +584,21 @@ struct InkButtonStyle: ButtonStyle {
 
         private var pressed: Bool { configuration.isPressed }
 
+        /// The primary button is deliberately *not* accent-filled. `controlAccentColor` is the
+        /// user's choice, so its luminance is unknowable here and no single label colour is legible
+        /// against all of them — and the accent is already spent on the one link in the popover.
+        /// Inverting the label ladder instead is high-contrast in both appearances by construction.
         private var fill: Color {
             switch kind {
-            // Pressed lightens rather than darkens: on paper, letting the surface through is the
-            // only direction that reads as give.
-            case .primary: return pressed ? Ink.ink.opacity(0.82) : Ink.ink
-            case .secondary: return pressed ? Ink.inkWash : Color.clear
+            // Pressed drops opacity rather than darkening: letting the surface through is the only
+            // direction that reads as give in both appearances.
+            case .primary: return pressed ? Ink.primary.opacity(0.82) : Ink.primary
+            case .secondary: return pressed ? Ink.wash : Color.clear
             }
         }
 
         private var label: Color {
-            kind == .primary ? Ink.paper : Ink.ink
+            kind == .primary ? Ink.surface : Ink.primary
         }
 
         var body: some View {
@@ -606,7 +611,7 @@ struct InkButtonStyle: ButtonStyle {
                 .background(Capsule(style: .continuous).fill(fill))
                 .overlay {
                     if kind == .secondary {
-                        Capsule(style: .continuous).strokeBorder(Ink.inkHairline, lineWidth: 1)
+                        Capsule(style: .continuous).strokeBorder(Ink.hairline, lineWidth: 1)
                     }
                 }
                 .contentShape(Capsule(style: .continuous))
@@ -619,8 +624,18 @@ struct InkButtonStyle: ButtonStyle {
 
 // MARK: - Permission row
 
-/// One capability, asked for in the app's own voice. The whole row is the target — the checkbox is
-/// a state readout, not a separate control.
+/// One capability, asked for in the app's own voice. The whole row is the target — the state
+/// readout is not a separate control.
+///
+/// The same row appears on two surfaces that must not look alike, which is what `native` selects
+/// between:
+///
+/// - **Onboarding** is the app's own sheet. The row is a card: a wash, a hairline, a drawn checkbox,
+///   the capability introduced as a first-person sentence.
+/// - **The menu bar popover** is a system surface sitting beside every other menu bar extra on the
+///   machine, so the row is a *menu item*: 22 pt tall, one system-size label, the status trailing in
+///   secondary, no fill of its own, no tracking, no border. A filled capsule with letter-spaced type
+///   is the single clearest tell that a panel was drawn by a website rather than by macOS.
 struct InkPermissionRow: View {
     private let title: String
     private let granted: Bool
@@ -630,29 +645,12 @@ struct InkPermissionRow: View {
 
     @State private var isHovering = false
 
-    /// Brand shading on the branded sheet; a system fill on the system surface.
-    ///
-    /// The native fill is deliberately faint. The popover already has a vibrant material behind it
-    /// doing the work of separating the row from the window, so anything heavier than a quaternary
-    /// wash reads as a second, competing background.
-    private var rowFill: Color {
-        guard native else { return isHovering ? Ink.surfaceHover : Ink.surface }
-        return isHovering
-            ? Color(nsColor: .tertiaryLabelColor).opacity(0.12)
-            : Color(nsColor: .quaternaryLabelColor).opacity(0.5)
-    }
-
     /// - Parameters:
-    ///   - title: the first-person sentence, e.g. "I would like to hear you".
-    ///   - granted: drives the checkbox fill.
+    ///   - title: the first-person sentence, e.g. "I would like to hear you"; the plain noun on the
+    ///     native surface, where the user has already been introduced.
+    ///   - granted: drives the state readout.
     ///   - status: one word — `Granted` / `Open` / `Checking` / `Action required`.
-    /// `native` swaps the brand palette for the system's semantic colours.
-    ///
-    /// The same row appears on two surfaces that should not look alike. In onboarding it sits on a
-    /// branded sheet and should read as ours; in the menu bar it sits on the popover's vibrant
-    /// material beside every other menu bar extra on the machine, where a warm ivory fill reads as
-    /// a website pasted into the system UI — and is unreadable outright in dark mode, because the
-    /// brand tones are fixed and the material behind them is not.
+    ///   - native: renders the row as a macOS menu item instead of an onboarding card.
     init(title: String, granted: Bool, status: String, native: Bool = false, action: @escaping () -> Void) {
         self.native = native
         self.title = title
@@ -661,41 +659,93 @@ struct InkPermissionRow: View {
         self.action = action
     }
 
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 13, style: .continuous)
-    }
-
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 11) {
-                InkCheckbox(granted: granted)
-                Text(title)
-                    .inkStyle(InkType.rowCopy, color: native ? Color(nsColor: .labelColor) : Ink.ink)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(status)
-                    .inkStyle(
-                        InkType.statusLabel,
-                        color: native ? Color(nsColor: .tertiaryLabelColor) : Ink.faint)
-                    .fixedSize()
+            if native {
+                menuRow
+            } else {
+                card
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Paper on paper: a half-step of warm shading plus a hairline. A fill strong enough to
-            // read on its own would box three sentences into three grey slabs.
-            .background(shape.fill(rowFill))
-            .overlay(shape.strokeBorder(Ink.line, lineWidth: 1))
-            .contentShape(shape)
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
         .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isHovering)
         .accessibilityLabel(Text("\(title). \(status)"))
     }
+
+    // MARK: - The menu bar
+
+    /// Menu metrics, not card metrics: `NSFont.systemFontSize` is the size AppKit sets a menu item
+    /// in, and 22 pt is the height it gives one. No `.inkStyle` anywhere in here — the tracking that
+    /// gives the onboarding sheet its character is exactly what makes a menu look counterfeit.
+    private var menuRow: some View {
+        HStack(spacing: 6) {
+            // The checkmark column, held open whether or not it is filled, so the titles of a
+            // granted and an ungranted row line up the way a menu's do.
+            Image(systemName: "checkmark")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Ink.primary)
+                .opacity(granted ? 1 : 0)
+                .frame(width: 12, alignment: .leading)
+
+            Text(title)
+                .font(.system(size: NSFont.systemFontSize))
+                .foregroundStyle(Ink.primary)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Text(status)
+                .font(.system(size: NSFont.systemFontSize))
+                .foregroundStyle(Ink.tertiary)
+                .fixedSize()
+        }
+        .padding(.horizontal, 4)
+        .frame(height: InkPermissionRow.menuRowHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Nothing at rest. The popover already has a vibrant material doing the work of separating
+        // itself from the window behind it, and a menu row that is filled when it is not under the
+        // pointer is not a menu row.
+        .background(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(isHovering ? Ink.rowHover : Color.clear)
+        )
+        .contentShape(Rectangle())
+    }
+
+    /// The height AppKit gives a menu item set at `NSFont.systemFontSize`.
+    static let menuRowHeight: CGFloat = 22
+
+    // MARK: - Onboarding
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
+    }
+
+    private var card: some View {
+        HStack(spacing: 11) {
+            InkCheckbox(granted: granted)
+            Text(title)
+                .inkStyle(InkType.rowCopy, color: Ink.primary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(status)
+                .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                .fixedSize()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // A half-step of shading plus a hairline. A fill strong enough to read on its own would box
+        // three sentences into three grey slabs.
+        .background(shape.fill(isHovering ? Ink.rowFillHover : Ink.rowFill))
+        .overlay(shape.strokeBorder(Ink.separator, lineWidth: 1))
+        .contentShape(shape)
+    }
 }
 
-/// 18 × 18, corner radius 6, ink hairline; fills ink with a paper checkmark when granted.
+/// 18 × 18, corner radius 6, `Ink.hairline`; fills `Ink.primary` with an `Ink.surface` checkmark
+/// when granted. The onboarding surface only — the menu bar uses a plain menu checkmark.
 struct InkCheckbox: View {
     let granted: Bool
 
@@ -705,12 +755,12 @@ struct InkCheckbox: View {
 
     var body: some View {
         shape
-            .fill(granted ? Ink.ink : Color.clear)
-            .overlay(shape.strokeBorder(granted ? Color.clear : Ink.inkHairline, lineWidth: 1))
+            .fill(granted ? Ink.primary : Color.clear)
+            .overlay(shape.strokeBorder(granted ? Color.clear : Ink.hairline, lineWidth: 1))
             .overlay(
                 Image(systemName: "checkmark")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Ink.paper)
+                    .foregroundStyle(Ink.surface)
                     .opacity(granted ? 1 : 0)
             )
             .frame(width: 18, height: 18)
@@ -743,9 +793,9 @@ struct OmiMark: View {
     var size: CGFloat
     /// Dots brighten in sequence while true. Stops dead when false, and under Reduce Motion.
     var pulsing: Bool = false
-    var color: Color = Ink.ink
+    var color: Color = Ink.primary
 
-    init(size: CGFloat, pulsing: Bool = false, color: Color = Ink.ink) {
+    init(size: CGFloat, pulsing: Bool = false, color: Color = Ink.primary) {
         self.size = size
         self.pulsing = pulsing
         self.color = color
@@ -849,13 +899,13 @@ struct OmiMark: View {
 #if DEBUG
 #Preview("Type") {
     VStack(alignment: .leading, spacing: 26) {
-        Text("i notice things").inkStyle(InkType.introHero, color: Ink.ink)
-        Text("First, a few permissions").inkStyle(InkType.firstTitle, color: Ink.ink)
+        Text("i notice things").inkStyle(InkType.introHero, color: Ink.primary)
+        Text("First, a few permissions").inkStyle(InkType.firstTitle, color: Ink.primary)
         Text("I listen, I watch, and I remember — all of it stays on this Mac.")
-            .inkStyle(InkType.prose, color: Ink.mid)
+            .inkStyle(InkType.prose, color: Ink.secondary)
     }
     .padding(45)
-    .background(Ink.paper)
+    .background(Ink.surface)
 }
 
 #Preview("Components") {
@@ -870,6 +920,6 @@ struct OmiMark: View {
     }
     .frame(width: InkLayout.permissionsMaxWidth)
     .padding(45)
-    .background(Ink.paper)
+    .background(Ink.surface)
 }
 #endif

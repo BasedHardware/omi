@@ -53,14 +53,14 @@ struct RandomizedText: View {
     ///   - segments: Text runs and their emphasis, in reading order.
     ///   - style: A complete type role — `.introHero`, `.stepHeadline`, `.prose`, …
     ///   - color: The colour the words resolve *to*. See the note on the type.
-    init(segments: [(String, Emphasis)], style: InkTextStyle, color: Color = Ink.ink) {
+    init(segments: [(String, Emphasis)], style: InkTextStyle, color: Color = Ink.primary) {
         self.segments = segments.map { Segment($0.0, $0.1) }
         self.style = style
         self.color = color
     }
 
     /// Convenience for a headline with no emphasis runs.
-    init(_ text: String, style: InkTextStyle, color: Color = Ink.ink) {
+    init(_ text: String, style: InkTextStyle, color: Color = Ink.primary) {
         self.init(segments: [(text, .plain)], style: style, color: color)
     }
 
@@ -124,16 +124,15 @@ struct RandomizedText: View {
         return out
     }
 
-    /// Emphasis names a weight rather than asking for a trait, and still should.
+    /// Emphasis names a weight rather than asking for a trait, and has to.
     ///
-    /// The original reason was Open Runde: its Medium and Semibold each shipped as their own
-    /// single-face family, so `.bold()` on a Semibold headline had no bolder member to resolve to
-    /// and the emphasis quietly vanished. That face is gone — the system pairing draws these now,
-    /// and New York and SF Pro both carry a real bold — but asking for the weight outright remains
-    /// the honest call: it is what the design means, and it cannot silently resolve to nothing.
+    /// Open Runde's faces are resolved by PostScript name (`OpenRunde-Bold`), because the family +
+    /// weight route does not reliably reach them. `.bold()` on a Semibold headline therefore has no
+    /// bolder member to resolve to and the emphasis quietly vanishes; naming the weight cannot
+    /// silently resolve to nothing, and it is also what the design means.
     ///
-    /// `.italic()` stays a trait. Both system faces have a true italic, so this is no longer the
-    /// synthesised slant it used to be.
+    /// `.italic()` stays a trait. Open Runde ships no italic, so above the display threshold this is
+    /// a synthesised slant — acceptable, and unused by any headline in the product today.
     private func emphasised(_ text: Text, _ emphasis: Emphasis) -> Text {
         switch emphasis {
         case .plain: return text
