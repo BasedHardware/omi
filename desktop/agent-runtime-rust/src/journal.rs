@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
+const RUNTIME_STATE_RETENTION_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+
 #[derive(Clone)]
 pub struct Surface {
     pub owner_id: String,
@@ -315,6 +317,42 @@ impl JournalStore {
                 .map_err(|error| error.to_string())?,
         };
         Ok(updated as u64)
+    }
+
+    pub fn prune_expired_runtime_state(&mut self) -> Result<u64, String> {
+        self.prune_terminal_runtime_state_before(
+            now_ms().saturating_sub(RUNTIME_STATE_RETENTION_MS),
+        )
+    }
+
+    pub fn prune_terminal_runtime_state_before(
+        &mut self,
+        expired_before_ms: u64,
+    ) -> Result<u64, String> {
+        let transaction = self
+            .connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        let claims = transaction
+            .execute(
+                "DELETE FROM rx4_tool_claims
+                 WHERE status IN ('completed', 'revoked') AND updated_at_ms < ?",
+                params![expired_before_ms],
+            )
+            .map_err(|error| error.to_string())?;
+        let runs = transaction
+            .execute(
+                "DELETE FROM rx4_runtime_runs
+                 WHERE created_at_ms < ?
+                   AND NOT EXISTS (
+                       SELECT 1 FROM rx4_tool_claims
+                       WHERE rx4_tool_claims.run_id = rx4_runtime_runs.run_id
+                   )",
+                params![expired_before_ms],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok((claims + runs) as u64)
     }
 
     fn tool_claim_with_status(
@@ -1012,5 +1050,38 @@ mod tests {
         assert_eq!(listed.conversation_id, "legacy-conversation");
         assert_eq!(listed.generation, 3);
         assert_eq!(listed.turns[0]["turnId"], "legacy-turn");
+    }
+
+    #[test]
+    fn prunes_only_expired_terminal_runtime_state() {
+        let mut store = must(JournalStore::in_memory());
+        store.connection.execute_batch(
+            "INSERT INTO rx4_runtime_runs VALUES ('expired-run', 'expired-attempt', 'owner', 'session', 1, 1);
+             INSERT INTO rx4_runtime_runs VALUES ('pending-run', 'pending-attempt', 'owner', 'session', 1, 1);
+             INSERT INTO rx4_runtime_runs VALUES ('recent-run', 'recent-attempt', 'owner', 'session', 1, 1);
+             INSERT INTO rx4_tool_claims VALUES ('expired-claim', 'owner', 'session', 'expired-run', 'expired-attempt', 1, 'boot', 1, 'search', 'hash', 'completed', 'succeeded', 'result', 1, 1);
+             INSERT INTO rx4_tool_claims VALUES ('pending-claim', 'owner', 'session', 'pending-run', 'pending-attempt', 1, 'boot', 1, 'search', 'hash', 'pending', NULL, NULL, 1, 1);
+             INSERT INTO rx4_tool_claims VALUES ('recent-claim', 'owner', 'session', 'recent-run', 'recent-attempt', 1, 'boot', 1, 'search', 'hash', 'revoked', NULL, NULL, 99, 99);",
+        ).expect("runtime state setup must succeed");
+
+        must(store.prune_terminal_runtime_state_before(10));
+
+        assert!(store.pending_tool_claim("pending-claim").unwrap().is_some());
+        assert!(store
+            .completed_tool_claim("expired-claim")
+            .unwrap()
+            .is_none());
+        let remaining_runs: i64 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM rx4_runtime_runs", [], |row| {
+                row.get(0)
+            })
+            .expect("run count must succeed");
+        assert_eq!(remaining_runs, 2);
+        let remaining_claims: i64 = store
+            .connection
+            .query_row("SELECT COUNT(*) FROM rx4_tool_claims", [], |row| row.get(0))
+            .expect("claim count must succeed");
+        assert_eq!(remaining_claims, 2);
     }
 }
