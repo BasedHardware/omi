@@ -8,10 +8,10 @@ import SwiftUI
 struct TutorialCardView: View {
     @ObservedObject var model: TutorialModel
     @ObservedObject var chrome: TutorialOverlayChrome
-    /// The card measures itself and hands its size back, because the window is only as big as the
-    /// card and the card's height depends on live content.
-    let onMeasured: (CGSize) -> Void
 
+    /// Fixed, and the same for every step: the window is sized from this card's ideal height at this
+    /// width (`TutorialOverlay.fittingHeight()`), so the width must not depend on anything the window
+    /// does.
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             content
@@ -19,16 +19,12 @@ struct TutorialCardView: View {
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 20)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: TutorialOverlay.width - (chrome.arrow == nil ? 0 : 18), alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .background(surface)
         .overlay(alignment: .top) { arrow(.top) }
         .overlay(alignment: .bottom) { arrow(.bottom) }
         .padding(chrome.arrow == nil ? 0 : 9)
-        .background(
-            GeometryReader { proxy in
-                Color.clear
-                    .onChange(of: proxy.size, initial: true) { _, size in onMeasured(size) }
-            })
         .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.settle)), value: model.step)
     }
 
@@ -97,7 +93,7 @@ struct TutorialCardView: View {
                     .textSelection(.enabled)
                 InkButton("Try again", kind: .secondary) { model.openArticleAgain() }
             } else {
-                prose("I opened the Antikythera mechanism on Wikipedia in your browser. Leave it open.")
+                prose("I opened Ling's Cars in your browser. Leave it open — there is a lot on that page.")
             }
         }
     }
@@ -126,14 +122,19 @@ struct TutorialCardView: View {
     private var collectFrames: some View {
         VStack(alignment: .leading, spacing: 12) {
             headline("Scroll around on this page")
-            prose("and collect your first frames. I store one when the screen actually changes, so keep moving.")
+            prose("Keep going — well past the banners and into the small print. I only store a frame when the screen genuinely changes.")
             HStack(spacing: 10) {
                 ForEach(0..<TutorialModel.frameTarget, id: \.self) { index in
                     Circle()
                         .fill(index < model.framesCollected ? Ink.accent : Ink.wash)
                         .frame(width: 9, height: 9)
                 }
-                Text("\(model.framesCollected) of \(TutorialModel.frameTarget) frames")
+                // Past the target the count keeps being the store's answer rather than the target's —
+                // capping it would be the first small lie — so the label drops the "of 5" instead of
+                // reading "6 of 5", which is what a live walkthrough showed.
+                Text(model.gateIsSatisfied
+                     ? "\(model.framesCollected) frames"
+                     : "\(model.framesCollected) of \(TutorialModel.frameTarget) frames")
                     .inkStyle(InkType.rowCopy, color: Ink.primary)
                     .monospacedDigit()
             }
@@ -142,6 +143,7 @@ struct TutorialCardView: View {
                      ? "Nothing yet — this counts real frames in your own store, so it only moves when one lands."
                      : "Counting from your store, not from a clock.")
                     .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -274,24 +276,32 @@ struct TutorialCardView: View {
 
     // MARK: - Footer
 
+    /// The waiver sits on its own row above the controls rather than inside them. Its label is a whole
+    /// sentence — it has to be, because it is the one control that says what did *not* happen — and on
+    /// a live walkthrough it squeezed the primary button down to "Con ti…".
     private var footer: some View {
-        HStack(spacing: 12) {
-            TutorialProgressDots(index: model.progress.index, total: model.progress.total)
-            Spacer(minLength: 8)
+        VStack(alignment: .leading, spacing: 10) {
             if model.waiverIsOffered {
                 Button(waiverLabel) { model.waive() }
                     .buttonStyle(.plain)
                     .inkStyle(InkType.statusLabel, color: Ink.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            // Every step is skippable, and skipping tears the whole thing down.
-            if model.step != .menuBar {
-                Button("Skip") { model.skip() }
-                    .buttonStyle(.plain)
-                    .inkStyle(InkType.statusLabel, color: Ink.tertiary)
-            }
-            if let title = primaryTitle {
-                InkButton(title) { model.advance() }
-                    .disabled(!model.gateIsSatisfied)
+            HStack(spacing: 12) {
+                TutorialProgressDots(index: model.progress.index, total: model.progress.total)
+                Spacer(minLength: 8)
+                // Every step is skippable, and skipping tears the whole thing down.
+                if model.step != .menuBar {
+                    Button("Skip") { model.skip() }
+                        .buttonStyle(.plain)
+                        .inkStyle(InkType.statusLabel, color: Ink.tertiary)
+                        .fixedSize()
+                }
+                if let title = primaryTitle {
+                    InkButton(title) { model.advance() }
+                        .disabled(!model.gateIsSatisfied)
+                        .fixedSize()
+                }
             }
         }
     }

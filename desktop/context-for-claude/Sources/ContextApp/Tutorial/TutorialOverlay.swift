@@ -29,18 +29,20 @@ final class TutorialOverlayChrome: ObservableObject {
 final class TutorialOverlay {
     static let shared = TutorialOverlay()
 
-    /// Coach marks are narrow enough to sit beside real UI; the opening and closing cards get a
-    /// little more room because they carry a headline.
-    static let coachWidth: CGFloat = 400
-    static let cardWidth: CGFloat = 460
+    /// One width for every step. Coach marks and cards are the same object as far as the user is
+    /// concerned, and a width that changed between steps made the card jump sideways mid-flow.
+    static let width: CGFloat = 420
 
     /// Gap between a card and the thing it points at, big enough that the arrow reads as an arrow.
     private static let gap: CGFloat = 14
 
     private var window: TutorialOverlayWindow?
+    private var hosting: NSHostingView<TutorialCardView>?
     private let chrome = TutorialOverlayChrome()
     private weak var model: TutorialModel?
-    private var measured: NSSize?
+    /// The display this step chose, so a centred card does not chase the pointer from one screen to
+    /// the other every second. Re-decided per step, never per tick.
+    private var stepScreen: NSScreen?
 
     var isVisible: Bool { window?.isVisible ?? false }
 
@@ -48,19 +50,22 @@ final class TutorialOverlay {
     func show(model: TutorialModel, step: TutorialStep) {
         guard !step.isTerminal else { return hide() }
         self.model = model
-        // A new step means new content, so the previous measurement is stale — using it would flash
-        // the card at the wrong height for one frame.
-        measured = nil
         chrome.isCoachMark = step.target != nil
+        stepScreen = nil
 
         let window = self.window ?? makeWindow(for: model)
         self.window = window
 
         layout(step: step)
 
-        // Only the step that needs typing takes key status. Everything else appears without pulling
-        // focus, because the user is being asked to work in another window.
-        if step == .query {
+        // A card is a thing to press, so it takes key status and activates: this app is an accessory
+        // and is almost never frontmost, and a SwiftUI button in an inactive window spends the user's
+        // first click on activation even with `acceptsFirstMouse` — measured on a live walkthrough,
+        // where "Start" had to be pressed twice and still did nothing.
+        //
+        // A coach mark does not, because the user is being asked to work in another window and taking
+        // focus off the browser mid-scroll would be taking the lesson away from them.
+        if step.target == nil || step == .query {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         } else {
@@ -70,9 +75,18 @@ final class TutorialOverlay {
 
     /// Re-runs placement for the current step. Called on every poll tick, so a window the user moved
     /// takes its coach mark with it.
+    ///
+    /// Re-orders as well as re-positions. A coach mark that another floating window has buried is not
+    /// a coach mark — and this app shares the floating level with anything else the user happens to
+    /// run. Ordering front is not activating: it never takes focus away from what they are doing.
     func reposition() {
-        guard let model, !model.step.isTerminal, window?.isVisible == true else { return }
+        guard let model, !model.step.isTerminal, let window else { return }
         layout(step: model.step)
+        // Ordered front whether or not it was visible. An overlay that has been hidden — by another
+        // app, by a Space change, by anything at all — must come back on its own while a step is still
+        // running; the earlier version bailed out when it was invisible, which made "hidden once" mean
+        // "hidden for the rest of the tutorial".
+        window.orderFrontRegardless()
     }
 
     func hide() {
@@ -84,7 +98,7 @@ final class TutorialOverlay {
 
     private func makeWindow(for model: TutorialModel) -> TutorialOverlayWindow {
         let window = TutorialOverlayWindow(
-            contentRect: NSRect(x: 0, y: 0, width: Self.cardWidth, height: 200),
+            contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 200),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false)
@@ -107,40 +121,46 @@ final class TutorialOverlay {
         container.autoresizingMask = [.width, .height]
         window.contentView = container
 
+        // Autoresizing rather than constraints, and `.intrinsicContentSize` rather than min/max: the
+        // window is sized *from* the card, so the card must never be sized from the window.
+        //
+        // The first version of this did the opposite — SwiftUI measured itself through a
+        // `GeometryReader` and handed the size back to resize the window, while the hosting view was
+        // pinned to all four edges of the container. That is a feedback loop: the new window height
+        // squeezes the content, the squeezed content measures shorter, the window shrinks again. On a
+        // live walkthrough the card collapsed to 54 pt with its footer wrapped into three lines and
+        // then stopped drawing altogether. Reading `fittingSize` closes the loop: it is the card's
+        // *ideal* height at a fixed width, and nothing about the window feeds into it.
         let hosting = TutorialFirstMouseHostingView(
-            rootView: TutorialCardView(
-                model: model,
-                chrome: chrome,
-                onMeasured: { [weak self] size in self?.measured(size) }))
-        hosting.sizingOptions = [.minSize, .maxSize]
-        hosting.translatesAutoresizingMaskIntoConstraints = false
+            rootView: TutorialCardView(model: model, chrome: chrome))
+        hosting.sizingOptions = [.intrinsicContentSize]
+        hosting.translatesAutoresizingMaskIntoConstraints = true
+        hosting.frame = NSRect(x: 0, y: 0, width: Self.width, height: 200)
+        hosting.autoresizingMask = [.width, .height]
         container.addSubview(hosting)
-        NSLayoutConstraint.activate([
-            hosting.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            hosting.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            hosting.topAnchor.constraint(equalTo: container.topAnchor),
-            hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
+        self.hosting = hosting
         return window
     }
 
-    /// The card measures itself in SwiftUI and reports back, because its height depends on content
-    /// that changes while a step is on screen — a live counter, a result list, an error line.
-    private func measured(_ size: CGSize) {
-        guard let model, !model.step.isTerminal else { return }
-        let rounded = NSSize(width: size.width.rounded(.up), height: size.height.rounded(.up))
-        guard rounded.height > 1, measured != rounded else { return }
-        measured = rounded
-        layout(step: model.step)
+    /// The card's ideal height at `Self.width`, straight from the hosting view.
+    ///
+    /// Recomputed on every tick as well as on every step, because the content genuinely changes
+    /// height while a step is on screen: a result list appears, an error line wraps, a thumbnail
+    /// loads.
+    private func fittingHeight() -> CGFloat {
+        guard let hosting else { return 200 }
+        hosting.layoutSubtreeIfNeeded()
+        let ideal = hosting.fittingSize.height
+        // A floor rather than a trust: `fittingSize` answers zero for one pass after the root view is
+        // replaced, and a zero-height window is a window the user cannot see or click.
+        return max(96, ideal.rounded(.up))
     }
 
     // MARK: - Placement
 
     private func layout(step: TutorialStep) {
         guard let window, let model else { return }
-        let width = step.target == nil ? Self.cardWidth : Self.coachWidth
-        let height = measured?.height ?? 220
-        let size = NSSize(width: width, height: height)
+        let size = NSSize(width: Self.width, height: fittingHeight())
 
         let target = model.targetFrame
         let screen = screenFor(target)
@@ -188,8 +208,12 @@ final class TutorialOverlay {
         }
         chrome.arrow = arrow
 
+        // Nothing after this line may feed back into `fittingHeight()`: the card is measured at a
+        // fixed width, so resizing the window cannot change what it measured.
+        guard window.frame != clamped else { return }
         window.setFrame(clamped, display: true)
         window.contentView?.frame = NSRect(origin: .zero, size: clamped.size)
+        hosting?.frame = NSRect(origin: .zero, size: clamped.size)
     }
 
     private func clamp(_ frame: NSRect, into bounds: NSRect) -> NSRect {
@@ -203,12 +227,18 @@ final class TutorialOverlay {
     /// which on a menu-bar-only app is routinely the display the user is not looking at.
     private func screenFor(_ target: CGRect?) -> NSScreen {
         if let target, let screen = NSScreen.screens.first(where: { $0.frame.intersects(target) }) {
+            stepScreen = screen
             return screen
         }
+        // Decided once per step. Asking the pointer every tick made a centred card hop between
+        // displays as the mouse moved, which is the opposite of something to read.
+        if let stepScreen { return stepScreen }
         let pointer = NSEvent.mouseLocation
-        return NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) })
+        let chosen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) })
             ?? NSScreen.screens.first
             ?? NSScreen.main!
+        stepScreen = chosen
+        return chosen
     }
 }
 

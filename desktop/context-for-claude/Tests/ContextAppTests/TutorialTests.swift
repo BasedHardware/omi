@@ -91,7 +91,7 @@ final class TutorialTests: XCTestCase {
         TutorialModel(environment: world.environment())
     }
 
-    private func memory(_ text: String = "Antikythera mechanism", at: Double = 1_699_999_000)
+    private func memory(_ text: String = "LINGsCARS car leasing", at: Double = 1_699_999_000)
         -> TutorialMemory
     {
         TutorialMemory(at: at, when: "earlier", text: text, app: "Safari", kind: "screen")
@@ -114,7 +114,7 @@ final class TutorialTests: XCTestCase {
         case .realSearchResult:
             world.searchResults = [memory()]
             // Advances by itself, and only because there was something to find.
-            model.search("mechanism")
+            model.search("leasing")
         case .genuineToolCall:
             recordStamp(world, at: world.clock + 1)
             model.poll()
@@ -225,9 +225,10 @@ final class TutorialTests: XCTestCase {
 
         XCTAssertEqual(world.openedArticles, [TutorialModel.articleURL])
         XCTAssertEqual(model.articleDidOpen, false, "a browser that did not open must not be claimed")
-        XCTAssertEqual(
-            TutorialModel.articleURL.host(), "en.wikipedia.org",
-            "the step opens a real Wikipedia article")
+        // Over https and nothing else asserted about the host: the page is a product decision that can
+        // change, and a test that pins it would be a test of the copy rather than of the step.
+        XCTAssertEqual(TutorialModel.articleURL.scheme, "https")
+        XCTAssertNotNil(TutorialModel.articleURL.host())
     }
 
     // MARK: - G5, the counter
@@ -329,30 +330,32 @@ final class TutorialTests: XCTestCase {
         let model = makeModel(world)
         drive(model, world, to: .query)
 
-        let hit = memory("gear train of the Antikythera mechanism", at: 1_699_998_888)
+        let hit = memory("cheap car leasing, no hidden fees", at: 1_699_998_888)
         world.searchResults = [hit]
-        model.search("gear")
+        model.search("leasing")
 
         XCTAssertEqual(model.step, .foundIt)
         XCTAssertEqual(model.results, [hit])
-        XCTAssertEqual(model.lastQuery, "gear")
+        XCTAssertEqual(model.lastQuery, "leasing")
     }
 
-    func testTappingAMemoryGoesBackToThatExactMoment() {
+    func testTappingAMemoryGoesBackToThatExactMoment() throws {
         let world = World()
         world.screenGranted = true
         world.momentNear = TutorialMoment(
-            at: 1_699_998_890, app: "Safari", windowTitle: "Antikythera mechanism",
+            at: 1_699_998_890, app: "Safari", windowTitle: "LINGsCARS car leasing",
             imagePath: "/tmp/does-not-need-to-exist.heic")
         let model = makeModel(world)
         drive(model, world, to: .foundIt)
 
-        let hit = model.results.first
-        XCTAssertNotNil(hit)
-        model.choose(hit!)
+        // `XCTUnwrap` rather than a force unwrap: this file is also run against deliberately broken
+        // builds to check that these assertions bite, and a crash there would abort the whole suite
+        // before the other honesty tests got to report.
+        let hit = try XCTUnwrap(model.results.first)
+        model.choose(hit)
         XCTAssertEqual(model.chosenMemory, hit)
         XCTAssertEqual(model.chosenMoment, world.momentNear)
-        XCTAssertEqual(world.scrubs, [hit!.at], "the timeline is repositioned on the real instant")
+        XCTAssertEqual(world.scrubs, [hit.at], "the timeline is repositioned on the real instant")
     }
 
     /// G9 advances because the real control in the real window was pressed.

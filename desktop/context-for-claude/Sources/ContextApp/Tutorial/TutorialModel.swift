@@ -41,13 +41,22 @@ final class TutorialModel: ObservableObject {
     static let framePatience: Double = 45
     static let grantPatience: Double = 20
 
-    /// The article the tutorial opens.
+    /// The page the tutorial opens.
     ///
-    /// A long, section-heavy, image-rich page in a neutral subject: the capture pipeline stores a
-    /// frame only when the screen has *changed*, so a page that actually looks different as you
-    /// scroll is what makes the frame counter move for real. Deliberately not this app's own or the
-    /// reference implementation's page — the lesson is about the user's own screen, not about us.
-    static let articleURL = URL(string: "https://en.wikipedia.org/wiki/Antikythera_mechanism")!
+    /// Text-dense and unmistakable, which is what the later beats need: the capture pipeline stores a
+    /// frame only when the screen has genuinely *changed*, so a page that looks different every time
+    /// you scroll is what makes the frame counter move for real, and a page full of words is what
+    /// gives OCR something to find again.
+    ///
+    /// Opened with `NSWorkspace.shared.open` — the user's own default browser, whatever it is — and
+    /// **never fetched.** This host answers a scripted request with a bot challenge, so any
+    /// reachability probe would report it as down while a real browser loads it perfectly. There is
+    /// deliberately no pre-flight check anywhere in this file.
+    ///
+    /// Nothing downstream assumes a single word from it. If the browser shows an interstitial instead,
+    /// the frames are still frames and the counter still counts them; the search beat asks the user
+    /// for a word *they* saw rather than testing for one this file guessed.
+    static let articleURL = URL(string: "https://www.lingscars.com/")!
 
     /// The question the handoff puts on the clipboard. Answerable only from captured context, so a
     /// Claude that answers it has genuinely read the store rather than guessed.
@@ -326,6 +335,9 @@ final class TutorialModel: ObservableObject {
     private func enter(_ next: TutorialStep) {
         step = next
         stepEnteredAt = environment.now()
+        // One line per beat. A tutorial that stalls is the kind of thing a user reports as "it just
+        // sat there", and the step it sat on is the whole diagnosis.
+        ContextLog.info("step \(next.rawValue)", "tutorial")
 
         switch next {
         case .invitation:

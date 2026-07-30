@@ -8,7 +8,7 @@ import Foundation
 enum TutorialStep: String, CaseIterable, Sendable {
     /// G1 — "Learn how this works", Start / Skip.
     case invitation
-    /// G2 — a real Wikipedia article opens in the default browser.
+    /// G2 — a real, text-dense page opens in the user's own default browser.
     case article
     /// G3 — Screen Recording, asked for here and only if it is genuinely missing.
     case screenAccess
