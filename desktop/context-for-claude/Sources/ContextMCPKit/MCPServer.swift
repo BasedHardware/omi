@@ -43,10 +43,20 @@ public final class MCPServer {
     public static let serverVersion = "1.0.0"
 
     private let store: ContextStore?
+    /// Where a served tool call is recorded so the app can prove Claude reached us.
+    private let queryStampURL: URL
 
     /// `store` is nil when nothing has been captured yet; the tools explain that in prose.
-    public init(store: ContextStore?) {
+    ///
+    /// `queryStampURL` defaults to the stamp beside the database this server opened, falling back to
+    /// the standard location when there is no database yet. Both resolve to the same file in a real
+    /// install; deriving it from the store keeps a server that was pointed at another data directory
+    /// from reporting its calls into the default one.
+    public init(store: ContextStore?, queryStampURL: URL? = nil) {
         self.store = store
+        self.queryStampURL = queryStampURL
+            ?? store.map { ContextPaths.queryStampURL(besideDatabaseAt: $0.databaseURL) }
+            ?? ContextPaths.queryStampURL
     }
 
     // MARK: - Transport
@@ -148,6 +158,14 @@ public final class MCPServer {
                              code: RPC.Code.invalidParams,
                              message: "tools/call requires a string \"name\"")
         }
+        // Only a tool this server advertises is proof that Claude reached *us*. An unknown name is
+        // the model guessing, or another connector's tool arriving here by mistake, and must not
+        // light up the tutorial's payoff beat.
+        let isOurTool = Tools.all.contains { $0.name == name }
+        // Fires on the failure path too: a `recall` that threw still proves Claude called us, and a
+        // tool that only leaves a trace when it succeeds would make the beat depend on the answer
+        // rather than on the connection.
+        defer { if isOurTool { recordServedCall(name) } }
         do {
             let text = try Tools.call(name: name, arguments: request.params?["arguments"], store: store)
             return RPC.result(id: request.id, Self.content(text, isError: false))
@@ -156,6 +174,25 @@ public final class MCPServer {
             // a JSON-RPC error would be swallowed by the client instead.
             Self.note("tool \(name) failed: \(error)")
             return RPC.result(id: request.id, Self.content(Self.describe(error), isError: true))
+        }
+    }
+
+    /// Leaves the durable trace the app watches for, so the first-run tutorial's "found it" fires
+    /// only when Claude has genuinely called one of our tools.
+    ///
+    /// **Only the tool name and the time are recorded, and that must stay true.** Never add the
+    /// query, the arguments, or the result: this is a plaintext file whose entire purpose is a UI
+    /// animation, and putting the user's questions — and so the private context behind them — on
+    /// disk to earn an animation is the wrong trade. `QueryStamp` has no field for them, and
+    /// `QueryStampRecordingTests.testTheStampNeverContainsTheQueryText` fails if that changes.
+    ///
+    /// A failure here is noted and dropped. The stamp is a nicety; the tool result is the contract,
+    /// and an unwritable data directory must not turn an answered question into an error.
+    private func recordServedCall(_ tool: String) {
+        do {
+            try QueryStamp.record(tool: tool, to: queryStampURL)
+        } catch {
+            Self.note("could not record the query stamp: \(error)")
         }
     }
 

@@ -41,6 +41,28 @@ public enum ContextPaths {
         supportDirectory.appendingPathComponent("capture-state.json")
     }
 
+    /// The heartbeat's mirror image: written by the MCP server when it serves a tool call, read by
+    /// the app so the first-run tutorial can prove Claude really queried it. See `QueryStamp`.
+    public static var queryStampURL: URL {
+        supportDirectory.appendingPathComponent(queryStampFilename)
+    }
+
+    /// The stamp sits beside the database it was served from, not at a second independently-derived
+    /// path. One process opened that database and the other watches this file; deriving both from one
+    /// location is what keeps them talking about the same install.
+    public static func queryStampURL(besideDatabaseAt databaseURL: URL) -> URL {
+        databaseURL.deletingLastPathComponent().appendingPathComponent(queryStampFilename)
+    }
+
+    /// The lock guarding a stamp write. Never renamed or replaced, so concurrent MCP servers always
+    /// contend over the same inode — see `QueryStamp.record`.
+    public static func queryStampLockURL(for stampURL: URL) -> URL {
+        stampURL.deletingLastPathComponent()
+            .appendingPathComponent(stampURL.lastPathComponent + ".lock")
+    }
+
+    static let queryStampFilename = "last-query.json"
+
     @discardableResult
     public static func ensureSupportDirectory() throws -> URL {
         let dir = supportDirectory
