@@ -65,8 +65,6 @@ codex-proxy/target/
 local-asr-helper/target/
 local-asr-helper/Cargo.lock
 local-backend/target/
-# Leftover from the retired Rust desktop backend (sources deleted; only stale target/ may remain)
-Backend-Rust/
 
 # Generated browser snapshots (contain PII)
 *-snapshot.md
