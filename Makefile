@@ -4,15 +4,16 @@ HOOKS_DIR := $(shell git rev-parse --git-path hooks)
 # worktree whose git context resolves to a git dir rather than a work tree,
 # show-toplevel exits 128 and previously expanded to an empty prefix, turning
 # the source into `/scripts/dev-harness/_resolve_python.sh: No such file` and
-# breaking every target. The root stays computed in-shell (never interpolated
-# into recipe text) so a checkout path with quote/`$` characters cannot inject.
+# breaking every target. Use the make process's working directory rather than
+# a command substitution: it remains shell data even when the checkout name
+# contains quote or command-substitution characters.
 # GNU Make supplies a built-in PYTHON=python default. Treat that as unset so
 # harness targets still resolve this checkout's backend venv, while retaining
 # explicit command-line and environment overrides for callers.
 ifeq ($(origin PYTHON),default)
-PYTHON := $(shell bash -c 'source "$$(git rev-parse --show-toplevel 2>/dev/null || pwd)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+PYTHON := $(shell bash -c 'source "$$PWD/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
 else
-PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel 2>/dev/null || pwd)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+PYTHON ?= $(shell bash -c 'source "$$PWD/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
 endif
 # Export so recipes use $$PYTHON (shell variable expansion) instead of $(PYTHON)
 # (Make text interpolation). Shell variable expansion treats the resolved path
