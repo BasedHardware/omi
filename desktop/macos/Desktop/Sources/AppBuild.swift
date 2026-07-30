@@ -1,6 +1,7 @@
 import Foundation
 
 enum AppBuild {
+  /// Release path advancement for v0.12.148.
   static let productionBundleIdentifier = "com.omi.computer-macos"
   /// The separately-installable beta app ("Omi Beta.app"). A distinct bundle id gives it
   /// its own UserDefaults domain, TCC grants, Keychain ACL, and single-instance lock, so
