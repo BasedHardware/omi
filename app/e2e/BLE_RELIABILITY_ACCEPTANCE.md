@@ -35,6 +35,12 @@ history. A historical drain requires either one explicit Sync action or the
 existing Auto Sync opt-in. Charging changes scheduling capacity, not user
 authority, and therefore never starts a deep drain.
 
+Once the user authorizes a drain, the live lane remains scheduler authority.
+Historical work runs only in bounded slices, and audio that arrives during one
+of those slices must be fetched before another historical slice begins. Being
+plugged in may supply the power budget for requested work; it does not permit
+backlog transfer to delay, replace, or disable live transcription.
+
 This contract is shared Dart policy. Android and iOS provide transport
 ownership but do not choose different backlog behavior. If the transcription
 service is unavailable, storage-authoritative firmware keeps recording on the

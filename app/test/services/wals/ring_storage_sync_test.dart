@@ -268,6 +268,49 @@ void main() {
     await session!.cancel();
   });
 
+  test('new live audio preempts the next manual backlog slice', () async {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final connection = _FakeRingConnection(
+      readSeq: 0,
+      writeSeq: 500,
+      growWriteSeqAfterFirstReadBy: 20,
+      growWriteSeqAfterReadNumber: 3,
+      timestamps: {
+        for (var seq = 0; seq < 480; seq++) seq: now - 1000,
+        for (var seq = 480; seq < 520; seq++) seq: now,
+      },
+    );
+    final sync = ringSync(
+      connection,
+      localSync(),
+      nowSeconds: now,
+      deepBacklogEnabled: false,
+    );
+
+    final session = await sync.startAudioTail(
+      onLiveFrames: (_) => _delivered(),
+    );
+    await connection.secondRead.future.timeout(const Duration(seconds: 3));
+    final request = sync.requestAudioTailBacklogDrain();
+
+    expect(request, isNotNull);
+    await connection.thirdRead.future.timeout(const Duration(seconds: 3));
+    await connection.fourthRead.future.timeout(const Duration(seconds: 3));
+
+    expect(connection.reads.take(4), [
+      (start: 480, count: 20),
+      (start: 384, count: 96),
+      (start: 0, count: 96),
+      // Twenty records arrived while the preceding backlog slice was in
+      // flight. They must preempt the next historical slice.
+      (start: 500, count: 20),
+    ]);
+
+    sync.cancelRequestedAudioTailBacklogDrain();
+    expect(await request, isNull);
+    await session!.cancel();
+  });
+
   test('manual snapshot caps a deep READ at its captured write sequence', () async {
     const now = _FakeRingConnection.baseTimestamp + 10000;
     final infoGate = Completer<RingInfo?>();
@@ -1728,6 +1771,7 @@ class _FakeRingConnection implements DeviceConnection {
   int readSeq;
   int writeSeq;
   final int growWriteSeqAfterFirstReadBy;
+  final int growWriteSeqAfterReadNumber;
   final int? truncateStartSeq;
   final bool corruptCrc;
   final bool failAdvance;
@@ -1743,6 +1787,7 @@ class _FakeRingConnection implements DeviceConnection {
   final Completer<void> firstAdvance = Completer<void>();
   final Completer<void> secondRead = Completer<void>();
   final Completer<void> thirdRead = Completer<void>();
+  final Completer<void> fourthRead = Completer<void>();
   final StreamController<List<int>> _notifications = StreamController<List<int>>.broadcast(sync: true);
   int ringInfoCalls = 0;
 
@@ -1750,6 +1795,7 @@ class _FakeRingConnection implements DeviceConnection {
     required this.readSeq,
     required this.writeSeq,
     this.growWriteSeqAfterFirstReadBy = 0,
+    this.growWriteSeqAfterReadNumber = 1,
     this.truncateStartSeq,
     this.corruptCrc = false,
     this.failAdvance = false,
@@ -1786,11 +1832,12 @@ class _FakeRingConnection implements DeviceConnection {
     final count = packetCount!;
     reads.add((start: startSeq, count: count));
     if (rejectRead) return false;
-    if (reads.length == 1 && growWriteSeqAfterFirstReadBy > 0) {
+    if (reads.length == growWriteSeqAfterReadNumber && growWriteSeqAfterFirstReadBy > 0) {
       writeSeq += growWriteSeqAfterFirstReadBy;
     }
     if (reads.length == 2 && !secondRead.isCompleted) secondRead.complete();
     if (reads.length == 3 && !thirdRead.isCompleted) thirdRead.complete();
+    if (reads.length == 4 && !fourthRead.isCompleted) fourthRead.complete();
     scheduleMicrotask(() {
       _notifications.add(_readBegin(startSeq, count));
       final requested = <int>[];
