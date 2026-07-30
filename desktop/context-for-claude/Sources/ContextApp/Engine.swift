@@ -114,6 +114,11 @@ final class Engine: ObservableObject {
     @Published private(set) var lastLine: String?
 
     private let store = EngineStore()
+
+    /// The writable store, once it is open, for read-only surfaces that need one. Nil until the
+    /// first open succeeds. Rewind reads through this rather than opening a second connection, so
+    /// the window and the writer can never disagree about what has been committed.
+    var contextStore: ContextStore? { store.currentStore() }
     /// The heartbeat is a tiny atomic file write, but it happens on a timer while audio is running;
     /// keep it off both the main thread and the store's queue.
     private let heartbeatQueue = DispatchQueue(label: "com.omi.context-for-claude.heartbeat", qos: .utility)
@@ -763,6 +768,15 @@ private final class EngineStore: @unchecked Sendable {
     private let policy = SessionPolicy()
 
     private var store: ContextStore?
+
+    /// The open store, for read-only surfaces that need one — the Rewind window in particular.
+    ///
+    /// Read through `queue` like every other access, because the store is opened lazily *on* that
+    /// queue: touching the property directly would race the open. Returns nil until the first open
+    /// succeeds, and callers must handle that rather than force it — a timeline window that appears
+    /// with no database behind it is worse than one that declines to appear.
+    func currentStore() -> ContextStore? { queue.sync { store } }
+
     private var openSessionId: Int64?
     /// The latest segment end across *both* transcribers. Session boundaries are a property of the
     /// conversation, not of one microphone.

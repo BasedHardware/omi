@@ -62,6 +62,32 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             StatusItemController.shared.install()
             Engine.shared.start()
 
+            // Decode the four onboarding cues now so the first one does not pay for it mid-beat.
+            // Safe with the assets missing: the layer degrades to silence rather than throwing,
+            // because nothing about onboarding may depend on audio succeeding.
+            Sound.prepare()
+
+            // Double-tap Command opens the timeline, double-tap Command-Shift opens search. Both are
+            // rebindable, and both simply do not fire while Accessibility is ungranted — a global
+            // monitor cannot see keys without it, and pretending to be armed would be worse.
+            GlobalShortcuts.shared.start { action in
+                switch action {
+                case .openSearch:
+                    SearchBarWindow.toggle()
+                case .openTimeline:
+                    // The store opens lazily on the engine's own queue, so ask at trigger time
+                    // rather than at launch. Nil means it is not open yet: decline to put a timeline
+                    // over nothing instead of showing an empty one.
+                    guard let store = Engine.shared.contextStore else { return }
+                    RewindWindow.present(
+                        store: store,
+                        // Settings does not exist yet, so `onOpenSettings` keeps its default no-op.
+                        // The gear is a dead control today; that is recorded in the requirements
+                        // checklist rather than hidden behind a stub that looks like it works.
+                        onSearch: { query in SearchBarWindow.present(prefill: query) })
+                }
+            }
+
             if !UserDefaults.standard.bool(forKey: Self.onboardedKey) {
                 OnboardingWindow.present()
             }
