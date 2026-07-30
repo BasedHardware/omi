@@ -251,13 +251,18 @@ final class LoopbackCallbackServer: @unchecked Sendable {
             }
         }
 
-        /// The same two accents the app uses: ink for the ordinary case, the site's red when
-        /// something failed. This page opens in the same browser as the product site, so it is
-        /// held to the site's palette rather than the app's old one.
+        /// Two accents: the ordinary heading colour, and a red when something failed.
+        ///
+        /// These are plain neutrals and a standard red rather than the warm palette this page used
+        /// to carry. The old justification was that the page "opens in the same browser as the
+        /// product site, so it is held to the site's palette" — but that palette is the one the app
+        /// deliberately moved off, and this page is the only web surface a real user sees, so it was
+        /// the last place still showing it. `currentColor` would be neater than repeating the body
+        /// colour, except the failure case genuinely needs its own hue.
         var accent: String {
             switch self {
-            case .success: return "#171412"
-            case .failure, .invalid: return "#C9352B"
+            case .success: return "inherit"
+            case .failure, .invalid: return "#C0392B"
             }
         }
     }
@@ -276,14 +281,22 @@ final class LoopbackCallbackServer: @unchecked Sendable {
           body {
             margin: 0; min-height: 100vh;
             display: flex; align-items: center; justify-content: center;
-            background: #FBF8F4; color: #171412;
+            /* Neutral greys, matching the installer art. This page kept the abandoned warm palette
+               long after the app moved off it, and it is the one web surface a real user sees.
+               A browser page cannot read NSColor semantics, so the appearance split below is a
+               media query rather than a token. */
+            background: #FAFAFA; color: #1C1C1C;
             font-family: "Open Runde", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
           }
           .card { max-width: 26rem; padding: 3rem 2rem; text-align: center; }
           svg { display: block; margin: 0 auto 1.75rem; opacity: 0.9; }
           h1 { margin: 0 0 0.6rem; font-size: 1.6rem; font-weight: 600; letter-spacing: -0.03em; color: \(page.accent); }
-          p { margin: 0; font-size: 1rem; line-height: 1.55; color: #6B625B; }
+          p { margin: 0; font-size: 1rem; line-height: 1.55; color: #6E6E6E; }
+          @media (prefers-color-scheme: dark) {
+            body { background: #1C1C1E; color: #F2F2F2; }
+            p { color: #9A9A9E; }
+          }
         </style>
         </head>
         <body>
