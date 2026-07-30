@@ -256,6 +256,15 @@ class MemoriesProvider extends ChangeNotifier {
     _memories = all.where((memory) => memory.id != _pendingDeletionId).toList();
     _deviceScopeSupported = deviceScopeSupported;
 
+    // Suppress re-insertion of a memory that has a pending/in-flight deletion.
+    // Without this, any background refresh (init, connectivity restore, pull-to-refresh)
+    // that fires during the undo window would re-fetch the still-present server
+    // document and overwrite the optimistic removal, making deleted items reappear.
+    final pendingDeletionId = _pendingDeletionId;
+    if (pendingDeletionId != null) {
+      _memories.removeWhere((m) => m.id == pendingDeletionId);
+    }
+
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     for (var pending in pendingMemories) {

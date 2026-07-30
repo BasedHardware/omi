@@ -63,6 +63,10 @@ class ActionItemsProvider extends ChangeNotifier {
   bool _isSelectionMode = false;
   Set<String> _selectedItems = {};
 
+  // IDs of action items that have been optimistically deleted but whose server
+  // delete may still be in flight. Guarded against re-insertion by fetch/load.
+  final Set<String> _pendingDeletionIds = {};
+
   // Search state — lexical client-side filter over already-loaded items.
   // Backend vector search will replace the filter implementation behind
   // the same getters in a follow-up PR.
@@ -218,6 +222,14 @@ class ActionItemsProvider extends ChangeNotifier {
 
       if (response != null) {
         _actionItems = response.actionItems;
+        // Suppress re-insertion of items with a pending/in-flight deletion.
+        // Without this, any background refresh (foreground resume, shared-task
+        // accept, toggle completed, date-range change) that fires while the
+        // server delete is in flight would re-fetch the still-present document
+        // and overwrite the optimistic removal.
+        if (_pendingDeletionIds.isNotEmpty) {
+          _actionItems.removeWhere((item) => _pendingDeletionIds.contains(item.id));
+        }
         _hasMore = response.hasMore;
         loaded = true;
 
@@ -447,6 +459,10 @@ class ActionItemsProvider extends ChangeNotifier {
     // Delete linked Apple Reminder if one exists
     _deleteAppleReminderIfLinked(item);
 
+    // Track as pending-deletion so any background refresh doesn't re-insert it
+    // while the server delete is in flight.
+    _pendingDeletionIds.add(item.id);
+
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
     notifyListeners();
@@ -456,10 +472,16 @@ class ActionItemsProvider extends ChangeNotifier {
 
       if (!success) {
         Logger.debug('Failed to delete action item on server');
+        // On failure, remove from pending set so a future reload can re-fetch it
+        _pendingDeletionIds.remove(item.id);
+      } else {
+        _pendingDeletionIds.remove(item.id);
       }
       return success;
     } catch (e) {
       Logger.debug('Error deleting action item: $e');
+      // On error, remove from pending set so a future reload can re-fetch it
+      _pendingDeletionIds.remove(item.id);
       return false;
     }
   }
