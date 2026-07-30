@@ -30,7 +30,7 @@ import SwiftUI
 enum PermissionGuidance: Equatable {
     /// The real row was located and is really on screen. Screen coordinates, top-left origin, the
     /// convention the Accessibility API and CoreGraphics both use.
-    case pointing(Located)
+    case pointing(LocatedSettingsRow)
     /// The row could not be located, or was located somewhere the user cannot see. Words only.
     case instruction(String)
 
@@ -44,7 +44,7 @@ enum PermissionGuidance: Equatable {
 
 /// A located row in System Settings: what to ring, what the hand points at, and whether the switch
 /// is already on.
-struct Located: Equatable {
+struct LocatedSettingsRow: Equatable {
     /// The whole row — label through switch. What the ring goes around.
     var row: CGRect
     /// The switch itself. What the hand points at, because it is the thing to press.
@@ -110,9 +110,9 @@ struct SettingsRowLocator {
     /// different sentences: one asks the user to scroll, the other cannot say where to look at all.
     /// Both refuse to point.
     enum Location: Equatable {
-        case visible(Located)
+        case visible(LocatedSettingsRow)
         /// Found in the tree, but clipped out of view by a scroll area or the window edge.
-        case offscreen(Located)
+        case offscreen(LocatedSettingsRow)
         case notFound
     }
 
@@ -142,7 +142,7 @@ struct SettingsRowLocator {
     // MARK: The walk
 
     private struct Hit {
-        var located: Located
+        var located: LocatedSettingsRow
         var isClipped: Bool
     }
 
@@ -200,7 +200,7 @@ struct SettingsRowLocator {
         // dot beside the thing instead of around it.
         let band = label.map { $0.union(toggleFrame) } ?? element.elementFrame ?? toggleFrame
 
-        let located = Located(row: band, toggle: toggleFrame, isOn: isOn(toggle))
+        let located = LocatedSettingsRow(row: band, toggle: toggleFrame, isOn: isOn(toggle))
         let clipped = !clips.allSatisfy { $0.contains(toggleFrame) }
         return Hit(located: located, isClipped: clipped)
     }
