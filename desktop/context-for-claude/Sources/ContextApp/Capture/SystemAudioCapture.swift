@@ -126,12 +126,10 @@ final class SystemAudioCapture: AudioSource, @unchecked Sendable {
 
     /// All blocking CoreAudio HAL setup. Must run on `audioQueue`.
     private func startOnQueue() throws {
-        // 1. A global tap over every process, muting nothing. `.unmuted` is not optional:
-        //    any other mute behaviour silences the user's own playback while we listen.
-        let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
-        tapDescription.uuid = tapUUID
-        tapDescription.name = "Context for Claude System Audio Tap"
-        tapDescription.muteBehavior = .unmuted
+        // 1. A global tap over every process except ourselves, muting nothing. `.unmuted` is not
+        //    optional: any other mute behaviour silences the user's own playback while we listen.
+        let tapDescription = Self.makeGlobalTapDescription(
+            name: "Context for Claude System Audio Tap", uuid: tapUUID)
 
         var status = AudioHardwareCreateProcessTap(tapDescription, &tapID)
         guard status == noErr else {
@@ -373,6 +371,74 @@ final class SystemAudioCapture: AudioSource, @unchecked Sendable {
         chunkHandler?(byteData)
     }
 
+    // MARK: - Tap description
+
+    /// The one place a tap is described, for both the capture path and the consent prime.
+    ///
+    /// The exclude list is what keeps our own output off the tap. It used to be empty, which made
+    /// this a global tap over *every* process including this one — so the first-run cinematic's bed
+    /// and swooshes, and every click a Settings surface plays while a session is live, were recorded,
+    /// transcribed, and filed in the user's own conversation history as if somebody had said them.
+    ///
+    /// The exclusion is unconditional and lasts the whole process lifetime, deliberately not scoped
+    /// to onboarding: chrome sounds can fire from any surface at any time, including while capture
+    /// is already running.
+    static func makeGlobalTapDescription(name: String, uuid: UUID) -> CATapDescription {
+        makeGlobalTapDescription(name: name, uuid: uuid, excluding: excludedProcessObjects())
+    }
+
+    /// The construction on its own, with the exclusion handed in, so it can be exercised without
+    /// the HAL.
+    static func makeGlobalTapDescription(
+        name: String,
+        uuid: UUID,
+        excluding processObjects: [AudioObjectID]
+    ) -> CATapDescription {
+        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: processObjects)
+        description.uuid = uuid
+        description.name = name
+        description.muteBehavior = .unmuted
+        return description
+    }
+
+    /// Just us.
+    ///
+    /// `CATapDescription` takes CoreAudio process *object* ids, not pids — the Swift signature is
+    /// `[AudioObjectID]`. A raw pid poured into an `AudioObjectID` names some unrelated audio object
+    /// or nothing at all, which would read exactly like a fix while our own audio kept landing in the
+    /// tap. `kAudioHardwarePropertyTranslatePIDToProcessObject` is the only correct way across.
+    static func excludedProcessObjects() -> [AudioObjectID] {
+        guard let own = ownProcessObject() else {
+            // Fail open rather than refuse to capture: losing the other side of every call is worse
+            // than the noise. Logged as an error, because it means our own sounds are being recorded.
+            ContextLog.error(
+                "could not resolve this app's CoreAudio process object; the tap cannot exclude us",
+                logCategory)
+            return []
+        }
+        return [own]
+    }
+
+    /// This process's CoreAudio process object, or `nil` if the HAL will not translate it.
+    static func ownProcessObject() -> AudioObjectID? {
+        var pid = pid_t(ProcessInfo.processInfo.processIdentifier)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslatePIDToProcessObject,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var objectID: AudioObjectID = kAudioObjectUnknown
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            UInt32(MemoryLayout<pid_t>.size),
+            &pid,
+            &size,
+            &objectID)
+        guard status == noErr, objectID != kAudioObjectUnknown else { return nil }
+        return objectID
+    }
+
     // MARK: - Permission
 
     /// Fires the CoreAudio process-tap consent prompt during onboarding instead of mid-call.
@@ -408,10 +474,8 @@ final class SystemAudioCapture: AudioSource, @unchecked Sendable {
         }
 
         let tapUUID = UUID()
-        let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
-        tapDescription.uuid = tapUUID
-        tapDescription.name = "Context for Claude System Audio Tap (permission prime)"
-        tapDescription.muteBehavior = .unmuted
+        let tapDescription = makeGlobalTapDescription(
+            name: "Context for Claude System Audio Tap (permission prime)", uuid: tapUUID)
 
         var status = AudioHardwareCreateProcessTap(tapDescription, &tapID)
         guard status == noErr else {

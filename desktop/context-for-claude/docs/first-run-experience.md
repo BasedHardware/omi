@@ -88,11 +88,31 @@ that records *every* process including this one. Onboarding music and swooshes w
 user's own transcripts. Fix: exclude our own pid unconditionally, for the whole process lifetime, not
 just during onboarding — clicks can fire from Settings while a capture session runs.
 
+**The obvious one-line fix is wrong and was corrected during implementation.** An earlier revision of
+this document recommended:
+
 ```swift
+// WRONG — does not compile, and would not have worked if it did.
 CATapDescription(stereoGlobalTapButExcludeProcesses: [pid_t(ProcessInfo.processInfo.processIdentifier)])
 ```
 
-Needs a regression test asserting the exclude list is non-empty and contains our pid.
+`stereoGlobalTapButExcludeProcesses` takes `[AudioObjectID]` — CoreAudio process *object* IDs, which
+are not pids. Passing a pid therefore reads as a fix while our own audio keeps landing in the tap
+(measured on this machine: pid 77685 is object 164). The real fix translates first, via
+`kAudioHardwarePropertyTranslatePIDToProcessObject`, and both tap sites go through one factory so
+they cannot drift apart.
+
+Two tests, not one:
+- The exclude list is non-empty and contains our own process object. Prove it by reverting the fix and
+  watching the test fail — an assertion that passes against both the broken and fixed code is not a
+  regression test.
+- `isExclusive == true` and `muteBehavior == .unmuted`. Flipping `exclusive` inverts the list's meaning
+  into "record only us", which would be a far worse bug than the one being fixed and would otherwise
+  pass the first test.
+
+If the pid-to-object translation fails, the implementation logs and falls open (an empty exclude
+list) rather than refusing to capture. That is a deliberate trade: the exposure is limited to this
+app's own UI sounds, whereas failing closed would silently disable the product's core function.
 
 ---
 

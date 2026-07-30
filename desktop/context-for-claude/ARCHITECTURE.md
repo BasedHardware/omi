@@ -75,7 +75,15 @@ tool, so Claude can report a gap instead of fabricating over it.
 context.db              sessions, segments, frames + two FTS5 indexes
 Frames/YYYY-MM-DD/      screen JPEGs, pruned after 30 days
 capture-state.json      heartbeat: capturing / paused reason / capabilities
+last-query.json         the MCP server's proof it served a tool call: tool name + time, nothing else
+last-query.json.lock    flock target for the above, so concurrent MCP servers cannot lose a write
 ```
+
+`capture-state.json` and `last-query.json` are the two halves of the same trick: the app and the MCP
+server are separate processes with no IPC, so each writes a small atomic file the other reads. The
+heartbeat carries live capture state *to* the server; the query stamp carries "Claude really called
+us" back *to* the app, which is what lets the first-run tutorial's payoff beat be earned rather than
+staged. Neither ever holds anything the user said, saw, or asked — see `QueryStamp`.
 
 A session is a contiguous run of speech; a gap over five minutes starts a new one
 (`SessionPolicy`). Transcripts are kept forever; frames are the expensive part and are the only
