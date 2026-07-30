@@ -47,7 +47,10 @@ dev_harness_python_uses_windows_paths() {
   local python_bin="$1"
   local resolved
   resolved="$(command -v "$python_bin" 2>/dev/null || printf '%s' "$python_bin")"
-  case "${resolved,,}" in
+  # macOS still ships Bash 3.2, which does not support `${value,,}`.
+  # Keep this resolver usable from the pre-push hook on both macOS and Git Bash.
+  resolved="$(printf '%s' "$resolved" | tr '[:upper:]' '[:lower:]')"
+  case "$resolved" in
     *.exe)
       return 0
       ;;
