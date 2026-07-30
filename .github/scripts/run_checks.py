@@ -9,7 +9,6 @@ import glob
 import json
 import os
 import platform as _platform_mod
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +16,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any
+
+from git_bash import bash_executable
 
 VALID_PLATFORMS = {"all", "macos", "linux", "windows"}
 
@@ -31,21 +32,6 @@ def detect_platform() -> str:
     if system == "Windows":
         return "windows"
     return system.lower()
-
-
-def bash_executable() -> str:
-    override = os.environ.get("OMI_BASH_EXECUTABLE")
-    if override:
-        return override
-    if os.name == "nt":
-        git = shutil.which("git")
-        if git:
-            git_root = Path(git).resolve().parent.parent
-            for relative_path in (Path("bin/bash.exe"), Path("usr/bin/bash.exe")):
-                candidate = git_root / relative_path
-                if candidate.is_file():
-                    return str(candidate)
-    return shutil.which("bash") or "bash"
 
 
 @dataclass(frozen=True)
@@ -186,6 +172,7 @@ def run_git(root: Path, *args: str) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
     )
     return result.stdout.strip()
 
@@ -277,31 +264,6 @@ def resolve_checks(
     ]
 
 
-def resolve_explicit_checks(
-    manifest: Manifest,
-    check_ids: list[str],
-    lane: str,
-    *,
-    include_pr_body_checks: bool,
-    platform: str,
-) -> list[CheckSelection]:
-    """Resolve named manifest checks without duplicating their commands in callers."""
-    checks_by_id = {check.id: check for check in manifest.checks}
-    selections: list[CheckSelection] = []
-    for check_id in dict.fromkeys(check_ids):
-        check = checks_by_id.get(check_id)
-        if check is None:
-            raise ValueError(f"unknown check id: {check_id}")
-        if lane not in check.lanes:
-            raise ValueError(f"{check_id}: check is not available in the {lane} lane")
-        if not include_pr_body_checks and check.requires_pr_body:
-            raise ValueError(f"{check_id}: check requires pull-request metadata")
-        if not _platform_matches(check, platform):
-            raise ValueError(f"{check_id}: check does not support platform {platform}")
-        selections.append(CheckSelection(check=check, matched_paths=()))
-    return selections
-
-
 def skipped_platform_checks(manifest: Manifest, files: list[str], lane: str, platform: str) -> list[Check]:
     """Checks that match lane+triggers but are skipped due to platform."""
     return [
@@ -332,18 +294,29 @@ def command_for_check(
         "{pr_body_file}": str(pr_body_file),
     }
     command: list[str] = []
-    for index, token in enumerate(check.command):
+    for token in check.command:
         if token == "{skip_changelog}":
             if skip_changelog:
                 command.append("--skip")
             continue
-        resolved = replacements.get(token, token)
-        if index == 0:
-            if resolved == "python3":
-                resolved = sys.executable
-            elif resolved == "bash":
-                resolved = bash_executable()
-        command.append(resolved)
+        command.append(replacements.get(token, token))
+    return command
+
+
+def command_for_host(
+    command: list[str],
+    *,
+    platform_name: str | None = None,
+    python_executable: str | None = None,
+) -> list[str]:
+    """Resolve manifest interpreter aliases through the active Windows toolchain."""
+    platform = platform_name or os.name
+    if platform != "nt" or not command:
+        return command
+    if command[0] == "bash":
+        return [bash_executable(platform_name=platform), *command[1:]]
+    if command[0] == "python3":
+        return [python_executable or sys.executable, *command[1:]]
     return command
 
 
@@ -369,6 +342,7 @@ def execute_checks(
             pr_body_file=pr_body_file,
             skip_changelog=skip_changelog,
         )
+        command = command_for_host(command)
         returncode = subprocess.run(command, cwd=root, check=False).returncode
         status = "PASS" if returncode == 0 else "FAIL"
         print(f"<== {status} {check.id} ({time.monotonic() - started:.2f}s)", flush=True)
@@ -396,12 +370,6 @@ def parse_args() -> argparse.Namespace:
         help="Exclude checks declared as requiring pull-request metadata.",
     )
     parser.add_argument("--skip-changelog", action="store_true")
-    parser.add_argument(
-        "--check-id",
-        action="append",
-        default=[],
-        help="Run a named manifest check regardless of path triggers; repeat for multiple checks.",
-    )
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--root", type=Path)
     parser.add_argument(
@@ -443,28 +411,14 @@ def main() -> int:
         print(f"FAIL: could not resolve manifest checks: {exc}", file=sys.stderr)
         return 2
     detected_platform = args.platform or detect_platform()
-    try:
-        selections = (
-            resolve_explicit_checks(
-                manifest,
-                args.check_id,
-                args.lane,
-                include_pr_body_checks=not args.skip_pr_body_checks,
-                platform=detected_platform,
-            )
-            if args.check_id
-            else resolve_check_selections(
-                manifest,
-                files,
-                args.lane,
-                include_pr_body_checks=not args.skip_pr_body_checks,
-                platform=detected_platform,
-                exclusive_platform=args.exclusive_platform,
-            )
-        )
-    except ValueError as exc:
-        print(f"FAIL: could not select manifest checks: {exc}", file=sys.stderr)
-        return 2
+    selections = resolve_check_selections(
+        manifest,
+        files,
+        args.lane,
+        include_pr_body_checks=not args.skip_pr_body_checks,
+        platform=detected_platform,
+        exclusive_platform=args.exclusive_platform,
+    )
     checks = [selection.check for selection in selections]
     if args.output == "json":
         print(
@@ -492,11 +446,10 @@ def main() -> int:
     )
     for check in checks:
         print(f"  SELECTED {check.id}: {check.reason}")
-    if not args.check_id:
-        for skip in skipped_platform_checks(manifest, files, args.lane, detected_platform):
-            print(
-                f"  SKIPPED {skip.id}: platform-only (requires {', '.join(skip.platforms)}, running on {detected_platform})"
-            )
+    for skip in skipped_platform_checks(manifest, files, args.lane, detected_platform):
+        print(
+            f"  SKIPPED {skip.id}: platform-only (requires {', '.join(skip.platforms)}, running on {detected_platform})"
+        )
     if args.list:
         return 0
 
