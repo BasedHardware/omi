@@ -11,17 +11,16 @@ const graph: GraphSnapshot = {
   adjacency: [{ claim_revision_id: "c-1", entity_id: "entity:alice", role_slot_id: "subject" }],
 };
 
-test("T10 entity retrieval grades committed graph transitions and never hides withheld placement", () => {
+test("T10 entity retrieval never reader-surfaces a withheld claim as related content", () => {
   const result = retrieveCommittedGraph(graph, { owner_account_id: "owner-1", kind: "entity", entity_id: "entity:alice" });
-  expect(result.claims).toHaveLength(2);
+  expect(result.claims).toHaveLength(1);
   expect(result.claims[0]).toMatchObject({ revision_id: "c-1", entities: [entity], scope: canonical.scope, evidence_citations: ["e-citation"], dates: canonical.temporal_scope, status: "canonical" });
-  expect(result.claims[1]).toMatchObject({ revision_id: "p-unresolved", status: "withheld_unresolved_subject", match: "withheld_unplaced", evidence_citations: ["e-unresolved"] });
-  expect(result.omission_accounting).toEqual({ total_committed_claims: 2, returned_canonical: 1, withheld_items: 1, withheld_by_status: { withheld_unresolved_subject: 1, withheld_abstained: 0 }, omitted_items: 0 });
+  expect(result.omission_accounting).toEqual({ total_committed_claims: 2, returned_canonical: 1, withheld_items: 1, withheld_by_status: { withheld_unresolved_subject: 1, withheld_abstained: 0 }, omitted_items: 1 });
 });
 
-test("T10 as-of retrieval applies only committed event dates while preserving eligible withheld claims", () => {
+test("T10 source/time provisional retrieval returns withheld content only when explicitly requested", () => {
   expect(retrieveCommittedGraph(graph, { owner_account_id: "owner-1", kind: "as_of", date: "2026-01-01" }).claims.map((claim) => claim.revision_id)).toEqual(["c-1"]);
-  const asOf = retrieveCommittedGraph(graph, { owner_account_id: "owner-1", kind: "as_of", date: "2026-01-02" });
+  const asOf = retrieveCommittedGraph(graph, { owner_account_id: "owner-1", kind: "as_of", date: "2026-01-02", include_provisional: true });
   expect(asOf.claims.map((claim) => claim.revision_id)).toEqual(["c-1", "p-unresolved"]);
   expect(asOf.omission_accounting.withheld_items).toBe(1);
 });

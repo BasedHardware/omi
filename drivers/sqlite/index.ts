@@ -6,6 +6,8 @@ import {
   type AtomicGraphTransition,
   type ClaimRevision,
   type EntityRevision,
+  type EvidenceRevision,
+  type EventRevision,
   type GraphRevision,
   type IdentityRevision,
   type LedgerPort,
@@ -16,7 +18,7 @@ export class IdempotencyConflictError extends Error {}
 export class GraphHeadConflictError extends Error {}
 export type CrashPoint = "after_claims" | "after_adjacency" | "after_consumed_markers" | "after_ledger";
 
-const revisionContent = (revision: GraphRevision) => revision.kind === "claim" ? revision.claim : revision.kind === "entity" ? revision.entity : revision.constraint;
+const revisionContent = (revision: GraphRevision) => revision.kind === "claim" ? revision.claim : revision.kind === "entity" ? revision.entity : revision.kind === "identity" ? revision.constraint : revision.kind === "event" ? revision.event : revision.evidence;
 
 /** The only imperative T9 shell. No model port is accepted or invoked by this driver. */
 export class SqliteLedger implements LedgerPort {
@@ -37,6 +39,14 @@ export class SqliteLedger implements LedgerPort {
       CREATE TABLE IF NOT EXISTS identity_revisions (
         revision_id TEXT PRIMARY KEY, owner_account_id TEXT NOT NULL, content_json TEXT NOT NULL,
         content_hash TEXT NOT NULL, commit_id TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS event_revisions (
+        revision_id TEXT PRIMARY KEY, owner_account_id TEXT NOT NULL, content_json TEXT NOT NULL,
+        content_hash TEXT NOT NULL, commit_id TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS evidence_revisions (
+        revision_id TEXT PRIMARY KEY, owner_account_id TEXT NOT NULL, event_revision_id TEXT NOT NULL,
+        content_json TEXT NOT NULL, content_hash TEXT NOT NULL, commit_id TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS generated_adjacency (
         claim_revision_id TEXT NOT NULL, entity_id TEXT NOT NULL, role_slot_id TEXT NOT NULL,
@@ -101,24 +111,37 @@ export class SqliteLedger implements LedgerPort {
       this.db.query("INSERT INTO claim_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(revision.revision_id, revision.claim.owner_account_id, revision.claim.lifecycle, revision.placement_status, revision.claim.temporal_scope.observed_at, json, hash, commitId);
     } else if (revision.kind === "entity") {
       this.db.query("INSERT INTO entity_revisions VALUES (?, ?, ?, ?, ?)").run(revision.revision_id, revision.entity.owner_account_id, json, hash, commitId);
-    } else {
+    } else if (revision.kind === "identity") {
       this.db.query("INSERT INTO identity_revisions VALUES (?, ?, ?, ?, ?)").run(revision.revision_id, revision.constraint.owner_account_id, json, hash, commitId);
+    } else if (revision.kind === "event") {
+      this.db.query("INSERT INTO event_revisions VALUES (?, ?, ?, ?, ?)").run(revision.revision_id, revision.event.owner_account_id, json, hash, commitId);
+    } else {
+      const evidence = revision as EvidenceRevision;
+      this.db.query("INSERT INTO evidence_revisions VALUES (?, ?, ?, ?, ?, ?)").run(evidence.revision_id, "", evidence.evidence.event_revision_id, json, hash, commitId);
     }
   }
 
   snapshot(ownerAccountId: string): GraphSnapshot {
+    const head = this.db.query("SELECT sequence FROM graph_heads WHERE owner_account_id = ?").get(ownerAccountId) as { sequence: number } | null;
     const claims = (this.db.query("SELECT revision_id, placement_status, content_json FROM claim_revisions WHERE owner_account_id = ? ORDER BY revision_id").all(ownerAccountId) as { revision_id: string; placement_status: ClaimRevision["placement_status"]; content_json: string }[])
       .map((row) => ({ revision_id: row.revision_id, placement_status: row.placement_status, claim: JSON.parse(row.content_json) }));
     const entities = (this.db.query("SELECT revision_id, content_json FROM entity_revisions WHERE owner_account_id = ? ORDER BY revision_id").all(ownerAccountId) as { revision_id: string; content_json: string }[])
       .map((row) => ({ revision_id: row.revision_id, entity: JSON.parse(row.content_json) }));
+    const identity_constraints = (this.db.query("SELECT revision_id, content_json FROM identity_revisions WHERE owner_account_id = ? ORDER BY revision_id").all(ownerAccountId) as { revision_id: string; content_json: string }[])
+      .map((row) => ({ revision_id: row.revision_id, constraint: JSON.parse(row.content_json) }));
+    const events = (this.db.query("SELECT revision_id, content_json FROM event_revisions WHERE owner_account_id = ? ORDER BY revision_id").all(ownerAccountId) as { revision_id: string; content_json: string }[])
+      .map((row) => ({ revision_id: row.revision_id, event: JSON.parse(row.content_json) }));
+    // Evidence is owner-scoped through its event. Old schemas did not persist an owner on evidence.
+    const evidence = (this.db.query("SELECT revision_id, content_json FROM evidence_revisions WHERE event_revision_id IN (SELECT revision_id FROM event_revisions WHERE owner_account_id = ?) ORDER BY revision_id").all(ownerAccountId) as { revision_id: string; content_json: string }[])
+      .map((row) => ({ revision_id: row.revision_id, evidence: JSON.parse(row.content_json) }));
     const adjacency = this.db.query("SELECT claim_revision_id, entity_id, role_slot_id FROM generated_adjacency WHERE claim_revision_id IN (SELECT revision_id FROM claim_revisions WHERE owner_account_id = ?) ORDER BY claim_revision_id, entity_id, role_slot_id").all(ownerAccountId) as GraphSnapshot["adjacency"];
-    return { owner_account_id: ownerAccountId, claims, entities, adjacency };
+    return { owner_account_id: ownerAccountId, graph_generation: head?.sequence ?? 0, claims, entities, identity_constraints, events, evidence, adjacency };
   }
 
   retrieve(request: RetrievalRequest): RetrievalResult { return retrieveCommittedGraph(this.snapshot(request.owner_account_id), request); }
 
   counts(): Record<string, number> {
-    const tables = ["claim_revisions", "entity_revisions", "identity_revisions", "generated_adjacency", "consumed_markers", "derivation_attempts", "derivation_commits", "graph_heads"];
+    const tables = ["claim_revisions", "entity_revisions", "identity_revisions", "event_revisions", "evidence_revisions", "generated_adjacency", "consumed_markers", "derivation_attempts", "derivation_commits", "graph_heads"];
     return Object.fromEntries(tables.map((table) => [table, (this.db.query(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count]));
   }
 }

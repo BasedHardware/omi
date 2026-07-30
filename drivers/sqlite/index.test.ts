@@ -47,18 +47,18 @@ test("T9 same key plus a different input/version digest is a hard conflict; equa
 test("T9 injected crash rolls back every write; committed active claims remain traversable", () => {
   const ledger = new SqliteLedger(new Database(":memory:"));
   expect(() => ledger.append(transition(), "after_adjacency")).toThrow("injected crash");
-  expect(ledger.counts()).toEqual({ claim_revisions: 0, entity_revisions: 0, identity_revisions: 0, generated_adjacency: 0, consumed_markers: 0, derivation_attempts: 0, derivation_commits: 0, graph_heads: 0 });
+  expect(ledger.counts()).toEqual({ claim_revisions: 0, entity_revisions: 0, identity_revisions: 0, event_revisions: 0, evidence_revisions: 0, generated_adjacency: 0, consumed_markers: 0, derivation_attempts: 0, derivation_commits: 0, graph_heads: 0 });
   ledger.append(transition());
   const snapshot = ledger.snapshot("owner-1");
   for (const claim of snapshot.claims.filter((item) => item.placement_status === "canonical")) expect(snapshot.adjacency.some((edge) => edge.claim_revision_id === claim.revision_id)).toBe(true);
 });
 
-test("T10 SQLite retrieval reads the committed graph and accounts for withheld claims", () => {
+test("T10 SQLite entity retrieval keeps withheld claims in omission accounting, not returned content", () => {
   const ledger = new SqliteLedger(new Database(":memory:"));
   const withheld = { ...provisional, claim_revision_id: "p-unresolved", claim_lineage_id: "lineage:unresolved", arguments: [{ slot_id: "subject", role: "subject", value: { kind: "literal" as const, value: "He" } }], ambiguity_markers: ["unresolved_subject"] };
   const derivation = prepareDerivation({ attempt_id: "attempt:withheld", commit_id: "commit:withheld", owner_account_id: "owner-1", parent_commit: null, idempotency_key: "key-withheld", input_revisions: [{ revision_id: "p-unresolved", content: withheld }], output_revisions: [], versions, success_kind: "successful_empty" });
   ledger.append({ placement: { offline_experiment: true, allocations: {}, results: [{ input_provisional_revision_id: "p-unresolved", disposition: "defer_review", operation: null, re_resolution_trigger: "new_identity_evidence" }] }, derivation, revisions: [{ kind: "claim", revision_id: "p-unresolved", claim: withheld, placement_status: "withheld_unresolved_subject" }], adjacency: [] });
   const result = ledger.retrieve({ owner_account_id: "owner-1", kind: "entity", entity_id: "entity:alice" });
-  expect(result.claims.map((claim) => claim.status)).toEqual(["withheld_unresolved_subject"]);
-  expect(result.omission_accounting).toMatchObject({ returned_canonical: 0, withheld_items: 1, omitted_items: 0 });
+  expect(result.claims).toEqual([]);
+  expect(result.omission_accounting).toMatchObject({ returned_canonical: 0, withheld_items: 1, omitted_items: 1 });
 });

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AllocatedPlacementPlan } from "../consolidate/plan";
-import type { CanonicalClaim, Entity, IdentityConstraint, ProvisionalClaim } from "../schema";
+import type { CanonicalClaim, Entity, Evidence, IdentityConstraint, L1Event, ProvisionalClaim } from "../schema";
 
 /** Fields whose contents are intentionally excluded from sha256-canonical-redacted-v1. */
 const redactedKeys = new Set(["api_key", "authorization", "raw", "raw_text", "secret", "token"]);
@@ -108,7 +108,10 @@ export interface ClaimRevision {
 }
 export interface EntityRevision { kind: "entity"; revision_id: string; entity: Entity; }
 export interface IdentityRevision { kind: "identity"; revision_id: string; constraint: IdentityConstraint; }
-export type GraphRevision = ClaimRevision | EntityRevision | IdentityRevision;
+/** L1 and evidence are immutable graph inputs too; retrieval needs their provenance, not just IDs. */
+export interface EventRevision { kind: "event"; revision_id: string; event: L1Event; }
+export interface EvidenceRevision { kind: "evidence"; revision_id: string; evidence: Evidence; }
+export type GraphRevision = ClaimRevision | EntityRevision | IdentityRevision | EventRevision | EvidenceRevision;
 export interface GeneratedAdjacency { claim_revision_id: string; entity_id: string; role_slot_id: string; }
 
 /** T9's typed persistence input: T7 allocation plus the already-validated immutable payloads. */
