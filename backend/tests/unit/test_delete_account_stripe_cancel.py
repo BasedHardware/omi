@@ -45,6 +45,7 @@ def users_service():
         "utils.stripe": AutoMockModule("utils.stripe"),
         "utils.executors": AutoMockModule("utils.executors"),
         "utils.log_sanitizer": AutoMockModule("utils.log_sanitizer"),
+        "utils.integration_telemetry": AutoMockModule("utils.integration_telemetry"),
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
         "utils.memory": _pkg("utils.memory"),
