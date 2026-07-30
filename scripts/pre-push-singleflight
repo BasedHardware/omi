@@ -2,7 +2,11 @@
 
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# Git runs hooks with the working directory at the top of the invoking work
+# tree, so fall back to it when `git rev-parse --show-toplevel` cannot resolve a
+# work tree. In a linked worktree whose git context resolves to a git dir,
+# show-toplevel exits 128 and this script would otherwise abort the gate.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT"
 
 # shellcheck source=dev-harness/_resolve_python.sh
