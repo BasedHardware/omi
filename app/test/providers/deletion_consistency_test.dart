@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -20,8 +18,7 @@ void main() {
 
       provider.deleteMemory(memory);
 
-      expect(provider.memories, isEmpty,
-          reason: 'Optimistic removal should hide the memory immediately');
+      expect(provider.memories, isEmpty, reason: 'Optimistic removal should hide the memory immediately');
       expect(provider.lastDeletedMemory, isNotNull);
       expect(provider.lastDeletedMemory!.id, 'mem-1');
     });
@@ -104,18 +101,19 @@ void main() {
       provider.deleteMemory(memory);
 
       // Optimistic removal happened
-      expect(provider.memories, isEmpty,
-          reason: 'Memory must be removed optimistically');
+      expect(provider.memories, isEmpty, reason: 'Memory must be removed optimistically');
 
       // Pending state is set — this is what loadMemories checks in the fix
-      expect(provider.lastDeletedMemory, isNotNull,
-          reason: 'Pending deletion state must be set during undo window');
+      expect(provider.lastDeletedMemory, isNotNull, reason: 'Pending deletion state must be set during undo window');
 
       // No memory with the deleted ID should exist in the list.
       // This invariant must hold even if a background refresh fires during
       // the undo window — the fix ensures loadMemories filters it out.
-      expect(provider.memories.every((m) => m.id != 'mem-5'), isTrue,
-          reason: 'No memory with pending-deletion ID should exist in the list');
+      expect(
+        provider.memories.every((m) => m.id != 'mem-5'),
+        isTrue,
+        reason: 'No memory with pending-deletion ID should exist in the list',
+      );
     });
 
     test('undo window keeps pending state until explicit confirmation or restore', () {
