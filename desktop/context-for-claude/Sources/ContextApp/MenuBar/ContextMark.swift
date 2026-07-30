@@ -3,9 +3,9 @@ import AppKit
 /// The Context for Claude mark: a round head with two eyes and two little legs.
 ///
 /// Drawn as vectors rather than shipped as a PNG so it stays crisp at any menu bar height and on
-/// any display scale, and marked as a template image so macOS owns the colour — it inverts itself
-/// for light and dark menu bars, and dims correctly when the item is inactive. A bitmap would need
-/// four assets and would still be wrong on the fifth display.
+/// any display scale — a bitmap would need four assets and would still be wrong on the fifth
+/// display. Drawn in clay rather than as a template, so it is the brand's mark on every ground
+/// instead of whatever tint the menu bar would have imposed.
 ///
 /// The geometry is deliberately heavier than the source drawing. At 18 pt a hairline outline
 /// disappears into a busy menu bar, so the stroke is thickened and the eyes enlarged until the
@@ -27,9 +27,20 @@ enum ContextMark {
             draw(in: size, struckThrough: struckThrough)
             return true
         }
-        image.isTemplate = true
+        // Not a template. A template mark is tinted by macOS — black on a light menu bar, white on a
+        // dark one — which is the right default and the wrong answer here: the mark *is* the brand,
+        // and clay is the whole of it. The cost is real and worth naming: it no longer inverts with
+        // the menu bar's appearance, and it will not dim with the item when the app is inactive.
+        // Clay carries that because it holds contrast on both grounds without changing.
+        image.isTemplate = false
         return image
     }
+
+    /// Anthropic's clay — the same value the rest of the product accents with (`Ink.bronze`).
+    ///
+    /// Written out here rather than reached for across the module: this file draws into AppKit and
+    /// owns no SwiftUI, and one literal in one place beats an import that exists only to avoid it.
+    static let clay = NSColor(srgbRed: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255, alpha: 1)
 
     /// All coordinates are expressed against a 20×20 design box and scaled, so the proportions hold
     /// at every size.
@@ -37,8 +48,8 @@ enum ContextMark {
         let s = min(size.width, size.height) / 20
         func p(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSPoint(x: x * s, y: y * s) }
 
-        NSColor.black.setStroke()
-        NSColor.black.setFill()
+        clay.setStroke()
+        clay.setFill()
 
         // Head. Sits high in the box to leave the legs room; slightly wider than tall, as drawn.
         let head = NSBezierPath(ovalIn: NSRect(
