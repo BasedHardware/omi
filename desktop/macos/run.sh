@@ -1298,6 +1298,15 @@ build_launch_env_args() {
     if [ -n "${OMI_FORCE_CANONICAL_MEMORY_ATLAS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CANONICAL_MEMORY_ATLAS=$OMI_FORCE_CANONICAL_MEMORY_ATLAS")
     fi
+    # Forward automation token overrides when the caller already pinned them
+    # (e.g. qualify-desktop-beta.sh). Default token discovery prefers Darwin
+    # user temp in harness clients, matching NSTemporaryDirectory().
+    if [ -n "${OMI_AUTOMATION_TOKEN_FILE:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_AUTOMATION_TOKEN_FILE=$OMI_AUTOMATION_TOKEN_FILE")
+    fi
+    if [ -n "${OMI_AUTOMATION_TOKEN:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_AUTOMATION_TOKEN=$OMI_AUTOMATION_TOKEN")
+    fi
 }
 
 build_launch_env_args

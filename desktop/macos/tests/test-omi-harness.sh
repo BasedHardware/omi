@@ -414,6 +414,14 @@ with tempfile.TemporaryDirectory() as directory:
         raise AssertionError("production bundle was not rejected")
 
 assert module.NAMED_NON_PRODUCTION_BUNDLE_PREFIX == "com.omi.omi-"
+
+# Missing token must fail loud (not silently omit Authorization).
+del os.environ["OMI_AUTOMATION_TOKEN"]
+os.environ["TMPDIR"] = "/tmp"
+os.environ.pop("OMI_AUTOMATION_TOKEN_FILE", None)
+missing = module.request_json("http://127.0.0.1:59999", "GET", "/state")
+assert missing.get("ok") is False
+assert "automation_token_missing" in str(missing.get("error", ""))
 PY
 
 python3 - "$MACOS_DIR/scripts/desktop-flow-lint.py" <<'PY'

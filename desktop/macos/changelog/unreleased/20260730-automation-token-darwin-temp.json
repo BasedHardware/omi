@@ -1,0 +1,3 @@
+{
+  "change": "Fixed desktop qualification harness auth so local automation flows can reach the running app again"
+}
