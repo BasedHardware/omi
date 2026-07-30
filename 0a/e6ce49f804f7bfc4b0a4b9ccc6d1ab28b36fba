@@ -1,0 +1,33 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionChoreography.swift
+  s_18cae1c5af4258::t_3042f38b3bbdfc 209
+  s_18cae1c5af4258::t_e2d45d1530eb7b 523
+  s_18cae1c5af4258::t_bad5cffa087793 807-811
+  s_18cae1c5af4258::t_d685f68936cc70 1-170,172-208,210-216,218-321,333-334,336-384,392,423-451,454-522,524-589,594,596-610,619-667,670-673,678-681,683-686,691-702,704-706,708-751,753-783,787-806,812-861,870-872,875-887
+  s_18cae1c5af4258::t_370a91b07f4ebb 874
+  s_18cae1c5af4258::t_57b4f384a0f7ff 385-391,393-422
+  s_18cae1c5af4258::t_58626ba64a2e6c 784-786
+  s_18cae1c5af4258::t_ee1ddf70a5c6bb 217
+  s_18cae1c5af4258::t_b108d5b82ca2a6 590-593,595,611-618
+  s_18cae1c5af4258::t_e7bb5dd0724d36 452-453
+  s_18cae1c5af4258::t_aae71876f1e8fe 322-332,335
+  s_18cae1c5af4258::t_0bfcdbc84bbe37 752
+  s_18cae1c5af4258::t_0d6b294801ab0f 862-869,873
+  s_18cae1c5af4258::t_884fdf4fc04507 171
+  s_18cae1c5af4258::t_70b4ea561207fc 668-669,674-677,682,687-690,703,707
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "0ae6ce49f804f7bfc4b0a4b9ccc6d1ab28b36fba",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
