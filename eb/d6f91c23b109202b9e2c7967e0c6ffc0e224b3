@@ -1,0 +1,53 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Ink.swift
+  s_18cae1c5af4258::t_7c33cde1215d3d 4-9,11-15,22-26,34-35,37,39,41-64,66-83,86-90,92,94-104
+  s_18cae1c5af4258::t_fbce51f4e27d4f 589-590
+  s_18cae1c5af4258::t_3d8847bb5a8066 331,355,478,544,594,627-638,649-651,653,664-667,675-744,747-748,758-759,908
+  s_18cae1c5af4258::t_ef9fe3fca0a9d4 346,348-352,354
+  s_18cae1c5af4258::t_e6e1da5e9d3495 121-133,135,137-141
+  s_18cae1c5af4258::t_865e432e375230 317,320-323,327,330
+  s_18cae1c5af4258::t_458401d26df2d0 105-108,142-145,332-334,356,358,441,447,454,546,587-588,593,595-596,601,614,763,796,798,902-903,905,923
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_18cae1c5af4258::t_2185d2606b14d6 284-285
+  s_18cae1c5af4258::t_8e6bfe7308f95f 211,243,314-351
+  s_18cae1c5af4258::t_2f728bfebe2a0a 32-38,40,42,44,47,50-53,62-63,65,67-69,72-73,75,82-83,85,90,93-98,103
+  s_18cae1c5af4258::t_37f27bae172e22 227,232-233,238
+  s_18cae1c5af4258::t_4d66c5d7630de7 188,191-194,197,202-203
+  s_18cae1c5af4258::t_216cb079c4b23f 12-18
+  s_18cae1c5af4258::t_9f24aeb8093725 105,110-111,130-131,206,210,215-216,226,244,247-249,286-289,291-292,300,352-358
+desktop/context-for-claude/Tests/ContextAppTests/MenuBarPresentationTests.swift
+  s_18cae1c5af4258::t_1fec2f2f1929b6 1-2,8-94
+  s_18cae1c5af4258::t_382daa476b04ab 3
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_18cae1c5af4258::t_cc277b558a2ea8 45-50,54-57
+  s_18cae1c5af4258::t_5469305be95df3 58
+desktop/context-for-claude/Sources/ContextApp/MenuBar/ContextMark.swift
+  s_18cae1c5af4258::t_047477d5ccdfb4 6-8,30,40-41
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusItemController.swift
+  s_18cae1c5af4258::t_f0db430b6f7f37 50-52
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Backdrop.swift
+  s_18cae1c5af4258::t_1f7afa1d9e04ff 46-48,54,106,112-113,265-267
+desktop/context-for-claude/Sources/ContextApp/Onboarding/MenuBarSpotlight.swift
+  s_18cae1c5af4258::t_0b4d4aca3632c1 126-128,137
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_18cae1c5af4258::t_a758693b4b16fb 139,163,167,185,189,195,257,261,268,324,333,390,396,421,435-438,442-444
+desktop/context-for-claude/Sources/ContextApp/Onboarding/RandomizedText.swift
+  s_18cae1c5af4258::t_6ce009d5e17c36 56,63,127,129-132,134-135
+desktop/context-for-claude/docs/design-system.md
+  s_18cae1c5af4258::t_ed39d6de4652f9 3-7,9-13,17,20-33,36-39,43-45,47-48,50-52,54-57,59-60,62,64-67,71-72,74,76-93,96,101-102,112,120-123,125-128,130-133,135-143,147-149,160-162,165-168,184,186-191,195,197-199,201-203,205-206,208-210,212-237,241-245,261-264,290-307,309,317-350
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ebd6f91c23b109202b9e2c7967e0c6ffc0e224b3",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
