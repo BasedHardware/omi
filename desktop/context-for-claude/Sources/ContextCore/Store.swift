@@ -562,6 +562,35 @@ public final class ContextStore: @unchecked Sendable {
             }
         }
 
+        // The owning application's bundle identifier, which capture already knew and discarded.
+        //
+        // `ScreenWatcher` reads `frontmostApplication.bundleIdentifier` on every tick and uses it
+        // for exclusion decisions, then stores only the *display name*. That is the wrong half to
+        // keep for anything that has to find the app again: resolving "Cursor" or "Preview" back to
+        // an installed bundle means probing a list of directories for `<name>.app` and guessing at
+        // bundle ids from the name, which is a heuristic that silently fails on renamed apps
+        // (`System Preferences` → `System Settings`), on anything not in a standard directory, and
+        // on every command-line tool that owns a window. The identifier is the actual key —
+        // `NSWorkspace.urlForApplication(withBundleIdentifier:)` answers it exactly or not at all.
+        //
+        // Nullable with no default, like `confidence` and the speaker columns before it: every row
+        // captured before today legitimately has no recorded identifier, and NULL has to keep
+        // meaning "not recorded" rather than collapsing into a claim about which app it was.
+        // `RewindQueries.bundleIdsByApp` is what makes that cheap — one new sighting of an app
+        // teaches its whole back catalogue — so the historical NULLs need no backfill and get none.
+        //
+        // Additive and unindexed, and therefore safe for the two external-content FTS tables built
+        // over `frames`: `frames_fts` covers (ocrText, windowTitle, appName) and `frames_ax_fts`
+        // covers axText, and neither is touched by a column appearing beneath them. Adding a column
+        // *to* an FTS table would mean dropping and rebuilding that index; adding one to the content
+        // table does not, which is the same reasoning `v6-accessibility-tree` recorded. Existing
+        // rows stay valid and readable throughout.
+        migrator.registerMigration("v7-frame-bundle-id") { db in
+            try db.alter(table: "frames") { t in
+                t.add(column: "bundleId", .text)
+            }
+        }
+
         return migrator
     }
 
