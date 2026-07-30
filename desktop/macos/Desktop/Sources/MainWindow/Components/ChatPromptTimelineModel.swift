@@ -8,6 +8,7 @@ struct ChatPromptMark: Identifiable, Equatable {
   let id: String
   let prompt: String
   let reply: String
+  let createdAt: Date
   /// 0 at the top of the document, 1 at its foot.
   let fraction: CGFloat
 }
@@ -19,6 +20,7 @@ struct ChatPromptSource: Identifiable, Equatable {
   let id: String
   let prompt: String
   let reply: String
+  let createdAt: Date
 }
 
 /// Turns a transcript plus whatever row geometry has been measured into the
@@ -41,7 +43,8 @@ enum ChatPromptTimelineModel {
       ChatPromptSource(
         id: message.id,
         prompt: preview(message.text),
-        reply: preview(reply(after: index, in: messages))
+        reply: preview(reply(after: index, in: messages)),
+        createdAt: message.createdAt
       )
     }
   }
@@ -73,6 +76,7 @@ enum ChatPromptTimelineModel {
         id: source.id,
         prompt: source.prompt,
         reply: source.reply,
+        createdAt: source.createdAt,
         fraction: documentHeight > 0
           ? clamp(resolved[position] / documentHeight)
           : evenFraction(position, of: sources.count)

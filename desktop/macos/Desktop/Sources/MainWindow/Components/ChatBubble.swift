@@ -416,7 +416,7 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private func messageMetadataRow(includeRatingButtons: Bool, includeCopyButton: Bool) -> some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+    HStack(alignment: .center, spacing: OmiSpacing.sm) {
       if includeRatingButtons || includeCopyButton {
         HStack(spacing: OmiSpacing.sm) {
           if includeRatingButtons {
@@ -433,10 +433,9 @@ struct ChatBubble: View {
         }
       }
 
-      Text(message.createdAt, format: .dateTime.year().month(.abbreviated).day().hour().minute())
-        .scaledFont(size: OmiType.micro)
-        .foregroundColor(OmiColors.textTertiary.opacity(0.82))
-        .frame(maxWidth: .infinity, alignment: .trailing)
+      Spacer(minLength: 0)
+
+      ChatMessageTimestamp(date: message.createdAt)
     }
     // Quiet timeline: actions and timestamps only surface while the reader
     // is on the message — by pointer hover or keyboard focus — or
@@ -549,6 +548,19 @@ struct ChatBubble: View {
         MessageMetadataPopover(metadata: metadata)
       }
     }
+  }
+}
+
+/// Shared understated date treatment for a transcript row and its prompt-rail
+/// preview. Keeping this outside the bubble makes the time contextual rather
+/// than part of the message itself.
+struct ChatMessageTimestamp: View {
+  let date: Date
+
+  var body: some View {
+    Text(date, format: .dateTime.year().month(.abbreviated).day().hour().minute())
+      .scaledFont(size: OmiType.micro)
+      .foregroundColor(OmiColors.textTertiary.opacity(0.82))
   }
 }
 
