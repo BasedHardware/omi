@@ -54,6 +54,48 @@ def test_provisional_env_var_present_is_rendered(monkeypatch):
     assert rendered == 'OMI_LLM_GATEWAY_URL=http://10.0.0.1'
 
 
+def test_projection_bucket_is_explicitly_optional_until_rollout(monkeypatch):
+    monkeypatch.delenv('BUCKET_PROJECTION_IMAGES', raising=False)
+    for environment in ('dev', 'prod'):
+        cloud_run = _MANIFEST['environments'][environment]['cloud_run']
+        for surface in (
+            cloud_run['services']['backend']['env'],
+            cloud_run['jobs']['notifications-job']['env'],
+        ):
+            entry = surface['BUCKET_PROJECTION_IMAGES']
+            assert entry['optional'] is True
+            assert entry['default'] == ''
+            assert _MODULE['_render_env_vars']({'BUCKET_PROJECTION_IMAGES': entry}) == 'BUCKET_PROJECTION_IMAGES='
+
+
+def test_projection_secret_bindings_follow_their_rollout_inputs(monkeypatch):
+    secrets = _MANIFEST['environments']['prod']['cloud_run']['jobs']['notifications-job']['secrets']
+    conditional_names = {'OMI_LLM_GATEWAY_SERVICE_TOKEN', 'REDIS_DB_PASSWORD'}
+
+    monkeypatch.delenv('PROJECTION_ENABLED_USERS', raising=False)
+    monkeypatch.delenv('REDIS_DB_HOST', raising=False)
+    rendered_secrets = _MODULE['_render_secrets'](secrets)
+    assert all(f'{name}=' not in rendered_secrets for name in conditional_names)
+    assert conditional_names.isdisjoint(_MODULE['_render_secret_names'](secrets).split(','))
+
+    monkeypatch.setenv('PROJECTION_ENABLED_USERS', 'owner-a')
+    rendered_secrets = _MODULE['_render_secrets'](secrets)
+    assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest' in rendered_secrets
+    assert 'REDIS_DB_PASSWORD=' not in rendered_secrets
+
+    monkeypatch.setenv('REDIS_DB_HOST', '10.0.0.2')
+    rendered_secrets = _MODULE['_render_secrets'](secrets)
+    rendered_names = set(_MODULE['_render_secret_names'](secrets).split(','))
+    assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest' in rendered_secrets
+    assert 'REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest' in rendered_secrets
+    assert conditional_names <= rendered_names
+
+
+def test_conditional_secret_marker_requires_an_environment_variable_name():
+    with pytest.raises(ValueError, match='enabled_if_env_var'):
+        _MODULE['_render_secrets']({'TOKEN': {'secret': 'TOKEN', 'enabled_if_env_var': ''}})
+
+
 @pytest.mark.parametrize(
     ('value', 'expected'),
     [
@@ -148,12 +190,15 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
+        'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+        'REDIS_DB_PASSWORD',
     }
 
 
 def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setenv('BUCKET_PROJECTION_IMAGES', 'fixture-projection-images')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
     monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
@@ -187,6 +232,7 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
 def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setenv('BUCKET_PROJECTION_IMAGES', 'fixture-projection-images')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
     monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')

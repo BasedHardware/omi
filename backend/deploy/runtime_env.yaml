@@ -290,6 +290,11 @@ environments:
       services:
         backend:
           env:
+            BUCKET_PROJECTION_IMAGES:
+              env_var: BUCKET_PROJECTION_IMAGES
+              default: ''
+              optional: true
+              category: projection_rollout
             SYNC_LEDGER_FENCE_MODE:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
@@ -678,11 +683,33 @@ environments:
       jobs:
         notifications-job:
           env:
+            BASE_API_URL:
+              value: https://api.omiapi.com
+              category: service_discovery
+            BUCKET_PROJECTION_IMAGES:
+              env_var: BUCKET_PROJECTION_IMAGES
+              default: ''
+              optional: true
+              category: projection_rollout
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            PROJECTION_ENABLED_USERS:
+              env_var: PROJECTION_ENABLED_USERS
+              default: ''
+              optional: true
+              category: projection_rollout
+            REDIS_DB_HOST:
+              env_var: REDIS_DB_HOST
+              default: ''
+              optional: true
+              category: reliability
             # X connector sync still indexes via Pinecone (not memory maintenance).
             PINECONE_INDEX_NAME:
               value: memories-backend-dev
@@ -699,9 +726,17 @@ environments:
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+              enabled_if_env_var: PROJECTION_ENABLED_USERS
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
               version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
+              enabled_if_env_var: REDIS_DB_HOST
         memory-maintenance-job:
           # Keep the known-good dev maintenance capacity in the checked-in deploy contract.
           # These must not rely on a prior Cloud Run revision retaining live-only patches.
@@ -973,6 +1008,11 @@ environments:
       services:
         backend:
           env:
+            BUCKET_PROJECTION_IMAGES:
+              env_var: BUCKET_PROJECTION_IMAGES
+              default: ''
+              optional: true
+              category: projection_rollout
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -1360,9 +1400,31 @@ environments:
       jobs:
         notifications-job:
           env:
+            BASE_API_URL:
+              value: https://api.omi.me
+              category: service_discovery
+            BUCKET_PROJECTION_IMAGES:
+              env_var: BUCKET_PROJECTION_IMAGES
+              default: ''
+              optional: true
+              category: projection_rollout
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            PROJECTION_ENABLED_USERS:
+              env_var: PROJECTION_ENABLED_USERS
+              default: ''
+              optional: true
+              category: projection_rollout
+            REDIS_DB_HOST:
+              env_var: REDIS_DB_HOST
+              default: ''
+              optional: true
+              category: reliability
             # X connector sync still indexes via Pinecone (not memory maintenance).
             PINECONE_INDEX_NAME:
               value: memories-backend
@@ -1377,9 +1439,17 @@ environments:
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+              enabled_if_env_var: PROJECTION_ENABLED_USERS
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
               version: latest
+            REDIS_DB_PASSWORD:
+              secret: REDIS_DB_PASSWORD
+              version: latest
+              enabled_if_env_var: REDIS_DB_HOST
         memory-maintenance-job:
           flags:
             --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED

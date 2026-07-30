@@ -48,6 +48,7 @@ OUT_OF_SCOPE_PREFIXES = (
     '/v2/messages/',  # SSE streaming
     '/v2/files',  # multipart upload
     '/v2/apps',  # Rust-proxied app routes (desktop uses v1/apps)
+    '/v1/users/projections/test',  # non-production demo trigger, intentionally absent from OpenAPI
 )
 
 # Swift string-interpolation route literals look like "v1/conversations/\(id)".

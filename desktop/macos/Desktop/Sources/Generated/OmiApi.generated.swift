@@ -3138,6 +3138,186 @@ public enum OmiAPI {
   }
 
 
+  public struct ProjectionEvidenceReceipt: Codable {
+    public let label: String
+    public let occurredAt: String?
+    public let reference: String
+    public let source: String
+
+    private enum CodingKeys: String, CodingKey {
+      case label
+      case occurredAt = "occurred_at"
+      case reference
+      case source
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      label = try c.decode(String.self, forKey: .label)
+      occurredAt = try c.decodeIfPresent(String.self, forKey: .occurredAt)
+      reference = try c.decode(String.self, forKey: .reference)
+      source = try c.decode(String.self, forKey: .source)
+    }
+
+    public init(label: String, occurredAt: String?, reference: String, source: String) {
+      self.label = label
+      self.occurredAt = occurredAt
+      self.reference = reference
+      self.source = source
+    }
+  }
+
+
+  public struct ProjectionFeedback: Codable {
+    public let rating: String
+    public let updatedAt: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case rating
+      case updatedAt = "updated_at"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      rating = try c.decode(String.self, forKey: .rating)
+      updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
+    }
+
+    public init(rating: String, updatedAt: String?) {
+      self.rating = rating
+      self.updatedAt = updatedAt
+    }
+  }
+
+
+  public struct ProjectionFeedbackRequest: Codable {
+    public let rating: String
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      rating = try c.decode(String.self, forKey: .rating)
+    }
+
+    public init(rating: String) {
+      self.rating = rating
+    }
+  }
+
+
+  public struct ProjectionGeneration: Codable {
+    public let model: String?
+    public let quality: String?
+    public let size: String?
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      model = try c.decodeIfPresent(String.self, forKey: .model)
+      quality = try c.decodeIfPresent(String.self, forKey: .quality)
+      size = try c.decodeIfPresent(String.self, forKey: .size)
+    }
+
+    public init(model: String?, quality: String?, size: String?) {
+      self.model = model
+      self.quality = quality
+      self.size = size
+    }
+  }
+
+
+  public struct ProjectionResponse: Codable {
+    public let createdAt: String?
+    public let feedback: ProjectionFeedback?
+    public let generation: ProjectionGeneration?
+    public let id: String?
+    public let imageUrl: String?
+    public let imperative: String?
+    public let stage: String?
+    public let subject: String?
+    public let whyThis: ProjectionWhyThis?
+
+    private enum CodingKeys: String, CodingKey {
+      case createdAt = "created_at"
+      case feedback
+      case generation
+      case id
+      case imageUrl = "image_url"
+      case imperative
+      case stage
+      case subject
+      case whyThis = "why_this"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
+      feedback = try c.decodeIfPresent(ProjectionFeedback.self, forKey: .feedback)
+      generation = try c.decodeIfPresent(ProjectionGeneration.self, forKey: .generation)
+      id = try c.decodeIfPresent(String.self, forKey: .id)
+      imageUrl = try c.decodeIfPresent(String.self, forKey: .imageUrl)
+      imperative = try c.decodeIfPresent(String.self, forKey: .imperative)
+      stage = try c.decodeIfPresent(String.self, forKey: .stage)
+      subject = try c.decodeIfPresent(String.self, forKey: .subject)
+      whyThis = try c.decodeIfPresent(ProjectionWhyThis.self, forKey: .whyThis)
+    }
+
+    public init(createdAt: String?, feedback: ProjectionFeedback?, generation: ProjectionGeneration?, id: String?, imageUrl: String?, imperative: String?, stage: String?, subject: String?, whyThis: ProjectionWhyThis?) {
+      self.createdAt = createdAt
+      self.feedback = feedback
+      self.generation = generation
+      self.id = id
+      self.imageUrl = imageUrl
+      self.imperative = imperative
+      self.stage = stage
+      self.subject = subject
+      self.whyThis = whyThis
+    }
+  }
+
+
+  public struct ProjectionWhyThis: Codable {
+    public let evidence: [ProjectionEvidenceReceipt]?
+    public let evidenceTier: String
+    public let selectionRank: Int
+    public let uncertainty: [String]?
+
+    private enum CodingKeys: String, CodingKey {
+      case evidence
+      case evidenceTier = "evidence_tier"
+      case selectionRank = "selection_rank"
+      case uncertainty
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      evidence = try c.decodeIfPresent([ProjectionEvidenceReceipt].self, forKey: .evidence)
+      evidenceTier = try c.decode(String.self, forKey: .evidenceTier)
+      selectionRank = try c.decode(Int.self, forKey: .selectionRank)
+      uncertainty = try c.decodeIfPresent([String].self, forKey: .uncertainty)
+    }
+
+    public init(evidence: [ProjectionEvidenceReceipt]?, evidenceTier: String, selectionRank: Int, uncertainty: [String]?) {
+      self.evidence = evidence
+      self.evidenceTier = evidenceTier
+      self.selectionRank = selectionRank
+      self.uncertainty = uncertainty
+    }
+  }
+
+
+  public struct ProjectionsResponse: Codable {
+    public let projections: [ProjectionResponse]?
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      projections = try c.decodeIfPresent([ProjectionResponse].self, forKey: .projections)
+    }
+
+    public init(projections: [ProjectionResponse]?) {
+      self.projections = projections
+    }
+  }
+
+
   public struct Recommendation: Codable {
     public let alternativeAction: String?
     public let dedupeKey: String
@@ -12794,6 +12974,88 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func getProjectionsEndpointV1UsersProjectionsGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> ProjectionsResponse {
+    let _path = "/v1/users/projections"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let limit {
+      queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if let offset {
+      queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(ProjectionsResponse.self, from: data)
+  }
+
+  public static func getProjectionEndpointV1UsersProjectionsProjectionIdGet(client: OmiApiClient, projectionId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> ProjectionResponse {
+    let _path = "/v1/users/projections/\(projectionId)"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(ProjectionResponse.self, from: data)
+  }
+
+  public static func setProjectionFeedbackV1UsersProjectionsProjectionIdFeedbackPost(client: OmiApiClient, projectionId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: ProjectionFeedbackRequest) async throws -> ProjectionFeedback {
+    let _path = "/v1/users/projections/\(projectionId)/feedback"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(ProjectionFeedback.self, from: data)
+  }
+
   public static func getChatMessageCountV1UsersStatsChatMessagesGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/stats/chat-messages"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -14440,5 +14702,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 387 Swift client methods generated.
+  // Total: 390 Swift client methods generated.
 }

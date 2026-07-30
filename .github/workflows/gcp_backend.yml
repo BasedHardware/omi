@@ -623,6 +623,7 @@ jobs:
           LISTEN_FINALIZATION_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_invoker_sa }}
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          BUCKET_PROJECTION_IMAGES: ${{ vars.BUCKET_PROJECTION_IMAGES }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
           MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
           MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}

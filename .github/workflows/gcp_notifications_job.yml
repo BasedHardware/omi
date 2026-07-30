@@ -85,8 +85,12 @@ jobs:
         env:
           # Prod network flags are env_var-backed; without these the renderer
           # exits before notifications_job_* outputs are emitted (same as gcp_backend.yml).
+          BUCKET_PROJECTION_IMAGES: ${{ vars.BUCKET_PROJECTION_IMAGES }}
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
+          PROJECTION_ENABLED_USERS: ${{ vars.PROJECTION_ENABLED_USERS }}
+          REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} --job notifications-job >> "$GITHUB_OUTPUT"
 

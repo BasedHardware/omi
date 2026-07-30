@@ -2616,6 +2616,51 @@ export interface ProgressExtractUpdateResponse {
   reasoning?: string;
 }
 
+export interface ProjectionEvidenceReceipt {
+  label: string;
+  occurred_at?: string | null;
+  reference: string;
+  source: "conversation" | "action_item" | "goal";
+}
+
+export interface ProjectionFeedback {
+  rating: "up" | "down";
+  updated_at?: string | null;
+}
+
+export interface ProjectionFeedbackRequest {
+  rating: "up" | "down";
+}
+
+export interface ProjectionGeneration {
+  model?: string | null;
+  quality?: string | null;
+  size?: string | null;
+}
+
+export interface ProjectionResponse {
+  created_at?: string | null;
+  feedback?: ProjectionFeedback | null;
+  generation?: ProjectionGeneration | null;
+  id?: string | null;
+  image_url?: string | null;
+  imperative?: string | null;
+  stage?: string | null;
+  subject?: string | null;
+  why_this?: ProjectionWhyThis | null;
+}
+
+export interface ProjectionWhyThis {
+  evidence?: Array<ProjectionEvidenceReceipt>;
+  evidence_tier: string;
+  selection_rank: number;
+  uncertainty?: Array<string>;
+}
+
+export interface ProjectionsResponse {
+  projections?: Array<ProjectionResponse>;
+}
+
 export interface PublicFairUseCaseStatusResponse {
   case_ref: string;
   created_at?: string | null;
@@ -4107,6 +4152,13 @@ export interface OmiApiSchemas {
   "ProgressExtractRequest": ProgressExtractRequest;
   "ProgressExtractResponse": ProgressExtractResponse;
   "ProgressExtractUpdateResponse": ProgressExtractUpdateResponse;
+  "ProjectionEvidenceReceipt": ProjectionEvidenceReceipt;
+  "ProjectionFeedback": ProjectionFeedback;
+  "ProjectionFeedbackRequest": ProjectionFeedbackRequest;
+  "ProjectionGeneration": ProjectionGeneration;
+  "ProjectionResponse": ProjectionResponse;
+  "ProjectionWhyThis": ProjectionWhyThis;
+  "ProjectionsResponse": ProjectionsResponse;
   "PublicFairUseCaseStatusResponse": PublicFairUseCaseStatusResponse;
   "RateMessageRequest": RateMessageRequest;
   "RebuildResponse": RebuildResponse;
@@ -7540,6 +7592,37 @@ export interface OmiApiPaths {
       operationId: "get_user_profile_endpoint_v1_users_profile_get";
       responses: {
         "200": UserProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/projections": {
+    get: {
+      operationId: "get_projections_endpoint_v1_users_projections_get";
+      responses: {
+        "200": ProjectionsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/projections/{projection_id}": {
+    get: {
+      operationId: "get_projection_endpoint_v1_users_projections__projection_id__get";
+      responses: {
+        "200": ProjectionResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/projections/{projection_id}/feedback": {
+    post: {
+      operationId: "set_projection_feedback_v1_users_projections__projection_id__feedback_post";
+      responses: {
+        "200": ProjectionFeedback;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -14541,6 +14624,68 @@ export async function get_user_profile_endpoint_v1_users_profile_get(header: { a
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_projections_endpoint_v1_users_projections_get(query: { limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ProjectionsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/projections`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_projection_endpoint_v1_users_projections__projection_id__get(path: { projection_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ProjectionResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/projections/${path.projection_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function set_projection_feedback_v1_users_projections__projection_id__feedback_post(path: { projection_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ProjectionFeedbackRequest, init?: OmiApiClientInit): Promise<ProjectionFeedback> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/projections/${path.projection_id}/feedback`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_chat_message_count_v1_users_stats_chat_messages_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChatMessageCountResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/stats/chat-messages`;
@@ -15781,4 +15926,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 387 client methods generated.
+// Total: 390 client methods generated.
