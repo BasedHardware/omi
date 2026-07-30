@@ -128,6 +128,7 @@ enum AppBuild {
   }
 
   static func mayRunLegacyStableAppCleanup(bundleIdentifier: String) -> Bool {
+  /// Release path advancement for v0.12.148.
     bundleIdentifier == productionBundleIdentifier
   }
 
