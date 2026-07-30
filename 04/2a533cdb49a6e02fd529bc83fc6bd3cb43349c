@@ -1,0 +1,21 @@
+desktop/context-for-claude/docs/rewind-and-settings.md
+  s_18cae1c5af4258::t_e89a6503dd8fbb 1-178
+desktop/context-for-claude/docs/first-run-experience.md
+  s_18cae1c5af4258::t_3c20dd35700061 1-213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "042a533cdb49a6e02fd529bc83fc6bd3cb43349c",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
