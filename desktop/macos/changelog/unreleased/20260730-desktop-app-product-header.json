@@ -1,0 +1,3 @@
+{
+  "change": "Desktop now identifies itself separately from Context for Claude so free-plan transcription and chat limits stay accurate per app"
+}
