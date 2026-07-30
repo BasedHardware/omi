@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import tempfile
 import uuid
 from pathlib import Path
@@ -21,6 +22,15 @@ def uses_gcs() -> bool:
 def projection_images_bucket_name() -> str | None:
     """Read the private projection bucket at the call boundary."""
     return (os.getenv('BUCKET_PROJECTION_IMAGES') or '').strip() or None
+
+
+def _local_projection_root() -> Path:
+    return Path(os.getenv('PROJECTION_LOCAL_IMAGE_DIR') or Path(tempfile.gettempdir()) / 'omi-projection-images')
+
+
+def _local_owner_root(uid: str) -> Path:
+    owner_scope = hashlib.sha256(uid.encode('utf-8')).hexdigest()
+    return _local_projection_root() / owner_scope
 
 
 def projection_image_path(uid: str, projection_id: str, attempt_token: str | None = None) -> str:
@@ -64,9 +74,7 @@ def local_projection_image_path(
         projection_id,
         persisted_path or projection_image_path(uid, projection_id, attempt_token),
     )
-    root = Path(os.getenv('PROJECTION_LOCAL_IMAGE_DIR') or Path(tempfile.gettempdir()) / 'omi-projection-images')
-    owner_scope = hashlib.sha256(uid.encode('utf-8')).hexdigest()
-    owner_root = root / owner_scope
+    owner_root = _local_owner_root(uid)
     owner_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     relative_path = image_path.removeprefix(f'{uid}/')
     local_path = owner_root.joinpath(*relative_path.split('/'))
@@ -98,3 +106,25 @@ def download_projection_image(uid: str, projection_id: str, persisted_path: obje
         raise BlobNotFound('Projection image storage is not configured')
     image_path = validate_projection_image_path(uid, projection_id, persisted_path)
     return gcs_storage.download_blob_bytes(bucket_name, image_path)
+
+
+def delete_all_projection_images(uid: str) -> int:
+    """Delete every projection image for one account from the active storage backend."""
+    if not uid:
+        return 0
+
+    bucket_name = projection_images_bucket_name()
+    if bucket_name:
+        bucket = gcs_storage.get_storage_bucket(bucket_name)
+        deleted = 0
+        for blob in bucket.list_blobs(prefix=f'{uid}/'):
+            blob.delete()
+            deleted += 1
+        return deleted
+
+    owner_root = _local_owner_root(uid)
+    if not owner_root.exists():
+        return 0
+    deleted = sum(1 for path in owner_root.rglob('*') if path.is_file())
+    shutil.rmtree(owner_root)
+    return deleted

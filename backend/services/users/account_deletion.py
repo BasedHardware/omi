@@ -25,6 +25,7 @@ from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
 from utils.other.storage import delete_all_conversation_recordings
+from utils.projections.storage import delete_all_projection_images
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
 
@@ -131,6 +132,12 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
     except Exception as e:
         record_failure('required_failures', 'conversation_recordings', e)
         logger.error(f'delete_account purge recordings failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        delete_all_projection_images(uid)
+    except Exception as e:
+        record_failure('required_failures', 'projection_images', e)
+        logger.error(f'delete_account purge projection images failed for {uid}: {sanitize(str(e))}')
 
     try:
         canonical_result = purge_canonical_derived_user_data(uid)

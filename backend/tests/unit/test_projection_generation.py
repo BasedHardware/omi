@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
+from routers.projections import ProjectionResponse, _served
 from utils.projections import generation as generation_module
 from utils.projections.aesthetic import AESTHETIC
 from utils.projections.archetypes import STAGE_IMAGERY
@@ -141,6 +142,7 @@ def test_the_persisted_document_records_what_produced_it(stub_reads):
         'selection_rank': 2,
         'uncertainty': ['1 higher-ranked candidate did not pass grounding checks.'],
     }
+    ProjectionResponse.model_validate(_served(projection))
     # The rated charge is recorded whole: the vector, the spread across completions and the
     # inventory it was rated against. Cheap now, unrecoverable later, and the only way to find
     # out from our own data whether a week of one person's prose rates discriminatingly at all.

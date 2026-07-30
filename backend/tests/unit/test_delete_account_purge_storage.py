@@ -1,9 +1,10 @@
 """Regression test for issue #5088 — account deletion must purge derived data outside Firestore.
 
 Before the fix, _background_wipe_user_data only cleaned Twilio + Firestore, leaving the user's
-Pinecone vectors and GCS conversation recordings behind. The wipe now enumerates IDs (before the
+Pinecone vectors and private GCS objects behind. The wipe now enumerates IDs (before the
 Firestore delete removes them) and purges Pinecone (conversations/memories/action-items/screen-
-activity) + recordings, each backend isolated so a failure never blocks the Firestore wipe.
+activity), recordings, and projection images, with required purge failures blocking the
+irreversible Firestore wipe.
 
 services.users.account_deletion binds its database/utils collaborators at import time
 (``from database.X import Y``), so the fakes must be active before the module is exec'd. This is
@@ -49,6 +50,8 @@ def users_service():
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
+        "utils.projections": _pkg("utils.projections"),
+        "utils.projections.storage": AutoMockModule("utils.projections.storage"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }
     with stub_modules(fakes):
@@ -81,6 +84,7 @@ def _purge_patches(users_service, **overrides):
         "delete_action_item_vectors_batch",
         "delete_screen_activity_vectors",
         "delete_all_conversation_recordings",
+        "delete_all_projection_images",
         "delete_user_caller_ids",
     ):
         patchers[name] = patch.object(users_service, name, create=True, **(overrides.get(name) or {}))
@@ -110,6 +114,7 @@ def test_purge_runs_all_backends_before_firestore_wipe(users_service):
     m["delete_screen_activity_vectors"].assert_called_once_with("uid1", ["s1"])
     # GCS + Firestore
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")
+    m["delete_all_projection_images"].assert_called_once_with("uid1")
     m["delete_user_data"].assert_called_once_with("uid1")
 
 
@@ -139,6 +144,7 @@ def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe(users_serv
     # required vector purge failures must block the irreversible Firestore wipe.
     m["delete_memory_vectors_batch"].assert_called_once()
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")
+    m["delete_all_projection_images"].assert_called_once_with("uid1")
     m["delete_user_data"].assert_not_called()
 
 
@@ -151,6 +157,7 @@ def test_gcs_failure_blocks_firestore_wipe(users_service):
     finally:
         _stop(patchers)
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")  # purge was wired + attempted
+    m["delete_all_projection_images"].assert_called_once_with("uid1")
     m["delete_user_data"].assert_not_called()
 
 
@@ -163,4 +170,5 @@ def test_enumeration_failure_is_isolated(users_service):
     # conversation enumeration is a required purge input, so it blocks the irreversible wipe.
     m["delete_memory_vectors_batch"].assert_called_once_with("uid1", ["m1"])
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")
+    m["delete_all_projection_images"].assert_called_once_with("uid1")
     m["delete_user_data"].assert_not_called()

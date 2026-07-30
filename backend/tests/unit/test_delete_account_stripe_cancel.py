@@ -51,6 +51,8 @@ def users_service():
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
         "utils.other.storage": AutoMockModule("utils.other.storage"),
+        "utils.projections": _pkg("utils.projections"),
+        "utils.projections.storage": AutoMockModule("utils.projections.storage"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }
     with stub_modules(fakes):
