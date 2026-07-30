@@ -93,6 +93,7 @@ class GeneratedMcpApiKey {
   final String keyPrefix;
   final DateTime? lastUsedAt;
   final String name;
+  final String? product;
   final List<String>? scopes;
 
   const GeneratedMcpApiKey({
@@ -102,6 +103,7 @@ class GeneratedMcpApiKey {
     required this.keyPrefix,
     this.lastUsedAt,
     required this.name,
+    this.product,
     this.scopes,
   });
 
@@ -113,6 +115,7 @@ class GeneratedMcpApiKey {
       keyPrefix: _required(_readFieldValue<String>(_readField(json, const ["key_prefix"]), "key_prefix", _readString, requiredField: true, nullable: false), "key_prefix"),
       lastUsedAt: _readFieldValue<DateTime>(_readField(json, const ["last_used_at"]), "last_used_at", _readDateTime, requiredField: false, nullable: true),
       name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      product: _readFieldValue<String>(_readField(json, const ["product"]), "product", _readString, requiredField: false, nullable: true),
       scopes: _readFieldValue<List<String>>(_readField(json, const ["scopes"]), "scopes", _readStringList, requiredField: false, nullable: true),
     );
   }
@@ -125,6 +128,7 @@ class GeneratedMcpApiKey {
       'key_prefix': keyPrefix,
       'last_used_at': lastUsedAt?.toUtc().toIso8601String(),
       'name': name,
+      'product': product,
       'scopes': scopes,
     };
   }
@@ -138,6 +142,7 @@ class GeneratedMcpApiKeyCreated {
   final String keyPrefix;
   final DateTime? lastUsedAt;
   final String name;
+  final String? product;
   final List<String>? scopes;
 
   const GeneratedMcpApiKeyCreated({
@@ -148,6 +153,7 @@ class GeneratedMcpApiKeyCreated {
     required this.keyPrefix,
     this.lastUsedAt,
     required this.name,
+    this.product,
     this.scopes,
   });
 
@@ -160,6 +166,7 @@ class GeneratedMcpApiKeyCreated {
       keyPrefix: _required(_readFieldValue<String>(_readField(json, const ["key_prefix"]), "key_prefix", _readString, requiredField: true, nullable: false), "key_prefix"),
       lastUsedAt: _readFieldValue<DateTime>(_readField(json, const ["last_used_at"]), "last_used_at", _readDateTime, requiredField: false, nullable: true),
       name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      product: _readFieldValue<String>(_readField(json, const ["product"]), "product", _readString, requiredField: false, nullable: true),
       scopes: _readFieldValue<List<String>>(_readField(json, const ["scopes"]), "scopes", _readStringList, requiredField: false, nullable: true),
     );
   }
@@ -173,6 +180,7 @@ class GeneratedMcpApiKeyCreated {
       'key_prefix': keyPrefix,
       'last_used_at': lastUsedAt?.toUtc().toIso8601String(),
       'name': name,
+      'product': product,
       'scopes': scopes,
     };
   }
