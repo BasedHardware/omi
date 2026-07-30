@@ -54,8 +54,10 @@ model_config_features:
       - conv_app_select
       - external_structure
       - proactive_notification
-      - translation
+      - projection_emotions
+      - projection_subject
       - trends
+      - translation
       - what_matters_now
     streaming:
       - chat_responses
