@@ -6192,6 +6192,17 @@
             ],
             "title": "App Id"
           },
+          "app_product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Product"
+          },
           "apps_results": {
             "default": [],
             "items": {
@@ -17213,6 +17224,17 @@
               }
             ],
             "title": "App Id"
+          },
+          "app_product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Product"
           },
           "apps_results": {
             "default": [],
