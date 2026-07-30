@@ -329,10 +329,23 @@ jobs:
 
           PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
           if [ "$PR_STATE" != "MERGED" ]; then
-            # This remains a regular merge. If the bot lacks the protected
-            # branch override, the workflow must fail before it can create a
-            # tag instead of tagging a side branch.
-            gh pr merge "$PR_NUMBER" --merge --admin || gh pr merge "$PR_NUMBER" --merge
+            # main branch policy blocks ordinary merges. Use admin override so
+            # the Omi Bot can sync the changelog without waiting on checks.
+            # Do not fall back to a non-admin merge: a transient --admin failure
+            # (e.g. HTTP 502) would otherwise retry without override and fail
+            # on branch policy (see run 30581710658 / PR #10910).
+            merge_ok=0
+            for attempt in 1 2 3; do
+              if gh pr merge "$PR_NUMBER" --admin --merge; then
+                merge_ok=1
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "Admin merge attempt ${attempt}/3 failed; retrying in 5s..."
+                sleep 5
+              fi
+            done
+            test "$merge_ok" = "1"
           fi
 
           PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
