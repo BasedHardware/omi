@@ -1,6 +1,6 @@
 """Regression tests for `X-App-Product` normalization and cohort fields."""
 
-from database.users import _normalize_product
+from database.user_product import _normalize_product
 
 
 def test_context_for_claude_is_allowed():

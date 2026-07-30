@@ -21,7 +21,7 @@ from utils.client_device import (
     ClientDeviceContext,
     resolve_client_device_from_websocket_auth_message,
 )
-from database.users import _normalize_product
+from database.user_product import _normalize_product
 from utils.other import endpoints as auth
 
 

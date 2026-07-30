@@ -7,7 +7,7 @@ from firebase_admin import auth
 
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
-from database.users import record_user_product
+from database.user_product import record_user_product
 from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
 from utils.executors import critical_executor, run_blocking
 from utils.log_sanitizer import sanitize

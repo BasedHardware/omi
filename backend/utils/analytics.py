@@ -3,7 +3,7 @@ from typing import Optional
 
 from database import user_usage as user_usage_db
 from database.llm_usage import record_llm_usage_bucket
-from database.users import _normalize_product
+from database.user_product import _normalize_product
 
 
 def billable_transcription_seconds(

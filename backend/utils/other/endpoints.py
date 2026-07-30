@@ -13,7 +13,8 @@ import logging
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
-from database.users import record_client_device, record_user_platform, record_user_product
+from database.users import record_client_device, record_user_platform
+from database.user_product import record_user_product
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
 from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
@@ -135,7 +136,6 @@ def get_current_user_uid(
             client_device_id=device_ctx.client_device_id,
             platform=device_ctx.platform,
             app_version=device_ctx.app_version,
-            product=x_app_product,
         )
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
@@ -199,7 +199,6 @@ def get_current_user_uid_no_byok_validation(
             client_device_id=device_ctx.client_device_id,
             platform=device_ctx.platform,
             app_version=device_ctx.app_version,
-            product=x_app_product,
         )
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)

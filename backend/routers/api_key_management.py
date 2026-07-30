@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 import database.dev_api_key as dev_api_key_db
 import database.mcp_api_key as mcp_api_key_db
 from database.api_key_metadata import ApiKeyRevocationUnavailableError, ApiKeyValidationError
-from database.users import _normalize_product
+from database.user_product import _normalize_product
 from dependencies import get_current_user_id
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated

@@ -24,7 +24,7 @@ from database.api_key_metadata import (
     valid_api_key_app_id,
 )
 from models.mcp_api_key import McpApiKey
-from database.users import _normalize_product
+from database.user_product import _normalize_product
 from utils.mcp_api_keys import generate_api_key, hash_api_key
 from utils.mcp_scopes import (
     MCP_APP_KEY_MEMORY_GRANTS_DOC_ID,
