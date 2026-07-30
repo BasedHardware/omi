@@ -136,31 +136,15 @@ _ABSENT = object()
 
 
 def _run(db, monkeypatch, capsys, argv):
-    # WP2/ADR-0028: the grant reader/writer migrated to the neutral storage port and dropped
-    # the injected db_client. They now resolve their backend through
-    # ``database.memory_app_key_grants._store()``. Point that seam at a FakeDocumentStore over
-    # the SAME dict the scan fake uses, so a grant the script writes through the port is visible
-    # to ``db.grant_for(...)`` and a grant seeded via ``db.add_grant(...)`` is read back.
-    store = FakeDocumentStore(backing=db.docs)
-    monkeypatch.setattr(memory_app_key_grants, '_store', lambda: store)
-
-    # The backfill script lives under scripts/ (exempt from the persistence boundary, ADR-0023)
-    # and still threads db_client into the two migrated grant helpers, which no longer accept it.
-    # Adapt the names the script resolves to so the real port-based helpers run with db_client
-    # stripped — the helpers' logic (transaction, dotted-key merge, contract shape) is exercised
-    # unchanged. See residual note: the script should drop these two db_client= kwargs.
-    real_read = memory_app_key_grants.read_app_key_memory_grants_state
-    real_seed = memory_app_key_grants.seed_developer_api_key_memory_grant
-    monkeypatch.setattr(backfill, 'read_app_key_memory_grants_state', lambda uid, db_client=None: real_read(uid))
-    monkeypatch.setattr(
-        backfill,
-        'seed_developer_api_key_memory_grant',
-        lambda uid, key_id, *, default_read=False, write=False, db_client=None: real_seed(
-            uid, key_id, default_read=default_read, write=write
-        ),
-    )
-
-    monkeypatch.setattr(backfill, 'get_firestore_client', lambda: db)
+    # The script now resolves persistence through the neutral storage port (WP2/ADR-0028): it
+    # enumerates ``dev_api_keys`` via ``backfill._store().query(...)`` and the grant reader/writer
+    # go through ``database.memory_app_key_grants._store()``. Point BOTH seams at a FakeDocumentStore
+    # over the same path-keyed dict, then run the REAL script end-to-end — real enumeration, the real
+    # grant reader/writer, no db_client — so this exercises the actual production call path (rather
+    # than papering over a signature mismatch).
+    store_factory = lambda: FakeDocumentStore(backing=db.docs)  # noqa: E731
+    monkeypatch.setattr(memory_app_key_grants, '_store', store_factory)
+    monkeypatch.setattr(backfill, '_store', store_factory)
     monkeypatch.setattr('sys.argv', ['backfill_developer_api_key_memory_grants.py', *argv])
     backfill.main()
     return eval(capsys.readouterr().out.strip())  # the script prints a dict literal
