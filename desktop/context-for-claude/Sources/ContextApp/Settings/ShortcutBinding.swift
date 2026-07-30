@@ -9,7 +9,7 @@ import Foundation
 /// all: they are a *modifier tapped twice*, which is why `tapCount` exists as a field rather than
 /// being implied. A model that could only express "modifiers + key" could not represent the app's own
 /// defaults, so it would have been wrong before the first row was drawn.
-struct ShortcutChord: Equatable, Hashable, Codable, Sendable {
+struct SettingsShortcutChord: Equatable, Hashable, Codable, Sendable {
     /// Virtual key code, or nil for a modifier-only chord.
     var keyCode: UInt16?
     /// `NSEvent.ModifierFlags.rawValue`, already masked to `deviceIndependentFlagsMask`.
@@ -98,10 +98,10 @@ enum ShortcutAction: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// What the app falls back to when the slot is cleared.
-    var defaultChord: ShortcutChord {
+    var defaultChord: SettingsShortcutChord {
         switch self {
-        case .openTimeline: ShortcutChord(modifierFlags: .command, tapCount: 2)
-        case .openSearch: ShortcutChord(modifierFlags: [.command, .shift], tapCount: 2)
+        case .openTimeline: SettingsShortcutChord(modifierFlags: .command, tapCount: 2)
+        case .openSearch: SettingsShortcutChord(modifierFlags: [.command, .shift], tapCount: 2)
         }
     }
 
@@ -120,11 +120,11 @@ enum ShortcutAction: String, CaseIterable, Identifiable, Sendable {
 /// `remedyTitle` is a string rather than a closure so this stays `Equatable` and a view can diff it;
 /// applying it goes back through the provider, which is the only thing that knows how to rewrite
 /// somebody else's configuration.
-struct ShortcutConflict: Equatable, Identifiable, Sendable {
+struct SettingsShortcutConflict: Equatable, Identifiable, Sendable {
     let action: ShortcutAction
     /// The other tool's display name, e.g. `Codex`.
     let owner: String
-    let chord: ShortcutChord
+    let chord: SettingsShortcutChord
     /// One-click switch, e.g. `Switch Codex to ⌥⌥`. Nil when nothing can be done automatically, in
     /// which case the row states the clash and offers no button.
     let remedyTitle: String?
@@ -163,13 +163,13 @@ enum ShortcutRecordResult: Equatable, Sendable {
 @MainActor
 protocol ShortcutBindingProvider: AnyObject {
     /// The chord in force for `action`, or nil when the slot is cleared.
-    func binding(for action: ShortcutAction) -> ShortcutChord?
+    func binding(for action: ShortcutAction) -> SettingsShortcutChord?
     /// Live check. Empty when nothing clashes, which is the common case.
-    func conflicts() -> [ShortcutConflict]
-    func record(_ chord: ShortcutChord, for action: ShortcutAction) -> ShortcutRecordResult
+    func conflicts() -> [SettingsShortcutConflict]
+    func record(_ chord: SettingsShortcutChord, for action: ShortcutAction) -> ShortcutRecordResult
     func clear(_ action: ShortcutAction)
     /// Applies `conflict.remedyTitle`'s promise. A no-op when the remedy was nil.
-    func resolve(_ conflict: ShortcutConflict)
+    func resolve(_ conflict: SettingsShortcutConflict)
     /// Called whenever any of the above would answer differently. Mirrors
     /// `ExclusionEngine.addObserver` so both live surfaces on these panes observe the same way.
     @discardableResult
@@ -188,19 +188,19 @@ final class InMemoryShortcutBindings: ShortcutBindingProvider {
 
     /// Chords macOS will never hand an app, so a recorder that accepted them would produce a
     /// shortcut that silently never fires.
-    static let reservedChords: [ShortcutChord] = [
-        ShortcutChord(keyCode: 12, modifierFlags: .command),  // ⌘Q
-        ShortcutChord(keyCode: 48, modifierFlags: .command),  // ⌘Tab
-        ShortcutChord(keyCode: 49, modifierFlags: .command),  // ⌘Space
+    static let reservedChords: [SettingsShortcutChord] = [
+        SettingsShortcutChord(keyCode: 12, modifierFlags: .command),  // ⌘Q
+        SettingsShortcutChord(keyCode: 48, modifierFlags: .command),  // ⌘Tab
+        SettingsShortcutChord(keyCode: 49, modifierFlags: .command),  // ⌘Space
     ]
 
-    private var chords: [ShortcutAction: ShortcutChord]
-    private var declaredConflicts: [ShortcutConflict]
+    private var chords: [ShortcutAction: SettingsShortcutChord]
+    private var declaredConflicts: [SettingsShortcutConflict]
     private var observers: [UUID: @MainActor () -> Void] = [:]
 
     init(
-        chords: [ShortcutAction: ShortcutChord]? = nil,
-        conflicts: [ShortcutConflict] = []
+        chords: [ShortcutAction: SettingsShortcutChord]? = nil,
+        conflicts: [SettingsShortcutConflict] = []
     ) {
         self.chords =
             chords
@@ -208,11 +208,11 @@ final class InMemoryShortcutBindings: ShortcutBindingProvider {
         self.declaredConflicts = conflicts
     }
 
-    func binding(for action: ShortcutAction) -> ShortcutChord? { chords[action] }
+    func binding(for action: ShortcutAction) -> SettingsShortcutChord? { chords[action] }
 
-    func conflicts() -> [ShortcutConflict] { declaredConflicts }
+    func conflicts() -> [SettingsShortcutConflict] { declaredConflicts }
 
-    func record(_ chord: ShortcutChord, for action: ShortcutAction) -> ShortcutRecordResult {
+    func record(_ chord: SettingsShortcutChord, for action: ShortcutAction) -> ShortcutRecordResult {
         if Self.reservedChords.contains(chord) {
             return .rejected("macOS reserves \(chord.displayString).")
         }
@@ -229,7 +229,7 @@ final class InMemoryShortcutBindings: ShortcutBindingProvider {
         notify()
     }
 
-    func resolve(_ conflict: ShortcutConflict) {
+    func resolve(_ conflict: SettingsShortcutConflict) {
         guard conflict.remedyTitle != nil else { return }
         declaredConflicts.removeAll { $0.id == conflict.id }
         notify()

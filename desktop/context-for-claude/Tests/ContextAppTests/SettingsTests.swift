@@ -580,7 +580,7 @@ final class SettingsTests: XCTestCase {
         let provider = InMemoryShortcutBindings()
         XCTAssertEqual(provider.binding(for: .openTimeline), ShortcutAction.openTimeline.defaultChord)
 
-        let chord = ShortcutChord(keyCode: 40, modifierFlags: [.command, .shift])
+        let chord = SettingsShortcutChord(keyCode: 40, modifierFlags: [.command, .shift])
         XCTAssertEqual(provider.record(chord, for: .openTimeline), .recorded)
         XCTAssertEqual(provider.binding(for: .openTimeline), chord)
 
@@ -590,7 +590,7 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(provider.binding(for: .openTimeline))
 
         // A recorder that always succeeded would let the user bind ⌘Q.
-        let quit = ShortcutChord(keyCode: 12, modifierFlags: .command)
+        let quit = SettingsShortcutChord(keyCode: 12, modifierFlags: .command)
         guard case .rejected = provider.record(quit, for: .openTimeline) else {
             return XCTFail("⌘Q is reserved by macOS and must be refused")
         }
@@ -607,7 +607,7 @@ final class SettingsTests: XCTestCase {
     func testConflictsAreQueriedAndResolvable() {
         XCTAssertTrue(InMemoryShortcutBindings().conflicts().isEmpty)
 
-        let conflict = ShortcutConflict(
+        let conflict = SettingsShortcutConflict(
             action: .openTimeline,
             owner: "Codex",
             chord: ShortcutAction.openTimeline.defaultChord,

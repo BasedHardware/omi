@@ -81,9 +81,7 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
                     guard let store = Engine.shared.contextStore else { return }
                     RewindWindow.present(
                         store: store,
-                        // Settings does not exist yet, so `onOpenSettings` keeps its default no-op.
-                        // The gear is a dead control today; that is recorded in the requirements
-                        // checklist rather than hidden behind a stub that looks like it works.
+                        onOpenSettings: { SettingsWindow.present() },
                         onSearch: { query in SearchBarWindow.present(prefill: query) })
                 }
             }

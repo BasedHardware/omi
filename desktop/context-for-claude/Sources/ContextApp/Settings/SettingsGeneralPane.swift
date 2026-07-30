@@ -167,7 +167,7 @@ struct SettingsGeneralPane: View {
         recording = action
     }
 
-    private func capture(_ chord: ShortcutChord, for action: ShortcutAction) {
+    private func capture(_ chord: SettingsShortcutChord, for action: ShortcutAction) {
         recording = nil
         switch shortcuts.record(chord, for: action) {
         case .recorded:
@@ -210,11 +210,11 @@ struct SettingsGeneralPane: View {
 /// never registers anything globally itself. Registration is the shortcut layer's job, and a recorder
 /// that installed its own hotkey would be a second owner of the same chord.
 struct ShortcutRecorderField: View {
-    let chord: ShortcutChord?
-    let fallback: ShortcutChord
+    let chord: SettingsShortcutChord?
+    let fallback: SettingsShortcutChord
     let isRecording: Bool
     let beginRecording: () -> Void
-    let capture: (ShortcutChord) -> Void
+    let capture: (SettingsShortcutChord) -> Void
     let cancelRecording: () -> Void
     let clear: () -> Void
 
@@ -277,7 +277,7 @@ struct ShortcutRecorderField: View {
             // A bare key is not a global shortcut; requiring a modifier is what stops the user
             // binding "k" and losing the letter everywhere.
             guard !modifiers.isEmpty else { return nil }
-            capture(ShortcutChord(keyCode: event.keyCode, modifierFlags: modifiers))
+            capture(SettingsShortcutChord(keyCode: event.keyCode, modifierFlags: modifiers))
             return nil
         }
     }
