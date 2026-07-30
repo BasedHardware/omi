@@ -12746,6 +12746,17 @@
             "title": "Name",
             "type": "string"
           },
+          "product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
+          },
           "scopes": {
             "anyOf": [
               {
@@ -12775,6 +12786,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
           }
         },
         "required": [
@@ -12828,6 +12850,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
           },
           "scopes": {
             "anyOf": [
@@ -22996,6 +23029,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -23067,6 +23109,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -23160,6 +23211,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -23248,6 +23308,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -23329,6 +23398,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -23426,6 +23504,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -23509,6 +23596,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -23599,6 +23695,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -23708,6 +23813,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -23781,6 +23895,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -23921,6 +24044,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -24018,6 +24150,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -24094,6 +24235,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -24182,6 +24332,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -24298,6 +24457,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -24374,6 +24542,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -24464,6 +24641,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -24534,6 +24720,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -24614,6 +24809,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -24684,6 +24888,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -25236,6 +25449,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -25537,6 +25759,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -25691,6 +25922,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -25773,6 +26013,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -25866,6 +26115,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -25954,6 +26212,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -26037,6 +26304,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -26147,6 +26423,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -26267,6 +26552,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -26364,6 +26658,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -26438,6 +26741,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -26539,6 +26851,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -26622,6 +26943,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -26692,6 +27022,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -26774,6 +27113,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -26934,6 +27282,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -27015,6 +27372,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -27159,6 +27525,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -27429,6 +27804,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -27510,6 +27894,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -27602,6 +27995,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -27684,6 +28086,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -27865,6 +28276,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -27949,6 +28369,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -28040,6 +28469,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -28140,6 +28578,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -28225,6 +28672,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -28388,6 +28844,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -28542,6 +29007,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -28636,6 +29110,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -28798,6 +29281,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -28878,6 +29370,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -29056,6 +29557,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -29175,6 +29685,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -29250,6 +29769,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -29352,6 +29880,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -29428,6 +29965,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -29511,6 +30057,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -29584,6 +30139,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -29722,6 +30286,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -29818,6 +30391,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -29900,6 +30482,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -30004,6 +30595,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -30080,6 +30680,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -30176,6 +30785,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -30280,6 +30898,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -30371,6 +30998,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -30477,6 +31113,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -30694,6 +31339,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -30768,6 +31422,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -30979,6 +31642,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -31052,6 +31724,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -31145,6 +31826,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -31227,6 +31917,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -31338,6 +32037,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -31421,6 +32129,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -31516,6 +32233,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -31604,6 +32330,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -31686,6 +32421,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -31791,6 +32535,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -31875,6 +32628,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -31975,6 +32737,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -32114,6 +32885,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -32204,6 +32984,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -32287,6 +33076,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -32389,6 +33187,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -32470,6 +33277,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -32574,6 +33390,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -32659,6 +33484,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -32755,6 +33589,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -32859,6 +33702,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -32947,6 +33799,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -33074,6 +33935,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -33155,6 +34025,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -33254,6 +34133,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -33403,6 +34291,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -33547,6 +34444,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -33636,6 +34542,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -33720,6 +34635,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -33819,6 +34743,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -33929,6 +34862,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -34013,6 +34955,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -34122,6 +35073,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -34181,6 +35141,24 @@
     "/v1/dev/keys": {
       "get": {
         "operationId": "listApiKeys",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -34198,6 +35176,16 @@
           },
           "401": {
             "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -34213,6 +35201,24 @@
       "post": {
         "description": "Create a new Developer API key with optional scopes.\n\n- **name**: Descriptive name for the key\n- **scopes**: Optional list of scopes. If not provided, defaults to read-only access.\n  Available scopes:\n  - conversations:read\n  - conversations:write\n  - memories:read\n  - memories:write\n  - action_items:read\n  - action_items:write\n  - goals:read\n  - goals:write",
         "operationId": "createApiKey",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -34270,6 +35276,22 @@
             "schema": {
               "title": "Key Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
             }
           }
         ],
@@ -35975,6 +36997,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -36048,6 +37079,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -36128,6 +37168,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -36216,6 +37265,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -36336,6 +37394,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -36412,6 +37479,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -36500,6 +37576,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -36638,6 +37723,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -36732,6 +37826,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -36820,6 +37923,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -36899,6 +38011,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -36992,6 +38113,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -37075,6 +38205,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -37183,6 +38322,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -37266,6 +38414,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -37359,6 +38516,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -37442,6 +38608,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -37535,6 +38710,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -37618,6 +38802,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -37723,6 +38916,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -37807,6 +39009,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -37922,6 +39133,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -38025,6 +39245,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -38134,6 +39363,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -38253,6 +39491,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -38361,6 +39608,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -38457,6 +39713,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -38574,6 +39839,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -38672,6 +39946,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -38763,6 +40046,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -38846,6 +40138,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -38941,6 +40242,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -39024,6 +40334,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -39117,6 +40436,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -39190,6 +40518,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -39358,6 +40695,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -39434,6 +40780,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -39522,6 +40877,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -39624,6 +40988,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -39704,6 +41077,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -39774,6 +41156,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -39851,6 +41242,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -39982,6 +41382,22 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -40025,6 +41441,24 @@
       },
       "post": {
         "operationId": "create_action_item_v1_mcp_action_items_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -40093,6 +41527,22 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -40147,6 +41597,22 @@
               "title": "Action Item Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -40197,6 +41663,22 @@
             "schema": {
               "title": "Action Item Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
             }
           }
         ],
@@ -40271,6 +41753,22 @@
               "title": "Completed",
               "type": "boolean"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -40331,6 +41829,22 @@
               "default": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
             }
           }
         ],
@@ -40447,6 +41961,22 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -40543,6 +42073,22 @@
               ],
               "title": "End Date"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -40596,6 +42142,22 @@
             "schema": {
               "title": "Conversation Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
             }
           }
         ],
@@ -40693,6 +42255,22 @@
               ],
               "title": "End Date"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -40749,6 +42327,22 @@
               "title": "Include Inactive",
               "type": "boolean"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -40795,6 +42389,24 @@
     "/v1/mcp/keys": {
       "get": {
         "operationId": "get_keys_v1_mcp_keys_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -40812,6 +42424,16 @@
           },
           "401": {
             "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -40826,6 +42448,24 @@
       },
       "post": {
         "operationId": "create_key_v1_mcp_keys_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -40883,6 +42523,22 @@
             "schema": {
               "title": "Key Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
             }
           }
         ],
@@ -41035,6 +42691,22 @@
               "title": "Include Sensitive",
               "type": "boolean"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -41078,6 +42750,24 @@
       },
       "post": {
         "operationId": "create_memory_v1_mcp_memories_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -41146,6 +42836,22 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -41199,6 +42905,22 @@
             "schema": {
               "title": "Memory Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
             }
           }
         ],
@@ -41260,6 +42982,22 @@
               "title": "Value",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
           }
         ],
         "responses": {
@@ -41304,6 +43042,24 @@
     "/v1/mcp/oauth/grants": {
       "get": {
         "operationId": "get_oauth_grants_v1_mcp_oauth_grants_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -41317,6 +43073,16 @@
           },
           "401": {
             "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -41341,6 +43107,22 @@
             "schema": {
               "title": "Grant Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
             }
           }
         ],
@@ -41379,6 +43161,24 @@
     "/v1/mcp/people": {
       "get": {
         "operationId": "get_people_v1_mcp_people_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -41396,6 +43196,16 @@
           },
           "401": {
             "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -41413,6 +43223,24 @@
       "get": {
         "description": "Omi's cached high-level user profile, if one has been generated.",
         "operationId": "get_user_profile_v1_mcp_profile_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -41426,6 +43254,16 @@
           },
           "401": {
             "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -41511,6 +43349,22 @@
               "default": 200,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Product"
             }
           }
         ],
@@ -41869,6 +43723,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -41954,6 +43817,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -42033,6 +43905,15 @@
             "required": false,
             "schema": {
               "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -42129,6 +44010,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -42214,6 +44104,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -42284,6 +44183,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -42384,6 +44292,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -42521,6 +44438,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -42606,6 +44532,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -42682,6 +44617,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -42772,6 +44716,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -42845,6 +44798,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -42933,6 +44895,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -43035,6 +45006,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -43111,6 +45091,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -43228,6 +45217,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -43360,6 +45358,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -43443,6 +45450,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -43665,6 +45681,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -43747,6 +45772,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -43857,6 +45891,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -43989,6 +46032,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -44076,6 +46128,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -44152,6 +46213,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -44239,6 +46309,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -44334,6 +46413,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -44410,6 +46498,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -44493,6 +46590,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -44564,6 +46670,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -44666,6 +46781,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -44742,6 +46866,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -44844,6 +46977,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -44929,6 +47071,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -45037,6 +47188,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -45166,6 +47326,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -45262,6 +47431,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -45375,6 +47553,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -45478,6 +47665,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -45591,6 +47787,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -45678,6 +47883,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -45756,6 +47970,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -45876,6 +48099,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -45957,6 +48189,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -46055,6 +48296,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -46132,6 +48382,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -46202,6 +48461,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -46318,6 +48586,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -46400,6 +48677,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -46493,6 +48779,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -46578,6 +48873,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -46679,6 +48983,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -46760,6 +49073,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -46831,6 +49153,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -46924,6 +49255,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -47005,6 +49345,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -47105,6 +49454,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -47186,6 +49544,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -47286,6 +49653,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -47371,6 +49747,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -47443,6 +49828,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -47521,6 +49915,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -47612,6 +50015,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-App-Version",
             "required": false,
             "schema": {
@@ -47682,6 +50094,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -47775,6 +50196,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -47846,6 +50276,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -47939,6 +50378,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -48010,6 +50458,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -48103,6 +50560,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -48174,6 +50640,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -48279,6 +50754,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -48349,6 +50833,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -48466,6 +50959,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -48542,6 +51044,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -48641,6 +51152,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -48728,6 +51248,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -48792,6 +51321,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -48884,6 +51422,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -48957,6 +51504,15 @@
             "required": false,
             "schema": {
               "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -49040,6 +51596,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -49111,6 +51676,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -49199,6 +51773,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -49301,6 +51884,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -49372,6 +51964,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -49473,6 +52074,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -49560,6 +52170,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -49630,6 +52249,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -49723,6 +52351,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -49794,6 +52431,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -49896,6 +52542,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -49971,6 +52626,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -50072,6 +52736,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -50157,6 +52830,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -50255,6 +52937,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -50359,6 +53050,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -50451,6 +53151,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -50523,6 +53232,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -50612,6 +53330,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -50685,6 +53412,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -50768,6 +53504,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -50845,6 +53590,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -50915,6 +53669,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -51004,6 +53767,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -51082,6 +53854,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -51153,6 +53934,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -51236,6 +54026,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -51307,6 +54106,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -51417,6 +54225,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -51489,6 +54306,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -51598,6 +54424,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -51726,6 +54561,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -51817,6 +54661,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -51925,6 +54778,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -52041,6 +54903,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -52148,6 +55019,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -52279,6 +55159,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -52373,6 +55262,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -52501,6 +55399,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -52620,6 +55527,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -52732,6 +55648,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -52829,6 +55754,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -52914,6 +55848,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -53323,6 +56266,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -53395,6 +56347,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -53702,6 +56663,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -53811,6 +56781,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -53913,6 +56892,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -54029,6 +57017,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -54112,6 +57109,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -54261,6 +57267,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -54360,6 +57375,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -54450,6 +57474,15 @@
             "required": false,
             "schema": {
               "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           }
@@ -54596,6 +57629,15 @@
               "title": "Authorization",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -54675,6 +57717,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -54748,6 +57799,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -54837,6 +57897,15 @@
             "required": false,
             "schema": {
               "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -54956,6 +58025,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -55035,6 +58113,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -55186,6 +58273,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-App-Version",
             "required": false,
             "schema": {
@@ -55251,6 +58347,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -55344,6 +58449,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -55424,6 +58538,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -55538,6 +58661,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -55630,6 +58762,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -55714,6 +58855,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -55810,6 +58960,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -55917,6 +59076,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -56038,6 +59206,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -56131,6 +59308,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -56242,6 +59428,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -56334,6 +59529,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -56450,6 +59654,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -56541,6 +59754,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Device-Id-Hash",
             "required": false,
             "schema": {
@@ -56617,6 +59839,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -56704,6 +59935,15 @@
             "required": false,
             "schema": {
               "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
               "type": "string"
             }
           },
