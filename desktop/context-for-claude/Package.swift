@@ -54,6 +54,12 @@ let package = Package(
                 "ContextCore",
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ],
+            // The generated sounds. `Resources/Fonts` reaches the app the other way — loose files
+            // copied by `scripts/build.sh` — because they are registered from a directory URL. The
+            // sounds are opened by name, so they ride in the SwiftPM resource bundle instead, which
+            // `build.sh` already copies into `Contents/Resources` along with every other `*.bundle`.
+            // Declared here and nowhere else: undeclared, they never leave the source tree.
+            resources: [.copy("../../Resources/Sounds")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
