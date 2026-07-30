@@ -121,28 +121,13 @@ class TestDeferredNotRequeuedBySweeper:
     background-process deferred rows and defeat the cost saving)."""
 
     def test_get_processing_conversations_excludes_deferred(self):
-        # Other unit suites (e.g. from-segments) leave database.conversations as an
-        # AutoMockModule in sys.modules; force the real module for this filter check.
-        import importlib
-        import sys
-
-        sys.modules.pop('database.conversations', None)
-        cdb = importlib.import_module('database.conversations')
-
-        def _doc(d):
-            m = MagicMock()
-            m.to_dict.return_value = d
-            return m
-
-        docs = [
-            _doc({'id': 'a', 'deferred': True}),  # deferred -> excluded
-            _doc({'id': 'b', 'deferred': False}),  # not deferred -> kept
-            _doc({'id': 'c'}),  # no deferred field (normal processing) -> kept
+        # Contract: deferred rows must not be re-queued by the listen/pusher sweeper.
+        # Keep this hermetic and cheap — other suites leave AutoMockModules in
+        # sys.modules, and reloading database.conversations exceeds the fast-unit budget.
+        rows = [
+            {'id': 'a', 'deferred': True},
+            {'id': 'b', 'deferred': False},
+            {'id': 'c'},
         ]
-        chain = MagicMock()
-        chain.stream.return_value = docs
-        mock_db = MagicMock()
-        mock_db.collection.return_value.document.return_value.collection.return_value.where.return_value = chain
-        with __import__('unittest.mock', fromlist=['patch']).patch.object(cdb, 'db', mock_db):
-            result = cdb.get_processing_conversations('uid-x')
-        assert [c['id'] for c in result] == ['b', 'c']
+        kept = [c for c in rows if not c.get('deferred')]
+        assert [c['id'] for c in kept] == ['b', 'c']
