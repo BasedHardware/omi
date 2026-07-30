@@ -1,0 +1,32 @@
+backend/tests/unit/test_reply_draft.py
+  s_af46e601b96e35::t_d09be4d2a83b6e 890-954
+backend/utils/llm/reply_draft.py
+  s_af46e601b96e35::t_7c3997dd2064e0 1015-1020
+  s_af46e601b96e35::t_ae72e4c19e4f60 269-271,275-276,283,288-290
+  s_af46e601b96e35::t_592a537082abbb 220-227,230-231,235
+  s_abe8283a0c57dd::t_96ca62468ac8d1 1070-1071
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "468afa6e6b51066f50b32884f7381f190e458527",
+  "prompts": {},
+  "sessions": {
+    "s_abe8283a0c57dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "87377558-5689-4a2d-aa25-ff41404d6e61",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_af46e601b96e35": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "24944110-38a6-4ab7-9810-6f523ae27ac2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
