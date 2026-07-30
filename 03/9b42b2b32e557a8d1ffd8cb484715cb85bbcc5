@@ -1,0 +1,48 @@
+desktop/context-for-claude/Sources/ContextApp/Rewind/OpenExternally.swift
+  s_18cae1c5af4258::t_f82b91a22ca3ad 90-94
+  s_18cae1c5af4258::t_765df9a90b0690 1-89,95-129
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindModel.swift
+  s_18cae1c5af4258::t_22dffeb8cc7ad6 1-343
+desktop/context-for-claude/Sources/ContextApp/Rewind/FrameLoader.swift
+  s_18cae1c5af4258::t_fff0e2dbf89beb 14-21
+  s_18cae1c5af4258::t_4109c158bfcc6a 31-34
+  s_18cae1c5af4258::t_5542ee35a61e57 1-13,22-30,35-38,44-51,55-165
+  s_18cae1c5af4258::t_66f2e8c7bc8449 39-43
+  s_18cae1c5af4258::t_ad7960df5d02cd 52-54
+desktop/context-for-claude/Sources/ContextApp/Rewind/LiveText.swift
+  s_18cae1c5af4258::t_aa3f961195d0b7 1-181
+desktop/context-for-claude/Tests/ContextAppTests/RewindTests.swift
+  s_18cae1c5af4258::t_9d51d0c507ac28 1-242
+desktop/context-for-claude/Sources/ContextApp/Rewind/AppIcon.swift
+  s_18cae1c5af4258::t_78d52b4f8721bb 1-130
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_18cae1c5af4258::t_3c3659c81594d4 1-120
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindTrack.swift
+  s_18cae1c5af4258::t_837cc862ad6f74 36-40
+  s_18cae1c5af4258::t_aaba7fe176462b 130,132-173
+  s_18cae1c5af4258::t_1de2f3dfd714f2 1-29,42-129,131,174-187,190-191,193-470
+  s_18cae1c5af4258::t_e1037a3ba7feff 41
+  s_18cae1c5af4258::t_d6839c2e589428 188-189,192
+  s_18cae1c5af4258::t_723ac9862ce2c5 30-35
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindPalette.swift
+  s_18cae1c5af4258::t_ee89d0e6a0a3a2 1-89
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindView.swift
+  s_18cae1c5af4258::t_75ff3d57997a5e 347-349
+  s_18cae1c5af4258::t_cdd297ac162acd 1-346,350-394
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "039b42b2b32e557a8d1ffd8cb484715cb85bbcc5",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
