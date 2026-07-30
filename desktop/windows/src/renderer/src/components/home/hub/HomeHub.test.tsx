@@ -168,6 +168,24 @@ describe('HomeHub — stage machine', () => {
     expect(mode()).toBe('hub')
   })
 
+  it('returns to the hub from the chat panel own close control', () => {
+    // Esc and a click on the paper both leave the panel, but neither is VISIBLE:
+    // users reached the chat panel and could not tell how to get back (#10894).
+    renderHub()
+    expect(screen.queryByLabelText('Close chat')).toBeNull()
+
+    fireEvent.focus(askBar())
+    expect(mode()).toBe('chat')
+
+    // A real press is mousedown → click; the click-outside listener rides mousedown.
+    const close = screen.getByLabelText('Close chat')
+    fireEvent.mouseDown(close)
+    fireEvent.click(close)
+
+    expect(mode()).toBe('hub')
+    expect(screen.getByText('omi.')).not.toBeNull()
+  })
+
   it('toggles the connect stage from the ask bar and back', () => {
     renderHub()
     const connect = screen.getByRole('button', { name: 'Connect' })
@@ -353,6 +371,18 @@ describe('HomeHub — portaled panel UI does not read as a click-outside', () =>
 
     expect(mode()).toBe('chat')
     expect(renameSession).toHaveBeenCalledWith('s1', 'Iceland trip')
+  })
+
+  it('lays the close control out in the SAME row as the multi-chat controls', async () => {
+    // jsdom has no layout, so the only honest guard against the close control
+    // landing on top of "+" / history is structural: one flex row owns all three.
+    renderHub()
+    fireEvent.focus(askBar())
+    const history = await screen.findByTitle('Chat history')
+    const row = screen.getByLabelText('Close chat').parentElement as HTMLElement
+
+    expect(row.className).toContain('flex')
+    expect(row.contains(history)).toBe(true)
   })
 
   it('still dismisses the panel on a mousedown on the Hub paper outside the stage', () => {

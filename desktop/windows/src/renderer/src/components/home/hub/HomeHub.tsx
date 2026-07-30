@@ -220,6 +220,7 @@ export function HomeHub(): React.JSX.Element {
                 <HubChatPanel
                   messages={chat.history}
                   sending={chat.sending}
+                  onDismiss={() => dispatch({ type: 'dismissed' })}
                   header={
                     <>
                       <ChatAppPicker />
