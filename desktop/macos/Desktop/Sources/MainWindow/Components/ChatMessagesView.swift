@@ -70,6 +70,21 @@ enum ChatTranscriptLayout {
   }
 }
 
+/// The desktop transcript is deliberately a recent-window view. Older turns
+/// stay in the canonical journal, but rendering an unbounded timeline makes
+/// ordinary chat sessions progressively more expensive to scroll and update.
+enum ChatTranscriptWindow {
+  static let maximumVisibleMessageCount = 500
+
+  static func recentMessages(in messages: [ChatMessage]) -> [ChatMessage] {
+    Array(messages.suffix(maximumVisibleMessageCount))
+  }
+
+  static func allowsLoadingEarlier(for messages: [ChatMessage]) -> Bool {
+    messages.count < maximumVisibleMessageCount
+  }
+}
+
 /// Reusable chat messages scroll view extracted from ChatPage.
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
 struct ChatMessagesView<WelcomeContent: View>: View {
@@ -502,7 +517,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
   @ViewBuilder
   private var loadMoreButton: some View {
-    if hasMoreMessages {
+    if hasMoreMessages && ChatTranscriptWindow.allowsLoadingEarlier(for: messages) {
       Button {
         prependAnchorId = messages.first?.id
         Task {
@@ -542,7 +557,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       welcomeContent()
     } else {
       let dupeIds = duplicateMessageIds
-      let displayMessages = AgentLifecycleDisplayProjection.project(messages)
+      let displayMessages = AgentLifecycleDisplayProjection.project(
+        ChatTranscriptWindow.recentMessages(in: messages)
+      )
       let finalAssistantMessageID = ChatOmiMarkPlacement.finalAssistantMessageID(in: displayMessages)
       ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
         ChatBubble(

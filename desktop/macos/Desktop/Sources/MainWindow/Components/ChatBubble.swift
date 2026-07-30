@@ -21,7 +21,6 @@ struct ChatBubble: View {
   /// only the capability-gated main shell is allowed to turn them into controls.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
 
-  @State private var isTimestampHovering = false
   @State private var isRowHovering = false
   @State private var isExpanded = false
   @State private var showCopied = false
@@ -417,30 +416,27 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private func messageMetadataRow(includeRatingButtons: Bool, includeCopyButton: Bool) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
-      if includeRatingButtons {
-        ratingButtons
+    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+      if includeRatingButtons || includeCopyButton {
+        HStack(spacing: OmiSpacing.sm) {
+          if includeRatingButtons {
+            ratingButtons
+          }
+
+          if includeCopyButton {
+            copyButton
+          }
+
+          if includeCopyButton, message.metadata != nil {
+            infoButton
+          }
+        }
       }
 
-      if includeCopyButton {
-        copyButton
-      }
-
-      if includeCopyButton, message.metadata != nil {
-        infoButton
-      }
-
-      Text(message.createdAt, format: .dateTime.hour().minute())
-        .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
-        .onHover { isTimestampHovering = $0 }
-
-      if isTimestampHovering {
-        Text(message.createdAt, format: .dateTime.month(.abbreviated).day())
-          .scaledFont(size: OmiType.micro, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
-          .transition(.opacity)
-      }
+      Text(message.createdAt, format: .dateTime.year().month(.abbreviated).day().hour().minute())
+        .scaledFont(size: OmiType.micro)
+        .foregroundColor(OmiColors.textTertiary.opacity(0.82))
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
     // Quiet timeline: actions and timestamps only surface while the reader
     // is on the message — by pointer hover or keyboard focus — or
@@ -452,7 +448,6 @@ struct ChatBubble: View {
         transientFeedback: showRatingFeedback || showCopied || showInfoPopover
       ) ? 1 : 0
     )
-    .omiAnimation(.easeInOut(duration: 0.12), value: isTimestampHovering)
     .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
     .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataControlFocused)
   }
