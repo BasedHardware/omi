@@ -13,7 +13,7 @@ import 'device_transport.dart';
 class NativeBleTransport extends DeviceTransport {
   final String _peripheralUuid;
   final bool requiresBond;
-  final BleHostApi _hostApi = BleHostApi();
+  final BleHostApi _hostApi;
   final StreamController<DeviceTransportState> _connectionStateController =
       StreamController<DeviceTransportState>.broadcast();
 
@@ -27,7 +27,8 @@ class NativeBleTransport extends DeviceTransport {
 
   DeviceTransportState _state = DeviceTransportState.disconnected;
 
-  NativeBleTransport(this._peripheralUuid, {this.requiresBond = false}) {
+  NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
+      : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
       onConnectionState: _handleConnectionState,
@@ -271,11 +272,14 @@ class NativeBleTransport extends DeviceTransport {
     try {
       _services = services;
 
-      // Re-create stream controllers and re-subscribe to previously active characteristics
+      // Native re-emits ready for a link that is already up, so keep live controllers.
       for (final key in _activeSubscriptionKeys) {
         final parts = key.split(':');
         if (parts.length == 2) {
-          _streamControllers[key] = StreamController<List<int>>.broadcast();
+          final existing = _streamControllers[key];
+          if (existing == null || existing.isClosed) {
+            _streamControllers[key] = StreamController<List<int>>.broadcast();
+          }
           _subscribeCharacteristic(parts[0], parts[1]);
         }
       }
