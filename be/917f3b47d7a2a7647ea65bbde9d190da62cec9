@@ -1,0 +1,36 @@
+desktop/context-for-claude/Sources/ContextApp/Settings/ExclusionsPaneModel.swift
+  s_18cae1c5af4258::t_09f98d8190836a 1-3,8-16,28,36,60,81,110,165,246,255,297,337-340,355-364,406,447,514-515
+  s_18cae1c5af4258::t_f6a0ae59396c92 35,92,107,354,410,446
+  s_18cae1c5af4258::t_9920a169573e19 4-7
+  s_18cae1c5af4258::t_701fa1f84d2051 17-27,29-34,37-59,61-80,82-91,93-106,108-109,111-164,166-217,219-245,247-254,256-296,298-336,341-353,365-405,407-409,411-445,448-513
+  s_18cae1c5af4258::t_71d11cafbf029d 218
+desktop/context-for-claude/Sources/ContextApp/Settings/ShortcutBinding.swift
+  s_18cae1c5af4258::t_f6a0ae59396c92 99
+  s_18cae1c5af4258::t_29c939371d1fdf 1-12,77-82,93-94,106-107,113-123,140-142,146-164,178-187,244,252
+  s_18cae1c5af4258::t_701fa1f84d2051 13-76,83-92,95-98,100-105,108-112,124-139,143-145,165-177,188-243,245-251
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsPreferences.swift
+  s_18cae1c5af4258::t_9cce4f875218e1 1-14,42-55,102-110,193-203,253-260,301-307,353-356,383-392,395,397,403-407,410,412,418-434,546,548,552,560,617-618,637,646-655,666
+  s_18cae1c5af4258::t_701fa1f84d2051 15-41,56-101,111-192,204-252,261-300,308-352,357-382,393-394,396,398-402,408-409,411,413-417,435-545,547,549-551,553-559,561-616,619-636,638-645,656-665
+desktop/context-for-claude/Sources/ContextApp/Settings/StorageUsage.swift
+  s_18cae1c5af4258::t_6f4ca4eee8f610 1-11,28-31,89-90
+  s_18cae1c5af4258::t_701fa1f84d2051 12-27,32-88
+desktop/context-for-claude/Sources/ContextApp/Settings/AgentDetection.swift
+  s_18cae1c5af4258::t_701fa1f84d2051 12-54,59-83,89-124,126-137
+  s_18cae1c5af4258::t_16ba82adb5cdb3 1-11,55-58,84-88,125,138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "be917f3b47d7a2a7647ea65bbde9d190da62cec9",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
