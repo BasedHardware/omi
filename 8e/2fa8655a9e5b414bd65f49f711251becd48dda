@@ -1,0 +1,53 @@
+desktop/context-for-claude/Tests/ContextAppTests/TutorialTests.swift
+  s_18cae1c5af4258::t_81d1f9cf413e18 94,346
+  s_18cae1c5af4258::t_1d7c2719957aeb 228-231
+  s_18cae1c5af4258::t_f7514b19f837ae 333
+  s_18cae1c5af4258::t_7b08c87bfdfa58 117,335,339
+  s_18cae1c5af4258::t_ac971634aa6a70 342
+  s_18cae1c5af4258::t_1173189d8d5863 351-355,358
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialModel.swift
+  s_18cae1c5af4258::t_7bc0342a0463ef 44,46-59
+  s_18cae1c5af4258::t_21f84fd589607d 338-340
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialTargets.swift
+  s_18cae1c5af4258::t_fc7d46a1456909 228,232-243
+  s_18cae1c5af4258::t_55f5ea051a549e 148,204-227,229-231,244-280,285-287,290-293
+  s_18cae1c5af4258::t_0fc25e9fe73bad 281-284,288-289
+  s_18cae1c5af4258::t_daf96f70af8f71 64-105
+  s_18cae1c5af4258::t_ccf3dc1ae26a83 113-119,130-134,146-147
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialCardView.swift
+  s_18cae1c5af4258::t_badd7a69917603 12-14,22-23
+  s_18cae1c5af4258::t_2e3755ded3f707 146
+  s_18cae1c5af4258::t_fa5fce7d40bcfa 96
+  s_18cae1c5af4258::t_744e6268d7bbec 279-281,283,288,290-304
+  s_18cae1c5af4258::t_7b960eb2b6988b 125
+  s_18cae1c5af4258::t_1df74f496c7cb5 132-137
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialStep.swift
+  s_18cae1c5af4258::t_31328cc6cac4ed 11
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialOverlay.swift
+  s_18cae1c5af4258::t_51c023d52afbe6 163
+  s_18cae1c5af4258::t_ac833dbe9162c6 43-45
+  s_18cae1c5af4258::t_80a20a8fcdce19 211-213,216
+  s_18cae1c5af4258::t_275a4de175e14d 230,233-235,237,240-241
+  s_18cae1c5af4258::t_09afa43a8cee9e 124-133,135-139,141,145-156
+  s_18cae1c5af4258::t_99947e3457166d 101
+  s_18cae1c5af4258::t_dc7ef023fdaceb 83,85-89
+  s_18cae1c5af4258::t_a6147ee681a187 54
+  s_18cae1c5af4258::t_5ad97b03ecd46b 32-34,40
+  s_18cae1c5af4258::t_ccc1f29b9ee66c 61-68,78-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "8e2fa8655a9e5b414bd65f49f711251becd48dda",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
