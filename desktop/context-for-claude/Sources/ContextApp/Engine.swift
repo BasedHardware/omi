@@ -832,6 +832,9 @@ private final class EngineStore: @unchecked Sendable {
     private var openClientSessionId: String?
     /// Bound by Engine when cloud transcription starts; applied to the next opened session.
     private var boundClientSessionId: String?
+    /// Gap rollover waits for listen to adopt the new client id before opening the next session,
+    /// so post-gap PCM and from-segments share one conversation identity.
+    private var pendingGapOpen: (clientSessionId: String, line: TranscriptLine, appHint: String?)?
     /// The latest segment end across *both* transcribers. Session boundaries are a property of the
     /// conversation, not of one microphone.
     private var lastSegmentEndedAt: Double?
@@ -939,6 +942,13 @@ private final class EngineStore: @unchecked Sendable {
 
     private func append(_ line: TranscriptLine, appHint: String?, to store: ContextStore) {
         do {
+            if pendingGapOpen != nil {
+                // Listen is still rotating onto the new client id; hold the newest line only.
+                if let pending = pendingGapOpen {
+                    pendingGapOpen = (pending.clientSessionId, line, appHint)
+                }
+                return
+            }
             if openSessionId == nil
                 || policy.shouldOpenNewSession(
                     lastSegmentEndedAt: lastSegmentEndedAt,
@@ -955,12 +965,16 @@ private final class EngineStore: @unchecked Sendable {
                             sessionId: previous, clientSessionId: previousClientId)
                     }
                     // Gap rollover needs a fresh identity so from-segments does not idempotency-hit
-                    // the prior conversation and drop the new transcript.
-                    boundClientSessionId = UUID().uuidString.lowercased()
-                    let rotated = boundClientSessionId!
+                    // the prior conversation and drop the new transcript. Rotate listen first so
+                    // PCM and the new local session share the same id.
+                    let rotated = UUID().uuidString.lowercased()
+                    boundClientSessionId = rotated
+                    pendingGapOpen = (rotated, line, appHint)
                     Task { @MainActor in
                         await ListenSocket.shared.rotateClientConversationId(rotated)
+                        self.finishGapOpen()
                     }
+                    return
                 }
                 openSessionId = try store.openSession(at: line.startedAt, appHint: appHint)
                 openClientSessionId = boundClientSessionId ?? UUID().uuidString.lowercased()
@@ -983,11 +997,33 @@ private final class EngineStore: @unchecked Sendable {
             } else {
                 try store.insertSegment(segment)
             }
-            // `max`, because a 10 s window from the other transcriber can land out of order and
+            // `max`, because a 10 s line from the other transcriber can land out of order and
             // must not drag the session's end backwards.
             lastSegmentEndedAt = max(lastSegmentEndedAt ?? line.endedAt, line.endedAt)
         } catch {
             ContextLog.error("Dropped a transcript line: \(error.localizedDescription)", "store")
+        }
+    }
+
+    /// Opens the session that was deferred until listen adopted the gap-rollover client id.
+    private func finishGapOpen() {
+        queue.async {
+            guard let pending = self.pendingGapOpen else { return }
+            self.pendingGapOpen = nil
+            guard let store = self.store else { return }
+            do {
+                self.openSessionId = try store.openSession(
+                    at: pending.line.startedAt, appHint: pending.appHint)
+                self.openClientSessionId = pending.clientSessionId
+                self.boundClientSessionId = pending.clientSessionId
+                // Anchor continuity so append does not treat this line as another gap rollover.
+                self.lastSegmentEndedAt = pending.line.startedAt
+                self.append(pending.line, appHint: pending.appHint, to: store)
+            } catch {
+                ContextLog.error(
+                    "Could not open session after listen rotation: \(error.localizedDescription)",
+                    "store")
+            }
         }
     }
 
@@ -1081,6 +1117,7 @@ private final class EngineStore: @unchecked Sendable {
     /// before the next line runs, and on quit an `await` would never resume.
     func closeOpenSession() {
         queue.sync {
+            self.pendingGapOpen = nil
             guard let store = self.store, let id = self.openSessionId else { return }
             let clientId = self.openClientSessionId
             try? store.closeSession(id, at: self.lastSegmentEndedAt ?? ContextTime.now)

@@ -146,6 +146,7 @@ final class MCPKeyProvisioner: ObservableObject {
         status = .missing
 
         let name = Self.keyName
+        let uidAtStart = OmiAuth.shared.userId
         let superseded = await Self.keyIds(named: name)
 
         let created: CreatedMCPKey
@@ -162,6 +163,16 @@ final class MCPKeyProvisioner: ObservableObject {
             ContextAnalytics.capture(
                 "mcp_key_provision_failed",
                 properties: ["reason": String(error.localizedDescription.prefix(120))])
+            return
+        }
+
+        // Sign-out cancels inFlight but does not abort the HTTP call; refuse to bind a key minted
+        // for an account that is no longer signed in (or for a different uid after a fast switch).
+        guard !Task.isCancelled,
+              OmiAuth.shared.isSignedIn,
+              OmiAuth.shared.userId == uidAtStart
+        else {
+            ContextLog.info("Discarding MCP key minted after sign-out or account switch", Self.category)
             return
         }
 

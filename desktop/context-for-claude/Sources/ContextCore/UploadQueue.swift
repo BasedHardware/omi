@@ -204,9 +204,11 @@ public enum UploadQueue {
                       (sessionId, state, attempts, partsDone, queuedAt, updatedAt, nextAttemptAt, clientSessionId)
                     VALUES (?, 'pending', 0, 0, ?, ?, 0, ?)
                     ON CONFLICT(sessionId) DO UPDATE SET
-                      state = 'pending', nextAttemptAt = 0, updatedAt = excluded.updatedAt,
+                      state = CASE WHEN uploads.state = 'failed' THEN 'pending' ELSE uploads.state END,
+                      nextAttemptAt = CASE WHEN uploads.state = 'failed' THEN 0 ELSE uploads.nextAttemptAt END,
+                      updatedAt = excluded.updatedAt,
                       clientSessionId = COALESCE(excluded.clientSessionId, uploads.clientSessionId)
-                    WHERE uploads.state = 'failed'
+                    WHERE uploads.state IN ('pending', 'failed')
                     """,
                 arguments: [sessionId, now, now, sharedId])
         }
