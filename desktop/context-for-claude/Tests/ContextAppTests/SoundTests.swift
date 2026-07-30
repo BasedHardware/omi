@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import XCTest
 @testable import ContextApp
 
@@ -275,4 +276,43 @@ final class SoundTests: XCTestCase {
         XCTAssertEqual(SoundFade.amplitude(from: 0, to: 1, progress: 0.5), Float(sin(Double.pi / 4)), accuracy: 0.0001)
     }
 
+    // MARK: - We never record ourselves
+
+    /// Regression: the tap used to be built with an **empty** exclude list, i.e. a global tap over
+    /// every process including this one. Now that the app plays sound, that means the cinematic's bed
+    /// and swooshes — and every click a Settings surface plays during a live session — get recorded,
+    /// transcribed, and filed in the user's own conversation history as if somebody had said them.
+    ///
+    /// Exercises the production factory both capture paths now call, not a copy of it.
+    @available(macOS 14.4, *)
+    func testEveryGlobalTapExcludesThisProcess() throws {
+        let description = SystemAudioCapture.makeGlobalTapDescription(name: "test", uuid: UUID())
+        let excluded: [AudioObjectID] = description.processes
+
+        XCTAssertFalse(excluded.isEmpty, "a global tap with an empty exclude list records this app")
+
+        // `CATapDescription` takes CoreAudio process *object* ids, not pids: a raw pid poured into an
+        // `AudioObjectID` names some unrelated object, which would read exactly like a fix while our
+        // own audio kept landing in the tap.
+        let own = try XCTUnwrap(
+            SystemAudioCapture.ownProcessObject(),
+            "the HAL would not translate our own pid, so nothing could have been excluded")
+        XCTAssertTrue(excluded.contains(own), "the tap excludes \(excluded), not this process (\(own))")
+        XCTAssertEqual(SystemAudioCapture.excludedProcessObjects(), [own])
+    }
+
+    /// `processes` means the opposite thing depending on `exclusive`: with it off, a non-empty list is
+    /// an *include* list and the tap would record only us. Inverting that flag would look like a
+    /// tighter fix and would be total data loss, so the flag is asserted rather than assumed.
+    @available(macOS 14.4, *)
+    func testTheProcessListIsAnExcludeListAndTheTapStaysUnmuted() {
+        let description = SystemAudioCapture.makeGlobalTapDescription(
+            name: "test", uuid: UUID(), excluding: [4242])
+
+        XCTAssertTrue(description.isExclusive, "the list is being read as an include list")
+        XCTAssertEqual(description.processes, [4242])
+        // `.unmuted` is not cosmetic: any other behaviour silences the user's own playback while we
+        // are listening to it.
+        XCTAssertEqual(description.muteBehavior, .unmuted)
+    }
 }
