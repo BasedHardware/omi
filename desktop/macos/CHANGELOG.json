@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.148",
+      "date": "2026-07-30",
+      "changes": [
+        "Fixed a chat freeze and runaway memory use when loading completed messages"
+      ]
+    },
+    {
       "version": "0.12.147",
       "date": "2026-07-30",
       "changes": [
