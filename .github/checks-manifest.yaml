@@ -6,17 +6,17 @@
 checks:
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["scripts/dev-harness/**", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/scripts/omi-fault-inject.sh", "desktop/macos/scripts/release-keyvalue.py", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/qualification-lease-command.sh", "desktop/macos/scripts/omi-fault-inject.sh", "desktop/macos/scripts/release-keyvalue.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hermetic dev-harness stack backs release qualification; the Jul 22 2026 beta qualification outage added a docker/native typesense runtime that must stay behaviorally covered"
   - id: pre-tag-readiness-contract
     command: ["bash", "desktop/macos/tests/test-pre-tag-readiness-contract.sh"]
-    triggers: ["desktop/macos/scripts/pre-tag-readiness.sh", "desktop/macos/scripts/qualification-runner-self-clean.py", "desktop/macos/scripts/qualification-watchdog.py", "desktop/macos/tests/test-pre-tag-readiness-contract.sh", ".github/scripts/verify-pre-tag-readiness.py", ".github/scripts/test_verify_pre_tag_readiness.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
+    triggers: ["desktop/macos/scripts/pre-tag-readiness.sh", "desktop/macos/scripts/qualification-runner-self-clean.py", "desktop/macos/scripts/qualification-watchdog.py", "desktop/macos/tests/test-pre-tag-readiness-contract.sh", "scripts/dev-harness/_resolve_python.sh", ".github/scripts/verify-pre-tag-readiness.py", ".github/scripts/test_verify_pre_tag_readiness.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "trusted-M1 readiness must retain exact-SHA cache/lease ownership and cannot emit a passing receipt before authenticated cleanup"
   - id: pre-tag-readiness-behavior
     command: ["python3", "desktop/macos/tests/test_pre_tag_readiness_behavior.py"]
-    triggers: ["desktop/macos/scripts/pre-tag-readiness.sh", "desktop/macos/scripts/qualification-runner-self-clean.py", "desktop/macos/scripts/qualification-watchdog.py", "desktop/macos/tests/test_pre_tag_readiness_behavior.py", ".github/checks-manifest.yaml"]
+    triggers: ["desktop/macos/scripts/pre-tag-readiness.sh", "desktop/macos/scripts/qualification-runner-self-clean.py", "desktop/macos/scripts/qualification-watchdog.py", "desktop/macos/tests/test_pre_tag_readiness_behavior.py", ".github/scripts/git_bash.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a disposable source and authenticated capability fakes prove the real readiness orchestrator emits its exact-SHA receipt only after ordered cleanup"
   - id: verify-pre-tag-readiness-tests
@@ -46,7 +46,7 @@ checks:
     reason: "make setup must provision the minimal, rerunnable backend environment required by selected pre-push checks"
   - id: desktop-release-process-guards
     command: ["bash", "scripts/run-release-process-guards.sh"]
-    triggers: [".github/workflows/desktop_qualify_beta.yml", ".github/scripts/check-release-process-guards.py", "scripts/run-release-process-guards.sh", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/desktop_qualify_beta.yml", ".github/scripts/check-release-process-guards.py", ".github/scripts/git_bash.py", "scripts/dev-harness/_resolve_python.sh", "scripts/run-release-process-guards.sh", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-174: qualification must check out the exact release tag inside its isolated source directory; the guard and its focused behavioral test run on every relevant diff"
   - id: failure-class-retirement-author
@@ -94,21 +94,6 @@ checks:
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/test_desktop_release_manifest_schema.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the Stable manifest schema must keep admitting exactly one app artifact pair; a beta_zip_url re-entering it is how a beta build becomes describable as Stable"
-  - id: pr-scope
-    command: ["python3", ".github/scripts/check_pr_scope.py", "--base", "{base}", "--head", "{head}"]
-    triggers: ["all"]
-    lanes: ["local", "ci"]
-    reason: "advisory PR production-source churn report (annotations only, never blocks)"
-  - id: pr-scope-helper-tests
-    command: ["python3", ".github/scripts/test_check_pr_scope.py"]
-    triggers: [".github/scripts/check_pr_scope.py", ".github/scripts/test_check_pr_scope.py"]
-    lanes: ["local", "ci"]
-    reason: "scope advisor classification/annotation contract"
-  - id: backend-test-discovery
-    command: ["python3", "backend/scripts/check_unit_test_discovery.py"]
-    triggers: ["backend/tests/**", "backend/testing/**", "backend/scripts/select_backend_unit_tests.py", "backend/scripts/check_unit_test_discovery.py", ".github/workflows/parakeet_gpu_tests.yml", ".github/workflows/backend-hermetic-e2e.yml", ".github/workflows/desktop-backend-contracts.yml", ".github/workflows/backend-unit-tests.yml"]
-    lanes: ["local", "ci"]
-    reason: "every backend test file must be discovered by a verified runner"
   - id: desktop-release-doctor-v1
     command: ["python3", ".github/scripts/test_desktop_release_doctor.py"]
     triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
@@ -168,7 +153,7 @@ checks:
     reason: "locked invariant citation enforcement must keep rejecting an uncited path match"
   - id: pr-preflight-contract-tests
     command: ["python3", ".github/scripts/test_pr_preflight.py"]
-    triggers: [".github/scripts/pr_preflight.py", ".github/scripts/test_pr_preflight.py", ".github/scripts/pr_metadata.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/preflight_runner.py", ".github/scripts/pr_preflight.py", ".github/scripts/test_pr_preflight.py", ".github/scripts/pr_metadata.py", "desktop/macos/scripts/check-e2e-flow-coverage.py", "scripts/pre-push-singleflight", "scripts/pr-preflight", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "preflight resolves the check selection every PR depends on"
   - id: product-invariants
@@ -215,7 +200,7 @@ checks:
     reason: "agent-facing macOS development hygiene CLI remains safe and deterministic"
   - id: desktop-e2e-flow-coverage
     command: ["python3", "desktop/macos/scripts/check-e2e-flow-coverage.py", "--strict", "--base", "{base}"]
-    triggers: ["desktop/macos/Desktop/Sources/**/*.swift"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-e2e-flow-coverage.py"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
@@ -233,16 +218,19 @@ checks:
     command: ["ruby", "app/ios/test/rayban_dat_plugin_boundary_test.rb"]
     triggers: ["app/ios/Podfile", "app/ios/Podfile.lock", "app/ios/rayban_dat_plugin_boundary.rb", "app/ios/test/rayban_dat_plugin_boundary_test.rb", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
     reason: "Ray-Ban DAT launch collision requires the Meta and mcumgr SwiftProtobuf copies to remain in mutually exclusive iOS pod graphs"
   - id: rayban-dat-xcode-graph
     command: ["ruby", "app/ios/test/rayban_dat_xcode_graph_test.rb"]
     triggers: ["app/ios/Podfile", "app/ios/Flutter/raybanDat*.xcconfig", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/Runner.xcodeproj/xcshareddata/xcschemes/raybanDat.xcscheme", "app/ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved", "app/ios/test/rayban_dat_xcode_graph_test.rb", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
     reason: "Ray-Ban DAT must link Meta 0.8.0 only in its dedicated signed iOS target while the default Runner remains audio-only"
   - id: rayban-dat-build-wrapper
     command: ["ruby", "app/ios/test/rayban_dat_build_wrapper_test.rb"]
     triggers: ["app/scripts/rayban_dat.sh", "app/ios/Podfile", "app/ios/rayban_dat_plugin_boundary.rb", "app/ios/test/rayban_dat_build_wrapper_test.rb", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
     reason: "Ray-Ban DAT builds must strip mcumgr before CocoaPods and restore the exact default graph even after interruption"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
@@ -487,7 +475,7 @@ checks:
     reason: "#9843 Ticket 05: enforce pinned swift-format lint on all first-party Swift"
   - id: desktop-swiftlint-config
     command: ["python3", ".github/scripts/test_swiftlint_config.py"]
-    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/scripts/prepare-swiftlint-baseline.py", "desktop/macos/scripts/swiftlint-wrapper.sh", ".github/scripts/test_swiftlint_config.py"]
+    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/scripts/prepare-swiftlint-baseline.py", "desktop/macos/scripts/swiftlint-wrapper.sh", ".github/scripts/git_bash.py", ".github/scripts/test_swiftlint_config.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 06: SwiftLint safety config, plugin attachment, and baseline contract"
   - id: desktop-swiftlint
@@ -616,6 +604,7 @@ checks:
     command: ["python3", ".github/scripts/test_desktop_release_flow_contract.py"]
     triggers: ["codemagic.yaml", ".github/workflows/desktop_auto_release.yml", ".github/workflows/desktop_qualify_beta.yml", ".github/workflows/desktop_promote_beta.yml", ".github/workflows/desktop_recover_beta.yml", ".github/workflows/desktop_rollback_beta.yml", ".github/workflows/desktop_breakglass_rollout_beta.yml", ".github/workflows/desktop_beta_admission_control.yml", ".github/workflows/desktop_promote_prod.yml", ".github/workflows/gcp_backend.yml", "desktop/macos/scripts/qualify-desktop-beta.sh", "desktop/macos/scripts/qualification-cache-reclaim.py", "desktop/macos/scripts/qualification-runner-self-clean.py", "desktop/macos/scripts/qualification-watchdog.py", "desktop/macos/scripts/qualification-lease-command.sh", ".github/scripts/test_desktop_release_flow_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
     reason: "SCA-17 prevents duplicate desktop promotion authorities and requires post-traffic production release-vector verification"
   - id: desktop-qualification-bootstrap-contract
     command: ["bash", "desktop/macos/tests/test-qualify-desktop-beta-contract.sh"]

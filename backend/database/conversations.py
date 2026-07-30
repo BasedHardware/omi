@@ -1100,6 +1100,42 @@ def get_processing_conversations(uid: str):
     return conversations
 
 
+def select_stale_in_progress(conversations, cutoff: datetime, limit: int):
+    """Oldest-first bounded selection of orphaned in-progress conversations (#9809).
+
+    A conversation owned by any live session refreshes `finished_at` on every
+    segment and that session's lifecycle loop processes it within the
+    conversation timeout, so anything idle past the cutoff has no owner.
+    Missing or non-datetime `finished_at` is excluded: without a trustworthy
+    idle clock the row cannot be proven orphaned.
+    """
+    stale = []
+    for conversation in conversations:
+        finished_at = conversation.get('finished_at')
+        if isinstance(finished_at, datetime) and finished_at < cutoff:
+            stale.append(conversation)
+    stale.sort(key=lambda conversation: conversation['finished_at'])
+    return stale[:limit]
+
+
+def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, limit: int = 10):
+    """In-progress conversations whose last activity predates the cutoff (#9809).
+
+    The composite index orders by the last activity clock, so the bounded read
+    always reaches the oldest candidates. Without that ordering, an arbitrary
+    first page could keep old orphaned rows beyond it invisible forever.
+    """
+    docs = _store().query(
+        _conversations_path(uid),
+        filters=[('status', '==', ConversationStatus.in_progress.value)],
+        order_by='finished_at',
+        direction='asc',
+        limit=limit,
+    )
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+    return select_stale_in_progress((doc.to_dict() for doc in docs), cutoff, limit)
+
+
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
     _store().update(_conversation_path(uid, conversation_id),{'status': status})
 

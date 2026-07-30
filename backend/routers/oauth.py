@@ -150,6 +150,18 @@ def oauth_authorize(
     return response
 
 
+def _setup_completed_from_payload(payload: object) -> bool:
+    """Read `is_setup_completed` from a third-party setup_completed_url body.
+
+    Mirrors `routers.apps._setup_completed_from_response`: the body is
+    developer-controlled, so a JSON scalar or array is as likely as the documented
+    object. Anything that is not an object carrying a truthy `is_setup_completed`
+    means setup is not completed. A non-JSON body still raises ValueError out of
+    `res.json()` and is answered with the 503 below.
+    """
+    return isinstance(payload, dict) and bool(payload.get('is_setup_completed', False))
+
+
 @router.post("/v1/oauth/token", response_model=OAuthTokenResponse)
 async def oauth_token(
     firebase_id_token: str = Form(...),
@@ -206,7 +218,7 @@ async def oauth_token(
                     follow_redirects=False,
                 )
                 res.raise_for_status()
-                if not res.json().get('is_setup_completed', False):
+                if not _setup_completed_from_payload(res.json()):
                     raise HTTPException(
                         status_code=400,
                         detail='App setup is not completed. Please complete app setup before authorizing.',

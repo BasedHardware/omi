@@ -324,6 +324,14 @@ assert [(request["method"], request["route"]) for request in requests] == [
 assert requests[0]["authorization"] is None
 assert requests[1]["authorization"] == "Bearer test-automation-token"
 assert requests[2]["authorization"] == "Bearer test-automation-token"
+
+# Missing token must fail loud (not silently omit Authorization).
+del os.environ["OMI_AUTOMATION_TOKEN"]
+os.environ["TMPDIR"] = "/tmp"
+os.environ.pop("OMI_AUTOMATION_TOKEN_FILE", None)
+missing = module.request_json("http://127.0.0.1:59999", "GET", "/state")
+assert missing.get("ok") is False
+assert "automation_token_missing" in str(missing.get("error", ""))
 PY
 
 write_flow() {

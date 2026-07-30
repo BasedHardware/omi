@@ -36,6 +36,7 @@ def test_source_closure_includes_all_dockerfile_copy_dirs() -> None:
             "backend/models/",
             "backend/routers/",
             "backend/services/",
+            "backend/testing/parity_pack_v0/",
             "backend/utils/",
             "backend/pusher/",
         ]
@@ -62,6 +63,7 @@ def test_source_closure_cli_output_includes_chart_dir() -> None:
         "backend/models/",
         "backend/routers/",
         "backend/services/",
+        "backend/testing/parity_pack_v0/",
         "backend/utils/",
         "backend/pusher/",
     ]:

@@ -4,4 +4,8 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
-exec python3 .github/scripts/pr_preflight.py "$@"
+
+# shellcheck source=dev-harness/_resolve_python.sh
+source scripts/dev-harness/_resolve_python.sh
+PYTHON_BIN="$(dev_harness_python)"
+exec "$PYTHON_BIN" .github/scripts/pr_preflight.py "$@"

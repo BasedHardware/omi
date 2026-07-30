@@ -92,6 +92,8 @@ final class DeviceProvider: ObservableObject {
     static let pairedDeviceId = "pairedDeviceId"
     static let pairedDeviceName = "pairedDeviceName"
     static let pairedDeviceType = "pairedDeviceType"
+    static let analyticsPairedDeviceIds = "analyticsPairedDeviceIds"
+    static let analyticsFirstPairedAt = "analyticsFirstPairedAt"
   }
 
   // MARK: - Initialization
@@ -111,6 +113,9 @@ final class DeviceProvider: ObservableObject {
     autoReconnectEnabled: Bool = true
   ) {
     let persistedDevice = Self.loadPairedDevice(from: userDefaults)
+    if let persistedDevice {
+      Self.seedPairingAnalyticsState(for: persistedDevice, in: userDefaults)
+    }
     let coordinator = DeviceSessionCoordinator(
       pairedDevice: persistedDevice,
       connectionFactory: connectionFactory,
@@ -224,6 +229,42 @@ final class DeviceProvider: ObservableObject {
     }
   }
 
+  private static func seedPairingAnalyticsState(
+    for device: BtDevice,
+    in userDefaults: UserDefaults
+  ) {
+    guard userDefaults.stringArray(forKey: UserDefaultsKeys.analyticsPairedDeviceIds) == nil else {
+      return
+    }
+    userDefaults.set([device.id], forKey: UserDefaultsKeys.analyticsPairedDeviceIds)
+  }
+
+  private func recordPairingAnalytics(for device: BtDevice) {
+    var pairedDeviceIds = Set(
+      userDefaults.stringArray(forKey: UserDefaultsKeys.analyticsPairedDeviceIds) ?? [])
+    let isNewPair = pairedDeviceIds.insert(device.id).inserted
+    let isFirstPair = isNewPair && pairedDeviceIds.count == 1
+    var firstPairedAt = userDefaults.object(forKey: UserDefaultsKeys.analyticsFirstPairedAt) as? Date
+
+    if isNewPair {
+      userDefaults.set(
+        pairedDeviceIds.sorted(),
+        forKey: UserDefaultsKeys.analyticsPairedDeviceIds
+      )
+      if isFirstPair {
+        firstPairedAt = Date()
+        userDefaults.set(firstPairedAt, forKey: UserDefaultsKeys.analyticsFirstPairedAt)
+      }
+    }
+
+    AnalyticsManager.shared.devicePairingReady(
+      device: device,
+      isNewPair: isNewPair,
+      isFirstPair: isFirstPair,
+      firstPairedAt: firstPairedAt
+    )
+  }
+
   // MARK: - Discovery
 
   /// Start scanning for devices
@@ -271,6 +312,7 @@ final class DeviceProvider: ObservableObject {
 
       // Save as paired device
       savePairedDevice(connection.device)
+      recordPairingAnalytics(for: connection.device)
 
       // Start battery monitoring
       await startBatteryMonitoring(connection: connection, generation: generation)

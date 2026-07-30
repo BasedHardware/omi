@@ -90,6 +90,7 @@ from utils.voice_duration_limiter import (
     check_budget,
     record_actual_duration,
 )
+from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 import logging
 
 logger = logging.getLogger(__name__)
@@ -785,6 +786,23 @@ async def transcribe_voice_message(
                 )
             )
 
+        parity_capture = SurfaceParityCapture.from_environ(
+            principal_id=uid,
+            session_id=str(uuid.uuid4()),
+            surface="ptt",
+            source="desktop_ptt_http",
+            provider_lane="stt",
+            route_or_model=stt_model or stt_provider or "prerecorded",
+            request={
+                "encoding": encoding,
+                "sample_rate": sample_rate,
+                "channels": channels,
+                "language": resolved_language,
+                "keyword_count": len(context_keywords),
+            },
+        )
+        parity_capture.observe_audio("client", audio_bytes)
+
         # Daily budget check
         duration_ms = compute_pcm_duration_ms(len(audio_bytes), sample_rate, channels)
         allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
@@ -810,6 +828,15 @@ async def transcribe_voice_message(
                 keywords=context_keywords,
             )
             outcome = TranscriptionOutcome.SUCCESS if transcript else TranscriptionOutcome.EXPECTED_SILENCE
+            parity_capture.observe(
+                "inbound",
+                {
+                    "type": "transcript",
+                    "text": transcript or "",
+                    "detected_language": detected_language,
+                    "outcome": outcome.value,
+                },
+            )
             attempt.finish(outcome)
         except Exception as error:
             failure = failure_from_exception(error, provider=stt_provider)
@@ -818,6 +845,7 @@ async def transcribe_voice_message(
         finally:
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
+            parity_capture.persist()
             del audio_bytes
 
         response = {
@@ -1083,6 +1111,21 @@ async def transcribe_voice_message_stream(
         await websocket.close(code=1011, reason='Transcription service unavailable')
         return
     context_keywords = _parse_context_keywords(keywords)
+    parity_capture = SurfaceParityCapture.from_environ(
+        principal_id=uid,
+        session_id=str(uuid.uuid4()),
+        surface="ptt",
+        source="desktop_ptt_stream",
+        provider_lane="stt",
+        route_or_model=stt_model,
+        request={
+            "codec": codec,
+            "sample_rate": sample_rate,
+            "channels": channels,
+            "language": stt_language,
+            "keyword_count": len(context_keywords),
+        },
+    )
 
     loop = asyncio.get_running_loop()
 
@@ -1092,6 +1135,7 @@ async def transcribe_voice_message_stream(
     segment_queue = asyncio.Queue()
 
     def stream_transcript(segments):
+        parity_capture.observe("inbound", {"type": "transcript", "segments": segments})
         loop.call_soon_threadsafe(segment_queue.put_nowait, segments)
 
     async def segment_sender():
@@ -1263,6 +1307,7 @@ async def transcribe_voice_message_stream(
                     break
 
             received_audio_bytes += len(data)
+            parity_capture.observe_audio("client", data)
             stt_audio_buffer.extend(data)
 
             # Flush to the selected provider in 30ms chunks.
@@ -1314,6 +1359,7 @@ async def transcribe_voice_message_stream(
                     pass
 
         del stt_audio_buffer
+        parity_capture.persist()
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])

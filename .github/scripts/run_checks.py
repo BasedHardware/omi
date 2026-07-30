@@ -7,6 +7,7 @@ import argparse
 import fnmatch
 import glob
 import json
+import os
 import platform as _platform_mod
 import subprocess
 import sys
@@ -15,6 +16,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any
+
+from git_bash import bash_executable
 
 VALID_PLATFORMS = {"all", "macos", "linux", "windows"}
 
@@ -169,6 +172,7 @@ def run_git(root: Path, *args: str) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
     )
     return result.stdout.strip()
 
@@ -299,6 +303,23 @@ def command_for_check(
     return command
 
 
+def command_for_host(
+    command: list[str],
+    *,
+    platform_name: str | None = None,
+    python_executable: str | None = None,
+) -> list[str]:
+    """Resolve manifest interpreter aliases through the active Windows toolchain."""
+    platform = platform_name or os.name
+    if platform != "nt" or not command:
+        return command
+    if command[0] == "bash":
+        return [bash_executable(platform_name=platform), *command[1:]]
+    if command[0] == "python3":
+        return [python_executable or sys.executable, *command[1:]]
+    return command
+
+
 def execute_checks(
     root: Path,
     checks: list[Check],
@@ -321,6 +342,7 @@ def execute_checks(
             pr_body_file=pr_body_file,
             skip_changelog=skip_changelog,
         )
+        command = command_for_host(command)
         returncode = subprocess.run(command, cwd=root, check=False).returncode
         status = "PASS" if returncode == 0 else "FAIL"
         print(f"<== {status} {check.id} ({time.monotonic() - started:.2f}s)", flush=True)

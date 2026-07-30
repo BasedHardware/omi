@@ -16,12 +16,20 @@ from pathlib import Path
 
 POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
+MAX_PR_BODY_FINGERPRINT_BYTES = 1024 * 1024
 
 # Signals forwarded to the owned child. SIGHUP is POSIX-only and is simply absent
 # on Windows, so the set is resolved against the host rather than assumed —
 # referencing signal.SIGHUP unconditionally raised AttributeError before any
 # pre-push check could run.
 FORWARDED_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP")
+FINGERPRINT_ENV_NAMES = (
+    "GITHUB_HEAD_REF",
+    "OMI_PR_BODY_FILE",
+    "PATH",
+    "PYTHON",
+    "PYTHONPATH",
+)
 
 
 def forwardable_signals() -> tuple[int, ...]:
@@ -30,20 +38,27 @@ def forwardable_signals() -> tuple[int, ...]:
     return tuple(signum for signum in resolved if signum is not None)
 
 
-def signal_child(child: subprocess.Popen, signum: int) -> None:
-    """Forward a signal to the child, preferring its process group where supported.
-
-    The child is started with ``start_new_session=True``, so on POSIX it leads its
-    own process group and ``os.killpg`` reaches the whole tree. Windows has no
-    ``os.killpg``; fall back to signalling the process directly.
-    """
+def signal_child(
+    child: subprocess.Popen,
+    signum: int,
+    *,
+    platform_name: str | None = None,
+) -> None:
+    """Forward a signal to the isolated child process group where supported."""
+    platform_name = platform_name or os.name
     killpg = getattr(os, "killpg", None)
     try:
-        if killpg is not None:
+        if platform_name == "nt":
+            ctrl_break = getattr(signal, "CTRL_BREAK_EVENT", None)
+            if ctrl_break is not None and signum in (signal.SIGINT, signal.SIGTERM):
+                child.send_signal(ctrl_break)
+            else:
+                child.send_signal(signum)
+        elif killpg is not None:
             killpg(child.pid, signum)
         else:
             child.send_signal(signum)
-    except (ProcessLookupError, OSError):
+    except (ProcessLookupError, OSError, ValueError):
         pass
 
 
@@ -51,6 +66,17 @@ def atomic_json(path: Path, value: dict) -> None:
     temporary = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(temporary, path)
+
+
+def configure_console_error_handling() -> None:
+    """Keep non-console Unicode output from aborting a Windows preflight."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            options = {"errors": "replace"}
+            if os.name == "nt":
+                options["encoding"] = "utf-8"
+            reconfigure(**options)
 
 
 def read_json(path: Path) -> dict:
@@ -64,6 +90,8 @@ def read_json(path: Path) -> dict:
 def process_exists(pid: int) -> bool:
     if pid <= 0:
         return False
+    if os.name == "nt":
+        return windows_process_exists(pid)
     try:
         os.kill(pid, 0)
         return True
@@ -73,11 +101,41 @@ def process_exists(pid: int) -> bool:
         return True
 
 
+def windows_process_exists(pid: int) -> bool:
+    """Check liveness without treating signal 0 as Windows CTRL_C_EVENT."""
+    import ctypes
+    from ctypes import wintypes
+
+    synchronize = 0x00100000
+    wait_timeout = 0x00000102
+    access_denied = 5
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(synchronize, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == access_denied
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == wait_timeout
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def default_state_dir(root: Path, name: str) -> Path:
     override = os.getenv("OMI_PREFLIGHT_STATE_DIR")
     if override:
         return Path(override).resolve() / name
-    git_dir = subprocess.check_output(["git", "rev-parse", "--absolute-git-dir"], cwd=root, text=True).strip()
+    git_dir = subprocess.check_output(
+        ["git", "rev-parse", "--absolute-git-dir"],
+        cwd=root,
+        text=True,
+        encoding="utf-8",
+    ).strip()
     return Path(git_dir) / "omi-preflight" / name
 
 
@@ -89,10 +147,29 @@ def fingerprint(root: Path, command: list[str], stdin_data: str) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
+        encoding="utf-8",
     ).stdout.strip()
     digest = hashlib.sha256()
     for value in (str(root.resolve()), head, "\0".join(command), stdin_data):
         digest.update(value.encode("utf-8"))
+        digest.update(b"\0")
+    relevant_names = set(FINGERPRINT_ENV_NAMES)
+    relevant_names.update(name for name in os.environ if name.startswith("PRE_PUSH_"))
+    for name in sorted(relevant_names):
+        digest.update(name.encode("utf-8"))
+        digest.update(b"=")
+        digest.update(os.getenv(name, "").encode("utf-8"))
+        digest.update(b"\0")
+    body_path = os.getenv("OMI_PR_BODY_FILE", "").strip()
+    if body_path:
+        try:
+            with Path(body_path).open("rb") as body_file:
+                body = body_file.read(MAX_PR_BODY_FINGERPRINT_BYTES + 1)
+            digest.update(body[:MAX_PR_BODY_FINGERPRINT_BYTES])
+            if len(body) > MAX_PR_BODY_FINGERPRINT_BYTES:
+                digest.update(b"<truncated-pr-body>")
+        except OSError:
+            digest.update(b"<unreadable-pr-body>")
         digest.update(b"\0")
     return digest.hexdigest()
 
@@ -212,15 +289,24 @@ def run_owned(
         log_path.write_text("", encoding="utf-8")
         os.chmod(log_path, 0o600)
         write_status()
+        child_env = os.environ.copy()
+        child_env["PYTHONIOENCODING"] = "utf-8"
+        child_env["PYTHONUTF8"] = "1"
+        process_group_options = (
+            {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
+        )
         child = subprocess.Popen(
             command,
             cwd=root,
+            env=child_env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
-            start_new_session=True,
+            **process_group_options,
         )
         if child.stdin:
             child.stdin.write(stdin_data)
@@ -263,6 +349,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    configure_console_error_handling()
     args = parse_args()
     command = list(args.command)
     if command and command[0] == "--":
@@ -270,7 +357,13 @@ def main() -> int:
     if not command:
         print("FAIL: preflight runner requires a command after --", file=sys.stderr)
         return 2
-    root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()).resolve()
+    root = Path(
+        subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"],
+            text=True,
+            encoding="utf-8",
+        ).strip()
+    ).resolve()
     # Git supplies ref updates on a pipe. Manual preflight runs inherit a TTY;
     # treating that as empty input avoids waiting forever for an interactive EOF.
     stdin_data = "" if sys.stdin.isatty() else sys.stdin.read()

@@ -219,6 +219,7 @@ class MemoriesViewModel: ObservableObject {
   @Published var pendingDeleteMemory: ServerMemory? = nil
   @Published var undoTimeRemaining: Double = 0
   private var deleteTask: Task<Void, Never>? = nil
+  private var finalizingDeleteMemoryIDs = Set<String>()
   private var cancellables = Set<AnyCancellable>()
   private var hasLoadedInitially = false
 
@@ -427,7 +428,13 @@ class MemoriesViewModel: ObservableObject {
 
   // MARK: - Initialization
 
-  init() {
+  private let deleteMemoryRequest: (String) async throws -> Void
+
+  init(deleteMemoryRequest: ((String) async throws -> Void)? = nil) {
+    self.deleteMemoryRequest =
+      deleteMemoryRequest ?? { id in
+        try await APIClient.shared.deleteMemory(id: id)
+      }
     // Owner fencing: an in-place account switch posts only
     // .runtimeOwnerDidChange (never .userDidSignOut), so without this reset the
     // previous owner's memories keep rendering until the container's deferred
@@ -1315,7 +1322,7 @@ class MemoriesViewModel: ObservableObject {
     }
 
     do {
-      try await MemoryStorage.shared.deleteMemoryByBackendId(memory.id)
+      try await MemoryStorage.shared.deleteMemory(surfacedId: memory.id)
     } catch {
       logError("Failed to soft-delete memory locally", error: error)
     }
@@ -1355,9 +1362,7 @@ class MemoriesViewModel: ObservableObject {
       if Task.isCancelled { return }
 
       // Timer expired, perform actual delete
-      await MainActor.run {
-        confirmDelete()
-      }
+      await MainActor.run { _ = confirmDelete() }
     }
   }
 
@@ -1375,7 +1380,7 @@ class MemoriesViewModel: ObservableObject {
 
     Task {
       do {
-        try await MemoryStorage.shared.restoreMemoryByBackendId(memory.id)
+        try await MemoryStorage.shared.restoreMemory(surfacedId: memory.id)
       } catch {
         logError("Failed to restore memory locally", error: error)
       }
@@ -1383,26 +1388,35 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
-  func confirmDelete() {
-    guard let memory = pendingDeleteMemory else { return }
+  @discardableResult
+  func confirmDelete() -> Task<Void, Never> {
+    guard let memory = pendingDeleteMemory else { return Task {} }
 
     // Cancel timer if still running
     deleteTask?.cancel()
     deleteTask = nil
 
-    Task {
+    return Task { [weak self] in
+      guard let self else { return }
       await performActualDelete(memory)
-    }
-
-    OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-      pendingDeleteMemory = nil
-      undoTimeRemaining = 0
+      guard self.pendingDeleteMemory?.id == memory.id else { return }
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+        self.pendingDeleteMemory = nil
+        self.undoTimeRemaining = 0
+      }
     }
   }
 
   private func performActualDelete(_ memory: ServerMemory) async {
+    guard finalizingDeleteMemoryIDs.insert(memory.id).inserted else { return }
+    defer { finalizingDeleteMemoryIDs.remove(memory.id) }
+
+    if MemoryIdentity(surfacedId: memory.id).isLocalOnly {
+      return
+    }
+
     do {
-      try await APIClient.shared.deleteMemory(id: memory.id)
+      try await deleteMemoryRequest(memory.id)
       AnalyticsManager.shared.memoryDeleted(conversationId: memory.id)
       // The backend row is now gone, so the raw backend paging cursor is one
       // position too high — decrement it so the next API-backed loadMore() doesn't
@@ -1413,7 +1427,7 @@ class MemoriesViewModel: ObservableObject {
     } catch {
       logError("Failed to delete memory", error: error)
       do {
-        try await MemoryStorage.shared.restoreMemoryByBackendId(memory.id)
+        try await MemoryStorage.shared.restoreMemory(surfacedId: memory.id)
       } catch {
         logError("Failed to restore memory after delete failure", error: error)
       }

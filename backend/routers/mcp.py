@@ -29,6 +29,7 @@ from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
+from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from dependencies import (
@@ -137,6 +138,12 @@ def create_memory(
         consumer='mcp',
         operation="mcp_memory_create",
         require_canonical_promotion=True,
+    )
+    capture_memory_write(
+        principal_id=uid,
+        source="mcp_memory_create",
+        session_id=memory_db.id,
+        memories=[memory_db],
     )
     postprocess_executor.submit(update_personas_async, uid)
     return memory_db

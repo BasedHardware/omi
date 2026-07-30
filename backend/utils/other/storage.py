@@ -344,20 +344,23 @@ def get_conversation_recording_if_exists(uid: str, memory_id: str) -> Optional[s
     return None
 
 
-def delete_all_conversation_recordings(uid: str) -> None:
+def delete_all_conversation_recordings(uid: str) -> int:
     if not uid:
-        return
+        return 0
     if not memories_recordings_bucket:
         # A required purge failure blocks the irreversible Firestore wipe (see
         # services/users/account_deletion.py), so an unconfigured bucket must not raise here:
         # uploads resolve the same name, so a deployment without it cannot have stored recordings.
         logger.warning('BUCKET_MEMORIES_RECORDINGS is not configured; skipping conversation recordings purge')
-        return
+        return 0
     bucket = _get_storage_client().bucket(memories_recordings_bucket)
     # Trailing slash so a uid is not a prefix of another uid's folder (e.g. "abc" matching "abcd/").
     blobs = bucket.list_blobs(prefix=f"{uid}/")
+    deleted = 0
     for blob in blobs:
         blob.delete()
+        deleted += 1
+    return deleted
 
 
 # ********************************************

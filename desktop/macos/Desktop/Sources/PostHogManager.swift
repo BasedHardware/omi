@@ -97,10 +97,10 @@ class PostHogManager {
     log("PostHog: Identified user \(uid)")
   }
 
-  /// Set a specific user property
-  func setUserProperty(key: String, value: Any) {
+  /// Set person properties in one identify call.
+  func setUserProperties(_ properties: [String: Any]) {
     guard isInitialized else { return }
-    PostHogSDK.shared.identify(PostHogSDK.shared.getDistinctId(), userProperties: [key: value])
+    PostHogSDK.shared.identify(PostHogSDK.shared.getDistinctId(), userProperties: properties)
   }
 
   // MARK: - Event Tracking

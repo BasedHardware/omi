@@ -536,9 +536,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         await TierManager.shared.checkTierIfNeeded()
       }
 
-      // Report comprehensive settings state (at most once per day)
-      AnalyticsManager.shared.reportAllSettingsIfNeeded()
-
       // File indexing now runs through FileIndexingView UI (user consent required)
       // No background scan — prevents race condition where scan finishes before UI listens
     }

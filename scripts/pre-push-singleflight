@@ -4,4 +4,20 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
-exec python3 .github/scripts/preflight_runner.py --name pre-push -- scripts/pre-push "$@"
+
+# shellcheck source=dev-harness/_resolve_python.sh
+source scripts/dev-harness/_resolve_python.sh
+PYTHON_BIN="$(dev_harness_python)"
+export PYTHON="$PYTHON_BIN"
+
+PREFLIGHT_COMMAND=(scripts/pre-push "$@")
+if dev_harness_python_uses_windows_paths "$PYTHON_BIN"; then
+  if ! command -v cygpath >/dev/null 2>&1; then
+    echo "FAIL: native Windows Python requires Git for Windows Bash (cygpath was not found)." >&2
+    exit 1
+  fi
+  GIT_BASH_NATIVE="$(cygpath -w "$(command -v bash)")"
+  PREFLIGHT_COMMAND=("$GIT_BASH_NATIVE" scripts/pre-push "$@")
+fi
+
+exec "$PYTHON_BIN" .github/scripts/preflight_runner.py --name pre-push -- "${PREFLIGHT_COMMAND[@]}"

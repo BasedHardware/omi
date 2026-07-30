@@ -638,29 +638,62 @@ wait_for_desktop_launch() {
 
 wait_for_bridge() {
   local port="$1"
-  local expected_bundle_id
+  local expected_bundle_id token_file probe_status
   expected_bundle_id="$(derive_bundle_id "$BUNDLE")"
+  # shellcheck source=automation-token-path.sh
+  source "$SCRIPT_DIR/automation-token-path.sh"
+  token_file="$(omi_automation_token_file "$port")"
   local deadline=$((SECONDS + BRIDGE_WAIT_SECS))
   while (( SECONDS < deadline )); do
-    if python3 - "$port" "$expected_bundle_id" <<'PY'
+    python3 - "$port" "$expected_bundle_id" "$token_file" "$SCRIPT_DIR" <<'PY'
 import json
 import sys
 import urllib.error
 import urllib.request
 
-port, expected_bundle_id = sys.argv[1:]
+port, expected_bundle_id, token_file, scripts_dir = sys.argv[1:]
+sys.path.insert(0, scripts_dir)
+from automation_token_lib import automation_token
+
 try:
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=3) as response:
         payload = json.loads(response.read().decode("utf-8"))
-    if payload.get("ok") and payload.get("bundleIdentifier") == expected_bundle_id:
-        raise SystemExit(0)
 except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
-    pass
-raise SystemExit(1)
+    raise SystemExit(1)
+
+if not (payload.get("ok") and payload.get("bundleIdentifier") == expected_bundle_id):
+    raise SystemExit(1)
+
+token = automation_token(int(port))
+if not token:
+    # Health can pass while readers still miss the token file (TMPDIR mismatch).
+    raise SystemExit(2)
+
+request = urllib.request.Request(
+    f"http://127.0.0.1:{port}/state",
+    headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+)
+try:
+    with urllib.request.urlopen(request, timeout=3) as response:
+        state = json.loads(response.read().decode("utf-8"))
+except urllib.error.HTTPError as exc:
+    raise SystemExit(3 if exc.code == 401 else 1)
+except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+    raise SystemExit(1)
+
+if state.get("ok") is not True:
+    raise SystemExit(1)
+raise SystemExit(0)
 PY
-    then
-      echo "automation bridge healthy on port $port"
+    probe_status=$?
+    if [[ "$probe_status" -eq 0 ]]; then
+      echo "automation bridge healthy on port $port (authenticated; token=$token_file)"
       return 0
+    fi
+    if [[ "$probe_status" -eq 2 ]]; then
+      echo "qualification waiting: bridge health ok but automation token missing at $token_file (and Darwin/TMPDIR fallbacks)" >&2
+    elif [[ "$probe_status" -eq 3 ]]; then
+      echo "qualification waiting: bridge rejected automation token (HTTP 401) for $token_file" >&2
     fi
     if [[ -n "$DESKTOP_LAUNCH_PID" ]] && ! kill -0 "$DESKTOP_LAUNCH_PID" 2>/dev/null; then
       echo "qualification failed: desktop launch process exited before bridge became healthy" >&2
@@ -668,7 +701,7 @@ PY
     fi
     sleep 5
   done
-  echo "qualification failed: automation bridge not healthy within ${BRIDGE_WAIT_SECS}s (port $port)" >&2
+  echo "qualification failed: automation bridge not healthy within ${BRIDGE_WAIT_SECS}s (port $port; token path $token_file)" >&2
   return 1
 }
 
@@ -790,14 +823,44 @@ phase_begin "desktop-preparation" "runner-hygiene-cleanup"
 rm -f "$LAUNCH_SIGNAL_FILE"
 
 DESKTOP_LAUNCH_REQUESTED=1
+# Run dev-up first in its own tracked subshell so the dev stack (backend,
+# desktop-backend, firestore, redis, typesense) stays alive even if the
+# subsequent desktop app launch fails.  Previously both commands shared one
+# subshell; set -e caused the subshell to exit on desktop-run-local (or any
+# post-dev-up) failure, which triggered the EXIT trap → cleanup → dev-down
+# → SIGINT to every harness service including the healthy backend.
+# See FC-qualification-sigint-cascade.
 (
   cd "$WORKTREE"
   OMI_HARNESS_OWNERSHIP_TOKEN="$QUALIFICATION_LEASE_TOKEN" PROVIDER_MODE=offline make dev-up
+) >"$LAUNCH_LOG" 2>&1 &
+DEV_UP_PID=$!
+
+# Wait for dev-up to complete (success or fail).
+if ! wait "$DEV_UP_PID"; then
+  phase_end failed
+  echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
+  tail -n 80 "$LAUNCH_LOG" >&2 || true
+  echo "qualification failed: dev stack startup failed" >&2
+  exit 1
+fi
+
+# Dev stack is up; launch the desktop app in a separate subshell.  Its
+# failure will NOT tear down the already-healthy dev stack.
+# Pin the automation token file to Darwin user temp (NSTemporaryDirectory) and
+# forward it through run.sh's open --env so TMPDIR overrides cannot desync
+# the app writer from harness readers.
+# shellcheck source=automation-token-path.sh
+source "$SCRIPT_DIR/automation-token-path.sh"
+export OMI_AUTOMATION_TOKEN_FILE="${OMI_AUTOMATION_TOKEN_FILE:-$(omi_automation_token_file "$AUTOMATION_PORT")}"
+(
+  cd "$WORKTREE"
   OMI_DESKTOP_LAUNCH_SIGNAL_FILE="$LAUNCH_SIGNAL_FILE" \
     OMI_DESKTOP_LAUNCH_TOKEN="$DESKTOP_LAUNCH_TOKEN" \
+    OMI_AUTOMATION_TOKEN_FILE="$OMI_AUTOMATION_TOKEN_FILE" \
     OMI_SKIP_SETTINGS_SEED=1 \
     make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
-) >"$LAUNCH_LOG" 2>&1 &
+) >>"$LAUNCH_LOG" 2>&1 &
 DESKTOP_LAUNCH_PID=$!
 
 if ! wait_for_desktop_launch "$LAUNCH_SIGNAL_FILE"; then
