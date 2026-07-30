@@ -198,9 +198,6 @@ Runtime-selected providers must keep model-token parsing and required environmen
 
 HTTP endpoints: `uid: str = Depends(get_current_user_uid)` from `utils.other.endpoints`.
 
-`X-App-Product` (`context-for-claude`/`omi-*`) is orthogonal to platform; auth records
-`signup_product`/`products_used`/`last_active_product`. Context STT → `context_for_claude_stt`.
-
 WebSocket endpoints: use `WebSocketException(code=1008)`, **not** `HTTPException` — HTTPException exits ASGI without handshake, causing LB 5xx.
 
 Rate limiting: `Depends(auth.with_rate_limit(get_current_user_uid, "policy_name"))` — policies in `utils/rate_limit_config.py`.
