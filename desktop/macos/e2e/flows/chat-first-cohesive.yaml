@@ -17,6 +17,9 @@ covers:
   - desktop/macos/agent/src/runtime/kernel-core.ts
   - desktop/macos/agent/src/index.ts
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  # S1a's authorized executor result is projected through this store before
+  # the fixture card becomes visible at S1b.
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeStatusStore.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge+ChatFirst.swift
   - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
@@ -37,6 +40,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift
   # S3-S6 load canonical goals, acknowledge focus, and mutate focused-goal state.
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CanonicalGoalsStore.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+TaskCatalog.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureArchivePage.swift
   # S12/S13 load the Omi-only archive, select detail, and prepare its playback through typed audio APIs.
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureArchiveRepository.swift
