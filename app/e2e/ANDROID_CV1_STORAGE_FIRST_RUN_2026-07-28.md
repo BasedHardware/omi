@@ -108,3 +108,26 @@ phone copy.
 - `/tmp/omi-acceptance-postfix-wals-final.json`
 - `/tmp/omi-cv1-marker-online.aiff`
 - `/tmp/omi-cv1-marker-offline.aiff`
+
+## 2026-07-30 live-authority rerun
+
+The authenticated Android dev build was rebuilt and installed in place after
+removing charging from the deep-backlog authority path. Authentication,
+preferences, the exact pendant pairing, and local recovery state were retained.
+Automatic offline sync remained off.
+
+The development transcription endpoint repeatedly closed with WebSocket code
+1006 before reporting service readiness. The app therefore left the
+storage-authoritative tail on the pendant: the run contained no ring
+`READ_BEGIN`, `READ`, or `ADVANCE` command while transcription was unavailable.
+This is the intended containment result and prevents an unavailable live
+service from turning durable pendant history into an unbounded phone-side
+queue. It is not live-preview evidence.
+
+Android Bluetooth was then disabled and re-enabled. The exact pendant began
+reconnecting about 5.2 seconds after radio shutdown, completed the physical
+GATT connection about 2.2 seconds later, republished app readiness in another
+0.3 seconds, and completed time sync in another 0.25 seconds. No ring read or
+advance occurred during the service outage. This proves transport recovery and
+live/deep authority containment; the live transcript still requires a healthy
+development transcription endpoint.

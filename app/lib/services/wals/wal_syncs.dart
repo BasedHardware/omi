@@ -34,7 +34,6 @@ class WalSyncs implements IWalSync {
   bool _isCancelled = false;
   BtDevice? _device;
   String? _firmwareVersion;
-  bool _deviceCharging = false;
   final Map<String, RingBacklogDrainReceipt> _automaticRingBacklogReceipts = {};
 
   /// Called from DeviceProvider when a device connects/disconnects so the
@@ -47,14 +46,7 @@ class WalSyncs implements IWalSync {
   void setDevice(BtDevice? device, {String? firmwareVersion}) {
     _device = device;
     _firmwareVersion = firmwareVersion;
-    if (device == null) {
-      _deviceCharging = false;
-    }
     _deviceStorageRouter.bind(device, firmwareVersion: firmwareVersion);
-  }
-
-  void setDeviceCharging(bool charging) {
-    _deviceCharging = charging;
   }
 
   /// Best available firmware for discovery routing: the enriched value if it
@@ -137,7 +129,6 @@ class WalSyncs implements IWalSync {
       listener,
       deepBacklogPolicy: () => ringShouldDrainDeepBacklog(
         autoSyncEnabled: SharedPreferencesUtil().autoSyncOfflineRecordings,
-        isCharging: _deviceCharging,
       ),
       onBacklogSnapshotCompleted: (receipt) {
         final preferences = SharedPreferencesUtil();

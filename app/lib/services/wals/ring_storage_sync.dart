@@ -52,9 +52,8 @@ typedef RingBacklogSnapshotCompleted = void Function(
 
 bool ringShouldDrainDeepBacklog({
   required bool autoSyncEnabled,
-  required bool isCharging,
 }) =>
-    autoSyncEnabled || isCharging;
+    autoSyncEnabled;
 
 /// Chooses the first sequence that must be replayed into a replacement live
 /// transcription socket.
@@ -190,7 +189,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     this.listener, {
     RingConnectionResolver? connectionResolver,
     RingDocumentsDirectoryProvider? documentsDirectoryProvider,
-    RingDeepBacklogPolicy? deepBacklogPolicy,
+    required RingDeepBacklogPolicy deepBacklogPolicy,
     RingConversationTimeoutSecondsProvider? conversationTimeoutSecondsProvider,
     RingBacklogSnapshotCompleted? onBacklogSnapshotCompleted,
     int packetsPerRead = defaultPacketsPerRead,
@@ -198,7 +197,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     int Function()? nowSeconds,
   })  : _connectionResolverOverride = connectionResolver,
         _documentsDirectoryProvider = documentsDirectoryProvider ?? getApplicationDocumentsDirectory,
-        _deepBacklogPolicy = deepBacklogPolicy ?? (() => true),
+        _deepBacklogPolicy = deepBacklogPolicy,
         _conversationTimeoutSecondsProvider =
             conversationTimeoutSecondsProvider ?? (() => SharedPreferencesUtil().conversationSilenceDuration),
         _onBacklogSnapshotCompleted = onBacklogSnapshotCompleted,

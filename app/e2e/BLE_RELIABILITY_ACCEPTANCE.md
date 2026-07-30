@@ -14,6 +14,8 @@ From `app/`, run the focused behavioral contracts before touching hardware:
 
 ```bash
 flutter test \
+  test/services/capture/device_audio_streaming_policy_test.dart \
+  test/services/wals/ring_storage_sync_test.dart \
   test/unit/device_transport_exclusive_release_test.dart \
   test/unit/firmware_dfu_connection_handoff_test.dart \
   test/unit/native_ble_transport_exclusive_release_test.dart \
@@ -23,6 +25,21 @@ flutter test \
 
 scripts/analyze_ratchet.sh
 ```
+
+## Storage-authoritative operating contract
+
+The default connected mode is live capture. It may repair missing audio from
+the still-open conversation, using the configured conversation-silence
+boundary and durable sequence coverage, but it must not consume older pendant
+history. A historical drain requires either one explicit Sync action or the
+existing Auto Sync opt-in. Charging changes scheduling capacity, not user
+authority, and therefore never starts a deep drain.
+
+This contract is shared Dart policy. Android and iOS provide transport
+ownership but do not choose different backlog behavior. If the transcription
+service is unavailable, storage-authoritative firmware keeps recording on the
+pendant; the app must not move an unbounded queue of tiny ranges onto the
+phone while no live transcript can accept them.
 
 ### Authenticated Android physical-device builds
 
@@ -134,12 +151,31 @@ next disruption until the tester has seen the restoration notice.
 |---|---|---|
 | Initial owner | Cold-launch the dev app with the paired pendant available | The exact paired pendant reaches ready, time sync is attempted once, and live audio starts without a second connect action |
 | Bluetooth cycle | Turn phone Bluetooth off, speak a marker, turn it on, repeat five times | Every cycle reconnects without force-stop/relaunch; one time-sync attempt occurs per new ready generation; live audio resumes |
-| Pendant absence | Take the pendant out of range or power-cycle it, speak while disconnected, then return it | Native reconnect restores live audio; stored audio drains afterward with its original chronology |
+| Pendant absence | Take the pendant out of range or power-cycle it, speak while disconnected, then return it | Native reconnect restores live audio; the still-open conversation gap is repaired in its original chronology without authorizing older history |
 | Foreground/background | Background and foreground the app with the screen both unlocked and locked; on Android test background mode off and on | Reconnect does not create duplicate subscriptions or duplicate time-sync writes; capture/backfill resumes according to the platform mode |
 | MCU DFU success | Complete one normal firmware update | The DFU updater releases BLE, one serialized bounded reclaim loop targets only the exact pre-DFU pendant (up to three attempts), normal audio/backlog sync resumes without app restart, and pendant application settings remain unchanged |
 | DFU failure | Abort or use a controlled failing test image before activation | The app clears firmware-update state and runs one bounded reclaim loop for the same pendant; a plugin error plus thrown future must not start a second loop |
 | Page disposal | Leave the firmware page while terminal cleanup is in flight | Disposal and the later terminal callback share one cleanup/reclaim future; neither strands nor duplicates the BLE owner |
 | Backlog | Begin with a known non-empty pendant backlog, disrupt BLE during transfer, then restore it | Durable records are not acknowledged early; transfer resumes, finishes, and preserves timestamp order without duplicates |
+
+## Cross-host ownership handoff
+
+CV1 firmware exposes one BLE connection. An installed iOS app may be relaunched
+by CoreBluetooth restoration even when it is not the companion the user is
+actively using. With iOS Background Mode disabled:
+
+1. Connect iOS, terminate the dev app, and confirm iOS performs a restoration
+   launch.
+2. Leave that restored iOS process running and enable Bluetooth on the paired
+   Android phone.
+3. Android must acquire the pendant without terminating iOS again. The
+   background-launched Flutter engine must not reclaim the link.
+4. Disable Android Bluetooth and foreground iOS. iOS must then reconnect and
+   republish GATT readiness.
+
+Repeat with iOS Background Mode enabled. In that opt-in mode, restoration owns
+the background capture link until the user explicitly releases or switches the
+device; this is expected rather than a handoff failure.
 
 ## Repeatable backlog throughput
 
@@ -175,9 +211,9 @@ bounded ring/archive artifacts internally, but adjacent artifacts inside the
 configured conversation-silence boundary must appear as one logical recording
 and upload as one ordered multipart job.
 
-Run this case with the pendant off its charger and
-`autoSyncOfflineRecordings=false`; charging or enabling automatic offline sync
-independently authorizes a deep drain.
+Run this case with `autoSyncOfflineRecordings=false`. Charging never authorizes
+a deep drain; only a Sync tap or explicit automatic offline-sync opt-in may
+consume historical backlog.
 
 1. Record the configured conversation-silence duration, Remote VAD state,
    initial battery, and initial ring `read`, `write`, and `dropped` counters.

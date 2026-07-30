@@ -32,6 +32,7 @@ import 'package:omi/services/capture/conversation_capture_window.dart';
 import 'package:omi/services/capture/conversation_session_window.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/services/capture/device_audio_streaming_policy.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/capture/live_audio_frame_pacer.dart';
 import 'package:omi/services/capture/live_transcript_preview.dart';
@@ -753,15 +754,22 @@ class CaptureController extends ChangeNotifier
     // outage so it can re-enable streaming if needed (e.g. Limitless pendant).
     // Guard on deviceRecord: skip if the user has paused — no point waking the
     // device when _bleBytesStream is cancelled and audio would just be dropped.
-    if (_socketReconnectPending && _recordingDevice != null && recordingState == RecordingState.deviceRecord) {
+    final recordingDevice = _recordingDevice;
+    final reconnectWasPending =
+        _socketReconnectPending && recordingDevice != null && recordingState == RecordingState.deviceRecord;
+    if (reconnectWasPending) {
       _socketReconnectPending = false;
       final conn = await ServiceManager.instance().device.ensureConnection(
-            _recordingDevice!.id,
+            recordingDevice.id,
           );
       await conn?.onNetworkSocketReconnected();
-      if (!deferDeviceAudioResume) {
-        await _initiateDeviceAudioStreaming(resumeLiveContinuity: true);
-      }
+    }
+    final storageTailNeedsResume = _wal.getSyncs().usesStorageAuthoritativeAudio == true &&
+        recordingDevice != null &&
+        recordingState == RecordingState.deviceRecord &&
+        _ringAudioTailSession == null;
+    if (!deferDeviceAudioResume && (reconnectWasPending || storageTailNeedsResume)) {
+      await _initiateDeviceAudioStreaming(resumeLiveContinuity: true);
     }
 
     await _loadInProgressConversation();
@@ -1081,6 +1089,13 @@ class CaptureController extends ChangeNotifier
 
   void _scheduleStorageAudioTailRestart(String deviceId) {
     if (_recordingDevice?.id != deviceId || _isPaused || _ringAudioTailSession != null) return;
+    if (!DeviceAudioStreamingPolicy.shouldConsumeDeviceAudio(
+      usesStorageAuthoritativeAudio: true,
+      transcribeLaterEnabled: SharedPreferencesUtil().batchModeEnabled,
+      transcriptionServiceReady: _socket?.serverReady == true,
+    )) {
+      return;
+    }
     if (_storageAudioTailRestartTimer?.isActive == true || _storageAudioTailRestartInFlight) return;
 
     _storageAudioTailRestartAttempt += 1;
@@ -1099,7 +1114,12 @@ class CaptureController extends ChangeNotifier
     if (_storageAudioTailRestartInFlight ||
         _recordingDevice?.id != deviceId ||
         _isPaused ||
-        _ringAudioTailSession != null) {
+        _ringAudioTailSession != null ||
+        !DeviceAudioStreamingPolicy.shouldConsumeDeviceAudio(
+          usesStorageAuthoritativeAudio: true,
+          transcribeLaterEnabled: SharedPreferencesUtil().batchModeEnabled,
+          transcriptionServiceReady: _socket?.serverReady == true,
+        )) {
       return;
     }
     _storageAudioTailRestartInFlight = true;
@@ -1253,6 +1273,20 @@ class CaptureController extends ChangeNotifier
     _wal.getSyncs().phone.setDeviceInfo(deviceId, deviceModel);
 
     await streamButton(deviceId);
+    final usesStorageAuthoritativeAudio = _wal.getSyncs().usesStorageAuthoritativeAudio == true;
+    if (!DeviceAudioStreamingPolicy.shouldConsumeDeviceAudio(
+      usesStorageAuthoritativeAudio: usesStorageAuthoritativeAudio,
+      transcribeLaterEnabled: SharedPreferencesUtil().batchModeEnabled,
+      transcriptionServiceReady: _socket?.serverReady == true,
+    )) {
+      await _suspendStorageAuthoritativeTailForTranscriptionOutage();
+      updateRecordingState(RecordingState.deviceRecord);
+      Logger.warning(
+        'Storage-authoritative audio remains on the pendant until the '
+        'transcription service is ready',
+      );
+      return;
+    }
     final foregroundAudioReady = await streamAudioToWs(
       deviceId,
       codec,
@@ -1272,6 +1306,23 @@ class CaptureController extends ChangeNotifier
       if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
     }
     updateRecordingState(RecordingState.deviceRecord);
+    notifyListeners();
+  }
+
+  Future<void> _suspendStorageAuthoritativeTailForTranscriptionOutage() async {
+    if (_wal.getSyncs().usesStorageAuthoritativeAudio != true || SharedPreferencesUtil().batchModeEnabled) {
+      return;
+    }
+    _storageAudioTailRestartTimer?.cancel();
+    _storageAudioTailRestartTimer = null;
+    final session = _ringAudioTailSession;
+    _ringAudioTailSession = null;
+    _liveAudioFramePacer?.rejectPending();
+    await session?.cancel();
+    await SharedPreferencesUtil().saveBool(
+      'nativeBleForegroundReady',
+      false,
+    );
     notifyListeners();
   }
 
@@ -1916,6 +1967,9 @@ class CaptureController extends ChangeNotifier
     // enable-data-stream command after its BLE audio times out).
     if (recordingState == RecordingState.deviceRecord) {
       _socketReconnectPending = true;
+      unawaited(
+        _suspendStorageAuthoritativeTailForTranscriptionOutage(),
+      );
     }
 
     notifyListeners();
@@ -1970,6 +2024,12 @@ class CaptureController extends ChangeNotifier
   void onError(Object err) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
+    if (recordingState == RecordingState.deviceRecord) {
+      _socketReconnectPending = true;
+      unawaited(
+        _suspendStorageAuthoritativeTailForTranscriptionOutage(),
+      );
+    }
 
     notifyListeners();
     _startKeepAliveServices();

@@ -353,7 +353,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (connection is! OmiDeviceConnection) return;
 
     final currentStatus = await connection.readChargingStatus();
-    ServiceManager.instance().wal.getSyncs().setDeviceCharging(currentStatus);
     if (isCharging != currentStatus) {
       isCharging = currentStatus;
       notifyListeners();
@@ -361,7 +360,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     _bleChargingStatusListener = await connection.getChargingStatusListener(
       onChargingStatusChange: (bool charging) {
-        ServiceManager.instance().wal.getSyncs().setDeviceCharging(charging);
         if (isCharging != charging) {
           isCharging = charging;
           if (!charging) {

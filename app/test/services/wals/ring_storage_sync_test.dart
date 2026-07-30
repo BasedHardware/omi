@@ -117,25 +117,16 @@ void main() {
     expect(recovered.wallClockEndSeconds, firstTimestamp + 3);
   });
 
-  test('deep backlog runs only by opt-in or while charging', () {
+  test('deep backlog runs only after explicit automatic-sync opt-in', () {
     expect(
       ringShouldDrainDeepBacklog(
         autoSyncEnabled: false,
-        isCharging: false,
       ),
       isFalse,
     );
     expect(
       ringShouldDrainDeepBacklog(
         autoSyncEnabled: true,
-        isCharging: false,
-      ),
-      isTrue,
-    );
-    expect(
-      ringShouldDrainDeepBacklog(
-        autoSyncEnabled: false,
-        isCharging: true,
       ),
       isTrue,
     );
