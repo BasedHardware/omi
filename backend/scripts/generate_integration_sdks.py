@@ -1628,6 +1628,13 @@ target_include_directories(omi_integration
 )
 target_link_libraries(omi_integration PUBLIC CURL::libcurl)
 
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(omi_integration_regression_test test/regression_test.cpp)
+  target_link_libraries(omi_integration_regression_test PRIVATE omi_integration)
+  add_test(NAME omi_integration_regression_test COMMAND omi_integration_regression_test)
+endif()
+
 install(TARGETS omi_integration)
 install(DIRECTORY include/ DESTINATION include)
 '''
@@ -1788,13 +1795,14 @@ class OmiIntegrationClient {
             args.append(f"{_dart_type(p, True)} {to_camel(p['name'])}")
 
         lines.append(f"  /// {op['summary']}")
+        response_type = op['success_ref'] or 'Object?'
         if args:
-            lines.append(f"  Future<Object?> {dart_name}({{")
+            lines.append(f"  Future<{response_type}> {dart_name}({{")
             for a in args:
                 lines.append(f"    {a},")
             lines.append("  }) async {")
         else:
-            lines.append(f"  Future<Object?> {dart_name}() async {{")
+            lines.append(f"  Future<{response_type}> {dart_name}() async {{")
 
         if "{app_id}" in op["path"]:
             path_expr = "'" + op["path"].replace("{app_id}", "$appId") + "'"
@@ -1816,7 +1824,12 @@ class OmiIntegrationClient {
         else:
             query_arg = "query: null"
         body_arg = "body: body" if op["body_type"] else "body: null"
-        lines.append(f"    return _request({json.dumps(op['method'])}, {path_expr}, {query_arg}, {body_arg});")
+        request = f"_request({json.dumps(op['method'])}, {path_expr}, {query_arg}, {body_arg})"
+        if op['success_ref']:
+            lines.append(f"    final parsed = await {request};")
+            lines.append(f"    return {op['success_ref']}.fromJson(parsed as Map<String, dynamic>);")
+        else:
+            lines.append(f"    return {request};")
         lines.append("  }")
         lines.append("")
 

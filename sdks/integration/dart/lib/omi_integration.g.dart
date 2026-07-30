@@ -114,14 +114,15 @@ class OmiIntegrationClient {
   }
 
   /// Send App Notification To User
-  Future<Object?> sendNotificationV1({
+  Future<IntegrationNotificationResponse> sendNotificationV1({
     required Map<String, dynamic> body,
   }) async {
-    return _request("POST", "/v1/integrations/notification", query: null, body: body);
+    final parsed = await _request("POST", "/v1/integrations/notification", query: null, body: body);
+    return IntegrationNotificationResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
   /// Get Conversations Via Integration
-  Future<Object?> listConversations({
+  Future<ConversationsResponse> listConversations({
     required String uid,
     int? limit,
     int? offset,
@@ -141,11 +142,12 @@ class OmiIntegrationClient {
     if (startDate != null) query["start_date"] = startDate;
     if (endDate != null) query["end_date"] = endDate;
     if (maxTranscriptSegments != null) query["max_transcript_segments"] = maxTranscriptSegments;
-    return _request("GET", "/v2/integrations/$appId/conversations", query: query, body: null);
+    final parsed = await _request("GET", "/v2/integrations/$appId/conversations", query: query, body: null);
+    return ConversationsResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
   /// Get Memories Via Integration
-  Future<Object?> listMemories({
+  Future<MemoriesResponse> listMemories({
     required String uid,
     int? limit,
     int? offset,
@@ -155,11 +157,12 @@ class OmiIntegrationClient {
     };
     if (limit != null) query["limit"] = limit;
     if (offset != null) query["offset"] = offset;
-    return _request("GET", "/v2/integrations/$appId/memories", query: query, body: null);
+    final parsed = await _request("GET", "/v2/integrations/$appId/memories", query: query, body: null);
+    return MemoriesResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
   /// Send Notification Via Integration
-  Future<Object?> sendNotification({
+  Future<IntegrationNotificationResponse> sendNotification({
     required String message,
     required String uid,
   }) async {
@@ -167,11 +170,12 @@ class OmiIntegrationClient {
       "message": message,
       "uid": uid,
     };
-    return _request("POST", "/v2/integrations/$appId/notification", query: query, body: null);
+    final parsed = await _request("POST", "/v2/integrations/$appId/notification", query: query, body: null);
+    return IntegrationNotificationResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
   /// Search Conversations Via Integration
-  Future<Object?> searchConversations({
+  Future<SearchConversationsResponse> searchConversations({
     required String uid,
     required SearchRequest body,
     int? maxTranscriptSegments,
@@ -180,11 +184,12 @@ class OmiIntegrationClient {
       "uid": uid,
     };
     if (maxTranscriptSegments != null) query["max_transcript_segments"] = maxTranscriptSegments;
-    return _request("POST", "/v2/integrations/$appId/search/conversations", query: query, body: body);
+    final parsed = await _request("POST", "/v2/integrations/$appId/search/conversations", query: query, body: body);
+    return SearchConversationsResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
   /// Get Tasks Via Integration
-  Future<Object?> listTasks({
+  Future<TasksResponse> listTasks({
     required String uid,
     int? limit,
     int? offset,
@@ -206,29 +211,32 @@ class OmiIntegrationClient {
     if (endDate != null) query["end_date"] = endDate;
     if (dueStartDate != null) query["due_start_date"] = dueStartDate;
     if (dueEndDate != null) query["due_end_date"] = dueEndDate;
-    return _request("GET", "/v2/integrations/$appId/tasks", query: query, body: null);
+    final parsed = await _request("GET", "/v2/integrations/$appId/tasks", query: query, body: null);
+    return TasksResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
   /// Create Conversation Via Integration
-  Future<Object?> createConversation({
+  Future<EmptyResponse> createConversation({
     required String uid,
     required ExternalIntegrationCreateConversation body,
   }) async {
     final query = <String, dynamic>{
       "uid": uid,
     };
-    return _request("POST", "/v2/integrations/$appId/user/conversations", query: query, body: body);
+    final parsed = await _request("POST", "/v2/integrations/$appId/user/conversations", query: query, body: body);
+    return EmptyResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
   /// Create Memories Via Integration
-  Future<Object?> createMemories({
+  Future<EmptyResponse> createMemories({
     required String uid,
     required ExternalIntegrationCreateMemory body,
   }) async {
     final query = <String, dynamic>{
       "uid": uid,
     };
-    return _request("POST", "/v2/integrations/$appId/user/memories", query: query, body: body);
+    final parsed = await _request("POST", "/v2/integrations/$appId/user/memories", query: query, body: body);
+    return EmptyResponse.fromJson(parsed as Map<String, dynamic>);
   }
 
 }
