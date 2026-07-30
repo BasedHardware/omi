@@ -77,7 +77,7 @@ distrust.
 | # | Requirement | Status |
 |---|---|---|
 | G1 | "Learn how to use it" card with Start / Skip | MISSING |
-| G2 | Opens a Wikipedia page in the browser as the first step | MISSING |
+| G2 | Opens a page in the browser as the first step. **NOT Wikipedia, and not any Wikipedia URL** — direct user instruction. The chosen page is `https://www.lingscars.com/`: text-dense (good for the OCR beat), online for two decades, and absurd enough that Claude reporting it back is the joke. **It is Cloudflare-challenged: `curl` gets HTTP 403 and an interstitial, so never fetch or health-check it — open it with `NSWorkspace` and let the real browser pass the challenge.** Frame progress must key off frame *count*, never a specific captured word, because on a slow network the first frames may be the interstitial. | MISSING |
 | G3 | Asks the screen-recording permission at the right moment | MISSING |
 | G4 | Coach mark: "Scroll around on this page and collect your first frames" | MISSING |
 | G5 | A LIVE frame counter reading our own store — never a timer pretending | MISSING |
