@@ -6,7 +6,14 @@ HOOKS_DIR := $(shell git rev-parse --git-path hooks)
 # the source into `/scripts/dev-harness/_resolve_python.sh: No such file` and
 # breaking every target. The root stays computed in-shell (never interpolated
 # into recipe text) so a checkout path with quote/`$` characters cannot inject.
+# GNU Make supplies a built-in PYTHON=python default. Treat that as unset so
+# harness targets still resolve this checkout's backend venv, while retaining
+# explicit command-line and environment overrides for callers.
+ifeq ($(origin PYTHON),default)
+PYTHON := $(shell bash -c 'source "$$(git rev-parse --show-toplevel 2>/dev/null || pwd)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+else
 PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel 2>/dev/null || pwd)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+endif
 # Export so recipes use $$PYTHON (shell variable expansion) instead of $(PYTHON)
 # (Make text interpolation). Shell variable expansion treats the resolved path
 # as data and cannot be broken by quote or command-substitution characters in

@@ -191,9 +191,11 @@ def test_canonical_maintenance_harness_activates_synthetic_uid_only_in_emulator(
         str(REPO_ROOT / "scripts/dev-harness/run-canonical-maintenance.py"),
         run_name="run_canonical_maintenance_test",
     )
+    from config import canonical_memory_cohort
     from utils.memory import memory_system
 
-    original_cohort = memory_system._canonical_cohort_uids
+    original_cohort = canonical_memory_cohort.CANONICAL_MEMORY_USERS
+    original_memory_system_cohort = memory_system.CANONICAL_MEMORY_USERS
     try:
         monkeypatch.setenv("FIRESTORE_EMULATOR_HOST", "127.0.0.1:18080")
         monkeypatch.setenv("ENVIRONMENT", "local-dev-harness")
@@ -202,7 +204,8 @@ def test_canonical_maintenance_harness_activates_synthetic_uid_only_in_emulator(
         assert memory_system.resolve_memory_system("synthetic-alice") == memory_system.MemorySystem.CANONICAL
         assert memory_system.resolve_memory_system("someone-else") == memory_system.MemorySystem.LEGACY
     finally:
-        memory_system._canonical_cohort_uids = original_cohort
+        canonical_memory_cohort.CANONICAL_MEMORY_USERS = original_cohort
+        memory_system.CANONICAL_MEMORY_USERS = original_memory_system_cohort
 
 
 def test_canonical_maintenance_harness_replaces_ambient_environment(monkeypatch) -> None:
