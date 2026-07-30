@@ -18,30 +18,16 @@ export function deepgramWsUrl(sampleRate = 16000): string {
   );
 }
 
-/** @deprecated Use deepgramWsUrl() without the apiKey parameter — token-in-URL leaks
- *  into server logs. Inject a createWebSocket factory instead. */
-export function deepgramWsUrlWithToken(apiKey: string, sampleRate = 16000): string {
-  return deepgramWsUrl(sampleRate) + `&token=${encodeURIComponent(apiKey)}`;
-}
-
 export function createDeepgramTranscriber(opts: {
-  apiKey?: string;
   sampleRate?: number;
   onTranscript: TranscriptHandler;
-  WebSocketImpl?: typeof WebSocket;
-  /** Authenticated WebSocket factory. When provided, apiKey is ignored and
-   *  the factory must handle Deepgram auth (e.g. via token header or proxy).
-   *  Prefer this over apiKey to avoid leaking tokens in server/proxy logs. */
-  createWebSocket?: (url: string) => WebSocket;
+  /** Header-capable authenticated WebSocket factory (or an authenticated proxy).
+   *  The factory owns Deepgram authentication so credentials never enter the URL. */
+  createWebSocket: (url: string) => WebSocket;
 }): StreamingTranscriber {
-  const sampleRate = opts.sampleRate ?? 16000;
-  const url: string = opts.createWebSocket
-    ? deepgramWsUrl(sampleRate)
-    : deepgramWsUrlWithToken(opts.apiKey ?? '', sampleRate);
-  const WS = opts.WebSocketImpl ?? WebSocket;
-  const ws: WebSocket = opts.createWebSocket
-    ? opts.createWebSocket(url)
-    : new WS(url);
+  if (!opts.createWebSocket) throw new Error('Deepgram requires createWebSocket');
+  const url = deepgramWsUrl(opts.sampleRate ?? 16000);
+  const ws = opts.createWebSocket(url);
   ws.binaryType = 'arraybuffer';
   ws.onmessage = (event: MessageEvent) => {
     try {
@@ -52,7 +38,7 @@ export function createDeepgramTranscriber(opts: {
   };
   return {
     appendPcm(chunk) {
-      if (ws.readyState === WS.OPEN) ws.send(chunk as any);
+      if (ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
       try { ws.close(); } catch { /* ignore */ }
@@ -139,11 +125,16 @@ export function createTranscriber(
     sampleRate?: number;
     whisperRunner?: (pcm: Uint8Array) => Promise<string> | string;
     WebSocketImpl?: typeof WebSocket;
+    createWebSocket?: (url: string) => WebSocket;
   }
 ): StreamingTranscriber {
   if (engine === 'deepgram') {
-    if (!opts.apiKey) throw new Error('Deepgram apiKey required');
-    return createDeepgramTranscriber(opts as any);
+    if (!opts.createWebSocket) throw new Error('Deepgram requires createWebSocket');
+    return createDeepgramTranscriber({
+      sampleRate: opts.sampleRate,
+      onTranscript: opts.onTranscript,
+      createWebSocket: opts.createWebSocket,
+    });
   }
   if (engine === 'parakeet') {
     const apiUrl = opts.apiUrl || (globalThis as any)?.process?.env?.HOSTED_PARAKEET_API_URL;

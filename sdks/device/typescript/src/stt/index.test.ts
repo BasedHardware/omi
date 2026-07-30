@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createDeepgramTranscriber, deepgramWsUrl, deepgramWsUrlWithToken } from './index.ts';
+import { createDeepgramTranscriber, createTranscriber, deepgramWsUrl } from './index.ts';
 
 describe('deepgramWsUrl', () => {
   test('returns base URL without token', () => {
@@ -12,18 +12,6 @@ describe('deepgramWsUrl', () => {
   test('uses custom sample rate', () => {
     const url = deepgramWsUrl(8000);
     expect(url).toInclude('sample_rate=8000');
-  });
-});
-
-describe('deepgramWsUrlWithToken', () => {
-  test('includes token query param (deprecated)', () => {
-    const url = deepgramWsUrlWithToken('test-key-123', 16000);
-    expect(url).toInclude('token=test-key-123');
-  });
-
-  test('encodes special characters in token', () => {
-    const url = deepgramWsUrlWithToken('key with spaces & stuff=', 16000);
-    expect(url).toInclude('token=key%20with%20spaces%20%26%20stuff%3D');
   });
 });
 
@@ -50,7 +38,26 @@ describe('createDeepgramTranscriber', () => {
     expect(openedUrl).toInclude('sample_rate=16000');
   });
 
-  test('connects with apiKey fallback (deprecated)', () => {
+  test('rejects apiKey-only construction so a credential cannot enter the URL', () => {
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor(_url: string) {}
+      send(_data: any) {}
+      close() {}
+    }
+
+    expect(() =>
+      (createDeepgramTranscriber as (opts: any) => unknown)({
+        apiKey: 'dg-123',
+        onTranscript: () => {},
+        WebSocketImpl: FakeWebSocket,
+      }),
+    ).toThrow('Deepgram requires createWebSocket');
+  });
+
+  test('createTranscriber accepts an authenticated WebSocket factory without apiKey', () => {
     let openedUrl: string | undefined;
     class FakeWebSocket {
       binaryType: string = 'blob';
@@ -63,13 +70,11 @@ describe('createDeepgramTranscriber', () => {
       close() {}
     }
 
-    createDeepgramTranscriber({
-      apiKey: 'dg-123',
+    createTranscriber('deepgram', {
       onTranscript: () => {},
-      WebSocketImpl: FakeWebSocket as any,
+      createWebSocket: (url: string) => new FakeWebSocket(url) as any,
     });
 
-    expect(openedUrl).toInclude('token=dg-123');
-    expect(openedUrl).toInclude('sample_rate=16000');
+    expect(openedUrl).not.toInclude('token=');
   });
 });
