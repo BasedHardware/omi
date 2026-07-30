@@ -1,0 +1,16 @@
+{
+  "name": "omi-placement-platform",
+  "private": true,
+  "type": "module",
+  "workspaces": ["core/*", "drivers/*", "harness"],
+  "scripts": {
+    "test": "bun test",
+    "test:node": "bun test",
+    "lint:imports": "bun run scripts/lint-import-graph.ts"
+  },
+  "devDependencies": {
+    "@sinclair/typebox": "^0.34.41",
+    "ajv": "^8.17.1",
+    "fast-check": "^3.23.2"
+  }
+}
