@@ -1124,7 +1124,7 @@ class TestStructuredOutputFeatureTracking:
         """BYOK routes structured output to OpenAI except managed translation."""
         profile = MODEL_QOS_PROFILES['byok']
         for feature in _STRUCTURED_OUTPUT_FEATURES:
-            if feature == 'translation':
+            if feature in {'translation', 'trends'}:
                 assert profile[feature] == ('gemini-2.5-flash-lite', 'gemini')
                 continue
             assert profile[feature][1] == 'openai', f'byok {feature} should be openai, got {profile[feature][1]}'
