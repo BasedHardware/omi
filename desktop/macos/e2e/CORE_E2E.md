@@ -88,7 +88,7 @@ healthy enough to boot the hermetic T2 stack. Stable nomination and production p
 | `claude-guidance-overlay` | v2 | typed bridge + visual | 2 | Overlay dogfood |
 | `capture-lifecycle` | v2 | typed bridge | 2 | STT seam via `capture_test_transcript` |
 | `rewind-artifact-recovery` | v2 | typed bridge | 2 | Synthetic Rewind → HEVC → SQLite → finalized-video readback, privacy admission, and database reopen |
-| `chat-hermetic` | v2 | typed bridge | 2 | desktop-backend `OMI_LLM_STUB=1` |
+| `chat-hermetic` | v2 | typed bridge | 2 | Rust `OMI_LLM_STUB=1` |
 | `floating-bar-functional` | v2 | typed bridge | 2 | Ask Omi open + stubbed turn |
 | `memories` | v2 | typed bridge | 2 | Navigate + snapshot + search step |
 | `tasks` | v2 | typed bridge | 2 | Navigate + snapshot |
@@ -161,7 +161,7 @@ Evidence contract: `.harness/desktop-core/<run-id>/{manifest.json, flows/, summa
 1. Read `manifest.json` for tier, git SHA, per-flow pass/fail.
 2. Read `summary.md` for human summary.
 3. For failed flows, open `flows/<name>/` for `omi-harness` step artifacts.
-4. T2 hermetic failures: confirm `provider_mode: offline` in `manifest.json`, `PROVIDER_MODE=offline` in dev-harness `config-digest.json`, `OMI_LLM_STUB=1` on desktop-backend, bridge `/health`. If a live stack is already up, the harness fails loudly instead of reusing it.
+4. T2 hermetic failures: confirm `provider_mode: offline` in `manifest.json`, `PROVIDER_MODE=offline` in dev-harness `config-digest.json`, `OMI_LLM_STUB=1` on Rust backend, bridge `/health`. If a live stack is already up, the harness fails loudly instead of reusing it.
 5. **`dev-up failed: Port 8085 for firestore is already in use by a foreign process`:** Another harness instance (or stale Firebase emulator) owns the default ports. Either `make dev-down` on the owning worktree, or set a separate `OMI_INSTANCE` / harness state root before `PROVIDER_MODE=offline make dev-up`. If emulators are healthy but process records are stale, flows can still be qualified manually: launch `make desktop-run-local DESKTOP_APP_NAME=omi-core-e2e DESKTOP_USER=alice`, note the automation port, then run each T2 flow with `python3 scripts/omi-harness run e2e/flows/<name>.yaml --lane bridge --port <PORT>`.
 6. T3 failures: check LLM credentials / quota; inspect gauntlet evidence under `.harness/agent-continuity-gauntlet/`.
 
@@ -173,7 +173,7 @@ Evidence contract: `.harness/desktop-core/<run-id>/{manifest.json, flows/, summa
 
 ## Hermetic vs live
 
-- **Hermetic (T2):** `make dev-up` with `PROVIDER_MODE=offline` (verified via config digest + service health; non-offline stacks abort), desktop-backend `OMI_LLM_STUB=1`, bridge transcript seam — no real LLM or mic/STT.
+- **Hermetic (T2):** `make dev-up` with `PROVIDER_MODE=offline` (verified via config digest + service health; non-offline stacks abort), Rust `OMI_LLM_STUB=1`, bridge transcript seam — no real LLM or mic/STT.
 - **Live P2 (manual):** Walker or hybrid flows for TCC, external URLs, destructive gates, and OAuth-adjacent paths. Not included in the qualification-tier matrix.
 - **Live (T3):** Real provider credentials; agent continuity gauntlet.
 
