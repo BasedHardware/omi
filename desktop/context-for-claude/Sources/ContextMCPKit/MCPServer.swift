@@ -148,6 +148,7 @@ public final class MCPServer {
                              code: RPC.Code.invalidParams,
                              message: "tools/call requires a string \"name\"")
         }
+        ContextMCPAnalytics.toolInvoked(name)
         do {
             let text = try Tools.call(name: name, arguments: request.params?["arguments"], store: store)
             return RPC.result(id: request.id, Self.content(text, isError: false))

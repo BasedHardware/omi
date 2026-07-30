@@ -13,36 +13,29 @@ export const maxDuration = 3600;
 // Per-platform profitability metrics.
 //
 // Platform attribution sources (combined, best-available wins):
-//   1. Firestore `fcm_tokens` device_key prefix (`macos_…` → desktop,
+//   1. Firestore `users.products_used` / `last_active_product` — authoritative
+//      product-surface cohort (Context for Claude vs Omi clients).
+//   2. Firestore `fcm_tokens` device_key prefix (`macos_…` → desktop,
 //      `ios_…`/`android_…` → mobile). Misses users who never enabled
-//      notifications.
-//   2. PostHog events where `properties.$os_name = 'macOS'` — desktop users.
-//      Already proven by crash-rate / macos-versions / dau-trends routes.
-//   3. Mixpanel `$os` in ['iOS','Android'] — mobile users.
+//      notifications. Cannot distinguish Context from Omi Desktop alone.
+//   3. PostHog events where `properties.$os_name = 'macOS'` AND product is not
+//      `context-for-claude` — Omi desktop users.
+//   4. PostHog events where `properties.product = 'context-for-claude'`.
+//   5. Mixpanel `$os` in ['iOS','Android'] — mobile users.
 //
 // Each source provides distinct_id/uid → platform pairs. We merge them so a
 // user appears desktop if ANY source tags them as desktop, and mobile if any
-// mobile source tags them.
-//
-// Counts:
-//   new users per day per platform: Firebase Auth creationTime bucketed by day
-//     and joined with the merged platform map. Users whose platform cannot be
-//     determined count as "unknown" and are excluded from chart series.
-//   active users per day per platform: taken directly from PostHog + Mixpanel
-//     daily unique-user segmentation.
-//   revenue: Stripe active subs joined by metadata.uid against the platform
-//     map → exact per-platform MRR.
-//   cost: active users × per-user infra cost (env / query param configurable).
-//   conversion: Stripe new paid subs per day grouped by platform via uid
-//     lookup, divided by new users per day per platform.
+// mobile source tags them. `context_for_claude` wins as primary when present
+// so Context spend/MRR is not folded into desktop.
 
-type Platform = "desktop" | "mobile" | "unknown";
-type KnownPlatform = "desktop" | "mobile";
+type Platform = "desktop" | "mobile" | "context_for_claude" | "unknown";
+type KnownPlatform = "desktop" | "mobile" | "context_for_claude";
 
 interface DailyPoint {
   date: string;
   desktop: number;
   mobile: number;
+  context_for_claude: number;
   total: number;
 }
 
@@ -59,15 +52,19 @@ export interface ProfitabilityPayload {
     mrr: number;
     mrrDesktop: number;
     mrrMobile: number;
+    mrrContextForClaude: number;
     mrrUnknown: number;
     totalNewDesktop: number;
     totalNewMobile: number;
+    totalNewContextForClaude: number;
     totalUsersDesktop: number;
     totalUsersMobile: number;
+    totalUsersContextForClaude: number;
     totalUsersUnknown: number;
     totalCostUsd: number;
     avgCostPerUserDesktop: number;
     avgCostPerUserMobile: number;
+    avgCostPerUserContextForClaude: number;
     assumptions: {
       desktopCostPerUser: number;
       mobileCostPerUser: number;
@@ -78,7 +75,9 @@ export interface ProfitabilityPayload {
     sources: {
       firebaseAuth: boolean;
       firestoreTokens: boolean;
+      firestoreProducts: boolean;
       posthogDesktop: boolean;
+      posthogContext: boolean;
       mixpanelMobile: boolean;
       stripeActive: boolean;
       stripeNewPaid: boolean;
@@ -89,7 +88,7 @@ export interface ProfitabilityPayload {
 }
 
 function cacheKey(days: number, desktopCost: number, mobileCost: number): string {
-  return `profitability:v1:${days}:${desktopCost}:${mobileCost}`;
+  return `profitability:v2:${days}:${desktopCost}:${mobileCost}`;
 }
 
 // Fallback per-user infra cost when real billing data can't be pulled from
@@ -137,7 +136,24 @@ type UserPlatformInfo = {
   platform: KnownPlatform | "unknown";
   hasDesktop: boolean;
   hasMobile: boolean;
+  hasContext: boolean;
 };
+
+async function buildUserProductMapFromFirestore(): Promise<Set<string> | null> {
+  try {
+    const db = getDb();
+    // Prefer array-contains so we only pay for Context cohort users.
+    const snap = await db
+      .collection("users")
+      .where("products_used", "array-contains", "context-for-claude")
+      .select("products_used")
+      .get();
+    return new Set(snap.docs.map((d) => d.id));
+  } catch (err) {
+    console.error("Firestore products_used scan failed:", err);
+    return null;
+  }
+}
 
 async function buildUserPlatformMapFromTokens(): Promise<Map<string, { desktop: Date | null; mobile: Date | null }> | null> {
   try {
@@ -178,6 +194,7 @@ async function fetchDesktopUidsFromPostHog(days: number): Promise<Set<string> | 
     SELECT DISTINCT distinct_id
     FROM events
     WHERE properties.$os_name = 'macOS'
+      AND coalesce(properties.product, '') != 'context-for-claude'
       AND timestamp >= now() - interval ${Math.max(days, 90)} day
     LIMIT 500000
   `;
@@ -213,6 +230,7 @@ async function fetchDesktopActivePerDay(days: number): Promise<Record<string, nu
     SELECT toDate(timestamp) as day, count(DISTINCT distinct_id) as users
     FROM events
     WHERE properties.$os_name = 'macOS'
+      AND coalesce(properties.product, '') != 'context-for-claude'
       AND timestamp >= now() - interval ${days} day
     GROUP BY day
     ORDER BY day
@@ -324,17 +342,88 @@ async function fetchMobileUidsFromMixpanel(): Promise<Set<string> | null> {
   }
 }
 
+async function fetchContextUidsFromPostHog(days: number): Promise<Set<string> | null> {
+  const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
+  const projectId = process.env.POSTHOG_PROJECT_ID;
+  const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
+  if (!apiKey || !projectId) return null;
+
+  const query = `
+    SELECT DISTINCT distinct_id
+    FROM events
+    WHERE properties.product = 'context-for-claude'
+      AND timestamp >= now() - interval ${Math.max(days, 90)} day
+    LIMIT 500000
+  `;
+  try {
+    const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: { kind: "HogQLQuery", query: withRowLimit(query) } }),
+    });
+    if (!response.ok) {
+      console.error("PostHog context uids failed:", response.status, await response.text());
+      return null;
+    }
+    const raw = await response.json();
+    const rows: [string][] = raw?.results ?? [];
+    return new Set(rows.map((r) => String(r[0])).filter(Boolean));
+  } catch (err) {
+    console.error("PostHog context uids exception:", err);
+    return null;
+  }
+}
+
+async function fetchContextActivePerDay(days: number): Promise<Record<string, number> | null> {
+  const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
+  const projectId = process.env.POSTHOG_PROJECT_ID;
+  const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
+  if (!apiKey || !projectId) return null;
+
+  const query = `
+    SELECT toDate(timestamp) as day, count(DISTINCT distinct_id) as users
+    FROM events
+    WHERE properties.product = 'context-for-claude'
+      AND timestamp >= now() - interval ${days} day
+    GROUP BY day
+    ORDER BY day
+  `;
+  try {
+    const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: { kind: "HogQLQuery", query: withRowLimit(query) } }),
+    });
+    if (!response.ok) return null;
+    const raw = await response.json();
+    const rows: [string, number][] = raw?.results ?? [];
+    const out: Record<string, number> = {};
+    for (const [day, count] of rows) out[String(day).slice(0, 10)] = Number(count ?? 0);
+    return out;
+  } catch (err) {
+    console.error("PostHog context active exception:", err);
+    return null;
+  }
+}
+
 function mergeUserPlatforms(
   tokens: Map<string, { desktop: Date | null; mobile: Date | null }> | null,
   posthogDesktopUids: Set<string> | null,
   mixpanelMobileUids: Set<string> | null,
+  contextUids: Set<string> | null,
 ): Map<string, UserPlatformInfo> {
   const result = new Map<string, UserPlatformInfo>();
 
   const addHas = (uid: string, platform: KnownPlatform) => {
-    const cur = result.get(uid) ?? { platform: "unknown" as KnownPlatform | "unknown", hasDesktop: false, hasMobile: false };
+    const cur = result.get(uid) ?? {
+      platform: "unknown" as KnownPlatform | "unknown",
+      hasDesktop: false,
+      hasMobile: false,
+      hasContext: false,
+    };
     if (platform === "desktop") cur.hasDesktop = true;
     if (platform === "mobile") cur.hasMobile = true;
+    if (platform === "context_for_claude") cur.hasContext = true;
     result.set(uid, cur);
   };
 
@@ -346,16 +435,19 @@ function mergeUserPlatforms(
   }
   if (posthogDesktopUids) for (const uid of Array.from(posthogDesktopUids)) addHas(uid, "desktop");
   if (mixpanelMobileUids) for (const uid of Array.from(mixpanelMobileUids)) addHas(uid, "mobile");
+  if (contextUids) for (const uid of Array.from(contextUids)) addHas(uid, "context_for_claude");
 
-  // Resolve primary platform: prefer earliest token date when both. Otherwise
-  // desktop wins if only desktop signal, mobile wins if only mobile signal.
+  // Resolve primary platform. Context product identity wins over OS heuristics
+  // so Context users are not counted as Omi desktop.
   for (const [uid, info] of Array.from(result.entries())) {
     const tokenDates = tokens?.get(uid);
-    if (info.hasDesktop && info.hasMobile) {
+    if (info.hasContext) {
+      info.platform = "context_for_claude";
+    } else if (info.hasDesktop && info.hasMobile) {
       if (tokenDates?.desktop && tokenDates?.mobile) {
         info.platform = tokenDates.desktop < tokenDates.mobile ? "desktop" : "mobile";
       } else {
-        info.platform = "mobile"; // tie-break: mobile is the more common primary
+        info.platform = "mobile";
       }
     } else if (info.hasDesktop) {
       info.platform = "desktop";
@@ -398,7 +490,14 @@ async function listAllAuthSignups(): Promise<AuthSignup[] | null> {
 }
 
 interface InfraCostsSnapshot {
-  daily: { date: string; desktop: number; mobile: number; unknown: number; total: number }[];
+  daily: {
+    date: string;
+    desktop: number;
+    mobile: number;
+    context_for_claude: number;
+    unknown: number;
+    total: number;
+  }[];
   overheadMonthlyUsd: number;
 }
 
@@ -439,9 +538,17 @@ async function fetchStripeSnapshot(
   const annualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
   if (!stripe || !monthlyPriceId || !annualPriceId) return null;
 
-  const mrrByPlatform: Record<Platform, number> = { desktop: 0, mobile: 0, unknown: 0 };
+  const mrrByPlatform: Record<Platform, number> = {
+    desktop: 0,
+    mobile: 0,
+    context_for_claude: 0,
+    unknown: 0,
+  };
   const newPaidByDayByPlatform: Record<Platform, Record<string, number>> = {
-    desktop: {}, mobile: {}, unknown: {},
+    desktop: {},
+    mobile: {},
+    context_for_claude: {},
+    unknown: {},
   };
   const activeSubs: StripeSnapshot['activeSubs'] = [];
 
@@ -535,25 +642,49 @@ export function parseProfitabilityParams(searchParams: URLSearchParams): { days:
 export async function computeProfitability(opts: { days: number; desktopCost: number; mobileCost: number }): Promise<ProfitabilityPayload> {
   const { days, desktopCost, mobileCost } = opts;
 
-    const [tokensRes, signupsRes, desktopUidsRes, mobileUidsRes, desktopActiveRes, mobileActiveRes, infraRes] = await Promise.allSettled([
+    const [
+      tokensRes,
+      productsRes,
+      signupsRes,
+      desktopUidsRes,
+      contextUidsRes,
+      mobileUidsRes,
+      desktopActiveRes,
+      contextActiveRes,
+      mobileActiveRes,
+      infraRes,
+    ] = await Promise.allSettled([
       buildUserPlatformMapFromTokens(),
+      buildUserProductMapFromFirestore(),
       listAllAuthSignups(),
       fetchDesktopUidsFromPostHog(days),
+      fetchContextUidsFromPostHog(days),
       fetchMobileUidsFromMixpanel(),
       fetchDesktopActivePerDay(days),
+      fetchContextActivePerDay(days),
       fetchMobileActivePerDay(days),
       fetchInfraCosts(days),
     ]);
 
     const tokens = tokensRes.status === "fulfilled" ? tokensRes.value : null;
+    const productContextUids = productsRes.status === "fulfilled" ? productsRes.value : null;
     const signups = signupsRes.status === "fulfilled" ? signupsRes.value : null;
     const desktopUids = desktopUidsRes.status === "fulfilled" ? desktopUidsRes.value : null;
+    const posthogContextUids = contextUidsRes.status === "fulfilled" ? contextUidsRes.value : null;
     const mobileUids = mobileUidsRes.status === "fulfilled" ? mobileUidsRes.value : null;
     const desktopActive = desktopActiveRes.status === "fulfilled" ? desktopActiveRes.value : null;
+    const contextActive = contextActiveRes.status === "fulfilled" ? contextActiveRes.value : null;
     const mobileActive = mobileActiveRes.status === "fulfilled" ? mobileActiveRes.value : null;
     const infraCosts = infraRes.status === "fulfilled" ? infraRes.value : null;
 
-    const userPlatforms = mergeUserPlatforms(tokens, desktopUids, mobileUids);
+    const contextUids = new Set<string>();
+    if (productContextUids) for (const uid of Array.from(productContextUids)) contextUids.add(uid);
+    if (posthogContextUids) for (const uid of Array.from(posthogContextUids)) contextUids.add(uid);
+    const contextUidSet = contextUids.size > 0 || productContextUids != null || posthogContextUids != null
+      ? contextUids
+      : null;
+
+    const userPlatforms = mergeUserPlatforms(tokens, desktopUids, mobileUids, contextUidSet);
 
     const stripeRes = await fetchStripeSnapshot(days, userPlatforms).catch((e) => {
       console.error("Stripe snapshot threw:", e);
@@ -562,10 +693,13 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
 
     if (
       tokens == null &&
+      productContextUids == null &&
       signups == null &&
       desktopUids == null &&
+      posthogContextUids == null &&
       mobileUids == null &&
       desktopActive == null &&
+      contextActive == null &&
       mobileActive == null &&
       stripeRes == null
     ) {
@@ -574,11 +708,13 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
 
     const dateKeys = buildDayKeys(days);
 
-    const signupsByDay: Record<string, { desktop: number; mobile: number }> = {};
+    const emptyCounts = () => ({ desktop: 0, mobile: 0, context_for_claude: 0 });
+    const signupsByDay: Record<string, { desktop: number; mobile: number; context_for_claude: number }> = {};
     let totalUsersDesktop = 0;
     let totalUsersMobile = 0;
+    let totalUsersContextForClaude = 0;
     let totalUsersUnknown = 0;
-    const cumulativeTotals = { desktop: 0, mobile: 0 };
+    const cumulativeTotals = { desktop: 0, mobile: 0, context_for_claude: 0 };
 
     const sortedSignups = (signups ?? []).slice().sort(
       (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
@@ -589,6 +725,10 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
       const platform = info?.platform ?? "unknown";
       if (platform === "desktop") { totalUsersDesktop += 1; cumulativeTotals.desktop += 1; }
       else if (platform === "mobile") { totalUsersMobile += 1; cumulativeTotals.mobile += 1; }
+      else if (platform === "context_for_claude") {
+        totalUsersContextForClaude += 1;
+        cumulativeTotals.context_for_claude += 1;
+      }
       else totalUsersUnknown += 1;
 
       const day = formatDate(new Date(Date.UTC(
@@ -597,132 +737,186 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
         createdAt.getUTCDate(),
       )));
       if (day >= windowStartKey && platform !== "unknown") {
-        const bucket = signupsByDay[day] ?? { desktop: 0, mobile: 0 };
+        const bucket = signupsByDay[day] ?? emptyCounts();
         bucket[platform] += 1;
         signupsByDay[day] = bucket;
       }
     }
 
     const users: DailyPoint[] = dateKeys.map((date) => {
-      const row = signupsByDay[date] ?? { desktop: 0, mobile: 0 };
-      return { date, desktop: row.desktop, mobile: row.mobile, total: row.desktop + row.mobile };
+      const row = signupsByDay[date] ?? emptyCounts();
+      return {
+        date,
+        desktop: row.desktop,
+        mobile: row.mobile,
+        context_for_claude: row.context_for_claude,
+        total: row.desktop + row.mobile + row.context_for_claude,
+      };
     });
 
     let runningDesktop = cumulativeTotals.desktop - users.reduce((s, u) => s + u.desktop, 0);
     let runningMobile = cumulativeTotals.mobile - users.reduce((s, u) => s + u.mobile, 0);
+    let runningContext = cumulativeTotals.context_for_claude - users.reduce((s, u) => s + u.context_for_claude, 0);
     const cumulativeUsers: DailyPoint[] = users.map((row) => {
       runningDesktop += row.desktop;
       runningMobile += row.mobile;
-      return { date: row.date, desktop: runningDesktop, mobile: runningMobile, total: runningDesktop + runningMobile };
+      runningContext += row.context_for_claude;
+      return {
+        date: row.date,
+        desktop: runningDesktop,
+        mobile: runningMobile,
+        context_for_claude: runningContext,
+        total: runningDesktop + runningMobile + runningContext,
+      };
     });
 
     const activeUsers: DailyPoint[] = dateKeys.map((date) => {
       const d = Number(desktopActive?.[date] ?? 0);
       const m = Number(mobileActive?.[date] ?? 0);
-      return { date, desktop: d, mobile: m, total: d + m };
+      const c = Number(contextActive?.[date] ?? 0);
+      return { date, desktop: d, mobile: m, context_for_claude: c, total: d + m + c };
     });
 
-    const mrrByPlatform = stripeRes?.mrrByPlatform ?? { desktop: 0, mobile: 0, unknown: 0 };
-    const mrr = mrrByPlatform.desktop + mrrByPlatform.mobile + mrrByPlatform.unknown;
+    const mrrByPlatform = stripeRes?.mrrByPlatform ?? {
+      desktop: 0,
+      mobile: 0,
+      context_for_claude: 0,
+      unknown: 0,
+    };
+    const mrr =
+      mrrByPlatform.desktop +
+      mrrByPlatform.mobile +
+      mrrByPlatform.context_for_claude +
+      mrrByPlatform.unknown;
 
-    // Cumulative MRR per platform, day by day. For each day in the window we
-    // sum the monthly MRR of every active subscription that was created on or
-    // before that day. This reflects actual revenue growth instead of a flat
-    // proportional split. Subs with an unresolved `unknown` platform are
-    // attributed to whichever platform has the larger share of known revenue
-    // so the stacked chart still ends at the live MRR total.
     const subs = stripeRes?.activeSubs ?? [];
-    const knownMrrTotal = mrrByPlatform.desktop + mrrByPlatform.mobile;
+    const knownMrrTotal =
+      mrrByPlatform.desktop + mrrByPlatform.mobile + mrrByPlatform.context_for_claude;
     const desktopShare = knownMrrTotal > 0 ? mrrByPlatform.desktop / knownMrrTotal : 0.5;
     const mobileShare = knownMrrTotal > 0 ? mrrByPlatform.mobile / knownMrrTotal : 0.5;
+    const contextShare = knownMrrTotal > 0 ? mrrByPlatform.context_for_claude / knownMrrTotal : 0;
     const sortedSubs = subs.slice().sort((a, b) => a.createdAt - b.createdAt);
     let subIdx = 0;
     let cumulativeDesktop = 0;
     let cumulativeMobile = 0;
+    let cumulativeContext = 0;
     const revenue: DailyPoint[] = dateKeys.map((date) => {
       const endOfDay = Date.parse(`${date}T23:59:59Z`) / 1000;
       while (subIdx < sortedSubs.length && sortedSubs[subIdx].createdAt <= endOfDay) {
         const s = sortedSubs[subIdx];
         if (s.platform === "desktop") cumulativeDesktop += s.monthlyMrr;
         else if (s.platform === "mobile") cumulativeMobile += s.monthlyMrr;
+        else if (s.platform === "context_for_claude") cumulativeContext += s.monthlyMrr;
         else {
           cumulativeDesktop += s.monthlyMrr * desktopShare;
           cumulativeMobile += s.monthlyMrr * mobileShare;
+          cumulativeContext += s.monthlyMrr * contextShare;
         }
         subIdx += 1;
       }
       const d = round2(cumulativeDesktop);
       const m = round2(cumulativeMobile);
-      return { date, desktop: d, mobile: m, total: round2(d + m) };
+      const c = round2(cumulativeContext);
+      return { date, desktop: d, mobile: m, context_for_claude: c, total: round2(d + m + c) };
     });
 
-    // Prefer real cost from infra-costs endpoint (Firestore llm_usage buckets
-    // + configurable monthly overhead). Fallback to active-users × per-user
-    // assumption when the endpoint didn't return data.
-    const infraByDate: Record<string, { desktop: number; mobile: number; total: number }> = {};
+    const infraByDate: Record<
+      string,
+      { desktop: number; mobile: number; context_for_claude: number; total: number }
+    > = {};
     if (infraCosts?.daily) {
       for (const row of infraCosts.daily) {
-        infraByDate[row.date] = { desktop: row.desktop, mobile: row.mobile, total: row.total };
+        infraByDate[row.date] = {
+          desktop: row.desktop,
+          mobile: row.mobile,
+          context_for_claude: row.context_for_claude ?? 0,
+          total: row.total,
+        };
       }
     }
 
     const cost: DailyPoint[] = dateKeys.map((date, idx) => {
       const real = infraByDate[date];
       if (real) {
-        return { date, desktop: round2(real.desktop), mobile: round2(real.mobile), total: round2(real.total) };
+        return {
+          date,
+          desktop: round2(real.desktop),
+          mobile: round2(real.mobile),
+          context_for_claude: round2(real.context_for_claude),
+          total: round2(real.total),
+        };
       }
       const row = activeUsers[idx];
       const d = round2(row.desktop * desktopCost);
       const m = round2(row.mobile * mobileCost);
-      return { date, desktop: d, mobile: m, total: round2(d + m) };
+      const c = round2(row.context_for_claude * desktopCost);
+      return { date, desktop: d, mobile: m, context_for_claude: c, total: round2(d + m + c) };
     });
 
-    // Cost PER USER = total platform cost / platform active users for that
-    // day. Falls back to the configured assumption when active users is 0 or
-    // real cost is unavailable.
     const costPerUser: DailyPoint[] = dateKeys.map((date, idx) => {
       const active = activeUsers[idx];
       const costRow = cost[idx];
       const desktopRate =
-        active.desktop > 0
-          ? round2(costRow.desktop / active.desktop)
-          : round2(desktopCost);
+        active.desktop > 0 ? round2(costRow.desktop / active.desktop) : round2(desktopCost);
       const mobileRate =
-        active.mobile > 0
-          ? round2(costRow.mobile / active.mobile)
-          : round2(mobileCost);
+        active.mobile > 0 ? round2(costRow.mobile / active.mobile) : round2(mobileCost);
+      const contextRate =
+        active.context_for_claude > 0
+          ? round2(costRow.context_for_claude / active.context_for_claude)
+          : round2(desktopCost);
       const blendedTotal =
         active.total > 0
           ? round2(costRow.total / active.total)
           : round2((desktopCost + mobileCost) / 2);
-      return { date, desktop: desktopRate, mobile: mobileRate, total: blendedTotal };
+      return {
+        date,
+        desktop: desktopRate,
+        mobile: mobileRate,
+        context_for_claude: contextRate,
+        total: blendedTotal,
+      };
     });
 
     const totalCostUsd = cost.reduce((s, c) => s + c.total, 0);
     const desktopActiveSum = activeUsers.reduce((s, a) => s + a.desktop, 0);
     const mobileActiveSum = activeUsers.reduce((s, a) => s + a.mobile, 0);
+    const contextActiveSum = activeUsers.reduce((s, a) => s + a.context_for_claude, 0);
     const desktopCostSum = cost.reduce((s, c) => s + c.desktop, 0);
     const mobileCostSum = cost.reduce((s, c) => s + c.mobile, 0);
+    const contextCostSum = cost.reduce((s, c) => s + c.context_for_claude, 0);
     const avgCostPerUserDesktop =
       desktopActiveSum > 0 ? round2(desktopCostSum / desktopActiveSum) : round2(desktopCost);
     const avgCostPerUserMobile =
       mobileActiveSum > 0 ? round2(mobileCostSum / mobileActiveSum) : round2(mobileCost);
+    const avgCostPerUserContextForClaude =
+      contextActiveSum > 0 ? round2(contextCostSum / contextActiveSum) : round2(desktopCost);
 
-    const newPaidByDayByPlatform = stripeRes?.newPaidByDayByPlatform ?? { desktop: {}, mobile: {}, unknown: {} };
+    const newPaidByDayByPlatform = stripeRes?.newPaidByDayByPlatform ?? {
+      desktop: {},
+      mobile: {},
+      context_for_claude: {},
+      unknown: {},
+    };
     const conversion: DailyPoint[] = dateKeys.map((date, idx) => {
       const newRow = users[idx];
       const dPaid = (newPaidByDayByPlatform.desktop[date] ?? 0);
       const mPaid = (newPaidByDayByPlatform.mobile[date] ?? 0);
+      const cPaid = (newPaidByDayByPlatform.context_for_claude[date] ?? 0);
       const uPaid = (newPaidByDayByPlatform.unknown[date] ?? 0);
       const dPct = newRow.desktop > 0 ? Math.round((dPaid / newRow.desktop) * 1000) / 10 : 0;
       const mPct = newRow.mobile > 0 ? Math.round((mPaid / newRow.mobile) * 1000) / 10 : 0;
-      const tPaid = dPaid + mPaid + uPaid;
+      const cPct =
+        newRow.context_for_claude > 0
+          ? Math.round((cPaid / newRow.context_for_claude) * 1000) / 10
+          : 0;
+      const tPaid = dPaid + mPaid + cPaid + uPaid;
       const tPct = newRow.total > 0 ? Math.round((tPaid / newRow.total) * 1000) / 10 : 0;
-      return { date, desktop: dPct, mobile: mPct, total: tPct };
+      return { date, desktop: dPct, mobile: mPct, context_for_claude: cPct, total: tPct };
     });
 
     const totalNewDesktop = users.reduce((s, u) => s + u.desktop, 0);
     const totalNewMobile = users.reduce((s, u) => s + u.mobile, 0);
+    const totalNewContextForClaude = users.reduce((s, u) => s + u.context_for_claude, 0);
 
     const partial =
       tokens == null ||
@@ -745,15 +939,19 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
         mrr,
         mrrDesktop: round2(mrrByPlatform.desktop),
         mrrMobile: round2(mrrByPlatform.mobile),
+        mrrContextForClaude: round2(mrrByPlatform.context_for_claude),
         mrrUnknown: round2(mrrByPlatform.unknown),
         totalNewDesktop,
         totalNewMobile,
+        totalNewContextForClaude,
         totalUsersDesktop,
         totalUsersMobile,
+        totalUsersContextForClaude,
         totalUsersUnknown,
         totalCostUsd: round2(totalCostUsd),
         avgCostPerUserDesktop,
         avgCostPerUserMobile,
+        avgCostPerUserContextForClaude,
         assumptions: {
           desktopCostPerUser: desktopCost,
           mobileCostPerUser: mobileCost,
@@ -764,7 +962,9 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
         sources: {
           firebaseAuth: signups != null,
           firestoreTokens: tokens != null,
+          firestoreProducts: productContextUids != null,
           posthogDesktop: desktopUids != null || desktopActive != null,
+          posthogContext: posthogContextUids != null || contextActive != null,
           mixpanelMobile: mobileUids != null || mobileActive != null,
           stripeActive: stripeRes != null,
           stripeNewPaid: stripeRes != null,

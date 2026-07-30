@@ -142,6 +142,7 @@ class _FakeRedis:
         scopes=None,
         key_id=None,
         app_id=None,
+        product=None,
         memory_grant_seeded=True,
         auth_context_version=mcp_api_key_db.MCP_API_KEY_AUTH_CONTEXT_VERSION,
     ):
@@ -151,6 +152,7 @@ class _FakeRedis:
             'scopes': scopes,
             'key_id': key_id,
             'app_id': app_id,
+            'product': product,
             'memory_grant_seeded': memory_grant_seeded,
             'auth_context_version': auth_context_version,
         }

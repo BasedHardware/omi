@@ -571,6 +571,7 @@ def cache_mcp_api_key_auth_context(
     scopes: Optional[List[str]] = None,
     key_id: Optional[str] = None,
     app_id: Optional[str] = None,
+    product: Optional[str] = None,
     memory_grant_seeded: bool = True,
     auth_context_version: int = MCP_API_KEY_AUTH_CONTEXT_VERSION,
     ttl: int = 3600,
@@ -581,6 +582,7 @@ def cache_mcp_api_key_auth_context(
         "scopes": scopes,
         "key_id": key_id,
         "app_id": app_id,
+        "product": product,
         "memory_grant_seeded": memory_grant_seeded,
         "auth_context_version": auth_context_version,
     }
@@ -979,6 +981,17 @@ def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600
     except Exception:
         # Fail-open: if Redis is down, let the caller write through. Firestore
         # merge is idempotent, so worst case we write more often than intended.
+        return True
+
+
+def try_acquire_user_product_write_lock(uid: str, product: str, ttl: int = 600) -> bool:
+    """Return True once every `ttl` seconds per (uid, product) to throttle
+    `last_active_product` writes. Same fail-open contract as the platform lock.
+    """
+    try:
+        result = r.set(f'users:{uid}:product_write:{product}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception:
         return True
 
 

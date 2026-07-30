@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from database import user_usage as user_usage_db
+from database.llm_usage import record_llm_usage_bucket
+from database.users import _normalize_product
 
 
 def billable_transcription_seconds(
@@ -23,6 +25,11 @@ def billable_transcription_seconds(
     return max(0, int(billable_until - last_usage_record_timestamp))
 
 
+# Vendor STT rate used for product-tagged cost buckets (Deepgram Nova reference).
+_STT_USD_PER_MINUTE = 0.0043
+_CONTEXT_STT_BUCKET = 'context_for_claude_stt'
+
+
 def record_usage(
     uid: str,
     transcription_seconds: int = 0,
@@ -31,8 +38,14 @@ def record_usage(
     memories_created: int = 0,
     speech_seconds: int = 0,
     idempotency_key: Optional[str] = None,
+    app_product: Optional[str] = None,
 ):
-    """Records hourly usage stats for a user."""
+    """Records hourly usage stats for a user.
+
+    When ``app_product`` is ``context-for-claude``, also dual-writes an estimated
+    STT ``cost_usd`` into the product-tagged llm_usage bucket so admin infra-costs
+    can segment Context spend without joining last_active_product.
+    """
     now = datetime.now(timezone.utc)
     updates = {
         'transcription_seconds': transcription_seconds,
@@ -45,3 +58,16 @@ def record_usage(
         user_usage_db.update_hourly_usage_once(uid, now, updates, idempotency_key)
     else:
         user_usage_db.update_hourly_usage(uid, now, updates)
+
+    product = _normalize_product(app_product)
+    if product == 'context-for-claude' and transcription_seconds > 0:
+        cost_usd = round((transcription_seconds / 60.0) * _STT_USD_PER_MINUTE, 6)
+        record_llm_usage_bucket(
+            uid,
+            input_tokens=0,
+            output_tokens=0,
+            total_tokens=0,
+            cost_usd=cost_usd,
+            bucket=_CONTEXT_STT_BUCKET,
+            account='omi',
+        )

@@ -467,3 +467,21 @@ lists, no settings page. That is the entire non-onboarding UI.
 **never ad-hoc, which resets Screen Recording for every Omi app on this machine** — then install to
 `/Applications/Context for Claude.app`. Idempotent, and it must not touch `/Applications/Omi.app` or
 `Omi Beta.app`.
+
+## Product telemetry identity
+
+Context for Claude shares the Omi account backend but is a separate product surface for cohorts and
+cost attribution.
+
+| Header | Value | Meaning |
+|---|---|---|
+| `X-App-Platform` | `macos` | OS (unchanged from Omi Desktop) |
+| `X-App-Product` | `context-for-claude` | Product surface — required on every authenticated HTTP / listen / MCP request |
+| `X-App-Version` / `X-App-Build` / `X-Device-Id-Hash` | as today | Install provenance |
+
+MCP keys minted by this app are stamped `product: context-for-claude` from the `X-App-Product`
+request header at create time (body-only product is rejected). Key-auth traffic can then be
+attributed from the key document without a header. PostHog events register `product=context-for-claude`
+so admin HogQL can exclude Context from Omi Desktop macOS cohorts.
+
+This is telemetry identity only — not a fork of the shared account or backend.

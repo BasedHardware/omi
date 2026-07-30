@@ -354,6 +354,7 @@ final class ScreenActivityUploader: ObservableObject {
             // Set after the borrowed headers so this request's own contract always wins.
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
+            request.setValue(OmiAPI.appProduct, forHTTPHeaderField: "X-App-Product")
 
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)

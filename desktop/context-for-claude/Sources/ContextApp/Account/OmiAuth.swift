@@ -179,6 +179,7 @@ final class OmiAuth: ObservableObject {
         email = nil
         isSignedIn = false
         SessionStore.clear()
+        ContextAnalytics.reset()
         ContextLog.info("Signed out", "auth")
     }
 
@@ -507,6 +508,9 @@ final class OmiAuth: ObservableObject {
         userId = session.tokenUserId.isEmpty ? nil : session.tokenUserId
         self.email = email
         isSignedIn = true
+        if let uid = userId {
+            ContextAnalytics.identify(uid: uid, email: email)
+        }
     }
 
     private static func authError(from error: Error) -> OmiAuthError {

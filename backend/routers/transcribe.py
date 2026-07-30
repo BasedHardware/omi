@@ -21,7 +21,15 @@ from utils.client_device import (
     ClientDeviceContext,
     resolve_client_device_from_websocket_auth_message,
 )
+from database.users import _normalize_product
 from utils.other import endpoints as auth
+
+
+def _app_product_from_websocket(websocket: WebSocket) -> Optional[str]:
+    headers = websocket.headers
+    raw = headers.get('x-app-product') or headers.get('X-App-Product')
+    return _normalize_product(raw)
+
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +55,7 @@ async def _stream_handler(
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
     client_device_context: Optional[ClientDeviceContext] = None,
+    app_product: Optional[str] = None,
 ) -> None:
     """Compatibility facade for the accepted-socket listen session."""
     await run_listen_session(
@@ -69,6 +78,7 @@ async def _stream_handler(
             call_id=call_id,
             client_conversation_id=client_conversation_id,
             client_device_context=client_device_context,
+            app_product=app_product,
         )
     )
 
@@ -115,6 +125,7 @@ async def _listen(
         vad_gate_override=vad_gate_override,
         call_id=call_id,
         client_conversation_id=client_conversation_id,
+        app_product=_app_product_from_websocket(websocket),
     )
 
 

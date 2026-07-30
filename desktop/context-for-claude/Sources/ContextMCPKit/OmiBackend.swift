@@ -614,6 +614,10 @@ public final class OmiBackend: @unchecked Sendable {
         request.setValue("Bearer \(credential.key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("context-for-claude-mcp/1.0", forHTTPHeaderField: "User-Agent")
+        // Same product/OS tags the app sends — MCP key auth alone cannot tell Context traffic from
+        // a generic omi-memory key without these (or product stamped on the key at mint).
+        request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
+        request.setValue("context-for-claude", forHTTPHeaderField: "X-App-Product")
 
         switch send(request, path: path) {
         case let .success(data):

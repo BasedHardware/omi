@@ -1,13 +1,14 @@
 """Dependency-light HTTP boundary for MCP and Developer API-key lifecycle."""
 
 import logging
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
 import database.dev_api_key as dev_api_key_db
 import database.mcp_api_key as mcp_api_key_db
 from database.api_key_metadata import ApiKeyRevocationUnavailableError, ApiKeyValidationError
+from database.users import _normalize_product
 from dependencies import get_current_user_id
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
@@ -41,12 +42,24 @@ def get_mcp_keys(uid: str = Depends(get_current_user_id)):
     summary="Create Key",
     operation_id="create_key_v1_mcp_keys_post",
 )
-def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id)):
+def create_mcp_key(
+    key_data: McpApiKeyCreate,
+    uid: str = Depends(get_current_user_id),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
+):
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
+    # Product stamps only from X-App-Product so clients cannot mint Context-tagged
+    # keys via a JSON body field alone. Optional body product must match the header.
+    header_product = _normalize_product(x_app_product)
+    body_product = _normalize_product(key_data.product)
+    if body_product and body_product != header_product:
+        raise HTTPException(status_code=422, detail="product body requires matching X-App-Product")
+    product = header_product
+
     try:
-        raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
+        raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip(), product=product)
     except ApiKeyValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)

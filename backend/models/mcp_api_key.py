@@ -12,6 +12,7 @@ class McpApiKey(BaseModel):
     last_used_at: Optional[datetime] = None
     app_id: Optional[str] = None
     scopes: Optional[list[str]] = None
+    product: Optional[str] = None
 
 
 class McpApiKeyDB(McpApiKey):
@@ -21,6 +22,7 @@ class McpApiKeyDB(McpApiKey):
 
 class McpApiKeyCreate(BaseModel):
     name: str
+    product: Optional[str] = None
 
 
 class McpApiKeyCreated(McpApiKey):

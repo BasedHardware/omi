@@ -12,6 +12,7 @@ from database.redis_db import (
     delete_cached_user_geolocation,
     try_acquire_client_device_write_lock,
     try_acquire_user_platform_write_lock,
+    try_acquire_user_product_write_lock,
 )
 from models.users import (
     LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
@@ -77,6 +78,17 @@ _PLATFORM_ALIASES = {
     'browser': 'web',
 }
 
+# Product-surface identity (`X-App-Product`). Orthogonal to OS platform above.
+# Unknown values are ignored — do not invent aliases from OS.
+_PRODUCT_ALLOWLIST = frozenset(
+    {
+        'context-for-claude',
+        'omi-desktop',
+        'omi-mobile',
+        'omi-web',
+    }
+)
+
 
 def _normalize_platform(raw: Optional[str]) -> tuple[Optional[str], Optional[str]]:
     """Return (coarse_platform, os_value) for a raw `X-App-Platform` header.
@@ -93,6 +105,16 @@ def _normalize_platform(raw: Optional[str]) -> tuple[Optional[str], Optional[str
     return coarse, os_value
 
 
+def _normalize_product(raw: Optional[str]) -> Optional[str]:
+    """Return a canonical product id for a raw `X-App-Product` header, or None."""
+    if not raw or not isinstance(raw, str):
+        return None
+    product = raw.strip().lower()
+    if product not in _PRODUCT_ALLOWLIST:
+        return None
+    return product
+
+
 def record_client_device(
     uid: str,
     *,
@@ -100,6 +122,7 @@ def record_client_device(
     platform: Optional[str],
     app_version: Optional[str] = None,
     label: Optional[str] = None,
+    product: Optional[str] = None,
 ) -> None:
     """Upsert users/{uid}/client_devices/{client_device_id} from request headers.
 
@@ -114,6 +137,7 @@ def record_client_device(
 
         now = datetime.now(timezone.utc)
         coarse, _os_value = _normalize_platform(platform)
+        normalized_product = _normalize_product(product)
         doc_ref = db.collection('users').document(uid).collection('client_devices').document(client_device_id)
         updates = {
             'platform': platform,
@@ -124,6 +148,8 @@ def record_client_device(
             updates['app_version'] = app_version
         if label:
             updates['label'] = label
+        if normalized_product:
+            updates['product'] = normalized_product
 
         snapshot = doc_ref.get()
         if not snapshot.exists:
@@ -186,6 +212,45 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
         user_ref.set(updates, merge=True)
     except Exception as e:  # noqa: BLE001
         logger.warning("record_user_platform failed for uid=%s: %s", uid, e)
+
+
+def record_user_product(uid: str, raw_product: Optional[str]) -> None:
+    """Write product-surface cohort fields from an `X-App-Product` header value.
+
+    Same throttle / fail-open contract as `record_user_platform`. Users can
+    belong to multiple products (`products_used` ArrayUnion) — e.g. Omi Desktop
+    and Context for Claude on the same account.
+    """
+    product = _normalize_product(raw_product)
+    if not product:
+        return
+
+    try:
+        if not try_acquire_user_product_write_lock(uid, product):
+            return
+
+        now = datetime.now(timezone.utc)
+        user_ref = db.collection('users').document(uid)
+
+        updates: dict[str, Any] = {
+            'last_active_product': product,
+            f'last_active_at_product_{product.replace("-", "_")}': now,
+            'products_used': firestore.ArrayUnion([product]),
+        }
+
+        snapshot = user_ref.get()
+        if snapshot.exists:
+            data = snapshot.to_dict() or {}
+            if not data.get('signup_product'):
+                updates['signup_product'] = product
+                updates['signup_product_at'] = data.get('created_at') or now
+        else:
+            updates['signup_product'] = product
+            updates['signup_product_at'] = now
+
+        user_ref.set(updates, merge=True)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("record_user_product failed for uid=%s: %s", uid, e)
 
 
 def is_exists_user(uid: str):

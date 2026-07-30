@@ -245,6 +245,7 @@ interface ProfitabilityPoint {
   date: string;
   desktop: number;
   mobile: number;
+  context_for_claude?: number;
   total: number;
 }
 
@@ -261,15 +262,19 @@ interface ProfitabilityData {
     mrr: number;
     mrrDesktop: number;
     mrrMobile: number;
+    mrrContextForClaude?: number;
     mrrUnknown: number;
     totalNewDesktop: number;
     totalNewMobile: number;
+    totalNewContextForClaude?: number;
     totalUsersDesktop: number;
     totalUsersMobile: number;
+    totalUsersContextForClaude?: number;
     totalUsersUnknown: number;
     totalCostUsd?: number;
     avgCostPerUserDesktop?: number;
     avgCostPerUserMobile?: number;
+    avgCostPerUserContextForClaude?: number;
     assumptions: {
       desktopCostPerUser: number;
       mobileCostPerUser: number;
@@ -280,7 +285,9 @@ interface ProfitabilityData {
     sources: {
       firebaseAuth: boolean;
       firestoreTokens: boolean;
+      firestoreProducts?: boolean;
       posthogDesktop?: boolean;
+      posthogContext?: boolean;
       mixpanelMobile?: boolean;
       stripeActive: boolean;
       stripeNewPaid: boolean;
@@ -450,9 +457,15 @@ export default function AnalyticsPage() {
       aprProjectionUsd: number;
       desktopProjectionUsd: number;
       mobileProjectionUsd: number;
+      contextProjectionUsd?: number;
     }>;
     summary: {
-      assumptions: { overheadMonthlyUsd: number; desktopShare: number; mobileShare: number };
+      assumptions: {
+        overheadMonthlyUsd: number;
+        desktopShare: number;
+        mobileShare: number;
+        contextShare?: number;
+      };
     };
   }
   const { data: infraCosts } = useSWR<InfraCostsData>(
@@ -611,7 +624,11 @@ export default function AnalyticsPage() {
         id: "profit-users",
         title: "New users / day",
         subtitle: summary
-          ? `Desktop ${summary.totalNewDesktop.toLocaleString()} · Mobile ${summary.totalNewMobile.toLocaleString()}`
+          ? `Desktop ${summary.totalNewDesktop.toLocaleString()} · Mobile ${summary.totalNewMobile.toLocaleString()}${
+              summary.totalNewContextForClaude != null
+                ? ` · Context ${summary.totalNewContextForClaude.toLocaleString()}`
+                : ""
+            }`
           : "Per-platform signups",
         icon: <Users className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -625,6 +642,7 @@ export default function AnalyticsPage() {
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar dataKey="desktop" stackId="u" fill="#6366f1" name="Desktop" />
               <Bar dataKey="mobile" stackId="u" fill="#22c55e" name="Mobile" />
+              <Bar dataKey="context_for_claude" stackId="u" fill="#b45309" name="Context" />
             </BarChart>
           </ResponsiveContainer>
         ),
@@ -647,6 +665,10 @@ export default function AnalyticsPage() {
                   <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
                   <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
                 </linearGradient>
+                <linearGradient id="profitRevContext" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#b45309" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#b45309" stopOpacity={0} />
+                </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} minTickGap={30} />
@@ -655,6 +677,7 @@ export default function AnalyticsPage() {
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Area type="monotone" dataKey="desktop" stackId="r" stroke="#6366f1" strokeWidth={2} fill="url(#profitRevDesktop)" name="Desktop" />
               <Area type="monotone" dataKey="mobile" stackId="r" stroke="#22c55e" strokeWidth={2} fill="url(#profitRevMobile)" name="Mobile" />
+              <Area type="monotone" dataKey="context_for_claude" stackId="r" stroke="#b45309" strokeWidth={2} fill="url(#profitRevContext)" name="Context" />
             </AreaChart>
           </ResponsiveContainer>
         ),
@@ -663,7 +686,11 @@ export default function AnalyticsPage() {
         id: "profit-cost-per-user",
         title: `Cost / user / day${costSource === "real" ? "" : " (est.)"}`,
         subtitle: avgCostDesktop != null && avgCostMobile != null
-          ? `Avg: Desktop $${avgCostDesktop.toFixed(2)} · Mobile $${avgCostMobile.toFixed(2)}`
+          ? `Avg: Desktop $${avgCostDesktop.toFixed(2)} · Mobile $${avgCostMobile.toFixed(2)}${
+              (summary as any)?.avgCostPerUserContextForClaude != null
+                ? ` · Context $${Number((summary as any).avgCostPerUserContextForClaude).toFixed(2)}`
+                : ""
+            }`
           : "Daily infra spend ÷ active users, per platform",
         icon: <Activity className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
@@ -677,6 +704,7 @@ export default function AnalyticsPage() {
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="desktop" stroke="#f59e0b" strokeWidth={2} dot={false} name="Desktop $/user" />
               <Line type="monotone" dataKey="mobile" stroke="#ef4444" strokeWidth={2} dot={false} name="Mobile $/user" />
+              <Line type="monotone" dataKey="context_for_claude" stroke="#b45309" strokeWidth={2} dot={false} name="Context $/user" />
             </LineChart>
           </ResponsiveContainer>
         ),
@@ -686,7 +714,7 @@ export default function AnalyticsPage() {
         title: `Total infra cost / day${costSource === "real" ? "" : " (est.)"}`,
         subtitle: summary?.totalCostUsd != null
           ? `Total last ${profitability?.days ?? 30}d: ${formatCurrency(summary.totalCostUsd)}`
-          : "Desktop + mobile daily burn",
+          : "Desktop + mobile + Context daily burn",
         icon: <DollarSign className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
         render: () => (
@@ -699,6 +727,7 @@ export default function AnalyticsPage() {
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar dataKey="desktop" stackId="c" fill="#f59e0b" name="Desktop" />
               <Bar dataKey="mobile" stackId="c" fill="#ef4444" name="Mobile" />
+              <Bar dataKey="context_for_claude" stackId="c" fill="#b45309" name="Context" />
             </BarChart>
           </ResponsiveContainer>
         ),
@@ -719,6 +748,7 @@ export default function AnalyticsPage() {
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="desktop" stroke="#6366f1" strokeWidth={2} dot={false} name="Desktop" />
               <Line type="monotone" dataKey="mobile" stroke="#22c55e" strokeWidth={2} dot={false} name="Mobile" />
+              <Line type="monotone" dataKey="context_for_claude" stroke="#b45309" strokeWidth={2} dot={false} name="Context" />
             </LineChart>
           </ResponsiveContainer>
         ),
@@ -727,7 +757,7 @@ export default function AnalyticsPage() {
         id: "profit-cost-breakdown",
         title: "Infra cost by service — last 30 days",
         subtitle: infraCosts?.summary?.assumptions
-          ? `Trailing-30-day actual spend, split by platform (Desktop ${Math.round((infraCosts.summary.assumptions.desktopShare ?? 0) * 100)}% · Mobile ${Math.round((infraCosts.summary.assumptions.mobileShare ?? 0) * 100)}%)`
+          ? `Trailing-30-day actual spend, split by platform (Desktop ${Math.round((infraCosts.summary.assumptions.desktopShare ?? 0) * 100)}% · Mobile ${Math.round((infraCosts.summary.assumptions.mobileShare ?? 0) * 100)}% · Context ${Math.round((infraCosts.summary.assumptions.contextShare ?? 0) * 100)}%)`
           : "Per-service actual spend from GCP bill + external LLMs, split by platform",
         icon: <DollarSign className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 6 },
@@ -744,6 +774,7 @@ export default function AnalyticsPage() {
           const totalProj = rows.reduce((s, r) => s + r.aprProjectionUsd, 0);
           const totalDesktopProj = rows.reduce((s, r) => s + r.desktopProjectionUsd, 0);
           const totalMobileProj = rows.reduce((s, r) => s + r.mobileProjectionUsd, 0);
+          const totalContextProj = rows.reduce((s, r) => s + (r.contextProjectionUsd ?? 0), 0);
           return (
             <div className="h-full overflow-auto">
               <table className="w-full text-sm">
@@ -754,6 +785,7 @@ export default function AnalyticsPage() {
                     <th className="px-3 py-2 text-right font-medium">Last 30 days</th>
                     <th className="px-3 py-2 text-right font-medium text-indigo-500">Desktop</th>
                     <th className="px-3 py-2 text-right font-medium text-green-500">Mobile</th>
+                    <th className="px-3 py-2 text-right font-medium text-amber-700">Context</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -764,6 +796,7 @@ export default function AnalyticsPage() {
                       <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(r.aprProjectionUsd)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-indigo-500">{formatCurrency(r.desktopProjectionUsd)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-red-500">{formatCurrency(r.mobileProjectionUsd)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-amber-700">{formatCurrency(r.contextProjectionUsd ?? 0)}</td>
                     </tr>
                   ))}
                   <tr className="border-t-2 border-border/60 font-semibold">
@@ -772,6 +805,7 @@ export default function AnalyticsPage() {
                     <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(totalProj)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-indigo-500">{formatCurrency(totalDesktopProj)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-red-500">{formatCurrency(totalMobileProj)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-amber-700">{formatCurrency(totalContextProj)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1941,6 +1975,23 @@ export default function AnalyticsPage() {
               : "--"}
           </div>
           <p className="text-xs text-muted-foreground">All-time signups</p>
+        </div>
+      ),
+    },
+    {
+      id: "kpi-total-users-context",
+      title: "Total Users (Context)",
+      variant: "kpi",
+      icon: <Monitor className="h-3.5 w-3.5" />,
+      initialLayout: { cols: 2, rows: 1 },
+      render: () => (
+        <div>
+          <div className="text-2xl font-bold">
+            {profitability?.summary.totalUsersContextForClaude != null
+              ? profitability.summary.totalUsersContextForClaude.toLocaleString()
+              : "--"}
+          </div>
+          <p className="text-xs text-muted-foreground">Context for Claude cohort</p>
         </div>
       ),
     },

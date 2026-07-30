@@ -160,6 +160,7 @@ class _Redis:
         scopes: Optional[list[str]] = None,
         key_id: Optional[str] = None,
         app_id: Optional[str] = None,
+        product: Optional[str] = None,
         memory_grant_seeded: bool = True,
         auth_context_version: int = mcp_api_key_db.MCP_API_KEY_AUTH_CONTEXT_VERSION,
     ) -> bool:
@@ -168,6 +169,7 @@ class _Redis:
             "scopes": scopes,
             "key_id": key_id,
             "app_id": app_id,
+            "product": product,
             "memory_grant_seeded": memory_grant_seeded,
             "auth_context_version": auth_context_version,
         }
@@ -294,6 +296,7 @@ def test_mcp_key_authentication_metadata_projection_and_revocation_share_documen
         "scopes": sorted(mcp_api_key_db.MCP_FULL_ACCESS_SCOPES),
         "key_id": "canonical-mcp-id",
         "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
+        "product": None,
     }
     assert auth_result.repairs == {
         ApiKeyAuthRepair.DOCUMENT_ID,

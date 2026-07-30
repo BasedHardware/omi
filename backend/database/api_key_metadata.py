@@ -4,7 +4,7 @@ from enum import Enum
 import re
 from typing import Any, Optional, Sequence, TypeGuard
 
-MCP_API_KEY_AUTH_CONTEXT_VERSION = 3
+MCP_API_KEY_AUTH_CONTEXT_VERSION = 4
 DEV_API_KEY_AUTH_CONTEXT_VERSION = 1
 
 _EPOCH_UTC = datetime(1970, 1, 1, tzinfo=timezone.utc)

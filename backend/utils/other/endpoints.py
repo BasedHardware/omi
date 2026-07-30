@@ -13,7 +13,7 @@ import logging
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
-from database.users import record_client_device, record_user_platform
+from database.users import record_client_device, record_user_platform, record_user_product
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
 from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
@@ -85,6 +85,7 @@ def verify_token(token: str) -> str:
 def get_current_user_uid(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
+    x_app_product: str = Header(None, alias='X-App-Product'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: str = Header(None, alias='X-App-Version'),
 ) -> str:
@@ -119,6 +120,11 @@ def get_current_user_uid(
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
 
     try:
+        record_user_product(uid, x_app_product)
+    except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+        logger.debug("record_user_product swallowed error for uid=%s: %s", uid, e)
+
+    try:
         device_ctx = resolve_client_device(
             x_app_platform=x_app_platform,
             x_device_id_hash=x_device_id_hash,
@@ -129,6 +135,7 @@ def get_current_user_uid(
             client_device_id=device_ctx.client_device_id,
             platform=device_ctx.platform,
             app_version=device_ctx.app_version,
+            product=x_app_product,
         )
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
@@ -145,6 +152,7 @@ def get_current_user_uid(
 def get_current_user_uid_no_byok_validation(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
+    x_app_product: str = Header(None, alias='X-App-Product'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: str = Header(None, alias='X-App-Version'),
 ) -> str:
@@ -176,6 +184,11 @@ def get_current_user_uid_no_byok_validation(
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
 
     try:
+        record_user_product(uid, x_app_product)
+    except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+        logger.debug("record_user_product swallowed error for uid=%s: %s", uid, e)
+
+    try:
         device_ctx = resolve_client_device(
             x_app_platform=x_app_platform,
             x_device_id_hash=x_device_id_hash,
@@ -186,6 +199,7 @@ def get_current_user_uid_no_byok_validation(
             client_device_id=device_ctx.client_device_id,
             platform=device_ctx.platform,
             app_version=device_ctx.app_version,
+            product=x_app_product,
         )
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
@@ -237,6 +251,8 @@ def _get_ws_auth_close(error: Exception) -> 'tuple[int, str]':
 async def get_current_user_uid_ws_listen(
     websocket: WebSocket = None,  # pyright: ignore[reportArgumentType]  # FastAPI needs bare WebSocket type for WS injection
     authorization: str = Header(None),
+    x_app_platform: str = Header(None, alias='X-App-Platform'),
+    x_app_product: str = Header(None, alias='X-App-Product'),
 ):
     """WebSocket auth for /v4/listen — NO rate limiting.
 
@@ -256,6 +272,17 @@ async def get_current_user_uid_ws_listen(
     Firestore calls are offloaded via ``run_blocking``.
     """
     uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
+
+    # Product/platform cohort telemetry from upgrade headers (Context for Claude
+    # and other clients that can set custom WS headers). Fail-open.
+    try:
+        await run_blocking(critical_executor, record_user_platform, uid, x_app_platform)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("ws listen record_user_platform swallowed error for uid=%s: %s", uid, e)
+    try:
+        await run_blocking(critical_executor, record_user_product, uid, x_app_product)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("ws listen record_user_product swallowed error for uid=%s: %s", uid, e)
 
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context

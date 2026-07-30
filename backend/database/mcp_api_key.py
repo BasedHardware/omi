@@ -24,6 +24,7 @@ from database.api_key_metadata import (
     valid_api_key_app_id,
 )
 from models.mcp_api_key import McpApiKey
+from database.users import _normalize_product
 from utils.mcp_api_keys import generate_api_key, hash_api_key
 from utils.mcp_scopes import (
     MCP_APP_KEY_MEMORY_GRANTS_DOC_ID,
@@ -160,6 +161,7 @@ def create_mcp_key(
     name: str,
     scopes: Optional[list[str]] = None,
     app_id: Optional[str] = MCP_DEFAULT_APP_ID,
+    product: Optional[str] = None,
 ) -> Tuple[str, McpApiKey]:
     """
     Creates a new MCP API key for a user.
@@ -173,6 +175,7 @@ def create_mcp_key(
         resolved_app_id = valid_api_key_app_id(app_id)
         if resolved_app_id is None:
             raise ApiKeyValidationError("Invalid MCP API key app_id")
+    resolved_product = _normalize_product(product)
     raw_key, hashed_key, key_prefix = generate_api_key()
     key_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -190,6 +193,8 @@ def create_mcp_key(
         "app_id": resolved_app_id,
         "scopes": resolved_scopes,
     }
+    if resolved_product:
+        api_key_doc["product"] = resolved_product
     firestore_client.collection("mcp_api_keys").document(key_id).set(api_key_doc)
     _seed_mcp_memory_grant(user_id, key_id, resolved_app_id, firestore_client=firestore_client)
 
@@ -201,6 +206,7 @@ def create_mcp_key(
         last_used_at=None,
         app_id=resolved_app_id,
         scopes=resolved_scopes,
+        product=resolved_product,
     )
     return raw_key, api_key_data
 
@@ -237,6 +243,7 @@ def get_mcp_keys_for_user_with_repair_info(
             missing_is_valid=False,
         ):
             repairs.add(ApiKeyMetadataRepair.SCOPES)
+        projected["product"] = _normalize_product(data.get("product") if isinstance(data.get("product"), str) else None)
         keys.append(McpApiKey.model_validate(projected))
     keys.sort(key=lambda key: key.id)
     keys.sort(key=lambda key: key.created_at, reverse=True)
@@ -311,6 +318,7 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
                 "scopes": normalize_mcp_scopes(cached_data.get("scopes")),
                 "key_id": cached_data["key_id"],
                 "app_id": cached_data["app_id"],
+                "product": cached_data.get("product"),
             }
         )
 
@@ -351,6 +359,8 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     ):
         repairs.add(ApiKeyAuthRepair.SCOPES)
 
+    product = _normalize_product(key_data.get("product") if isinstance(key_data.get("product"), str) else None)
+
     key_ref = key_doc.reference
     key_ref.update({"id": key_id, "last_used_at": datetime.now(timezone.utc), "app_id": app_id, "scopes": scopes})
     if _ensure_mcp_memory_grant(user_id, key_id, app_id, firestore_client):
@@ -361,13 +371,14 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
         scopes,
         key_id=key_id,
         app_id=app_id,
+        product=product,
         auth_context_version=MCP_API_KEY_AUTH_CONTEXT_VERSION,
     )
     if cache_written is not True:
         repairs.add(ApiKeyAuthRepair.CACHE_WRITE)
 
     return ApiKeyAuthLookupResult(
-        context={"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id},
+        context={"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id, "product": product},
         repairs=frozenset(repairs),
     )
 

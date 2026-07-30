@@ -22,12 +22,13 @@ export const maxDuration = 3600;
 //      per-platform LLM share. Override via env or ?overhead_monthly=…
 //      query param.
 
-type Platform = "desktop" | "mobile" | "unknown";
+type Platform = "desktop" | "mobile" | "context_for_claude" | "unknown";
 
 interface DailyCostPoint {
   date: string;
   desktop: number; // USD
   mobile: number;
+  context_for_claude: number;
   unknown: number;
   total: number;
 }
@@ -43,6 +44,7 @@ interface ServiceCostRow {
   aprProjectionUsd: number;
   desktopProjectionUsd: number;
   mobileProjectionUsd: number;
+  contextProjectionUsd: number;
 }
 
 export interface InfraCostsPayload {
@@ -53,6 +55,7 @@ export interface InfraCostsPayload {
     totalCostUsd: number;
     totalDesktopUsd: number;
     totalMobileUsd: number;
+    totalContextForClaudeUsd: number;
     totalUnknownUsd: number;
     perUserLlmUsd: number;
     overheadUsd: number;
@@ -60,6 +63,7 @@ export interface InfraCostsPayload {
       overheadMonthlyUsd: number;
       desktopShare: number;
       mobileShare: number;
+      contextShare: number;
     };
     partial: boolean;
   };
@@ -84,6 +88,8 @@ interface ServiceCostEntry {
   cost30d: number;
   desktopWeight: number;
   mobileWeight: number;
+  /** Optional share for Context for Claude; remainder stays desktop/mobile. */
+  contextWeight?: number;
 }
 
 const DEFAULT_SERVICE_COSTS: ServiceCostEntry[] = [
@@ -107,7 +113,9 @@ const DEFAULT_SERVICE_COSTS: ServiceCostEntry[] = [
   // Anthropic is nearly all desktop (Claude-Opus floating bar).
   { service: 'Anthropic', cost30d: 14326, desktopWeight: 0.9, mobileWeight: 0.1 },
   { service: 'OpenAI', cost30d: 14884, desktopWeight: 0.5, mobileWeight: 0.5 },
-  { service: 'Deepgram', cost30d: 10580, desktopWeight: 0.2, mobileWeight: 0.8 },
+  // Deepgram: temporary small Context share until metered context_for_claude_stt
+  // buckets dominate the per-user series.
+  { service: 'Deepgram', cost30d: 10580, desktopWeight: 0.18, mobileWeight: 0.77, contextWeight: 0.05 },
 ];
 
 function loadServiceCosts(): ServiceCostEntry[] {
@@ -121,6 +129,7 @@ function loadServiceCosts(): ServiceCostEntry[] {
       .map((r) => {
         const d = Number(r.desktopWeight);
         const m = Number(r.mobileWeight);
+        const c = Number(r.contextWeight);
         // Back-compat: accept `cost30d`, `mtd`, or `projection` from the env
         // override — whichever is set wins. This lets existing configs that
         // still use the old `mtd` / `projection` keys keep working.
@@ -131,6 +140,7 @@ function loadServiceCosts(): ServiceCostEntry[] {
           cost30d: cost,
           desktopWeight: Number.isFinite(d) ? d : 0.5,
           mobileWeight: Number.isFinite(m) ? m : 0.5,
+          contextWeight: Number.isFinite(c) ? c : 0,
         };
       });
   } catch {
@@ -142,16 +152,24 @@ function loadServiceCosts(): ServiceCostEntry[] {
 // Used as the overhead budget for the daily cost series. The name is kept as
 // "MonthlyOverhead" for caller compatibility — the value is now actual
 // trailing-30d spend rather than a projection.
-function computeMonthlyOverheadByPlatform(services: ServiceCostEntry[]): { desktop: number; mobile: number; total: number } {
+function computeMonthlyOverheadByPlatform(services: ServiceCostEntry[]): {
+  desktop: number;
+  mobile: number;
+  context_for_claude: number;
+  total: number;
+} {
   let desktop = 0;
   let mobile = 0;
+  let context_for_claude = 0;
   let total = 0;
   for (const s of services) {
+    const contextWeight = s.contextWeight ?? 0;
     desktop += s.cost30d * s.desktopWeight;
     mobile += s.cost30d * s.mobileWeight;
+    context_for_claude += s.cost30d * contextWeight;
     total += s.cost30d;
   }
-  return { desktop, mobile, total };
+  return { desktop, mobile, context_for_claude, total };
 }
 
 // User-provided April projection. Override with ADMIN_INFRA_OVERHEAD_MONTHLY
@@ -160,9 +178,24 @@ const DEFAULT_OVERHEAD_MONTHLY = 57447;
 
 function platformFromBucket(bucket: string): Platform {
   const lower = bucket.toLowerCase();
+  if (lower.startsWith("context_for_claude_")) return "context_for_claude";
   if (lower.startsWith("desktop_")) return "desktop";
   if (lower.startsWith("mobile_")) return "mobile";
   return "unknown";
+}
+
+/** Primary cost buckets only — skip `{primary}_{account}` dual-write aliases. */
+function isPrimaryCostBucket(key: string): boolean {
+  const lower = key.toLowerCase();
+  if (lower.startsWith("context_for_claude_")) {
+    const rest = lower.slice("context_for_claude_".length);
+    return !rest.includes("_");
+  }
+  return key.split("_").length <= 2;
+}
+
+function emptyPlatformCosts(): Record<Platform, number> {
+  return { desktop: 0, mobile: 0, context_for_claude: 0, unknown: 0 };
 }
 
 function formatDate(d: Date): string {
@@ -214,7 +247,7 @@ async function fetchLlmCostsPerDay(
       const date = (data?.date as string | undefined) ?? doc.id;
       if (!date) continue;
 
-      if (!byDay[date]) byDay[date] = { desktop: 0, mobile: 0, unknown: 0 };
+      if (!byDay[date]) byDay[date] = emptyPlatformCosts();
 
       for (const key of Object.keys(data)) {
         if (NON_BUCKET_FIELDS.has(key)) continue;
@@ -228,9 +261,8 @@ async function fetchLlmCostsPerDay(
 
         // Skip aliased buckets of the form `{primary}_{account}` to avoid
         // double-counting. Primary buckets: desktop_chat, desktop_rag,
-        // mobile_chat, etc. Aliases add a third underscore-separated segment.
-        const segments = key.split("_");
-        if (segments.length > 2) continue;
+        // mobile_chat, context_for_claude_stt, etc.
+        if (!isPrimaryCostBucket(key)) continue;
 
         const cost = Number((value as any).cost_usd || 0);
         if (!Number.isFinite(cost) || cost <= 0) continue;
@@ -265,7 +297,7 @@ export function parseInfraCostsParams(searchParams: URLSearchParams): { days: nu
 }
 
 export function infraCostsCacheKey(days: number, overheadMonthly: number): string {
-  return `infra-costs:v1:${days}:${overheadMonthly}`;
+  return `infra-costs:v2:${days}:${overheadMonthly}`;
 }
 
 export async function computeInfraCosts(opts: { days: number; overheadMonthly: number }): Promise<InfraCostsPayload> {
@@ -283,33 +315,35 @@ export async function computeInfraCosts(opts: { days: number; overheadMonthly: n
     const overheadByPlatform = computeMonthlyOverheadByPlatform(services);
     const dailyOverheadDesktop = overheadByPlatform.desktop / 30;
     const dailyOverheadMobile = overheadByPlatform.mobile / 30;
+    const dailyOverheadContext = overheadByPlatform.context_for_claude / 30;
 
     const daily: DailyCostPoint[] = dateKeys.map((date) => {
-      const row = llmByDay?.[date] ?? { desktop: 0, mobile: 0, unknown: 0 };
-      // `row.desktop` / `row.mobile` is the per-user LLM spend recorded in
-      // Firestore. Today only `desktop_*` buckets exist in practice, so we
-      // add the per-service platform-weighted overhead on top — that
-      // captures the Anthropic/OpenAI/Deepgram + GCP share attributable to
-      // each platform.
+      const row = llmByDay?.[date] ?? emptyPlatformCosts();
+      // `row.desktop` / `row.mobile` / `row.context_for_claude` is the per-user
+      // spend recorded in Firestore. Context STT meters into
+      // `context_for_claude_stt`; weighted overhead fills gaps until metered.
       const desktop = row.desktop + dailyOverheadDesktop;
       const mobile = row.mobile + dailyOverheadMobile;
+      const context_for_claude = row.context_for_claude + dailyOverheadContext;
       const unknown = row.unknown;
       return {
         date,
         desktop: Math.round(desktop * 100) / 100,
         mobile: Math.round(mobile * 100) / 100,
+        context_for_claude: Math.round(context_for_claude * 100) / 100,
         unknown: Math.round(unknown * 100) / 100,
-        total: Math.round((desktop + mobile + unknown) * 100) / 100,
+        total: Math.round((desktop + mobile + context_for_claude + unknown) * 100) / 100,
       };
     });
 
     const totalCostUsd = daily.reduce((s, d) => s + d.total, 0);
     const totalDesktopUsd = daily.reduce((s, d) => s + d.desktop, 0);
     const totalMobileUsd = daily.reduce((s, d) => s + d.mobile, 0);
+    const totalContextForClaudeUsd = daily.reduce((s, d) => s + d.context_for_claude, 0);
     const totalUnknownUsd = daily.reduce((s, d) => s + d.unknown, 0);
 
     const perUserLlmUsd = Object.values(llmByDay ?? {}).reduce(
-      (s, r) => s + r.desktop + r.mobile + r.unknown,
+      (s, r) => s + r.desktop + r.mobile + r.context_for_claude + r.unknown,
       0,
     );
 
@@ -323,10 +357,13 @@ export async function computeInfraCosts(opts: { days: number; overheadMonthly: n
       aprProjectionUsd: Math.round(row.cost30d * 100) / 100,
       desktopProjectionUsd: Math.round(row.cost30d * row.desktopWeight * 100) / 100,
       mobileProjectionUsd: Math.round(row.cost30d * row.mobileWeight * 100) / 100,
+      contextProjectionUsd: Math.round(row.cost30d * (row.contextWeight ?? 0) * 100) / 100,
     }));
 
     const desktopShare = overheadByPlatform.total > 0 ? overheadByPlatform.desktop / overheadByPlatform.total : 0.5;
     const mobileShare = overheadByPlatform.total > 0 ? overheadByPlatform.mobile / overheadByPlatform.total : 0.5;
+    const contextShare =
+      overheadByPlatform.total > 0 ? overheadByPlatform.context_for_claude / overheadByPlatform.total : 0;
 
     const payload: InfraCostsPayload = {
       days,
@@ -336,6 +373,7 @@ export async function computeInfraCosts(opts: { days: number; overheadMonthly: n
         totalCostUsd: Math.round(totalCostUsd * 100) / 100,
         totalDesktopUsd: Math.round(totalDesktopUsd * 100) / 100,
         totalMobileUsd: Math.round(totalMobileUsd * 100) / 100,
+        totalContextForClaudeUsd: Math.round(totalContextForClaudeUsd * 100) / 100,
         totalUnknownUsd: Math.round(totalUnknownUsd * 100) / 100,
         perUserLlmUsd: Math.round(perUserLlmUsd * 100) / 100,
         overheadUsd: Math.round((overheadByPlatform.total / 30) * days * 100) / 100,
@@ -343,6 +381,7 @@ export async function computeInfraCosts(opts: { days: number; overheadMonthly: n
           overheadMonthlyUsd: overheadMonthly,
           desktopShare: Math.round(desktopShare * 1000) / 1000,
           mobileShare: Math.round(mobileShare * 1000) / 1000,
+          contextShare: Math.round(contextShare * 1000) / 1000,
         },
         partial,
       },

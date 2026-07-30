@@ -150,16 +150,20 @@ final class OmiAPI: @unchecked Sendable {
 
     // MARK: - Headers
 
+    /// Product surface identity for cohort / cost attribution. Orthogonal to OS platform.
+    static let appProduct = "context-for-claude"
+
     /// Headers every request carries, including a fresh Authorization.
     ///
-    /// The backend reads the first four; the rest are the telemetry the desktop client has always
-    /// sent, kept identical so Context for Claude's traffic is legible in the same dashboards.
+    /// `X-App-Platform` stays the OS (`macos`). `X-App-Product` is what separates this install from
+    /// Omi Desktop in signup/last-active cohorts and cost dashboards.
     func headers(forceRefresh: Bool = false) async throws -> [String: String] {
         let bearer = try await authorization(forceRefresh: forceRefresh)
         return [
             "Content-Type": "application/json",
             "Authorization": bearer,
             "X-App-Platform": "macos",
+            "X-App-Product": Self.appProduct,
             "X-App-Version": Self.appVersion,
             "X-App-Build": Self.appBuild,
             "X-Device-Id-Hash": Self.deviceIdHash,

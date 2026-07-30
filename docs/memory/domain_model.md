@@ -492,11 +492,12 @@ Devices are **capture surfaces only** — provenance metadata, not memory author
 | `client_device_id` | `{platform}_{hash}` | Same shape as FCM `device_key` in `notifications.py` |
 | `hash` | sha256 → first 8 hex chars | From a stable per-install id (Keychain UUID on macOS; persisted local install id on Windows; IDFV/Android id on mobile) |
 | `X-Device-Id-Hash` | HTTP / WS upgrade header (first auth message for browser WS) | Raw hash component only |
-| `X-App-Platform` | `macos` / `windows` / `ios` / `android` / `web` | Platform component |
+| `X-App-Platform` | `macos` / `windows` / `ios` / `android` / `web` | Platform / OS component |
+| `X-App-Product` | `context-for-claude` / `omi-desktop` / `omi-mobile` / `omi-web` | Optional product-surface identity (orthogonal to OS). Written to `signup_product` / `products_used` / `last_active_product` via `record_user_product`. Unknown values ignored. |
 | `X-App-Version` | optional | Stored on registry `client_devices` doc |
 
 **Nullability:** all device fields optional. Absent headers or legacy data ⇒ `client_device_id=null` ⇒ UI shows **unknown device**. Device id is **never** folded into `evidence_id` hash inputs (legacy dedup must stay byte-identical when device is absent).
 
-**Registry:** `users/{uid}/client_devices/{client_device_id}` — `platform`, `device_class`, `label`, `first_seen_at`, `last_seen_at`, `app_version`. Upsert throttled like `record_user_platform()`.
+**Registry:** `users/{uid}/client_devices/{client_device_id}` — `platform`, `device_class`, `product`, `label`, `first_seen_at`, `last_seen_at`, `app_version`. Upsert throttled like `record_user_platform()`.
 
 **Provenance path:** Conversation (`client_device_id`, `client_platform`) → `Evidence.client_device_id` / `MemoryEvidence.client_device_id` (not in `artifact_ref` or `evidence_id` hash inputs) → optional denormalized `capture_device_ids` / `primary_capture_device` on `MemoryItem` → retrieval filter `device_scope=current|all|explicit` (canonical memory users only; see `X-Omi-Memory-Device-Scope-Supported` response header).

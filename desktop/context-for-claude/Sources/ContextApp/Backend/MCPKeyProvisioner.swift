@@ -99,7 +99,9 @@ final class MCPKeyProvisioner {
         let created: CreatedMCPKey
         do {
             created = try await OmiAPI.shared.post(
-                "v1/mcp/keys", body: CreateMCPKeyRequest(name: name), as: CreatedMCPKey.self)
+                "v1/mcp/keys",
+                body: CreateMCPKeyRequest(name: name, product: OmiAPI.appProduct),
+                as: CreatedMCPKey.self)
         } catch {
             // Offline, rate-limited, a token that would not refresh. The resolver falls back to
             // whatever else it can find, and the tools report the account unreachable — which is true.
@@ -223,6 +225,7 @@ final class MCPKeyProvisioner {
 
 private struct CreateMCPKeyRequest: Encodable {
     let name: String
+    let product: String
 }
 
 /// `POST /v1/mcp/keys` — the one and only moment the raw key is ever returned.

@@ -323,6 +323,7 @@ final class ConversationUploader: ObservableObject {
         lastUploadedAt = now
         lastError = nil
         await stamp(.lastUploadedAt, at: now)
+        await MainActor.run { ContextAnalytics.conversationUploaded() }
     }
 
     private func fail(_ sessionId: Int64, reason: String, retryIn seconds: Double) async {

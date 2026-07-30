@@ -134,6 +134,7 @@ final class Engine: ObservableObject {
     private static let accountGraceSeconds: Double = 5
 
     private var hasStarted = false
+    private var hasReportedListenConnected = false
     private var isPaused = false
     private var isStorageReady = false
     /// What is genuinely capturing right now — the engine's own bookkeeping, not a poll of the
@@ -198,6 +199,7 @@ final class Engine: ObservableObject {
         //    database opens — `EngineStore` holds it, bounded, until there is somewhere to put it.
         startPermittedSources()
         publishState()
+        ContextAnalytics.captureStarted()
 
         // 4. Storage. Nothing above waits on this.
         Task { [weak self] in
@@ -316,6 +318,10 @@ final class Engine: ObservableObject {
     /// Maps `/v4/listen` health onto the same per-source reason channel as mic/screen, so the menu
     /// bar and MCP `status()` never claim speech is flowing when the socket is dead.
     private func applyListenState(_ state: ListenSocket.State) {
+        if case .live = state, !hasReportedListenConnected {
+            hasReportedListenConnected = true
+            ContextAnalytics.listenConnected()
+        }
         if let reason = ListenSpeechStatus.reason(
             state: state, signedIn: OmiAuth.shared.isSignedIn, isPaused: isPaused)
         {

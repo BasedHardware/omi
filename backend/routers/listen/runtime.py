@@ -491,6 +491,7 @@ class ListenSessionRuntime:
                 transcription_seconds=seconds,
                 words_transcribed=words,
                 speech_seconds=speech_seconds,
+                app_product=self.request.app_product,
             )
         if not final:
             self.state.last_usage_record_timestamp = now

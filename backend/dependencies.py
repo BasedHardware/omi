@@ -1,12 +1,13 @@
 import logging
 from typing import List, Optional
 
-from fastapi import Depends, HTTPException, Request, Security
+from fastapi import Depends, Header, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
 
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
+from database.users import record_user_product
 from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
 from utils.executors import critical_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -27,22 +28,33 @@ bearer_scheme = HTTPBearer()
 
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
 ) -> str:
     if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         id_token = credentials.credentials
         decoded_token = await run_blocking(critical_executor, auth.verify_id_token, id_token)
-        return decoded_token["uid"]
+        uid = decoded_token["uid"]
     except Exception as e:
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+    try:
+        record_user_product(uid, x_app_product)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("record_user_product swallowed error for uid=%s: %s", uid, e)
+
+    return uid
 
 
 api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 
-async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> str:
+async def get_uid_from_mcp_api_key(
+    api_key: str = Security(api_key_header),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
+) -> str:
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
@@ -59,6 +71,11 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
     user_id = user_data["user_id"]
+    try:
+        # Prefer stamped key metadata; fall back to request header for legacy keys.
+        record_user_product(user_id, user_data.get("product") or x_app_product)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("record_user_product from mcp key swallowed error for uid=%s: %s", user_id, e)
     await _check_api_key_rate_limit_async(
         prefix="mcp",
         uid=user_id,
@@ -69,7 +86,10 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
     return user_id
 
 
-async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiKeyAuth":
+async def get_mcp_api_key_auth(
+    api_key: str = Security(api_key_header),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
+) -> "ApiKeyAuth":
     """Extract uid plus persisted MCP app/key/scope context from an MCP API key.
 
     Existing uid-only MCP auth remains available through get_uid_from_mcp_api_key.
@@ -91,6 +111,15 @@ async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiK
     user_data = auth_result.context
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
+
+    try:
+        record_user_product(user_data["user_id"], user_data.get("product") or x_app_product)
+    except Exception as e:  # noqa: BLE001
+        logger.debug(
+            "record_user_product from mcp key auth swallowed error for uid=%s: %s",
+            user_data["user_id"],
+            e,
+        )
 
     return ApiKeyAuth(
         uid=user_data["user_id"],
