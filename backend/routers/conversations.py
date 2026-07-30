@@ -89,6 +89,11 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     return conversation
 
 
+def enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
+    """Public entry for demand-side / first-open enrichment of deferred stubs."""
+    return _enrich_deferred_conversation(uid, conversation)
+
+
 def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return

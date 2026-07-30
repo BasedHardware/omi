@@ -576,9 +576,9 @@ def get_conversation_by_id(
 
     # Demand-side enrich for free Context / desktop deferred rows (same as app open).
     if conversation.get('deferred'):
-        from routers.conversations import _enrich_deferred_conversation
+        from routers.conversations import enrich_deferred_conversation
 
-        conversation = _enrich_deferred_conversation(uid, conversation)
+        conversation = enrich_deferred_conversation(uid, conversation)
 
     populate_speaker_names(uid, [conversation])
 

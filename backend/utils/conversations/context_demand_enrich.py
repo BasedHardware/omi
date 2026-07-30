@@ -17,7 +17,7 @@ def kick_recent_context_enrichment(uid: str, *, n: Optional[int] = None) -> int:
     Returns how many enrich jobs were kicked.
     """
     from database import conversations as conversations_db
-    from routers.conversations import _enrich_deferred_conversation
+    from routers.conversations import enrich_deferred_conversation
 
     limit = n if n is not None else CONTEXT_RECENT_ENRICH_N
     if limit <= 0:
@@ -35,7 +35,7 @@ def kick_recent_context_enrichment(uid: str, *, n: Optional[int] = None) -> int:
         if not conv.get('deferred'):
             continue
         try:
-            _enrich_deferred_conversation(uid, conv)
+            enrich_deferred_conversation(uid, conv)
             kicked += 1
         except Exception as e:  # noqa: BLE001
             logger.warning(

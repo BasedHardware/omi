@@ -231,7 +231,7 @@ def test_kick_recent_context_enrichment_only_deferred(monkeypatch):
         kicked_ids.append(conv['id'])
         return conv
 
-    router_mod._enrich_deferred_conversation = _kick
+    router_mod.enrich_deferred_conversation = _kick
 
     # Nested packages already exist; only swap the leaf modules for this call.
     monkeypatch.setitem(__import__('sys').modules, 'database.conversations', db_mod)
