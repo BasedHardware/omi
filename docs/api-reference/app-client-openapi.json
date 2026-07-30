@@ -21348,6 +21348,11 @@
             "title": "Transcription Seconds",
             "type": "integer"
           },
+          "transcription_seconds_context_for_claude": {
+            "default": 0,
+            "title": "Transcription Seconds Context For Claude",
+            "type": "integer"
+          },
           "words_transcribed": {
             "default": 0,
             "title": "Words Transcribed",
@@ -21391,6 +21396,11 @@
           "transcription_seconds": {
             "default": 0,
             "title": "Transcription Seconds",
+            "type": "integer"
+          },
+          "transcription_seconds_context_for_claude": {
+            "default": 0,
+            "title": "Transcription Seconds Context For Claude",
             "type": "integer"
           },
           "words_transcribed": {
@@ -31706,7 +31716,7 @@
     },
     "/v1/conversations/from-segments": {
       "post": {
-        "description": "Create a conversation from already-transcribed segments (Firebase-authed).\n\nUsed by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need\nthe conversation persisted, processed (memories/summaries), and synced across devices — exactly\nlike a cloud-transcribed conversation, but without the live `/v4/listen` websocket.",
+        "description": "Create a conversation from already-transcribed segments (Firebase-authed).\n\nUsed by clients that already have transcript text (e.g. Context for Claude after cloud\n`/v4/listen`) and need the conversation persisted and product-aware enrichment applied.",
         "operationId": "create_conversation_from_segments_user_v1_conversations_from_segments_post",
         "parameters": [
           {
@@ -51230,6 +51240,15 @@
           },
           {
             "in": "header",
+            "name": "X-App-Product",
+            "required": false,
+            "schema": {
+              "title": "X-App-Product",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-App-Version",
             "required": false,
             "schema": {
@@ -51243,15 +51262,6 @@
             "required": false,
             "schema": {
               "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Product",
-            "required": false,
-            "schema": {
-              "title": "X-App-Product",
               "type": "string"
             }
           },
@@ -51500,19 +51510,19 @@
           },
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Product",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Product",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Product",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Product",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -57008,19 +57018,19 @@
           },
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Product",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Product",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Product",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Product",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -57893,19 +57903,19 @@
           },
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Product",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Product",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Product",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Product",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -58016,19 +58026,19 @@
           },
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Product",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Product",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Product",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Product",
+              "title": "Authorization",
               "type": "string"
             }
           },
