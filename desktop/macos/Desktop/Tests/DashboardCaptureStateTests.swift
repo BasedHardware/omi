@@ -390,7 +390,6 @@ final class DashboardCaptureStateTests: XCTestCase {
     return try String(contentsOf: handlerURL, encoding: .utf8)
   }
 
-
   private func source(named fileName: String) throws -> String {
     let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
     let sourceURL =
