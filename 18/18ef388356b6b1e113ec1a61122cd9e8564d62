@@ -1,0 +1,23 @@
+desktop/context-for-claude/Sources/ContextCore/Queries.swift
+  s_abe8283a0c57dd::t_775a461a10637d 585-638
+  s_abe8283a0c57dd::t_531070bda382fa 150-157,164-165
+  s_abe8283a0c57dd::t_0594988011a719 158-163
+  s_abe8283a0c57dd::t_cf656fd9a7e557 569-584
+  s_abe8283a0c57dd::t_48b22934bf62e3 183-192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "1818ef388356b6b1e113ec1a61122cd9e8564d62",
+  "prompts": {},
+  "sessions": {
+    "s_abe8283a0c57dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "87377558-5689-4a2d-aa25-ff41404d6e61",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
