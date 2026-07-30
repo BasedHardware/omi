@@ -109,22 +109,26 @@ private actor SuspendedContextClient: TaskContextualResurfacingClient {
 }
 
 private func transitionContextTestOwner(to ownerID: String?) async {
-  _ = await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-    plannedNextOwner: { _, _ in ownerID },
-    quiesceVoice: { _, _ in },
-    retargetLocalStorage: { _, _ in },
-    ownerDidChange: {
-      await MainActor.run {
-        NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+  do {
+    _ = try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+      plannedNextOwner: { _, _ in ownerID },
+      quiesceVoice: { _, _ in },
+      retargetLocalStorage: { _, _ in },
+      ownerDidChange: {
+        await MainActor.run {
+          NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+        }
+      }
+    ) { defaults in
+      defaults.removeObject(forKey: .automationOwnerOverride)
+      if let ownerID {
+        defaults.set(ownerID, forKey: .authUserId)
+      } else {
+        defaults.removeObject(forKey: .authUserId)
       }
     }
-  ) { defaults in
-    defaults.removeObject(forKey: .automationOwnerOverride)
-    if let ownerID {
-      defaults.set(ownerID, forKey: .authUserId)
-    } else {
-      defaults.removeObject(forKey: .authUserId)
-    }
+  } catch {
+    XCTFail("owner transition failed: \(error)")
   }
 }
 

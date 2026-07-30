@@ -45,7 +45,7 @@ from utils.listen_session_bootstrap import finalize_listen_connect_context, load
 from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
-from utils.observability.journeys import JourneyAttempt, JourneyOutcome
+from utils.observability.transcription import LiveSTTAttempt
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.stt.streaming import get_stt_service_for_language
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
@@ -68,6 +68,7 @@ from utils.transcribe_decisions import USER_SELF_PERSON_ID, person_id_for_client
 from .contracts import ListenLimits, ListenRequest, ListenSessionState
 from .conversations import LiveConversationController
 from .persistence import ListenPersistence
+from .parity_capture import ListenParityCapture
 from .receiver import ListenReceiver
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
@@ -116,7 +117,6 @@ class ListenSessionRuntime:
         self.private_cloud_sync_enabled = False
         self.has_speech_profile = False
         self.conversation_creation_timeout = request.conversation_timeout
-        self.frame_size = 160
         self.lc3_frame_duration_us: Optional[int] = None
         self.task_supervisor = WebSocketTaskSupervisor(
             uid=request.uid, label='listen', gauge=BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
@@ -134,6 +134,7 @@ class ListenSessionRuntime:
         self.speakers: Any = None
         self.transcripts: Any = None
         self.conversations: Any = None
+        self.parity_capture = ListenParityCapture(None)
 
     def _build_components(self) -> None:
         channels = build_channel_config(self.request.source or 'phone_call') if self.is_multi_channel else []
@@ -161,6 +162,11 @@ class ListenSessionRuntime:
             return True
         except WebSocketDisconnect:
             self.state.active = False
+        except RuntimeError as error:
+            # The ASGI server refuses a send after close: the socket is gone, so stop
+            # queueing events for it instead of failing once per remaining event.
+            self.state.active = False
+            logger.warning('Listen event delivery after close type=%s', type(error).__name__)
         except Exception as error:
             logger.error('Listen event delivery failed type=%s', type(error).__name__)
         return False
@@ -185,25 +191,48 @@ class ListenSessionRuntime:
 
     def start_live_transcription(self) -> None:
         """Accept the journey once the listen socket has received real audio."""
+        if self.use_custom_stt:
+            return
         if self.state.live_transcription_attempt is None:
-            self.state.live_transcription_attempt = JourneyAttempt('live_transcription')
+            self.state.live_transcription_attempt = LiveSTTAttempt(
+                provider=getattr(self.stt_service, 'value', self.stt_service),
+                platform=self.client_device_context.platform,
+            )
+
+    def capture_client_audio(self, audio: bytes) -> None:
+        try:
+            self.parity_capture.observe_client_audio(audio)
+        except Exception as error:
+            logger.warning('Listen parity capture client event failed type=%s', type(error).__name__)
+
+    def capture_outbound_stt(self, audio: bytes) -> None:
+        try:
+            self.parity_capture.observe_outbound_stt(audio)
+        except Exception as error:
+            logger.warning('Listen parity capture outbound event failed type=%s', type(error).__name__)
+
+    def capture_inbound_stt(self, segments: List[Dict[str, Any]]) -> None:
+        try:
+            self.parity_capture.observe_inbound_stt(segments)
+        except Exception as error:
+            logger.warning('Listen parity capture inbound event failed type=%s', type(error).__name__)
 
     def complete_live_transcription(self) -> None:
         """Record the first nonempty transcript successfully delivered to the client."""
         if self.state.live_transcription_attempt is not None:
-            self.state.live_transcription_attempt.finish('success')
+            self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
 
     def _finish_live_transcription(self) -> None:
         """Terminalize an accepted attempt that never delivered a transcript."""
         attempt = self.state.live_transcription_attempt
         if attempt is None:
             return
-        outcome: JourneyOutcome = (
+        outcome = (
             'failure'
             if self.state.live_transcription_failed or self.state.stt_terminal_failure or self.state.close_code == 1011
             else 'cancelled'
         )
-        attempt.finish(outcome)
+        attempt.finish(outcome, phase='teardown')
 
     async def _admit(self) -> bool:
         if not self.request.uid:
@@ -239,6 +268,20 @@ class ListenSessionRuntime:
             self.language,
             multi_lang_enabled=not single_language_mode,
             preferred_service=request.stt_service,
+        )
+        self.parity_capture = ListenParityCapture.from_environ(
+            principal_id=request.uid,
+            session_id=getattr(self, 'session_id', ''),
+            provider=getattr(self.stt_service, 'value', self.stt_service),
+            model=self.stt_model or '',
+            request={
+                'codec': request.codec,
+                'sample_rate': request.sample_rate,
+                'channels': request.channels,
+                'language': self.stt_language,
+                'provider': getattr(self.stt_service, 'value', self.stt_service),
+                'model': self.stt_model,
+            },
         )
         if not self.stt_service or not self.stt_language:
             await request.websocket.close(code=1008, reason=f'The language is not supported, {self.language}')
@@ -278,7 +321,6 @@ class ListenSessionRuntime:
         )
         decision = normalize_codec_frame(request.codec)
         self.request = replace(request, codec=decision.codec)
-        self.frame_size = decision.frame_size
         self.lc3_frame_duration_us = decision.lc3_frame_duration_us
         self._build_components()
         if not self.user_has_credits:
@@ -419,7 +461,16 @@ class ListenSessionRuntime:
         if self.state.fair_use_track_dg_usage and self.state.dg_usage_ms_pending:
             await self.persistence.call(record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending)
             self.state.dg_usage_ms_pending = 0
-        if self.use_custom_stt or not self.state.last_usage_record_timestamp:
+        if self.use_custom_stt:
+            # Exempt from transcription billing and live caps, but the speech
+            # still drives Omi-paid LLM post-processing — meter it in its own
+            # isolated fair-use lane so the spend is visible (#7690).
+            if FAIR_USE_ENABLED and self.receiver.vad_gate is not None:
+                custom_speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
+                if custom_speech_ms:
+                    await self.persistence.call(record_speech_ms, self.request.uid, custom_speech_ms, 'custom_stt')
+            return 0
+        if not self.state.last_usage_record_timestamp:
             return 0
         speech_seconds = 0
         if self.receiver.vad_gate is not None:
@@ -634,6 +685,10 @@ class ListenSessionRuntime:
         if self.onboarding_handler:
             self.onboarding_handler.cleanup()
         await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
+        try:
+            self.parity_capture.persist()
+        except Exception as error:
+            logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()

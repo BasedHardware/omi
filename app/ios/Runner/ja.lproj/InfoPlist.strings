@@ -1,7 +1,7 @@
 /* Localized versions of Info.plist keys (Japanese) */
 
-"NSBluetoothAlwaysUsageDescription" = "Omi デバイスと接続するために Bluetooth の利用許可が必要です。";
-"NSBluetoothPeripheralUsageDescription" = "Omi デバイスと接続するために Bluetooth の利用許可が必要です。";
+"NSBluetoothAlwaysUsageDescription" = "Omi は Bluetooth で Omi デバイスと接続し、マイクの音声を端末に送信します。例えば会議の音声を文字起こししてメモにしたり、デバイスの電池残量を確認したりします。";
+"NSBluetoothPeripheralUsageDescription" = "Omi は Bluetooth で Omi デバイスと接続し、マイクの音声を端末に送信します。例えば会議の音声を文字起こししてメモにしたり、デバイスの電池残量を確認したりします。";
 
 "NSCalendarsUsageDescription" = "予定の閲覧と編集など、カレンダー機能の大部分にアクセスします。";
 "NSCalendarsFullAccessUsageDescription" = "予定の閲覧と編集など、カレンダー機能の大部分にアクセスします。";

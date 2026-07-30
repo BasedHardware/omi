@@ -20,6 +20,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.llm.chat import initial_chat_message
 from utils.llm.persona import initial_persona_chat_message
 from utils.notifications import send_notification, send_notification_async
+from utils.observability.fallback import record_fallback
 from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
@@ -338,10 +339,95 @@ def process_voice_message_segment(
     return [message.model_dump(), ai_message_resp]
 
 
+CHAT_STREAM_ERROR_TEXT = "Sorry, something went wrong while generating a response. Please try again."
+
+
+def _new_stream_error_message(app_id: Optional[str], chat_session: Optional[ChatSession]) -> Message:
+    """Construct (but do not persist) the canned fallback AI message."""
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=CHAT_STREAM_ERROR_TEXT,
+        created_at=datetime.now(timezone.utc),
+        sender='ai',
+        app_id=app_id,
+        type='text',
+    )
+    if chat_session:
+        ai_message.chat_session_id = chat_session.id
+    return ai_message
+
+
+def build_stream_error_reply(
+    uid: str,
+    app_id: Optional[str] = None,
+    chat_session: Optional[ChatSession] = None,
+) -> ResponseMessage:
+    """Persist and return a graceful fallback AI reply for a chat turn that
+    failed mid-stream without producing an answer.
+
+    Without this, the SSE stream ends as a clean 200 with no ``done:`` frame and
+    every client renders a blank assistant bubble. Mirrors
+    ``_build_quota_exceeded_reply``: the reply is persisted so the message the
+    client renders from the ``done:`` frame stays consistent with server-side
+    history (clients persist what they receive). The user's message is already
+    persisted by the caller, so only the AI reply is saved here. The raw
+    exception is logged upstream in ``execute_*_chat_stream`` and is never
+    surfaced to the client.
+    """
+    ai_message = _new_stream_error_message(app_id, chat_session)
+    if chat_session:
+        chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
+    chat_db.add_message(uid, ai_message.model_dump())
+    return ResponseMessage(**ai_message.model_dump(), ask_for_nps=False)
+
+
+async def emit_stream_error_fallback(
+    uid: str,
+    app_id: Optional[str],
+    chat_session: Optional[ChatSession],
+    *,
+    label: str,
+    error_recorded: bool,
+) -> str:
+    """Build the SSE ``done:`` frame for a chat stream that ended without an answer.
+
+    The pipeline failed mid-stream (raw error already logged in
+    ``execute_*_chat_stream``); this emits a graceful fallback so every client
+    renders real text instead of a blank bubble. ``label`` distinguishes the
+    calling surface (e.g. ``'chat'`` / ``'voice_chat'``) in server-side logs.
+
+    This is a fail-open correctness degrade (real LLM answer -> canned text), so
+    it records the shared fallback metric exactly once. Normal path persists the
+    reply and reports ``degraded``; if the Firestore write itself fails we still
+    emit an in-memory ``done:`` frame (unpersisted -- client/server history
+    diverges for this turn) and report ``exhausted``. Returns the full
+    ``"done: ...\\n\\n"`` frame.
+    """
+    logger.error('%s stream ended without an answer for uid=%s (error=%s)', label, uid, error_recorded)
+    try:
+        fallback = await run_blocking(db_executor, build_stream_error_reply, uid, app_id, chat_session)
+        outcome = 'degraded'
+    except Exception as persist_exc:
+        logger.error('%s stream fallback persistence failed for uid=%s: %s', label, uid, type(persist_exc).__name__)
+        ai_message = _new_stream_error_message(app_id, chat_session)
+        fallback = ResponseMessage(**ai_message.model_dump(), ask_for_nps=False)
+        outcome = 'exhausted'
+    record_fallback(
+        component='other',
+        from_mode='llm_answer',
+        to_mode='canned_reply',
+        reason='other',
+        outcome=outcome,
+    )
+    encoded_response = base64.b64encode(bytes(fallback.model_dump_json(), 'utf-8')).decode('utf-8')
+    return f"done: {encoded_response}\n\n"
+
+
 async def process_voice_message_segment_stream(
     path: str,
     uid: str,
     language: str = 'multi',
+    platform: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     if not language:
         language = await run_blocking(db_executor, resolve_voice_message_language, uid, None)
@@ -442,10 +528,13 @@ async def process_voice_message_segment_stream(
         reversed([Message(**msg) for msg in await run_blocking(db_executor, chat_db.get_messages, uid, limit=10)])
     )
     callback_data = {}
+    answered = False
     # Set usage context for streaming (can't use 'with' across yields)
     usage_token = set_usage_context(uid, Features.CHAT)
     try:
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=False, callback_data=callback_data):
+        async for chunk in execute_graph_chat_stream(
+            uid, messages, app, cited=False, callback_data=callback_data, platform=platform
+        ):
             if chunk:
                 data = chunk.replace("\n", "__CRLF__")
                 yield f'{data}\n\n'
@@ -459,9 +548,15 @@ async def process_voice_message_segment_stream(
                     response_message.ask_for_nps = ask_for_nps
                     data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
                     yield f"done: {data}\n\n"
+                    answered = True
 
                     # send notification
                     await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+
+        if not answered:
+            yield await emit_stream_error_fallback(
+                uid, app_id, chat_session, label='voice_chat', error_recorded=bool(callback_data.get('error'))
+            )
     finally:
         reset_usage_context(usage_token)
 

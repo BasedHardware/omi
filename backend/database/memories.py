@@ -731,6 +731,31 @@ def delete_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> 
     memory_ref.delete()
 
 
+def delete_memories_batch(uid: str, memory_ids: List[str], *, firestore_client: Any = None) -> None:
+    """Delete multiple memories in a single batched Firestore write.
+
+    The router caps a batch-delete request at MEMORIES_BATCH_MAX (100), well under
+    Firestore's 500-writes-per-batch limit, but this helper mirrors the chunking in
+    delete_all_memories so it stays correct if it is ever reused for larger sets.
+    """
+    if not memory_ids:
+        return
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    batch = database.batch()
+    count = 0
+    for memory_id in memory_ids:
+        batch.delete(memories_ref.document(memory_id))
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = database.batch()
+            count = 0
+    if count > 0:
+        batch.commit()
+
+
 def delete_all_memories(uid: str, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -1057,6 +1082,21 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
 
     # Add memories to batch
     for memory in memories_to_migrate:
+        # Enhanced memories are encrypted with a per-user key (the uid is the HKDF salt), so content
+        # encrypted for prev_uid is unreadable to new_uid. Decrypt with the previous user's key and
+        # re-encrypt with the new user's key before copying, so the new owner can read them.
+        content = memory.get('content')
+        if memory.get('data_protection_level') == 'enhanced' and isinstance(content, str) and content:
+            plaintext = encryption.decrypt(content, prev_uid)
+            if plaintext == content:
+                # encryption.decrypt returns its input unchanged when it cannot decrypt (wrong key or
+                # corrupted ciphertext) rather than raising, so an unchanged value means decryption
+                # failed. Copy the memory as-is and log it, rather than re-encrypting the still-
+                # encrypted content under new_uid (which the new owner could "decrypt" back to the old
+                # ciphertext, masking the corruption).
+                logger.warning(f"migrate_memories: could not decrypt memory {memory.get('id')}; copying as-is")
+            else:
+                memory = {**memory, 'content': encryption.encrypt(plaintext, new_uid)}
         memory_ref = new_memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
 

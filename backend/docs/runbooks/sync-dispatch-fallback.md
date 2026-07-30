@@ -37,4 +37,13 @@ removes partial blobs, terminalizes the job, and returns 503 so the client WAL
 can retry. If acknowledgement remains uncertain after staging, the client keeps
 its WAL and polls; a missing/expired job restores normal re-upload recovery.
 
+**Lost-dispatch exit (#10033):** A cloud_tasks job still `queued` with no
+attempt ever started (`started_at`/`attempt` unset) goes stale after 30
+minutes; the poll route's lease-owned finalizer terminalizes it with
+`error=sync_dispatch_lost`, releasing the content claim so the client reverts
+its WALs to `miss` and re-uploads from retained local files. Distinct from
+`sync_worker_stale` (a died worker) so the two populations stay separable.
+Inline queued jobs and worker re-queues between Cloud Tasks retries
+(`attempt` set) are never poll-terminalized.
+
 **Owner:** backend-sync team.

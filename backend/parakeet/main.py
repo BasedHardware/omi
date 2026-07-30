@@ -79,6 +79,10 @@ INFERENCE_DURATION = Histogram(
     buckets=_ASR_BUCKETS,
 )
 GPU_OOM_TOTAL = Counter('parakeet_gpu_oom_total', 'CUDA out-of-memory events')
+GPU_FATAL_ERRORS_TOTAL = Counter(
+    'parakeet_gpu_fatal_errors_total',
+    'Fatal CUDA errors that make a Parakeet GPU worker unavailable',
+)
 REQUESTS_TOTAL = Counter('parakeet_requests_total', 'Total requests by status', ['endpoint', 'status'])
 
 gpu_worker: Optional[GPUWorker] = None
@@ -122,6 +126,10 @@ def _on_gpu_oom() -> None:
     GPU_OOM_TOTAL.inc()
 
 
+def _on_fatal_cuda_error(_reason: str) -> None:
+    GPU_FATAL_ERRORS_TOTAL.inc()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global gpu_worker, batch_engine, stream_admission, start_time
@@ -131,7 +139,7 @@ async def lifespan(app: FastAPI):
     os.makedirs("_temp", exist_ok=True)
 
     if INFERENCE_MODE != "nim":
-        gpu_worker = GPUWorker()
+        gpu_worker = GPUWorker(on_fatal_cuda_error=_on_fatal_cuda_error)
         gpu_worker.start()
         set_gpu_worker(gpu_worker)
 
@@ -308,6 +316,10 @@ async def stream_transcribe(
     hangover_s: float = Query(None),
 ):
     await websocket.accept()
+    if gpu_worker is not None and not gpu_worker.is_ready:
+        REQUESTS_TOTAL.labels(endpoint='v3_stream', status='error').inc()
+        await websocket.close(code=1013, reason='service_not_ready')
+        return
     if stream_admission is None:
         logger.error('v3/stream admission unavailable')
         await websocket.close(code=1011, reason='service_not_ready')
@@ -375,11 +387,14 @@ async def stream_transcribe(
 async def health_check() -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None:
         ready = gpu_worker.is_ready
+        fatal_cuda_reason = gpu_worker.fatal_cuda_reason
         body = {
-            "status": "healthy" if ready else "loading",
+            "status": "healthy" if ready else "unhealthy" if fatal_cuda_reason is not None else "loading",
             "ready": ready,
             "uptime_seconds": round(time.monotonic() - start_time, 1),
         }
+        if fatal_cuda_reason is not None:
+            body["reason"] = fatal_cuda_reason
         if not ready:
             return JSONResponse(status_code=503, content=body)
         return body

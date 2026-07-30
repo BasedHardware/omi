@@ -87,7 +87,7 @@ class _AuthComponentState extends State<AuthComponent> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              FaIcon(FontAwesomeIcons.apple, size: 24),
+                              const FaIcon(FontAwesomeIcons.apple, size: 24),
                               const SizedBox(width: 8),
                               Text(
                                 context.l10n.signInWithApple,
@@ -121,7 +121,7 @@ class _AuthComponentState extends State<AuthComponent> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            FaIcon(FontAwesomeIcons.google, size: 20),
+                            const FaIcon(FontAwesomeIcons.google, size: 20),
                             const SizedBox(width: 8),
                             Text(
                               context.l10n.signInWithGoogle,

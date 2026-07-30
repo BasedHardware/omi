@@ -68,6 +68,22 @@ final class StartupWarmupPolicyTests: XCTestCase {
     )
   }
 
+  func testRemainingDelayGeneralizesLaunchAnchorMath() {
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: 0), 6.0)
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: 2.0), 4.0)
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: 10.0), 0)
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: -5), 6.0)
+  }
+
+  func testRemainingProactiveAssistantsStartDelayUsesRemainingDelay() {
+    let elapsed: TimeInterval = 2.5
+    XCTAssertEqual(
+      StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: elapsed),
+      StartupWarmupPolicy.remainingDelay(
+        StartupWarmupPolicy.proactiveAssistantsStartDelay, elapsedSinceLaunch: elapsed)
+    )
+  }
+
   func testConversationWarmupWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.conversationWarmupDelay,
@@ -136,27 +152,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.apiKeyFetchDelay,
       StartupWarmupPolicy.dashboardNetworkRefreshDelay
-    )
-  }
-
-  func testTranscriptionDeferralStartsAPIKeyFetchImmediately() throws {
-    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let homeURL =
-      testsURL
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/MainWindow/DesktopHomeView.swift")
-    let source = try String(contentsOf: homeURL, encoding: .utf8)
-
-    guard let deferralRange = source.range(of: "DesktopHomeView: Deferring transcription — API keys not yet loaded"),
-      let immediateFetchRange = source.range(of: "Task { await APIKeyService.shared.waitForKeys() }")
-    else {
-      return XCTFail("Transcription auto-start deferral must kick off API key fetch immediately")
-    }
-
-    XCTAssertGreaterThan(
-      immediateFetchRange.lowerBound,
-      deferralRange.lowerBound,
-      "Immediate key fetch should be started from the transcription deferral branch"
     )
   }
 

@@ -57,6 +57,7 @@ struct OnboardingDataSourcesStepView: View {
             }
           }
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {

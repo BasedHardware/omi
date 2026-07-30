@@ -1761,18 +1761,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lovingOmi => 'Omiを楽しんでいますか？';
 
   @override
-  String get leaveReviewIos => 'App Storeでレビューを残して、より多くの人に届けるお手伝いをしてください。皆様のフィードバックは私たちにとって非常に大切です！';
-
-  @override
-  String get leaveReviewAndroid => 'Google Playストアでレビューを残して、より多くの人に届けるお手伝いをしてください。皆様のフィードバックは私たちにとって非常に大切です！';
-
-  @override
-  String get rateOnAppStore => 'App Storeで評価';
-
-  @override
-  String get rateOnGooglePlay => 'Google Playで評価';
-
-  @override
   String get maybeLater => '後で';
 
   @override
@@ -2099,6 +2087,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ 記憶を編集';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'アイスクリームが好き...';
@@ -5971,7 +5971,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryDrainSignificantly => 'バッテリー消費が大幅に増加します。';
 
   @override
-  String get premiumMinutesMonth => '月間 600 分のプレミアム枠。「オンデバイス」タブでは無料の無制限文字起こしが利用できます。';
+  String get premiumMinutesMonth => '月間 300 分のプレミアム枠。「オンデバイス」タブでは無料の無制限文字起こしが利用できます。';
 
   @override
   String get audioProcessedLocally => '音声はローカルで処理されます。オフラインで動作し、よりプライベートですが、バッテリー消費が増えます。';
@@ -9594,4 +9594,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => '音声の読み込みエラー';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Ray-Ban Meta のマイクを選択';
+
+  @override
+  String get rayBanMetaMicPickerDescription => 'メガネの Bluetooth マイクを選択してください。Omi の使用中は音楽が一時停止します。';
+
+  @override
+  String get rayBanMetaMicPickerEmpty => 'Bluetooth マイクが見つかりません。iPhone の設定でメガネを接続してから、もう一度お試しください。';
+
+  @override
+  String get rayBanMetaMicPickerLoadError => 'Bluetooth マイクを読み込めませんでした。Bluetooth がオンになっていることを確認して、もう一度お試しください。';
+
+  @override
+  String get rayBanMetaMicPickerConnectError => 'そのマイクに接続できませんでした。iPhone の設定で接続されていることを確認してください。';
 }

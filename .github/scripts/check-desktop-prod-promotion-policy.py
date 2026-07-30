@@ -5,22 +5,24 @@ from pathlib import Path
 
 WORKFLOW = Path(".github/workflows/desktop_promote_prod.yml")
 
+# The release-controller consolidation deliberately moved trusted qualification
+# selection and Stable CAS inputs from manual dispatch fields into workflow-owned
+# state. Keep this policy guard aligned with that safer contract.
 REQUIRED = (
     "on:\n  workflow_dispatch:",
     "confirm:",
     "promote-stable",
-    "operation:",
-    "expected_current_release_id:",
-    "expected_generation:",
-    "qualification_run_id:",
     "environment: prod",
-    "Validate trusted qualification run for initial promotion",
+    "Verify live desktop-backend chat compatibility",
+    '.chat_contract_version == "1"',
+    "Select and validate the exact trusted qualification",
     "Fetch exact retained qualified manifest",
     '"https://api.omi.me/v2/desktop/releases/$RELEASE_TAG"',
     "manifest_sha256",
-    "Verify current beta and stable pointer compare-and-swap inputs",
+    "Read current pointers and capture workflow-owned CAS inputs",
     '"$BASE/macos-beta"',
-    "check_stable_pointer_precondition.py",
+    "EXPECTED_RELEASE_ID",
+    "EXPECTED_GENERATION",
     "desktop_update_channels/macos-stable",
     "desktop_release_manifests/$RELEASE_TAG",
     "Publish immutable stable repair installer",
@@ -29,18 +31,17 @@ REQUIRED = (
     "Publish latest stable repair route",
     "Verify exact pointer, hashes, and stable feed",
     "https://api.omi.me/v2/desktop/channels/promote",
-    "Authorization: Bearer $ACCESS_TOKEN",
     "appcast.xml?identity=stable",
     "verify_stable_appcast.py",
-    ".event",
-    ".path",
+    "desktop_qualification_admission.py",
     "--if-generation-match=0",
-    'operation\": os.environ[\"OPERATION\"]',
 )
 
 ORDERED_STEPS = (
+    "Verify live desktop-backend chat compatibility",
+    "Select and validate the exact trusted qualification",
     "Fetch exact retained qualified manifest",
-    "Verify current beta and stable pointer compare-and-swap inputs",
+    "Read current pointers and capture workflow-owned CAS inputs",
     "Publish immutable stable repair installer",
     "Advance explicit stable pointer",
     "Bridge stable for legacy desktop clients",

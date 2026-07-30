@@ -172,6 +172,15 @@ describe("env-command local subprocess adapters", () => {
         writeResponse(proc, request, {
           type: "event",
           event: {
+            type: "tool_activity",
+            name: "omi_tool",
+            status: "interrupted",
+            toolUseId: "tool-1",
+          },
+        });
+        writeResponse(proc, request, {
+          type: "event",
+          event: {
             type: "tool_result_display",
             name: "omi_tool",
             toolUseId: "tool-1",
@@ -251,8 +260,10 @@ describe("env-command local subprocess adapters", () => {
       "text_delta",
       "thinking_delta",
       "tool_activity",
+      "tool_activity",
       "tool_result_display",
     ]);
+    expect(events[3]).toMatchObject({ type: "tool_activity", status: "interrupted" });
     expect(requests.map((request) => request.type)).toEqual(["open", "resume", "execute"]);
     await adapter.stop();
   });

@@ -333,8 +333,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         final conversation = provider.conversation;
         final summaryContent =
             conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
-                ? conversation.appResults[0].content.trim()
-                : conversation.structured.toString();
+            ? conversation.appResults[0].content.trim()
+            : conversation.structured.toString();
         _copyContent(context, summaryContent);
         break;
       case 'download_audio':
@@ -711,7 +711,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     Navigator.pop(context);
                   }
                 },
-                icon: FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
             ),
             title: Align(
@@ -764,8 +764,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         provider.conversation.starred = newStarredState;
                                         // Update in conversation provider
                                         context.read<ConversationProvider>().updateConversationInSortedList(
-                                              provider.conversation,
-                                            );
+                                          provider.conversation,
+                                        );
                                         // Track star/unstar action
                                         PlatformManager.instance.analytics.conversationStarToggled(
                                           conversation: provider.conversation,
@@ -863,7 +863,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   )
-                                : FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                                : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                           ),
                         ),
                         // Search button (second) - only show on transcript and summary tabs
@@ -896,7 +896,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 });
                                 HapticFeedback.mediumImpact();
                               },
-                              icon: FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
+                              icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
                             ),
                           ),
                         // Developer Tools button (third) - iOS style pull-down menu
@@ -908,23 +908,23 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             itemBuilder: (context) => [
                               PullDownMenuItem(
                                 title: context.l10n.copyTranscript,
-                                iconWidget: FaIcon(FontAwesomeIcons.copy, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.copy, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_transcript', provider),
                               ),
                               PullDownMenuItem(
                                 title: context.l10n.copySummary,
-                                iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.clone, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                               ),
                               PullDownMenuItem(
                                 title: context.l10n.copyConversationId,
-                                iconWidget: FaIcon(FontAwesomeIcons.clipboard, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.clipboard, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_conversation_id', provider),
                               ),
                               if (provider.conversation.hasAudio())
                                 PullDownMenuItem(
                                   title: context.l10n.shareAudio,
-                                  iconWidget: FaIcon(FontAwesomeIcons.share, size: 16),
+                                  iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
                                   onTap: _isDownloadingAudio
                                       ? null
                                       : () => _handleMenuSelection(context, 'download_audio', provider),
@@ -950,18 +950,18 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 ),
                               PullDownMenuItem(
                                 title: context.l10n.testPrompt,
-                                iconWidget: FaIcon(FontAwesomeIcons.commentDots, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.commentDots, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'test_prompt', provider),
                               ),
                               if (!provider.conversation.discarded)
                                 PullDownMenuItem(
                                   title: context.l10n.reprocessConversation,
-                                  iconWidget: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
+                                  iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
                                   onTap: () => _handleMenuSelection(context, 'reprocess', provider),
                                 ),
                               PullDownMenuItem(
                                 title: context.l10n.deleteConversation,
-                                iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
+                                iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
                                 onTap: () => _handleMenuSelection(context, 'delete', provider),
                               ),
                             ],
@@ -980,7 +980,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   color: Colors.grey.withValues(alpha: 0.3),
                                   shape: BoxShape.circle,
                                 ),
-                                child: Center(
+                                child: const Center(
                                   child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
                                 ),
                               ),
@@ -1078,7 +1078,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     }
                                   },
                                 ),
-                                ActionItemsTab(),
+                                const ActionItemsTab(),
                               ],
                             );
                           },
@@ -1104,13 +1104,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   child: Consumer<ConversationDetailProvider>(
                     builder: (context, provider, child) {
                       final conversation = provider.conversation;
-                      final hasActionItems =
-                          conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
+                      final hasActionItems = conversation.structured.actionItems
+                          .where((item) => !item.deleted)
+                          .isNotEmpty;
                       return ConversationBottomBar(
                         mode: ConversationBottomBarMode.detail,
                         selectedTab: selectedTab,
                         conversation: conversation,
-                        hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                        hasSegments:
+                            conversation.transcriptSegments.isNotEmpty ||
                             conversation.photos.isNotEmpty ||
                             conversation.externalIntegration != null,
                         hasActionItems: hasActionItems,
@@ -1736,29 +1738,29 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
             child: _isLoading
                 ? _buildShimmerList()
                 : _events.isEmpty
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(40),
-                          child: Text(
-                            'No calendar events found around this time.',
-                            style: TextStyle(color: Colors.grey, fontSize: 15),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: _events.length,
-                        separatorBuilder: (_, __) =>
-                            const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
-                        itemBuilder: (context, index) {
-                          final event = _events[index];
-                          final isLinkingThis = _linkingEventId == event.eventId;
-                          final isSuggested = event.eventId == _suggestedEventId;
-                          return _buildEventTile(event, isSuggested, isLinkingThis);
-                        },
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40),
+                      child: Text(
+                        'No calendar events found around this time.',
+                        style: TextStyle(color: Colors.grey, fontSize: 15),
+                        textAlign: TextAlign.center,
                       ),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: _events.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
+                    itemBuilder: (context, index) {
+                      final event = _events[index];
+                      final isLinkingThis = _linkingEventId == event.eventId;
+                      final isSuggested = event.eventId == _suggestedEventId;
+                      return _buildEventTile(event, isSuggested, isLinkingThis);
+                    },
+                  ),
           ),
           SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
         ],
@@ -1851,9 +1853,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 }
                 final segments = provider.conversation.transcriptSegments;
                 final segment = segments[segmentIndex];
-                final person =
-                    segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
-                final speakerName = person?.name ??
+                final person = segment.personId != null
+                    ? SharedPreferencesUtil().getPersonById(segment.personId!)
+                    : null;
+                final speakerName =
+                    person?.name ??
                     context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
                 PlatformManager.instance.analytics.editSegmentTextStarted();
                 bool saved = false;
@@ -1912,8 +1916,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                               );
                               if (segmentIndex == -1) continue;
                               provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                              provider.conversation.transcriptSegments[segmentIndex].personId =
-                                  finalPersonId == 'user' ? null : finalPersonId;
+                              provider.conversation.transcriptSegments[segmentIndex].personId = finalPersonId == 'user'
+                                  ? null
+                                  : finalPersonId;
                             }
                             await assignBulkConversationTranscriptSegments(
                               provider.conversation.id,

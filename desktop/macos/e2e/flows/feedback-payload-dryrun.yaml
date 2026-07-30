@@ -11,23 +11,23 @@ preconditions:
 
 steps:
   - id: S1
-    name: Dry-run builds the report title from a message, no Sentry capture
+    name: Dry-run uses the privacy-safe report title, no Sentry capture
     bridge.action:
       name: dump_feedback_payload_dryrun
       params:
         message: "[[MARKER:set02-dryrun]]"
     expect:
-      result.detail.sentry_message: "User Report: [[MARKER:set02-dryrun]]"
+      result.detail.sentry_message: "User Report"
       result.detail.sentry_capture_invoked: "false"
       result.detail.would_submit_to_sentry: "false"
       result.detail.diagnostics_filename: "desktop_diagnostics.json"
 
   - id: S2
-    name: Empty message yields the logs-only title
+    name: Empty message uses the same privacy-safe report title
     bridge.action:
       name: dump_feedback_payload_dryrun
     expect:
-      result.detail.sentry_message: "User Report (logs only)"
+      result.detail.sentry_message: "User Report"
       result.detail.sentry_capture_invoked: "false"
 
   - id: S3

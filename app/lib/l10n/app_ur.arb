@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "ہمیں مزید لوگوں تک پہنچنے میں مدد کریں App Store میں ریویو چھوڑ کر۔ آپ کی رائے ہمارے لیے بہت اہم ہے!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "ہمیں مزید لوگوں تک پہنچنے میں مدد کریں Google Play Store میں ریویو چھوڑ کر۔ آپ کی رائے ہمارے لیے بہت اہم ہے!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "App Store پر ریٹنگ دیں",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play پر ریٹنگ دیں",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "شاید بعد میں",
     "@maybeLater": {
         "description": "Button text to defer action"
@@ -10728,5 +10712,59 @@
     "deviceStorageFree": "{free} خالی",
     "deviceStorageNearlyFull": "آلہ تقریباً بھر چکا ہے — جگہ خالی کرنے کے لیے سنک کریں۔",
     "phoneMicOfflineFallbackMessage": "کوئی کنکشن نہیں — مقامی طور پر ریکارڈنگ ہو رہی ہے۔ جب آپ دوبارہ آن لائن ہوں گے تو اسے نقل کر دیا جائے گا۔",
-    "dataEncryptedBanner": "آپ کا ڈیٹا بطورِ ڈیفالٹ مضبوط خفیہ کاری سے محفوظ ہے، اور یہ کیسے محفوظ اور استعمال کیا جاتا ہے اس پر آپ کا کنٹرول رہتا ہے۔"
+    "dataEncryptedBanner": "آپ کا ڈیٹا بطورِ ڈیفالٹ مضبوط خفیہ کاری سے محفوظ ہے، اور یہ کیسے محفوظ اور استعمال کیا جاتا ہے اس پر آپ کا کنٹرول رہتا ہے۔",
+    "rayBanMetaMicPickerTitle": "اپنا Ray-Ban Meta مائیکروفون منتخب کریں",
+    "rayBanMetaMicPickerDescription": "اپنے چشمے کا Bluetooth مائیکروفون منتخب کریں۔ Omi کے استعمال کے دوران موسیقی رک جاتی ہے۔",
+    "rayBanMetaMicPickerEmpty": "کوئی Bluetooth مائیکروفون نہیں ملا۔ iPhone کی ترتیبات میں چشمہ منسلک کریں، پھر دوبارہ کوشش کریں۔",
+    "rayBanMetaMicPickerLoadError": "Bluetooth مائیکروفون لوڈ نہیں ہو سکے۔ چیک کریں کہ Bluetooth آن ہے، پھر دوبارہ کوشش کریں۔",
+    "rayBanMetaMicPickerConnectError": "اس مائیکروفون سے منسلک نہیں ہو سکے۔ یقینی بنائیں کہ یہ iPhone کی ترتیبات میں منسلک ہے۔",
+    "cloudTranscription": "کلاؤڈ ٹرانسکرپشن",
+    "copyMessage": "پیغام کاپی کریں",
+    "deleteOnDeviceModel": "ماڈل حذف کریں",
+    "deleteOnDeviceModelConfirm": "کیا آپ واقعی یہ ماڈل حذف کرنا چاہتے ہیں؟",
+    "downgradeAnyway": "پھر بھی ڈاؤن گریڈ کریں",
+    "downgradeLimitBattery": "7 گنا زیادہ بیٹری کی کھپت",
+    "downgradeLimitDelay": "5-7 سیکنڈ کی تاخیر",
+    "downgradeLimitQuality": "30% کم ٹرانسکرپشن معیار",
+    "downgradeLimitSpeakers": "بولنے والوں کی شناخت ممکن نہیں",
+    "downgradeLimitationsHeading": "آپ کو یہ حدود درپیش ہوں گی:",
+    "downgradeToFreemiumTitle": "مفت منصوبے پر ڈاؤن گریڈ کریں؟",
+    "errorLoadingAudio": "آڈیو لوڈ کرنے میں خرابی",
+    "failedToLinkCalendarEvent": "کیلنڈر ایونٹ منسلک کرنے میں ناکامی",
+    "googleCalendarConnectPrompt": "بات چیتوں کو کیلنڈر ایونٹس سے منسلک کرنے کے لیے اپنا Google کیلنڈر منسلک کریں۔",
+    "googleCalendarNotConnected": "Google کیلنڈر منسلک نہیں ہے",
+    "linkedToEvent": "\"{title}\" سے منسلک کر دیا گیا",
+    "onDeviceModelDeleted": "ماڈل حذف ہو گیا",
+    "onDeviceModelDownloadFailed": "ماڈل ڈاؤن لوڈ ناکام",
+    "onDeviceModelDownloadFailedDesc": "Whisper ماڈل ڈاؤن لوڈ کرنے میں ناکامی۔ براہ کرم دوبارہ کوشش کریں۔",
+    "onDeviceModelDownloadSuccess": "ماڈل ڈاؤن لوڈ ہو گیا",
+    "onDeviceModelDownloadSuccessDesc": "Whisper ماڈل کامیابی سے ڈاؤن لوڈ ہو گیا",
+    "onDeviceModelDownloaded": "ڈاؤن لوڈ شدہ",
+    "onDeviceModelSize": "ماڈل کا سائز",
+    "onDeviceTranscription": "ڈیوائس پر ٹرانسکرپشن",
+    "onDeviceTranscriptionDesc": "ٹرانسکرپشن آپ کی ڈیوائس پر مقامی طور پر ہوتی ہے",
+    "searchSettings": "ترتیبات تلاش کریں…",
+    "speechToTextProvider": "آواز سے متن کا فراہم کنندہ",
+    "speechToTextProviderDesc": "ٹرانسکرپشن کے لیے استعمال ہونے والی سروس منتخب کریں",
+    "sttFilterAuto": "خودکار",
+    "sttModelAccuracy": "درستگی",
+    "sttModelFaster": "تیز تر",
+    "sttModelHigher": "زیادہ",
+    "sttModelLower": "کم",
+    "sttModelSlower": "سست تر",
+    "sttModelSpeed": "رفتار",
+    "sttNone": "کوئی نہیں",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "آپ کی رائے کا شکریہ!",
+    "transcriptionLanguage": "ٹرانسکرپشن کی زبان",
+    "transcriptionLanguageDesc": "تقریر کی ٹرانسکرپشن کے لیے زبان منتخب کریں",
+    "whisperModel": "Whisper ماڈل",
+    "whisperModelDesc": "ڈیوائس پر ٹرانسکرپشن کے لیے ماڈل منتخب کریں",
+    "whisperModelSizeBase": "بنیادی",
+    "whisperModelSizeLarge": "بڑا",
+    "whisperModelSizeMedium": "درمیانہ",
+    "whisperModelSizeSmall": "چھوٹا",
+    "whisperModelSizeTiny": "بہت چھوٹا"
 }

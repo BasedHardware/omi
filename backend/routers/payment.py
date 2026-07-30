@@ -1275,7 +1275,12 @@ def save_paypal_payment_details(data: SavePayPalPaymentDetailsRequest, uid: str 
             set_default_payment_method(uid, 'paypal')
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Broad catch around a Firestore write — unlike the ValidationError/
+        # StripeError sites elsewhere in this file (whose messages are
+        # designed to be user-facing), an unexpected exception here could be
+        # anything, so log the real detail server-side and don't echo it.
+        logger.error(f"Failed to save PayPal payment details for uid={uid}: {e}")
+        raise HTTPException(status_code=400, detail="Could not save PayPal payment details. Please try again.")
 
 
 @router.get("/v1/paypal/payment-details", response_model=Optional[PayPalPaymentDetailsResponse])

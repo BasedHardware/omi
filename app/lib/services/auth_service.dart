@@ -40,15 +40,54 @@ final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
   Future<void> signOut() => FirebaseAuth.instance.signOut();
 }
 
+/// Source-bound proof captured before a credential-collision sign-in replaces
+/// the anonymous Firebase user.
+final class AnonymousSourceMigration {
+  const AnonymousSourceMigration({required this.uid, required this.token});
+
+  final String uid;
+  final String token;
+}
+
+/// The outcome of linking an external provider.
+///
+/// A credential collision signs in to the already-linked destination account
+/// inside [AuthService]. The caller must use [anonymousSourceMigration], rather
+/// than inspecting FirebaseAuth.currentUser after that switch, to migrate the
+/// anonymous source data.
+final class ProviderLinkResult {
+  const ProviderLinkResult({required this.destinationUid, this.anonymousSourceMigration});
+
+  final String? destinationUid;
+  final AnonymousSourceMigration? anonymousSourceMigration;
+}
+
+/// Captures an anonymous source proof before [establishDestination] can replace
+/// FirebaseAuth.currentUser, then returns both sides of the completed collision.
+@visibleForTesting
+Future<ProviderLinkResult> resolveProviderCredentialCollision({
+  required String sourceUid,
+  required bool sourceIsAnonymous,
+  required Future<String?> Function() captureSourceToken,
+  required Future<String?> Function() establishDestination,
+}) async {
+  final sourceToken = sourceIsAnonymous ? await captureSourceToken() : null;
+  final anonymousSourceMigration = sourceToken == null
+      ? null
+      : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
+  final destinationUid = await establishDestination();
+  return ProviderLinkResult(destinationUid: destinationUid, anonymousSourceMigration: anonymousSourceMigration);
+}
+
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   static AuthService get instance => _instance;
 
   AuthService._internal()
-      : _tokenGateway = _FirebaseAuthTokenGateway(),
-        _refreshDelay = _defaultRefreshDelay,
-        _recordTelemetry = _recordProductionTelemetry,
-        _telemetryContextProvider = _productionTelemetryContext;
+    : _tokenGateway = _FirebaseAuthTokenGateway(),
+      _refreshDelay = _defaultRefreshDelay,
+      _recordTelemetry = _recordProductionTelemetry,
+      _telemetryContextProvider = _productionTelemetryContext;
 
   @visibleForTesting
   AuthService.forTesting({
@@ -56,10 +95,10 @@ class AuthService {
     AuthRefreshDelay? refreshDelay,
     AuthTelemetryRecorder? recordTelemetry,
     AuthTelemetryContextProvider? telemetryContextProvider,
-  })  : _tokenGateway = tokenGateway,
-        _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
-        _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
-        _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
+  }) : _tokenGateway = tokenGateway,
+       _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
+       _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
+       _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
 
   static const int _maxRefreshAttempts = 3;
   static const List<Duration> _refreshRetryDelays = [Duration(milliseconds: 200), Duration(milliseconds: 500)];
@@ -91,10 +130,10 @@ class AuthService {
   }
 
   static Map<String, dynamic> _productionTelemetryContext() => {
-        'platform': PlatformManager.instance.platform,
-        'app_version': PlatformManager.instance.appVersion,
-        'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
-      };
+    'platform': PlatformManager.instance.platform,
+    'app_version': PlatformManager.instance.appVersion,
+    'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
+  };
 
   bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
 
@@ -426,15 +465,17 @@ class AuthService {
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
-        queryParameters: {
-          'provider': provider,
-          'redirect_uri': redirectUri,
-          'state': state,
-          'code_challenge': codeChallenge,
-          'code_challenge_method': 'S256',
-        },
-      ).toString();
+      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize')
+          .replace(
+            queryParameters: {
+              'provider': provider,
+              'redirect_uri': redirectUri,
+              'state': state,
+              'code_challenge': codeChallenge,
+              'code_challenge_method': 'S256',
+            },
+          )
+          .toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
@@ -717,13 +758,15 @@ class AuthService {
           Logger.debug('Web platform detected - attempting updateProfile with caution');
 
           // Try with a timeout to prevent hanging
-          await user.updateProfile(displayName: fullName).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {
-              Logger.debug('updateProfile timed out on web platform');
-              throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
-            },
-          );
+          await user
+              .updateProfile(displayName: fullName)
+              .timeout(
+                const Duration(seconds: 5),
+                onTimeout: () {
+                  Logger.debug('updateProfile timed out on web platform');
+                  throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+                },
+              );
         } else {
           await user.updateProfile(displayName: fullName);
         }
@@ -767,7 +810,7 @@ class AuthService {
     return base64Url.encode(digest.bytes).replaceAll('=', '');
   }
 
-  Future<UserCredential?> linkWithProvider(String provider) async {
+  Future<ProviderLinkResult?> linkWithProvider(String provider) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
@@ -781,15 +824,17 @@ class AuthService {
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
-        queryParameters: {
-          'provider': provider,
-          'redirect_uri': redirectUri,
-          'state': state,
-          'code_challenge': codeChallenge,
-          'code_challenge_method': 'S256',
-        },
-      ).toString();
+      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize')
+          .replace(
+            queryParameters: {
+              'provider': provider,
+              'redirect_uri': redirectUri,
+              'state': state,
+              'code_challenge': codeChallenge,
+              'code_challenge_method': 'S256',
+            },
+          )
+          .toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
@@ -857,11 +902,15 @@ class AuthService {
         await _updateUserPreferences(result, provider);
 
         Logger.debug('Firebase account linking successful');
-        return result;
+        return ProviderLinkResult(destinationUid: result.user?.uid);
       } catch (e) {
         if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
-          // Handle existing credential case
-          return await _handleExistingCredential(e);
+          return await resolveProviderCredentialCollision(
+            sourceUid: currentUser.uid,
+            sourceIsAnonymous: currentUser.isAnonymous,
+            captureSourceToken: currentUser.getIdToken,
+            establishDestination: () async => (await _handleExistingCredential(e)).user?.uid,
+          );
         }
         rethrow;
       }
@@ -887,7 +936,7 @@ class AuthService {
   }
 
   /// Handle the case when credential is already in use
-  Future<UserCredential?> _handleExistingCredential(FirebaseAuthException e) async {
+  Future<UserCredential> _handleExistingCredential(FirebaseAuthException e) async {
     // Get existing user credentials
     final existingCred = e.credential;
 
@@ -909,11 +958,11 @@ class AuthService {
     return result;
   }
 
-  Future<UserCredential?> linkWithGoogle() async {
+  Future<ProviderLinkResult?> linkWithGoogle() async {
     return await linkWithProvider('google');
   }
 
-  Future<UserCredential?> linkWithApple() async {
+  Future<ProviderLinkResult?> linkWithApple() async {
     return await linkWithProvider('apple');
   }
 }

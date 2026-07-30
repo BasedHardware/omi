@@ -210,16 +210,16 @@ class CircularDotsIndicator extends CustomPainter {
   final Animation<double> animation;
 
   CircularDotsIndicator({required this.progress, required this.isRefreshing, required this.animation})
-      : super(repaint: animation);
+    : super(repaint: animation);
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 12;
-    final dotRadius = 3.0;
+    const dotRadius = 3.0;
 
     // Calculate how many dots should be filled
-    final totalDots = 8;
+    const totalDots = 8;
     final filledDots = isRefreshing ? totalDots : (progress * totalDots).round().clamp(0, totalDots);
 
     // Add rotation when refreshing

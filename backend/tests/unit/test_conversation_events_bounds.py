@@ -158,6 +158,7 @@ def router():
         "utils.conversations.calendar_linking": _pkg("utils.conversations.calendar_linking"),
         "utils.conversations.calendar_utils": _pkg("utils.conversations.calendar_utils"),
         "utils.conversations.location": _pkg("utils.conversations.location"),
+        "utils.conversations.analytics": _pkg("utils.conversations.analytics"),
         "utils.llm": _pkg("utils.llm"),
         "utils.llm.conversation_processing": _pkg("utils.llm.conversation_processing"),
         "utils.speaker_identification": _pkg("utils.speaker_identification"),

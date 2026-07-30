@@ -105,7 +105,7 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
 }
 
 Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>
-    retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
+retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
   final url = '${Env.apiBaseUrl}v2/apps/capability/$capability/grouped?include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
   try {
@@ -686,11 +686,11 @@ Future<bool> deleteApiKeyServer(String appId, String keyId) async {
   }
 }
 
-Future<bool> migrateAppOwnerId(String oldId) async {
+Future<bool> migrateAppOwnerId(String oldId, String sourceToken) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/migrate-owner?old_id=$oldId',
-    headers: {},
-    body: '',
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({'source_token': sourceToken}),
     method: 'POST',
   );
   try {

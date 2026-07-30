@@ -41,6 +41,7 @@ def fixtures(root: Path) -> argparse.Namespace:
     smoke = {
         "ok": True,
         "release_tag": TAG,
+        "source_sha": SHA,
         "expected_channel": "beta",
         "bundle_id": "com.omi.computer-macos",
         "version": "0.12.99",
@@ -94,6 +95,7 @@ def beta_fixtures(root: Path) -> argparse.Namespace:
     beta_smoke = {
         "ok": True,
         "release_tag": TAG,
+        "source_sha": SHA,
         "expected_channel": "beta",
         "bundle_id": "com.omi.computer-macos.beta",
         "version": "0.12.99",
@@ -161,6 +163,11 @@ def main() -> int:
         smoke_path.write_text(json.dumps(smoke))
         expect_failure(args, "callback canary validated mismatch")
 
+        smoke["notification_callback_canary"]["validated"] = True
+        smoke["source_sha"] = "d" * 40
+        smoke_path.write_text(json.dumps(smoke))
+        expect_failure(args, "source SHA does not match the candidate tag")
+
     # Releases shipping the side-by-side Omi Beta assets: the beta artifact must
     # satisfy the same smoke contract as stable, under its own bundle id.
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -204,6 +211,11 @@ def main() -> int:
         expect_failure(args, "beta smoke result is missing UserNotifications callback canary")
 
         beta_smoke = json.loads(original)
+        beta_smoke["source_sha"] = "d" * 40
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "beta smoke source SHA does not match the candidate tag")
+
+        beta_smoke = json.loads(original)
         beta_smoke["notification_callback_canary"]["bundle_id"] = "com.omi.computer-macos"
         beta_smoke_path.write_text(json.dumps(beta_smoke))
         expect_failure(args, "beta smoke UserNotifications callback canary bundle_id mismatch")
@@ -226,7 +238,7 @@ def test_codemagic_beta_smoke_produces_gate_required_canaries() -> None:
     assert len(invocations) >= 3, "expected stable and beta smoke invocations in the production branch"
     stable_invocation, beta_invocation = invocations[1], invocations[2]
 
-    evidence_flags = ["--launch", "--auth-storage-canary", "--notification-callback-canary", "--tag"]
+    evidence_flags = ["--launch", "--auth-storage-canary", "--notification-callback-canary", "--source-sha", "--tag"]
     for flag in evidence_flags:
         assert flag in stable_invocation, f"stable smoke invocation lost {flag}; update this contract test"
         assert flag in beta_invocation, (

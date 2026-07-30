@@ -228,6 +228,26 @@ def _failure_class(error: Optional[object]) -> str:
     return value[:80] or error.__class__.__name__.lower()
 
 
+# RFC 6749 §4.1.2.1 error codes a provider may echo on the callback. The raw
+# `error` param is attacker-controlled free text and must never become a
+# Prometheus label value directly — that is unbounded cardinality on a
+# module-level (process-lifetime) metric registry.
+_OAUTH_ERROR_CODES = {
+    "access_denied",
+    "invalid_request",
+    "invalid_scope",
+    "unauthorized_client",
+    "unsupported_response_type",
+    "server_error",
+    "temporarily_unavailable",
+}
+
+
+def _bounded_provider_error(error: str) -> str:
+    normalized = error.strip().lower().replace(" ", "_")[:64]
+    return normalized if normalized in _OAUTH_ERROR_CODES else "provider_error_other"
+
+
 def _log_auth_event(
     *,
     provider: Optional[str],
@@ -369,7 +389,7 @@ async def auth_callback_google(
             stage="provider_callback_received",
             outcome="failed",
             auth_flow_id=auth_flow_id,
-            failure_class=error,
+            failure_class=_bounded_provider_error(error),
             status_code=400,
         )
         raise HTTPException(status_code=400, detail=f"Auth error: {error}")
@@ -411,9 +431,9 @@ async def auth_callback_google(
     # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
     # ``/authorize`` time and cannot be overridden by the caller here.
     return templates.TemplateResponse(
+        request,
         "auth_callback.html",
         {
-            "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
             "redirect_uri": app_redirect_uri,
@@ -458,7 +478,7 @@ async def auth_callback_apple_post(
             stage="provider_callback_received",
             outcome="failed",
             auth_flow_id=auth_flow_id,
-            failure_class=error,
+            failure_class=_bounded_provider_error(error),
             status_code=400,
         )
         raise HTTPException(status_code=400, detail=f"Auth error: {error}")
@@ -512,9 +532,9 @@ async def auth_callback_apple_post(
     # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
     # ``/authorize`` time and cannot be overridden by the caller here.
     return templates.TemplateResponse(
+        request,
         "auth_callback.html",
         {
-            "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
             "redirect_uri": app_redirect_uri,

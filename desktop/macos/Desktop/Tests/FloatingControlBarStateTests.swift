@@ -83,6 +83,45 @@ final class FloatingControlBarStateTests: XCTestCase {
     )
   }
 
+  /// Hovering the notch always shows something now — the shortcut legend and capture
+  /// controls — so the surface presents regardless of subagent count.
+  func testNotchHoverMenuAlwaysPresentsForTheControlPanel() {
+    XCTAssertTrue(NotchAgentMenuPresentation.shouldPresent(agentCount: 0))
+    XCTAssertTrue(NotchAgentMenuPresentation.shouldPresent(agentCount: 1))
+    XCTAssertTrue(NotchAgentMenuPresentation.shouldPresent(agentCount: 8))
+  }
+
+  /// The agent row list stays agent-only: presenting the surface must not imply drawing
+  /// rows, otherwise an empty list renders as dead space under the legend.
+  func testAgentRowsRemainGatedOnActiveSubagents() {
+    XCTAssertFalse(NotchAgentMenuPresentation.hasAgentRows(agentCount: 0))
+    XCTAssertTrue(NotchAgentMenuPresentation.hasAgentRows(agentCount: 1))
+    XCTAssertTrue(NotchAgentMenuPresentation.hasAgentRows(agentCount: 8))
+  }
+
+  func testIdleNotchTapOpensMainChatOnlyWhenTheNotchIsIdle() {
+    var openCount = 0
+    let openMainChat = { openCount += 1 }
+
+    NotchIdleTapRoute.perform(
+      isVoicePresentationActive: false,
+      isShowingConversation: false,
+      openMainChat: openMainChat
+    )
+    NotchIdleTapRoute.perform(
+      isVoicePresentationActive: true,
+      isShowingConversation: false,
+      openMainChat: openMainChat
+    )
+    NotchIdleTapRoute.perform(
+      isVoicePresentationActive: false,
+      isShowingConversation: true,
+      openMainChat: openMainChat
+    )
+
+    XCTAssertEqual(openCount, 1)
+  }
+
   func testAgentSurfaceDoesNotDependOnMainChatContentOrHeight() {
     let state = FloatingControlBarState()
     let agentID = UUID()

@@ -24,6 +24,9 @@ struct ConversationDetailView: View {
 
   // Transcript drawer state (replaces tab system)
   @State private var showTranscriptDrawer = false
+  // When expanded, the transcript drawer fills the window (the summary pane
+  // collapses) for full-width reading; collapsed it's the fixed side drawer.
+  @State private var isTranscriptExpanded = false
 
   // Entry animation
   @State private var hasAppeared = false
@@ -148,33 +151,52 @@ struct ConversationDetailView: View {
             RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
               .stroke(OmiColors.backgroundTertiary.opacity(0.3), lineWidth: 1)
           )
+          .overlay(alignment: .top) {
+            if isEnrichingDeferred {
+              deferredProcessingSection
+                .padding(OmiSpacing.xxl)
+                .allowsHitTesting(false)
+            }
+          }
           .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 8)
           .padding(OmiSpacing.xxl)
         }
       }
-      .frame(maxWidth: .infinity)
+      // Collapses to zero width when the transcript is expanded so the drawer
+      // can fill the window; otherwise it's the greedy main pane.
+      .frame(maxWidth: isTranscriptExpanded ? 0 : .infinity)
+      .opacity(isTranscriptExpanded ? 0 : 1)
+      .clipped()
 
-      // Transcript drawer (slides in from right)
+      // Transcript drawer (slides in from right; expands to fill on demand)
       if showTranscriptDrawer {
-        Rectangle()
-          .fill(OmiColors.border)
-          .frame(width: 1)
+        if !isTranscriptExpanded {
+          Rectangle()
+            .fill(OmiColors.border)
+            .frame(width: 1)
+        }
 
         transcriptDrawerView
-          .frame(width: 450)
+          .frame(maxWidth: isTranscriptExpanded ? .infinity : 450)
           .transition(.move(edge: .trailing))
       }
     }
     .opacity(hasAppeared ? 1 : 0)
     .offset(y: hasAppeared ? 0 : 20)
     .onAppear {
-      ConversationDetailAutomationState.shared.setOpen(
+      showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
         conversationId: conversation.id,
         transcriptDrawerOpen: showTranscriptDrawer
       )
       OmiMotion.withGated(.easeOut(duration: 0.5)) {
         hasAppeared = true
       }
+    }
+    .onChange(of: conversation.id) { _, conversationId in
+      showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
+        conversationId: conversationId,
+        transcriptDrawerOpen: showTranscriptDrawer
+      )
     }
     .onDisappear {
       ConversationDetailAutomationState.shared.clear(conversationId: conversation.id)
@@ -341,7 +363,6 @@ struct ConversationDetailView: View {
     }
     .padding(.horizontal, OmiSpacing.xxl)
     .padding(.vertical, OmiSpacing.lg)
-    .background(OmiColors.backgroundTertiary.opacity(0.5))
     .alert("Edit Conversation Title", isPresented: $showEditDialog) {
       TextField("Title", text: $editedTitle)
       Button("Cancel", role: .cancel) {}
@@ -570,13 +591,6 @@ struct ConversationDetailView: View {
 
   @ViewBuilder
   private var summaryContent: some View {
-    // Lazy processing: while the deferred conversation is being enriched (polled) on first
-    // open, show a loader where the summary will appear. Cleared when enrichment completes or
-    // the poll times out, so it never spins forever.
-    if isEnrichingDeferred {
-      deferredProcessingSection
-    }
-
     // Overview section
     if !displayConversation.overview.isEmpty {
       overviewSection
@@ -627,6 +641,24 @@ struct ConversationDetailView: View {
 
         Spacer()
 
+        // Expand / collapse the drawer to fill the window for full-width reading
+        Button(action: {
+          OmiMotion.withGated(.easeInOut(duration: 0.25)) {
+            isTranscriptExpanded.toggle()
+          }
+        }) {
+          Image(
+            systemName: isTranscriptExpanded
+              ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textSecondary)
+          .frame(width: 28, height: 28)
+          .background(Circle().fill(OmiColors.backgroundTertiary))
+        }
+        .buttonStyle(.plain)
+        .help(isTranscriptExpanded ? "Collapse transcript" : "Expand transcript")
+
         // Copy button
         Button(action: copyTranscript) {
           Image(systemName: "doc.on.doc")
@@ -645,6 +677,7 @@ struct ConversationDetailView: View {
         Button(action: {
           OmiMotion.withGated(.easeInOut(duration: 0.25)) {
             showTranscriptDrawer = false
+            isTranscriptExpanded = false
           }
         }) {
           Image(systemName: "xmark")
@@ -776,7 +809,8 @@ struct ConversationDetailView: View {
 
   // MARK: - Deferred Processing Loader
 
-  /// Shown while a lazily-deferred conversation is being enriched on first open.
+  /// Overlaid while a lazily-deferred conversation is enriched, preserving the
+  /// position of details that may already be available from the local cache.
   private var deferredProcessingSection: some View {
     HStack(spacing: OmiSpacing.md) {
       ProgressView()
@@ -811,7 +845,7 @@ struct ConversationDetailView: View {
           .foregroundColor(OmiColors.textSecondary)
       }
 
-      SelectableMarkdown(text: displayConversation.overview, sender: .ai)
+      OmiMarkdown(text: displayConversation.overview, sender: .ai)
         .textSelection(.enabled)
         .environment(\.colorScheme, .dark)
         .frame(maxWidth: .infinity, alignment: .leading)

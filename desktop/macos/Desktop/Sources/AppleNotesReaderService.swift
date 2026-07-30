@@ -89,6 +89,23 @@ enum AppleNotesReadOutcome: Equatable {
   }
 }
 
+enum AppleNotesReadProbe {
+  nonisolated static func resolveRequestedFolder(
+    path: String?,
+    fileManager: FileManager = .default,
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+  ) throws -> URL? {
+    guard let path = path?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else {
+      return nil
+    }
+    return try AppleNotesReaderService.resolveSelectedFolder(
+      URL(fileURLWithPath: path),
+      fileManager: fileManager,
+      homeDirectory: homeDirectory
+    )
+  }
+}
+
 actor AppleNotesReaderService {
   static let shared = AppleNotesReaderService()
   private static let classifierNoise = [

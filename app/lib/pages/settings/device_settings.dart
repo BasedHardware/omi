@@ -274,10 +274,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               onTap: () => routeToPage(
                 context,
                 isOpenGlass
-                    ? OmiGlassOtaUpdate(
-                        device: device,
-                        latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
-                      )
+                    ? OmiGlassOtaUpdate(device: device, latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails)
                     : FirmwareUpdate(device: device),
               ),
             ),
@@ -781,7 +778,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 24,
                       height: 24,
                       child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.redAccent, size: 20),
@@ -838,7 +835,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 24,
                       height: 24,
                       child: FaIcon(FontAwesomeIcons.ban, color: Colors.orange, size: 20),
@@ -898,7 +895,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             leading: IconButton(
-              icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
             title: Text(

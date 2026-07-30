@@ -13,15 +13,17 @@ final class HomeKnowsComposerTests: XCTestCase {
   ]
   private let questions = ["What should I do today?", "What did I spend my time on this week?"]
 
-  func testComposePicksTaskInsightQuestionWhenAllAvailable() {
+  func testComposePicksTaskInsightTaskQuestionWhenAllAvailable() {
     let rows = HomeKnowsListComposer.compose(tasks: tasks, insights: insights, questions: questions)
 
-    XCTAssertEqual(rows.count, 3)
+    // Diverse 4-slot brief: pressing task, one insight, a second task, then a prefilled ask.
+    XCTAssertEqual(rows.count, 4)
     XCTAssertEqual(rows[0].kind, .task(id: "t1"))
     XCTAssertEqual(rows[0].text, "Submit the Design PR by 7pm")
     XCTAssertEqual(rows[1].kind, .insight(id: "i1"))
-    XCTAssertEqual(rows[2].kind, .question)
-    XCTAssertEqual(rows[2].text, "What should I do today?")
+    XCTAssertEqual(rows[2].kind, .task(id: "t2"))
+    XCTAssertEqual(rows[3].kind, .question)
+    XCTAssertEqual(rows[3].text, "What should I do today?")
   }
 
   func testDismissedTaskFallsThroughToNextTask() {
@@ -31,30 +33,34 @@ final class HomeKnowsComposerTests: XCTestCase {
     XCTAssertEqual(rows[0].kind, .task(id: "t2"))
   }
 
-  func testAllTasksDismissedFillsWithInsightsAndQuestion() {
+  func testAllTasksDismissedFillsWithOneInsightAndQuestion() {
     let rows = HomeKnowsListComposer.compose(
       tasks: tasks, insights: insights, questions: questions, dismissedTaskIDs: ["t1", "t2"])
 
-    XCTAssertEqual(rows.count, 3)
+    // At most one insight (the tip slot); the ask fills the remaining slot.
+    XCTAssertEqual(rows.count, 2)
     XCTAssertEqual(rows[0].kind, .insight(id: "i1"))
-    XCTAssertEqual(rows[1].kind, .insight(id: "i2"))
-    XCTAssertEqual(rows[2].kind, .question)
+    XCTAssertEqual(rows[1].kind, .question)
   }
 
-  func testQuestionsFillAllSlotsWhenNoTasksOrInsights() {
+  func testSingleAskWhenNoTasksOrInsights() {
     let rows = HomeKnowsListComposer.compose(
       tasks: [], insights: [], questions: questions + ["Third question?"])
 
-    XCTAssertEqual(rows.count, 3)
-    XCTAssertTrue(rows.allSatisfy { $0.kind == .question })
+    // Only one prefilled ask is ever surfaced — the list never collapses into all-questions.
+    XCTAssertEqual(rows.count, 1)
+    XCTAssertEqual(rows[0].kind, .question)
+    XCTAssertEqual(rows[0].text, "What should I do today?")
   }
 
-  func testInsightsMayFillLastSlotOnlyWhenNoQuestionExists() {
+  func testSecondTaskFillsLastSlotWhenNoQuestionExists() {
     let rows = HomeKnowsListComposer.compose(tasks: tasks, insights: insights, questions: [])
 
+    // With no ask, the last slot goes to a second task — never a second insight.
     XCTAssertEqual(rows.count, 3)
+    XCTAssertEqual(rows[0].kind, .task(id: "t1"))
     XCTAssertEqual(rows[1].kind, .insight(id: "i1"))
-    XCTAssertEqual(rows[2].kind, .insight(id: "i2"))
+    XCTAssertEqual(rows[2].kind, .task(id: "t2"))
   }
 
   func testEmptyAndWhitespaceEntriesAreSkipped() {
@@ -70,5 +76,22 @@ final class HomeKnowsComposerTests: XCTestCase {
 
   func testEverythingEmptyProducesNoRows() {
     XCTAssertTrue(HomeKnowsListComposer.compose(tasks: [], insights: [], questions: []).isEmpty)
+  }
+
+  func testDuplicateQuestionsDoNotCollideAcrossQuestionRows() {
+    // Question rows derive their ForEach ID from the text, so a repeated
+    // suggestion must never surface twice. The redesign surfaces at most two
+    // question-kind rows (a composed tip in the second slot and a distinct ask
+    // in the last), so use a tip to exercise both and assert the repeat is
+    // dropped and the two IDs stay unique.
+    let rows = HomeKnowsListComposer.compose(
+      tasks: [], insights: [],
+      tip: "What should I do today?",
+      questions: ["What should I do today?", " What should I do today? ", "Second question?"])
+
+    XCTAssertEqual(rows.count, 2)
+    XCTAssertEqual(rows.map(\.kind), [.question, .question])
+    XCTAssertEqual(rows.map(\.text), ["What should I do today?", "Second question?"])
+    XCTAssertEqual(Set(rows.map(\.id)).count, rows.count)
   }
 }

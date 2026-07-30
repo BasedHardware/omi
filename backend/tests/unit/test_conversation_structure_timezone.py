@@ -81,6 +81,8 @@ sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
 _stub_package("langchain_core")
 langchain_output_parsers = _stub_module("langchain_core.output_parsers")
 langchain_output_parsers.PydanticOutputParser = MagicMock()
+langchain_messages = _stub_module("langchain_core.messages")
+langchain_messages.SystemMessage = MagicMock()
 langchain_prompts = _stub_module("langchain_core.prompts")
 langchain_prompts.ChatPromptTemplate = MagicMock()
 
@@ -128,6 +130,9 @@ sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
 _conversation_processing_stub = sys.modules.get("utils.llm.conversation_processing")
 if _conversation_processing_stub is not None and not hasattr(_conversation_processing_stub, "_local_started_at_iso"):
     sys.modules.pop("utils.llm.conversation_processing", None)
+
+# discard_parser only needs pydantic and langchain_core, so load the real module.
+_load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm" / "discard_parser.py")
 
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",
@@ -282,10 +287,23 @@ class TestStructureFunctionsTimezone:
             started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc),
             language_code="en",
             tz="Pacific/Honolulu",
-            title="Lunch",
         )
         assert result["invoke"]["started_at"] == "2025-01-01T13:48:00"
         assert result["invoke"]["tz"] == "Pacific/Honolulu"
+
+    def test_reprocess_regenerates_title_and_emoji_from_current_content(self):
+        result = _capture_structure(
+            conv_proc.get_reprocess_transcript_structure,
+            transcript="The corrected transcript is about a product launch",
+            started_at=datetime(2025, 1, 1, 12, 0, tzinfo=timezone.utc),
+            language_code="en",
+            tz="UTC",
+        )
+
+        assert "generate a concise title from the current content" in result["system_text"]
+        assert "select a single emoji" in result["system_text"]
+        assert "For the title, use" not in result["system_text"]
+        assert "title" not in result["invoke"]
 
     def test_both_prompts_state_local_and_drop_convert_instruction(self):
         # The semantic core of the fix is the prompt wording; pin it so a revert can't pass silently.
@@ -296,7 +314,7 @@ class TestStructureFunctionsTimezone:
             ),
             (
                 conv_proc.get_reprocess_transcript_structure,
-                dict(transcript="x", language_code="en", tz="Pacific/Honolulu", title="t"),
+                dict(transcript="x", language_code="en", tz="Pacific/Honolulu"),
             ),
         ]:
             result = _capture_structure(fn, started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), **kwargs)
@@ -305,3 +323,16 @@ class TestStructureFunctionsTimezone:
             assert "do not re-interpret this timestamp as UTC" in text
             # The old buggy instruction asking the model to convert must be gone.
             assert "respond in user local timezone" not in text
+
+
+def test_gpt56_cache_buckets_are_fixed_and_never_include_request_content():
+    keys = {conv_proc._cache_bucket_key('omi-transcript-structure', now=offset * 15) for offset in range(8)}
+
+    assert keys == {
+        'omi-transcript-structure-v1-b0',
+        'omi-transcript-structure-v1-b1',
+        'omi-transcript-structure-v1-b2',
+        'omi-transcript-structure-v1-b3',
+    }
+    assert conv_proc._has_gpt56_cacheable_static_prefix('static ' * 1_100)
+    assert not conv_proc._has_gpt56_cacheable_static_prefix('short prefix')

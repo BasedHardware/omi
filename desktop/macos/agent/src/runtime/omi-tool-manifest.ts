@@ -1065,6 +1065,13 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     runtimePreconditions: ["Requires authenticated backend access."],
     adapters: piAndStdio(),
   },
+  // capture_screen returns file PATHS, not image bytes. The model only sees the
+  // pixels by calling the built-in `Read` tool on those paths — supplied by the
+  // ACP `claude_code` tool preset and auto-approved under the desktop_high_trust
+  // policy. There is no omi-owned image-injection fallback: if the kernel ever
+  // passes `_meta.disableBuiltInTools: true` (which strips Read — see
+  // node_modules/@zed-industries/claude-agent-acp acp-agent.js), this tool and
+  // its detail-tile design silently degrade to unreadable paths. Keep Read enabled.
   {
     name: "capture_screen",
     label: "Capture Screen",
@@ -1769,6 +1776,15 @@ export function toolNamesForAdapter(
   context: OmiToolProjectionContext = {},
 ): string[] {
   return toolsForAdapter(adapterId, context).map((tool) => tool.adapters[adapterId]?.adapterName ?? tool.name);
+}
+
+/// Surface projection over the same manifest that generates the Swift surface
+/// allowlists. Realtime-voice runs authorize Swift-executed voice tools (e.g.
+/// ask_higher_model, point_click) that no chat adapter advertises, so the
+/// kernel capability allowlist must include the run surface's tools — an
+/// adapter-only projection structurally rejects every voice-only tool.
+export function toolsForSurface(surface: OmiToolSurface): OmiToolManifestEntry[] {
+  return omiToolManifest.filter((tool) => tool.surfaces.includes(surface));
 }
 
 export function mcpToolDefinitionsForAdapter(

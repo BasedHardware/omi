@@ -33,7 +33,7 @@ const DELETE_OUTBOX_COLUMNS = `
   created_at_ms, updated_at_ms, delivered_at_ms
 `;
 
-const LOCAL_ONLY_SURFACES = new Set(["task_chat", "workstream"]);
+const LOCAL_ONLY_SURFACES = new Set(["onboarding", "task_chat", "workstream"]);
 const DEFAULT_OUTBOX_LEASE_MS = 30_000;
 const MAX_DRAIN_BATCH = 100;
 const BACKEND_RECONCILE_PAGE_LIMIT = 100;
@@ -204,6 +204,12 @@ export interface ChatFirstIntentMaterializationResult {
 export interface ChatFirstIntentsMaterializationResult {
   results: ChatFirstIntentMaterializationResult[];
   stoppedByTail: boolean;
+}
+
+export interface RepairOrphanedJournalTurnsInput {
+  ownerId: string;
+  turnIds: readonly string[];
+  nowMs?: number;
 }
 
 export interface TerminalizeJournalTurnInput {
@@ -1392,6 +1398,47 @@ export function bindProducingJournalTurn(
   });
 }
 
+/**
+ * Repair assistant turns after their UI projection releases its send lock.
+ *
+ * Turn IDs are globally unique, so this resolves the canonical conversation
+ * from the producing turn instead of trusting the caller's selected surface.
+ * Active runs retain mutation authority.
+ */
+export function repairOrphanedJournalTurns(
+  store: AgentStore,
+  input: RepairOrphanedJournalTurnsInput,
+): ConversationTurn[] {
+  const turnIds = [...new Set(input.turnIds.map((turnId) => turnId.trim()).filter(Boolean))].slice(0, 100);
+  const repaired: ConversationTurn[] = [];
+  for (const turnId of turnIds) {
+    const current = findJournalTurnById(store, turnId);
+    if (!current) continue;
+    assertConversationOwner(store, current.conversationId, input.ownerId);
+    if (current.role !== "assistant" || terminalTurnStatus(current.status)) continue;
+
+    const producingRun = current.producingRunId === null
+      ? null
+      : store.getOptionalRow("SELECT status FROM runs WHERE run_id = ?", [current.producingRunId]);
+    const runStatus = producingRun ? String(producingRun.status) : null;
+    if (
+      runStatus !== null
+      && ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"].includes(runStatus)
+    ) {
+      continue;
+    }
+
+    repaired.push(updateJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId: current.conversationId,
+      turnId,
+      status: runStatus === "succeeded" ? "completed" : "failed",
+      nowMs: input.nowMs,
+    }));
+  }
+  return repaired;
+}
+
 export function assertPublicJournalUpdatePolicy(
   store: AgentStore,
   input: UpdateJournalTurnInput,
@@ -2160,7 +2207,18 @@ function chatHistorySearchExcerpt(content: string, query: string): string | null
 
 export function clearJournalConversation(
   store: AgentStore,
-  input: { ownerId: string; conversationId: string; expectedGeneration: number; nowMs?: number },
+  input: {
+    ownerId: string;
+    conversationId: string;
+    expectedGeneration: number;
+    nowMs?: number;
+    // When false, the local journal is fenced and its turns are purged, but the
+    // user's server-side chat history is left untouched (no backend delete is
+    // enqueued). Used by resets (onboarding re-walkthrough, non-prod harness)
+    // that must not destroy cloud history. Defaults to true — the explicit
+    // user "Clear history" action still deletes backend messages.
+    deleteBackend?: boolean;
+  },
 ): {
   conversationId: string;
   generation: number;
@@ -2217,12 +2275,18 @@ export function clearJournalConversation(
        WHERE conversation_id = ?`,
       [generation, now, input.conversationId],
     );
-    const backendDeleteOperationId = enqueueBackendConversationDelete(store, {
-      ownerId: input.ownerId,
-      conversationId: input.conversationId,
-      conversationGeneration: generation,
-      nowMs: now,
-    });
+    const deleteBackend =
+      canonicalJournalDelivery(store, input.ownerId, input.conversationId) === "backend"
+      && input.deleteBackend !== false;
+    const backendDeleteOperationId =
+      !deleteBackend
+        ? null
+        : enqueueBackendConversationDelete(store, {
+            ownerId: input.ownerId,
+            conversationId: input.conversationId,
+            conversationGeneration: generation,
+            nowMs: now,
+          });
     // Canonical rows are hard-deleted. The narrow claim tombstone above retains
     // only exact physical-delivery identity so a pre-clear POST can settle
     // before the backend delete is acknowledged; it is never projected as chat.
@@ -2808,10 +2872,24 @@ function assertBackendConversationDeleteClaim(
   }
 }
 
+/**
+ * Diagnostic `last_error_code` stamped on an outbox row whose stored payload
+ * hash diverges from the canonical journal turn. Such a row is parked (see
+ * {@link drainBackendTurnOutbox}) so the pump can keep draining; the same code
+ * lets an operator spot the quarantine in the local store.
+ */
+export const OUTBOX_CANONICAL_HASH_MISMATCH_CODE = "canonical_hash_mismatch";
+
 /** Atomically leases completed journal rows for the backend sync adapter. */
 export function drainBackendTurnOutbox(
   store: AgentStore,
-  input: { ownerId?: string; limit?: number; nowMs?: number; leaseMs?: number } = {},
+  input: {
+    ownerId?: string;
+    limit?: number;
+    nowMs?: number;
+    leaseMs?: number;
+    onQuarantine?: (turnId: string) => void;
+  } = {},
 ): BackendTurnDelivery[] {
   const now = input.nowMs ?? Date.now();
   const leaseMs = Math.max(1, input.leaseMs ?? DEFAULT_OUTBOX_LEASE_MS);
@@ -2841,6 +2919,7 @@ export function drainBackendTurnOutbox(
     );
 
     const deliveries: BackendTurnDelivery[] = [];
+    const quarantined: string[] = [];
     for (const candidate of candidates) {
       const turnId = String(candidate.turn_id);
       const currentOutbox = requireOutboxRecord(store, turnId);
@@ -2848,7 +2927,21 @@ export function drainBackendTurnOutbox(
       const payload = backendTurnPayload(turn);
       const payloadHash = backendTurnPayloadHash(payload);
       if (payloadHash !== currentOutbox.payloadHash) {
-        throw new Error("Backend turn outbox revision does not match the canonical journal turn");
+        // Fail closed on a divergence from the canonical turn — but quarantine
+        // this one row instead of throwing. Throwing aborts the whole batch
+        // transaction, so the 1s outbox pump re-selects the same poisoned row
+        // forever, wedging delivery for every turn (observed as an app-wide
+        // stall that persists across restarts because the row is durable).
+        // Parking to 'failed' excludes it from future selection; a later
+        // `updateJournalTurn` re-stamps the hash and re-arms it to 'pending'.
+        store.execute(
+          `UPDATE backend_turn_outbox
+           SET status = 'failed', last_error_code = ?, lease_expires_at_ms = NULL, updated_at_ms = ?
+           WHERE turn_id = ?`,
+          [OUTBOX_CANONICAL_HASH_MISMATCH_CODE, now, turnId],
+        );
+        quarantined.push(turnId);
+        continue;
       }
       const journalState = requireJournalState(store, currentOutbox.conversationId);
       store.execute(
@@ -2862,6 +2955,9 @@ export function drainBackendTurnOutbox(
       );
       const outbox = requireOutboxRecord(store, turnId);
       deliveries.push({ ...outbox, clientMessageId: turnId, turn, payload });
+    }
+    if (input.onQuarantine) {
+      for (const turnId of quarantined) input.onQuarantine(turnId);
     }
     return deliveries;
   });

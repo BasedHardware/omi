@@ -26,6 +26,13 @@ import 'package:omi/utils/wal_file_manager.dart';
 const _kBackendBusyErrorHint = 'background worker likely died';
 const _freshSyncCutoffSeconds = 6 * 60 * 60;
 
+/// Files per upload batch, the same for both lanes. The lanes exist to keep
+/// rate-limit domains separate — a backfill cooldown must not stall a freshly
+/// captured recording — not to throttle throughput. Draining a backlog a few
+/// files at a time made offline recovery needlessly slow; the backend caps part
+/// size (200 MB), not file count.
+const _syncUploadBatchLimit = 20;
+
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
 
 /// The shared WAL acknowledgement boundary for async sync jobs.
@@ -50,8 +57,8 @@ bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
 
 SyncUploadLane syncUploadLaneForTimestamp(int captureSeconds, int nowSeconds, {required bool hasServerCaptureProof}) =>
     hasServerCaptureProof && nowSeconds - captureSeconds <= _freshSyncCutoffSeconds
-        ? SyncUploadLane.fresh
-        : SyncUploadLane.backfill;
+    ? SyncUploadLane.fresh
+    : SyncUploadLane.backfill;
 
 SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) =>
     syncUploadLaneForTimestamp(wal.timerStart, nowSeconds, hasServerCaptureProof: wal.conversationId != null);
@@ -75,8 +82,8 @@ List<Wal> nextSyncUploadBatch(
 }) {
   SyncUploadLane effectiveLane(Wal wal) =>
       wal.conversationId != null && forcedBackfillConversationIds.contains(wal.conversationId)
-          ? SyncUploadLane.backfill
-          : _syncLaneForWal(wal, nowSeconds);
+      ? SyncUploadLane.backfill
+      : _syncLaneForWal(wal, nowSeconds);
 
   final ordered = List<Wal>.from(pending)
     ..sort((a, b) {
@@ -87,10 +94,9 @@ List<Wal> nextSyncUploadBatch(
   if (ordered.isEmpty) return const [];
   final lane = effectiveLane(ordered.first);
   final conversationId = ordered.first.conversationId;
-  final batchLimit = lane == SyncUploadLane.fresh ? 20 : 3;
   return ordered
       .where((wal) => effectiveLane(wal) == lane && wal.conversationId == conversationId)
-      .take(batchLimit)
+      .take(_syncUploadBatchLimit)
       .toList();
 }
 
@@ -662,8 +668,8 @@ class LocalWalSyncImpl implements LocalWalSync {
       forcedBackfillConversationIds.addAll(oversizedFreshConversationIds(candidates, batchNowSeconds));
       SyncUploadLane effectiveLane(Wal wal) =>
           wal.conversationId != null && forcedBackfillConversationIds.contains(wal.conversationId)
-              ? SyncUploadLane.backfill
-              : _syncLaneForWal(wal, batchNowSeconds);
+          ? SyncUploadLane.backfill
+          : _syncLaneForWal(wal, batchNowSeconds);
       final pending = candidates
           .where(
             (wal) =>
@@ -681,8 +687,8 @@ class LocalWalSyncImpl implements LocalWalSync {
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchLane =
           batch.first.conversationId != null && forcedBackfillConversationIds.contains(batch.first.conversationId)
-              ? SyncUploadLane.backfill
-              : _syncLaneForWal(batch.first, batchNowSeconds);
+          ? SyncUploadLane.backfill
+          : _syncLaneForWal(batch.first, batchNowSeconds);
       if (_isCancelled) {
         Logger.debug("LocalWalSync: Upload cancelled");
         DebugLogManager.logWarning('Local upload cancelled', {

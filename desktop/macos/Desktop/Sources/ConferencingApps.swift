@@ -146,6 +146,63 @@ enum ConferencingApps {
     return false
   }
 
+  // MARK: - Active outgoing screen share detection
+
+  /// True if a single window — identified by owner app and title — is a share-indicator
+  /// window: the floating toolbar/status chrome a conferencing app shows **only while the
+  /// user is actively sharing their screen** in a call.
+  ///
+  /// Known signatures (window names are internal identifiers, not localized UI strings,
+  /// except the browser bubble which is English-locale best effort):
+  /// - Zoom: "zoom share statusbar window" / "zoom share toolbar window" floating controls
+  /// - Microsoft Teams: "Screen sharing toolbar" window while presenting
+  /// - Browsers (Google Meet / Teams web): the "<site> is sharing your screen/a tab/a window"
+  ///   stop-sharing bubble window
+  static func isShareIndicatorWindow(ownerName: String?, title: String?) -> Bool {
+    guard let ownerName = ownerName, let title = title, !title.isEmpty else { return false }
+    let lowerTitle = title.lowercased()
+
+    if ownerName == "zoom.us" {
+      return lowerTitle.contains("zoom share")
+    }
+
+    if ownerName.contains("Microsoft Teams") || ownerName == "MSTeams" {
+      return lowerTitle.contains("sharing toolbar")
+    }
+
+    if browserApps.contains(ownerName) {
+      return lowerTitle.contains("is sharing your screen")
+        || lowerTitle.contains("is sharing a tab")
+        || lowerTitle.contains("is sharing a window")
+    }
+
+    return false
+  }
+
+  /// True if any on-screen window indicates an active outgoing screen share (the user is
+  /// presenting in Zoom/Teams/Meet/etc.). Window titles require Screen Recording permission;
+  /// without it only windows with readable names are considered.
+  ///
+  /// Used to pause Omi's periodic capture: a one-shot ScreenCaptureKit capture while another
+  /// app streams the screen contends in WindowServer capture arbitration and has been observed
+  /// to stop the other app's share (issue #10143).
+  static func activeScreenSharePresent() -> Bool {
+    guard
+      let windows = CGWindowListCopyWindowInfo(
+        [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+    else {
+      return false
+    }
+    for window in windows {
+      let owner = window[kCGWindowOwnerName as String] as? String
+      let title = window[kCGWindowName as String] as? String
+      if isShareIndicatorWindow(ownerName: owner, title: title) {
+        return true
+      }
+    }
+    return false
+  }
+
   // MARK: - CoreAudio process API (macOS 14.4+) — microphone-in-use detection
 
   @available(macOS 14.4, *)

@@ -1467,7 +1467,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get payYourSttProvider => 'Bruk omi fritt. Du betaler bare STT-leverandøren direkte.';
 
   @override
-  String get freeMinutesMonth => '1 200 gratis minutter/måned inkludert. Ubegrenset med ';
+  String get freeMinutesMonth => '300 gratis minutter/måned inkludert. Ubegrenset med ';
 
   @override
   String get omiUnlimited => 'Omi Ubegrenset';
@@ -1789,20 +1789,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Liker du Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Hjelp oss med å nå flere personer ved å legge igjen en anmeldelse i App Store. Tilbakemeldingen din betyr alt for oss!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Hjelp oss med å nå flere personer ved å legge igjen en anmeldelse i Google Play Store. Tilbakemeldingen din betyr alt for oss!';
-
-  @override
-  String get rateOnAppStore => 'Vurder i App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Vurder i Google Play';
 
   @override
   String get maybeLater => 'Kanskje senere';
@@ -2137,6 +2123,18 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Rediger minne';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Jeg liker å spise iskrem...';
@@ -4710,7 +4708,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ingen spesifikk datatilgang konfigurert.';
 
   @override
-  String get basicPlanDescription => '1 200 premium minutter + ubegrenset on-device';
+  String get basicPlanDescription => '300 premium minutter + ubegrenset on-device';
 
   @override
   String get minutes => 'minutter';
@@ -9605,10 +9603,10 @@ class AppLocalizationsNo extends AppLocalizations {
       'Dataene dine er som standard sikret med sterk kryptering, og du bestemmer hvordan de lagres og brukes.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Nøyaktighet';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Basis';
 
   @override
   String get cloudTranscription => 'Skytranskribering';
@@ -9617,52 +9615,52 @@ class AppLocalizationsNo extends AppLocalizations {
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Slett modell';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Er du sikker på at du vil slette denne modellen?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Lastet ned';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Raskere';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Automatisk';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Høyere';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Stor';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Lavere';
 
   @override
   String get whisperModelSizeMedium => 'Medium';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Modellen er slettet';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Nedlasting av modell mislyktes';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Kunne ikke laste ned Whisper-modellen. Prøv igjen.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Modellen er lastet ned';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper-modellen ble lastet ned';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Modellstørrelse';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Ingen';
 
   @override
   String get onDeviceTranscription => 'Transkribering på enheten';
@@ -9671,10 +9669,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get onDeviceTranscriptionDesc => 'Transkribering behandles lokalt på enheten din';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Tregere';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Liten';
 
   @override
   String get sttProviderSoniox => 'Soniox';
@@ -9689,10 +9687,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Hastighet';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Veldig liten';
 
   @override
   String get transcriptionLanguage => 'Transkriberingsspråk';
@@ -9707,49 +9705,69 @@ class AppLocalizationsNo extends AppLocalizations {
   String get whisperModelDesc => 'Velg modell for transkribering på enheten';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Nedgradere til gratisplanen?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Du vil oppleve disse begrensningene:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7x høyere batteriforbruk';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '30 % dårligere transkriberingskvalitet';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5–7 sekunders forsinkelse';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Kan ikke identifisere talere';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Nedgrader likevel';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google-kalender ikke tilkoblet';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Koble til Google-kalenderen din for å knytte samtaler til kalenderhendelser.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Koblet til «$title»';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Kunne ikke koble til kalenderhendelsen';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Takk for tilbakemeldingen!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Kopier melding';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Søk i innstillinger…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Kunne ikke laste inn lyden';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Velg Ray-Ban Meta-mikrofonen';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Velg Bluetooth-mikrofonen til brillene. Musikken settes på pause mens Omi bruker den.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Fant ingen Bluetooth-mikrofoner. Koble til brillene i iPhone-innstillingene, og prøv igjen.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth-mikrofonene kunne ikke lastes inn. Kontroller at Bluetooth er på, og prøv igjen.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Kunne ikke koble til mikrofonen. Sørg for at den er tilkoblet i iPhone-innstillingene.';
 }

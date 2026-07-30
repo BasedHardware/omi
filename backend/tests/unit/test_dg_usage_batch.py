@@ -106,13 +106,17 @@ class TestDgUsageBatchingStructure:
         assert len(resets) == 1, f'Expected one shared reset point, found {len(resets)}'
 
     def test_flush_before_custom_stt_guard(self):
-        """DG flush must happen before use_custom_stt:continue guard."""
+        """DG flush must happen before use_custom_stt early-return guard."""
         source = _read_listen_source('runtime')
         flush_start = source.find('async def _flush_usage(')
         flush_end = source.find('    async def _start_pusher', flush_start)
         flush_body = source[flush_start:flush_end]
         flush_pos = flush_body.find('record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending')
-        guard_pos = flush_body.find('if self.use_custom_stt or not self.state.last_usage_record_timestamp:')
+        # PR #7690 split the compound guard into a standalone custom-STT
+        # early-return (with its own isolated fair-use lane) followed by the
+        # last_usage_record_timestamp check.  The invariant is unchanged: the
+        # DG accumulator flush must precede the custom-STT exit path.
+        guard_pos = flush_body.find('if self.use_custom_stt:')
         assert flush_pos != -1, 'DG flush call not found'
         assert guard_pos != -1, 'use_custom_stt guard not found'
         assert flush_pos < guard_pos, 'DG flush must be before use_custom_stt guard'

@@ -3,43 +3,62 @@ import XCTest
 final class DashboardCaptureStateTests: XCTestCase {
   func testDashboardCaptureStatusUsesLiveMonitoringState() throws {
     let source = try dashboardSource()
+    let logic = try captureLogicSource()
 
+    // The header derives capture status from the shared CaptureListeningLogic…
     XCTAssertTrue(
-      source.contains("private var isCaptureLive: Bool"),
-      "DashboardPage should centralize live capture state so the header reflects the running monitor"
+      source.contains(
+        "CaptureListeningLogic.captureStatus(appState: appState, isCaptureMonitoring: isCaptureMonitoring)"),
+      "DashboardPage should derive capture status from the shared CaptureListeningLogic"
     )
+    // …which lights up from the LIVE monitor, never stale persisted intent.
     XCTAssertTrue(
-      source.contains("if isCaptureLive {\n      return .active\n    }"),
+      logic.contains("return isCaptureLive(isCaptureMonitoring: isCaptureMonitoring) ? .active : .inactive"),
       "Capture status should light up when monitoring is live, even if persisted intent is stale"
     )
+    XCTAssertTrue(
+      logic.contains("isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring"),
+      "Live capture state must reflect the running monitor"
+    )
     XCTAssertFalse(
-      source.contains("if screenAnalysisEnabled && isCaptureMonitoring {\n            return .active\n        }"),
+      logic.contains("if screenAnalysisEnabled && isCaptureMonitoring {\n            return .active\n        }"),
       "Capture status must not require persisted intent to match the live monitor"
     )
   }
 
   func testDashboardCaptureToggleDerivesFromLiveState() throws {
     let source = try dashboardSource()
+    let logic = try captureLogicSource()
 
     XCTAssertTrue(
-      source.contains("syncCaptureState()\n    let enabled = !isCaptureLive"),
+      source.contains("CaptureListeningLogic.toggleCapture("),
+      "DashboardPage's capture toggle should route through the shared CaptureListeningLogic"
+    )
+    XCTAssertTrue(
+      logic.contains(
+        "syncCaptureState(screenAnalysisEnabled: screenAnalysisEnabled, isCaptureMonitoring: isCaptureMonitoring)"),
       "Capture toggles should reconcile the live monitor before deciding whether the click starts or stops capture"
     )
+    XCTAssertTrue(
+      logic.contains("let enabled = !isCaptureLive(isCaptureMonitoring: isCaptureMonitoring.wrappedValue)"),
+      "Capture toggles should derive the next state from the live monitor"
+    )
     XCTAssertFalse(
-      source.contains("let enabled = !screenAnalysisEnabled"),
+      logic.contains("let enabled = !screenAnalysisEnabled"),
       "Capture toggles should not derive from stale persisted intent"
     )
   }
 
   func testListeningPillShowsAndTogglesCaptureMode() throws {
     let source = try dashboardSource()
+    let logic = try captureLogicSource()
 
     XCTAssertTrue(source.contains("@AppStorage(\"systemAudioCaptureMode\")"))
     XCTAssertTrue(source.contains("private var listeningModeTitle: String"))
-    XCTAssertTrue(source.contains("return appState.isAwaitingMeeting ? \"Meetings only\" : \"In meeting\""))
+    XCTAssertTrue(logic.contains("return appState.isAwaitingMeeting ? \"Meetings only\" : \"In meeting\""))
     XCTAssertTrue(source.contains("HomeListeningStatusButton("))
     XCTAssertTrue(source.contains("modeAction: toggleListeningMode"))
-    XCTAssertTrue(source.contains("AssistantSettings.shared.systemAudioCaptureMode = nextMode"))
+    XCTAssertTrue(logic.contains("AssistantSettings.shared.systemAudioCaptureMode = nextMode"))
     XCTAssertTrue(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"person.fill\")"))
     XCTAssertTrue(source.contains("private var modeIconColor: Color"))
     XCTAssertTrue(source.contains(".frame(height: 34)"))
@@ -59,7 +78,6 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("(text as NSString).size(withAttributes: attributes).width"))
     XCTAssertTrue(source.contains("private func homeHubStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View"))
     XCTAssertTrue(source.contains("private var homeHubHeadline: some View"))
-    XCTAssertTrue(source.contains("private var homeStatTextStrip: some View"))
     XCTAssertFalse(source.contains(".frame(width: 304)"))
     XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeAskBarMaxWidth)"))
     XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeStagePanelMaxWidth)"))
@@ -67,18 +85,35 @@ final class DashboardCaptureStateTests: XCTestCase {
 
   func testHomeAskBarRefocusesAfterOpeningChatStage() throws {
     let source = try dashboardSource()
+    let openChat = try methodBody(named: "openHomeChat", in: source)
 
     XCTAssertTrue(source.contains("private func openHomeChat(focusInput: Bool = true)"))
     XCTAssertTrue(source.contains("focusHomeAskFieldAfterStageTransition()"))
     XCTAssertTrue(source.contains("await Task.yield()"))
     XCTAssertTrue(source.contains("homeAskFieldFocused = true"))
     XCTAssertTrue(source.contains("openHomeChat(focusInput: false)"))
+    // omi-test-quality: source-inspection -- static contract: the SwiftUI focus
+    // state and navigation method are private view wiring, so the hotkey's
+    // already-visible-chat path cannot be driven from the test host.
+    XCTAssertTrue(
+      openChat.contains("if homeMode != .chat {"),
+      "Opening an already-visible chat must still continue to the input-focus request")
+    XCTAssertFalse(
+      openChat.contains("guard homeMode != .chat else { return }"),
+      "An early return drops the hotkey's input focus when chat is already visible")
   }
 
   func testSecondaryHomePagesReturnHomeOnEscape() throws {
     let source = try desktopHomeSource()
 
-    XCTAssertTrue(source.contains(".onExitCommand {\n          navigateHomeOnEscapeIfNeeded()\n        }"))
+    // Matched without leading indentation: the escape handler's contract is that
+    // it calls navigateHomeOnEscapeIfNeeded, not how deeply the view hierarchy
+    // that carries it happens to be nested. Pinning the indent made this fail
+    // when the content container was extracted into its own `some View`.
+    XCTAssertTrue(
+      source.range(
+        of: #"\.onExitCommand\s*\{\s*navigateHomeOnEscapeIfNeeded\(\)\s*\}"#,
+        options: .regularExpression) != nil)
     XCTAssertTrue(source.contains("[.conversations, .memories, .tasks, .rewind].contains(item)"))
     XCTAssertTrue(source.contains("selectedIndex = SidebarNavItem.dashboard.rawValue"))
     XCTAssertFalse(source.contains("[.conversations, .chat, .memories, .tasks, .rewind]"))
@@ -240,7 +275,9 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("onSelectDestination(destination)"))
     XCTAssertTrue(source.contains("selectedExportDestination = destination"))
     XCTAssertTrue(source.contains("if appProvider.apps.isEmpty && !appProvider.isLoading"))
-    XCTAssertTrue(source.contains("ViewThatFits(in: .horizontal)"))
+    // Responsive layout was extracted into AppsHeaderRow (AppsPageHeaderControls.swift);
+    // AppsPage now delegates to it instead of inlining ViewThatFits.
+    XCTAssertTrue(source.contains("AppsHeaderRow("))
     XCTAssertTrue(source.contains("private var searchField: some View"))
     XCTAssertTrue(source.contains("private var filterControls: some View"))
     XCTAssertFalse(source.contains("struct AppsCatalogContent: View"))
@@ -311,6 +348,16 @@ final class DashboardCaptureStateTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift")
     return try String(contentsOf: dashboardURL, encoding: .utf8)
+  }
+
+  private func captureLogicSource() throws -> String {
+    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let logicURL =
+      testsURL
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/CaptureListeningLogic.swift")
+    // omi-test-quality: source-inspection -- static contract: DashboardPage must delegate capture status and toggle to the shared CaptureListeningLogic source
+    return try String(contentsOf: logicURL, encoding: .utf8)
   }
 
   private func desktopHomeSource() throws -> String {

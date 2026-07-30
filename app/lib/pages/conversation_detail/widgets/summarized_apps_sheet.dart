@@ -647,7 +647,8 @@ class _AppListItemState extends State<_AppListItem> {
 
   Widget _buildTrailingWidget() {
     // Check if this app is currently being processed
-    final isProcessing = widget.provider != null &&
+    final isProcessing =
+        widget.provider != null &&
         widget.provider!.loadingReprocessConversation &&
         widget.provider!.selectedAppForReprocessing?.id == widget.app.id;
 
@@ -706,7 +707,7 @@ class _CreateTemplateListItem extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: CircleAvatar(
+          leading: const CircleAvatar(
             backgroundColor: Colors.white,
             radius: 16,
             child: FaIcon(FontAwesomeIcons.plus, color: Colors.black, size: 18),
@@ -743,7 +744,7 @@ class _EnableAppsListItem extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: CircleAvatar(
+          leading: const CircleAvatar(
             backgroundColor: Colors.white,
             radius: 16,
             child: FaIcon(FontAwesomeIcons.solidFolderOpen, color: Colors.black, size: 14),

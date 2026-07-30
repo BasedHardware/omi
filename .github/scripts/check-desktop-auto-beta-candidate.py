@@ -60,6 +60,7 @@ def _validate_smoke_contract(
     release_tag: str,
     expected_version: str,
     expected_build: str,
+    expected_source_sha: str,
     label: str,
 ) -> set[str]:
     """Enforce the shared success/tag/version/build/team/channel contract on a
@@ -77,6 +78,12 @@ def _validate_smoke_contract(
     for field, value in expected.items():
         if smoke.get(field) != value:
             fail(f"{label} smoke result {field} mismatch: expected {value!r}, got {smoke.get(field)!r}")
+
+    smoke_source_sha = smoke.get("source_sha")
+    if not isinstance(smoke_source_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", smoke_source_sha):
+        fail(f"{label} smoke result is missing an exact source SHA")
+    if smoke_source_sha != expected_source_sha:
+        fail(f"{label} smoke source SHA does not match the candidate tag")
 
     checks = set(smoke.get("checks") or [])
     missing_checks = sorted(REQUIRED_SMOKE_CHECKS - checks)
@@ -121,6 +128,11 @@ def validate(args: argparse.Namespace) -> dict:
 
     release = load_json(args.release_json)
     smoke = load_json(args.smoke_result)
+    smoke_source_sha = smoke.get("source_sha")
+    if not isinstance(smoke_source_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", smoke_source_sha):
+        fail("signed smoke result is missing an exact source SHA")
+    if smoke_source_sha != args.tag_sha:
+        fail("signed smoke source SHA does not match the candidate tag")
     if release.get("tagName") != args.release_tag:
         fail("GitHub release tag does not match the requested candidate")
     if release.get("isDraft") or release.get("isPrerelease"):
@@ -139,13 +151,14 @@ def validate(args: argparse.Namespace) -> dict:
         release_tag=args.release_tag,
         expected_version=expected_version,
         expected_build=expected_build,
+        expected_source_sha=args.tag_sha,
         label="signed",
     )
 
     callback_canary = smoke.get("notification_callback_canary")
 
     zip_release = asset_by_name(release, {"Omi.zip"})
-    dmg_release = asset_by_name(release, {"Omi.dmg", "omi.dmg"})
+    dmg_release = asset_by_name(release, {"omi.dmg"})
     zip_smoke = smoke_artifact(smoke, "sparkle_zip")
     dmg_smoke = smoke_artifact(smoke, "dmg")
     artifact_digests = {
@@ -171,6 +184,7 @@ def validate(args: argparse.Namespace) -> dict:
             release_tag=args.release_tag,
             expected_version=expected_version,
             expected_build=expected_build,
+            expected_source_sha=args.tag_sha,
             label="beta",
         )
         beta_zip_release = asset_by_name(release, {"Omi.Beta.zip"})
@@ -188,7 +202,7 @@ def validate(args: argparse.Namespace) -> dict:
         "passed": True,
         "gate": "desktop-auto-beta-candidate-v1",
         "release_tag": args.release_tag,
-        "source_sha": args.tag_sha,
+        "source_sha": smoke_source_sha,
         "verified_at": datetime.now(timezone.utc).isoformat(),
         "artifact_digests": artifact_digests,
         "signed_smoke_checks": sorted(checks),

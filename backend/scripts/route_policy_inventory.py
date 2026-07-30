@@ -48,6 +48,7 @@ AUTH_MECHANISMS = {
     'public',
     'firebase_id_token',
     'admin_key',
+    'beta_promotion_token',
     'desktop_preview_publish_key',
     'admin_key_uid_prefix',
     'developer_api_key',

@@ -43,7 +43,7 @@ Starts the Windows desktop app from source using the public config in `.env.exam
 
 > **Requirements:** [Node.js](https://nodejs.org/)
 
-For development worktrees, run the cheap local setup once:
+For development worktrees, run the baseline local setup once. It installs the Git hooks and syncs the pinned backend Python environment used by selected pre-push checks; mobile and desktop runtime environments remain opt-in.
 
 ```bash
 make setup
@@ -58,7 +58,7 @@ For local development with the full backend stack:
 
 ```bash
 xcode-select --install
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+uv --version
 ```
 
 2. Clone and configure
@@ -66,7 +66,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```bash
 git clone https://github.com/BasedHardware/omi.git
 cd omi/desktop/macos
-cp Backend-Rust/.env.example Backend-Rust/.env
+cp ../../backend/.env.example ../../backend/.env
 ```
 
 3. Build and run
@@ -106,7 +106,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 │                                                         │
 │  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
 │  │ Omi      │  │ macOS App    │  │ Mobile App        │  │
-│  │ Wearable │  │ (Swift/Rust) │  │ (Flutter)         │  │
+│  │ Wearable │  │ (Swift/Python) │  │ (Flutter)         │  │
 │  └────┬─────┘  └──────┬───────┘  └────────┬──────────┘  │
 │       │    BLE         │   HTTPS/WS        │             │
 └───────┼────────────────┼───────────────────┼─────────────┘
@@ -129,7 +129,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 | Component | Path | Stack |
 |-----------|------|-------|
-| **macOS app** | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Rust backend |
+| **macOS app** | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Python desktop backend |
 | Mobile app | [`app/`](app/) | Flutter (iOS & Android) |
 | Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
 | Firmware | [`omi/`](omi/) | nRF, Zephyr, C |

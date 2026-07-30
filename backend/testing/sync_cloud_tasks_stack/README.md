@@ -59,7 +59,10 @@ Scenarios cover:
 8. a lost create-task acknowledgement converges through named-task
    `AlreadyExists`, never falls back inline, and later completes; and
 9. a missing staged blob follows the real expired-input failure path without
-   invoking STT.
+   invoking STT; and
+10. a lifecycle-fenced processor result is terminally acknowledged, releases
+    its exact backfill slot, and keeps duplicate delivery from re-running the
+    provider pipeline.
 
 Only external/provider leaves are replaced: Cloud Storage is local filesystem
 storage, Cloud Tasks is the local strict recorder, Google OIDC verification
@@ -70,7 +73,8 @@ fair-use metering, status polling, and conversation persistence.
 
 It does not prove real GCS, Cloud Tasks IAM/control-plane delivery,
 Google-signed OIDC tokens, production VAD/STT/LLM quality, BYOK, or backfill
-behavior. Those are distinct provider or product surfaces. With `--keep`, the
+admission and queue configuration. Those are distinct provider or product
+surfaces. With `--keep`, the
 runner retains process logs, local staged files, and sanitized JSONL evidence;
 evidence contains metadata only and rejects test UID/transcript sentinels. A
 caller-supplied `--state-dir` is always preserved as well; relative paths are

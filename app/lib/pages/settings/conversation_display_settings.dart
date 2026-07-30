@@ -184,7 +184,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
         backgroundColor: const Color(0xFF000000),
         elevation: 0,
         leading: IconButton(
-          icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+          icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(

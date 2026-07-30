@@ -148,6 +148,41 @@ def test_processing_upsert_preserves_every_user_owned_field(monkeypatch):
     assert written['status'] == 'completed'
 
 
+def test_processing_upsert_fills_user_fields_the_stub_left_null(monkeypatch):
+    """Regression: the in-progress stub written at transcribe time dumps
+    folder_id/user_title as None. A null existing value means "never user-set"
+    and must not revert the AI folder assignment made during processing."""
+    existing = {
+        'id': 'conversation-1',
+        'structured': {'title': 'In progress'},
+        'starred': False,
+        'folder_id': None,
+        'visibility': 'private',
+        'user_title': None,
+        'data_protection_level': 'standard',
+    }
+    ref = _ConversationRef(_Snapshot(existing))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    incoming = {
+        'id': 'conversation-1',
+        'structured': {'title': 'Generated title'},
+        'folder_id': 'ai-assigned-folder',
+        'status': 'completed',
+        'data_protection_level': 'standard',
+    }
+
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
+
+    written, options = ref.set_calls[0]
+    assert options == {'merge': True}
+    assert written['folder_id'] == 'ai-assigned-folder'
+    # Non-null user-owned values are still preserved.
+    assert written['starred'] is False
+    assert written['visibility'] == 'private'
+    assert written['structured']['title'] == 'Generated title'
+
+
 def test_first_processing_write_still_creates_complete_document(monkeypatch):
     ref = _ConversationRef(_Snapshot(None, exists=False))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
@@ -328,3 +363,96 @@ def test_segment_text_edit_missing_conversation_returns_not_found(monkeypatch):
 
     assert result == 'not_found'
     assert ref.update_calls == []
+
+
+def test_processing_upsert_preserves_explicit_user_unfile_on_completed_conversation(monkeypatch):
+    """Regression (PR review): a user can explicitly move a conversation to no
+    folder (PATCH /v1/conversations/{id}/folder with folder_id null). That
+    write stamps folder_user_set, so the explicit-null state is user-owned and
+    must not be overwritten by an AI folder assignment replayed by upsert."""
+    existing = {
+        'id': 'conversation-1',
+        'structured': {'title': 'My title'},
+        'starred': False,
+        'folder_id': None,
+        'folder_user_set': True,
+        'visibility': 'private',
+        'status': 'completed',
+        'data_protection_level': 'standard',
+    }
+    ref = _ConversationRef(_Snapshot(existing))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    incoming = {
+        'id': 'conversation-1',
+        'structured': {'title': 'Generated title'},
+        'folder_id': 'ai-assigned-folder',
+        'status': 'completed',
+        'data_protection_level': 'standard',
+    }
+
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
+
+    written, options = ref.set_calls[0]
+    assert options == {'merge': True}
+    assert written['folder_id'] is None
+
+
+def test_processing_upsert_preserves_unfile_raced_against_in_flight_processing(monkeypatch):
+    """Regression (PR review): the user clears the folder while processing is
+    still in flight — the stored doc is still the in-progress stub, but the
+    folder_user_set marker makes the explicit null win over the AI assignment.
+    A status-based guard would miss this case; the marker must not."""
+    existing = {
+        'id': 'conversation-1',
+        'structured': {'title': 'In progress'},
+        'folder_id': None,
+        'folder_user_set': True,
+        'visibility': 'private',
+        'status': 'in_progress',
+        'data_protection_level': 'standard',
+    }
+    ref = _ConversationRef(_Snapshot(existing))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    incoming = {
+        'id': 'conversation-1',
+        'structured': {'title': 'Generated title'},
+        'folder_id': 'ai-assigned-folder',
+        'status': 'completed',
+        'data_protection_level': 'standard',
+    }
+
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
+
+    written, options = ref.set_calls[0]
+    assert options == {'merge': True}
+    assert written['folder_id'] is None
+
+
+def test_processing_upsert_still_fills_stub_null_when_user_never_touched_folder(monkeypatch):
+    """The original fix stays intact: without folder_user_set, a stub's null
+    folder_id is "never user-set" and the AI assignment wins."""
+    existing = {
+        'id': 'conversation-1',
+        'structured': {'title': 'In progress'},
+        'folder_id': None,
+        'visibility': 'private',
+        'status': 'in_progress',
+        'data_protection_level': 'standard',
+    }
+    ref = _ConversationRef(_Snapshot(existing))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    incoming = {
+        'id': 'conversation-1',
+        'structured': {'title': 'Generated title'},
+        'folder_id': 'ai-assigned-folder',
+        'status': 'completed',
+        'data_protection_level': 'standard',
+    }
+
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
+
+    written, _ = ref.set_calls[0]
+    assert written['folder_id'] == 'ai-assigned-folder'

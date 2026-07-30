@@ -1483,7 +1483,7 @@
     "exportConfiguration": "Izvezi konfiguraciju",
     "bringYourOwn": "Dovedite svoje",
     "payYourSttProvider": "Slobodno koristi omi. Plaćate samo vašem STT dobavljaču direktno.",
-    "freeMinutesMonth": "1.200 besplatnih minuta/mesec uključeno. Neograničeno sa ",
+    "freeMinutesMonth": "300 besplatnih minuta/mesec uključeno. Neograničeno sa ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Domaćin je obavezan",
     "validPortRequired": "Validan port je obavezan",
@@ -1698,22 +1698,6 @@
     "lovingOmi": "Vam se sviđa Omi?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "Pomozite nam da dosegnemo više ljudi ostavljanjem recenzije u App Store-u. Vaša povratna informacija znači nam sve!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Pomozite nam da dosegnemo više ljudi ostavljanjem recenzije u Google Play Store-u. Vaša povratna informacija znači nam sve!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Oceni u App Store-u",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Oceni na Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "Možda kasnije",
     "@maybeLater": {
@@ -5506,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1.200 premium minuta + neograničeno na uređaju",
+    "basicPlanDescription": "300 premium minuta + neograničeno na uređaju",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7281,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1.200 premium minuta/mjesec. Kartaca na uređaju nudi neограничenu besplatnu transkripciju.",
+    "premiumMinutesInfo": "300 premium minuta/mjesec. Kartaca na uređaju nudi neограничenu besplatnu transkripciju.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1.200 premium minuta/mjesec. Kartaca na uređaju nudi neograničenu besplatnu transkripciju. ",
+    "premiumMinutesMonth": "300 premium minuta/mjesec. Kartaca na uređaju nudi neograničenu besplatnu transkripciju. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10728,5 +10712,59 @@
     "deviceStorageFree": "{free} slobodno",
     "deviceStorageNearlyFull": "Uređaj je gotovo pun — sinkronizirajte da oslobodite prostor.",
     "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Bit će transkribirano kada ponovo budete na mreži.",
-    "dataEncryptedBanner": "Vaši podaci su prema zadanim postavkama zaštićeni jakom enkripcijom, a vi kontrolišete kako se pohranjuju i koriste."
+    "dataEncryptedBanner": "Vaši podaci su prema zadanim postavkama zaštićeni jakom enkripcijom, a vi kontrolišete kako se pohranjuju i koriste.",
+    "rayBanMetaMicPickerTitle": "Odaberite Ray-Ban Meta mikrofon",
+    "rayBanMetaMicPickerDescription": "Odaberite Bluetooth mikrofon svojih naočala. Muzika se pauzira dok ga Omi koristi.",
+    "rayBanMetaMicPickerEmpty": "Nije pronađen nijedan Bluetooth mikrofon. Povežite naočale u postavkama iPhonea pa pokušajte ponovo.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth mikrofoni se nisu mogli učitati. Provjerite je li Bluetooth uključen pa pokušajte ponovo.",
+    "rayBanMetaMicPickerConnectError": "Povezivanje s tim mikrofonom nije uspjelo. Provjerite je li povezan u postavkama iPhonea.",
+    "cloudTranscription": "Transkripcija u oblaku",
+    "copyMessage": "Kopiraj poruku",
+    "deleteOnDeviceModel": "Izbriši model",
+    "deleteOnDeviceModelConfirm": "Jeste li sigurni da želite izbrisati ovaj model?",
+    "downgradeAnyway": "Ipak pređi na niži plan",
+    "downgradeLimitBattery": "7x veća potrošnja baterije",
+    "downgradeLimitDelay": "Kašnjenje od 5-7 sekundi",
+    "downgradeLimitQuality": "30% lošiji kvalitet prepisa",
+    "downgradeLimitSpeakers": "Nije moguće prepoznati govornike",
+    "downgradeLimitationsHeading": "Suočit ćete se sa sljedećim ograničenjima:",
+    "downgradeToFreemiumTitle": "Preći na besplatni plan?",
+    "errorLoadingAudio": "Greška pri učitavanju zvuka",
+    "failedToLinkCalendarEvent": "Povezivanje s događajem u kalendaru nije uspjelo",
+    "googleCalendarConnectPrompt": "Povežite Google Kalendar da biste razgovore povezali s događajima u kalendaru.",
+    "googleCalendarNotConnected": "Google Kalendar nije povezan",
+    "linkedToEvent": "Povezano s „{title}“",
+    "onDeviceModelDeleted": "Model izbrisan",
+    "onDeviceModelDownloadFailed": "Preuzimanje modela nije uspjelo",
+    "onDeviceModelDownloadFailedDesc": "Preuzimanje Whisper modela nije uspjelo. Pokušajte ponovo.",
+    "onDeviceModelDownloadSuccess": "Model preuzet",
+    "onDeviceModelDownloadSuccessDesc": "Whisper model je uspješno preuzet",
+    "onDeviceModelDownloaded": "Preuzeto",
+    "onDeviceModelSize": "Veličina modela",
+    "onDeviceTranscription": "Prepis na uređaju",
+    "onDeviceTranscriptionDesc": "Prepis se obrađuje lokalno na vašem uređaju",
+    "searchSettings": "Pretraži postavke…",
+    "speechToTextProvider": "Pružatelj usluge govor-u-tekst",
+    "speechToTextProviderDesc": "Odaberite uslugu koja se koristi za prepis",
+    "sttFilterAuto": "Automatski",
+    "sttModelAccuracy": "Tačnost",
+    "sttModelFaster": "Brže",
+    "sttModelHigher": "Veća",
+    "sttModelLower": "Manja",
+    "sttModelSlower": "Sporije",
+    "sttModelSpeed": "Brzina",
+    "sttNone": "Nijedan",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "Hvala na povratnoj informaciji!",
+    "transcriptionLanguage": "Jezik prepisa",
+    "transcriptionLanguageDesc": "Odaberite jezik za prepis govora",
+    "whisperModel": "Whisper model",
+    "whisperModelDesc": "Odaberite model za prepis na uređaju",
+    "whisperModelSizeBase": "Osnovni",
+    "whisperModelSizeLarge": "Veliki",
+    "whisperModelSizeMedium": "Srednji",
+    "whisperModelSizeSmall": "Mali",
+    "whisperModelSizeTiny": "Sićušni"
 }

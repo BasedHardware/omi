@@ -286,11 +286,11 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: provider.apiKeys.length,
-      separatorBuilder: (context, index) => SizedBox(height: 12),
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final key = provider.apiKeys[index];
         return Container(
-          decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(10.0)),
+          decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(10.0)),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
             title: Text(key.label, style: const TextStyle(fontWeight: FontWeight.bold)),

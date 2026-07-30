@@ -349,6 +349,14 @@ export interface JournalTerminalizeTurnMessage extends ProtocolEnvelope {
   };
 }
 
+export interface JournalRepairTurnsMessage extends ProtocolEnvelope {
+  type: "journal_repair_turns";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  turnIds: string[];
+}
+
 export function journalTerminalizationDisposition(input: unknown): "accept" | "discard" {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Journal terminalization input must be an object");
@@ -375,6 +383,9 @@ export interface JournalClearTurnsMessage extends ProtocolEnvelope {
   externalRefKind: string;
   externalRefId: string;
   expectedGeneration: number;
+  // When false, purge the local journal only and leave server-side chat history
+  // intact (no backend delete). Defaults to true for the explicit user clear.
+  deleteBackend?: boolean;
 }
 
 /**
@@ -588,6 +599,7 @@ export type InboundMessage =
   | JournalImportRemoteTurnMessage
   | JournalUpdateTurnMessage
   | JournalTerminalizeTurnMessage
+  | JournalRepairTurnsMessage
   | JournalListTurnsMessage
   | JournalClearTurnsMessage
   | AppendChatFirstBlocksMessage
@@ -803,7 +815,7 @@ export interface RuntimeFailurePayload {
 export interface ToolActivityMessage extends QueryScopedOutbound {
   type: "tool_activity";
   name: string;
-  status: "started" | "progress" | "completed" | "failed";
+  status: "started" | "progress" | "completed" | "failed" | "cancelled" | "interrupted";
   toolUseId?: string;
   input?: Record<string, unknown>;
 }
@@ -1041,7 +1053,20 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear" | "append_chat_first_blocks" | "append_chat_first_evidence" | "record_question_interaction_reply" | "materialize_chat_first_intents" | "list_chat_first_materialization_receipts" | "acknowledge_chat_first_materialization_receipts";
+  operation:
+    | "record"
+    | "record_exchange"
+    | "import_remote"
+    | "update"
+    | "repair"
+    | "list"
+    | "clear"
+    | "append_chat_first_blocks"
+    | "append_chat_first_evidence"
+    | "record_question_interaction_reply"
+    | "materialize_chat_first_intents"
+    | "list_chat_first_materialization_receipts"
+    | "acknowledge_chat_first_materialization_receipts";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;

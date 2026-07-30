@@ -3,6 +3,66 @@ import XCTest
 @testable import Omi_Computer
 
 final class RealtimeHubCloseClassifierTests: XCTestCase {
+  func testClassifiesTypedPOSIXAddressFailureWithoutParsingLocalizedText() {
+    let systemError = NSError(
+      domain: NSPOSIXErrorDomain,
+      code: Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue),
+      userInfo: [NSLocalizedDescriptionKey: "locale-dependent text"])
+    let failure = RealtimeHubTransportFailure.system(systemError, phase: .receive)
+
+    XCTAssertEqual(failure.kind, .localAddressUnavailable)
+    XCTAssertEqual(failure.systemDomain, "posix")
+    XCTAssertEqual(failure.systemCode, Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue))
+    XCTAssertEqual(
+      RealtimeHubCloseClassifier.category(
+        failure: failure,
+        aliveFor: 1,
+        provider: .gemini),
+      .localAddressUnavailable)
+    XCTAssertTrue(
+      RealtimeHubCloseClassifier.shouldReportToSentry(.localAddressUnavailable))
+  }
+
+  func testProviderErrorDetailIsLocalOnlyWhileCategoryRemainsActionable() {
+    let failure = RealtimeHubTransportFailure.providerError("raw provider payload")
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 1,
+      provider: .gemini)
+    let plan = RealtimeHubFailureReportingPlan.make(
+      failure: failure,
+      category: category,
+      provider: "gemini",
+      aliveFor: 1,
+      activeTurn: true)
+
+    XCTAssertEqual(category, .providerError)
+    XCTAssertTrue(plan.localMessage.contains("raw provider payload"))
+    XCTAssertFalse(plan.sentryMessage.contains("raw provider payload"))
+  }
+
+  func testUnclassifiedProviderCloseReasonNeverEntersSentryMessage() {
+    let rawReason = "upstream 1011 secret marker"
+    let failure = RealtimeHubTransportFailure.providerClose(code: 1011, reason: rawReason)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 1,
+      provider: .gemini)
+    let plan = RealtimeHubFailureReportingPlan.make(
+      failure: failure,
+      category: category,
+      provider: "gemini",
+      aliveFor: 1,
+      activeTurn: true)
+
+    XCTAssertNil(category)
+    XCTAssertTrue(plan.localMessage.contains(rawReason))
+    XCTAssertEqual(
+      plan.sentryMessage,
+      "RealtimeHub: session error category=unclassified provider=gemini activeTurn=true")
+    XCTAssertFalse(plan.sentryMessage.contains(rawReason))
+  }
+
   func testClassifiesLongLivedWebSocket1008AsExpectedIdleTeardownOnlyWhenIdle() {
     let category = RealtimeHubCloseClassifier.category(
       message: "WebSocket closed (1008)",

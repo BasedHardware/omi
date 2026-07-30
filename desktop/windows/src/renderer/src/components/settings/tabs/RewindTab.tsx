@@ -1,5 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Monitor, Clock, CalendarClock, Ban, Brain, Lightbulb, X, Mic, Trash2 } from 'lucide-react'
+import {
+  Monitor,
+  Clock,
+  CalendarClock,
+  Ban,
+  Brain,
+  Lightbulb,
+  X,
+  Mic,
+  Trash2,
+  Target,
+  ScanText
+} from 'lucide-react'
 import { runScreenSynthesisOnce } from '../../../lib/screenSynthesis'
 import { BUILT_IN_EXCLUDED_APPS } from '../../../../../shared/rewindExclusions'
 import { SettingRow } from '../SettingRow'
@@ -7,8 +19,10 @@ import { Toggle } from '../Toggle'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import type {
   RewindSettings,
+  RewindCaptureQuality,
   ScreenSynthState,
-  InsightSettings
+  InsightSettings,
+  AssistantSettingsView
 } from '../../../../../shared/types'
 
 // Preset cadences offered for proactive insights (minutes). Each run is a Gemini
@@ -19,6 +33,14 @@ export function RewindTab(): React.JSX.Element {
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
   const [screenSynth, setScreenSynth] = useState<ScreenSynthState | null>(null)
   const [insight, setInsight] = useState<InsightSettings | null>(null)
+  // Insight's OTHER gate. `InsightAssistant.isEnabled()` (main/assistants/insight)
+  // also requires a notification to be deliverable — master on AND frequency above
+  // Off — because Insight has no glow, so a run that can't notify is pure wasted
+  // spend. Frequency ships at 0 (Off), so out of the box this row reads "on" while
+  // the pipeline never runs. Read the same flags here to say so.
+  const [assistants, setAssistants] = useState<AssistantSettingsView | null>(null)
+  // "Automatically suggest goals" (Wave C). null until the main-process value loads.
+  const [goalAutoGen, setGoalAutoGen] = useState<boolean | null>(null)
   const [newExcluded, setNewExcluded] = useState('')
   const [continuousRec, setContinuousRec] = useState<boolean>(
     () => !!getPreferences().continuousRecording
@@ -40,7 +62,21 @@ export function RewindTab(): React.JSX.Element {
     void window.omi.rewindGetSettings().then(setRewind)
     void window.omi.screenSynthGetState().then(setScreenSynth)
     void window.omi.insightGetSettings().then(setInsight)
+    void window.omi.goalsGetAutoGeneration().then(setGoalAutoGen)
   }, [])
+
+  // Separate effect: the notifications gate is broadcast (tray checkbox, the
+  // Notifications tab, a future backend sync), so this row has to stay in
+  // lock-step rather than read once on mount.
+  useEffect(() => {
+    void window.omi?.assistantsGetSettings?.().then(setAssistants)
+    return window.omi?.onAssistantSettingsChanged?.(setAssistants)
+  }, [])
+
+  const toggleGoalAutoGen = (on: boolean): void => {
+    setGoalAutoGen(on) // optimistic
+    void window.omi.goalsSetAutoGeneration(on).then(setGoalAutoGen)
+  }
 
   const saveRewind = (next: RewindSettings): void => {
     setRewind(next) // optimistic
@@ -68,6 +104,14 @@ export function RewindTab(): React.JSX.Element {
     setInsight(await window.omi.insightSetSettings(patch))
   }
 
+  // Mirrors notify.ts `notificationsActive`: master on AND frequency above Off.
+  // Null while the settings are still loading — no claim either way until then.
+  const insightsDeliverable =
+    assistants === null
+      ? null
+      : assistants.notificationsEnabled && assistants.notificationFrequency > 0
+  const insightsSilenced = !!insight?.enabled && insightsDeliverable === false
+
   // Snap any legacy / out-of-range interval (e.g. an old 1- or 10-min value) to a
   // valid preset, so the picker (15/20/30/60) and the engine stay in agreement.
   useEffect(() => {
@@ -86,11 +130,7 @@ export function RewindTab(): React.JSX.Element {
         subtitle="Always-on microphone. Omi turns what you hear into conversations automatically."
         keywords="continuous recording microphone audio always-on"
         control={
-          <Toggle
-            on={continuousRec}
-            onChange={toggleContinuous}
-            label="Continuous recording"
-          />
+          <Toggle on={continuousRec} onChange={toggleContinuous} label="Continuous recording" />
         }
       />
       <SettingRow
@@ -138,14 +178,51 @@ export function RewindTab(): React.JSX.Element {
         control={
           <select
             value={rewind?.intervalMs ?? 1000}
-            onChange={(e) => rewind && saveRewind({ ...rewind, intervalMs: Number(e.target.value) })}
+            onChange={(e) =>
+              rewind && saveRewind({ ...rewind, intervalMs: Number(e.target.value) })
+            }
             disabled={!rewind}
             className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-40"
           >
-            <option value={1000} className="bg-neutral-900">Every 1s</option>
-            <option value={2000} className="bg-neutral-900">Every 2s</option>
-            <option value={5000} className="bg-neutral-900">Every 5s</option>
-            <option value={10000} className="bg-neutral-900">Every 10s</option>
+            <option value={1000} className="bg-neutral-900">
+              Every 1s
+            </option>
+            <option value={2000} className="bg-neutral-900">
+              Every 2s
+            </option>
+            <option value={5000} className="bg-neutral-900">
+              Every 5s
+            </option>
+            <option value={10000} className="bg-neutral-900">
+              Every 10s
+            </option>
+          </select>
+        }
+      />
+      <SettingRow
+        icon={ScanText}
+        title="Capture quality"
+        subtitle="Higher quality makes small on-screen text readable (better search and OCR), and uses more CPU and disk."
+        keywords="rewind resolution quality ocr sharpness readable text"
+        control={
+          <select
+            value={rewind?.captureQuality ?? 'standard'}
+            onChange={(e) =>
+              rewind &&
+              saveRewind({ ...rewind, captureQuality: e.target.value as RewindCaptureQuality })
+            }
+            disabled={!rewind}
+            className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-40"
+          >
+            <option value="standard" className="bg-neutral-900">
+              Standard (720p)
+            </option>
+            <option value="high" className="bg-neutral-900">
+              High (1080p)
+            </option>
+            <option value="max" className="bg-neutral-900">
+              Maximum (1440p)
+            </option>
           </select>
         }
       />
@@ -192,7 +269,11 @@ export function RewindTab(): React.JSX.Element {
               placeholder="App name (e.g. Banking)"
               className="flex-1 rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
             />
-            <button onClick={addExcludedApp} disabled={!newExcluded.trim()} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={addExcludedApp}
+              disabled={!newExcluded.trim()}
+              className="btn-ghost disabled:opacity-40"
+            >
               Add
             </button>
           </div>
@@ -251,7 +332,10 @@ export function RewindTab(): React.JSX.Element {
               defaultValue={screenSynth.denylist.join('\n')}
               onBlur={(e) =>
                 void patchScreenSynth({
-                  denylist: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean)
+                  denylist: e.target.value
+                    .split('\n')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
                 })
               }
               className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
@@ -272,10 +356,19 @@ export function RewindTab(): React.JSX.Element {
 
       <SettingRow
         icon={Lightbulb}
-        dot={insight?.enabled ? 'on' : 'off'}
+        dot={insight?.enabled ? (insightsSilenced ? 'warn' : 'on') : 'off'}
         title="Proactive insights"
-        subtitle="Periodically reviews recent screen activity and surfaces a single useful insight (choose the style below). On by default — requires screen capture to be on."
-        keywords="notifications toast gemini suggestion"
+        subtitle="Periodically reviews recent screen activity and surfaces a single useful insight (choose the style below). Requires screen capture, and Notifications turned on with a frequency above Off."
+        keywords="notifications toast gemini suggestion frequency off silenced"
+        note={
+          insightsSilenced ? (
+            <span className="text-xs text-amber-400/90">
+              Notifications are off, so insights never run — a test notification still shows because
+              it bypasses this. Turn Notifications on and raise the frequency above Off in Settings
+              → Notifications.
+            </span>
+          ) : undefined
+        }
         control={
           <Toggle
             on={!!insight?.enabled}
@@ -312,8 +405,12 @@ export function RewindTab(): React.JSX.Element {
                 }
                 className="rounded-md bg-white/10 px-2 py-1.5 text-white focus:outline-none"
               >
-                <option value="omi" className="bg-neutral-900">Omi notification</option>
-                <option value="native" className="bg-neutral-900">Windows notification</option>
+                <option value="omi" className="bg-neutral-900">
+                  Omi notification
+                </option>
+                <option value="native" className="bg-neutral-900">
+                  Windows notification
+                </option>
               </select>
             </label>
             <button onClick={() => window.omi.insightTest()} className="btn-ghost self-start">
@@ -325,7 +422,10 @@ export function RewindTab(): React.JSX.Element {
               defaultValue={insight.denylist.join('\n')}
               onBlur={(e) =>
                 void patchInsight({
-                  denylist: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean)
+                  denylist: e.target.value
+                    .split('\n')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
                 })
               }
               className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
@@ -333,6 +433,22 @@ export function RewindTab(): React.JSX.Element {
           </div>
         )}
       </SettingRow>
+
+      <SettingRow
+        icon={Target}
+        dot={goalAutoGen ? 'on' : 'off'}
+        title="Automatically suggest goals"
+        subtitle="Occasionally reviews your memories, conversations, and tasks on-device and creates a goal it thinks fits you. Off by default; you can always use Suggest on the Goals page."
+        keywords="goals suggest auto generate proactive"
+        control={
+          <Toggle
+            on={!!goalAutoGen}
+            onChange={toggleGoalAutoGen}
+            disabled={goalAutoGen === null}
+            label="Automatically suggest goals"
+          />
+        }
+      />
     </>
   )
 }

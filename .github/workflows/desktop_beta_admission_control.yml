@@ -1,0 +1,110 @@
+name: Control Desktop Beta Admission
+run-name: ${{ inputs.operation }} desktop Beta automation by ${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Enable or disable qualified desktop Beta promotion'
+        required: true
+        type: choice
+        options:
+          - enable
+          - disable
+      confirm:
+        description: 'Type ENABLE BETA AUTOMATION or DISABLE BETA AUTOMATION'
+        required: true
+        type: string
+      reason:
+        description: 'Auditable reason for changing the Beta admission fence'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: desktop-beta-promotion
+  cancel-in-progress: false
+
+jobs:
+  control-beta-admission:
+    environment: prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate explicit Beta admission intent
+        env:
+          OPERATION: ${{ inputs.operation }}
+          CONFIRM: ${{ inputs.confirm }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          case "$OPERATION" in
+            enable)
+              expected='ENABLE BETA AUTOMATION'
+              ;;
+            disable)
+              expected='DISABLE BETA AUTOMATION'
+              ;;
+            *)
+              echo 'ERROR: operation must be enable or disable' >&2
+              exit 1
+              ;;
+          esac
+          [[ "$CONFIRM" == "$expected" ]] || {
+            echo "ERROR: confirm must exactly equal $expected" >&2
+            exit 1
+          }
+          [[ -n "${REASON//[[:space:]]/}" ]] || {
+            echo 'ERROR: reason must not be empty' >&2
+            exit 1
+          }
+
+      - name: Use the existing production Google identity
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Change only the desktop Beta admission fence
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          OPERATION: ${{ inputs.operation }}
+          REASON: ${{ inputs.reason }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          case "$OPERATION" in
+            enable) promotion_enabled=true ;;
+            disable) promotion_enabled=false ;;
+            *) echo 'ERROR: invalid validated operation' >&2; exit 1 ;;
+          esac
+          ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")"
+          [[ -n "$ADMIN_KEY" ]] || {
+            echo 'ERROR: ADMIN_KEY is empty' >&2
+            exit 1
+          }
+          echo "::add-mask::$ADMIN_KEY"
+          response="$(mktemp)"
+          trap 'rm -f "$response"; unset ADMIN_KEY' EXIT
+          jq -cn --argjson promotion_enabled "$promotion_enabled" \
+            '{promotion_enabled: $promotion_enabled}' \
+            | curl --fail-with-body --silent --show-error --request PUT \
+                --header 'Content-Type: application/json' \
+                --header "secret-key: $ADMIN_KEY" \
+                --data-binary @- \
+                https://api.omi.me/v2/desktop/beta/admission \
+                --output "$response"
+          jq -e --argjson expected "$promotion_enabled" \
+            'keys == ["generation", "promotion_enabled"] and
+             .promotion_enabled == $expected and
+             (.generation | type == "number" and . >= 0 and floor == .)' \
+            "$response" >/dev/null
+          generation="$(jq -r '.generation' "$response")"
+          {
+            echo '## Desktop Beta admission control'
+            echo "- operation: $OPERATION"
+            echo "- promotion_enabled: $promotion_enabled"
+            echo "- generation: $generation"
+            echo "- actor: $ACTOR"
+            echo "- reason: $REASON"
+          } >> "$GITHUB_STEP_SUMMARY"

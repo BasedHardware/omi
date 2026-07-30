@@ -339,6 +339,55 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("keeps leaf deliverables in the managed workspace when a delegated objective invents Desktop", async () => {
+    const artifactRoot = mkdtempTracked("omi-agent-artifacts-");
+    const inventedDesktop = mkdtempTrackedIn(process.cwd(), "omi-invented-desktop-");
+    const artifactStorage = new OmiArtifactStorage({ rootDir: artifactRoot });
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 4, artifactStorage);
+    adapter.writeFileOnExecute = { name: "omi-artifact-smoke.txt", contents: "hello from managed workspace" };
+
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      executionRole: "leaf",
+      cwd: inventedDesktop,
+      prompt: "Create omi-artifact-smoke.txt on the Desktop.",
+      mcpServers: [{
+        name: "omi-tools",
+        command: "node",
+        args: ["tools.js"],
+        env: [{ name: "OMI_WORKSPACE", value: inventedDesktop }],
+      }],
+    });
+    const artifacts = kernel.inspectArtifacts({ runId: result.run.runId });
+    const assignedWorkspace = adapter.opened[0]!.cwd;
+    const workspaceFromMcp = adapter.opened[0]!.mcpServers
+      .flatMap((server) => Array.isArray(server.env) ? server.env : [])
+      .find((entry) => entry && typeof entry === "object" && (entry as { name?: unknown }).name === "OMI_WORKSPACE") as
+        | { value?: unknown }
+        | undefined;
+
+    expect(assignedWorkspace).toContain(result.run.runId);
+    expect(assignedWorkspace).not.toBe(inventedDesktop);
+    expect(adapter.opened[0]!.systemPrompt).toContain("Do not default to Desktop");
+    expect(workspaceFromMcp?.value).toBe(assignedWorkspace);
+    expect(artifacts).toEqual([
+      expect.objectContaining({
+        sessionId: result.session.sessionId,
+        runId: result.run.runId,
+        attemptId: result.attempt.attemptId,
+        displayName: "omi-artifact-smoke.txt",
+        uri: expect.stringContaining("omi-artifact-smoke.txt"),
+      }),
+    ]);
+    expect(result.artifacts).toEqual(artifacts);
+    expect(readFileSync(new URL(artifacts[0]!.uri), "utf8")).toBe("hello from managed workspace");
+    expect(JSON.parse(artifacts[0]!.metadataJson)).toMatchObject({
+      omiManaged: true,
+      discoveredFromRunDirectory: true,
+    });
+    store.close();
+  });
+
   it("projects verified temporary and managed-root deliverables reported by OpenClaw and Hermes terminal prose", async () => {
     for (const provider of ["openclaw", "hermes"] as const) {
       const artifactRoot = mkdtempTracked(`omi-${provider}-artifacts-`);

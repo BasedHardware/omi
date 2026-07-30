@@ -94,6 +94,21 @@ spec:
             summary: "NLLB SLO burn rate critical (fast burn)"
             description: "NLLB error budget is burning at >14.4x rate over both 5m and 1h windows. At this rate, the monthly error budget will be exhausted in hours."
 
+        - alert: NLLBSLOBurnRateSlow
+          expr: >-
+            (sum(rate(nllb_requests_total{status!="ok"}[30m]))
+            / clamp_min(sum(rate(nllb_requests_total[30m])), 0.001)) / 0.005 > 6
+            AND
+            (sum(rate(nllb_requests_total{status!="ok"}[6h]))
+            / clamp_min(sum(rate(nllb_requests_total[6h])), 0.001)) / 0.005 > 6
+            AND sum(rate(nllb_requests_total[30m])) > 0.1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NLLB SLO burn rate warning (slow burn)"
+            description: "NLLB error budget is burning at >6x rate over both 30m and 6h windows. At this rate, the monthly error budget will be exhausted in ~5 days."
+
         - alert: NLLBConcurrencyHigh
           expr: nllb_active_requests > 8
           for: 5m

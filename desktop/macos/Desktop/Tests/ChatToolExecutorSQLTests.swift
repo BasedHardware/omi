@@ -328,22 +328,26 @@ final class ChatToolExecutorSQLTests: XCTestCase {
   }
 
   private static func transitionStandardOwner(to ownerID: String?) async {
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: .standard,
-      allowAutomationOverride: false,
-      plannedNextOwner: { _, _ in ownerID },
-      quiesceVoice: { _, _ in },
-      revokeKernelOwner: { _, _ in },
-      retargetLocalStorage: { _, _ in },
-      ownerDidChange: {}
-    ) { defaults in
-      defaults.removeObject(forKey: .automationOwnerOverride)
-      defaults.removeObject(forKey: .automationOwnerABackup)
-      if let ownerID {
-        defaults.set(ownerID, forKey: .authUserId)
-      } else {
-        defaults.removeObject(forKey: .authUserId)
+    do {
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+        defaults: .standard,
+        allowAutomationOverride: false,
+        plannedNextOwner: { _, _ in ownerID },
+        quiesceVoice: { _, _ in },
+        revokeKernelOwner: { _, _ in },
+        retargetLocalStorage: { _, _ in },
+        ownerDidChange: {}
+      ) { defaults in
+        defaults.removeObject(forKey: .automationOwnerOverride)
+        defaults.removeObject(forKey: .automationOwnerABackup)
+        if let ownerID {
+          defaults.set(ownerID, forKey: .authUserId)
+        } else {
+          defaults.removeObject(forKey: .authUserId)
+        }
       }
+    } catch {
+      XCTFail("owner transition failed: \(error)")
     }
   }
 
@@ -356,26 +360,30 @@ final class ChatToolExecutorSQLTests: XCTestCase {
       ? ownerOverride
       : authOwner
     await Self.transitionStandardOwner(to: "chat-tool-sql-owner-restore")
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: .standard,
-      allowAutomationOverride: true,
-      plannedNextOwner: { _, _ in effectiveOwner },
-      quiesceVoice: { _, _ in },
-      revokeKernelOwner: { _, _ in },
-      retargetLocalStorage: { _, _ in },
-      ownerDidChange: {}
-    ) { defaults in
-      for (key, value) in [
-        (DefaultsKey.authUserId, authOwner),
-        (DefaultsKey.automationOwnerOverride, ownerOverride),
-        (DefaultsKey.automationOwnerABackup, ownerBackup),
-      ] {
-        if let value {
-          defaults.set(value, forKey: key.rawValue)
-        } else {
-          defaults.removeObject(forKey: key.rawValue)
+    do {
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+        defaults: .standard,
+        allowAutomationOverride: true,
+        plannedNextOwner: { _, _ in effectiveOwner },
+        quiesceVoice: { _, _ in },
+        revokeKernelOwner: { _, _ in },
+        retargetLocalStorage: { _, _ in },
+        ownerDidChange: {}
+      ) { defaults in
+        for (key, value) in [
+          (DefaultsKey.authUserId, authOwner),
+          (DefaultsKey.automationOwnerOverride, ownerOverride),
+          (DefaultsKey.automationOwnerABackup, ownerBackup),
+        ] {
+          if let value {
+            defaults.set(value, forKey: key.rawValue)
+          } else {
+            defaults.removeObject(forKey: key.rawValue)
+          }
         }
       }
+    } catch {
+      XCTFail("owner restoration failed: \(error)")
     }
   }
 }

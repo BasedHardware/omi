@@ -1714,22 +1714,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "Help us reach more people by leaving a review in the App Store. Your feedback means the world to us!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Help us reach more people by leaving a review in the Google Play Store. Your feedback means the world to us!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Rate on App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Rate on Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "Maybe Later",
     "@maybeLater": {
         "description": "Button text to defer action"
@@ -2199,6 +2183,22 @@
     "editMemory": "✏️ Edit Memory",
     "@editMemory": {
         "description": "Dialog title when editing a memory"
+    },
+    "pinAsBaseline": "Pin as Baseline",
+    "@pinAsBaseline": {
+        "description": "Label for pinning a memory as baseline"
+    },
+    "unpinAsBaseline": "Unpin from Baseline",
+    "@unpinAsBaseline": {
+        "description": "Label for unpinning a memory from baseline"
+    },
+    "baselineMemory": "Baseline Memory",
+    "@baselineMemory": {
+        "description": "Label for baseline memory"
+    },
+    "alwaysInContext": "Always in context",
+    "@alwaysInContext": {
+        "description": "Description for baseline memory being always in context"
     },
     "memoryContentHint": "I like to eat ice cream...",
     "@memoryContentHint": {
@@ -11534,5 +11534,25 @@
     "errorLoadingAudio": "Error loading audio",
     "@errorLoadingAudio": {
         "description": "Title shown when an audio recording fails to load in the conversation player"
+    },
+    "rayBanMetaMicPickerTitle": "Choose your Ray-Ban Meta microphone",
+    "@rayBanMetaMicPickerTitle": {
+        "description": "Title for the Bluetooth microphone picker used to connect Ray-Ban Meta glasses"
+    },
+    "rayBanMetaMicPickerDescription": "Select the Bluetooth microphone for your glasses. Music pauses while Omi uses it.",
+    "@rayBanMetaMicPickerDescription": {
+        "description": "Explains how to choose the glasses microphone and the Bluetooth HFP music tradeoff"
+    },
+    "rayBanMetaMicPickerEmpty": "No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.",
+    "@rayBanMetaMicPickerEmpty": {
+        "description": "Empty state when iOS reports no Bluetooth HFP microphone inputs"
+    },
+    "rayBanMetaMicPickerLoadError": "Bluetooth microphones could not be loaded. Check that Bluetooth is on, then try again.",
+    "@rayBanMetaMicPickerLoadError": {
+        "description": "Error state when available Bluetooth HFP inputs cannot be read"
+    },
+    "rayBanMetaMicPickerConnectError": "Could not connect to that microphone. Make sure it is connected in iPhone Settings.",
+    "@rayBanMetaMicPickerConnectError": {
+        "description": "Error shown when the selected Bluetooth HFP microphone cannot connect"
     }
 }

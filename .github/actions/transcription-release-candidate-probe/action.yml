@@ -28,9 +28,10 @@ runs:
         FIREBASE_AUTH_PROJECT_ID: ${{ inputs.firebase_auth_project_id }}
       run: |
         set -euo pipefail
+        DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
         token_file="$(mktemp "$RUNNER_TEMP/omi-transcription-probe.XXXXXX")"
         trap 'rm -f "$token_file"' EXIT
-        python3 backend/scripts/firebase_release_probe_token.py \
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/firebase_release_probe_token.py" \
           --secret-project "$PROBE_SECRET_PROJECT" \
           --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
           --token-output "$token_file"
@@ -40,7 +41,7 @@ runs:
           --json-only
         )
         if [[ -n "$EVIDENCE_PATH" ]]; then
-          python3 backend/scripts/transcription_capability_probe.py "${probe_args[@]}" > "$EVIDENCE_PATH"
+          python3 "$DEPLOY_CONTROL_SCRIPT_DIR/transcription_capability_probe.py" "${probe_args[@]}" > "$EVIDENCE_PATH"
         else
-          python3 backend/scripts/transcription_capability_probe.py "${probe_args[@]}"
+          python3 "$DEPLOY_CONTROL_SCRIPT_DIR/transcription_capability_probe.py" "${probe_args[@]}"
         fi

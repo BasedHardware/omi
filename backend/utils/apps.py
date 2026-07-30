@@ -684,7 +684,7 @@ def upsert_app_payment_link(
             app.payment_product_id = payment_product.id
 
         # price
-        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, int(price * 100))
+        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, int(round(price * 100)))
         app.payment_price_id = payment_price.id
 
         # payment link

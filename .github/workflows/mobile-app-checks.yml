@@ -47,6 +47,17 @@ jobs:
           channel: stable
           cache: true
 
+      # flutter-action already caches the SDK and ~/.pub-cache. build_runner's
+      # incremental state is not covered by it and is what makes codegen slow.
+      - name: Cache build_runner state
+        uses: actions/cache@v6
+        with:
+          path: app/.dart_tool/build
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
+            ${{ runner.os }}-flutter-buildrunner-
+
       - name: Resolve Flutter dependencies
         working-directory: app
         run: flutter pub get
@@ -81,11 +92,12 @@ jobs:
             exit 1
           fi
 
-  analyze:
-    name: Dart Analyze (ratchet)
+  analyze-and-test:
+    name: Dart Analyze & Tests
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.has_app_dart == 'true'
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -96,10 +108,21 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Cache build_runner state
+        uses: actions/cache@v6
+        with:
+          path: app/.dart_tool/build
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
+            ${{ runner.os }}-flutter-buildrunner-
+
       - name: Resolve Flutter dependencies
         working-directory: app
         run: flutter pub get
 
+      # Also satisfies test.sh's generated-file prerequisites, so it skips its
+      # own pub get and build_runner run.
       - name: Prepare Flutter dev compile inputs
         working-directory: app
         run: |
@@ -120,22 +143,6 @@ jobs:
       - name: Run analyzer ratchet
         working-directory: app
         run: bash scripts/analyze_ratchet.sh
-
-  flutter-test:
-    name: Flutter Tests
-    runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.has_app_dart == 'true'
-    timeout-minutes: 30
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
 
       - name: Run Flutter tests
         id: flutter_tests
@@ -237,6 +244,15 @@ jobs:
         with:
           channel: stable
           cache: true
+
+      - name: Cache build_runner state
+        uses: actions/cache@v6
+        with:
+          path: app/.dart_tool/build
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
+            ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies
         working-directory: app

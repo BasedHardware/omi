@@ -17,10 +17,8 @@ void main() {
     // missed, and the server has since completed the conversation. A refresh
     // must drop the stale "Processing" card instead of leaving it pinned forever.
     final provider = ConversationProvider(
-      conversationListFetcher: () async => (
-        items: [_conversation('c1', status: ConversationStatus.completed)],
-        ok: true,
-      ),
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.completed)], ok: true),
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);
@@ -34,10 +32,8 @@ void main() {
 
   test('refresh keeps processing cards the server still reports as processing', () async {
     final provider = ConversationProvider(
-      conversationListFetcher: () async => (
-        items: [_conversation('c1', status: ConversationStatus.processing)],
-        ok: true,
-      ),
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.processing)], ok: true),
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);
@@ -52,10 +48,8 @@ void main() {
     // forceProcessingCurrentConversation adds a local-only placeholder (id '0')
     // before the server conversation exists; a concurrent refresh must not drop it.
     final provider = ConversationProvider(
-      conversationListFetcher: () async => (
-        items: [_conversation('other', status: ConversationStatus.completed)],
-        ok: true,
-      ),
+      conversationListFetcher: () async =>
+          (items: [_conversation('other', status: ConversationStatus.completed)], ok: true),
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);
@@ -81,8 +75,8 @@ void main() {
 }
 
 ServerConversation _conversation(String id, {required ConversationStatus status}) => ServerConversation(
-      id: id,
-      createdAt: DateTime.utc(2026),
-      structured: Structured('Title', 'Overview'),
-      status: status,
-    );
+  id: id,
+  createdAt: DateTime.utc(2026),
+  structured: Structured('Title', 'Overview'),
+  status: status,
+);

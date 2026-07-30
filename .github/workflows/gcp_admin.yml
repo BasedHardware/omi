@@ -13,15 +13,21 @@ on:
       - '.github/scripts/preflight_public_build_runtime.py'
       - '.github/scripts/smoke_public_build_browser.py'
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'prod'
+        type: choice
+        options: [development, prod]
 
 concurrency:
-  group: deploy-cloud-run-omi-admin-dashboard-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
+  group: deploy-cloud-run-omi-admin-dashboard-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
-    environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
     permissions:
       actions: read
       contents: read
@@ -35,6 +41,10 @@ jobs:
         uses: ./.github/actions/deploy-public-build
         with:
           target: admin
-          environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
+          environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          network: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          subnet: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
+          require_gateway_url: true

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
@@ -411,12 +412,12 @@ class AnalyticsManager {
       track('Device Onboarding Double Tap Configured', properties: {'action': action});
 
   void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) => track(
-        'Developer Settings Saved',
-        properties: {
-          'has_webhook_memory_created': hasWebhookConversationCreated,
-          'has_webhook_transcript_received': hasWebhookTranscriptReceived,
-        },
-      );
+    'Developer Settings Saved',
+    properties: {
+      'has_webhook_memory_created': hasWebhookConversationCreated,
+      'has_webhook_transcript_received': hasWebhookTranscriptReceived,
+    },
+  );
 
   void pageOpened(String name) {
     setInteractionContext(screenName: name, target: 'screen');
@@ -522,9 +523,45 @@ class AnalyticsManager {
     track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
   }
 
-  void deviceConnected() => track('Device Connected', properties: {..._preferences.btDevice.toJson()});
+  void deviceConnected() {
+    final device = _preferences.btDevice;
+    final vendor = device.type.analyticsVendor;
+    track('Device Connected', properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': vendor});
+    setUserProperty('device_vendor', vendor);
+  }
+
+  void devicePaired(String firstPairedAt) {
+    final device = _preferences.btDevice;
+    track(
+      'Device Paired',
+      properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': device.type.analyticsVendor},
+    );
+    _setUserPropertiesBatch({
+      'has_paired_device': true,
+      'first_paired_at': firstPairedAt,
+      'device_vendor': device.type.analyticsVendor,
+    });
+  }
 
   void deviceDisconnected() => track('Device Disconnected');
+
+  void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
+    final properties = <String, Object>{
+      'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
+      'reason': _knownDeviceValue(reason ?? ''),
+      'device_vendor': device.type.analyticsVendor,
+      'model': _knownDeviceValue(device.modelNumber),
+      'firmware_revision': _knownDeviceValue(device.firmwareRevision),
+      // The app emits at disconnect, before native auto-reconnect can attempt.
+      'reconnect_attempt_count': 0,
+    };
+    if (hciReasonCode != null && hciReasonCode >= 0) {
+      properties['hci_reason_code'] = hciReasonCode;
+    }
+    track('Device Session Ended', properties: properties);
+  }
+
+  static String _knownDeviceValue(String value) => value.isEmpty || value == 'Unknown' ? 'unknown' : value;
 
   void memoriesPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
@@ -639,19 +676,18 @@ class AnalyticsManager {
     required String chatTargetId,
     required bool isPersonaChat,
     required bool isVoiceInput,
-  }) =>
-      track(
-        'Chat Message Sent',
-        properties: {
-          'message_length': message.length,
-          'message_word_count': message.split(' ').length,
-          'includes_files': includesFiles,
-          'number_of_files': numberOfFiles,
-          'chat_target_id': chatTargetId,
-          'is_persona_chat': isPersonaChat,
-          'is_voice_input': isVoiceInput,
-        },
-      );
+  }) => track(
+    'Chat Message Sent',
+    properties: {
+      'message_length': message.length,
+      'message_word_count': message.split(' ').length,
+      'includes_files': includesFiles,
+      'number_of_files': numberOfFiles,
+      'chat_target_id': chatTargetId,
+      'is_persona_chat': isPersonaChat,
+      'is_voice_input': isVoiceInput,
+    },
+  );
 
   void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
     track('Chat Voice Input Used', properties: {'chat_target_id': chatTargetId, 'is_persona_chat': isPersonaChat});
@@ -672,9 +708,9 @@ class AnalyticsManager {
       track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
 
   void shortConversationThresholdChanged(int thresholdSeconds) => track(
-        'Short Conversation Threshold Changed',
-        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
-      );
+    'Short Conversation Threshold Changed',
+    properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+  );
 
   void voiceResponseToggled(bool enabled) => track('Voice Response Audio Toggled', properties: {'enabled': enabled});
 
@@ -689,28 +725,28 @@ class AnalyticsManager {
   void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
 
   void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
-        'Conversation Selected For Merge',
-        properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
-      );
+    'Conversation Selected For Merge',
+    properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
+  );
 
   void conversationMergeInitiated(List<String> conversationIds) => track(
-        'Conversation Merge Initiated',
-        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-      );
+    'Conversation Merge Initiated',
+    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+  );
 
   void conversationMergeCompleted(String mergedConversationId, List<String> removedConversationIds) => track(
-        'Conversation Merge Completed',
-        properties: {
-          'merged_conversation_id': mergedConversationId,
-          'removed_count': removedConversationIds.length,
-          'removed_conversation_ids': removedConversationIds,
-        },
-      );
+    'Conversation Merge Completed',
+    properties: {
+      'merged_conversation_id': mergedConversationId,
+      'removed_count': removedConversationIds.length,
+      'removed_conversation_ids': removedConversationIds,
+    },
+  );
 
   void conversationMergeFailed(List<String> conversationIds) => track(
-        'Conversation Merge Failed',
-        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-      );
+    'Conversation Merge Failed',
+    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+  );
 
   // Important Conversation Share Events
   void importantConversationNotificationReceived(String conversationId) =>
@@ -720,14 +756,14 @@ class AnalyticsManager {
       track('Share To Contacts Sheet Opened', properties: {'conversation_id': conversationId});
 
   void shareToContactsSelected(String conversationId, int contactCount) => track(
-        'Share To Contacts Selected',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-      );
+    'Share To Contacts Selected',
+    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+  );
 
   void shareToContactsSmsOpened(String conversationId, int contactCount) => track(
-        'Share To Contacts SMS Opened',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-      );
+    'Share To Contacts SMS Opened',
+    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+  );
 
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
@@ -864,11 +900,11 @@ class AnalyticsManager {
       track('Delete Account Kept Account', properties: {'step': step, 'reason': reason});
 
   void deleteUser() => PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
-        final adapter = _adapter;
-        if (adapter == null) return;
-        adapter.track(eventName: 'User Deleted');
-        adapter.reset();
-      });
+    final adapter = _adapter;
+    if (adapter == null) return;
+    adapter.track(eventName: 'User Deleted');
+    adapter.reset();
+  });
 
   // Apps Filter
   void appsFilterOpened() => track('Apps Filter Opened');
@@ -1888,6 +1924,8 @@ class AnalyticsManager {
   // ============================================================================
 
   void connectDevicePageOpened() => track('Connect Device Page Opened');
+
+  void getOmiDeviceClicked() => track('Get Omi Device Clicked');
 
   void connectionGuideOpened() => track('Connection Guide Opened');
 

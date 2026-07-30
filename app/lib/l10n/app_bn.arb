@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "অ্যাপ স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "অ্যাপ স্টোরে রেটিং দিন",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play তে রেটিং দিন",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "হয়তো পরে",
     "@maybeLater": {
         "description": "Button text to defer action"
@@ -5506,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "১,২০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড",
+    "basicPlanDescription": "৩০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7281,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
+    "premiumMinutesInfo": "প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
+    "premiumMinutesMonth": "প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10728,5 +10712,59 @@
     "deviceStorageFree": "{free} খালি",
     "deviceStorageNearlyFull": "ডিভাইস প্রায় পূর্ণ — জায়গা খালি করতে সিঙ্ক করুন।",
     "phoneMicOfflineFallbackMessage": "সংযোগ নেই — স্থানীয়ভাবে রেকর্ড করা হচ্ছে। আপনি আবার অনলাইনে এলে এটি ট্রান্সক্রাইব করা হবে।",
-    "dataEncryptedBanner": "আপনার ডেটা ডিফল্টরূপে শক্তিশালী এনক্রিপশন দিয়ে সুরক্ষিত, এবং এটি কীভাবে সংরক্ষণ ও ব্যবহার করা হয় তা আপনি নিয়ন্ত্রণ করেন।"
+    "dataEncryptedBanner": "আপনার ডেটা ডিফল্টরূপে শক্তিশালী এনক্রিপশন দিয়ে সুরক্ষিত, এবং এটি কীভাবে সংরক্ষণ ও ব্যবহার করা হয় তা আপনি নিয়ন্ত্রণ করেন।",
+    "rayBanMetaMicPickerTitle": "আপনার Ray-Ban Meta মাইক্রোফোন বেছে নিন",
+    "rayBanMetaMicPickerDescription": "আপনার চশমার Bluetooth মাইক্রোফোন নির্বাচন করুন। Omi এটি ব্যবহার করার সময় গান থেমে থাকবে।",
+    "rayBanMetaMicPickerEmpty": "কোনো Bluetooth মাইক্রোফোন পাওয়া যায়নি। iPhone সেটিংসে আপনার চশমা সংযুক্ত করে আবার চেষ্টা করুন।",
+    "rayBanMetaMicPickerLoadError": "Bluetooth মাইক্রোফোন লোড করা যায়নি। Bluetooth চালু আছে কিনা দেখে আবার চেষ্টা করুন।",
+    "rayBanMetaMicPickerConnectError": "ওই মাইক্রোফোনে সংযোগ করা যায়নি। iPhone সেটিংসে এটি সংযুক্ত আছে কিনা নিশ্চিত করুন।",
+    "cloudTranscription": "ক্লাউড ট্রান্সক্রিপশন",
+    "copyMessage": "বার্তা অনুলিপি করুন",
+    "deleteOnDeviceModel": "মডেল মুছুন",
+    "deleteOnDeviceModelConfirm": "আপনি কি নিশ্চিত যে এই মডেলটি মুছতে চান?",
+    "downgradeAnyway": "তবুও ডাউনগ্রেড করুন",
+    "downgradeLimitBattery": "৭ গুণ বেশি ব্যাটারি খরচ",
+    "downgradeLimitDelay": "৫-৭ সেকেন্ড বিলম্ব",
+    "downgradeLimitQuality": "৩০% কম ট্রান্সক্রিপশন মান",
+    "downgradeLimitSpeakers": "বক্তা শনাক্ত করা যাবে না",
+    "downgradeLimitationsHeading": "আপনি এই সীমাবদ্ধতাগুলির সম্মুখীন হবেন:",
+    "downgradeToFreemiumTitle": "বিনামূল্যের প্ল্যানে ডাউনগ্রেড করবেন?",
+    "errorLoadingAudio": "অডিও লোড করতে সমস্যা হয়েছে",
+    "failedToLinkCalendarEvent": "ক্যালেন্ডার ইভেন্ট লিঙ্ক করা যায়নি",
+    "googleCalendarConnectPrompt": "কথোপকথনকে ক্যালেন্ডার ইভেন্টের সাথে লিঙ্ক করতে আপনার Google ক্যালেন্ডার সংযুক্ত করুন।",
+    "googleCalendarNotConnected": "Google ক্যালেন্ডার সংযুক্ত নয়",
+    "linkedToEvent": "“{title}”-এর সাথে লিঙ্ক করা হয়েছে",
+    "onDeviceModelDeleted": "মডেল মুছে ফেলা হয়েছে",
+    "onDeviceModelDownloadFailed": "মডেল ডাউনলোড ব্যর্থ হয়েছে",
+    "onDeviceModelDownloadFailedDesc": "Whisper মডেল ডাউনলোড করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।",
+    "onDeviceModelDownloadSuccess": "মডেল ডাউনলোড হয়েছে",
+    "onDeviceModelDownloadSuccessDesc": "Whisper মডেল সফলভাবে ডাউনলোড হয়েছে",
+    "onDeviceModelDownloaded": "ডাউনলোড হয়েছে",
+    "onDeviceModelSize": "মডেলের আকার",
+    "onDeviceTranscription": "ডিভাইসে ট্রান্সক্রিপশন",
+    "onDeviceTranscriptionDesc": "ট্রান্সক্রিপশন আপনার ডিভাইসেই স্থানীয়ভাবে প্রক্রিয়া করা হয়",
+    "searchSettings": "সেটিংস অনুসন্ধান করুন…",
+    "speechToTextProvider": "স্পিচ-টু-টেক্সট প্রদানকারী",
+    "speechToTextProviderDesc": "ট্রান্সক্রিপশনের জন্য ব্যবহৃত পরিষেবা বেছে নিন",
+    "sttFilterAuto": "স্বয়ংক্রিয়",
+    "sttModelAccuracy": "নির্ভুলতা",
+    "sttModelFaster": "দ্রুততর",
+    "sttModelHigher": "বেশি",
+    "sttModelLower": "কম",
+    "sttModelSlower": "ধীরতর",
+    "sttModelSpeed": "গতি",
+    "sttNone": "কোনোটি নয়",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "আপনার মতামতের জন্য ধন্যবাদ!",
+    "transcriptionLanguage": "ট্রান্সক্রিপশনের ভাষা",
+    "transcriptionLanguageDesc": "কথা ট্রান্সক্রিপশনের জন্য ভাষা বেছে নিন",
+    "whisperModel": "Whisper মডেল",
+    "whisperModelDesc": "ডিভাইসে ট্রান্সক্রিপশনের জন্য মডেল বেছে নিন",
+    "whisperModelSizeBase": "বেস",
+    "whisperModelSizeLarge": "বড়",
+    "whisperModelSizeMedium": "মাঝারি",
+    "whisperModelSizeSmall": "ছোট",
+    "whisperModelSizeTiny": "অতি ছোট"
 }

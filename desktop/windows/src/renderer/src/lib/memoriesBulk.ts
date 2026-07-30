@@ -3,13 +3,32 @@ import type { Memory } from '../hooks/useMemories'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-// Page through every memory (server caps a page at 200). Dedupes by id and stops
-// if a page adds nothing new — guards against a server that ignores `offset`.
-export async function fetchAllMemories(): Promise<Memory[]> {
+// A raw axios response, narrowed to just what the pager's onResponse hook reads
+// (headers) — avoids coupling this module to the full axios type surface.
+type MemoriesResponse = { data: unknown; headers?: Record<string, unknown> }
+
+// Page through every memory. GET /v3/memories clamps `limit` to at most 500
+// (no first-page 5000 expansion — that caused prod GET 504s). Request the
+// server max page on every call and advance `offset` by items actually received.
+// Dedupes by id; stops on empty page or zero new ids.
+const MEMORIES_PAGE_LIMIT = 500
+//
+// `onResponse` fires for every raw page response so a caller (the Memories page)
+// can read capability headers off the first page — e.g.
+// X-Omi-Memory-Canonical-Lifecycle-Exposed, which gates the tier/device filters
+// — without a second request. It is the single source of truth for "fetch every
+// memory": the display hook (useMemories) and the bulk export/purge paths all go
+// through it, so the pagination contract can never drift between them again.
+export async function fetchAllMemoriesPaged(
+  onResponse?: (res: MemoriesResponse) => void
+): Promise<Memory[]> {
   const byId = new Map<string, Memory>()
-  for (let offset = 0; offset < 100_000; offset += 200) {
-    const r = await omiApi.get('/v3/memories', { params: { limit: 200, offset } })
+  let offset = 0
+  while (offset < 100_000) {
+    const r = await omiApi.get('/v3/memories', { params: { limit: MEMORIES_PAGE_LIMIT, offset } })
+    onResponse?.(r)
     const page = (Array.isArray(r.data) ? r.data : (r.data?.memories ?? [])) as Memory[]
+    if (page.length === 0) break
     let added = 0
     for (const m of page) {
       if (m.id && !byId.has(m.id)) {
@@ -17,9 +36,50 @@ export async function fetchAllMemories(): Promise<Memory[]> {
         added++
       }
     }
-    if (page.length < 200 || added === 0) break
+    if (added === 0) break
+    offset += page.length
   }
   return [...byId.values()]
+}
+
+// Convenience wrapper for callers that only need the full list (export/purge).
+export function fetchAllMemories(): Promise<Memory[]> {
+  return fetchAllMemoriesPaged()
+}
+
+// Cap aligned with the backend's MEMORIES_BATCH_MAX (backend/routers/memories.py)
+// so a chunk can never be rejected for exceeding the server's per-request limit.
+export const MEMORIES_IMPORT_BATCH_SIZE = 100
+
+export type BatchImportTally = { ok: number; failed: number; firstError?: string }
+
+// Send memory contents through POST /v3/memories/batch in chunks of at most
+// MEMORIES_IMPORT_BATCH_SIZE, one request per chunk, sequentially. Replaces the
+// old one-POST-per-memory fan-out (up to hundreds of requests for a large
+// import), which could blow through the per-Authorization rate limit and
+// collaterally 429 unrelated chat/sync/goals calls for the same user.
+export async function postMemoriesBatched(contents: string[]): Promise<BatchImportTally> {
+  let ok = 0
+  let failed = 0
+  let firstError: string | undefined
+  for (let i = 0; i < contents.length; i += MEMORIES_IMPORT_BATCH_SIZE) {
+    const chunk = contents.slice(i, i + MEMORIES_IMPORT_BATCH_SIZE)
+    try {
+      const r = await omiApi.post('/v3/memories/batch', {
+        memories: chunk.map((content) => ({ content }))
+      })
+      ok += r.data?.created_count ?? chunk.length
+    } catch (e) {
+      const msg =
+        (e as { response?: { status?: number; data?: { detail?: string } }; message: string })
+          .response?.data?.detail ??
+        (e as { response?: { status?: number } }).response?.status?.toString() ??
+        (e as Error).message
+      if (!firstError) firstError = msg
+      failed += chunk.length
+    }
+  }
+  return { ok, failed, firstError }
 }
 
 export type BulkDeleteTally = { deleted: number; failed: number; firstError?: string }
@@ -48,7 +108,8 @@ export async function deleteMemoriesPaced(
         ok = true
         break
       } catch (e) {
-        const resp = (e as { response?: { status?: number; headers?: Record<string, string> } }).response
+        const resp = (e as { response?: { status?: number; headers?: Record<string, string> } })
+          .response
         const status = resp?.status
         if (status === 404) {
           ok = true // already gone
@@ -56,7 +117,9 @@ export async function deleteMemoriesPaced(
         }
         if (status === 429) {
           const ra = Number(resp?.headers?.['retry-after'])
-          await sleep(Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000))
+          await sleep(
+            Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000)
+          )
           continue
         }
         if (!firstError) firstError = status ? `HTTP ${status}` : (e as Error).message

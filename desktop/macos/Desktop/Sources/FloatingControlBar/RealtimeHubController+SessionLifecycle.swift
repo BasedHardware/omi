@@ -17,6 +17,10 @@ extension RealtimeHubController {
       // token while the offline gauntlet is exercising the production reducer.
       if isAuthorizedLocalProfileTransport() { return }
     #endif
+    guard !sessionReplacementGate.isPending else {
+      log("RealtimeHub: warm start coalesced behind physical transport drain")
+      return
+    }
     guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else {
       log("RealtimeHub: warm start denied during effective-owner transition")
       return
@@ -40,13 +44,17 @@ extension RealtimeHubController {
     if session != nil, sessionOwnerScope != ownerScope {
       log("RealtimeHub: rebuilding warm session after authenticated owner changed")
       discardSessionAfterOwnerChange()
+      return
     }
-    if session != nil { teardownSession() }
+    if session != nil {
+      replaceSessionAfterDrain()
+      return
+    }
 
     let contextRequirement = voiceSessionContext(for: ownerScope)
     guard RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: contextRequirement.isResolved) else {
       log("RealtimeHub: waiting for resolved voice context before warming session")
-      if voiceContextPrefetchTask == nil {
+      if !voiceContextSingleFlight.isRunning {
         prefetchVoiceContextSnapshotIfNeeded()
       }
       return
@@ -282,13 +290,18 @@ extension RealtimeHubController {
             ownerScope: ownerScope)
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
+        let fallbackStarted =
+          !error.healthError.failureClass.isAccountWide
+          && self.failoverToAlternateProvider(
+            reason: self.failoverReason(for: error.healthError.failureClass),
+            mintAttemptId: String(mintGeneration))
         self.recordRealtimeMintFailure(
-          error, provider: providerParam, phase: "warm", context: "realtime_mint")
+          error, provider: providerParam, phase: "warm", context: "realtime_mint",
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
         if error.healthError.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
-        } else if !self.failoverToAlternateProvider(
-          reason: self.failoverReason(for: error.healthError.failureClass))
-        {
+        } else if !fallbackStarted {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
@@ -300,16 +313,21 @@ extension RealtimeHubController {
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         CredentialHealthManager.shared.record(error, context: "realtime_mint")
+        let fallbackStarted =
+          !error.failureClass.isAccountWide
+          && self.failoverToAlternateProvider(
+            reason: self.failoverReason(for: error.failureClass),
+            mintAttemptId: String(mintGeneration))
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: error.failureClass.logValue,
           phase: "warm",
-          httpStatusCode: error.failureClass.httpStatusCode)
+          httpStatusCode: error.failureClass.httpStatusCode,
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
         if error.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
-        } else if !self.failoverToAlternateProvider(
-          reason: self.failoverReason(for: error.failureClass))
-        {
+        } else if !fallbackStarted {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
@@ -323,11 +341,14 @@ extension RealtimeHubController {
         let typed = CredentialHealthError.backendTransient(
           statusCode: nil, message: error.localizedDescription)
         CredentialHealthManager.shared.record(typed, context: "realtime_mint")
+        let fallbackStarted = self.failoverToAlternateProvider(mintAttemptId: String(mintGeneration))
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: "backend_transient",
-          phase: "warm")
-        if !self.failoverToAlternateProvider() {
+          phase: "warm",
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
+        if !fallbackStarted {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
@@ -355,6 +376,10 @@ extension RealtimeHubController {
     auth: HubAuth,
     ownerScope: RealtimeHubOwnerScope
   ) {
+    guard !sessionReplacementGate.isPending else {
+      log("RealtimeHub: physical session start rejected until previous transport acknowledges close")
+      return
+    }
     guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else {
       log("RealtimeHub: physical session start denied during effective-owner transition")
       return
@@ -367,11 +392,16 @@ extension RealtimeHubController {
     let topLevelContext = voiceSessionContext(for: ownerScope)
     guard RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: topLevelContext.isResolved) else {
       log("RealtimeHub: session start deferred until voice context resolves")
-      if voiceContextPrefetchTask == nil {
+      if !voiceContextSingleFlight.isRunning {
         prefetchVoiceContextSnapshotIfNeeded()
       }
       return
     }
+    #if DEBUG
+      if testingSessionStartAfterDrain?(provider, auth, ownerScope) == true {
+        return
+      }
+    #endif
     sessionVoiceContextFreshnessIdentity = topLevelContext.snapshotFreshnessIdentity
     let instructions = RealtimeHubTools.systemInstruction(
       kernelContext: topLevelContext.rendered,
@@ -448,90 +478,54 @@ extension RealtimeHubController {
   }
 
   /// Prefetch the typed kernel snapshot on PTT key-down before `beginTurn`.
-  func prefetchVoiceContextSnapshotIfNeeded() {
-    voiceContextPrefetchTask?.cancel()
-    voiceContextRefreshGeneration &+= 1
-    let refreshGeneration = voiceContextRefreshGeneration
+  @discardableResult
+  func prefetchVoiceContextSnapshotIfNeeded(forceRefresh: Bool = false) -> Task<Bool, Never> {
     let ownerScope = currentOwnerScope
-    voiceContextPrefetchTask = Task { [weak self] in
-      defer {
-        Task { @MainActor [weak self] in
-          guard let self, self.voiceContextRefreshGeneration == refreshGeneration else { return }
-          self.voiceContextPrefetchTask = nil
-        }
-      }
-      await self?.importLegacyVoiceJournalIfNeeded()
-      guard let self, self.isOwnerScopeCurrent(ownerScope) else { return }
+    let operation: @MainActor @Sendable () async -> Bool = { @MainActor [weak self] in
+      guard let self else { return false }
+      await self.importLegacyVoiceJournalIfNeeded()
+      guard !Task.isCancelled, self.isOwnerScopeCurrent(ownerScope) else { return false }
       let resolvedSnapshot: KernelVoiceContextSnapshot
       do {
         resolvedSnapshot = try await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()
       } catch is CancellationError {
-        // Expected only for a speculative key-down prefetch superseded by the
-        // hard refresh. This task owns the suppression.
-        return
+        return false
       } catch {
-        return
+        return false
       }
       let registeredProviders = await AgentRuntimeProcess.shared.registeredDirectedProviderIDs()
-      await MainActor.run {
-        guard !Task.isCancelled,
-          self.voiceContextRefreshGeneration == refreshGeneration,
-          self.isOwnerScopeCurrent(ownerScope),
-          resolvedSnapshot.isResolved
-        else { return }
-        self.prefetchedVoiceContext = resolvedSnapshot.context
-        self.prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
-        self.prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
-        self.prefetchedVoiceContextPlanID = resolvedSnapshot.contextPlanID
-        self.prefetchedVoiceStableCacheIdentity = resolvedSnapshot.stableCacheIdentity
-        self.prefetchedVoiceDynamicContextIdentity = resolvedSnapshot.dynamicContextIdentity
-        self.prefetchedVoiceSemanticGuidance = resolvedSnapshot.semanticGuidance
-        self.updateRegisteredDirectedProviders(registeredProviders)
-        self.prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
-        self.prefetchedVoiceContextOwnerScope = ownerScope
-        self.reconcileWarmSessionForCurrentRequirement()
-      }
+      guard !Task.isCancelled,
+        self.isOwnerScopeCurrent(ownerScope),
+        resolvedSnapshot.isResolved
+      else { return false }
+      self.prefetchedVoiceContext = resolvedSnapshot.context
+      self.prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
+      self.prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
+      self.prefetchedVoiceContextPlanID = resolvedSnapshot.contextPlanID
+      self.prefetchedVoiceStableCacheIdentity = resolvedSnapshot.stableCacheIdentity
+      self.prefetchedVoiceDynamicContextIdentity = resolvedSnapshot.dynamicContextIdentity
+      self.prefetchedVoiceSemanticGuidance = resolvedSnapshot.semanticGuidance
+      self.updateRegisteredDirectedProviders(registeredProviders)
+      self.prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
+      self.prefetchedVoiceContextOwnerScope = ownerScope
+      self.reconcileWarmSessionForCurrentRequirement()
+      return true
     }
+    return forceRefresh
+      ? voiceContextSingleFlight.restart(operation)
+      : voiceContextSingleFlight.joinOrStart(operation)
+  }
+
+  @discardableResult
+  func awaitVoiceContextReadiness() async -> Bool {
+    guard !Task.isCancelled else { return false }
+    return await prefetchVoiceContextSnapshotIfNeeded().value
   }
 
   @discardableResult
   func refreshVoiceContextSnapshot() async -> Bool {
     guard !Task.isCancelled else { return false }
-    let ownerScope = currentOwnerScope
-    await importLegacyVoiceJournalIfNeeded()
-    guard !Task.isCancelled, isOwnerScopeCurrent(ownerScope) else { return false }
-    voiceContextPrefetchTask?.cancel()
-    voiceContextPrefetchTask = nil
-    voiceContextRefreshGeneration &+= 1
-    let refreshGeneration = voiceContextRefreshGeneration
-    let resolvedSnapshot: KernelVoiceContextSnapshot
-    do {
-      resolvedSnapshot = try await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()
-    } catch {
-      return false
-    }
-    let registeredProviders = await AgentRuntimeProcess.shared.registeredDirectedProviderIDs()
-    guard resolvedSnapshot.isResolved else {
-      log("RealtimeHub: retaining the last voice context after an unresolved kernel snapshot")
-      return false
-    }
-    guard !Task.isCancelled, voiceContextRefreshGeneration == refreshGeneration,
-      isOwnerScopeCurrent(ownerScope)
-    else {
-      return false
-    }
-    prefetchedVoiceContext = resolvedSnapshot.context
-    prefetchedVoiceContextSessionID = resolvedSnapshot.sessionId
-    prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity
-    prefetchedVoiceContextPlanID = resolvedSnapshot.contextPlanID
-    prefetchedVoiceStableCacheIdentity = resolvedSnapshot.stableCacheIdentity
-    prefetchedVoiceDynamicContextIdentity = resolvedSnapshot.dynamicContextIdentity
-    prefetchedVoiceSemanticGuidance = resolvedSnapshot.semanticGuidance
-    updateRegisteredDirectedProviders(registeredProviders)
-    prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
-    prefetchedVoiceContextOwnerScope = ownerScope
-    reconcileWarmSessionForCurrentRequirement()
-    return true
+    return await prefetchVoiceContextSnapshotIfNeeded(forceRefresh: true).value
   }
 
   func updateRegisteredDirectedProviders(_ providers: [String]) {
@@ -788,18 +782,6 @@ extension RealtimeHubController {
         message: message))
   }
 
-  @discardableResult
-  func enqueueTurnPersistence(
-    idempotencyKey: String,
-    retainingReceipt: Bool = false,
-    _ operation: @escaping @MainActor () async -> Bool
-  ) -> Task<Bool, Never> {
-    turnPersistenceLedger.enqueue(
-      continuityKey: idempotencyKey,
-      retainingReceipt: retainingReceipt,
-      operation)
-  }
-
   /// A deterministic screen-verification failure becomes visible before the provider can
   /// continue. Successful reports do not use this path: they keep provider narration open.
   /// Register its canonical journal obligation through the same retained receipt
@@ -841,6 +823,33 @@ extension RealtimeHubController {
     let kernelOwnsExchange = RealtimeHubContinuityRestore.kernelOwnsExchange(
       continuityKey: idempotencyKey,
       kernelTurnIDs: prefetchedVoiceContextTurnIDs)
+    if acceptedSpawnOwnerID == ownerID
+      || (kernelOwnsExchange && !streamingJournalWriteLedger.contains(continuityKey: idempotencyKey))
+    {
+      return await RealtimeTurnJournalAuthority.persist(
+        turnOwnerID: ownerID,
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+        kernelOwnsExchange: kernelOwnsExchange,
+        refreshAcceptedSpawn: {
+          guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+          await FloatingControlBarManager.shared.refreshKernelJournal(surface: surface)
+          return AuthorizedToolExecution.isOwnerCurrent(ownerID)
+        },
+        recordProviderExchange: { false })
+    }
+
+    switch await finalizeStreamingRealtimeProjection(
+      ownerID: ownerID,
+      userText: userText,
+      assistantText: assistantText,
+      continuityKey: idempotencyKey
+    ) {
+    case .completed(let accepted):
+      return accepted
+    case .absent, .recordRejected:
+      break
+    }
+
     return await RealtimeTurnJournalAuthority.persist(
       turnOwnerID: ownerID,
       acceptedSpawnOwnerID: acceptedSpawnOwnerID,
@@ -922,15 +931,6 @@ extension RealtimeHubController {
     legacyVoiceJournalImportTask = nil
   }
 
-  func awaitTurnPersistenceFence() async {
-    while !Task.isCancelled {
-      let observedGeneration = turnPersistenceLedger.generation
-      await turnPersistenceLedger.awaitPendingObligations()
-      guard observedGeneration == turnPersistenceLedger.generation else { continue }
-      return
-    }
-  }
-
   /// Completes the reducer-owned journal fence only after the canonical kernel
   /// has acknowledged this turn's stable idempotency key. Merely enqueueing the
   /// durable outbox entry is not logical success.
@@ -967,7 +967,8 @@ extension RealtimeHubController {
   }
 
   func detachPhysicalSessionForTeardown(
-    preservingReconnectAudio: Bool = false
+    preservingReconnectAudio: Bool = false,
+    preservingBargeInReplacement: Bool = false
   ) -> RealtimeHubSession? {
     let detachedSession = session
     // Detach first so a socket we're dropping can't deliver a late error/close to us
@@ -980,7 +981,9 @@ extension RealtimeHubController {
     // identity fence that guarded the original PTT turn.
     voiceResponseID = RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
       preservingReconnectAudio: preservingReconnectAudio,
-      pendingReconnect: reconnectAudioBuffer)
+      pendingReconnect: reconnectAudioBuffer,
+      preservingBargeInReplacement: preservingBargeInReplacement,
+      pendingBargeInReplacement: replacementAudioBuffer)
     sessionProvider = nil
     sessionAuth = nil
     sessionOwnerBinding = nil
@@ -994,7 +997,9 @@ extension RealtimeHubController {
     if !preservingReconnectAudio {
       reconnectAudioBuffer = nil
     }
-    clearBargeInReplacementState()
+    if !preservingBargeInReplacement {
+      clearBargeInReplacementState()
+    }
     clearRealtimeToolTracking()
     return detachedSession
   }
@@ -1006,17 +1011,6 @@ extension RealtimeHubController {
       )
     else { return }
     schedulePhysicalSessionTeardown(detachedSession)
-  }
-
-  func schedulePhysicalSessionTeardown(_ detachedSession: RealtimeHubSession) {
-    let sessionID = ObjectIdentifier(detachedSession)
-    guard detachedSessionsAwaitingDrain[sessionID] == nil else { return }
-    detachedSessionsAwaitingDrain[sessionID] = detachedSession
-    Task { @MainActor [weak self, weak detachedSession] in
-      guard let detachedSession else { return }
-      await detachedSession.stopAndWait()
-      self?.detachedSessionsAwaitingDrain.removeValue(forKey: sessionID)
-    }
   }
 
   func clearBargeInReplacementState() {
@@ -1031,7 +1025,8 @@ extension RealtimeHubController {
 
   @discardableResult
   func prepareBargeInReplacement() -> Bool {
-    guard let provider = sessionProvider ?? pendingBargeInProvider,
+    guard !sessionReplacementGate.isPending,
+      let provider = sessionProvider ?? pendingBargeInProvider,
       let auth = sessionAuth ?? pendingBargeInAuth,
       let ownerScope = sessionOwnerScope ?? pendingBargeInOwnerScope,
       RealtimeHubOwnerFence.acceptsBargeInReplacement(
@@ -1043,16 +1038,6 @@ extension RealtimeHubController {
       let responseID = voiceResponseID,
       let identity = VoiceTurnCoordinator.shared.reserveEffectIdentity()
     else { return false }
-    let interruptedSession = session
-    interruptedSession?.detach()
-    session = nil
-    sessionProvider = nil
-    sessionAuth = nil
-    sessionOwnerBinding = nil
-    hubConnected = false
-    if let interruptedSession {
-      schedulePhysicalSessionTeardown(interruptedSession)
-    }
     replacementAudioBuffer = RealtimeReplacementAudioBuffer(
       turnID: turnID,
       responseID: responseID,
@@ -1066,6 +1051,9 @@ extension RealtimeHubController {
     pendingBargeInProvider = provider
     pendingBargeInAuth = auth
     pendingBargeInOwnerScope = ownerScope
+    replaceSessionAfterDrain(
+      preservingBargeInReplacement: true,
+      rewarmAfterDrain: false)
     return true
   }
 
@@ -1217,16 +1205,20 @@ extension RealtimeHubController {
           return
         }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
+        let fallbackStarted =
+          self.shouldFailoverToAlternate(for: error.healthError.failureClass)
+          && self.failoverBargeInReplacement(
+            from: provider,
+            reason: self.failoverReason(for: error.healthError.failureClass),
+            mintAttemptId: String(mintGeneration))
         self.recordRealtimeMintFailure(
           error,
           provider: providerParam,
           phase: "barge_in_replacement",
-          context: "realtime_barge_in_mint")
-        if self.shouldFailoverToAlternate(for: error.healthError.failureClass),
-          self.failoverBargeInReplacement(
-            from: provider,
-            reason: self.failoverReason(for: error.healthError.failureClass))
-        {
+          context: "realtime_barge_in_mint",
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
+        if fallbackStarted {
           return
         }
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
@@ -1244,16 +1236,20 @@ extension RealtimeHubController {
         }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
         CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
+        let fallbackStarted =
+          self.shouldFailoverToAlternate(for: error.failureClass)
+          && self.failoverBargeInReplacement(
+            from: provider,
+            reason: self.failoverReason(for: error.failureClass),
+            mintAttemptId: String(mintGeneration))
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: error.failureClass.logValue,
           phase: "barge_in_replacement",
-          httpStatusCode: error.failureClass.httpStatusCode)
-        if self.shouldFailoverToAlternate(for: error.failureClass),
-          self.failoverBargeInReplacement(
-            from: provider,
-            reason: self.failoverReason(for: error.failureClass))
-        {
+          httpStatusCode: error.failureClass.httpStatusCode,
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
+        if fallbackStarted {
           return
         }
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
@@ -1270,11 +1266,17 @@ extension RealtimeHubController {
           return
         }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
+        let fallbackStarted = self.failoverBargeInReplacement(
+          from: provider,
+          reason: "other",
+          mintAttemptId: String(mintGeneration))
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
           reason: "backend_transient",
-          phase: "barge_in_replacement")
-        if self.failoverBargeInReplacement(from: provider, reason: "other") {
+          phase: "barge_in_replacement",
+          outcome: fallbackStarted ? .degraded : .exhausted,
+          mintAttemptId: String(mintGeneration))
+        if fallbackStarted {
           return
         }
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
@@ -1327,17 +1329,21 @@ extension RealtimeHubController {
     auth: HubAuth,
     ownerScope: RealtimeHubOwnerScope
   ) {
-    guard
-      RealtimeHubOwnerFence.acceptsBargeInReplacement(
-        sessionOwner: ownerScope,
-        replacementOwner: pendingBargeInOwnerScope,
-        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
-    else {
-      clearBargeInReplacementState()
-      ensureWarm()
-      return
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      await self.sessionReplacementGate.waitUntilIdle()
+      guard
+        RealtimeHubOwnerFence.acceptsBargeInReplacement(
+          sessionOwner: ownerScope,
+          replacementOwner: self.pendingBargeInOwnerScope,
+          currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+      else {
+        self.clearBargeInReplacementState()
+        self.ensureWarm()
+        return
+      }
+      self.startSession(provider: provider, auth: auth, ownerScope: ownerScope)
     }
-    startSession(provider: provider, auth: auth, ownerScope: ownerScope)
   }
 
   func finishBargeInReplacementAfterSessionReady() {

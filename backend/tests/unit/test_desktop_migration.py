@@ -127,6 +127,7 @@ sys.modules["google.cloud.firestore_v1"].transactional = lambda f: f
 
 redis_stub = sys.modules["database.redis_db"]
 redis_stub.r = MagicMock()
+redis_stub.delete_cached_user_geolocation = MagicMock()
 setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
@@ -139,7 +140,9 @@ _ensure_package_path("database", BACKEND_DIR / "database")
 client_stub = _stub_module("database._client")
 mock_db = MagicMock()
 client_stub.db = mock_db
+client_stub.delete_collection_recursive = MagicMock()
 client_stub.document_id_from_seed = MagicMock(return_value="seed-id")
+client_stub.get_firestore_client = MagicMock(return_value=mock_db)
 
 # Stub database.helpers (used by chat.py)
 helpers_stub = _stub_module("database.helpers")
@@ -154,6 +157,10 @@ models_users_stub.Subscription = MagicMock()
 models_users_stub.PlanLimits = MagicMock()
 models_users_stub.PlanType = MagicMock()
 models_users_stub.SubscriptionStatus = MagicMock()
+models_users_stub.LocationContextConsent = MagicMock()
+models_users_stub.LocationContextConsentStatus = MagicMock()
+models_users_stub.LOCATION_CONTEXT_DISCLOSED_PROVIDERS = ()
+models_users_stub.LOCATION_CONTEXT_PURPOSE = "city_context"
 
 _stub_package("utils")
 _stub_package("utils.other")
@@ -184,6 +191,7 @@ request_validation_stub = _stub_module("utils.request_validation")
 request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
 redis_stub = _stub_module("database.redis_db")
 redis_stub.r = MagicMock()
+redis_stub.delete_cached_user_geolocation = MagicMock()
 setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
@@ -1636,6 +1644,41 @@ class TestScoreComputation:
 
         # Verify created_at was used in filter calls (for weekly query)
         assert 'created_at' in captured_filters, f"Expected created_at in filters, got: {captured_filters}"
+
+    def test_weekly_window_spans_seven_days_ending_on_date(self):
+        """The weekly window is the 7 days ending on `date`, i.e. [date-6, date+1).
+
+        Regression: it was [date-7, date+1) — 8 calendar days — which over-counted
+        every task created on the date-7 day, inconsistent with the docstring and
+        with the one-day daily window [date, date+1).
+        """
+        from datetime import timedelta
+
+        mock_col = MagicMock()
+        empty = MagicMock()
+        empty.where.return_value = empty
+        empty.stream.return_value = []
+        mock_col.where.return_value = empty
+        mock_col.stream.return_value = []
+
+        captured = []  # (field, op, value)
+        original_ff = action_items_db.FieldFilter
+
+        def tracking_filter(field, op, value):
+            captured.append((field, op, value))
+            return original_ff(field, op, value)
+
+        with patch.object(action_items_db, 'db') as patched_db, patch.object(
+            action_items_db, 'FieldFilter', side_effect=tracking_filter
+        ):
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            action_items_db.get_scores('test-uid', date='2026-07-19')
+
+        day = datetime(2026, 7, 19, tzinfo=timezone.utc)
+        created_at_lower = [v for (f, op, v) in captured if f == 'created_at' and op == '>=']
+        assert created_at_lower, f"no created_at >= filter captured: {captured}"
+        # 7 days ending on 2026-07-19 -> lower bound is 2026-07-13 (day-6), not 2026-07-12 (day-7).
+        assert created_at_lower[0] == day - timedelta(days=6), created_at_lower[0]
 
     def test_default_tab_daily_when_highest(self):
         """default_tab is 'daily' when daily has tasks and highest score."""

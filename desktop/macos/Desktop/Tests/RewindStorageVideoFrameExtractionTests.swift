@@ -11,6 +11,7 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
   override func setUp() async throws {
     try await super.setUp()
 
+    await RewindStorage.shared.reset()
     testUserId = "video-frame-test-\(UUID().uuidString)"
     RewindDatabase.currentUserId = testUserId
     try await RewindStorage.shared.initialize()

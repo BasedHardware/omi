@@ -592,7 +592,9 @@ export function canonicalAdapterEventType(event: OutboundMessageDraft): string |
     case "tool_activity":
       if (event.status === "started") return "tool.started";
       if (event.status === "completed") return "tool.completed";
-      if (event.status === "failed") return "tool.failed";
+      if (event.status === "failed" || event.status === "cancelled" || event.status === "interrupted") {
+        return "tool.failed";
+      }
       return "tool.updated";
     case "tool_use":
       return "tool.started";
@@ -632,7 +634,8 @@ export function mcpServersForBinding(
   mcpServers: Record<string, unknown>[],
   sessionId: string,
   adapterId: string,
-  runtimeNodeId: string
+  runtimeNodeId: string,
+  workingDirectory?: string,
 ): Record<string, unknown>[] {
   return mcpServers.map((server) => {
     if (!server || typeof server !== "object" || Array.isArray(server)) {
@@ -644,7 +647,10 @@ export function mcpServersForBinding(
       const name = (entry as Record<string, unknown>).name;
       return typeof name !== "string" || !VOLATILE_MCP_ENV_KEYS.has(name) || name === "OMI_CONTEXT_FILE";
     });
-    normalized.env = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    const bindingEnv = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    normalized.env = workingDirectory
+      ? upsertEnv(bindingEnv, "OMI_WORKSPACE", workingDirectory)
+      : bindingEnv;
     return normalized;
   });
 }

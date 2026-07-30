@@ -268,7 +268,7 @@ final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
     await importer.waitUntilStarted()
 
     let transition = Task {
-      await EffectiveOwnerTransitionFence.shared.performEffectiveOwnerTransition(
+      try await EffectiveOwnerTransitionFence.shared.performEffectiveOwnerTransition(
         currentOwner: { authorization.isCurrent() ? "owner-a" : "owner-b" },
         plannedNextOwner: { _ in "owner-b" },
         beginAuthorizationRevocation: { _ in authorization.revoke() },
@@ -287,7 +287,7 @@ final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
     XCTAssertEqual(defaults.dictionary(forKey: defaultsKey) as? [String: String], original)
     let transitionReleased = await transitionGate.release()
     XCTAssertTrue(transitionReleased)
-    await transition.value
+    try await transition.value
 
     let outcome = await migration.value
     XCTAssertEqual(outcome, .retained(reason: "owner_authorization_revoked"))

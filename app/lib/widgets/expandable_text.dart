@@ -53,7 +53,10 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
               a: widget.style,
               p: widget.style,
               blockquote: widget.style.copyWith(backgroundColor: Colors.transparent, color: Colors.black),
-              blockquoteDecoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(4)),
+              blockquoteDecoration: BoxDecoration(
+                color: const Color(0xFF35343B),
+                borderRadius: BorderRadius.circular(4),
+              ),
               code: widget.style.copyWith(
                 backgroundColor: Colors.transparent,
                 decoration: TextDecoration.none,
@@ -64,8 +67,8 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
             data: widget.isExpanded
                 ? widget.text
                 : widget.text.length > maxChars
-                    ? widget.text.substring(0, maxChars)
-                    : widget.text,
+                ? widget.text.substring(0, maxChars)
+                : widget.text,
           ),
           // Text(
           //   widget.text,

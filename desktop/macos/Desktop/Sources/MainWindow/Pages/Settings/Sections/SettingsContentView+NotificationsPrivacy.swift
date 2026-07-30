@@ -33,6 +33,22 @@ extension SettingsContentView {
 
             notificationFrequencySlider(settingId: "notifications.frequency")
 
+            // Sits under the master toggle and the frequency slider because both gate it:
+            // frequency caps how often any proactive card is delivered, and this decides
+            // whether live suggestions are generated at all.
+            settingRow(
+              title: "Live Suggestions",
+              subtitle: "Suggest things in the notch, using what Omi already knows",
+              settingId: "notifications.livesuggestions"
+            ) {
+              Toggle("", isOn: $liveSuggestionsEnabled)
+                .toggleStyle(OmiToggleStyle())
+                .labelsHidden()
+                .onChange(of: liveSuggestionsEnabled) { _, newValue in
+                  SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
+                }
+            }
+
             settingRow(
               title: "Focus Notifications", subtitle: "Show notification on focus changes",
               settingId: "notifications.focus"
@@ -89,7 +105,7 @@ extension SettingsContentView {
                 .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: memoryNotificationsEnabled) { _, newValue in
-                  MemoryAssistantSettings.shared.notificationsEnabled = newValue
+                  MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: newValue)
                   SettingsSyncManager.shared.pushPartialUpdate(
                     AssistantSettingsResponse(
                       memory: MemorySettingsResponse(notificationsEnabled: newValue)))

@@ -8,6 +8,8 @@ import re
 import sys
 from pathlib import Path
 
+from desktop_flow_contract import ACTION_SOURCE_RELATIVE_PATHS
+
 try:
     import yaml
 except ImportError as exc:  # pragma: no cover - surfaced in CI with install hint
@@ -21,12 +23,9 @@ except ImportError as exc:  # pragma: no cover - surfaced in CI with install hin
 SCRIPT_DIR = Path(__file__).resolve().parent
 DESKTOP_DIR = SCRIPT_DIR.parent
 FLOWS_DIR = DESKTOP_DIR / "e2e" / "flows"
-BRIDGE_SOURCE = DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift"
-REWIND_GAUNTLET_SOURCE = DESKTOP_DIR / "Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift"
-HUB_SOURCE = DESKTOP_DIR / "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
-VIEW_MODEL_ACTION_SOURCES = (
-    DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
-    DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
+# Keep origin/main's shared action-source contract and the PR's Chat-first
+# action owner covered while both surfaces are present in the merged runtime.
+ACTION_SOURCES = tuple(DESKTOP_DIR / path for path in ACTION_SOURCE_RELATIVE_PATHS) + (
     DESKTOP_DIR / "Desktop/Sources/MainWindow/ChatFirst/ChatFirstAutomationRuntime.swift",
 )
 
@@ -56,7 +55,7 @@ def fail(message: str) -> None:
 def registered_actions() -> set[str]:
     actions: set[str] = set()
     pattern = re.compile(r'name:\s*"([^"]+)"')
-    for path in (BRIDGE_SOURCE, REWIND_GAUNTLET_SOURCE, HUB_SOURCE, *VIEW_MODEL_ACTION_SOURCES):
+    for path in ACTION_SOURCES:
         if not path.is_file():
             fail(f"missing automation source: {path}")
         actions.update(pattern.findall(path.read_text(encoding="utf-8")))

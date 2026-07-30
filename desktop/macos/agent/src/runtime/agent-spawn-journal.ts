@@ -639,6 +639,22 @@ export function ensureAgentSpawnJournal(
         metadataJson,
         createdAtMs: assistantCreatedAtMs,
       }).turn;
+    } else if (existingAssistant.status === "streaming" && existingAssistant.producingRunId === null) {
+      // An optimistic streaming projection admitted the assistant row before the
+      // canonical spawn receipt arrived. Replace its speculative content with the
+      // authoritative spawn exchange instead of rejecting the turn.
+      assistantTurn = updateJournalTurn(store, {
+        ownerId: input.ownerId,
+        conversationId,
+        turnId: assistantTurnId,
+        status: "completed",
+        content: descriptor.assistantText,
+        replaceContentBlocks: completionBlock ? [spawnBlock, completionBlock] : [spawnBlock],
+        replaceResources: artifactResources,
+        producingRunId: input.runId,
+        metadataJson,
+        nowMs: now,
+      });
     } else {
       if (existingAssistant.role !== "assistant" || existingAssistant.content !== descriptor.assistantText) {
         throw new Error("Agent spawn journal assistant identity collides with different producer content");

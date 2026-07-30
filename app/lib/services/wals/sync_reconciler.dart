@@ -65,8 +65,15 @@ class SyncReconciler {
       rethrow;
     } finally {
       _running = false;
+      // Re-arm on every outcome. Leaving the timer disarmed after a failed pass
+      // stranded uploaded WALs until something else happened to wake the
+      // coordinator.
+      try {
+        await _reschedule();
+      } catch (e) {
+        Logger.debug('SyncReconciler: reschedule failed: $e');
+      }
     }
-    await _reschedule();
   }
 
   Future<bool> _hasUploaded() async {

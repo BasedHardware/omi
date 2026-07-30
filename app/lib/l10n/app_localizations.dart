@@ -3501,30 +3501,6 @@ abstract class AppLocalizations {
   /// **'Loving Omi?'**
   String get lovingOmi;
 
-  /// App review prompt text for iOS users
-  ///
-  /// In en, this message translates to:
-  /// **'Help us reach more people by leaving a review in the App Store. Your feedback means the world to us!'**
-  String get leaveReviewIos;
-
-  /// App review prompt text for Android users
-  ///
-  /// In en, this message translates to:
-  /// **'Help us reach more people by leaving a review in the Google Play Store. Your feedback means the world to us!'**
-  String get leaveReviewAndroid;
-
-  /// Button text to rate on Apple App Store
-  ///
-  /// In en, this message translates to:
-  /// **'Rate on App Store'**
-  String get rateOnAppStore;
-
-  /// Button text to rate on Google Play Store
-  ///
-  /// In en, this message translates to:
-  /// **'Rate on Google Play'**
-  String get rateOnGooglePlay;
-
   /// Button text to defer action
   ///
   /// In en, this message translates to:
@@ -4148,6 +4124,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'✏️ Edit Memory'**
   String get editMemory;
+
+  /// Label for pinning a memory as baseline
+  ///
+  /// In en, this message translates to:
+  /// **'Pin as Baseline'**
+  String get pinAsBaseline;
+
+  /// Label for unpinning a memory from baseline
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin from Baseline'**
+  String get unpinAsBaseline;
+
+  /// Label for baseline memory
+  ///
+  /// In en, this message translates to:
+  /// **'Baseline Memory'**
+  String get baselineMemory;
+
+  /// Description for baseline memory being always in context
+  ///
+  /// In en, this message translates to:
+  /// **'Always in context'**
+  String get alwaysInContext;
 
   /// Input hint
   ///
@@ -18188,6 +18188,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error loading audio'**
   String get errorLoadingAudio;
+
+  /// Title for the Bluetooth microphone picker used to connect Ray-Ban Meta glasses
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your Ray-Ban Meta microphone'**
+  String get rayBanMetaMicPickerTitle;
+
+  /// Explains how to choose the glasses microphone and the Bluetooth HFP music tradeoff
+  ///
+  /// In en, this message translates to:
+  /// **'Select the Bluetooth microphone for your glasses. Music pauses while Omi uses it.'**
+  String get rayBanMetaMicPickerDescription;
+
+  /// Empty state when iOS reports no Bluetooth HFP microphone inputs
+  ///
+  /// In en, this message translates to:
+  /// **'No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.'**
+  String get rayBanMetaMicPickerEmpty;
+
+  /// Error state when available Bluetooth HFP inputs cannot be read
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth microphones could not be loaded. Check that Bluetooth is on, then try again.'**
+  String get rayBanMetaMicPickerLoadError;
+
+  /// Error shown when the selected Bluetooth HFP microphone cannot connect
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to that microphone. Make sure it is connected in iPhone Settings.'**
+  String get rayBanMetaMicPickerConnectError;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

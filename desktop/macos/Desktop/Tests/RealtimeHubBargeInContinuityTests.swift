@@ -204,6 +204,98 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       .init(continuityKey: "voice:matrix-dup", accepted: true))
   }
 
+  func testStreamingJournalProjectionUsesOneStablePairAndSerializesItsLifecycle() async {
+    let projection = RealtimeStreamingJournalProjection(
+      ownerID: "owner-a",
+      continuityKey: "voice:streaming-turn",
+      admissionSurface: .mainChat(chatId: nil)
+    )
+    let user = projection.userMessage(text: "What changed?")
+    let placeholder = projection.assistantMessage(text: "", isStreaming: true)
+    XCTAssertEqual(
+      user.id,
+      KernelTurnProjection.stableTurnID(continuityKey: "voice:streaming-turn", role: "user")
+    )
+    XCTAssertEqual(
+      placeholder.id,
+      KernelTurnProjection.stableTurnID(continuityKey: "voice:streaming-turn", role: "assistant")
+    )
+    XCTAssertTrue(placeholder.isStreaming)
+
+    let ledger = RealtimeStreamingJournalWriteLedger()
+    var writes: [String] = []
+    XCTAssertTrue(
+      ledger.begin(projection: projection) { projection in
+        writes.append("record:\(projection.userTurnID):\(projection.assistantTurnID)")
+        return true
+      })
+    ledger.enqueueUpdate(continuityKey: projection.continuityKey) { projection in
+      writes.append("delta:\(projection.assistantTurnID)")
+      return true
+    }
+
+    let finalized = await ledger.finalize(continuityKey: projection.continuityKey) { projection in
+      writes.append("complete:\(projection.userTurnID):\(projection.assistantTurnID)")
+      return true
+    }
+
+    XCTAssertEqual(finalized, RealtimeStreamingJournalWriteLedger.FinalizationResult.completed(true))
+    XCTAssertEqual(
+      writes,
+      [
+        "record:\(projection.userTurnID):\(projection.assistantTurnID)",
+        "delta:\(projection.assistantTurnID)",
+        "complete:\(projection.userTurnID):\(projection.assistantTurnID)",
+      ]
+    )
+    let absent = await ledger.finalize(continuityKey: projection.continuityKey) { _ in true }
+    XCTAssertEqual(absent, RealtimeStreamingJournalWriteLedger.FinalizationResult.absent)
+  }
+
+  func testStreamingJournalProjectionReportsRejectedAdmissionForFinalOnlyFallback() async {
+    let projection = RealtimeStreamingJournalProjection(
+      ownerID: "owner-a",
+      continuityKey: "voice:streaming-rejected",
+      admissionSurface: .mainChat(chatId: nil)
+    )
+    let ledger = RealtimeStreamingJournalWriteLedger()
+    var updateRan = false
+    XCTAssertTrue(ledger.begin(projection: projection) { _ in false })
+    ledger.enqueueUpdate(continuityKey: projection.continuityKey) { _ in
+      updateRan = true
+      return true
+    }
+
+    let finalized = await ledger.finalize(continuityKey: projection.continuityKey) { _ in
+      XCTFail("a rejected atomic admission must not terminalize a non-existent row")
+      return true
+    }
+
+    XCTAssertEqual(finalized, RealtimeStreamingJournalWriteLedger.FinalizationResult.recordRejected)
+    XCTAssertFalse(updateRan)
+  }
+
+  func testStreamingJournalCancelForKeyEvictsAndRejectsFinalize() async {
+    let projection = RealtimeStreamingJournalProjection(
+      ownerID: "owner-a",
+      continuityKey: "voice:streaming-cancel",
+      admissionSurface: .mainChat(chatId: nil)
+    )
+    let ledger = RealtimeStreamingJournalWriteLedger()
+    XCTAssertTrue(ledger.begin(projection: projection) { _ in true })
+    XCTAssertTrue(ledger.contains(continuityKey: projection.continuityKey))
+
+    ledger.cancel(continuityKey: projection.continuityKey)
+    XCTAssertFalse(ledger.contains(continuityKey: projection.continuityKey))
+
+    let finalized = await ledger.finalize(continuityKey: projection.continuityKey) { _ in true }
+    XCTAssertEqual(
+      finalized,
+      RealtimeStreamingJournalWriteLedger.FinalizationResult.absent,
+      "a cancelled projection must not be terminalizable"
+    )
+  }
+
   func testTurnPersistenceLedgerConsumeIsOnceThenFreshEnqueue() async {
     let ledger = RealtimeTurnPersistenceLedger()
     let gate = SuspendedTurnPersistenceGate()
@@ -669,7 +761,9 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
     let retainedResponseID = RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
       preservingReconnectAudio: true,
-      pendingReconnect: pendingReconnect)
+      pendingReconnect: pendingReconnect,
+      preservingBargeInReplacement: false,
+      pendingBargeInReplacement: nil)
     XCTAssertEqual(retainedResponseID, responseID)
     XCTAssertTrue(
       RealtimeHubEventOwnership.accepts(
@@ -685,11 +779,58 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertNil(
       RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
         preservingReconnectAudio: false,
-        pendingReconnect: pendingReconnect))
+        pendingReconnect: pendingReconnect,
+        preservingBargeInReplacement: false,
+        pendingBargeInReplacement: nil))
     XCTAssertNil(
       RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
         preservingReconnectAudio: true,
-        pendingReconnect: nil))
+        pendingReconnect: nil,
+        preservingBargeInReplacement: false,
+        pendingBargeInReplacement: nil))
+  }
+
+  func testBargeInReplacementKeepsBufferedResponseIdentityForFreshSocket() {
+    let turnID = VoiceTurnID()
+    let responseID = VoiceResponseID("barge-in-response")
+    let pendingReplacement = RealtimeReplacementAudioBuffer(
+      turnID: turnID,
+      responseID: responseID,
+      identity: VoiceEffectIdentity(turnID: turnID, effectID: 1))
+
+    let retainedResponseID = RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
+      preservingReconnectAudio: false,
+      pendingReconnect: nil,
+      preservingBargeInReplacement: true,
+      pendingBargeInReplacement: pendingReplacement)
+
+    XCTAssertEqual(retainedResponseID, responseID)
+    XCTAssertEqual(
+      RealtimeHubEventOwnership.admission(
+        RealtimeHubEventIdentity(turnID: turnID, responseID: responseID),
+        activeTurnID: turnID,
+        activeResponseID: retainedResponseID),
+      .accept)
+  }
+
+  func testCurrentTurnResponseMismatchIsNotClassifiedAsAnOldTurnCallback() {
+    let turnID = VoiceTurnID()
+    let event = RealtimeHubEventIdentity(
+      turnID: turnID,
+      responseID: VoiceResponseID("provider-response"))
+
+    XCTAssertEqual(
+      RealtimeHubEventOwnership.admission(
+        event,
+        activeTurnID: turnID,
+        activeResponseID: nil),
+      .rejectCurrentTurnResponse)
+    XCTAssertEqual(
+      RealtimeHubEventOwnership.admission(
+        event,
+        activeTurnID: VoiceTurnID(),
+        activeResponseID: event.responseID),
+      .dropStaleTurn)
   }
 
   func testGeminiInputTranscriptCannotCrossCompletedTurnBoundary() {
@@ -875,7 +1016,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("reason: .cancelledTurnContinuity"))
     XCTAssertTrue(
       source.contains("pendingSessionRefreshReason = RealtimeHubSessionHandoffReason.persistedVoiceContext.rawValue"))
-    XCTAssertTrue(source.contains("ensureWarm()"))
+    XCTAssertTrue(source.contains("replaceSessionAfterDrain()"))
     XCTAssertFalse(source.contains("general warm deferred behind canceled-turn continuity fence"))
     XCTAssertFalse(source.contains("session start rejected behind canceled-turn continuity fence"))
   }
@@ -894,8 +1035,11 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertLessThan(preparationWait.lowerBound, continuityWait.lowerBound)
     XCTAssertLessThan(continuityWait.lowerBound, persistenceFence.lowerBound)
     XCTAssertLessThan(
-      try XCTUnwrap(cancelTail.range(of: "ensureWarm()", range: cancelTail.startIndex..<preparationWait.lowerBound))
-        .lowerBound,
+      try XCTUnwrap(
+        cancelTail.range(
+          of: "replaceSessionAfterDrain()",
+          range: cancelTail.startIndex..<preparationWait.lowerBound)
+      ).lowerBound,
       persistenceFence.lowerBound)
 
     let helper = try XCTUnwrap(
@@ -907,15 +1051,18 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let contextRefresh = try XCTUnwrap(helperTail.range(of: "await refreshVoiceContextSnapshot()"))
     XCTAssertLessThan(ordinaryPersistenceWait.lowerBound, contextRefresh.lowerBound)
 
-    XCTAssertTrue(source.contains("var voiceContextRefreshGeneration: UInt64 = 0"))
-    XCTAssertTrue(source.contains("voiceContextRefreshGeneration == refreshGeneration"))
+    XCTAssertTrue(source.contains("let voiceContextSingleFlight = RealtimeVoiceContextSingleFlight()"))
+    XCTAssertTrue(source.contains("voiceContextSingleFlight.joinOrStart(operation)"))
+    XCTAssertTrue(source.contains("voiceContextSingleFlight.restart(operation)"))
+    XCTAssertTrue(source.contains("await prefetchVoiceContextSnapshotIfNeeded().value"))
+    XCTAssertTrue(source.contains("prefetchVoiceContextSnapshotIfNeeded(forceRefresh: true)"))
+    XCTAssertFalse(source.contains("voiceContextPrefetchTask?.cancel()"))
     XCTAssertTrue(
       source.contains(
         "resolvedSnapshot = try await FloatingControlBarManager.shared.kernelVoiceContextSnapshot()"))
     XCTAssertTrue(source.contains("prefetchedVoiceContext = resolvedSnapshot.context"))
     XCTAssertTrue(source.contains("prefetchedVoiceContextFreshnessIdentity = resolvedSnapshot.freshnessIdentity"))
-    XCTAssertTrue(source.contains("guard resolvedSnapshot.isResolved else"))
-    XCTAssertTrue(source.contains("retaining the last voice context after an unresolved kernel snapshot"))
+    XCTAssertTrue(source.contains("resolvedSnapshot.isResolved"))
     XCTAssertTrue(source.contains("failContextFreshInputPreparation("))
     XCTAssertTrue(source.contains("Voice context is temporarily unavailable"))
     XCTAssertFalse(source.contains("prefetchedFloatingAgentStatus"))

@@ -129,7 +129,57 @@ def definitions_directory(root: Path) -> Path:
     return root / DEFINITIONS_RELATIVE_PATH
 
 
-def validate_definition(data: Any, path: Path) -> list[dict[str, Any]]:
+def validate_canonical_prevention_artifact(value: Any, path: Path, root: Path) -> list[dict[str, Any]]:
+    """Return errors for the optional guard-artifact field.
+
+    The field names the reusable guard surface that makes recurrence of this
+    class mechanically harder — a checker, a shared fixture, or a behavioral
+    contract test. Every listed path must exist so a rename cannot silently
+    leave a class claiming a guard it no longer has.
+    """
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(not isinstance(item, str) or not item.strip() for item in value)
+    ):
+        return [
+            error(
+                "invalid_canonical_prevention_artifact",
+                "'canonical_prevention_artifact', when present, must be a non-empty array of repository-relative paths",
+                path=str(path),
+            )
+        ]
+    errors: list[dict[str, Any]] = []
+    if len(set(value)) != len(value):
+        errors.append(
+            error(
+                "invalid_canonical_prevention_artifact",
+                "'canonical_prevention_artifact' must not contain duplicates",
+                path=str(path),
+            )
+        )
+    for item in value:
+        candidate = Path(item)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            errors.append(
+                error(
+                    "invalid_canonical_prevention_artifact",
+                    f"'{item}' must be a repository-relative path without '..'",
+                    path=str(path),
+                )
+            )
+        elif not (root / candidate).exists():
+            errors.append(
+                error(
+                    "missing_canonical_prevention_artifact",
+                    f"'canonical_prevention_artifact' path does not exist: {item}",
+                    path=str(path),
+                )
+            )
+    return errors
+
+
+def validate_definition(data: Any, path: Path, root: Path) -> list[dict[str, Any]]:
     """Return schema errors without allowing malformed files to fail open."""
     if not isinstance(data, dict):
         return [error("invalid_definition", "definition must be a JSON object", path=str(path))]
@@ -142,7 +192,7 @@ def validate_definition(data: Any, path: Path) -> list[dict[str, Any]]:
         "evidence_prs",
         "status",
     }
-    allowed = required | {"scope_hints", "dormant_since"}
+    allowed = required | {"scope_hints", "dormant_since", "canonical_prevention_artifact"}
     errors: list[dict[str, Any]] = []
     for key in sorted(required - data.keys()):
         errors.append(error("missing_definition_field", f"missing required field '{key}'", path=str(path)))
@@ -195,6 +245,9 @@ def validate_definition(data: Any, path: Path) -> list[dict[str, Any]]:
                 path=str(path),
             )
         )
+    if "canonical_prevention_artifact" in data:
+        errors.extend(validate_canonical_prevention_artifact(data["canonical_prevention_artifact"], path, root))
+
     status = data.get("status")
     if status not in {"open", "dormant"}:
         errors.append(error("invalid_status", "'status' must be 'open' or 'dormant'", path=str(path)))
@@ -250,7 +303,7 @@ def load_definitions(root: Path) -> tuple[list[Definition], list[dict[str, Any]]
         except (OSError, json.JSONDecodeError) as exc:
             errors.append(error("invalid_definition_json", str(exc), path=str(path)))
             continue
-        errors.extend(validate_definition(data, path))
+        errors.extend(validate_definition(data, path, root))
         if isinstance(data, dict) and isinstance(data.get("id"), str):
             if data["id"] in ids:
                 errors.append(
@@ -331,6 +384,55 @@ def changed_definition_paths(root: Path, common: str, head: str) -> list[Path]:
         str(DEFINITIONS_RELATIVE_PATH),
     )
     return [Path(line) for line in output.splitlines() if line]
+
+
+def definition_json_at_ref(root: Path, ref: str, relative: Path) -> dict[str, Any] | None:
+    try:
+        output = run_git(root, "show", f"{ref}:{relative.as_posix()}")
+    except CliError:
+        return None
+    try:
+        data = json.loads(output)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def is_artifact_only_definition_update(root: Path, common: str, relative: Path) -> bool:
+    """True when the only JSON delta is adding or updating canonical_prevention_artifact."""
+    head_path = root / relative
+    try:
+        head_data = json.loads(head_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(head_data, dict) or "canonical_prevention_artifact" not in head_data:
+        return False
+    base_data = definition_json_at_ref(root, common, relative)
+    if base_data is None:
+        return False
+    if base_data.get("canonical_prevention_artifact") == head_data.get("canonical_prevention_artifact"):
+        return False
+    for key in set(base_data) | set(head_data):
+        if key == "canonical_prevention_artifact":
+            continue
+        if base_data.get(key) != head_data.get(key):
+            return False
+    return True
+
+
+def instance_fix_registry_changes_allowed(
+    root: Path,
+    common: str,
+    declaration: str,
+    changed_paths: list[Path],
+) -> bool:
+    """Instance-fix PRs may record a guard artifact for the declared class only."""
+    if not changed_paths:
+        return True
+    expected = DEFINITIONS_RELATIVE_PATH / f"{declaration}.json"
+    if set(changed_paths) != {expected}:
+        return False
+    return is_artifact_only_definition_update(root, common, expected)
 
 
 def public_definition(definition: Definition, root: Path) -> dict[str, Any]:
@@ -429,11 +531,20 @@ def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, An
             )
         )
 
-    if has_fix_commit and declaration != "new" and changed_definition_paths_in_range:
+    if (
+        has_fix_commit
+        and declaration not in (None, "new", "none")
+        and changed_definition_paths_in_range
+        and not instance_fix_registry_changes_allowed(
+            root, common, declaration, changed_definition_paths_in_range
+        )
+    ):
         errors.append(
             error(
                 "instance_fix_mutates_registry",
-                "an instance-fix PR must not edit failure-class definitions; use a separate registry-only lifecycle PR",
+                "an instance-fix PR must not edit failure-class definitions except to add or update "
+                "'canonical_prevention_artifact' on the declared class; other registry edits need a "
+                "separate registry-only lifecycle PR",
                 changed_paths=[str(path) for path in changed_definition_paths_in_range],
             )
         )

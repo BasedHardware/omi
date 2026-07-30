@@ -42,6 +42,83 @@ struct UserNotificationDeliveryResult: Sendable {
   let errorDescription: String?
 }
 
+/// A Sendable copy of the bounded string fields accepted by the local
+/// distributed-notification test bridge. `Notification.userInfo` is not
+/// Sendable and must not cross from Foundation's delivery thread to MainActor.
+struct ProactiveTestNotificationPayload: Sendable {
+  private static let supportedKeys = [
+    "hours", "count", "title", "message", "assistantId", "sourceApp",
+    "windowTitle", "contextSummary", "currentActivity", "reasoning", "detail",
+  ]
+
+  private let values: [String: String]
+
+  nonisolated init(_ notification: Notification) {
+    let userInfo = notification.userInfo
+    var copiedValues: [String: String] = [:]
+    for key in Self.supportedKeys {
+      copiedValues[key] = userInfo?[key] as? String
+    }
+    values = copiedValues
+  }
+
+  subscript(_ key: String) -> String? {
+    values[key]
+  }
+}
+
+/// Selector-based Foundation observers can be called on the posting thread.
+/// Keep the Objective-C entrypoint nonisolated, copy only Sendable values, and
+/// perform the MainActor hop before touching the actor-isolated plugin.
+protocol ProactiveSelectorNotificationCenter: AnyObject {
+  func addProactiveObserver(_ observer: NSObject, selector: Selector, name: Notification.Name)
+  func removeProactiveObserver(_ observer: NSObject, name: Notification.Name)
+}
+
+extension NotificationCenter: ProactiveSelectorNotificationCenter {
+  func addProactiveObserver(_ observer: NSObject, selector: Selector, name: Notification.Name) {
+    addObserver(observer, selector: selector, name: name, object: nil)
+  }
+
+  func removeProactiveObserver(_ observer: NSObject, name: Notification.Name) {
+    removeObserver(observer, name: name, object: nil)
+  }
+}
+
+final class ProactiveTestNotificationObserver: NSObject, @unchecked Sendable {
+  let name: Notification.Name
+  private let handler: @MainActor @Sendable (ProactiveTestNotificationPayload) -> Void
+
+  init(
+    name: Notification.Name,
+    handler: @escaping @MainActor @Sendable (ProactiveTestNotificationPayload) -> Void
+  ) {
+    self.name = name
+    self.handler = handler
+  }
+
+  func register(in center: ProactiveSelectorNotificationCenter) {
+    center.addProactiveObserver(
+      self,
+      selector: #selector(receive(_:)),
+      name: name
+    )
+  }
+
+  func unregister(from center: ProactiveSelectorNotificationCenter) {
+    center.removeProactiveObserver(self, name: name)
+  }
+
+  @objc nonisolated func receive(_ notification: Notification) {
+    let payload = ProactiveTestNotificationPayload(notification)
+    DispatchQueue.main.async { [handler] in
+      MainActor.assumeIsolated {
+        handler(payload)
+      }
+    }
+  }
+}
+
 /// The sole boundary for completion-handler UserNotifications APIs.
 ///
 /// System callback registration remains nonisolated and copies only Sendable

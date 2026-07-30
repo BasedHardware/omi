@@ -51,6 +51,20 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     }
   }
 
+  /// Client IDs that count as "authorized" when scanning OAuth grants — NOT the
+  /// same as `cloudOAuthClientID` (the setup form's per-backend value). The
+  /// ChatGPT directory is one global plugin that always grants under
+  /// `omi-chatgpt-prod`, even on a dev-backend build, so verification must accept
+  /// it or ChatGPT never connects on Beta. Mirrors backend `PUBLIC_CHATGPT_CLIENT_IDS`.
+  var cloudOAuthGrantClientIDs: Set<String> {
+    switch self {
+    case .chatgpt: return ["omi-chatgpt-prod", "omi-chatgpt-dev"]
+    case .claude: return ["omi-claude-prod"]
+    case .notion, .obsidian, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
+      return []
+    }
+  }
+
   var cloudOAuthClientSecret: String? {
     switch self {
     case .chatgpt, .claude:
@@ -95,7 +109,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var subtitle: String {
     switch self {
-    case .notion: return "Copy-ready page export"
+    case .notion: return "Live page in your workspace"
     case .obsidian: return "Choose once, refresh anytime"
     case .chatgpt: return "Add Omi from the ChatGPT directory"
     case .claude: return "Live MCP or memory pack"
@@ -110,7 +124,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var description: String {
     switch self {
-    case .notion: return "Copy a ready-to-paste memory page and jump into Notion."
+    case .notion: return "Connect once and Omi keeps an Omi Memories page fresh in your workspace."
     case .obsidian: return "Write Omi memories into your Obsidian vault."
     case .chatgpt:
       return "Add Omi in ChatGPT, authorize once, and use your memories in every ChatGPT chat."
@@ -660,106 +674,6 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   fileprivate var connectedAtKey: String { "memoryExportConnectedAt.\(rawValue)" }
 }
 
-struct MemoryExportStatus: Sendable {
-  let exportedCount: Int
-  let lastExportedAt: Date?
-  let detailText: String?
-  let isConfigured: Bool
-  let hasConnection: Bool
-}
-
-struct MCPSetupCompletionSummary: Equatable, Sendable {
-  let title: String
-  let subtitle: String
-}
-
-struct MemoryExportConnectionPresentation: Equatable {
-  let primaryActionTitle: String?
-  let completion: MCPSetupCompletionSummary?
-
-  static func make(
-    destination: MemoryExportDestination,
-    status: MemoryExportStatus?,
-    isRunning: Bool,
-    accessibilityPreflightMissing: Bool = false
-  ) -> MemoryExportConnectionPresentation {
-    if status?.hasConnection == true {
-      return MemoryExportConnectionPresentation(
-        primaryActionTitle: nil,
-        completion: destination.mcpSetupCompletionSummary
-      )
-    }
-
-    let title: String
-    if isRunning {
-      title = "Connecting…"
-    } else {
-      switch destination.mcpExecuteKind {
-      case .directoryApp:
-        title = "Add Omi to ChatGPT"
-      case .localAutonomous:
-        title = "Do it for me"
-      case .browserAutonomous:
-        title = accessibilityPreflightMissing ? "Grant Accessibility" : "Do it for me"
-      case .assisted:
-        title = destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
-      }
-    }
-
-    return MemoryExportConnectionPresentation(primaryActionTitle: title, completion: nil)
-  }
-}
-
-/// Rendered MCP connection instructions for a single client.
-struct MCPSetup: Sendable {
-  let serverURL: String
-  let copyTitle: String?
-  let copyText: String?
-  let steps: [String]
-  let openURL: URL?
-  let openTitle: String?
-}
-
-struct MemoryExportResult: Sendable {
-  let memoryCount: Int
-  let detailText: String?
-  let destinationURL: URL?
-  let fileURL: URL?
-  let clipboardText: String?
-}
-
-struct AgentConnectionTestResult: Sendable {
-  let hostedMemoryCount: Int
-  let localToolCount: Int
-
-  var summary: String {
-    "Connection looks good: Omi returned \(hostedMemoryCount) hosted memories, and Desktop shared \(localToolCount) local tools."
-  }
-}
-
-enum MemoryExportError: LocalizedError {
-  case noMemories
-  case invalidNotionConfiguration
-  case invalidNotionResponse
-  case invalidObsidianVault
-  case requestFailed(String)
-
-  var errorDescription: String? {
-    switch self {
-    case .noMemories:
-      return "There are no memories available to export yet."
-    case .invalidNotionConfiguration:
-      return "Enter both a Notion integration token and a parent page ID."
-    case .invalidNotionResponse:
-      return "Notion returned an unexpected response."
-    case .invalidObsidianVault:
-      return "Choose a valid Obsidian vault folder first."
-    case .requestFailed(let message):
-      return message
-    }
-  }
-}
-
 actor MemoryExportService {
   static let shared = MemoryExportService()
 
@@ -799,12 +713,16 @@ actor MemoryExportService {
       destination.supportsMCP
       ? MemoryExportConnectionDetector.scanLocalMCPConnections(for: destination, matchingKey: currentMCPKey)
       : []
-    return status(for: destination, localMCPConnections: localConnections)
+    return status(
+      for: destination,
+      localMCPConnections: localConnections,
+      cloudGrantObservation: destination.cloudOAuthGrantClientIDs.isEmpty ? nil : "cached_or_derived")
   }
 
   private func status(
     for destination: MemoryExportDestination,
-    localMCPConnections: Set<MemoryExportDestination>
+    localMCPConnections: Set<MemoryExportDestination>,
+    cloudGrantObservation: String? = nil
   ) -> MemoryExportStatus {
     let exportedCount = max(defaults.integer(forKey: destination.exportedCountKey), 0)
 
@@ -832,6 +750,14 @@ actor MemoryExportService {
     case .notion, .obsidian, .gemini, .agents:
       hasConnection = exportedCount > 0 || hasConnectedTimestamp || hasLocalMCPConnection
     }
+    if let cloudGrantObservation {
+      DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
+        seam: .connectorStatus,
+        from: cloudGrantObservation,
+        to: hasConnection ? "connected" : "not_connected",
+        direction: "cloud_grant_status_inferred",
+        subject: destination.rawValue)
+    }
     let isConfigured: Bool
     switch destination {
     case .obsidian:
@@ -845,7 +771,7 @@ actor MemoryExportService {
     case .chatgpt, .claude:
       isConfigured = hasConnection
     case .notion, .gemini:
-      isConfigured = exportedCount > 0
+      isConfigured = destination == .notion ? NotionMCPConnector.shared.isConnected : exportedCount > 0
     }
 
     return MemoryExportStatus(
@@ -861,33 +787,48 @@ actor MemoryExportService {
     let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(matchingKey: storedMCPKey())
     return Dictionary(
       lastWriteWins: MemoryExportDestination.allCases.map { destination in
-        (destination, status(for: destination, localMCPConnections: localConnections))
+        (
+          destination,
+          status(
+            for: destination,
+            localMCPConnections: localConnections,
+            cloudGrantObservation: destination.cloudOAuthGrantClientIDs.isEmpty ? nil : "cached_or_derived")
+        )
       })
   }
 
-  /// Refreshes the authoritative connection state after returning from the
-  /// ChatGPT directory. Network failures intentionally retain the last known
-  /// state rather than presenting an authorization as revoked.
-  func refreshChatGPTDirectoryConnectionStatus() async -> MemoryExportStatus {
+  /// Refreshes the authoritative connection state for a cloud OAuth connector
+  /// (ChatGPT/Claude) after the user authorizes in the browser — only the backend
+  /// grant list knows the truth. Network failures intentionally retain the last
+  /// known state rather than presenting an authorization as revoked.
+  func refreshCloudGrantConnectionStatus(for destination: MemoryExportDestination) async -> MemoryExportStatus {
+    let clientIDs = destination.cloudOAuthGrantClientIDs
+    guard !clientIDs.isEmpty else { return status(for: destination) }
+    var observation = "authoritative_grant_check"
     do {
       let response: OAuthGrantsResponse = try await APIClient.shared.get(
         "v1/mcp/oauth/grants", includeBYOK: false)
-      let isAuthorized = response.grants.contains {
-        $0.clientID == MemoryExportDestination.chatgptOAuthClientID && $0.isActive
-      }
+      let isAuthorized = response.grants.contains { clientIDs.contains($0.clientID) && $0.isActive }
 
       if isAuthorized {
-        defaults.set(Date().timeIntervalSince1970, forKey: MemoryExportDestination.chatgpt.connectedAtKey)
-        defaults.set("Authorized through ChatGPT", forKey: MemoryExportDestination.chatgpt.detailKey)
+        defaults.set(Date().timeIntervalSince1970, forKey: destination.connectedAtKey)
+        defaults.set("Authorized through \(destination.title)", forKey: destination.detailKey)
       } else {
-        defaults.removeObject(forKey: MemoryExportDestination.chatgpt.connectedAtKey)
-        defaults.removeObject(forKey: MemoryExportDestination.chatgpt.detailKey)
+        defaults.removeObject(forKey: destination.connectedAtKey)
+        defaults.removeObject(forKey: destination.detailKey)
       }
     } catch {
-      log("MemoryExportService: ChatGPT OAuth grant refresh failed: \(error.localizedDescription)")
+      log("MemoryExportService: \(destination.title) OAuth grant refresh failed: \(error.localizedDescription)")
+      observation = "cached_after_check_failed"
     }
 
-    return status(for: .chatgpt)
+    let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(
+      for: destination,
+      matchingKey: storedMCPKey())
+    return status(
+      for: destination,
+      localMCPConnections: localConnections,
+      cloudGrantObservation: observation == "authoritative_grant_check" ? nil : observation)
   }
 
   func notionConfiguration() -> (token: String, parentPageID: String) {
@@ -1331,7 +1272,7 @@ actor MemoryExportService {
     )
   }
 
-  private func fetchMemories(limit: Int) async throws -> [ServerMemory] {
+  func fetchMemories(limit: Int) async throws -> [ServerMemory] {
     do {
       let remoteMemories = try await APIClient.shared.getMemories(limit: limit)
       if !remoteMemories.isEmpty {
@@ -1349,7 +1290,7 @@ actor MemoryExportService {
     throw MemoryExportError.noMemories
   }
 
-  private func buildMarkdownPack(
+  func buildMarkdownPack(
     memories: [ServerMemory],
     destination: MemoryExportDestination
   ) -> String {
@@ -1398,7 +1339,7 @@ actor MemoryExportService {
     return directory
   }
 
-  private func persistStatus(
+  func persistStatus(
     destination: MemoryExportDestination,
     exportedCount: Int,
     detailText: String?,

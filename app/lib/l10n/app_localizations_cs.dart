@@ -1468,7 +1468,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get payYourSttProvider => 'Používejte Omi zdarma. Platíte pouze svému poskytovateli STT přímo.';
 
   @override
-  String get freeMinutesMonth => '1 200 bezplatných minut měsíčně. Neomezené s ';
+  String get freeMinutesMonth => '300 bezplatných minut měsíčně. Neomezené s ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1790,20 +1790,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Líbí se vám Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Pomozte nám oslovit více lidí tím, že zanecháte hodnocení v App Store. Vaše zpětná vazba pro nás hodně znamená!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Pomozte nám oslovit více lidí tím, že zanecháte hodnocení v Obchodě Google Play. Vaše zpětná vazba pro nás hodně znamená!';
-
-  @override
-  String get rateOnAppStore => 'Ohodnotit v App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Ohodnotit v Google Play';
 
   @override
   String get maybeLater => 'Možná později';
@@ -2141,6 +2127,18 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Upravit vzpomínku';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Rád/a jím zmrzlinu...';
@@ -4702,7 +4700,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Není nakonfigurován žádný specifický přístup k datům.';
 
   @override
-  String get basicPlanDescription => '1 200 prémiových minut + neomezené na zařízení';
+  String get basicPlanDescription => '300 prémiových minut + neomezené na zařízení';
 
   @override
   String get minutes => 'minut';
@@ -5990,7 +5988,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cloudProvider => 'Cloudový poskytovatel';
 
   @override
-  String get premiumMinutesInfo => '1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.';
+  String get premiumMinutesInfo => '300 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.';
 
   @override
   String get viewUsage => 'Zobrazit využití';
@@ -6070,8 +6068,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get batteryDrainSignificantly => 'Vybíjení baterie se výrazně zvýší.';
 
   @override
-  String get premiumMinutesMonth =>
-      '1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ';
+  String get premiumMinutesMonth => '300 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9607,151 +9604,171 @@ class AppLocalizationsCs extends AppLocalizations {
       'Vaše data jsou ve výchozím nastavení zabezpečena silným šifrováním a vy máte kontrolu nad tím, jak jsou ukládána a používána.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Přesnost';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Základní';
 
   @override
-  String get cloudTranscription => 'Cloud Transcription';
+  String get cloudTranscription => 'Cloudový přepis';
 
   @override
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Smazat model';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Opravdu chcete tento model smazat?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Staženo';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Rychlejší';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Automaticky';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Vyšší';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Velký';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Nižší';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Střední';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Model smazán';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Stažení modelu se nezdařilo';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Model Whisper se nepodařilo stáhnout. Zkuste to prosím znovu.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Model stažen';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Model Whisper byl úspěšně stažen';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Velikost modelu';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Žádný';
 
   @override
-  String get onDeviceTranscription => 'On-Device Transcription';
+  String get onDeviceTranscription => 'Přepis v zařízení';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+  String get onDeviceTranscriptionDesc => 'Přepis se zpracovává lokálně ve vašem zařízení';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Pomalejší';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Malý';
 
   @override
   String get sttProviderSoniox => 'Soniox';
 
   @override
-  String get speechToTextProvider => 'Speech-to-Text Provider';
+  String get speechToTextProvider => 'Poskytovatel převodu řeči na text';
 
   @override
-  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+  String get speechToTextProviderDesc => 'Vyberte službu používanou pro přepis';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Rychlost';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Nejmenší';
 
   @override
-  String get transcriptionLanguage => 'Transcription Language';
+  String get transcriptionLanguage => 'Jazyk přepisu';
 
   @override
-  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+  String get transcriptionLanguageDesc => 'Vyberte jazyk pro přepis řeči';
 
   @override
-  String get whisperModel => 'Whisper Model';
+  String get whisperModel => 'Model Whisper';
 
   @override
-  String get whisperModelDesc => 'Choose the model for on-device transcription';
+  String get whisperModelDesc => 'Vyberte model pro přepis v zařízení';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Přejít na bezplatný plán?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Setkáte se s těmito omezeními:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7× vyšší spotřeba baterie';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => 'O 30 % nižší kvalita přepisu';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => 'Zpoždění 5–7 sekund';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Nelze rozpoznat řečníky';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Přesto přejít níž';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Kalendář Google není připojen';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Připojte Kalendář Google, abyste mohli propojovat konverzace s událostmi v kalendáři.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Propojeno s „$title“';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Propojení s událostí v kalendáři se nezdařilo';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Děkujeme za zpětnou vazbu!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Kopírovat zprávu';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Hledat v nastavení…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Chyba při načítání zvuku';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Vyberte mikrofon Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Vyberte Bluetooth mikrofon brýlí. Při jeho používání aplikací Omi se hudba pozastaví.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nebyly nalezeny žádné Bluetooth mikrofony. Připojte brýle v Nastavení iPhonu a zkuste to znovu.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth mikrofony se nepodařilo načíst. Zkontrolujte, zda je Bluetooth zapnutý, a zkuste to znovu.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'K tomuto mikrofonu se nepodařilo připojit. Ověřte, že je připojený v Nastavení iPhonu.';
 }

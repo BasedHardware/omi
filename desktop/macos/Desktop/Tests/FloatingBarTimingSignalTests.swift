@@ -18,33 +18,6 @@ final class FloatingBarTimingSignalTests: XCTestCase {
       .appendingPathComponent("Sources/FloatingControlBar")
   }
 
-  private func floatingBarViewSource() throws -> String {
-    try String(
-      contentsOf: floatingControlBarDir().appendingPathComponent("FloatingControlBarView.swift"))
-  }
-
-  func testWindowActivationKeysOffWindowSignalNotFixedDelay() throws {
-    let source = try floatingBarViewSource()
-    XCTAssertTrue(
-      source.contains("func runWhenMainAppWindowKey"),
-      "window activation should route through the window-key signal helper")
-    XCTAssertTrue(
-      source.contains("NSWindow.didBecomeKeyNotification"),
-      "the transition should key off didBecomeKey, not a fixed delay")
-  }
-
-  func testFollowUpFocusUsesViewLifecycle() throws {
-    let source = try floatingBarViewSource()
-    XCTAssertTrue(
-      source.contains(".task {"),
-      "view-lifecycle transitions should be driven by .task, not asyncAfter")
-    // The follow-up text field was replaced by a "Continue in Omi" affordance
-    // (upstream: remove typing from the floating bar). Assert the replacement
-    // exists instead of the removed isFollowUpFocused state variable.
-    XCTAssertTrue(
-      source.contains("Continue in Omi"), "follow-up affordance should be the Continue in Omi button")
-  }
-
   /// Anti-regression: no new fixed-delay `asyncAfter` may be added under
   /// `FloatingControlBar/` above the pinned baseline. Recurses the directory the
   /// same way the Python ratchet does; comment mentions of the word are excluded

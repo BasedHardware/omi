@@ -3,9 +3,25 @@ name: Auto Deploy Backend Pusher to GKE (Development)
 on:
   push:
     branches: [ "main" ]
+    # Keep this list in lockstep with the final-stage COPY source closure
+    # emitted by backend/scripts/verify_pusher_source_closure.py. A change to
+    # any copied source invalidates the development qualification artifact.
     paths:
+      - 'backend/config/**'
+      - 'backend/database/**'
+      - 'backend/models/**'
+      - 'backend/routers/**'
+      - 'backend/services/**'
+      - 'backend/testing/parity_pack_v0/**'
+      - 'backend/utils/**'
       - 'backend/pusher/**'
       - 'backend/charts/pusher/**'
+      - '.dockerignore'
+      - 'backend/scripts/verify_pusher_source_closure.py'
+      - 'backend/scripts/verify_pusher_live_deployment_gate.py'
+      - 'backend/scripts/verify_pusher_dev_observability.py'
+      - 'backend/scripts/verify_pusher_promotion_evidence.py'
+      - '.github/workflows/gcp_backend_pusher_auto_deploy.yml'
 
 # Share the development pusher lock with manual deployments.
 concurrency:
@@ -49,11 +65,28 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/pusher/Dockerfile .
+          PUSHER_IMAGE_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}"
+          docker build -t "${PUSHER_IMAGE_REPOSITORY}:${GITHUB_SHA::7}" -f backend/pusher/Dockerfile .
           python3 backend/scripts/runtime_image_contracts.py smoke \
             --dockerfile backend/pusher/Dockerfile \
-            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+            --image "${PUSHER_IMAGE_REPOSITORY}:${GITHUB_SHA::7}"
+          docker push "${PUSHER_IMAGE_REPOSITORY}:${GITHUB_SHA::7}"
+          PUSHER_IMAGE_DIGEST="$(gcloud container images describe "${PUSHER_IMAGE_REPOSITORY}:${GITHUB_SHA::7}" --format='value(image_summary.digest)')"
+          if [[ ! "$PUSHER_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Pusher image did not resolve to an exact digest after push." >&2
+            exit 1
+          fi
+          {
+            echo "PUSHER_IMAGE_REPOSITORY=$PUSHER_IMAGE_REPOSITORY"
+            echo "PUSHER_IMAGE_DIGEST=$PUSHER_IMAGE_DIGEST"
+            echo "PUSHER_IMAGE_REFERENCE=${PUSHER_IMAGE_REPOSITORY}@${PUSHER_IMAGE_DIGEST}"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify Pusher static rollout controls
+        run: |
+          python3 backend/scripts/verify_pusher_rollout_budget.py
+          python3 backend/scripts/verify_pusher_rollout_gate.py preflight
+          python3 backend/scripts/verify_pusher_dev_observability.py
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
@@ -68,12 +101,56 @@ jobs:
           python3 backend/scripts/verify_pusher_config_references.py \
             --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
 
+      - name: Verify live Pusher surge capacity and digest render
+        run: |
+          python3 backend/scripts/verify_pusher_live_deployment_gate.py \
+            --environment ${{ vars.ENV }} \
+            --namespace ${{ vars.ENV }}-omi-backend \
+            --image "$PUSHER_IMAGE_REFERENCE"
+
       - name: Deploy Pusher to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.repository=${PUSHER_IMAGE_REPOSITORY}" --set-string "image.digest=${PUSHER_IMAGE_DIGEST}" --set-string image.tag= --set-string image.pullPolicy=IfNotPresent
           # Must cover the chart-derived Pusher rollout budget; the CI guard
           # recalculates the required value from committed chart inputs.
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=9600s
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=9600s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
+
+      - name: Record successful development Pusher qualification
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          Path("pusher-dev-qualification.json").write_text(
+              json.dumps(
+                  {
+                      "schema_version": 1,
+                      "environment": "development",
+                      "image_digest": os.environ["PUSHER_IMAGE_DIGEST"],
+                      "image_repository": os.environ["PUSHER_IMAGE_REPOSITORY"],
+                      "run_id": int(os.environ["GITHUB_RUN_ID"]),
+                      "source_sha": os.environ["GITHUB_SHA"],
+                      "workflow": "gcp_backend_pusher_auto_deploy.yml",
+                  },
+                  sort_keys=True,
+              )
+              + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload development Pusher qualification
+        uses: actions/upload-artifact@v7
+        with:
+          name: pusher-dev-qualification
+          path: pusher-dev-qualification.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Show Output
         run: echo "Pusher deployed to development environment"

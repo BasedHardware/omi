@@ -261,6 +261,7 @@ def _generated_feature_route_items(
                         'byok_unsupported_provider',
                         'missing_byok_key',
                         'capability_mismatch',
+                        'provider_invalid_request',
                         'invalid_config',
                     ],
                 },
@@ -303,6 +304,7 @@ def _capabilities_for_feature(feature: str, *, provider: str, surface: str) -> d
         'streaming': anthropic_messages or provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
         'structured_output': structured_output,
         'tools': anthropic_messages or feature == 'memory_l2',
+        'translation': feature == 'translation',
     }
 
 
@@ -322,6 +324,7 @@ def _credential_policy() -> dict[str, Any]:
             'byok_unsupported_provider',
             'missing_byok_key',
             'capability_mismatch',
+            'provider_invalid_request',
             'invalid_config',
         ],
     }

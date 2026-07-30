@@ -11,10 +11,10 @@ from starlette.requests import Request
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
-from llm_gateway.gateway.executor import ProviderRegistry
+from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
-from llm_gateway.gateway.schemas import FailureClass
+from llm_gateway.gateway.schemas import FailureClass, ProviderRef, ProviderRejection
 from llm_gateway.main import app
 from llm_gateway.routers import dependencies, openai_compatible
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
@@ -91,6 +91,97 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'metadata' not in provider.calls[0].request
 
 
+@pytest.mark.parametrize(
+    ('failure_class', 'provider_rejection', 'expected_code'),
+    [
+        (
+            FailureClass.CAPABILITY_MISMATCH,
+            ProviderRejection.UNSUPPORTED_REASONING_EFFORT,
+            'capability_not_supported',
+        ),
+        (
+            FailureClass.PROVIDER_INVALID_REQUEST,
+            ProviderRejection.CONTEXT_LENGTH_EXCEEDED,
+            'provider_request_rejected',
+        ),
+    ],
+)
+def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
+    monkeypatch,
+    failure_class,
+    provider_rejection,
+    expected_code,
+):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    recorded: list[dict] = []
+    provider = FakeChatCompletionProvider([ProviderFailure(failure_class, provider_rejection=provider_rejection)])
+    monkeypatch.setattr(openai_compatible, 'observe_error', lambda *_args, **kwargs: recorded.append(kwargs))
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers=auth_headers(),
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()['error']['code'] == expected_code
+    assert len(recorded) == 1
+    error = recorded[0]['error']
+    assert error.failure_class == failure_class
+    assert error.provider == 'openai'
+    assert error.model == 'gpt-5.4-nano'
+    assert error.provider_rejection == provider_rejection
+
+
+@pytest.mark.parametrize(
+    'failure_class',
+    [FailureClass.BYOK_RATE_LIMIT, FailureClass.BYOK_QUOTA],
+)
+def test_byok_throttling_is_not_reported_as_a_credential_rejection(monkeypatch, failure_class):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider([ProviderFailure(failure_class)])
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 429
+    assert response.json()['error']['type'] == 'rate_limit_error'
+    assert response.json()['error']['message'] == f'provider request failed: {failure_class.value}'
+
+
+def test_byok_auth_failure_still_reports_a_credential_rejection(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    provider = FakeChatCompletionProvider([ProviderFailure(FailureClass.BYOK_AUTH)])
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(),
+            headers={
+                **auth_headers(),
+                'X-Omi-Byok-OpenAI-Key': 'sk-user-byok',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert response.json()['error']['type'] == 'authentication_error'
+    assert response.json()['error']['code'] == 'credential_failure'
+
+
 def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attribution(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     persisted = []
@@ -133,6 +224,58 @@ def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attrib
     assert trace.attempts[0].usage is not None
     assert trace.attempts[0].usage.cached_input_tokens == 40
     assert trace.attempts[0].usage.cache_status.value == 'partial_hit'
+
+
+def test_gateway_provider_body_forwards_validated_gpt56_cache_fields_unchanged():
+    request = valid_request(
+        prompt_cache_key='omi-extract-actions-v1-b0',
+        prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'explicit'},
+                    }
+                ],
+            },
+            {'role': 'user', 'content': 'Dynamic content.'},
+        ],
+    )
+    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.6-luna'))
+
+    assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
+    assert forwarded['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+    assert forwarded['messages'] == request['messages']
+
+
+def test_gateway_provider_body_strips_gpt56_cache_fields_for_legacy_route():
+    request = valid_request(
+        prompt_cache_key='omi-extract-actions-v1-b0',
+        prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'explicit'},
+                    }
+                ],
+            },
+            {'role': 'user', 'content': 'Dynamic content.'},
+        ],
+    )
+    resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.4-nano'))
+
+    assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
+    assert 'prompt_cache_options' not in forwarded
+    assert forwarded['messages'][0]['content'] == [{'type': 'text', 'text': 'Stable instructions.'}]
 
 
 def test_metadata_feature_never_enters_the_accounting_context(monkeypatch):

@@ -18,6 +18,10 @@ image:
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
+  # Build-once promotion: set `digest: sha256:<64 lowercase hex>` (and clear
+  # `tag`, set `pullPolicy: IfNotPresent`) to deploy an exact content-addressed
+  # image qualified once in dev. Malformed/ambiguous identity is rejected at
+  # render time. See backend/scripts/verify_pusher_rollout_gate.py.
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -30,7 +34,7 @@ serviceAccount:
   # Specifies whether a service account should be created
   create: true
   # Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  automount: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
@@ -45,12 +49,21 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  env: dev
+  # The development Prometheus job keeps this target in the development
+  # evidence plane as a second boundary alongside its namespace selector.
 
 podSecurityContext: {}
   # fsGroup: 2000
 
-securityContext: {}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  runAsUser: 10001
   # capabilities:
   #   drop:
   #   - ALL
@@ -68,6 +81,12 @@ service:
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
     cloud.google.com/backend-config: '{"default": "dev-pusher-backend-config"}'  # Link to BackendConfig
+
+# BackendConfig connectionDraining: bounds how long the LB waits before cutting
+# in-flight WS on endpoint removal (must be <= terminationGracePeriodSeconds 120).
+backendConfig:
+  connectionDraining:
+    drainingTimeoutSec: 60
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -168,11 +187,6 @@ env:
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local-development"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
@@ -247,7 +261,7 @@ env:
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
   - name: STT_PRERECORDED_MODEL
-    value: "modulate-velma-2,parakeet"
+    value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
     value: "modulate-velma-2,parakeet"
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -276,7 +290,7 @@ env:
         name: dev-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
-    value: "based-hardware"
+    value: "based-hardware-dev"
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:
@@ -306,7 +320,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /health
+    path: /ready
     port: 8080
   failureThreshold: 3
   initialDelaySeconds: 0
@@ -366,7 +380,9 @@ terminationGracePeriodSeconds: 120
 lifecycle:
   preStop:
     exec:
-      command: ["sh", "-c", "sleep 15"]
+      # preStop flips readiness (via Lane A /__internal/drain) so the kubelet removes the endpoint
+      # early; sleep covers NEG->backend-service->ALB reprogram convergence before SIGTERM.
+      command: ["sh", "-c", "curl -sf -m 5 -X POST http://localhost:8080/__internal/drain || true; sleep 15"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -383,7 +399,13 @@ volumeMounts: []
 
 nodeSelector: {}
 
-tolerations: []
+# The dedicated dev Pusher pool is tainted to keep other workloads out. The
+# existing affinity below still confines this workload to matching Pusher nodes.
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: pusher
+    effect: NoSchedule
 
 affinity:
   nodeAffinity:

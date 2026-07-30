@@ -7,6 +7,7 @@
 #   ./scripts/desktop-core-harness.sh --tier 0
 #   ./scripts/desktop-core-harness.sh --tier 1 --bundle omi-core-e2e
 #   ./scripts/desktop-core-harness.sh --tier 2 --bundle omi-core-e2e --keep-stack
+#   ./scripts/desktop-core-harness.sh --readiness
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -20,8 +21,10 @@ FAULT_SUITE=0
 FAULT_BUNDLE="omi-fault"
 KEEP_STACK=0
 SELF_CHECK=0
+READINESS=0
 SKIP_BACKEND_CONTRACTS=0
 PORT="${OMI_AUTOMATION_PORT:-47777}"
+FAULT_PORT="${OMI_FAULT_PORT:-47790}"
 DEV_STACK_PROVIDER_MODE=""
 
 usage() {
@@ -29,12 +32,13 @@ usage() {
 Desktop core E2E harness.
 
 Options:
-  --tier N                    Run tier N checks (0-3). Required unless --self-check.
+  --tier N                    Run tier N checks (0-3). Required unless --self-check or --readiness.
   --bundle NAME               Named test bundle for T1+ (default: omi-core-e2e)
   --port PORT                 Automation bridge port (default: OMI_AUTOMATION_PORT or 47777)
   --keep-stack                On T2+, leave dev-up running after the run
   --fault-suite               Start omi-fault-inject + omi-fault bundle; run chat-fault-5xx flow
   --self-check                Static checks (flow lint + gauntlet self-check; backend contracts locally)
+  --readiness                 Pre-tag readiness: self-check + offline dev-stack probe (no app launch, no E2E flows)
   --skip-backend-contracts    With --self-check, skip backend preflight + pytest contracts (CI desktop gate)
   --help                      Show this help
 USAGE
@@ -62,6 +66,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --self-check)
       SELF_CHECK=1
+      ;;
+    --readiness)
+      READINESS=1
       ;;
     --skip-backend-contracts)
       SKIP_BACKEND_CONTRACTS=1
@@ -96,6 +103,7 @@ finalize_run() {
   local flows_json="$6"
   python3 - "$run_dir/manifest.json" "$passed" "$tier_value" "$started_at" "$duration_s" "$flows_json" "$BUNDLE" "$(git_sha)" "$DEV_STACK_PROVIDER_MODE" <<'PY'
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -111,6 +119,9 @@ manifest = {
 }
 if provider_mode:
     manifest["provider_mode"] = provider_mode
+lane = os.environ.get("OMI_READINESS_LANE")
+if lane:
+    manifest["lane"] = lane
 Path(path).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
   if [[ "$passed" == "true" ]]; then
@@ -182,8 +193,14 @@ refuse_prod_bundle() {
   fi
 }
 
+DEV_STACK_TEARDOWN_DONE=0
+
 maybe_teardown_dev_stack() {
-  if [[ "$KEEP_STACK" -eq 0 && "${TIER:-0}" -ge 2 ]]; then
+  if [[ "$DEV_STACK_TEARDOWN_DONE" -eq 1 ]]; then
+    return 0
+  fi
+  if [[ "$KEEP_STACK" -eq 0 && ( "${TIER:-0}" -ge 2 || "${READINESS:-0}" -eq 1 ) ]]; then
+    DEV_STACK_TEARDOWN_DONE=1
     make -C "$REPO_ROOT" dev-down >/dev/null 2>&1 || true
   fi
 }
@@ -403,16 +420,21 @@ for service in REQUIRED_SERVICES:
         missing_services.append(f"{service}:{exc}")
         continue
     if service == "typesense":
-        container = f"omi-dev-harness-{cfg.instance}-typesense"
-        container_running = subprocess.run(
-            ["docker", "ps", "--filter", f"name={container}", "--filter", "status=running", "-q"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            check=False,
-        ).stdout.strip()
-        if not container_running:
-            missing_services.append(f"{service}:container-not-running")
+        # Only the docker runtime has a container to cross-check; the native
+        # typesense-server runtime is covered by the owned-PID check above.
+        recorded_command = record.get("command") or []
+        uses_docker = bool(recorded_command) and str(recorded_command[0]).endswith("docker")
+        if uses_docker:
+            container = f"omi-dev-harness-{cfg.instance}-typesense"
+            container_running = subprocess.run(
+                ["docker", "ps", "--filter", f"name={container}", "--filter", "status=running", "-q"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+            ).stdout.strip()
+            if not container_running:
+                missing_services.append(f"{service}:container-not-running")
 
 if missing_services:
     ownership_failure(
@@ -426,7 +448,7 @@ typesense_headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
 checks = {
     "firestore": f"http://{cfg.firestore_host}/",
     "auth": f"http://{cfg.auth_host}/",
-    "typesense": f"http://127.0.0.1:{config.TYPESENSE_PORT}/collections",
+    "typesense": f"http://127.0.0.1:{cfg.typesense_port}/collections",
     "backend": f"{cfg.backend_url}/docs",
     "desktop-backend": f"{cfg.desktop_backend_url}/health",
 }
@@ -528,20 +550,283 @@ ensure_dev_stack() {
 
 FAULT_RUN_PID=""
 FAULT_RUN_STARTED=0
+FAULT_RUN_TOKEN=""
+FAULT_LAUNCH_TOKEN=""
+FAULT_LAUNCH_SIGNAL_FILE=""
+FAULT_APP_RECORD=""
+FAULT_APP_LAUNCH_REQUESTED=0
+FAULT_STATE_DIR=""
+FAULT_RUN_DIR=""
+FAULT_CLEANUP_DONE=0
+FAULT_CLEANUP_STATUS=0
+FAULT_FLOW_PID=""
+FAULT_FLOW_RESULT_FILE=""
+
+fault_token_for_run() {
+  local token="${OMI_FAULT_RUN_TOKEN:-}"
+  if [[ -z "$token" ]]; then
+    token="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+  fi
+  [[ "$token" =~ ^[A-Za-z0-9_-]{16,128}$ ]] || {
+    echo "desktop-core-harness: invalid OMI_FAULT_RUN_TOKEN" >&2
+    return 1
+  }
+  printf '%s\n' "$token"
+}
+
+fault_bundle_for_run() {
+  local token="$1" slug
+  slug="$(printf '%s' "$token" | tr '[:upper:]_' '[:lower:]-')"
+  printf 'omi-fault-%s\n' "${slug:0:48}"
+}
+
+record_owned_fault_app() {
+  local bundle_id app_path executable_path
+  # shellcheck source=app-config.sh
+  source "$SCRIPT_DIR/app-config.sh"
+  derive_omi_app_config "$FAULT_BUNDLE"
+  bundle_id="$BUNDLE_ID"
+  app_path="/Applications/${FAULT_BUNDLE}.app"
+  executable_path="$app_path/Contents/MacOS/Omi Computer"
+  FAULT_APP_RECORD="$FAULT_RUN_DIR/fault-app.json"
+  umask 077
+  python3 - "$FAULT_APP_RECORD" "$FAULT_LAUNCH_SIGNAL_FILE" "$FAULT_RUN_TOKEN" "$FAULT_BUNDLE" "$bundle_id" "$app_path" "$executable_path" "$PORT" <<'PY'
+import hashlib
+import json
+import os
+import shlex
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+path, signal_path, run_token, bundle, bundle_id, app_path, executable_path, port = sys.argv[1:]
+signal = Path(signal_path)
+if not signal.is_file() or signal.stat().st_uid != os.getuid() or stat.S_IMODE(signal.stat().st_mode) != 0o600:
+    raise SystemExit("fault launch signal is missing or not owner-only")
+fields = {}
+for line in signal.read_text(encoding="utf-8").splitlines():
+    if "=" not in line:
+        raise SystemExit("fault launch signal is malformed")
+    key, value = line.split("=", 1)
+    if key in fields:
+        raise SystemExit("fault launch signal has duplicate fields")
+    fields[key] = value
+expected_signal = {
+    "schema_version": "1", "bundle_id": bundle_id, "app_path": app_path,
+    "executable_path": executable_path, "launch_token": run_token,
+}
+if any(fields.get(key) != value for key, value in expected_signal.items()):
+    raise SystemExit("fault launch signal does not bind this run")
+if fields.get("launch_transport") not in {"open", "direct"}:
+    raise SystemExit("fault launch signal has unknown transport")
+proc = subprocess.run(["ps", "-axo", "pid=,lstart=,command="], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+matches = []
+for line in proc.stdout.splitlines():
+    parts = line.split(None, 6)
+    if len(parts) != 7 or not parts[0].isdigit():
+        continue
+    pid, started, command = int(parts[0]), " ".join(parts[1:6]), parts[6]
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        continue
+    if executable_path in command and f"--omi-launch-token={run_token}" in command:
+        matches.append((pid, started, command))
+if len(matches) != 1:
+    raise SystemExit(f"fault launch ownership is ambiguous (matching processes={len(matches)})")
+pid, started, command = matches[0]
+payload = {
+    "schema_version": 2,
+    "run_token": run_token,
+    "bundle": bundle,
+    "bundle_id": bundle_id,
+    "app_path": app_path,
+    "executable_path": executable_path,
+    "automation_port": int(port),
+    "launch_transport": fields["launch_transport"],
+    "launch_pid": pid,
+    "process_start": started,
+    "command_sha256": hashlib.sha256(command.encode()).hexdigest(),
+}
+target = Path(path)
+target.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+target.chmod(0o600)
+PY
+}
+
+validated_fault_app_pid() {
+  [[ -n "$FAULT_APP_RECORD" && -f "$FAULT_APP_RECORD" ]] || return 1
+  python3 - "$FAULT_APP_RECORD" "$FAULT_RUN_TOKEN" "$FAULT_BUNDLE" "$PORT" <<'PY'
+import hashlib
+import json
+import os
+import shlex
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+path, run_token, bundle, port = sys.argv[1:]
+target = Path(path)
+if target.stat().st_uid != os.getuid() or stat.S_IMODE(target.stat().st_mode) != 0o600:
+    raise SystemExit("fault app record is not owner-only")
+payload = json.loads(target.read_text(encoding="utf-8"))
+expected = {
+    "schema_version": 2,
+    "run_token": run_token,
+    "bundle": bundle,
+    "bundle_id": f"com.omi.{bundle}",
+    "app_path": f"/Applications/{bundle}.app",
+    "executable_path": f"/Applications/{bundle}.app/Contents/MacOS/Omi Computer",
+    "automation_port": int(port),
+}
+if any(payload.get(key) != value for key, value in expected.items()):
+    raise SystemExit("fault app record does not bind this run")
+if payload.get("launch_transport") not in {"open", "direct"}:
+    raise SystemExit("fault app record has unknown launch transport")
+if not isinstance(payload.get("launch_pid"), int) or payload["launch_pid"] <= 0 or not isinstance(payload.get("process_start"), str) or not isinstance(payload.get("command_sha256"), str):
+    raise SystemExit("fault app record has no launch metadata")
+pid = str(payload["launch_pid"])
+proc = subprocess.run(["ps", "-p", pid, "-o", "lstart=,command="], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+line = proc.stdout.strip()
+if not line:
+    raise SystemExit(3)  # known terminal state; no process can be signaled
+parts = line.split(None, 5)
+if len(parts) != 6:
+    raise SystemExit("fault process metadata cannot be parsed")
+started, command = " ".join(parts[:5]), parts[5]
+try:
+    argv = shlex.split(command)
+except ValueError as exc:
+    raise SystemExit(f"fault process command cannot be parsed: {exc}")
+if started != payload["process_start"] or payload["executable_path"] not in command or f"--omi-launch-token={run_token}" not in command or hashlib.sha256(command.encode()).hexdigest() != payload["command_sha256"]:
+    raise SystemExit("fault process no longer matches launch provenance")
+print(pid)
+PY
+}
+
+stop_recorded_fault_app() {
+  local pid status attempt
+  set +e
+  pid="$(validated_fault_app_pid)"
+  status=$?
+  set -e
+  if [[ "$status" -eq 3 ]]; then
+    echo "desktop-core-harness: owned fault app already exited" >&2
+    return 0
+  fi
+  if [[ "$status" -ne 0 || ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
+    echo "desktop-core-harness: refusing unproven fault app cleanup" >&2
+    return 1
+  fi
+  # Signal exactly the pid whose bundle path, process-start identity, command
+  # hash, and unguessable launch token were just revalidated. Never quit by
+  # bundle id/name and never scan-kill a matching process.
+  kill -TERM "$pid" 2>/dev/null || return 1
+  for attempt in $(seq 1 50); do
+    set +e
+    validated_fault_app_pid >/dev/null
+    status=$?
+    set -e
+    [[ "$status" -eq 3 ]] && return 0
+    [[ "$status" -eq 0 ]] || {
+      echo "desktop-core-harness: fault app ownership changed during cleanup" >&2
+      return 1
+    }
+    sleep 0.1
+  done
+  echo "desktop-core-harness: owned fault app did not stop; preserving evidence" >&2
+  return 1
+}
+
+harness_auth_host() {
+  python3 - "$REPO_ROOT" <<'PY'
+import sys
+from pathlib import Path
+
+repo_root = Path(sys.argv[1])
+sys.path.insert(0, str(repo_root / "scripts" / "dev-harness"))
+from dev_harness import config
+
+print(config.load_config(repo_root).auth_host)
+PY
+}
 
 stop_fault_stack() {
+  local status=0
+  if [[ -n "$FAULT_FLOW_PID" ]]; then
+    kill -TERM "$FAULT_FLOW_PID" 2>/dev/null || true
+    wait "$FAULT_FLOW_PID" 2>/dev/null || true
+    FAULT_FLOW_PID=""
+  fi
   if [[ "$FAULT_RUN_STARTED" -eq 1 ]]; then
     if [[ -n "$FAULT_RUN_PID" ]]; then
       kill "$FAULT_RUN_PID" 2>/dev/null || true
       wait "$FAULT_RUN_PID" 2>/dev/null || true
       FAULT_RUN_PID=""
     fi
-    pkill -f "${FAULT_BUNDLE}.app" 2>/dev/null || true
     FAULT_RUN_STARTED=0
   fi
   if [[ -x "$SCRIPT_DIR/omi-fault-inject.sh" ]]; then
-    "$SCRIPT_DIR/omi-fault-inject.sh" stop >/dev/null 2>&1 || true
+    OMI_FAULT_STATE_DIR="$FAULT_STATE_DIR" "$SCRIPT_DIR/omi-fault-inject.sh" stop >/dev/null 2>&1 || status=1
   fi
+  return "$status"
+}
+
+write_fault_cleanup_evidence() {
+  local status="$1" detail="$2"
+  [[ -n "$FAULT_RUN_DIR" ]] || return 0
+  python3 - "$FAULT_RUN_DIR/fault-cleanup.json" "$status" "$detail" "$FAULT_APP_RECORD" <<'PY'
+import json
+import sys
+from pathlib import Path
+path, status, detail, record = sys.argv[1:]
+Path(path).write_text(json.dumps({
+    "cleanup_status": status,
+    "detail": detail,
+    "fault_app_record": record or None,
+}, sort_keys=True) + "\n", encoding="utf-8")
+PY
+}
+
+cleanup_fault_suite() {
+  local status=0 detail="stopped"
+  [[ "$FAULT_CLEANUP_DONE" -eq 0 ]] || return "$FAULT_CLEANUP_STATUS"
+  FAULT_CLEANUP_DONE=1
+  if [[ "$FAULT_APP_LAUNCH_REQUESTED" -eq 1 ]]; then
+    if [[ -z "$FAULT_APP_RECORD" || ! -f "$FAULT_APP_RECORD" ]]; then
+      echo "desktop-core-harness: fault app launch proof is missing; preserving run evidence" >&2
+      status=1
+      detail="missing-launch-proof"
+    elif ! stop_recorded_fault_app; then
+      status=1
+      detail="unproven-or-unreclaimed-app"
+    fi
+  fi
+  # App cleanup comes first: run.sh may have detached from open, so killing its
+  # shell cannot prove that the app exited. The isolated fault server is stopped
+  # only after the app decision and evidence are recorded.
+  if ! stop_fault_stack; then
+    status=1
+    [[ "$detail" == stopped ]] && detail="fault-server-cleanup-failed"
+  fi
+  if [[ "$status" -eq 0 ]]; then
+    write_fault_cleanup_evidence stopped "$detail"
+  else
+    write_fault_cleanup_evidence failed "$detail"
+  fi
+  FAULT_CLEANUP_STATUS="$status"
+  return "$status"
+}
+
+fault_suite_exit_trap() {
+  local original_status=$?
+  trap - EXIT
+  if ! cleanup_fault_suite; then
+    [[ "$original_status" -ne 0 ]] || exit 1
+  fi
+  exit "$original_status"
 }
 
 start_fault_stack() {
@@ -550,15 +835,19 @@ start_fault_stack() {
     exit 1
   fi
   refuse_prod_bundle "$FAULT_BUNDLE"
-  "$SCRIPT_DIR/omi-fault-inject.sh" stop >/dev/null 2>&1 || true
-  eval "$("$SCRIPT_DIR/omi-fault-inject.sh" start error)"
+  OMI_FAULT_STATE_DIR="$FAULT_STATE_DIR" "$SCRIPT_DIR/omi-fault-inject.sh" stop >/dev/null 2>&1 || true
+  eval "$(OMI_FAULT_STATE_DIR="$FAULT_STATE_DIR" OMI_FAULT_OWNERSHIP_TOKEN="$FAULT_RUN_TOKEN" "$SCRIPT_DIR/omi-fault-inject.sh" start error --port "$FAULT_PORT")"
   echo "desktop-core-harness: fault inject at $OMI_FAULT_URL"
+  local auth_host
+  auth_host="$(harness_auth_host)"
+  auth_host="${auth_host:-127.0.0.1:9099}"
   # Auth seed runs inside ./run.sh after install (passes APP_PATH for Keychain ACL).
   # Do not pre-seed here — without the installed .app path, seed refuses to write tokens.
   (
     cd "$DESKTOP_DIR"
     OMI_DESKTOP_LOCAL_PROFILE=1 \
       OMI_HARNESS_INSTANCE="${OMI_HARNESS_INSTANCE:-${OMI_LOCAL_INSTANCE:-fault-suite}}" \
+      OMI_HARNESS_OWNERSHIP_TOKEN="${OMI_HARNESS_OWNERSHIP_TOKEN:-${OMI_FAULT_OWNERSHIP_TOKEN:-}}" \
       OMI_SKIP_AUTH_SEED=1 \
       OMI_SKIP_SETTINGS_SEED=1 \
       OMI_LOCAL_PROFILE_STORAGE_NAME="$FAULT_BUNDLE" \
@@ -566,7 +855,7 @@ start_fault_stack() {
       OMI_LOCAL_AUTH_EMAIL=alice@local.omi.invalid \
       OMI_LOCAL_AUTH_PASSWORD=alice-local-password-030 \
       OMI_LOCAL_AUTH_DISPLAY_NAME='Synthetic Alice' \
-      FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+      FIREBASE_AUTH_EMULATOR_HOST="$auth_host" \
       FIREBASE_PROJECT_ID=demo-omi-local \
       FIREBASE_AUTH_PROJECT_ID=demo-omi-local \
       FIRESTORE_DATABASE_ID='(default)' \
@@ -579,28 +868,42 @@ start_fault_stack() {
       OMI_FAULT_MODEL_AUTH_TOKEN=omi-fault-model-token \
       OMI_AUTOMATION_PORT="$PORT" \
       OMI_APP_NAME="$FAULT_BUNDLE" \
+      OMI_DESKTOP_LAUNCH_SIGNAL_FILE="$FAULT_LAUNCH_SIGNAL_FILE" \
+      OMI_DESKTOP_LAUNCH_TOKEN="$FAULT_LAUNCH_TOKEN" \
       ./run.sh
   ) &
   FAULT_RUN_PID=$!
   FAULT_RUN_STARTED=1
+  FAULT_APP_LAUNCH_REQUESTED=1
   local expected_bundle="com.omi.${FAULT_BUNDLE}"
+  # A cold qualification cache can spend several minutes creating the named
+  # fault bundle before the bridge exists. Do not turn that bounded build time
+  # into a false fault-suite failure; an explicit override keeps local probes
+  # fast while the qualification default covers a clean SwiftPM build.
+  local bridge_ready_attempts="${OMI_FAULT_BRIDGE_READY_ATTEMPTS:-210}"
+  [[ "$bridge_ready_attempts" =~ ^[1-9][0-9]*$ ]] || {
+    echo "desktop-core-harness: OMI_FAULT_BRIDGE_READY_ATTEMPTS must be a positive integer" >&2
+    return 1
+  }
   local attempt
-  for attempt in $(seq 1 90); do
+  for attempt in $(seq 1 "$bridge_ready_attempts"); do
     if verify_fault_bundle_health "$PORT" "$expected_bundle" 2>/dev/null; then
       OMI_AUTOMATION_PORT="$PORT" "$SCRIPT_DIR/omi-ctl" wait-ready 90
+      record_owned_fault_app
       echo "desktop-core-harness: $FAULT_BUNDLE bridge ready on port $PORT (bundle: $expected_bundle)"
       return 0
     fi
-    if ! kill -0 "$FAULT_RUN_PID" 2>/dev/null; then
+    # `open` returns after dispatching the app. Once the signed owner-only
+    # launch signal exists, run.sh is allowed to exit while its app remains
+    # detached; the token-bound process record below is the lifecycle owner.
+    if ! kill -0 "$FAULT_RUN_PID" 2>/dev/null && [[ ! -f "$FAULT_LAUNCH_SIGNAL_FILE" ]]; then
       echo "desktop-core-harness: $FAULT_BUNDLE launch exited before bridge was ready" >&2
-      stop_fault_stack
-      exit 1
+      return 1
     fi
     sleep 2
   done
   echo "desktop-core-harness: timed out waiting for $FAULT_BUNDLE bridge on port $PORT" >&2
-  stop_fault_stack
-  exit 1
+  return 1
 }
 
 run_flow_file() {
@@ -640,6 +943,28 @@ PY
   fi
 }
 
+run_fault_flow_file() {
+  local flow_path="$1" run_dir="$2" worker_status=0 flow_passed
+  FAULT_FLOW_RESULT_FILE="$run_dir/fault-flow-result"
+  (
+    run_flow_file "$flow_path" "$run_dir"
+    printf '%s\n%s\n' "$PASSED" "$FLOW_RESULTS" > "$FAULT_FLOW_RESULT_FILE"
+  ) &
+  FAULT_FLOW_PID=$!
+  set +e
+  wait "$FAULT_FLOW_PID"
+  worker_status=$?
+  set -e
+  FAULT_FLOW_PID=""
+  if [[ "$worker_status" -ne 0 || ! -f "$FAULT_FLOW_RESULT_FILE" ]]; then
+    PASSED=false
+    return 1
+  fi
+  flow_passed="$(sed -n '1p' "$FAULT_FLOW_RESULT_FILE")"
+  FLOW_RESULTS="$(sed -n '2p' "$FAULT_FLOW_RESULT_FILE")"
+  [[ "$flow_passed" == true ]] || PASSED=false
+}
+
 if [[ "$SELF_CHECK" -eq 1 ]]; then
   run_self_check
   exit 0
@@ -648,15 +973,35 @@ fi
 if [[ "$FAULT_SUITE" -eq 1 ]]; then
   RUN_DIR="$HARNESS_ROOT/$(run_id)-fault"
   mkdir -p "$RUN_DIR"
+  chmod 700 "$RUN_DIR"
+  FAULT_RUN_DIR="$RUN_DIR"
+  # Qualification binds this state to its sentinel-protected lease root. Honor
+  # that handoff so authenticated lease release can reclaim the exact tokened
+  # listener if this harness is interrupted before its normal stop path.
+  FAULT_STATE_DIR="${OMI_FAULT_STATE_DIR:-$RUN_DIR/fault-inject}"
+  mkdir -p "$FAULT_STATE_DIR"
+  chmod 700 "$FAULT_STATE_DIR"
+  FAULT_RUN_TOKEN="$(fault_token_for_run)"
+  FAULT_LAUNCH_TOKEN="$FAULT_RUN_TOKEN"
+  FAULT_BUNDLE="$(fault_bundle_for_run "$FAULT_RUN_TOKEN")"
+  FAULT_LAUNCH_SIGNAL_FILE="$RUN_DIR/fault-launch.signal"
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   START_SEC=$(date +%s)
   FLOW_RESULTS="[]"
   PASSED=true
-  trap stop_fault_stack EXIT
-  start_fault_stack
-  run_flow_file "$DESKTOP_DIR/e2e/flows/chat-fault-5xx.yaml" "$RUN_DIR"
-  stop_fault_stack
-  trap - EXIT
+  trap fault_suite_exit_trap EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
+  if ! start_fault_stack; then
+    PASSED=false
+  else
+    run_fault_flow_file "$DESKTOP_DIR/e2e/flows/chat-fault-5xx.yaml" "$RUN_DIR"
+  fi
+  if ! cleanup_fault_suite; then
+    PASSED=false
+  fi
+  trap - EXIT INT TERM HUP
   DURATION=$(( $(date +%s) - START_SEC ))
   if [[ "$PASSED" == true ]]; then
     finalize_run "$RUN_DIR" true "fault" "$STARTED_AT" "$DURATION" "$FLOW_RESULTS"
@@ -667,9 +1012,33 @@ if [[ "$FAULT_SUITE" -eq 1 ]]; then
   echo "desktop-core-harness fault-suite failed (evidence: $RUN_DIR)" >&2
   exit 1
 fi
+if [[ "$READINESS" -eq 1 ]]; then
+  # Pre-tag readiness gate: validate the exact desktop source + bounded offline
+  # dev stack on the trusted self-hosted M1 BEFORE an immutable tag is created.
+  # Distinct from post-tag qualification: no app launch, no E2E flows, no signed
+  # artifacts. provider_mode=offline is enforced by ensure_dev_stack (no prod).
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "desktop-core-harness: --readiness requires macOS (trusted self-hosted M1)" >&2
+    exit 1
+  fi
+  RUN_DIR="$HARNESS_ROOT/$(run_id)-readiness"
+  mkdir -p "$RUN_DIR"
+  STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  START_SEC=$(date +%s)
+  FLOW_RESULTS="[]"
+  trap maybe_teardown_dev_stack EXIT
+  run_self_check
+  ensure_dev_stack
+  maybe_teardown_dev_stack
+  trap - EXIT
+  DURATION=$(( $(date +%s) - START_SEC ))
+  finalize_run "$RUN_DIR" true "readiness" "$STARTED_AT" "$DURATION" "$FLOW_RESULTS"
+  echo "desktop-core-harness readiness passed (evidence: $RUN_DIR)"
+  exit 0
+fi
 
 if [[ -z "$TIER" ]]; then
-  echo "--tier is required unless --self-check or --fault-suite" >&2
+  echo "--tier is required unless --self-check, --readiness, or --fault-suite" >&2
   usage >&2
   exit 2
 fi

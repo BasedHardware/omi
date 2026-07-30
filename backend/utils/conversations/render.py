@@ -192,7 +192,9 @@ def conversations_to_string(
     people_map: Dict[str, Person] = {p.id: p for p in people} if people else {}
     display_tz, tz_label = resolve_display_tz(tz)
     for i, conversation in enumerate(conversations):
-        formatted_date = conversation.created_at.astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+        formatted_date = (
+            _as_utc(conversation.created_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+        )
         conversation_str = (
             f"Conversation #{i + 1}\n"
             f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
@@ -201,12 +203,12 @@ def conversations_to_string(
         # Add started_at and finished_at if available
         if conversation.started_at:
             formatted_started = (
-                conversation.started_at.astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+                _as_utc(conversation.started_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
             )
             conversation_str += f"Started: {formatted_started}\n"
         if conversation.finished_at:
             formatted_finished = (
-                conversation.finished_at.astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+                _as_utc(conversation.finished_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
             )
             conversation_str += f"Finished: {formatted_finished}\n"
 

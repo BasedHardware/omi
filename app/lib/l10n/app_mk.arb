@@ -1699,22 +1699,6 @@
     "@lovingOmi": {
         "description": "Title for the app review prompt"
     },
-    "leaveReviewIos": "Помогнете ни да дојдеме до повеќе луѓе со оставување рецензија во App Store. Вашата повратна информација ни значи многу!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Помогнете ни да дојдеме до повеќе луѓе со оставување рецензија во Google Play Store. Вашата повратна информација ни значи многу!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Оценете во App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Оценете на Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
-    },
     "maybeLater": "Можеби подоцна",
     "@maybeLater": {
         "description": "Button text to defer action"
@@ -5506,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1.200 премиум минути + неограничено на уред",
+    "basicPlanDescription": "300 премиум минути + неограничено на уред",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7281,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1.200 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција.",
+    "premiumMinutesInfo": "300 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1.200 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција. ",
+    "premiumMinutesMonth": "300 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10728,5 +10712,59 @@
     "deviceStorageFree": "{free} слободни",
     "deviceStorageNearlyFull": "Уредот е речиси полн — синхронизирајте за да ослободите простор.",
     "phoneMicOfflineFallbackMessage": "Нема врска — се снима локално. Ќе биде транскрибирано кога повторно ќе бидете онлајн.",
-    "dataEncryptedBanner": "Вашите податоци се стандардно заштитени со силна енкрипција, а вие контролирате како се складираат и користат."
+    "dataEncryptedBanner": "Вашите податоци се стандардно заштитени со силна енкрипција, а вие контролирате како се складираат и користат.",
+    "rayBanMetaMicPickerTitle": "Изберете го микрофонот на Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Изберете го Bluetooth микрофонот на очилата. Музиката се паузира додека Omi го користи.",
+    "rayBanMetaMicPickerEmpty": "Не се пронајдени Bluetooth микрофони. Поврзете ги очилата во поставките на iPhone и обидете се повторно.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth микрофоните не можеа да се вчитаат. Проверете дали Bluetooth е вклучен и обидете се повторно.",
+    "rayBanMetaMicPickerConnectError": "Не може да се поврзе со тој микрофон. Проверете дали е поврзан во поставките на iPhone.",
+    "cloudTranscription": "Транскрипција во облак",
+    "copyMessage": "Копирај порака",
+    "deleteOnDeviceModel": "Избриши модел",
+    "deleteOnDeviceModelConfirm": "Дали сте сигурни дека сакате да го избришете овој модел?",
+    "downgradeAnyway": "Сепак намали го планот",
+    "downgradeLimitBattery": "7x поголема потрошувачка на батерија",
+    "downgradeLimitDelay": "Доцнење од 5-7 секунди",
+    "downgradeLimitQuality": "30% послаб квалитет на транскрипцијата",
+    "downgradeLimitSpeakers": "Не може да ги препознае говорниците",
+    "downgradeLimitationsHeading": "Ќе ги имате следниве ограничувања:",
+    "downgradeToFreemiumTitle": "Намалување на бесплатниот план?",
+    "errorLoadingAudio": "Грешка при вчитување на аудиото",
+    "failedToLinkCalendarEvent": "Неуспешно поврзување со настан од календарот",
+    "googleCalendarConnectPrompt": "Поврзете го вашиот Google Calendar за да ги поврзувате разговорите со настани од календарот.",
+    "googleCalendarNotConnected": "Google Calendar не е поврзан",
+    "linkedToEvent": "Поврзано со „{title}“",
+    "onDeviceModelDeleted": "Моделот е избришан",
+    "onDeviceModelDownloadFailed": "Преземањето на моделот не успеа",
+    "onDeviceModelDownloadFailedDesc": "Whisper моделот не можеше да се преземе. Обидете се повторно.",
+    "onDeviceModelDownloadSuccess": "Моделот е преземен",
+    "onDeviceModelDownloadSuccessDesc": "Whisper моделот е успешно преземен",
+    "onDeviceModelDownloaded": "Преземено",
+    "onDeviceModelSize": "Големина на моделот",
+    "onDeviceTranscription": "Транскрипција на уредот",
+    "onDeviceTranscriptionDesc": "Транскрипцијата се обработува локално на вашиот уред",
+    "searchSettings": "Пребарај поставки…",
+    "speechToTextProvider": "Провајдер за говор во текст",
+    "speechToTextProviderDesc": "Изберете ја услугата што се користи за транскрипција",
+    "sttFilterAuto": "Автоматско",
+    "sttModelAccuracy": "Точност",
+    "sttModelFaster": "Побрзо",
+    "sttModelHigher": "Повисока",
+    "sttModelLower": "Пониска",
+    "sttModelSlower": "Побавно",
+    "sttModelSpeed": "Брзина",
+    "sttNone": "Нема",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "Ви благодариме за повратната информација!",
+    "transcriptionLanguage": "Јазик на транскрипцијата",
+    "transcriptionLanguageDesc": "Изберете го јазикот за транскрипција на говорот",
+    "whisperModel": "Whisper модел",
+    "whisperModelDesc": "Изберете модел за транскрипција на уредот",
+    "whisperModelSizeBase": "Основен",
+    "whisperModelSizeLarge": "Голем",
+    "whisperModelSizeMedium": "Среден",
+    "whisperModelSizeSmall": "Мал",
+    "whisperModelSizeTiny": "Многу мал"
 }

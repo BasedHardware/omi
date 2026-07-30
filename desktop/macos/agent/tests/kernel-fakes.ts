@@ -49,6 +49,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   sinks = new Map<string, AdapterEventSink>();
   failNextOpenError: unknown;
   failNextExecutionError: unknown;
+  eventBeforeExecutionError: OutboundMessage | undefined;
   failNextResume = false;
   failNextExecutionAsStale = false;
   deferOnlyPromptIncludes: string | undefined;
@@ -130,6 +131,10 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     if (this.failNextExecutionError) {
       const error = this.failNextExecutionError;
       this.failNextExecutionError = undefined;
+      if (this.eventBeforeExecutionError) {
+        sink(this.eventBeforeExecutionError);
+        this.eventBeforeExecutionError = undefined;
+      }
       throw error;
     }
     const promptText = context.prompt

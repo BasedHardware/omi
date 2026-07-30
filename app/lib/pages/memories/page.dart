@@ -180,7 +180,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         height: 44,
                                         child: SearchBar(
                                           hintText: context.l10n.searchMemories,
-                                          leading: Padding(
+                                          leading: const Padding(
                                             padding: EdgeInsets.only(left: 6.0),
                                             child: FaIcon(
                                               FontAwesomeIcons.magnifyingGlass,
@@ -234,7 +234,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                             height: 44,
                                             child: SearchBar(
                                               hintText: context.l10n.searchMemories,
-                                              leading: Padding(
+                                              leading: const Padding(
                                                 padding: EdgeInsets.only(left: 6.0),
                                                 child: FaIcon(
                                                   FontAwesomeIcons.magnifyingGlass,
@@ -306,7 +306,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           padding: EdgeInsets.zero,
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                         ),
-                                        child: FaIcon(FontAwesomeIcons.brain, size: 16),
+                                        child: const FaIcon(FontAwesomeIcons.brain, size: 16),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -323,7 +323,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           padding: EdgeInsets.zero,
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                         ),
-                                        child: FaIcon(FontAwesomeIcons.sliders, size: 16),
+                                        child: const FaIcon(FontAwesomeIcons.sliders, size: 16),
                                       ),
                                     ),
                                   ],
@@ -342,11 +342,11 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
                                             ? context.l10n.noMemoriesYet
                                             : provider.selectedCategories.isNotEmpty
-                                                ? provider.selectedCategories.contains(MemoryCategory.manual) &&
-                                                        provider.selectedCategories.length == 1
-                                                    ? context.l10n.noManualMemories
-                                                    : context.l10n.noMemoriesInCategories
-                                                : context.l10n.noMemoriesFound,
+                                            ? provider.selectedCategories.contains(MemoryCategory.manual) &&
+                                                      provider.selectedCategories.length == 1
+                                                  ? context.l10n.noManualMemories
+                                                  : context.l10n.noMemoriesInCategories
+                                            : context.l10n.noMemoriesFound,
                                         style: TextStyle(color: Colors.grey.shade400, fontSize: 18),
                                       ),
                                       if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
@@ -371,9 +371,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       provider: provider,
                                       onTap:
                                           (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
-                                        PlatformManager.instance.analytics.memoryListItemClicked(tappedMemory);
-                                        _showQuickEditSheet(context, tappedMemory, tappedProvider);
-                                      },
+                                            PlatformManager.instance.analytics.memoryListItemClicked(tappedMemory);
+                                            _showQuickEditSheet(context, tappedMemory, tappedProvider);
+                                          },
                                       onDeleteNotification: showDeleteNotification,
                                     );
                                   }, childCount: provider.filteredMemories.length),

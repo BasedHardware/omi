@@ -6,11 +6,25 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-15 (durable recording-session bindings, fenced late-content recovery, and ordered lifecycle envelopes)
+> Last updated: 2026-07-26 (bounded Pusher delivery, validated frames, and durable finalization ownership)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
+
+The backend-to-Pusher binary protocol accepts only opcodes `100` through `105`.
+Audio frames (`101`) require the four-byte opcode, an eight-byte timestamp, and
+PCM payload; JSON opcodes require an object payload, with transcript, finalization,
+and speaker-sample fields validated before they enter background queues. Malformed
+or unknown frames close the session with a protocol error instead of reaching
+application processing.
+
+Transcript, speaker-sample, audio-webhook, and private-cloud queues are bounded.
+Buffered audio also shares a per-session byte budget, so variable-size payloads
+cannot bypass item-count limits. A failed or cancelled backend-to-Pusher send
+retains the pending item for reconnect replay; buffers are cleared only after the
+send completes. Finalization opcode `104` carries the durable job id and dispatch
+generation, and Pusher claims that Firestore-owned job before processing.
 
 ## 1. Connection + Streaming + Transcription
 
@@ -122,6 +136,39 @@ sequenceDiagram
         Backend-->>Client: JSON array of segments [{id, text, speaker, ...}]
     end
 ```
+
+### Live STT observability
+
+For backend-provider `/v4/listen` sessions, `omi_live_stt_accepted_total`
+increments when the listener receives its first nontrivial audio frame. A
+successful terminal is emitted only after a nonempty transcript has been
+delivered to the client WebSocket. Provider failures finish the same attempt
+through `terminate_live_stt_session`, preserving their bounded failure phase;
+other attempts that end before delivery are classified during teardown as
+`failure` or `cancelled`.
+
+These metrics use only the closed `provider`, client `platform`, deployment
+environment, outcome, and phase labels. They do not include transcript content,
+user IDs, model revisions, or other high-cardinality request data. Custom-STT
+sessions are excluded because the backend does not own their provider socket or
+provider attempt lifecycle.
+
+### Dev-only parity-pack capture
+
+For local conformance debugging only, the listen runtime may write a restricted
+local cassette. It starts after listen has selected its STT service and accepts
+only an exact Firebase UID from `OMI_PARITY_PACK_ALLOWED_PRINCIPALS`. Capture is
+off unless all of `OMI_ENV_STAGE=dev`, `OMI_PARITY_PACK_CAPTURE=1`, and an
+absolute, outside-repository `OMI_PARITY_PACK_ROOT` are present. No Helm or
+production setting enables it.
+
+When enabled, the receiver records decoded client PCM (including each
+multi-channel PCM stream), successfully forwarded STT audio, and provider
+transcript callbacks. The runtime persists the anonymous cassette during
+teardown. Events and raw audio retained in memory are bounded (1,000 events or
+8 MiB of audio); once either limit is reached, remaining capture events are
+dropped. Capture initialization, observation, and persistence errors are
+isolated from the listen path.
 
 ### Terminal STT provider failure
 

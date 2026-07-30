@@ -1777,20 +1777,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get lovingOmi => 'تحب Omi؟';
 
   @override
-  String get leaveReviewIos =>
-      'ساعدنا في الوصول إلى المزيد من الأشخاص من خلال ترك تقييم في App Store. ملاحظاتك تعني لنا الكثير!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'ساعدنا في الوصول إلى المزيد من الأشخاص من خلال ترك تقييم في Google Play Store. ملاحظاتك تعني لنا الكثير!';
-
-  @override
-  String get rateOnAppStore => 'التقييم على App Store';
-
-  @override
-  String get rateOnGooglePlay => 'التقييم على Google Play';
-
-  @override
   String get maybeLater => 'ربما لاحقاً';
 
   @override
@@ -2123,6 +2109,18 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ تعديل الذاكرة';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'أحب تناول الآيس كريم...';
@@ -9548,151 +9546,169 @@ class AppLocalizationsAr extends AppLocalizations {
   String get dataEncryptedBanner => 'بياناتك محمية افتراضيًا بتشفير قوي، وتظل أنت المتحكم في كيفية تخزينها واستخدامها.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'الدقة';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'أساسي';
 
   @override
-  String get cloudTranscription => 'Cloud Transcription';
+  String get cloudTranscription => 'النسخ السحابي';
 
   @override
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'حذف النموذج';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'هل أنت متأكد أنك تريد حذف هذا النموذج؟';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'تم التنزيل';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'أسرع';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'تلقائي';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'أعلى';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'كبير';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'أقل';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'متوسط';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'تم حذف النموذج';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'فشل تنزيل النموذج';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'فشل تنزيل نموذج Whisper. يرجى المحاولة مرة أخرى.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'تم تنزيل النموذج';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'تم تنزيل نموذج Whisper بنجاح';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'حجم النموذج';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'بدون';
 
   @override
-  String get onDeviceTranscription => 'On-Device Transcription';
+  String get onDeviceTranscription => 'النسخ على الجهاز';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+  String get onDeviceTranscriptionDesc => 'تتم معالجة النسخ محليًا على جهازك';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'أبطأ';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'صغير';
 
   @override
   String get sttProviderSoniox => 'Soniox';
 
   @override
-  String get speechToTextProvider => 'Speech-to-Text Provider';
+  String get speechToTextProvider => 'مزود تحويل الكلام إلى نص';
 
   @override
-  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+  String get speechToTextProviderDesc => 'اختر الخدمة المستخدمة للنسخ';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'السرعة';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'صغير جدًا';
 
   @override
-  String get transcriptionLanguage => 'Transcription Language';
+  String get transcriptionLanguage => 'لغة النسخ';
 
   @override
-  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+  String get transcriptionLanguageDesc => 'اختر لغة نسخ الكلام';
 
   @override
-  String get whisperModel => 'Whisper Model';
+  String get whisperModel => 'نموذج Whisper';
 
   @override
-  String get whisperModelDesc => 'Choose the model for on-device transcription';
+  String get whisperModelDesc => 'اختر النموذج المستخدم للنسخ على الجهاز';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'الرجوع إلى الخطة المجانية؟';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'ستواجه هذه القيود:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => 'استهلاك بطارية أعلى بـ 7 أضعاف';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => 'جودة نسخ أقل بنسبة 30%';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => 'تأخير من 5 إلى 7 ثوانٍ';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'تعذّر التعرف على المتحدثين';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'خفض الخطة على أي حال';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'تقويم Google غير متصل';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt => 'اربط تقويم Google لربط المحادثات بأحداث التقويم.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'تم الربط بـ “$title”';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'فشل ربط حدث التقويم';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'شكرًا على ملاحظاتك!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'نسخ الرسالة';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'البحث في الإعدادات…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'خطأ في تحميل الصوت';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'اختر ميكروفون Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'حدد ميكروفون Bluetooth لنظارتك. تتوقف الموسيقى مؤقتًا أثناء استخدام Omi له.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'لم يتم العثور على ميكروفونات Bluetooth. وصّل نظارتك في إعدادات iPhone، ثم حاول مرة أخرى.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'تعذر تحميل ميكروفونات Bluetooth. تأكد من تشغيل Bluetooth، ثم حاول مرة أخرى.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError => 'تعذر الاتصال بهذا الميكروفون. تأكد من أنه متصل في إعدادات iPhone.';
 }

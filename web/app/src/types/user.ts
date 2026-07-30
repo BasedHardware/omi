@@ -246,6 +246,10 @@ export const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'de', name: 'German' },
   { code: 'it', name: 'Italian' },
   { code: 'pt', name: 'Portuguese' },
+  // Regional variants, matching the mobile app and desktop lists, so an account
+  // set to Brazilian Portuguese elsewhere still renders here (#7461).
+  { code: 'pt-BR', name: 'Portuguese (Brazil)' },
+  { code: 'pt-PT', name: 'Portuguese (Portugal)' },
   { code: 'nl', name: 'Dutch' },
   { code: 'pl', name: 'Polish' },
   { code: 'ru', name: 'Russian' },

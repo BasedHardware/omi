@@ -640,6 +640,16 @@ private func ensureConversationsTabVisibleForAutomation() async throws {
   try await Task.sleep(nanoseconds: 150_000_000)
 }
 
+private func requestAutomationConversationOpen(conversationId: String, showTranscript: Bool) async {
+  await MainActor.run {
+    ConversationDetailAutomationState.shared.requestOpen(
+      conversationId: conversationId,
+      showTranscript: showTranscript
+    )
+    NotificationCenter.default.post(name: .desktopAutomationOpenConversationRequested, object: nil)
+  }
+}
+
 @MainActor
 final class DesktopAutomationActionRegistry {
   static let shared = DesktopAutomationActionRegistry()
@@ -728,7 +738,7 @@ final class DesktopAutomationActionRegistry {
   func registerBuiltins() {
     guard !didRegisterBuiltins else { return }
     didRegisterBuiltins = true
-
+    registerOpenOmiShortcutActionsForQA()
     register(
       name: "refresh_all_data",
       summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"
@@ -1154,7 +1164,7 @@ final class DesktopAutomationActionRegistry {
           "message": message,
           "memories": "\(result.memoryCount ?? 0)",
         ]
-      case .failure(let message):
+      case .failure(let message, failureClass: _):
         return ["outcome": "failure", "message": message]
       }
     }
@@ -1260,11 +1270,7 @@ final class DesktopAutomationActionRegistry {
       }
       let persisted = try? await TranscriptionStorage.shared.getCachedConversation(id: detail.id)
 
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: ["conversationId": detail.id, "showTranscript": true]
-      )
+      await requestAutomationConversationOpen(conversationId: detail.id, showTranscript: true)
 
       return [
         "list_loaded": appState.conversations.isEmpty ? "false" : "true",
@@ -1561,7 +1567,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "home_close_panel",
-      summary: "Collapse Home back to the hub (same as Esc / the close buttons)"
+      summary: "Collapse Home back to its resting surface (same as Esc / the close buttons)"
     ) { _ in
       NotificationCenter.default.post(name: .homeStageClose, object: nil)
       return nil
@@ -1667,6 +1673,24 @@ final class DesktopAutomationActionRegistry {
         return ["error": error]
       }
       return ["reset": "true"]
+    }
+
+    register(
+      name: "present_onboarding_opener",
+      summary: "Compose and show the post-onboarding opener in the empty-chat slot (QA rendering seam)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "present_onboarding_opener is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      provider.presentOnboardingOpener()
+      return [
+        "presented": "true",
+        "starter_count": "\(provider.onboardingOpener?.starters.count ?? 0)",
+      ]
     }
 
     // Send a message through the real main-window chat pipeline (ChatPage),
@@ -2052,14 +2076,13 @@ final class DesktopAutomationActionRegistry {
       params: ["folderPath", "maxResults", "remember"]
     ) { params in
       let maxResults = min(max(intParam(params["maxResults"], default: 20), 1), 250)
-      let folderPath = params["folderPath"]?.trimmingCharacters(in: .whitespacesAndNewlines)
       let remember = boolParam(params["remember"], default: false)
 
       do {
         let selectedFolderPath: String?
-        if let folderPath, !folderPath.isEmpty {
+        if let requestedFolder = try AppleNotesReadProbe.resolveRequestedFolder(path: params["folderPath"]) {
           let resolved = try await AppleNotesReaderService.shared.validateSelectedFolder(
-            path: folderPath,
+            path: requestedFolder.path,
             remember: remember
           )
           selectedFolderPath = resolved.path
@@ -2136,7 +2159,7 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "capture_main_window_png",
       summary: "Write PNG of the frontmost Omi window (in-process capture)",
-      params: ["path"]
+      params: ["path", "surface"]
     ) { params in
       guard let path = params["path"], !path.isEmpty else {
         return ["error": "missing 'path'"]
@@ -2145,10 +2168,14 @@ final class DesktopAutomationActionRegistry {
         guard
           let window = NSApp.windows.first(where: {
             $0.isVisible && $0.title.range(of: "omi", options: .caseInsensitive) != nil
-          }),
-          let contentView = window.contentView
+          })
         else {
           return ["error": "no_visible_window"]
+        }
+        let requestedSheet = params["surface"] == "sheet"
+        let captureWindow = requestedSheet ? (window.attachedSheet ?? window) : window
+        guard let contentView = captureWindow.contentView else {
+          return ["error": "no_content_view"]
         }
         let bounds = contentView.bounds
         guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
@@ -2160,7 +2187,26 @@ final class DesktopAutomationActionRegistry {
         }
         do {
           try data.write(to: URL(fileURLWithPath: path))
-          return ["path": path, "bytes": "\(data.count)"]
+          var result = [
+            "path": path,
+            "bytes": "\(data.count)",
+            "captured_surface": requestedSheet && window.attachedSheet != nil ? "sheet" : "window",
+            "frame_x": "\(Int(window.frame.origin.x.rounded()))",
+            "frame_y": "\(Int(window.frame.origin.y.rounded()))",
+            "frame_width": "\(Int(window.frame.width.rounded()))",
+            "frame_height": "\(Int(window.frame.height.rounded()))",
+            "backing_scale": String(format: "%.1f", window.backingScaleFactor),
+          ]
+          if let sheet = window.attachedSheet {
+            result["has_sheet"] = "true"
+            result["sheet_frame_x"] = "\(Int(sheet.frame.origin.x.rounded()))"
+            result["sheet_frame_y"] = "\(Int(sheet.frame.origin.y.rounded()))"
+            result["sheet_frame_width"] = "\(Int(sheet.frame.width.rounded()))"
+            result["sheet_frame_height"] = "\(Int(sheet.frame.height.rounded()))"
+          } else {
+            result["has_sheet"] = "false"
+          }
+          return result
         } catch {
           return ["error": error.localizedDescription]
         }
@@ -2570,11 +2616,7 @@ final class DesktopAutomationActionRegistry {
       }
       let showTranscript = boolParam(params["showTranscript"], default: false)
       try await ensureConversationsTabVisibleForAutomation()
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
-      )
+      await requestAutomationConversationOpen(conversationId: conversationId, showTranscript: showTranscript)
       let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
       while ConversationDetailAutomationState.shared.openConversationId != conversationId,
@@ -2619,11 +2661,7 @@ final class DesktopAutomationActionRegistry {
       }
       let showTranscript = boolParam(params["showTranscript"], default: false)
       try await ensureConversationsTabVisibleForAutomation()
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: ["conversationId": conversationId, "showTranscript": showTranscript]
-      )
+      await requestAutomationConversationOpen(conversationId: conversationId, showTranscript: showTranscript)
       let timeoutMs = max(500, intParam(params["timeoutMs"], default: 5_000))
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1_000)
       while ConversationDetailAutomationState.shared.openConversationId != conversationId,
@@ -3056,17 +3094,61 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
-      name: "memory_graph_snapshot",
-      summary: "Return knowledge graph node/edge counts (no SceneKit rendering)",
+      name: "memory_graph_rebuild",
+      summary:
+        "Regenerate the server-side knowledge graph from the signed-in account's memories",
       params: []
     ) { _ in
+      // Mutating and not undoable: the backend deletes the stored graph before
+      // the background rebuild runs, so a caller that loses the race sees an
+      // empty graph. Exposed for cursor-free QA of the Brain Map's own rebuild
+      // control, which is otherwise only reachable by clicking.
+      do {
+        let response = try await APIClient.shared.rebuildKnowledgeGraph()
+        return [
+          "status": response.status,
+          "nodes_count": "\(response.nodesCount ?? 0)",
+          "edges_count": "\(response.edgesCount ?? 0)",
+        ]
+      } catch {
+        return [
+          "has_error": "true",
+          "error_message": error.localizedDescription,
+        ]
+      }
+    }
+
+    register(
+      name: "memory_graph_snapshot",
+      summary: "Return knowledge graph node/edge counts (no SceneKit rendering)",
+      params: ["label"]
+    ) { params in
       do {
         let graph = try await APIClient.shared.getKnowledgeGraph()
-        return [
+        var detail = [
           "node_count": "\(graph.nodes.count)",
           "edge_count": "\(graph.edges.count)",
           "is_empty": graph.nodes.isEmpty ? "true" : "false",
         ]
+        // `label` resolves a human-typed name to the ids the inspector needs,
+        // so a cursor-free check can both drive a selection and state what it
+        // expects the panel to show.
+        if let query = params["label"]?.lowercased(), !query.isEmpty {
+          if let match = graph.nodes.first(where: { $0.label.lowercased().contains(query) }) {
+            let edges = graph.edges.filter { $0.sourceId == match.id || $0.targetId == match.id }
+            detail["match_id"] = match.id
+            detail["match_label"] = match.label
+            detail["match_edge_count"] = "\(edges.count)"
+            detail["match_cited_memory_count"] = "\(Set(edges.flatMap(\.memoryIds)).count)"
+            if let first = edges.first {
+              detail["match_first_edge_id"] = first.id
+              detail["match_first_edge_memory_count"] = "\(first.memoryIds.count)"
+            }
+          } else {
+            detail["match_id"] = ""
+          }
+        }
+        return detail
       } catch {
         return [
           "node_count": "0",
@@ -3076,6 +3158,138 @@ final class DesktopAutomationActionRegistry {
           "error_message": error.localizedDescription,
         ]
       }
+    }
+
+    register(
+      name: "memory_atlas_select",
+      summary: "Select a Brain Map entity or connection so the inspector can be checked cursor-free",
+      params: ["target", "node_id", "label", "edge_id", "clear"]
+    ) { params in
+      let target = params["target"] == "inline" ? "inline" : "page"
+      var userInfo: [String: Any] = ["target": target]
+      if let nodeID = params["node_id"], !nodeID.isEmpty { userInfo["node_id"] = nodeID }
+      if let label = params["label"], !label.isEmpty { userInfo["label"] = label }
+      if let edgeID = params["edge_id"], !edgeID.isEmpty { userInfo["edge_id"] = edgeID }
+      if params["clear"] == "true" { userInfo["clear"] = true }
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryAtlasSelectRequested,
+          object: nil,
+          userInfo: userInfo
+        )
+      }
+      return [
+        "posted": "true",
+        "target": target,
+        "node_id": params["node_id"] ?? "",
+        "label": params["label"] ?? "",
+        "edge_id": params["edge_id"] ?? "",
+        "clear": params["clear"] ?? "false",
+      ]
+    }
+
+    register(
+      name: "memories_open_detail",
+      summary: "Open a memory's detail panel by backend id (omit the id to close it)",
+      params: ["memory_id"]
+    ) { params in
+      let memoryId = params["memory_id"] ?? ""
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryDetailOpenRequested,
+          object: nil,
+          userInfo: memoryId.isEmpty ? [:] : ["memory_id": memoryId]
+        )
+      }
+      return ["posted": "true", "memory_id": memoryId]
+    }
+
+    register(
+      name: "open_memory_atlas",
+      summary: "Open the canonical memory atlas page for non-production UI and performance harnesses"
+    ) { _ in
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationOpenMemoryAtlasRequested,
+          object: nil
+        )
+      }
+      return ["opened": "true", "target": "page"]
+    }
+
+    register(
+      name: "memory_atlas_set_viewport",
+      summary: "Set memory atlas zoom and pan for deterministic non-production performance sweeps",
+      params: ["target", "zoom", "pan_x", "pan_y", "reset"]
+    ) { params in
+      let target = params["target"] == "inline" ? "inline" : "page"
+      var userInfo: [String: Any] = ["target": target]
+      if let zoom = params["zoom"].flatMap(Double.init) { userInfo["zoom"] = zoom }
+      if let panX = params["pan_x"].flatMap(Double.init) { userInfo["pan_x"] = panX }
+      if let panY = params["pan_y"].flatMap(Double.init) { userInfo["pan_y"] = panY }
+      if let reset = params["reset"] { userInfo["reset"] = reset == "true" }
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryAtlasViewportRequested,
+          object: nil,
+          userInfo: userInfo
+        )
+      }
+      return [
+        "posted": "true",
+        "target": target,
+        "zoom": params["zoom"] ?? "unchanged",
+        "pan_x": params["pan_x"] ?? "unchanged",
+        "pan_y": params["pan_y"] ?? "unchanged",
+      ]
+    }
+
+    register(
+      name: "memory_atlas_enter_region",
+      summary: "Go into a Brain Map neighbourhood by caption, or leave the one you are in",
+      params: ["target", "caption", "leave"]
+    ) { params in
+      let target = params["target"] == "inline" ? "inline" : "page"
+      var userInfo: [String: Any] = ["target": target]
+      if let caption = params["caption"] { userInfo["caption"] = caption }
+      if let leave = params["leave"] { userInfo["leave"] = leave == "true" }
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryAtlasRegionRequested,
+          object: nil,
+          userInfo: userInfo
+        )
+      }
+      return [
+        "posted": "true", "target": target,
+        "caption": params["caption"] ?? "", "leave": params["leave"] ?? "false",
+      ]
+    }
+
+    register(
+      name: "memory_atlas_set_time",
+      summary: "Scrub or play the memory atlas time axis for deterministic non-production checks",
+      params: ["target", "fraction", "play", "reset_to_start", "reset"]
+    ) { params in
+      let target = params["target"] == "inline" ? "inline" : "page"
+      var userInfo: [String: Any] = ["target": target]
+      if let fraction = params["fraction"].flatMap(Double.init) { userInfo["fraction"] = fraction }
+      if let play = params["play"] { userInfo["play"] = play == "true" }
+      if let resetToStart = params["reset_to_start"] { userInfo["reset_to_start"] = resetToStart == "true" }
+      if let reset = params["reset"] { userInfo["reset"] = reset == "true" }
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryAtlasTimeRequested,
+          object: nil,
+          userInfo: userInfo
+        )
+      }
+      return [
+        "posted": "true",
+        "target": target,
+        "fraction": params["fraction"] ?? "unchanged",
+        "play": params["play"] ?? "unchanged",
+      ]
     }
 
     register(
@@ -4014,16 +4228,10 @@ final class DesktopAutomationBridge: @unchecked Sendable {
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
     await activateMainWindowIfNeeded(payload.activateApp ?? true)
     try await ensureConversationsTabVisibleForAutomation()
-    await MainActor.run {
-      NotificationCenter.default.post(
-        name: .desktopAutomationOpenConversationRequested,
-        object: nil,
-        userInfo: [
-          "conversationId": payload.conversationId,
-          "showTranscript": payload.showTranscript ?? false,
-        ]
-      )
-    }
+    await requestAutomationConversationOpen(
+      conversationId: payload.conversationId,
+      showTranscript: payload.showTranscript ?? false
+    )
   }
 
   private func activateMainWindowIfNeeded(_ activateApp: Bool) async {

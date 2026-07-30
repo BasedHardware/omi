@@ -4,6 +4,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+/// Users often paste one key and miss the banner saying all four are required
+/// at the same time. Non-nil while 1–3 keys (in `BYOKProvider.allCases` order)
+/// are entered, listing the ones still missing.
+func byokMissingKeysHint(_ keys: [String]) -> String? {
+  let missing = zip(BYOKProvider.allCases, keys).filter { $0.1.isEmpty }.map(\.0.displayName)
+  guard !missing.isEmpty, missing.count < keys.count else { return nil }
+  return
+    "Still missing: \(missing.joined(separator: ", ")). All 4 keys must be entered at the same time to activate the free plan."
+}
+
 extension SettingsContentView {
   var developerKeysSubsection: some View {
     VStack(spacing: OmiSpacing.xl) {
@@ -41,16 +51,12 @@ extension SettingsContentView {
         value: $devDeepgramKey
       )
 
+      if let byokIncompleteHint {
+        byokWarningCard(byokIncompleteHint, settingId: "advanced.devkeys.incomplete")
+      }
+
       if let byokActivationError {
-        settingsCard(settingId: "advanced.devkeys.error") {
-          HStack(spacing: OmiSpacing.sm) {
-            Image(systemName: "exclamationmark.triangle.fill")
-              .foregroundColor(OmiColors.warning)
-            Text(byokActivationError)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.warning)
-          }
-        }
+        byokWarningCard(byokActivationError, settingId: "advanced.devkeys.error")
       }
 
       if hasAnyBYOKKey {
@@ -72,6 +78,22 @@ extension SettingsContentView {
     .onChange(of: devAnthropicKey) { _, _ in refreshBYOKActivation() }
     .onChange(of: devGeminiKey) { _, _ in refreshBYOKActivation() }
     .onChange(of: devDeepgramKey) { _, _ in refreshBYOKActivation() }
+  }
+
+  var byokIncompleteHint: String? {
+    byokMissingKeysHint([devOpenAIKey, devAnthropicKey, devGeminiKey, devDeepgramKey])
+  }
+
+  func byokWarningCard(_ text: String, settingId: String) -> some View {
+    settingsCard(settingId: settingId) {
+      HStack(spacing: OmiSpacing.sm) {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .foregroundColor(OmiColors.warning)
+        Text(text)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(OmiColors.warning)
+      }
+    }
   }
 
   var hasAnyBYOKKey: Bool {

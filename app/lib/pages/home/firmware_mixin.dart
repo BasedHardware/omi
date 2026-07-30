@@ -33,14 +33,15 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   int installProgress = 0;
   bool isLegacySecureDFU = true;
   List<String> otaUpdateSteps = [];
-  late final mcumgr.FirmwareUpdateManagerFactory? managerFactory =
-      firmwareUpdatePolicy.allowsOmiFirmwareUpdate ? mcumgr.FirmwareUpdateManagerFactory() : null;
+  late final mcumgr.FirmwareUpdateManagerFactory? managerFactory = firmwareUpdatePolicy.allowsOmiFirmwareUpdate
+      ? mcumgr.FirmwareUpdateManagerFactory()
+      : null;
   mcumgr.FirmwareUpdateManager? _mcuUpdateManager;
 
   /// Process ZIP file and return firmware image list
   Future<List<mcumgr.Image>> processZipFile(Uint8List zipFileData) async {
     // Create temporary directory
-    final prefix = 'firmware_${Uuid().v4()}';
+    final prefix = 'firmware_${const Uuid().v4()}';
     final systemTempDir = await getTemporaryDirectory();
     final tempDir = Directory('${systemTempDir.path}/$prefix');
     await tempDir.create();
@@ -162,8 +163,8 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     updateManager.logger.logMessageStream
         .where((log) => log.level.rawValue > 1) // Filter debug messages
         .listen((log) {
-      Logger.debug('dfu log: ${log.message}');
-    });
+          Logger.debug('dfu log: ${log.message}');
+        });
 
     await updateManager.update(images, configuration: configuration);
   }

@@ -19,6 +19,14 @@ enum ChatContentBlockCodec {
     blocks.map(persistenceDictionary(for:))
   }
 
+  /// Stable, in-process representation used to compare every persisted
+  /// journal-owned field without emitting any block content to telemetry.
+  static func comparisonData(_ blocks: [ChatContentBlock]) -> Data? {
+    try? JSONSerialization.data(
+      withJSONObject: blocks.map(persistenceDictionary(for:)),
+      options: [.sortedKeys])
+  }
+
   static func decode(_ json: String) -> [ChatContentBlock]? {
     guard let data = json.data(using: .utf8),
       let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]

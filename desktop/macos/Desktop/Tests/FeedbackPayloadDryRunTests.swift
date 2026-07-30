@@ -90,6 +90,18 @@ import XCTest
       XCTAssertEqual(feedbackReportTitle(for: "mic dropped"), "User Report")
     }
 
+    func testTier2FlowExpectsPrivacySafeReportTitle() throws {
+      // omi-test-quality: source-inspection -- static contract: the checked-in Tier-2
+      // expectation must match the privacy-safe product title used by the shared builder.
+      let flow = try String(contentsOf: feedbackPayloadFlowURL(), encoding: .utf8)
+      let expectedTitle = feedbackReportTitle(for: "[[MARKER:set02-dryrun]]")
+      XCTAssertTrue(
+        flow.contains("result.detail.sentry_message: \"\(expectedTitle)\""),
+        "Tier-2 must expect the shared privacy-safe Sentry title")
+      XCTAssertFalse(flow.contains("User Report: [[MARKER:set02-dryrun]]"))
+      XCTAssertFalse(flow.contains("User Report (logs only)"))
+    }
+
     func testDiagnosticsPayloadIsParseableAndCarriesPrivacyMarker() throws {
       DesktopDiagnosticsManager.shared.resetForTests()
       defer { DesktopDiagnosticsManager.shared.resetForTests() }
@@ -116,6 +128,14 @@ import XCTest
     }
 
     // MARK: - Helpers
+
+    private func feedbackPayloadFlowURL() -> URL {
+      URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("e2e/flows/feedback-payload-dryrun.yaml")
+    }
 
     private func dryRunActionBlock() throws -> String {
       let source = try bridgeSource()

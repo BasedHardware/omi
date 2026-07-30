@@ -31,7 +31,7 @@ def reset_posthog_client():
 
 
 def _function_calls(path: str, function_name: str) -> set[str]:
-    tree = ast.parse((BACKEND_DIR / path).read_text())
+    tree = ast.parse((BACKEND_DIR / path).read_text(encoding='utf-8'))
     for node in tree.body:
         if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name == function_name:
             return {
