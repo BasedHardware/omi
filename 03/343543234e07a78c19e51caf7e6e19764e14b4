@@ -1,0 +1,23 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Ink.swift
+  s_abe8283a0c57dd::t_1d8f272fe3009f 130-138
+  s_abe8283a0c57dd::t_34523273026bcc 124-128
+  s_abe8283a0c57dd::t_ce7e39e33c4d4a 4-14
+desktop/context-for-claude/docs/design-system.md
+  s_abe8283a0c57dd::t_b39fda3e4e3df3 4,15-16,20,180,257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "03343543234e07a78c19e51caf7e6e19764e14b4",
+  "prompts": {},
+  "sessions": {
+    "s_abe8283a0c57dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "87377558-5689-4a2d-aa25-ff41404d6e61",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
