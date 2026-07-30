@@ -3497,6 +3497,7 @@ export interface UsageHistoryPoint {
   memories_created?: number;
   speech_seconds?: number;
   transcription_seconds?: number;
+  transcription_seconds_context_for_claude?: number;
   words_transcribed?: number;
 }
 
@@ -3507,6 +3508,7 @@ export interface UsageStats {
   memories_created?: number;
   speech_seconds?: number;
   transcription_seconds?: number;
+  transcription_seconds_context_for_claude?: number;
   words_transcribed?: number;
 }
 
@@ -14302,7 +14304,7 @@ export async function get_user_paywall_status_v1_users_me_paywall_get(query: { p
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_user_subscription_endpoint_v1_users_me_subscription_get(header: { X_App_Platform?: string, X_App_Version?: string, authorization?: string, X_App_Product?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<UserSubscriptionResponse> {
+export async function get_user_subscription_endpoint_v1_users_me_subscription_get(header: { X_App_Platform?: string, X_App_Product?: string, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<UserSubscriptionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/subscription`;
   const _search = "";
@@ -14312,9 +14314,9 @@ export async function get_user_subscription_endpoint_v1_users_me_subscription_ge
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_App_Product !== undefined ? { "X-App-Product": String(header.X_App_Product) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
-      ...(header.X_App_Product !== undefined ? { "X-App-Product": String(header.X_App_Product) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
     },
   });
@@ -14365,7 +14367,7 @@ export async function get_user_usage_stats_endpoint_v1_users_me_usage_get(query:
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_user_chat_usage_quota_v1_users_me_usage_quota_get(header: { X_App_Platform?: string, authorization?: string, X_App_Product?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChatUsageQuota> {
+export async function get_user_chat_usage_quota_v1_users_me_usage_quota_get(header: { X_App_Platform?: string, X_App_Product?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChatUsageQuota> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/usage-quota`;
   const _search = "";
@@ -14375,8 +14377,8 @@ export async function get_user_chat_usage_quota_v1_users_me_usage_quota_get(head
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Product !== undefined ? { "X-App-Product": String(header.X_App_Product) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
@@ -15500,7 +15502,7 @@ export async function get_messages_v2_messages_get(query: { plugin_id?: string |
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function send_message_v2_messages_post(query: { plugin_id?: string | null, app_id?: string | null }, header: { X_App_Platform?: string, authorization?: string, X_App_Product?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SendMessageRequest, init?: OmiApiClientInit): Promise<ResponseMessage> {
+export async function send_message_v2_messages_post(query: { plugin_id?: string | null, app_id?: string | null }, header: { X_App_Platform?: string, X_App_Product?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SendMessageRequest, init?: OmiApiClientInit): Promise<ResponseMessage> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/messages`;
   const _params = query ? Object.entries(query)
@@ -15514,8 +15516,8 @@ export async function send_message_v2_messages_post(query: { plugin_id?: string 
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Product !== undefined ? { "X-App-Product": String(header.X_App_Product) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
@@ -15695,7 +15697,7 @@ export async function get_sync_job_status_v2_sync_local_files__job_id__get(path:
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function transcribe_voice_message_v2_voice_message_transcribe_post(header: { X_App_Platform?: string, authorization?: string, X_App_Product?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<VoiceMessageTranscriptionResponse> {
+export async function transcribe_voice_message_v2_voice_message_transcribe_post(header: { X_App_Platform?: string, X_App_Product?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<VoiceMessageTranscriptionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/voice-message/transcribe`;
   const _search = "";
@@ -15705,8 +15707,8 @@ export async function transcribe_voice_message_v2_voice_message_transcribe_post(
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Product !== undefined ? { "X-App-Product": String(header.X_App_Product) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
