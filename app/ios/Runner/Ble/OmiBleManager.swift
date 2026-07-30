@@ -31,6 +31,13 @@ final class OmiBleManager: NSObject {
     /// Whether the user explicitly disconnected (suppress auto-reconnect).
     private var manuallyDisconnected: Set<String> = []
 
+    /// A CoreBluetooth restoration launch with Background Mode disabled must
+    /// not be allowed to reconnect any cached paired UUID. The restoration
+    /// dictionary can be empty even though Flutter still knows the device.
+    /// Only a real foreground transition consumes this process-wide gate.
+    private var backgroundRestoreRequiresForegroundActivation = false
+    private var deferredForegroundConnectUuids: Set<String> = []
+
     /// RSSI keep-alive timer — periodic reads prevent connection supervision timeout.
     private var rssiTimer: Timer?
 
@@ -132,6 +139,17 @@ final class OmiBleManager: NSObject {
     // MARK: - Connection
 
     func connectPeripheral(uuid: String) {
+        if BleRestoredPeripheralPolicy.shouldDeferConnect(
+            requiresForegroundActivation: backgroundRestoreRequiresForegroundActivation
+        ) {
+            deferredForegroundConnectUuids.insert(uuid)
+            releaseDeferredRestoredPeripheral(uuid: uuid)
+            NSLog(
+                "[OmiBle] Deferred connect for restored peripheral \(uuid); "
+                    + "waiting for foreground activation"
+            )
+            return
+        }
         manuallyDisconnected.remove(uuid)
 
         if let peripheral = peripherals[uuid] {
@@ -146,6 +164,24 @@ final class OmiBleManager: NSObject {
             peripheral.delegate = self
             peripherals[uuid] = peripheral
             connectOrRevalidate(peripheral, uuid: uuid)
+        }
+    }
+
+    private func releaseDeferredRestoredPeripheral(uuid: String) {
+        guard let identifier = UUID(uuidString: uuid) else { return }
+        let peripheral = peripherals[uuid]
+            ?? centralManager.retrievePeripherals(withIdentifiers: [identifier]).first
+        guard let peripheral else { return }
+
+        peripheral.delegate = self
+        peripherals[uuid] = peripheral
+        manuallyDisconnected.insert(uuid)
+        if peripheral.state == .connected || peripheral.state == .connecting {
+            centralManager.cancelPeripheralConnection(peripheral)
+            NSLog(
+                "[OmiBle] Released deferred restored peripheral \(uuid); "
+                    + "waiting for foreground activation"
+            )
         }
     }
 
@@ -193,6 +229,15 @@ final class OmiBleManager: NSObject {
     /// cost nothing while iOS waits at the chipset level.
     func reconnectStalePeripherals() {
         guard centralManager.state == .poweredOn else { return }
+        if backgroundRestoreRequiresForegroundActivation {
+            backgroundRestoreRequiresForegroundActivation = false
+            let deferredUuids = deferredForegroundConnectUuids
+            deferredForegroundConnectUuids.removeAll()
+            for uuid in deferredUuids {
+                NSLog("[OmiBle] Foreground activation reconnecting deferred peripheral \(uuid)")
+                connectPeripheral(uuid: uuid)
+            }
+        }
         for (uuid, peripheral) in peripherals {
             guard everConnected.contains(uuid) else { continue }
             if manuallyDisconnected.contains(uuid) { continue }
@@ -628,23 +673,50 @@ extension OmiBleManager: CBCentralManagerDelegate {
             NSLog("[OmiBle] Executing queued scan (timeout=\(pending.timeout))")
             startScan(timeout: pending.timeout, serviceUuids: pending.serviceUuids)
         }
+        if central.state == .poweredOn,
+           BleRestoredPeripheralPolicy.shouldResumeDeferredConnect(
+               requiresForegroundActivation: backgroundRestoreRequiresForegroundActivation,
+               applicationIsActive: UIApplication.shared.applicationState == .active
+           ) {
+            reconnectStalePeripherals()
+        }
     }
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
-        // Restore previously connected peripherals after app relaunch
+        let restoredAction = BleRestoredPeripheralPolicy.action(
+            backgroundModeEnabled: UserDefaults.standard.bool(
+                forKey: "flutter.backgroundModeEnabled"
+            )
+        )
+        if restoredAction == .releaseConnection {
+            backgroundRestoreRequiresForegroundActivation = true
+        }
+
+        // Restore previously connected peripherals after app relaunch only
+        // when the user explicitly opted into Background Mode. Otherwise an
+        // OS-restored iOS process can monopolize a one-connection pendant while
+        // the user is deliberately trying to use Android or another host.
         if let restoredPeripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
             var uuids: [String] = []
             for peripheral in restoredPeripherals {
                 let uuid = peripheralUuidString(peripheral)
                 peripheral.delegate = self
                 peripherals[uuid] = peripheral
-                uuids.append(uuid)
-
-                // Re-establish connection if not already connected
-                if peripheral.state != .connected {
-                    central.connect(peripheral, options: nil)
-                } else {
-                    peripheral.discoverServices(nil)
+                switch restoredAction {
+                case .restoreConnection:
+                    uuids.append(uuid)
+                    if peripheral.state != .connected {
+                        central.connect(peripheral, options: nil)
+                    } else {
+                        peripheral.discoverServices(nil)
+                    }
+                case .releaseConnection:
+                    manuallyDisconnected.insert(uuid)
+                    central.cancelPeripheralConnection(peripheral)
+                    NSLog(
+                        "[OmiBle] Released restored peripheral \(uuid); "
+                            + "Background Mode is disabled"
+                    )
                 }
             }
             flutterApi?.onStateRestored(peripheralUuids: uuids) { _ in }

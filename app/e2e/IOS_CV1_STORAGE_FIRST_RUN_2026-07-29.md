@@ -107,3 +107,31 @@ contract is implemented and tested end to end.
   resumes without starving live continuity.
 - Run an unplugged quiet/speech cycle long enough to compare 3.0.29 battery use
   with the prior firmware.
+
+## 2026-07-30 cross-host restoration audit
+
+CV1 exposes one BLE connection, so an iOS restoration launch can prevent an
+otherwise healthy Android companion from acquiring the pendant. Two initial
+release-policy variants failed the physical handoff and are not counted as
+passes. A fresh iPhone system-log archive showed why: `bluetoothd` retained the
+restorable CoreBluetooth session, SpringBoard relaunched the isolated dev app
+in the background, and the restored session associated the already-connected
+pendant before the Flutter foreground policy ran.
+
+This distinguishes two responsibilities:
+
+- a process-level gate prevents new background `connectPeripheral` requests;
+- the app must also cancel the exact OS-restored physical peripheral when
+  Background Mode is disabled.
+
+The candidate now uses the exact paired UUID supplied by Flutter to retrieve
+and release that restored peripheral, even when CoreBluetooth's restoration
+dictionary is empty. The foreground callback consumes the gate and reconnects
+the deferred UUID. With Background Mode enabled, restoration remains the
+explicitly authorized owner.
+
+The signed isolated build containing the exact-UUID release policy is installed
+without replacing the production app. A final physical four-leg proof remains:
+iOS connect, OS background restoration, Android acquisition while restored iOS
+stays alive, then iOS foreground reacquisition after Android releases the
+pendant. No pass is claimed until all four legs complete.
