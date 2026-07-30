@@ -426,6 +426,31 @@ async def _wait_for_vm_healthy(vm_ip: str, auth_token: str, timeout: float = 120
     return False
 
 
+async def _send_startup_event(websocket: WebSocket, uid: str, payload: Dict[str, Any]) -> bool:
+    """Push a VM-startup status/error event to the client. False means the client is gone.
+
+    VM startup outlives the client's keepalive window (the health wait alone is 120s), so by
+    the time these events go out uvicorn may already have dropped the phone with a 1011 ping
+    timeout. A vanished client is the terminal, expected end of this connection — not an ASGI
+    error — and must not escape agent_ws, which is the only ownership the relay loop below
+    already has and this startup path did not.
+    """
+    try:
+        await websocket.send_text(json.dumps(payload))
+        return True
+    except Exception as e:
+        logger.info(f"[agent-proxy] uid={uid} client gone during VM startup: {type(e).__name__}")
+        return False
+
+
+async def _close_client(websocket: WebSocket, uid: str, code: int, reason: str) -> None:
+    """Close the client socket, tolerating a client that already went away."""
+    try:
+        await websocket.close(code=code, reason=reason)
+    except Exception as e:
+        logger.debug(f"[agent-proxy] uid={uid} close({code}) on gone client: {type(e).__name__}")
+
+
 # --------------- encryption helpers ---------------
 
 
@@ -624,34 +649,34 @@ async def agent_ws(websocket: WebSocket):
         except Exception:
             # VM not reachable — check GCE and restart/reset if needed
             logger.info(f"[agent-proxy] uid={uid} VM {vm_ip} not reachable, checking GCE...")
-            await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
+            await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
             vm = await _ensure_vm_running(uid, vm, health_failed=True)
             if not vm or vm.get("status") != "ready" or not vm.get("ip"):
-                await websocket.send_text(json.dumps(await run_blocking(db_executor, _vm_unavailable_event, uid)))
-                await websocket.close(code=4002, reason="VM startup failed")
+                await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
+                await _close_client(websocket, uid, 4002, "VM startup failed")
                 return
             vm_ip = vm["ip"]
             vm_token = vm["authToken"]
             # Wait for VM to be healthy after restart
             healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
             if not healthy:
-                await websocket.send_text(json.dumps({"type": "error", "message": "Agent VM is not responding"}))
-                await websocket.close(code=4003, reason="VM not healthy")
+                await _send_startup_event(websocket, uid, {"type": "error", "message": "Agent VM is not responding"})
+                await _close_client(websocket, uid, 4003, "VM not healthy")
                 return
     else:
         # No IP or not ready — must restart
-        await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
+        await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
         vm = await _ensure_vm_running(uid, vm)
         if not vm or vm.get("status") != "ready" or not vm.get("ip"):
-            await websocket.send_text(json.dumps(await run_blocking(db_executor, _vm_unavailable_event, uid)))
-            await websocket.close(code=4002, reason="VM startup failed")
+            await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
+            await _close_client(websocket, uid, 4002, "VM startup failed")
             return
         vm_ip = vm["ip"]
         vm_token = vm["authToken"]
         healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
         if not healthy:
-            await websocket.send_text(json.dumps({"type": "error", "message": "Agent VM is not responding"}))
-            await websocket.close(code=4003, reason="VM not healthy")
+            await _send_startup_event(websocket, uid, {"type": "error", "message": "Agent VM is not responding"})
+            await _close_client(websocket, uid, 4003, "VM not healthy")
             return
 
     vm_uri = f"ws://{vm_ip}:8080/ws?token={vm_token}"

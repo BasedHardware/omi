@@ -11,7 +11,8 @@ ID token must match that audience and issuer.
 
 The script never prints a credential, request body, response body, or upstream
 error body. The ID token is written only to a mode-0600 file owned by the
-current runner process.
+current runner process; platforms that cannot enforce that mode fail before
+creating the output file.
 """
 
 from __future__ import annotations
@@ -244,13 +245,16 @@ def _signed_custom_token_locally(credentials_path: Path, firebase_project: str) 
             f'{_base64url(json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8"))}.'
             f'{_base64url(json.dumps(claims, separators=(",", ":"), sort_keys=True).encode("utf-8"))}'
         )
+        fchmod = getattr(os, 'fchmod', None)
+        if not callable(fchmod):
+            raise ProbeTokenError('custom_token_signing', 'credential_unavailable')
         try:
             descriptor, key_path = tempfile.mkstemp(
                 prefix='omi-firebase-probe-signer-',
                 dir=os.environ.get('RUNNER_TEMP'),
             )
             try:
-                os.fchmod(descriptor, 0o600)
+                fchmod(descriptor, 0o600)
                 with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
                     descriptor = -1
                     handle.write(private_key)
@@ -369,13 +373,16 @@ def mint_probe_token(
 def write_token(path: Path, token: str) -> None:
     if not path.parent.is_dir() or not token or len(token) > MAX_TOKEN_CHARS:
         raise ProbeTokenError('token_output')
+    fchmod = getattr(os, 'fchmod', None)
+    if not callable(fchmod):
+        raise ProbeTokenError('token_output')
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, 'O_NOFOLLOW', 0)
     try:
         descriptor = os.open(path, flags, 0o600)
         try:
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ProbeTokenError('token_output')
-            os.fchmod(descriptor, 0o600)
+            fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
                 descriptor = -1
                 handle.write(token)

@@ -2,14 +2,27 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 const getSources = vi.fn()
 const getPrimaryDisplay = vi.fn()
+const getDisplayMatching = vi.fn()
+const screenToDipRect = vi.fn()
+const getCursorScreenPoint = vi.fn()
+const getDisplayNearestPoint = vi.fn()
+const getForegroundWindowRect = vi.fn()
 const on = vi.fn()
 
 vi.mock('electron', () => ({
   desktopCapturer: { getSources: (...args: unknown[]) => getSources(...args) },
   screen: {
     getPrimaryDisplay: () => getPrimaryDisplay(),
+    getDisplayMatching: (...args: unknown[]) => getDisplayMatching(...args),
+    screenToDipRect: (...args: unknown[]) => screenToDipRect(...args),
+    getCursorScreenPoint: () => getCursorScreenPoint(),
+    getDisplayNearestPoint: (...args: unknown[]) => getDisplayNearestPoint(...args),
     on: (...args: unknown[]) => on(...args)
   }
+}))
+
+vi.mock('../usage/nativeForeground', () => ({
+  getForegroundWindowRect: () => getForegroundWindowRect()
 }))
 
 // The module caches at module scope, so each test gets a fresh copy.
@@ -88,5 +101,85 @@ describe('prewarmPrimarySourceId', () => {
     invalidate?.()
 
     expect(await getPrimarySourceId()).toBe('screen:1:0')
+  })
+})
+
+describe('getRewindCaptureSourceId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getPrimaryDisplay.mockReturnValue({ id: 2 })
+    getForegroundWindowRect.mockReturnValue({
+      rect: null,
+      className: null,
+      exePath: null
+    })
+    getCursorScreenPoint.mockReturnValue({ x: 100, y: 100 })
+    getDisplayNearestPoint.mockReturnValue({ id: 2 })
+    screenToDipRect.mockImplementation((_window, rect) => rect)
+    getDisplayMatching.mockReturnValue({ id: 2 })
+  })
+
+  it('selects the source for the display containing the foreground window', async () => {
+    const physicalRect = { x: 3840, y: 0, width: 1920, height: 1080 }
+    const dipRect = { x: 2560, y: 0, width: 1280, height: 720 }
+    getForegroundWindowRect.mockReturnValue({
+      rect: physicalRect,
+      className: 'Chrome_WidgetWin_1',
+      exePath: 'C:\\Chrome\\chrome.exe'
+    })
+    screenToDipRect.mockReturnValue(dipRect)
+    getDisplayMatching.mockReturnValue({ id: 3 })
+    getSources.mockResolvedValue([source('screen:0:0', '2'), source('screen:1:0', '3')])
+
+    const { getRewindCaptureSourceId } = await loadModule()
+
+    expect(await getRewindCaptureSourceId()).toBe('screen:1:0')
+    expect(screenToDipRect).toHaveBeenCalledWith(null, physicalRect)
+    expect(getDisplayMatching).toHaveBeenCalledWith(dipRect)
+  })
+
+  it('uses the cursor display when foreground geometry is unavailable', async () => {
+    getDisplayNearestPoint.mockReturnValue({ id: 3 })
+    getSources.mockResolvedValue([source('screen:0:0', '2'), source('screen:1:0', '3')])
+
+    const { getRewindCaptureSourceId } = await loadModule()
+
+    expect(await getRewindCaptureSourceId()).toBe('screen:1:0')
+  })
+
+  it('reuses the source map while the foreground window moves between displays', async () => {
+    getForegroundWindowRect.mockReturnValue({
+      rect: { x: 0, y: 0, width: 100, height: 100 },
+      className: 'TestWindow',
+      exePath: 'C:\\test.exe'
+    })
+    getDisplayMatching.mockReturnValueOnce({ id: 2 }).mockReturnValueOnce({ id: 3 })
+    getSources.mockResolvedValue([source('screen:0:0', '2'), source('screen:1:0', '3')])
+
+    const { getRewindCaptureSourceId } = await loadModule()
+
+    expect(await getRewindCaptureSourceId()).toBe('screen:0:0')
+    expect(await getRewindCaptureSourceId()).toBe('screen:1:0')
+    expect(getSources).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to the primary source when the target display has no source', async () => {
+    getDisplayNearestPoint.mockReturnValue({ id: 99 })
+    getSources.mockResolvedValue([source('screen:0:0', '2'), source('screen:1:0', '3')])
+
+    const { getRewindCaptureSourceId } = await loadModule()
+
+    expect(await getRewindCaptureSourceId()).toBe('screen:0:0')
+  })
+
+  it('rejects a frame captured from a display that is no longer foreground', async () => {
+    getDisplayNearestPoint.mockReturnValue({ id: 3 })
+    getSources.mockResolvedValue([source('screen:0:0', '2'), source('screen:1:0', '3')])
+
+    const { isCurrentRewindCaptureSource } = await loadModule()
+
+    expect(await isCurrentRewindCaptureSource('screen:0:0')).toBe(false)
+    expect(await isCurrentRewindCaptureSource('screen:1:0')).toBe(true)
+    expect(await isCurrentRewindCaptureSource('')).toBe(false)
   })
 })
