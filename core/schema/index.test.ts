@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import fc from "fast-check";
-import { EnvelopeJsonSchemas2020, ProvisionalClaimSchema, isValidLifecycleTransition, transitionClaimLifecycle } from "./index";
+import { CanonicalClaimSchema, EnvelopeJsonSchemas2020, ProvisionalClaimSchema, isValidLifecycleTransition, transitionClaimLifecycle } from "./index";
 import { validateStrict } from "./json";
 
 const fixtureClaim = (predicate = "unknown.future/predicate") => ({
@@ -24,4 +24,11 @@ test("T1 lifecycle kernel has only declared transitions", () => {
     const result = transitionClaimLifecycle(from, to);
     return "error" in result ? !isValidLifecycleTransition(from, to) : isValidLifecycleTransition(from, to);
   }));
+});
+
+test("T1 canonical claims carry explicit revision supersession edges", () => {
+  const canonical = { ...fixtureClaim(), lifecycle: "canonical", canonical_claim_id: "canonical-1", source_provisional_revision_ids: [], supersedes_revision_ids: ["revision-0"] };
+  delete (canonical as { ambiguity_markers?: unknown }).ambiguity_markers;
+  delete (canonical as { context_packet?: unknown }).context_packet;
+  expect(validateStrict(CanonicalClaimSchema, canonical)).toBe(true);
 });

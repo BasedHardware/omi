@@ -87,6 +87,8 @@ export const CanonicalClaimSchema = Type.Object({
   lifecycle: Type.Literal("canonical"),
   canonical_claim_id: OpaqueId(),
   source_provisional_revision_ids: Type.Array(Type.String({ minLength: 1 })),
+  /** Explicit revision-to-revision lineage edge; it is independent of commit ordering. */
+  supersedes_revision_ids: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
 }, { additionalProperties: false });
 export type CanonicalClaim = Static<typeof CanonicalClaimSchema>;
 

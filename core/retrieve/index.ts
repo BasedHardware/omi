@@ -82,12 +82,18 @@ export interface TreeInputSnapshot {
   /** Evidence-chain faults are visible to callers instead of being silently projected away. */
   diagnostics: readonly ProjectionDiagnostic[];
 }
-export interface ProjectionDiagnostic {
+export type ProjectionDiagnostic = {
   kind: "missing_evidence" | "missing_event";
   claim_revision_id: string;
   evidence_ref: string;
   message: string;
-}
+} | {
+  /** A multi-revision lineage without edges cannot honestly infer recency. */
+  kind: "missing_commit_sequence";
+  claim_lineage_id: string;
+  claim_revision_ids: readonly string[];
+  message: string;
+};
 export interface TreeInputOptions {
   account_timezone: string;
   valid_time_by_claim_revision?: Readonly<Record<string, string | null>>;
@@ -116,25 +122,44 @@ const canonicalEntityIds = (snapshot: GraphSnapshot): Map<string, string> => {
   return result;
 };
 
+interface LiveClaimSelection { claims: readonly CommittedClaim[]; diagnostics: readonly ProjectionDiagnostic[]; }
+
 /** D35 i-lite: pick one current member per lineage, after consumed + versioned erasure. */
-export const liveCommittedClaims = (snapshot: GraphSnapshot, hook: TreeInputOptions["liveness_hook"]): readonly CommittedClaim[] => {
+const selectLiveCommittedClaims = (snapshot: GraphSnapshot, hook: TreeInputOptions["liveness_hook"]): LiveClaimSelection => {
   const eligible = snapshot.claims.filter((item) => item.placement_status !== "consumed" && (hook?.include(item) ?? true));
   const rank = (item: CommittedClaim) => item.placement_status === "canonical" ? 2 : 1;
-  const winners = new Map<string, CommittedClaim>();
   const explicitlySupersedes = (newer: CommittedClaim, older: CommittedClaim): boolean => {
     const sourceIds = newer.claim.lifecycle === "canonical" ? newer.claim.source_provisional_revision_ids : [];
-    const explicit = "supersedes_revision_ids" in newer.claim ? (newer.claim as { supersedes_revision_ids?: readonly string[] }).supersedes_revision_ids ?? [] : [];
+    const explicit = newer.claim.lifecycle === "canonical" ? newer.claim.supersedes_revision_ids ?? [] : [];
     return [...sourceIds, ...explicit].includes(older.revision_id);
   };
-  for (const item of eligible) {
-    const current = winners.get(item.claim.claim_lineage_id);
-    if (!current) { winners.set(item.claim.claim_lineage_id, item); continue; }
-    // Explicit lineage edges outrank all heuristics; otherwise persistence sequence is
-    // the only recency signal. Placement rank only resolves genuinely unordered ties.
-    if (explicitlySupersedes(item, current) || (!explicitlySupersedes(current, item) && ((item.commit_sequence ?? -1) > (current.commit_sequence ?? -1) || ((item.commit_sequence ?? -1) === (current.commit_sequence ?? -1) && rank(item) > rank(current))))) winners.set(item.claim.claim_lineage_id, item);
-  }
-  return [...winners.values()].sort((left, right) => left.revision_id.localeCompare(right.revision_id));
+  // This content-derived key is deliberately independent of ingestion/array order.
+  const stableTieBreak = (item: CommittedClaim): string => sha256CanonicalRedacted({ revision_id: item.revision_id, claim: item.claim, placement_status: item.placement_status });
+  const byLineage = new Map<string, CommittedClaim[]>();
+  for (const item of eligible) byLineage.set(item.claim.claim_lineage_id, [...(byLineage.get(item.claim.claim_lineage_id) ?? []), item]);
+  const diagnostics: ProjectionDiagnostic[] = [];
+  const winners = [...byLineage.entries()].map(([lineage, members]) => {
+    if (members.length === 1) return members[0]!;
+    // A unique explicit head is authoritative, even when its commit sequence is lower.
+    const explicitHeads = members.filter((candidate) => !members.some((other) => other !== candidate && explicitlySupersedes(other, candidate)));
+    if (explicitHeads.length === 1 && members.some((candidate) => explicitlySupersedes(explicitHeads[0]!, candidate))) return explicitHeads[0]!;
+    if (members.some((member) => member.commit_sequence === undefined)) {
+      diagnostics.push({ kind: "missing_commit_sequence", claim_lineage_id: lineage, claim_revision_ids: members.map((member) => member.revision_id).sort(), message: `lineage ${lineage} has multiple revisions without a complete commit sequence; selected by stable content hash` });
+      return [...members].sort((left, right) => stableTieBreak(left).localeCompare(stableTieBreak(right)))[0]!;
+    }
+    return [...members].sort((left, right) => {
+      const sequence = right.commit_sequence! - left.commit_sequence!;
+      if (sequence) return sequence;
+      const placement = rank(right) - rank(left);
+      return placement || stableTieBreak(left).localeCompare(stableTieBreak(right));
+    })[0]!;
+  });
+  return { claims: winners.sort((left, right) => left.revision_id.localeCompare(right.revision_id)), diagnostics };
 };
+
+/** Returns deterministic live members; projection callers also receive selection diagnostics. */
+export const liveCommittedClaims = (snapshot: GraphSnapshot, hook: TreeInputOptions["liveness_hook"]): readonly CommittedClaim[] =>
+  selectLiveCommittedClaims(snapshot, hook).claims;
 
 /** Pure committed-graph projection. It intentionally has no tree or model dependency. */
 export const projectTreeInputSnapshot = (snapshot: GraphSnapshot, options: TreeInputOptions): TreeInputSnapshot => {
@@ -151,8 +176,9 @@ export const projectTreeInputSnapshot = (snapshot: GraphSnapshot, options: TreeI
   }).sort((left, right) => left.evidence_id.localeCompare(right.evidence_id));
   const spanById = new Map(spans.map((span) => [span.evidence_id, span]));
   const canonicalIds = canonicalEntityIds(snapshot);
-  const diagnostics: ProjectionDiagnostic[] = [];
-  const claims = liveCommittedClaims(snapshot, options.liveness_hook).map((item) => {
+  const selection = selectLiveCommittedClaims(snapshot, options.liveness_hook);
+  const diagnostics: ProjectionDiagnostic[] = [...selection.diagnostics];
+  const claims = selection.claims.map((item) => {
     for (const ref of item.claim.evidence_refs) {
       const evidence = evidenceById.get(ref);
       if (!evidence) diagnostics.push({ kind: "missing_evidence", claim_revision_id: item.revision_id, evidence_ref: ref, message: `claim ${item.revision_id} references missing evidence ${ref}` });

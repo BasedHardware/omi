@@ -59,6 +59,20 @@ test("R0 chooses later commit sequence over lexicographic revision IDs and repor
   expect(projectTreeInputSnapshot(explicit, { account_timezone: "UTC" }).claims.map((item) => item.claim_revision_id)).toEqual(["r2"]);
 });
 
+test("R0 missing multi-revision commit sequences diagnose and use an order-independent winner", () => {
+  const unordered = (revisions: readonly string[]): GraphSnapshot => ({ ...graph(), claims: revisions.map((revision) => ({ revision_id: revision, placement_status: "canonical" as const, claim: claim(revision, "lineage:one") })) });
+  const forward = projectTreeInputSnapshot(unordered(["r10", "r2"]), { account_timezone: "UTC" });
+  const reversed = projectTreeInputSnapshot(unordered(["r2", "r10"]), { account_timezone: "UTC" });
+  expect(forward.claims.map((item) => item.claim_revision_id)).toEqual(reversed.claims.map((item) => item.claim_revision_id));
+  expect(forward.diagnostics).toEqual(reversed.diagnostics);
+  expect(forward.diagnostics).toContainEqual(expect.objectContaining({ kind: "missing_commit_sequence", claim_lineage_id: "lineage:one", claim_revision_ids: ["r10", "r2"] }));
+
+  const withEdge = (revisions: readonly string[]): GraphSnapshot => ({ ...graph(), claims: revisions.map((revision) => ({ revision_id: revision, commit_sequence: revision === "r10" ? 99 : 1, placement_status: "canonical" as const, claim: revision === "r2" ? { ...claim("r2", "lineage:one"), supersedes_revision_ids: ["r10"] } : claim("r10", "lineage:one") })) });
+  // Counterexample: r10 has the larger sequence, but r2's canonical edge must win in either order.
+  expect(projectTreeInputSnapshot(withEdge(["r10", "r2"]), { account_timezone: "UTC" }).claims.map((item) => item.claim_revision_id)).toEqual(["r2"]);
+  expect(projectTreeInputSnapshot(withEdge(["r2", "r10"]), { account_timezone: "UTC" }).claims.map((item) => item.claim_revision_id)).toEqual(["r2"]);
+});
+
 test("R0 diagnoses evidence that exists but has no Event-to-Capture lineage", () => {
   const input = graph();
   input.events = [];

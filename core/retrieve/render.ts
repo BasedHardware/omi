@@ -27,18 +27,12 @@ export interface RenderOptions { strategy: string; model_version: string; prompt
 export type RenderCache = ReadonlyMap<string, RenderNode>;
 
 type PolicyDimension = keyof PolicyClass;
-// These are deliberately separate partial orders.  Unknown non-generic labels are
-// opaque peers: their only safe mixed join is the explicit top, "restricted".
-const chains: Readonly<Record<PolicyDimension, readonly string[]>> = {
-  subject_class: ["generic", "owner", "bystander", "restricted"],
-  sensitivity: ["generic", "private", "health", "restricted"],
-  capture_class: ["generic", "voice", "screen", "restricted"],
-};
+// Each dimension is a diamond partial order: generic is bottom, restricted is top,
+// and every concrete label (including unknown labels) is an opaque peer.  Thus
+// owner/bystander, private/health, and voice/screen are intentionally incomparable.
 const dominates = (dimension: PolicyDimension, effective: string, contributor: string): boolean => {
-  if (effective === contributor || effective === "restricted" || contributor === "generic") return true;
-  const chain = chains[dimension];
-  const effectiveRank = chain.indexOf(effective), contributorRank = chain.indexOf(contributor);
-  return effectiveRank >= 0 && contributorRank >= 0 && effectiveRank >= contributorRank;
+  void dimension; // Dimensions share the same explicitly-defined partial-order shape.
+  return effective === contributor || effective === "restricted" || contributor === "generic";
 };
 const joinDimension = (dimension: PolicyDimension, values: readonly string[]): string => values.reduce((effective, value) => {
   if (dominates(dimension, effective, value)) return effective;
@@ -57,12 +51,13 @@ export const validateRestrictiveJoin = (effective: PolicyClass, contributors: re
 
 const nodeClaims = (node: StructuralNode, input: TreeInputSnapshot) => node.member_claim_revision_ids.map((id) => input.claims.find((claim) => claim.claim_revision_id === id)).filter((claim): claim is NonNullable<typeof claim> => claim !== undefined);
 
-/** Adds observed child render dependencies without changing anchor-derived structural identity. */
-export const withChildRenderHashes = (tree: StructuralTree, renders: readonly RenderNode[]): StructuralTree => ({
-  ...tree,
-  nodes: tree.nodes.map((node) => ({ ...node, dependency_manifest: { ...node.dependency_manifest,
-    child_render_hashes: node.child_node_ids.map((child) => renders.find((render) => render.node_id === child)?.render_hash ?? "missing-child-render").sort() } })),
-});
+/** Persists observed child render dependencies without changing anchor-derived structural identity. */
+export const withChildRenderHashes = (tree: StructuralTree, renders: readonly RenderNode[]): StructuralTree => {
+  const byNodeId = new Map(renders.map((render) => [render.node_id, render]));
+  for (const node of tree.nodes) node.dependency_manifest = { ...node.dependency_manifest,
+    child_render_hashes: node.child_node_ids.map((child) => byNodeId.get(child)?.render_hash ?? "missing-child-render").sort() };
+  return tree;
+};
 
 export const renderStructuralTree = async (tree: StructuralTree, input: TreeInputSnapshot, model: RenderModelPort, options: RenderOptions, cache: RenderCache = new Map()): Promise<readonly RenderNode[]> => {
   const rendered = new Map<string, RenderNode>();
@@ -72,15 +67,15 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
     const children = await Promise.all(node.child_node_ids.map((id) => visit(tree.nodes.find((item) => item.node_id === id)!)));
     const claims = nodeClaims(node, input);
     const effective = restrictivePolicyJoin(claims.map((claim) => claim.policy_class));
-    // Populate the parent manifest before construction/request, rather than leaving
-    // tree.ts's seed manifest empty after child renders are known.
-    const nodeWithChildHashes = withChildRenderHashes(tree, children).nodes.find((candidate) => candidate.node_id === node.node_id)!;
-    const manifest = nodeWithChildHashes.dependency_manifest;
+    // Persist the parent manifest before request construction; this is the structural
+    // dependency record used for later parent invalidation, not a request-only copy.
+    const nodeWithChildHashes = withChildRenderHashes({ ...tree, nodes: [node] }, children).nodes[0]!;
+    const manifest = node.dependency_manifest;
     const rendered_from_digest = sha256CanonicalRedacted({ node_id: node.node_id, manifest, strategy: options.strategy, model_version: options.model_version, prompt_version: options.prompt_version, policy_version: options.policy_version, schema_version: options.schema_version });
     if (!validateRestrictiveJoin(effective, claims.map((claim) => claim.policy_class))) throw new Error(`restrictive policy join failed for ${node.node_id}`);
     const cached = cache.get(rendered_from_digest);
     if (cached) { rendered.set(node.node_id, cached); return cached; }
-    const childStale = children.some((child) => child.stale || child.status === "failed");
+    const childStale = manifest.child_render_hashes.some((hash) => hash === "missing-child-render" || children.some((child) => child.render_hash === hash && (child.stale || child.status === "failed")));
     try {
       const response = await model.render({ strategy: options.strategy, version: options.model_version, input: { node: nodeWithChildHashes, claims, child_summaries: children.map((child) => child.summary_text) } });
       const status: RenderStatus = response.summary_text ? "ready" : "empty";

@@ -52,17 +52,41 @@ test("R2 mixed structural node cannot use first-member policy and policy join is
   expect(validateRestrictiveJoin({ subject_class: "owner", sensitivity: "private", capture_class: "voice" }, [{ subject_class: "owner", sensitivity: "private", capture_class: "voice" }, { subject_class: "bystander", sensitivity: "health", capture_class: "screen" }])).toBe(false);
 });
 
-test("R2 stores child render hashes in the parent request manifest and stale children stale parents", async () => {
+test("R2 policy dimensions use a real peer-safe partial-order join", () => {
+  const labels = {
+    subject_class: ["generic", "owner", "bystander", "restricted"],
+    sensitivity: ["generic", "private", "health", "restricted"],
+    capture_class: ["generic", "voice", "screen", "restricted"],
+  } as const;
+  const policy = (dimension: keyof typeof labels, value: string) => ({ subject_class: "generic", sensitivity: "generic", capture_class: "generic", [dimension]: value });
+  for (const [dimension, values] of Object.entries(labels) as [keyof typeof labels, readonly string[]][]) for (const left of values) for (const right of values) {
+    const expected = left === right ? left : left === "generic" ? right : right === "generic" ? left : "restricted";
+    expect(restrictivePolicyJoin([policy(dimension, left), policy(dimension, right)])[dimension]).toBe(expected);
+  }
+  const ownerPrivateVoice = { subject_class: "owner", sensitivity: "private", capture_class: "voice" };
+  const bystanderHealthScreen = { subject_class: "bystander", sensitivity: "health", capture_class: "screen" };
+  expect(restrictivePolicyJoin([ownerPrivateVoice, bystanderHealthScreen])).toEqual({ subject_class: "restricted", sensitivity: "restricted", capture_class: "restricted" });
+  // Counterexample: a first-contributor render fails every incomparable peer check.
+  expect(validateRestrictiveJoin(ownerPrivateVoice, [ownerPrivateVoice, bystanderHealthScreen])).toBe(false);
+});
+
+test("R2 persists child render hashes on structural parents and propagates structural child staleness", async () => {
   const { input, tree } = inputAndTree();
-  const seenParentManifests: unknown[] = [];
+  const success = new DeterministicFakeModel(() => ({ summary_text: "ok", citations: [] }));
+  const successfulRenders = await renderStructuralTree(tree, input, success, options());
+  const monthNode = tree.nodes.find((node) => node.anchor_key.includes("month:"))!;
+  const childHashes = monthNode.child_node_ids.map((id) => successfulRenders.find((render) => render.node_id === id)?.render_hash).filter((hash): hash is string => hash !== null && hash !== undefined).sort();
+  expect(monthNode.dependency_manifest.child_render_hashes).toEqual(childHashes);
+  expect(monthNode.dependency_manifest.child_render_hashes).not.toEqual([]);
+
+  const staleTree = buildDeterministicAnchors(input);
   const fake = new DeterministicFakeModel((request) => {
     const node = (request.input as { node: { anchor_key: string; dependency_manifest: unknown } }).node;
     if (node.anchor_key.includes("day:")) throw new Error("child failure");
-    if (node.anchor_key.includes("month:")) seenParentManifests.push(node.dependency_manifest);
     return { summary_text: "ok", citations: [] };
   });
-  const renders = await renderStructuralTree(tree, input, fake, options());
-  const month = renders.find((render) => tree.nodes.find((node) => node.node_id === render.node_id)?.anchor_key.includes("month:"));
+  const renders = await renderStructuralTree(staleTree, input, fake, options());
+  const month = renders.find((render) => staleTree.nodes.find((node) => node.node_id === render.node_id)?.anchor_key.includes("month:"));
   expect(month?.stale).toBe(true);
-  expect(seenParentManifests).toContainEqual(expect.objectContaining({ child_render_hashes: ["missing-child-render"] }));
+  expect(staleTree.nodes.find((node) => node.node_id === month?.node_id)?.dependency_manifest.child_render_hashes).toEqual(["missing-child-render"]);
 });
