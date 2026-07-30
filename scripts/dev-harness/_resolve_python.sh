@@ -47,7 +47,9 @@ dev_harness_python_uses_windows_paths() {
   local python_bin="$1"
   local resolved
   resolved="$(command -v "$python_bin" 2>/dev/null || printf '%s' "$python_bin")"
-  case "${resolved,,}" in
+  # ${var,,} is bash 4+; macOS ships bash 3.2 and expands it to a fatal syntax error.
+  resolved="$(printf '%s' "$resolved" | tr '[:upper:]' '[:lower:]')"
+  case "$resolved" in
     *.exe)
       return 0
       ;;
