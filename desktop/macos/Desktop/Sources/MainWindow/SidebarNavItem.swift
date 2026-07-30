@@ -1,3 +1,5 @@
+import Foundation
+
 // MARK: - Navigation Item Model
 enum SidebarNavItem: Int, CaseIterable {
   case dashboard = 0
@@ -11,6 +13,7 @@ enum SidebarNavItem: Int, CaseIterable {
   case apps = 8
   case settings = 9
   case permissions = 10
+  case projections = 11
   case help = 12
   var title: String {
     switch self {
@@ -25,6 +28,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .apps: return "Apps"
     case .settings: return "Settings"
     case .permissions: return "Permissions"
+    case .projections: return "Omens"
     case .help: return "Help from Founder"
     }
   }
@@ -41,6 +45,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .apps: return "puzzlepiece.fill"
     case .settings: return "gearshape.fill"
     case .permissions: return "exclamationmark.triangle.fill"
+    case .projections: return "sparkles.rectangle.stack.fill"
     case .help: return "bubble.left.fill"
     }
   }
@@ -59,6 +64,26 @@ enum SidebarNavItem: Int, CaseIterable {
 
   /// Items shown in the main navigation (top section)
   static var mainItems: [SidebarNavItem] {
-    [.dashboard, .conversations, .memories, .tasks, .focus, .insight, .rewind, .apps]
+    mainItems(
+      bundleIdentifier: Bundle.main.bundleIdentifier,
+      productionOmensRolloutEnabled: false)
+  }
+
+  static func mainItems(
+    bundleIdentifier: String?,
+    productionOmensRolloutEnabled: Bool
+  ) -> [SidebarNavItem] {
+    let items: [SidebarNavItem] = [
+      .dashboard, .conversations, .memories, .tasks, .focus, .insight, .projections, .rewind, .apps,
+    ]
+    let resolvedBundleIdentifier = bundleIdentifier ?? ""
+    let omensAreUnavailable =
+      AppBuild.isExternalPreviewBundleIdentifier(resolvedBundleIdentifier)
+      || (AppBuild.productionFamilyBundleIdentifiers.contains(resolvedBundleIdentifier)
+        && !productionOmensRolloutEnabled)
+    if omensAreUnavailable {
+      return items.filter { $0 != .projections }
+    }
+    return items
   }
 }

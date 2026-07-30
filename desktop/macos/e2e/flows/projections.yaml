@@ -1,0 +1,151 @@
+version: 2
+name: projections
+tier: 2
+description: Omens loading, grounded result, provenance, empty state, and main error in a named non-production bundle
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationVisualWindowResolver.swift
+  - desktop/macos/Desktop/Sources/Automation/ProjectionAutomationHarness.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ProjectionPage.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Projections.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Omens
+    bridge.navigate:
+      target: projections
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 11
+
+  - id: S2
+    name: Open the isolated real Omens page
+    bridge.action:
+      name: open_projection_harness
+    expect:
+      result.detail.opened: "true"
+      result.detail.action_registered: "true"
+
+  - id: S3
+    name: Present and assert the loading state
+    bridge.action:
+      name: projection_harness_state
+      params:
+        mode: loading
+    expect:
+      result.detail.state: loading
+      result.detail.display_message: No omen yet.
+      result.detail.feedback_visible: "false"
+
+  - id: S4
+    name: Present a loaded grounded omen
+    bridge.action:
+      name: projection_harness_state
+      params:
+        mode: loaded
+    expect:
+      result.detail.state: loaded
+      result.detail.evidence_count: "1"
+      result.detail.generate_visible: "true"
+      result.detail.image_visible: "true"
+
+  - id: S5
+    name: Assert the loaded omen presentation
+    bridge.action:
+      name: projection_snapshot
+    expect:
+      result.detail.display_message: "Name the choice you have been postponing."
+      result.detail.why_this_visible: "true"
+      result.detail.feedback_visible: "true"
+      result.detail.generate_visible: "true"
+      result.detail.image_visible: "true"
+
+  - id: S6
+    name: Capture the loaded omen
+    visual.export:
+      name: projection-loaded
+      target: projection_harness
+
+  - id: S7
+    name: Present a generated omen result
+    bridge.action:
+      name: projection_harness_state
+      params:
+        mode: generated
+    expect:
+      result.detail.state: generated
+      result.detail.projection_id: automation-generated
+      result.detail.imperative:
+        contains: "work that keeps returning"
+
+  - id: S8
+    name: Assert the generated result
+    bridge.action:
+      name: projection_snapshot
+    expect:
+      result.detail.state: generated
+      result.detail.display_message: "Make one small move toward the work that keeps returning."
+      result.detail.why_this_visible: "true"
+
+  - id: S9
+    name: Present and assert the empty state
+    bridge.action:
+      name: projection_harness_state
+      params:
+        mode: empty
+    expect:
+      result.detail.state: empty
+      result.detail.error_message: ""
+      result.detail.image_visible: "false"
+
+  - id: S10
+    name: Assert the empty message
+    bridge.action:
+      name: projection_snapshot
+    expect:
+      result.detail.state: empty
+      result.detail.display_message: No omen yet.
+      result.detail.feedback_visible: "false"
+
+  - id: S11
+    name: Present and assert the main error state
+    bridge.action:
+      name: projection_harness_state
+      params:
+        mode: error
+    expect:
+      result.detail.state: error
+      result.detail.error_message:
+        contains: "harness backend unavailable"
+      result.detail.image_visible: "false"
+
+  - id: S12
+    name: Assert the main error message
+    bridge.action:
+      name: projection_snapshot
+    expect:
+      result.detail.state: error
+      result.detail.display_message: "Could not load omens: harness backend unavailable."
+      result.detail.feedback_visible: "false"
+
+  - id: S13
+    name: Capture the error state
+    visual.export:
+      name: projection-error
+      target: projection_harness
+
+  - id: S14
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+
+  - id: S15
+    name: Close the isolated Omens page
+    bridge.action:
+      name: close_projection_harness
+    expect:
+      result.detail.closed: "true"

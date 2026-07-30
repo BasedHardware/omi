@@ -139,7 +139,8 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
     expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    requestTimeoutInterval: TimeInterval? = nil
   ) async throws -> T {
     let authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
@@ -156,6 +157,9 @@ actor APIClient {
       requireAuth: requireAuth,
       includeBYOK: includeBYOK,
       expectedAuthOwnerId: authOwnerId)
+    if let requestTimeoutInterval {
+      request.timeoutInterval = requestTimeoutInterval
+    }
     try validateExpectedOwner(authPolicy)
 
     return try await performRequest(

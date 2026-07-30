@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1869,
-    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": 1643,
+    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": 1647,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3559,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4459,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3530,
@@ -12,7 +12,7 @@
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Final-assistant Omi mark ownership and canonical expandable tool-call presentation are row-level rendering contracts that belong with bubble equality and layout. The mark remains an overlay so it cannot shift bubbles horizontally, while its owner row reserves the mark's height to prevent an empty streaming reply from clipping at the transcript live edge.",
-    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": "Canonical Memory Atlas routing, unified Memory navigation, the cohort-not-yet-known guard, and leave handling coexist in the home content owner; the combined SwiftUI expression is split into independently type-checkable helper properties, with a further component split tracked separately.",
+    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": "Canonical Memory Atlas routing, unified Memory navigation, the cohort-not-yet-known guard, and leave handling coexist in the home content owner; the combined SwiftUI expression is split into independently type-checkable helper properties, with a further component split tracked separately. The Omens destination remains in this existing page router while rollout visibility is owned by the sidebar.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Apps search now owns an explicit unknown/loading/completed/failed presentation state so the UI never flashes a false empty result before filtering completes.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home ask bar now auto-grows as a multi-line TextField so long messages wrap instead of scrolling off-screen; the Home prompt rail also receives the ask bar's outer trailing edge so the custom rail aligns flush with it; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Memory search waits for its active projection, while canonical lifecycle capability, the Brain Map evidence inspector, and the split list/detail presentation remain owned by the Memories page; local-only identity resolution and its guarded delete/undo lifecycle remain with its optimistic mutation owner rather than exposing coordination state across view-model boundaries.",
