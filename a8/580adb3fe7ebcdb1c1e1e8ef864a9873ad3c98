@@ -1,0 +1,25 @@
+desktop/context-for-claude/Sources/ContextApp/Capture/SystemAudioCapture.swift
+  s_18cae1c5af4258::t_dee8aea2caeedf 374-386,388-441
+  s_18cae1c5af4258::t_d919759744a573 129-132
+  s_18cae1c5af4258::t_f302192ad51c50 387
+  s_18cae1c5af4258::t_4aaae6a01e1041 477-478
+desktop/context-for-claude/Tests/ContextAppTests/SoundTests.swift
+  s_18cae1c5af4258::t_636953773cebbd 279-317
+  s_18cae1c5af4258::t_7b01cd9568709d 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "a8580adb3fe7ebcdb1c1e1e8ef864a9873ad3c98",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
