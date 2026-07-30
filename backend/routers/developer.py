@@ -63,6 +63,7 @@ from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
+from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from utils.mcp_memories import collect_filtered_memories
@@ -638,6 +639,12 @@ def create_memory(
             upsert_vector=False,
             require_canonical_promotion=True,
         )
+        capture_memory_write(
+            principal_id=uid,
+            source="developer_memory_create",
+            session_id=memory_db.id,
+            memories=[memory_db],
+        )
         if memory.visibility == 'public':
             postprocess_executor.submit(update_personas_async, uid)
         return DeveloperMemory(
@@ -667,6 +674,12 @@ def create_memory(
         operation='create_memory',
         upsert_vector=False,
         require_canonical_promotion=True,
+    )
+    capture_memory_write(
+        principal_id=uid,
+        source="developer_memory_create",
+        session_id=memory_db.id,
+        memories=[memory_db],
     )
     if memory.visibility == 'public':
         postprocess_executor.submit(update_personas_async, uid)
@@ -741,6 +754,12 @@ def create_memories_batch(
         operation='batch_create_memories',
         upsert_vectors=memory_system != MemorySystem.CANONICAL,
         require_canonical_promotion=True,
+    )
+    capture_memory_write(
+        principal_id=uid,
+        source="developer_memory_batch_create",
+        session_id=str(uuid.uuid4()),
+        memories=created_dbs,
     )
     if has_public:
         postprocess_executor.submit(update_personas_async, uid)

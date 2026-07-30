@@ -46,39 +46,45 @@ struct OnboardingVoiceShortcutStepView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, OmiSpacing.xl)
 
-      Spacer()
+      OnboardingContentWithPinnedActions {
+        VStack(spacing: OmiSpacing.xxl) {
+          Text("Let's set \"Audio ask a question\" shortcut.\nPress and hold to test. Does the button light up?")
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundColor(OmiColors.textPrimary)
+            .multilineTextAlignment(.center)
 
-      VStack(spacing: OmiSpacing.xxl) {
-        Text("Let's set \"Audio ask a question\" shortcut.\nPress and hold to test. Does the button light up?")
-          .font(.system(size: 22, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
-          .multilineTextAlignment(.center)
-
-        RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary)
-          .frame(height: 128)
-          .frame(maxWidth: 420)
-          .overlay {
-            shortcutKeyPreview
-          }
-
-        VStack(spacing: OmiSpacing.md) {
-          Text("Try another shortcut if it doesn't react:")
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(OmiColors.textSecondary)
-
-          HStack(spacing: OmiSpacing.sm) {
-            ForEach(ShortcutSettings.pttPresets, id: \.self) { shortcut in
-              shortcutChoiceButton(shortcut)
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+            .fill(OmiColors.backgroundSecondary)
+            .frame(height: 128)
+            .frame(maxWidth: 420)
+            .overlay {
+              shortcutKeyPreview
             }
-            customShortcutButton
+
+          VStack(spacing: OmiSpacing.md) {
+            Text("Try another shortcut if it doesn't react:")
+              .font(.system(size: 14, weight: .medium))
+              .foregroundColor(OmiColors.textSecondary)
+
+            LazyVGrid(
+              columns: [GridItem(.adaptive(minimum: 92), spacing: OmiSpacing.sm)],
+              alignment: .center,
+              spacing: OmiSpacing.sm
+            ) {
+              ForEach(ShortcutSettings.pttPresets, id: \.self) { shortcut in
+                shortcutChoiceButton(shortcut)
+              }
+              customShortcutButton
+            }
+
+            if isRecordingCustomShortcut || shortcutSettings.pttUsesCustomShortcut || captureError != nil {
+              customShortcutRecorder
+            }
           }
 
-          if isRecordingCustomShortcut || shortcutSettings.pttUsesCustomShortcut || captureError != nil {
-            customShortcutRecorder
-          }
         }
-
+        .frame(maxWidth: 420)
+      } actions: {
         HStack(spacing: OmiSpacing.md) {
           OnboardingBackButton()
 
@@ -99,9 +105,8 @@ struct OnboardingVoiceShortcutStepView: View {
             .transition(.move(edge: .trailing).combined(with: .opacity))
           }
         }
+        .frame(maxWidth: 420)
       }
-
-      Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(OmiColors.backgroundPrimary)

@@ -184,6 +184,8 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Keep formatter output reproducible across runner images and local hooks.
+          flutter-version: 3.44.5
           cache: true
 
       - name: Resolve Flutter dependencies for formatting
@@ -196,7 +198,7 @@ jobs:
         run: |
           FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
+            echo "$FILES" | xargs "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" format --line-length 120 --set-exit-if-changed --output=none
           fi
 
       - name: Check Python formatting

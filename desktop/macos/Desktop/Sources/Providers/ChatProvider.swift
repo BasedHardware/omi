@@ -1686,6 +1686,12 @@ class ChatProvider: ObservableObject {
     journalWriteCoordinator.cancelAll()
     journalOwnerByMessageID.removeAll()
     journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
+    // A ChatErrorCard belongs to the session that produced it. Retaining an
+    // auth-required card after a successful account switch incorrectly asks
+    // the newly signed-in user to sign in again.
+    currentError = nil
+    errorMessage = nil
+    lastFailedPrompt = nil
     messages.removeAll()
     resetMessagesPagination()
     pendingAttachments.removeAll()

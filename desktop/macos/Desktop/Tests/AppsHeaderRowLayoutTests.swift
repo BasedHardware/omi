@@ -32,6 +32,30 @@ final class AppsHeaderRowLayoutTests: XCTestCase {
     }
   }
 
+  func testCreateControlMovesBelowFiltersWhenTheCompactRowWouldOverflow() {
+    let recorder = AppsHeaderLayoutRecorder()
+    let width: CGFloat = 380
+    layOut(
+      width: width,
+      recorder: recorder,
+      filters: Color.clear.frame(width: 280, height: AppsHeaderMetrics.controlHeight)
+    )
+
+    guard let filters = recorder.frame(of: .filters),
+      let create = recorder.frame(of: .create)
+    else {
+      return XCTFail("the compact header controls never laid out")
+    }
+
+    XCTAssertLessThanOrEqual(filters.maxX, width + 0.5)
+    XCTAssertLessThanOrEqual(create.maxX, width + 0.5)
+    XCTAssertGreaterThanOrEqual(
+      create.minY,
+      filters.maxY - 0.5,
+      "Create App should move below filters instead of extending the compact row"
+    )
+  }
+
   func testAppsToolbarControlsShareTheSearchFieldHeight() {
     let recorder = AppsHeaderLayoutRecorder()
     let host = NSHostingView(
@@ -77,6 +101,14 @@ final class AppsHeaderRowLayoutTests: XCTestCase {
   }
 
   private func layOut(width: CGFloat, recorder: AppsHeaderLayoutRecorder) {
+    layOut(width: width, recorder: recorder, filters: AppsHeaderFilterFixture())
+  }
+
+  private func layOut<Filters: View>(
+    width: CGFloat,
+    recorder: AppsHeaderLayoutRecorder,
+    filters: Filters
+  ) {
     let host = NSHostingView(
       rootView: AppsHeaderRow(
         search: {
@@ -86,10 +118,14 @@ final class AppsHeaderRowLayoutTests: XCTestCase {
         },
         filters: {
           AppsHeaderLayoutProbe(recorder: recorder, slot: .filters) {
-            AppsHeaderFilterFixture()
+            filters
           }
         },
-        create: { Color.clear.frame(width: 100, height: AppsHeaderMetrics.controlHeight) },
+        create: {
+          AppsHeaderLayoutProbe(recorder: recorder, slot: .create) {
+            Color.clear.frame(width: 100, height: AppsHeaderMetrics.controlHeight)
+          }
+        },
         dismiss: { EmptyView() }
       )
       .frame(width: width)

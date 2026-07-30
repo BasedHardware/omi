@@ -16,6 +16,8 @@ from pathlib import Path
 
 import yaml
 
+from git_bash import bash_executable, bash_path
+
 ROOT = Path(__file__).resolve().parents[2]
 MAX_SECURITY_BOUND_FILE_BYTES = 10 * 1024 * 1024
 
@@ -1040,6 +1042,11 @@ def check_firmware_release_metadata() -> list[str]:
     if not script.exists():
         return []
 
+    try:
+        bash = bash_executable()
+    except FileNotFoundError as exc:
+        return [f"firmware release body smoke failed: {exc}"]
+
     with tempfile.TemporaryDirectory() as temp_dir:
         output = Path(temp_dir) / "body.md"
         env = {
@@ -1051,19 +1058,21 @@ def check_firmware_release_metadata() -> list[str]:
             "MIN_APP_CODE": "438",
             "OTA_STEPS": "battery,internet",
             "IS_LEGACY_SECURE_DFU": "False",
-            "OUT": str(output),
+            "OUT": bash_path(output, bash),
         }
         completed = subprocess.run(
-            ["bash", str(script)],
+            [bash, str(script)],
             cwd=ROOT,
             env={**os.environ, **env},
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
         )
         if completed.returncode != 0:
-            return [f"firmware release body smoke failed: {completed.stderr.strip() or completed.stdout.strip()}"]
+            detail = (completed.stderr or "").strip() or (completed.stdout or "").strip()
+            return [f"firmware release body smoke failed: {detail or f'exit {completed.returncode}'}"]
         body = output.read_text(encoding="utf-8")
 
     kv = extract_key_value_pairs(body)

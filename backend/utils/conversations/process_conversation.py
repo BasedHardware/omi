@@ -51,6 +51,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
+from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import memory_system_request_scope
 from utils.memory.canonical_memory_adapter import extraction_memory_id
@@ -529,14 +530,67 @@ def _update_goal_progress(uid: str, conversation: Conversation) -> None:
         logger.error(f"[GOAL] Error updating progress: {e}")
 
 
+def _parity_transcript_segments(conversation: Conversation) -> list[dict[str, Any]]:
+    segments = getattr(conversation, "transcript_segments", None) or []
+    return [
+        {
+            "start": segment.start,
+            "end": segment.end,
+            "speaker": segment.speaker,
+            "text": (segment.text or "")[:8192],
+        }
+        for segment in segments[:1000]
+    ]
+
+
+def _parity_accepted_memories(memories: List[MemoryDB]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": memory.id,
+            "content": (memory.content or "")[:8192],
+            "category": memory.category.value,
+            "visibility": memory.visibility,
+        }
+        for memory in memories[:100]
+    ]
+
+
 def extract_memories(uid: str, conversation: Conversation) -> None:
     """Extract one conversation's memories through the selected memory system.
 
     Finalization workers use this public boundary while holding their durable
     lease. Keep the private helper below for existing in-module async callers.
     """
-    with track_usage(uid, Features.MEMORIES):
-        result = _extract_memories_inner(uid, conversation)
+    source = source_for_conversation(conversation)
+    parity_capture = SurfaceParityCapture.from_environ(
+        principal_id=uid,
+        session_id=conversation.id,
+        surface="conversation_finalization",
+        source=f"conversation_{source}",
+        provider_lane="memory",
+        route_or_model="memory-extraction",
+        request={
+            "conversation_source": str(source),
+            "segment_count": len(getattr(conversation, "transcript_segments", None) or []),
+            "locked": bool(getattr(conversation, "is_locked", False)),
+        },
+    )
+    parity_capture.observe(
+        "client",
+        {"type": "conversation_transcript", "segments": _parity_transcript_segments(conversation)},
+    )
+    try:
+        with track_usage(uid, Features.MEMORIES):
+            if parity_capture.enabled:
+                result = _extract_memories_inner(uid, conversation, parity_capture=parity_capture)
+            else:
+                result = _extract_memories_inner(uid, conversation)
+        parity_capture.observe(
+            "inbound",
+            {"type": "memory_extraction_result", "count": result.count, "path": result.path},
+        )
+    finally:
+        parity_capture.persist()
     # Product-analytics telemetry (Conversation Memories Extracted): at most one
     # analytics success per (uid, conversation) across retries — zero-extraction
     # (count == 0) and persistence exceptions emit nothing; the durable
@@ -821,7 +875,7 @@ def _canonical_conversation_write_payload(
 
 
 def _extract_memories_canonical(
-    uid: str, conversation: Conversation, *, db_client: Any
+    uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
 ) -> ConversationMemoryExtractionResult:
     """Canonical-cohort extraction with one atomic source replacement."""
     source = source_for_conversation(conversation)
@@ -966,6 +1020,14 @@ def _extract_memories_canonical(
         return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
 
     logger.info(f"Saving {len(parsed_memories)} canonical memories for conversation {conversation.id}")
+    if parity_capture is not None:
+        parity_capture.observe(
+            "inbound",
+            {
+                "type": "accepted_memories",
+                "memories": _parity_accepted_memories([memory for memory, *_ in parsed_memories]),
+            },
+        )
 
     if not is_locked:
         memory_refs = [
@@ -1009,17 +1071,25 @@ def _extract_memories_canonical(
     return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_CANONICAL)
 
 
-def _extract_memories_inner(uid: str, conversation: Conversation) -> ConversationMemoryExtractionResult:
+def _extract_memories_inner(
+    uid: str, conversation: Conversation, *, parity_capture: SurfaceParityCapture | None = None
+) -> ConversationMemoryExtractionResult:
     with memory_system_request_scope(uid) as memory_system:
         db_client = getattr(db_client_module, 'db', None)
         if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
-            return _extract_memories_canonical(uid, conversation, db_client=db_client)
+            return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
 
-        return _extract_memories_legacy(uid, conversation)
+        if parity_capture is None:
+            # Preserve the direct legacy helper shape used by non-live callers
+            # and its contract tests; live finalization supplies the observer.
+            return _extract_memories_legacy(uid, conversation)
+        return _extract_memories_legacy(uid, conversation, parity_capture=parity_capture)
 
 
-def _extract_memories_legacy(uid: str, conversation: Conversation) -> ConversationMemoryExtractionResult:
+def _extract_memories_legacy(
+    uid: str, conversation: Conversation, *, parity_capture: SurfaceParityCapture | None = None
+) -> ConversationMemoryExtractionResult:
     source = source_for_conversation(conversation)
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
@@ -1150,6 +1220,11 @@ def _extract_memories_legacy(uid: str, conversation: Conversation) -> Conversati
 
     logger.info(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
     memories_db.save_memories(uid, [memory_write_payload(fact, MemoryApiExposure.LEGACY) for fact in parsed_memories])
+    if parity_capture is not None:
+        parity_capture.observe(
+            "inbound",
+            {"type": "accepted_memories", "memories": _parity_accepted_memories(parsed_memories)},
+        )
 
     for memory_db_obj in parsed_memories:
         upsert_memory_vector(

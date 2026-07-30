@@ -6,6 +6,19 @@ enum SBOnboardingRepository {
   static let url = URL(string: "https://github.com/BasedHardware/omi")!
 }
 
+enum SBOnboardingPanelLayout {
+  static let maximumSize = CGSize(width: 540, height: 640)
+  static let horizontalInset: CGFloat = 24
+  static let verticalInset: CGFloat = 20
+
+  static func size(in availableSize: CGSize) -> CGSize {
+    CGSize(
+      width: min(maximumSize.width, max(0, availableSize.width - horizontalInset * 2)),
+      height: min(maximumSize.height, max(0, availableSize.height - verticalInset * 2))
+    )
+  }
+}
+
 /// The Second Brain conversational onboarding — a chat with Omi that streams
 /// word-by-word and performs real side-effects. Replaces the legacy wizard.
 struct SBOnboardingView: View {
@@ -55,39 +68,23 @@ struct SBOnboardingView: View {
       } else {
         SBWallpaper()
       }
-      panel
-        .frame(width: 540, height: min(640, 900))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      GeometryReader { geometry in
+        let panelSize = SBOnboardingPanelLayout.size(in: geometry.size)
+        panel
+          .frame(width: panelSize.width, height: panelSize.height)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
     }
     .overlay(alignment: .topTrailing) {
-      HStack(spacing: 8) {
-        if model.canGoBack {
-          Button(action: { model.goBack() }) {
-            Text("← Back")
-              .geist(size: 13).foregroundStyle(sb.ink(.w75))
-              .padding(.horizontal, 14).padding(.vertical, 7)
-              .background(
-                Capsule().fill(Color.white.opacity(0.06))
-                  .background(.ultraThinMaterial, in: Capsule())
-              )
-              .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
-          }
-          .buttonStyle(.plain)
-          .help("Go back and change an earlier answer")
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 8) {
+          backButton
+          skipButton
         }
-
-        Button(action: { model.skip() }) {
-          Text("Skip")
-            .geist(size: 13).foregroundStyle(sb.ink(.w45))
-            .padding(.horizontal, 14).padding(.vertical, 7)
-            .background(
-              Capsule().fill(Color.white.opacity(0.06))
-                .background(.ultraThinMaterial, in: Capsule())
-            )
-            .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+        VStack(alignment: .trailing, spacing: 8) {
+          backButton
+          skipButton
         }
-        .buttonStyle(.plain)
-        .help("Skip onboarding and go to your second brain")
       }
       .padding(.top, 20).padding(.trailing, 24)
     }
@@ -160,6 +157,38 @@ struct SBOnboardingView: View {
     .shadow(color: .black.opacity(0.5), radius: 60, y: 30)
   }
 
+  @ViewBuilder private var backButton: some View {
+    if model.canGoBack {
+      Button(action: { model.goBack() }) {
+        Text("← Back")
+          .geist(size: 13).foregroundStyle(sb.ink(.w75))
+          .padding(.horizontal, 14).padding(.vertical, 7)
+          .background(
+            Capsule().fill(Color.white.opacity(0.06))
+              .background(.ultraThinMaterial, in: Capsule())
+          )
+          .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+      }
+      .buttonStyle(.plain)
+      .help("Go back and change an earlier answer")
+    }
+  }
+
+  private var skipButton: some View {
+    Button(action: { model.skip() }) {
+      Text("Skip")
+        .geist(size: 13).foregroundStyle(sb.ink(.w45))
+        .padding(.horizontal, 14).padding(.vertical, 7)
+        .background(
+          Capsule().fill(Color.white.opacity(0.06))
+            .background(.ultraThinMaterial, in: Capsule())
+        )
+        .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+    }
+    .buttonStyle(.plain)
+    .help("Skip onboarding and go to your second brain")
+  }
+
   private func scrollDown(_ proxy: ScrollViewProxy) {
     withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
   }
@@ -203,10 +232,7 @@ struct SBOnboardingView: View {
       permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") {
         model.answerScreen()
       }
-    case .files:
-      permStepWidget("full_disk_access", "Full Disk Access", "cite your files · read-only, stays on this Mac") {
-        model.answerFiles()
-      }
+    case .files: filesWidget
     case .accessibility:
       permStepWidget("accessibility", "Accessibility", "catch your shortcut + click/type for you") {
         model.answerAccessibility()
@@ -282,9 +308,13 @@ struct SBOnboardingView: View {
         // Auto-detected default: accept with one tap, or reveal the picker.
         HStack(spacing: 8) {
           Text(draft).geist(size: 17, weight: .medium).foregroundStyle(sb.ink)
-          Text("· detected").geist(size: 12.5).foregroundStyle(sb.ink(.w4))
+          if model.languageIsDetectedFromMac {
+            Text(SBOnboardingLanguageCopy.detectedLanguageDetail)
+              .geist(size: 12.5)
+              .foregroundStyle(sb.ink(.w4))
+          }
         }
-        SBInkButton(title: "Continue", isDefaultAction: true) {
+        SBInkButton(title: SBOnboardingLanguageCopy.continueAction(for: draft), isDefaultAction: true) {
           if let m = all.first(where: { $0.name.lowercased() == draft.lowercased() }) {
             model.pickLanguage(code: m.code, name: m.name)
           } else {
@@ -294,7 +324,9 @@ struct SBOnboardingView: View {
         Button {
           languageChanging = true
         } label: {
-          Text("Change language").geist(size: 13).foregroundStyle(sb.ink(.w45))
+          Text(SBOnboardingLanguageCopy.changeSpokenLanguageAction)
+            .geist(size: 13)
+            .foregroundStyle(sb.ink(.w45))
         }
         .buttonStyle(.plain)
       } else {
@@ -406,6 +438,58 @@ struct SBOnboardingView: View {
       }
     }
     .frame(maxWidth: 380, alignment: .leading)
+  }
+
+  @ViewBuilder private var filesWidget: some View {
+    switch model.localFileProfileState {
+    case .idle:
+      permStepWidget("full_disk_access", "Full Disk Access", "cite your files · read-only, stays on this Mac") {
+        model.answerFiles()
+      }
+    case .scanning:
+      VStack(alignment: .leading, spacing: 10) {
+        Text("Building your local profile").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+        HStack(spacing: 8) {
+          ProgressView().controlSize(.small)
+          Text("Scanning your projects and recent files…").geist(size: 13).foregroundStyle(sb.ink(.w45))
+        }
+      }
+      .frame(maxWidth: 380, alignment: .leading)
+    case .complete(let fileCount, let memoryCount, let deniedFolders):
+      VStack(alignment: .leading, spacing: 10) {
+        Text("Your local profile is ready").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+        Text("\(fileCount.formatted()) files indexed · \(memoryCount) profile memories saved")
+          .geist(size: 13).foregroundStyle(sb.ink(.w45))
+        if !deniedFolders.isEmpty {
+          Text("Some folders need access later: \(deniedFolders.joined(separator: ", "))")
+            .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
+        }
+        if model.fdaState != .on {
+          Button(model.fdaState == .waiting ? "Waiting for Full Disk Access…" : "Allow Full Disk Access") {
+            if model.fdaState == .ask { model.requestPerm("full_disk_access") }
+          }
+          .buttonStyle(.plain)
+          .disabled(model.fdaState == .waiting)
+          .geist(size: 13, weight: .medium)
+          .foregroundStyle(sb.ink(.w6))
+        }
+        SBInkButton(title: "Continue", isDefaultAction: true) { model.finishFilesStep() }
+      }
+      .frame(maxWidth: 380, alignment: .leading)
+    case .failed(let message):
+      VStack(alignment: .leading, spacing: 10) {
+        Text("I couldn't finish scanning your files").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+        Text(message).geist(size: 13).foregroundStyle(sb.ink(.w45))
+        HStack(spacing: 10) {
+          SBInkButton(title: "Retry") { model.retryLocalFileScan() }
+          Button("Continue without a scan") { model.finishFilesStep() }
+            .buttonStyle(.plain)
+            .geist(size: 13, weight: .medium)
+            .foregroundStyle(sb.ink(.w6))
+        }
+      }
+      .frame(maxWidth: 380, alignment: .leading)
+    }
   }
 
   /// A physical-looking keycap (symbol + key name for modifiers, centered glyph
@@ -674,33 +758,24 @@ struct SBOnboardingView: View {
 
   private var captureWidget: some View {
     VStack(spacing: 8) {
-      // The chosen open-Omi chord as keycap chips (e.g. ⌘ O), matching the ⌥ keycap
-      // on the demo step — instead of plain "⌘O" glyphs buried in the message copy.
-      if !model.summonTokens.isEmpty {
-        HStack(spacing: 5) {
-          ForEach(model.summonTokens, id: \.self) { tok in keycap(tok) }
-          Text("reaches me anytime").geist(size: 14).foregroundStyle(sb.ink(.w85))
-          Spacer(minLength: 0)
-        }
-        .padding(.bottom, 2)
-      }
       Button {
-        model.captureContinuous()
-      } label: {
-        Text("● Start listening — continuously").geist(size: 14, weight: .semibold).foregroundStyle(sb.inkInverted)
-          .frame(maxWidth: .infinity).padding(.vertical, 11)
-          .background(RoundedRectangle(cornerRadius: 11).fill(sb.ink))
-      }
-      .buttonStyle(.plain)
-      Button {
-        model.captureMeetingsOnly()
+        model.capture(SBOnboardingModel.defaultCaptureSelection)
       } label: {
         HStack(spacing: 4) {
-          Text("Only during meetings").geist(size: 14).foregroundStyle(sb.ink(.w85))
-          Text("· from my calendar").geist(size: 12).foregroundStyle(sb.ink(.w4))
+          Text("● Only during meetings").geist(size: 14, weight: .semibold).foregroundStyle(sb.inkInverted)
+          Text("· from my calendar").geist(size: 12).foregroundStyle(sb.inkInverted.opacity(0.7))
         }
         .frame(maxWidth: .infinity).padding(.vertical, 11)
-        .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w18), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 11).fill(sb.ink))
+      }
+      .buttonStyle(.plain)
+      .keyboardShortcut(.defaultAction)
+      Button {
+        model.capture(.continuous)
+      } label: {
+        Text("Start listening — continuously").geist(size: 14).foregroundStyle(sb.ink(.w85))
+          .frame(maxWidth: .infinity).padding(.vertical, 11)
+          .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w18), lineWidth: 1))
       }
       .buttonStyle(.plain)
     }

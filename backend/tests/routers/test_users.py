@@ -99,12 +99,14 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
         (users_router.resolve_deletion_wipe_job_id, ('job-1',)),
         (users_router.try_acquire_job_run_lock, ('account-deletion:uid1',)),
         (users_router.claim_deletion_wipe_for_task, ('uid1',)),
-        (users_router.background_wipe_user_data, ('uid1',)),
+        (users_router.background_wipe_user_data, ('uid1', 0, False)),
         (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
     ]
 
 
 def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
+    background_args = []
+
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
@@ -113,6 +115,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
         if fn is users_router.background_wipe_user_data:
+            background_args.append(args)
             return False
         if fn is users_router.release_job_run_lock:
             return None
@@ -129,6 +132,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'failed_final'}
+    assert background_args == [('uid1', 1, True)]
 
 
 def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):

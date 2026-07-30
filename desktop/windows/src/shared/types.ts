@@ -288,8 +288,8 @@ export type CaptureCommand =
   // Meeting detection (Phase 5, sent by MAIN): start/stop the auto-capture
   // session (mic + system lanes) for a detected meeting. Serviced by
   // MeetingSessionHost in the capture window.
-  | { type: 'meeting-capture-start'; meetingId: string; appName: string }
-  | { type: 'meeting-capture-stop'; meetingId: string }
+  | { type: 'meeting-capture-start'; meetingId: string; attemptId: number; appName: string }
+  | { type: 'meeting-capture-stop'; meetingId: string; attemptId: number }
 
 /** A mutation to the shared live-conversation store, emitted by the capture
  *  window as it owns the always-on mic session. UI windows apply these via
@@ -307,6 +307,8 @@ export type LiveStoreOp =
 export type CaptureEvent =
   // Live-conversation store mirror (broadcast).
   | { type: 'live'; op: LiveStoreOp }
+  // An audio lane acquired its source and built the PCM pipeline (routed to the owner).
+  | { type: 'audio-source-ready'; sessionId: string }
   // An audio lane's source (mic/system stream) failed (routed to the owner).
   | { type: 'audio-source-error'; sessionId: string; name: string; message: string }
   // Push-to-talk streamed data / lifecycle (routed to the owner).
@@ -328,7 +330,8 @@ export type CaptureEvent =
   | {
       type: 'meeting-capture-status'
       meetingId: string
-      status: 'started' | 'error' | 'saved'
+      attemptId: number
+      status: 'started' | 'startup-error' | 'runtime-error' | 'saved' | 'save-error'
       message?: string
     }
 
@@ -1014,7 +1017,13 @@ export type OmiBridgeApi = {
    *  deletes, idempotent). Resolves to the number of rows rebuilt. */
   rewindRebuildIndex: () => Promise<number>
   rewindPrimarySourceId: () => Promise<string | null>
-  rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
+  /** Display source containing the foreground window, with cursor/primary fallbacks. */
+  rewindCaptureSourceId: () => Promise<string | null>
+  rewindSaveFrame: (
+    data: Uint8Array,
+    sourceId: string
+  ) => Promise<{ captured: boolean; reason?: string }>
+  onRewindCaptureNow: (cb: () => void) => () => void
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
   /** Runtime capture directive (pause + effective cadence) the main process derives
    *  from OS power/lock state; the capture host prefers it over the base interval. */
@@ -2526,8 +2535,10 @@ export type MeetingSettings = {
 export type MeetingToastPayload = {
   meetingId: string
   appName: string
-  /** 'ask' → "Meeting detected — start capturing?"; 'capturing' → live notice. */
-  kind: 'ask' | 'capturing'
+  /** Ask, startup progress, confirmed live capture, or a retryable startup failure. */
+  kind: 'ask' | 'starting' | 'capturing' | 'error'
+  /** Distinguishes a failed start, interrupted capture, and final-save failure. */
+  errorKind?: 'startup' | 'runtime' | 'save'
   /** Show the one-time first-run hint line. */
   firstRun?: boolean
 }

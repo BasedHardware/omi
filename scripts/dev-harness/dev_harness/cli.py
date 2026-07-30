@@ -21,6 +21,8 @@ from typing import Iterable
 from . import config, providers, qualification, safety, memory_scenarios
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
+
+
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -31,7 +33,11 @@ def _repo_root() -> Path:
 
 def _marker(cfg: config.HarnessConfig, service: str) -> str:
     token = os.environ.get("OMI_HARNESS_OWNERSHIP_TOKEN", "").strip()
-    return f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}:{token}" if token else f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
+    return (
+        f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}:{token}"
+        if token
+        else f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
+    )
 
 
 def _load_json(path: Path, default: dict[str, object]) -> dict[str, object]:
@@ -469,6 +475,13 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _prepend_pythonpath(env: dict[str, str], *entries: Path) -> None:
+    values = [str(path) for path in entries]
+    if existing := env.get("PYTHONPATH"):
+        values.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(values)
+
+
 def _start_process(
     cfg: config.HarnessConfig,
     service: str,
@@ -493,11 +506,10 @@ def _start_process(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = log_path.open("ab")
     child_env = config.child_env_for(cfg) if env is None else env
-    child_env["PYTHONPATH"] = f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{child_env.get('PYTHONPATH', '')}"
+    python_paths = [cfg.repo_root / "scripts" / "dev-harness"]
     if service == "backend":
-        child_env["PYTHONPATH"] = (
-            f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{cfg.repo_root / 'backend'}:{child_env.get('PYTHONPATH', '')}"
-        )
+        python_paths.append(cfg.repo_root / "backend")
+    _prepend_pythonpath(child_env, *python_paths)
     supervised = [
         sys.executable,
         "-m",
@@ -685,7 +697,16 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
     _start_process(
         cfg,
         "desktop-backend",
-        [sys.executable, "-m", "uvicorn", "desktop_backend:app", "--host", "127.0.0.1", "--port", str(cfg.desktop_backend_port)],
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "desktop_backend:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(cfg.desktop_backend_port),
+        ],
         cwd=cfg.repo_root / "backend",
         log_name="desktop-backend.log",
         port=cfg.desktop_backend_port,

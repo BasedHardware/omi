@@ -31,6 +31,7 @@ def run_git(root: Path, *args: str) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
     )
     return result.stdout.strip()
 

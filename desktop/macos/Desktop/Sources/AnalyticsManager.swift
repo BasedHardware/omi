@@ -19,6 +19,7 @@ class AnalyticsManager {
   /// outside the actor, so tests can observe the real event/payload safely under
   /// Swift concurrency.
   private var memoryAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  private var devicePairingTelemetryCaptureForTests: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
 
   private init() {}
 
@@ -64,6 +65,12 @@ class AnalyticsManager {
 
   private func captureIntegrationConnectTelemetryForTests(_ event: String, properties: [String: Any]) {
     integrationConnectTelemetryCaptureForTests?(event, properties)
+  }
+
+  func setDevicePairingTelemetryCaptureForTests(
+    _ capture: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
+  ) {
+    devicePairingTelemetryCaptureForTests = capture
   }
 
   // MARK: - Initialization
@@ -343,6 +350,39 @@ class AnalyticsManager {
       "authorization_raw": authorizationRaw,
     ]
     PostHogManager.shared.track("Bluetooth State Changed", properties: properties)
+  }
+
+  func devicePairingReady(
+    device: BtDevice,
+    isNewPair: Bool,
+    isFirstPair: Bool,
+    firstPairedAt: Date?
+  ) {
+    let vendor = device.type.analyticsVendorSlug
+    let eventProperties: [String: Any] = [
+      "device_vendor": vendor,
+      "device_type": device.type.rawValue,
+      "model": device.displayModelNumber,
+      "is_first_pair": isFirstPair,
+    ]
+    var userProperties: [String: Any] = [
+      "has_paired_device": true,
+      "paired_device_type": device.type.rawValue,
+      "device_vendor": vendor,
+    ]
+    if let firstPairedAt {
+      userProperties["first_paired_at"] = ISO8601DateFormatter().string(from: firstPairedAt)
+    }
+
+    devicePairingTelemetryCaptureForTests?(
+      isNewPair ? "Device Paired" : nil,
+      eventProperties,
+      userProperties
+    )
+    if isNewPair {
+      PostHogManager.shared.track("Device Paired", properties: eventProperties)
+    }
+    PostHogManager.shared.setUserProperties(userProperties)
   }
 
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
@@ -1190,108 +1230,6 @@ class AnalyticsManager {
 
   func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
     PostHogManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
-  }
-
-  // MARK: - All Settings State (Comprehensive daily report)
-
-  /// No-op. Replaced by on-change person-property updates at the owning callsites.
-  func reportAllSettingsIfNeeded() {}
-
-  private func collectAllSettings() -> [String: Any] {
-    var props: [String: Any] = [:]
-
-    // -- General / Shared Assistant Settings --
-    let shared = AssistantSettings.shared
-    props["screen_analysis_enabled"] = shared.screenAnalysisEnabled
-    props["transcription_enabled"] = shared.transcriptionEnabled
-    props["transcription_language"] = shared.transcriptionLanguage
-    props["transcription_auto_detect"] = shared.transcriptionAutoDetect
-    props["transcription_vocabulary_count"] = shared.transcriptionVocabulary.count
-    props["analysis_delay"] = shared.analysisDelay
-    props["cooldown_interval"] = shared.cooldownInterval
-    props["glow_overlay_enabled"] = shared.glowOverlayEnabled
-
-    // -- Focus Assistant --
-    let focus = FocusAssistantSettings.shared
-    props["focus_enabled"] = focus.isEnabled
-    props["focus_notifications_enabled"] = focus.notificationsEnabled
-    props["focus_cooldown_interval"] = focus.cooldownInterval
-    props["focus_has_custom_prompt"] =
-      focus.analysisPrompt != FocusAssistantSettings.defaultAnalysisPrompt
-    props["focus_prompt_length"] = focus.analysisPrompt.count
-    props["focus_excluded_apps_count"] = focus.excludedApps.count
-
-    // -- Task Extraction Assistant --
-    let task = TaskAssistantSettings.shared
-    props["task_enabled"] = task.isEnabled
-    props["task_notifications_enabled"] = task.notificationsEnabled
-    props["task_extraction_interval"] = task.extractionInterval
-    props["task_min_confidence"] = task.minConfidence
-    props["task_has_custom_prompt"] =
-      task.analysisPrompt != TaskAssistantSettings.defaultAnalysisPrompt
-    props["task_prompt_length"] = task.analysisPrompt.count
-    props["task_allowed_apps_count"] = task.allowedApps.count
-    props["task_browser_keywords_count"] = task.browserKeywords.count
-
-    // -- Memory Assistant --
-    let memory = MemoryAssistantSettings.shared
-    props["memory_enabled"] = memory.isEnabled
-    props["memory_extraction_interval"] = memory.extractionInterval
-    props["memory_min_confidence"] = memory.minConfidence
-    props["memory_notifications_enabled"] = memory.notificationsEnabled
-    props["memory_has_custom_prompt"] =
-      memory.analysisPrompt != MemoryAssistantSettings.defaultAnalysisPrompt
-    props["memory_prompt_length"] = memory.analysisPrompt.count
-    props["memory_excluded_apps_count"] = memory.excludedApps.count
-
-    // -- Insight Assistant --
-    let insight = InsightAssistantSettings.shared
-    props["insight_enabled"] = insight.isEnabled
-    props["insight_notifications_enabled"] = insight.notificationsEnabled
-    props["insight_extraction_interval"] = insight.extractionInterval
-    props["insight_min_confidence"] = insight.minConfidence
-    props["insight_has_custom_prompt"] =
-      insight.analysisPrompt != InsightAssistantSettings.defaultAnalysisPrompt
-    props["insight_prompt_length"] = insight.analysisPrompt.count
-    props["insight_excluded_apps_count"] = insight.excludedApps.count
-
-    // -- Task Agent --
-    let agent = TaskAgentSettings.shared
-    props["task_agent_enabled"] = agent.isEnabled
-    props["task_agent_auto_launch"] = agent.autoLaunch
-    props["task_agent_skip_permissions"] = agent.skipPermissions
-    props["task_agent_has_custom_prompt"] = !agent.customPromptPrefix.isEmpty
-
-    // -- Rewind (read from UserDefaults since these are @AppStorage in views) --
-    let ud = UserDefaults.standard
-    props["rewind_retention_days"] = ud.object(forKey: "rewindRetentionDays") as? Double ?? 7.0
-    props["rewind_capture_interval"] = ud.object(forKey: "rewindCaptureInterval") as? Double ?? 1.0
-
-    // -- AI Chat Mode --
-    props["chat_bridge_mode"] = ud.string(forKey: "chatBridgeMode") ?? "agentSDK"
-
-    // -- UI Preferences --
-    props["multi_chat_enabled"] = ud.bool(forKey: "multiChatEnabled")
-    props["conversations_compact_view"] =
-      ud.object(forKey: "conversationsCompactView") as? Bool ?? true
-    props["tier_level"] = ud.integer(forKey: "currentTierLevel")
-
-    // -- Device --
-    let deviceId = ud.string(forKey: "pairedDeviceId") ?? ""
-    props["has_paired_device"] = !deviceId.isEmpty
-    props["paired_device_type"] = ud.string(forKey: "pairedDeviceType") ?? ""
-
-    // -- Launch at Login --
-    props["launch_at_login_enabled"] = LaunchAtLoginManager.shared.isEnabled
-
-    // -- Floating Bar (AskOmi) --
-    props["floating_bar_enabled"] = FloatingControlBarManager.shared.isEnabled
-    props["floating_bar_visible"] = FloatingControlBarManager.shared.isVisible
-
-    // -- Dev Mode --
-    props["dev_mode_enabled"] = ud.bool(forKey: "devModeEnabled")
-
-    return props
   }
 
   // MARK: - Floating Bar Events

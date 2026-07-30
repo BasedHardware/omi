@@ -412,6 +412,18 @@ REVIEW_QUEUE_BY_STATUS_ID_QUERY = FirestoreQuerySpec(
     ),
 )
 
+STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
+    identifier='conversations_in_progress_by_finished_at',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'),),
+    index_fields=(
+        _asc('status'),
+        _asc('finished_at'),
+        _asc('__name__'),
+    ),
+)
+
 QUERY_SPECS = (
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
@@ -427,6 +439,7 @@ QUERY_SPECS = (
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
+    STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
 )
 INDEX_REQUIREMENTS = (
     *INDEX_ONLY_REQUIREMENTS,

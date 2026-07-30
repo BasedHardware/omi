@@ -11,11 +11,10 @@ import OmiTheme
 /// - Tables use an Omi-owned `Grid` with fixed decoration. They deliberately
 ///   avoid geometry preferences.
 ///
-/// Chat Markdown deliberately disables SwiftUI text selection. On macOS,
-/// `textSelection(.enabled)` installs AppKit-backed `SelectionOverlay` views
-/// that can form a non-converging setFont → intrinsic-size → AttributeGraph
-/// loop when a long transcript scrolls. Chat bubbles already provide a
-/// whole-message copy action; code blocks add a focused copy action.
+/// Text selection is opt-in. On macOS, `textSelection(.enabled)` installs
+/// AppKit-backed `SelectionOverlay` views, so callers must enable it only for
+/// settled message bodies—not the transcript container or streaming content.
+/// Code blocks retain their focused copy action.
 struct OmiMarkdown: View {
   enum Style: Equatable {
     case assistant
@@ -25,22 +24,40 @@ struct OmiMarkdown: View {
 
   let text: String
   let style: Style
+  let textSelectionEnabled: Bool
   @Environment(\.fontScale) private var fontScale
 
-  init(text: String, sender: ChatSender) {
+  init(text: String, sender: ChatSender, textSelectionEnabled: Bool = false) {
     self.text = text
     self.style = sender == .user ? .user : .assistant
+    self.textSelectionEnabled = textSelectionEnabled
   }
 
-  init(text: String, style: Style) {
+  init(text: String, sender: ChatSender, isStreaming: Bool) {
+    self.text = text
+    self.style = sender == .user ? .user : .assistant
+    self.textSelectionEnabled = !isStreaming
+  }
+
+  init(text: String, style: Style, textSelectionEnabled: Bool = false) {
     self.text = text
     self.style = style
+    self.textSelectionEnabled = textSelectionEnabled
   }
 
   var body: some View {
+    if textSelectionEnabled {
+      renderedContent
+        .textSelection(.enabled)
+    } else {
+      renderedContent
+        .textSelection(.disabled)
+    }
+  }
+
+  private var renderedContent: some View {
     OmiMarkdownContent(text: text, style: style, fontScale: fontScale)
       .equatable()
-      .textSelection(.disabled)
   }
 
   static func containsGFMTable(_ content: String) -> Bool {
@@ -52,9 +69,8 @@ struct OmiMarkdown: View {
 }
 
 /// Keeps parent-only UI feedback (copy checkmarks, hover chrome, ratings) from
-/// rebuilding unchanged message content. Combined with the selection-free
-/// render boundary above, this prevents AppKit font invalidations from
-/// re-entering AttributeGraph while the transcript scrolls.
+/// rebuilding unchanged message content. The selection boundary remains scoped
+/// above this value renderer so those feedback updates do not re-enter it.
 struct OmiMarkdownContent: View, Equatable {
   let text: String
   let style: OmiMarkdown.Style

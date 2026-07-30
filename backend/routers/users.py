@@ -402,12 +402,19 @@ async def run_account_deletion_wipe(
             logger.warning(f'account_deletion handler: non-actionable task for {uid}, claim_status={claim_status}')
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
 
-        ok = await run_blocking(cleanup_executor, background_wipe_user_data, uid)
+        max_attempts = get_account_deletion_tasks_max_attempts()
+        terminal = task_authentication.retry_count >= max_attempts - 1
+        ok = await run_blocking(
+            cleanup_executor,
+            background_wipe_user_data,
+            uid,
+            task_authentication.retry_count,
+            terminal,
+        )
         if ok:
             return JSONResponse(status_code=200, content={'status': 'done'})
 
-        max_attempts = get_account_deletion_tasks_max_attempts()
-        if task_authentication.retry_count >= max_attempts - 1:
+        if terminal:
             logger.error(
                 f'account_deletion handler: final attempt {task_authentication.retry_count + 1} failed for {uid}'
             )
