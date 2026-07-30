@@ -94,52 +94,54 @@ struct ChatBubble: View {
   }
 
   var body: some View {
-    if message.hidesEmptyStreamingPlaceholder,
-      message.isStreaming,
-      message.text.isEmpty,
-      message.contentBlocks.isEmpty
-    {
-      EmptyView()
-        .accessibilityHidden(true)
-    } else {
-      let groupedBlocks = ContentBlockGroup.visibleChatGroups(
-        message.contentBlocks,
-        isStreaming: message.isStreaming,
-        richBlockRenderingEnabled: chatFirstRichBlockContext != nil
-      )
-
-      HStack(alignment: .top, spacing: OmiSpacing.md) {
-        // Default omi replies render avatar-free for a quieter timeline; only
-        // app personas keep their identity mark.
-        if message.sender == .ai, let app = app {
-          AsyncImage(url: URL(string: app.image)) { phase in
-            switch phase {
-            case .success(let image):
-              image
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-            default:
-              Circle()
-                .fill(OmiColors.backgroundTertiary)
-            }
-          }
-          .frame(width: 32, height: 32)
-          .clipShape(Circle())
-        }
-
-        // Bubbles hug their content up to a readable cap — omi replies sit
-        // left, user messages sit right, neither spans the full column.
-        VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
-          messageContentView(groupedBlocks)
-        }
-        .frame(
-          maxWidth: 640,
-          alignment: message.sender == .user ? .trailing : .leading
+    Group {
+      if message.hidesEmptyStreamingPlaceholder,
+        message.isStreaming,
+        message.text.isEmpty,
+        message.contentBlocks.isEmpty
+      {
+        EmptyView()
+          .accessibilityHidden(true)
+      } else {
+        let groupedBlocks = ContentBlockGroup.visibleChatGroups(
+          message.contentBlocks,
+          isStreaming: message.isStreaming,
+          richBlockRenderingEnabled: chatFirstRichBlockContext != nil
         )
+
+        HStack(alignment: .top, spacing: OmiSpacing.md) {
+          // Default omi replies render avatar-free for a quieter timeline; only
+          // app personas keep their identity mark.
+          if message.sender == .ai, let app = app {
+            AsyncImage(url: URL(string: app.image)) { phase in
+              switch phase {
+              case .success(let image):
+                image
+                  .resizable()
+                  .aspectRatio(contentMode: .fill)
+              default:
+                Circle()
+                  .fill(OmiColors.backgroundTertiary)
+              }
+            }
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
+          }
+
+          // Bubbles hug their content up to a readable cap — omi replies sit
+          // left, user messages sit right, neither spans the full column.
+          VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
+            messageContentView(groupedBlocks)
+          }
+          .frame(
+            maxWidth: 640,
+            alignment: message.sender == .user ? .trailing : .leading
+          )
+        }
+        .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
+        .contentShape(Rectangle())
+        .onHover { isRowHovering = $0 }
       }
-      .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
-      .contentShape(Rectangle())
-      .onHover { isRowHovering = $0 }
     }
     .frame(
       maxWidth: .infinity,
