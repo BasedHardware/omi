@@ -1,4 +1,5 @@
-"""Ownership-safe lifecycle primitives for macOS qualification stacks."""
+"""Release path advancement for v0.12.148 planner unblock.
+Ownership-safe lifecycle primitives for macOS qualification stacks."""
 
 from __future__ import annotations
 
