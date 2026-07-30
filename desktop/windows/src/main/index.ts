@@ -20,6 +20,7 @@ import { installContextMenu } from './contextMenu'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 import type { ConversationFolder, LiveNote } from '../shared/types'
 import {
+  isListenSessionOwnedBy,
   registerOmiListenHandlers,
   startTestListenSession,
   stopTestListenSession
@@ -837,12 +838,18 @@ app.whenReady().then(async () => {
   // Sign-out teardown: clear every user-scoped table so a second account on this
   // machine can't see the prior user's local data (renderer authTeardown.ts).
   ipcMain.handle('db:wipeUserData', async () => wipeUserData())
-  registerOmiListenHandlers()
+  registerOmiListenHandlers((ownerId) => {
+    const captureWc = getCaptureWc()
+    const mainWc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+    return ownerId === mainWc?.id || ownerId === captureWc?.id
+  })
   // Capture bridge: routes commands from UI windows to the hidden capture window
   // and events back. Registered before the capture window is created so no early
   // command/event is missed. Reads the capture wc live so a respawn is picked up.
-  registerCaptureBridge(getCaptureWc, () =>
-    mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+  registerCaptureBridge(
+    getCaptureWc,
+    () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
+    isListenSessionOwnedBy
   )
   // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
   // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
