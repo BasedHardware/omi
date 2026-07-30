@@ -321,7 +321,10 @@ struct RewindView: View {
 
     private var liveTextButton: some View {
         circleButton(
-            systemName: model.isRecognizing ? "text.viewfinder" : "text.viewfinder",
+            // Two genuinely different glyphs. Recognition runs on demand and can take most of a
+            // second, so the button has to show that it is working. The previous ternary returned
+            // "text.viewfinder" on both branches: it coded for a state it never rendered.
+            systemName: model.isRecognizing ? "arrow.triangle.2.circlepath" : "text.viewfinder",
             help: "Highlight selectable text in this frame",
             // Dim until a pass has actually detected something, which is the spec's wording read
             // literally. It stays pressable — pressing it is what runs the pass.

@@ -297,6 +297,27 @@ struct StatusView: View {
                 }
             }
 
+            // The timeline and Settings both existed with nothing able to open them. The shortcuts are
+            // the fast path, but a menu-bar-only app whose windows are reachable ONLY by an
+            // undiscoverable modifier double-tap has effectively hidden them — and the shortcut is
+            // gated on Accessibility, so without these rows an ungranted user cannot reach either
+            // window at all.
+            MenuCommand(title: "Open Timeline", shortcut: GlobalShortcuts.shared.display(for: .openTimeline)) {
+                // Nil until the database finishes opening on the engine's queue. Declining beats
+                // presenting a timeline with nothing behind it.
+                guard let store = Engine.shared.contextStore else { return }
+                RewindWindow.present(
+                    store: store,
+                    onOpenSettings: { SettingsWindow.present() },
+                    onSearch: { query in SearchBarWindow.present(prefill: query) })
+            }
+
+            MenuCommand(title: "Settings…", shortcut: "⌘,") { SettingsWindow.present() }
+                .keyboardShortcut(",")
+
+            Divider()
+                .padding(.vertical, 4)
+
             MenuCommand(title: "Quit", shortcut: "⌘Q") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }

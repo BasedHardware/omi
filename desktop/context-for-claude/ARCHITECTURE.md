@@ -110,6 +110,8 @@ Sources/ContextApp/      ContextApp  Engine  Permissions
                          MenuBar/    StatusView
                          Onboarding/ Ink  Backdrop  RandomizedText  OnboardingWindow  OnboardingView
                          Integration/ClaudeRegistrar  LoginItem
+                         Shortcuts/  GlobalShortcuts  ShortcutConflicts
+                         Search/     ClaudeRouter  SearchBarWindow  SearchBarView
                          Support/    Log
 ```
 

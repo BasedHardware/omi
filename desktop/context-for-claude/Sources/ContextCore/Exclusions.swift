@@ -499,6 +499,12 @@ public enum PrivateBrowsing {
         "com.microsoft.edgemac", "com.brave.browser", "org.mozilla.firefox",
         "company.thebrowser.browser", "company.thebrowser.dia", "com.operasoftware.opera",
         "com.vivaldi.vivaldi", "org.chromium.chromium", "com.openai.chat",
+        // ChatGPT Atlas. Absent until now, and a real hole rather than a tidy-up: `isBrowser` returns
+        // on a bundle-identifier miss WITHOUT falling through to the name-fragment check, so an Atlas
+        // frame carrying its identifier was classified as not-a-browser and its private windows were
+        // never considered at all. Confirmed as this machine's default http handler through
+        // LaunchServices, which makes it the browser most likely to be in front of someone.
+        "com.openai.atlas",
     ]
 
     /// Best evidence from what a capture tick already has in hand.

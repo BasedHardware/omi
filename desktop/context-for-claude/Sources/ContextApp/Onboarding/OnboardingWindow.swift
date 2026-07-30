@@ -17,7 +17,18 @@ final class OnboardingWindow {
     static let cardSize = NSSize(width: 720, height: 520)
 
     private static var current: NSWindow?
+    /// The cinematic's own layer, held only while it plays so it can be torn out afterwards.
+    private static var cinematicHosting: NSView?
+    private static var cinematicDirector: CinematicDirector?
+    /// Esc, at the AppKit level. See `installEscapeMonitor`.
+    private static var escapeMonitor: Any?
 
+    /// The first-run entry point.
+    ///
+    /// Plays the Phase 3 cinematic on the display under the pointer and then shrinks into the
+    /// welcome card. Once `context.onboarded` is set — the same flag `ContextApp` gates this call on
+    /// — `CinematicGate` turns the intro off and this is the card alone, so the sequence runs
+    /// exactly once per install and the entry point never has to change.
     static func present() {
         if let window = current {
             window.alphaValue = 1
@@ -37,10 +48,143 @@ final class OnboardingWindow {
             return
         }
 
-        let frame = centredFrame(on: screen)
+        guard CinematicGate().shouldPlay else {
+            presentCard(on: screen)
+            return
+        }
+        presentCinematic(on: screen)
+    }
 
+    /// The welcome card, with no intro. The state onboarding actually runs in, and where the
+    /// cinematic lands.
+    static func presentCard(on screen: NSScreen) {
+        let frame = centredFrame(on: screen)
+        let window = makeWindow(contentRect: frame)
+        window.contentView = makeRoot(size: frame.size, hosting: OnboardingView())
+        window.setFrame(frame, display: true)
+
+        current = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // MARK: - The cinematic
+
+    /// Beat 1 needs the whole display, so the window opens at `screen.frame` and above the menu bar
+    /// — a dim with a bright strip along the top is not a dim. It is the *same window* that becomes
+    /// the card, so beat 6 is a resize rather than a second window appearing over the first.
+    private static func presentCinematic(on screen: NSScreen) {
+        let full = screen.frame
+        let window = makeWindow(contentRect: full)
+        // Above `.mainMenu` (24), so the scrim covers the menu bar and the Dock. Dropped back to
+        // `.floating` the moment the card takes over — an always-on-top-of-everything window is
+        // right for eight seconds and wrong for a flow the user has to click through.
+        window.level = .statusBar
+
+        let director = CinematicDirector()
+        let root = FirstMouseView(frame: NSRect(origin: .zero, size: full.size))
+        root.autoresizingMask = [.width, .height]
+
+        let hosting = FirstMouseHostingView(rootView: CinematicView(director: director))
+        hosting.frame = root.bounds
+        hosting.autoresizingMask = [.width, .height]
+        root.addSubview(hosting)
+
+        // CRITICAL: the hosting view goes *inside* a plain container and is never the window's
+        // `contentView`. As `RewindWindow` documents, an `NSHostingView` that is the contentView of
+        // a borderless window negotiates the window's size and crashes in
+        // `_postWindowNeedsUpdateConstraints` on macOS 26.
+        window.contentView = root
+        window.setFrame(full, display: true)
+
+        current = window
+        cinematicHosting = hosting
+        cinematicDirector = director
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        installEscapeMonitor(director)
+
+        director.start { end in
+            MainActor.assumeIsolated { landOnCard(on: screen, after: end) }
+        }
+    }
+
+    /// Beat 6's landing: the window shrinks to the card's frame and the card fades in where the
+    /// composition receded to.
+    ///
+    /// The order matters. The cinematic layer is already at zero opacity by the time beat 6 ends, so
+    /// the resize itself is invisible and can happen instantly — animating an empty transparent
+    /// window would only add a pause. On an abort the layer is *not* faded out, so it is dropped in
+    /// the same turn as the resize.
+    private static func landOnCard(on screen: NSScreen, after end: CinematicEnd) {
+        removeEscapeMonitor()
+        cinematicDirector = nil
+
+        guard let window = current else {
+            // The window went away under us (a `dismiss()` racing the last beat). Onboarding still
+            // has to happen, so open the card fresh.
+            presentCard(on: screen)
+            return
+        }
+
+        cinematicHosting?.removeFromSuperview()
+        cinematicHosting = nil
+
+        let frame = centredFrame(on: screen)
+        window.level = .floating
+        window.setFrame(frame, display: true)
+
+        let root = makeRoot(size: frame.size, hosting: OnboardingView())
+        // `NSView.alphaValue` is only honoured on a layer-backed view, and `animator()` can only
+        // animate it through Core Animation. Without this the card either never fades or — worse —
+        // is left sitting at the alpha it started from, which is a first run with no visible
+        // onboarding at all. The completion handler pins it to 1 regardless, so the one thing that
+        // cannot happen is an invisible card.
+        root.wantsLayer = true
+        root.alphaValue = 0
+        window.contentView = root
+        window.makeKeyAndOrderFront(nil)
+
+        let duration = InkReduceMotion.isEnabled ? 0 : InkMotion.finaleGlow
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = duration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            root.animator().alphaValue = 1
+        }, completionHandler: {
+            MainActor.assumeIsolated { root.alphaValue = 1 }
+        })
+
+        ContextLog.info("cinematic handed off to the welcome card (\(end))", "onboarding")
+    }
+
+    /// Esc, at the AppKit level.
+    ///
+    /// The Skip button already carries `.keyboardShortcut(.cancelAction)`, but this app is an
+    /// `.accessory` presenting a borderless window, and whether AppKit routes Esc to a SwiftUI
+    /// cancel action there depends on what currently holds first responder. A local monitor does
+    /// not: it sees the key event before anything else in this process, which is what "Esc aborts
+    /// at any point" has to mean. Removed the instant the cinematic ends, so it can never eat an
+    /// Esc that belongs to the onboarding card.
+    private static func installEscapeMonitor(_ director: CinematicDirector) {
+        removeEscapeMonitor()
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return event }
+            MainActor.assumeIsolated { director.skip() }
+            return nil
+        }
+    }
+
+    private static func removeEscapeMonitor() {
+        if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }
+        escapeMonitor = nil
+    }
+
+    // MARK: - Window construction
+
+    private static func makeWindow(contentRect: NSRect) -> NSWindow {
         let window = KeyableWindow(
-            contentRect: frame,
+            contentRect: contentRect,
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -55,27 +199,24 @@ final class OnboardingWindow {
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
+        return window
+    }
 
-        // Not layer-backed with a colour: the root has to stay clear, or it paints the rectangle
-        // the mask is there to dissolve.
-        let root = FirstMouseView(frame: NSRect(origin: .zero, size: frame.size))
+    /// Not layer-backed with a colour: the root has to stay clear, or it paints the rectangle the
+    /// mask is there to dissolve.
+    ///
+    /// Deliberately no NSVisualEffectView. Its material is a rectangle, and every way of masking one
+    /// down to an ellipse leaves a faint straight edge somewhere. The surface is painted entirely in
+    /// SwiftUI instead, where a single elliptical mask is exact.
+    private static func makeRoot<Content: View>(size: NSSize, hosting content: Content) -> NSView {
+        let root = FirstMouseView(frame: NSRect(origin: .zero, size: size))
         root.autoresizingMask = [.width, .height]
 
-        // Deliberately no NSVisualEffectView. Its material is a rectangle, and every way of
-        // masking one down to an ellipse leaves a faint straight edge somewhere. The surface is
-        // painted entirely in SwiftUI instead, where a single elliptical mask is exact.
-
-        let hosting = FirstMouseHostingView(rootView: OnboardingView())
+        let hosting = FirstMouseHostingView(rootView: content)
         hosting.frame = root.bounds
         hosting.autoresizingMask = [.width, .height]
         root.addSubview(hosting)
-
-        window.contentView = root
-        window.setFrame(frame, display: true)
-
-        current = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        return root
     }
 
     /// Centred horizontally, and sitting slightly above true centre — optical centre reads as
@@ -113,6 +254,11 @@ final class OnboardingWindow {
     static func dismiss() {
         guard let window = current else { return }
         current = nil
+        // Belt and braces: onboarding cannot finish while the cinematic is still on screen, but if
+        // it somehow did, the key monitor must not outlive the window that owns it.
+        removeEscapeMonitor()
+        cinematicHosting = nil
+        cinematicDirector = nil
 
         let duration: TimeInterval = InkReduceMotion.isEnabled ? 0 : 0.55
         NSAnimationContext.runAnimationGroup({ context in
