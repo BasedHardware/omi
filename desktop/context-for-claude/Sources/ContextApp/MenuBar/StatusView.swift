@@ -35,7 +35,6 @@ struct StatusView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(width: 320)
-        .background(Ink.paper)
         .onAppear(perform: refresh)
         .onReceive(tick) { _ in engine.refreshCapabilities() }
     }
@@ -46,12 +45,12 @@ struct StatusView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(engine.isCapturing ? Ink.listeningGreen : Ink.faint)
+                    .fill(engine.isCapturing ? Color(nsColor: .systemGreen) : Color(nsColor: .tertiaryLabelColor))
                     .frame(width: 7, height: 7)
 
                 Text(engine.isCapturing ? "Listening · \(todayLabel)" : "Paused")
                     .inkStyle(.rowCopy)
-                    .foregroundStyle(Ink.ink)
+                    .foregroundStyle(Color(nsColor: .labelColor))
             }
 
             // Shown even while capturing: sources fail independently, so "Listening" plus "System
@@ -60,7 +59,7 @@ struct StatusView: View {
             if let reason = engine.pausedReason, !reason.isEmpty {
                 Text(reason)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(Ink.mid)
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -74,7 +73,7 @@ struct StatusView: View {
         Text(engine.lastLine ?? idlePlaceholder)
             .inkStyle(.statusLabel)
             .italic()
-            .foregroundStyle(Ink.mid)
+            .foregroundStyle(Color(nsColor: .secondaryLabelColor))
             .lineLimit(2)
             // The newest words are at the end of a transcript line, so keep the tail.
             .truncationMode(.head)
@@ -106,6 +105,7 @@ struct StatusView: View {
                     // `Permissions` owns the status word, so this popover and the onboarding rows can
                     // never disagree about what the user still has to do.
                     status: report.detail,
+                    native: true,
                     action: { handle(report) }
                 )
                 .frame(maxWidth: .infinity)
@@ -160,7 +160,7 @@ struct StatusView: View {
                     .inkStyle(.statusLabel)
                     // Not connected is the state with something to do about it, so it is the
                     // state that gets full ink. Settled recedes to `mid`.
-                    .foregroundStyle(isConnected ? Ink.mid : Ink.ink)
+                    .foregroundStyle(isConnected ? Color(nsColor: .secondaryLabelColor) : Color(nsColor: .labelColor))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: 0)
@@ -169,14 +169,14 @@ struct StatusView: View {
                     Button("Connect", action: connect)
                         .buttonStyle(.plain)
                         .inkStyle(.statusLabel)
-                        .foregroundStyle(Ink.bronze)
+                        .foregroundStyle(Color(nsColor: .controlAccentColor))
                 }
             }
 
             if let claudeNote, !claudeNote.isEmpty {
                 Text(claudeNote)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(Ink.mid)
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -190,13 +190,13 @@ struct StatusView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(accountSummary)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(auth.isSignedIn ? Ink.mid : Ink.ink)
+                    .foregroundStyle(auth.isSignedIn ? Color(nsColor: .secondaryLabelColor) : Color(nsColor: .labelColor))
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let note = uploadNote {
                     Text(note)
                         .inkStyle(.statusLabel)
-                        .foregroundStyle(uploads.lastError == nil ? Ink.mid : Ink.errorRed)
+                        .foregroundStyle(uploads.lastError == nil ? Color(nsColor: .secondaryLabelColor) : Color(nsColor: .systemRed))
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -207,7 +207,7 @@ struct StatusView: View {
                 Button("Sign out") { auth.signOut() }
                     .buttonStyle(.plain)
                     .inkStyle(.statusLabel)
-                    .foregroundStyle(Ink.faint)
+                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
             }
         }
     }
@@ -259,7 +259,7 @@ struct StatusView: View {
             Button("Quit") { NSApp.terminate(nil) }
                 .buttonStyle(.plain)
                 .inkStyle(.statusLabel)
-                .foregroundStyle(Ink.faint)
+                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
                 .keyboardShortcut("q")
         }
     }
@@ -268,7 +268,7 @@ struct StatusView: View {
 
     private var hairline: some View {
         Rectangle()
-            .fill(Ink.line)
+            .fill(Color(nsColor: .separatorColor))
             .frame(height: 1)
     }
 

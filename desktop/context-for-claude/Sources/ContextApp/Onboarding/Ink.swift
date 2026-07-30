@@ -306,16 +306,55 @@ enum InkFonts {
     static func naturalLineHeight(_ font: NSFont) -> CGFloat {
         font.ascender - font.descender + font.leading
     }
+
+    /// The pairing every role resolves through: New York for display, SF Pro for reading.
+    ///
+    /// Drawn face and measured face are produced together and from the same decision, because the
+    /// two must never disagree — a serif headline whose line spacing was computed from a sans is
+    /// the kind of bug that looks like bad taste rather than like a defect.
+    static func system(size: CGFloat, weight: RundeWeight) -> Resolved {
+        let sans = NSFont.systemFont(ofSize: size, weight: weight.appKitWeight)
+        guard size >= Font.inkDisplayThreshold else {
+            return Resolved(
+                font: .system(size: size, weight: weight.swiftUIWeight),
+                metrics: sans,
+                isCustom: false)
+        }
+        // `withDesign` is the only supported route to New York; if a future macOS stops offering it,
+        // the sans metrics are still correct for the sans fallback SwiftUI would then draw.
+        let serifMetrics = sans.fontDescriptor.withDesign(.serif)
+            .flatMap { NSFont(descriptor: $0, size: size) } ?? sans
+        return Resolved(
+            font: .system(size: size, weight: weight.swiftUIWeight, design: .serif),
+            metrics: serifMetrics,
+            isCustom: false)
+    }
 }
 
 extension Font {
+    /// The size at or above which a run of text is display type rather than reading type.
+    ///
+    /// One threshold rather than a flag on every call site: the split is a fact about the role, and
+    /// every role in this system already encodes its role in its size. A headline is never 15 pt
+    /// here and body copy is never 24.
+    static let inkDisplayThreshold: CGFloat = 22
+
+    /// Anthropic's pairing, in the faces macOS actually ships.
+    ///
+    /// Their identity is an editorial serif over a quiet grotesque — Tiempos and Styrene — and
+    /// neither is licensable to bundle. New York is Apple's companion serif to SF and the closest
+    /// honest stand-in: same editorial weight in a headline, same warmth, no licence. Below the
+    /// display threshold the text falls to SF Pro, which is what a native macOS app should be
+    /// setting body copy in anyway.
+    ///
+    /// This replaces Open Runde, a rounded geometric carried over from the product site. It was the
+    /// single most off-brand thing left in the window: rounded terminals read as friendly-consumer,
+    /// which is a different company's voice entirely.
     static func openRunde(_ size: CGFloat, _ weight: RundeWeight = .regular) -> Font {
-        InkFonts.resolve(
-            weight.fontName,
-            size: size,
-            weight: weight.swiftUIWeight,
-            appKitWeight: weight.appKitWeight
-        ).font
+        if size >= inkDisplayThreshold {
+            return .system(size: size, weight: weight.swiftUIWeight, design: .serif)
+        }
+        return .system(size: size, weight: weight.swiftUIWeight)
     }
 }
 
@@ -435,12 +474,7 @@ enum InkType {
     ) -> InkTextStyle {
         InkTextStyle(
             size: size,
-            resolved: InkFonts.resolve(
-                weight.fontName,
-                size: size,
-                weight: weight.swiftUIWeight,
-                appKitWeight: weight.appKitWeight
-            ),
+            resolved: InkFonts.system(size: size, weight: weight),
             tracking: tracking,
             lineHeightMultiple: lineHeight
         )
@@ -591,15 +625,36 @@ struct InkPermissionRow: View {
     private let title: String
     private let granted: Bool
     private let status: String
+    private let native: Bool
     private let action: () -> Void
 
     @State private var isHovering = false
+
+    /// Brand shading on the branded sheet; a system fill on the system surface.
+    ///
+    /// The native fill is deliberately faint. The popover already has a vibrant material behind it
+    /// doing the work of separating the row from the window, so anything heavier than a quaternary
+    /// wash reads as a second, competing background.
+    private var rowFill: Color {
+        guard native else { return isHovering ? Ink.surfaceHover : Ink.surface }
+        return isHovering
+            ? Color(nsColor: .tertiaryLabelColor).opacity(0.12)
+            : Color(nsColor: .quaternaryLabelColor).opacity(0.5)
+    }
 
     /// - Parameters:
     ///   - title: the first-person sentence, e.g. "I would like to hear you".
     ///   - granted: drives the checkbox fill.
     ///   - status: one word — `Granted` / `Open` / `Checking` / `Action required`.
-    init(title: String, granted: Bool, status: String, action: @escaping () -> Void) {
+    /// `native` swaps the brand palette for the system's semantic colours.
+    ///
+    /// The same row appears on two surfaces that should not look alike. In onboarding it sits on a
+    /// branded sheet and should read as ours; in the menu bar it sits on the popover's vibrant
+    /// material beside every other menu bar extra on the machine, where a warm ivory fill reads as
+    /// a website pasted into the system UI — and is unreadable outright in dark mode, because the
+    /// brand tones are fixed and the material behind them is not.
+    init(title: String, granted: Bool, status: String, native: Bool = false, action: @escaping () -> Void) {
+        self.native = native
         self.title = title
         self.granted = granted
         self.status = status
@@ -615,11 +670,13 @@ struct InkPermissionRow: View {
             HStack(spacing: 11) {
                 InkCheckbox(granted: granted)
                 Text(title)
-                    .inkStyle(InkType.rowCopy, color: Ink.ink)
+                    .inkStyle(InkType.rowCopy, color: native ? Color(nsColor: .labelColor) : Ink.ink)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(status)
-                    .inkStyle(InkType.statusLabel, color: Ink.faint)
+                    .inkStyle(
+                        InkType.statusLabel,
+                        color: native ? Color(nsColor: .tertiaryLabelColor) : Ink.faint)
                     .fixedSize()
             }
             .padding(.horizontal, 14)
@@ -627,7 +684,7 @@ struct InkPermissionRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             // Paper on paper: a half-step of warm shading plus a hairline. A fill strong enough to
             // read on its own would box three sentences into three grey slabs.
-            .background(shape.fill(isHovering ? Ink.surfaceHover : Ink.surface))
+            .background(shape.fill(rowFill))
             .overlay(shape.strokeBorder(Ink.line, lineWidth: 1))
             .contentShape(shape)
         }

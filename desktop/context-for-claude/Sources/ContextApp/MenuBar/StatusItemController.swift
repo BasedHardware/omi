@@ -49,7 +49,9 @@ final class StatusItemController: NSObject {
         popover.contentViewController = NSHostingController(rootView: StatusView())
         // The popover is AppKit chrome the app does not draw itself; without this a dark-mode Mac
         // frames the paper popover in a dark shell.
-        popover.appearance = NSAppearance(named: .aqua)
+        // Deliberately not pinned to `.aqua`. This popover is a system surface, so it follows the
+        // system: forcing light meant dark-mode users got a white sheet among their dark menu bar
+        // extras, and the vibrancy behind it had nothing to blend with.
         self.popover = popover
 
         // The icon answers "is it listening?" without a click, so it has to follow the engine

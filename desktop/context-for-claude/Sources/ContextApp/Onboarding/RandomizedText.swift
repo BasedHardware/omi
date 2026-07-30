@@ -124,12 +124,16 @@ struct RandomizedText: View {
         return out
     }
 
-    /// Emphasis names a face rather than asking for a trait. Open Runde's Medium and Semibold each
-    /// ship as their own single-face family ("Open Runde Semibold" / Regular), so `.bold()` on a
-    /// headline set in Semibold has no bolder member to resolve to and the emphasis quietly
-    /// vanishes. Naming `OpenRunde-Bold` outright is the only way a bold run is real.
+    /// Emphasis names a weight rather than asking for a trait, and still should.
     ///
-    /// `.italic()` stays a trait: the family has no oblique anywhere, so Core Text synthesises one.
+    /// The original reason was Open Runde: its Medium and Semibold each shipped as their own
+    /// single-face family, so `.bold()` on a Semibold headline had no bolder member to resolve to
+    /// and the emphasis quietly vanished. That face is gone — the system pairing draws these now,
+    /// and New York and SF Pro both carry a real bold — but asking for the weight outright remains
+    /// the honest call: it is what the design means, and it cannot silently resolve to nothing.
+    ///
+    /// `.italic()` stays a trait. Both system faces have a true italic, so this is no longer the
+    /// synthesised slant it used to be.
     private func emphasised(_ text: Text, _ emphasis: Emphasis) -> Text {
         switch emphasis {
         case .plain: return text
