@@ -312,6 +312,7 @@ class GeneratedUsageStats {
   final int memoriesCreated;
   final int speechSeconds;
   final int transcriptionSeconds;
+  final int transcriptionSecondsContextForClaude;
   final int wordsTranscribed;
 
   const GeneratedUsageStats({
@@ -319,6 +320,7 @@ class GeneratedUsageStats {
     this.memoriesCreated = 0,
     this.speechSeconds = 0,
     this.transcriptionSeconds = 0,
+    this.transcriptionSecondsContextForClaude = 0,
     this.wordsTranscribed = 0,
   });
 
@@ -328,6 +330,7 @@ class GeneratedUsageStats {
       memoriesCreated: _required(_readFieldValue<int>(_readField(json, const ["memories_created"]), "memories_created", _readInt, requiredField: false, nullable: false, defaultValue: 0), "memories_created"),
       speechSeconds: _required(_readFieldValue<int>(_readField(json, const ["speech_seconds"]), "speech_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "speech_seconds"),
       transcriptionSeconds: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds"]), "transcription_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "transcription_seconds"),
+      transcriptionSecondsContextForClaude: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_context_for_claude"]), "transcription_seconds_context_for_claude", _readInt, requiredField: false, nullable: false, defaultValue: 0), "transcription_seconds_context_for_claude"),
       wordsTranscribed: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed"]), "words_transcribed", _readInt, requiredField: false, nullable: false, defaultValue: 0), "words_transcribed"),
     );
   }
@@ -338,6 +341,7 @@ class GeneratedUsageStats {
       'memories_created': memoriesCreated,
       'speech_seconds': speechSeconds,
       'transcription_seconds': transcriptionSeconds,
+      'transcription_seconds_context_for_claude': transcriptionSecondsContextForClaude,
       'words_transcribed': wordsTranscribed,
     };
   }
@@ -349,6 +353,7 @@ class GeneratedUsageHistoryPoint {
   final int memoriesCreated;
   final int speechSeconds;
   final int transcriptionSeconds;
+  final int transcriptionSecondsContextForClaude;
   final int wordsTranscribed;
 
   const GeneratedUsageHistoryPoint({
@@ -357,6 +362,7 @@ class GeneratedUsageHistoryPoint {
     this.memoriesCreated = 0,
     this.speechSeconds = 0,
     this.transcriptionSeconds = 0,
+    this.transcriptionSecondsContextForClaude = 0,
     this.wordsTranscribed = 0,
   });
 
@@ -367,6 +373,7 @@ class GeneratedUsageHistoryPoint {
       memoriesCreated: _required(_readFieldValue<int>(_readField(json, const ["memories_created"]), "memories_created", _readInt, requiredField: false, nullable: false, defaultValue: 0), "memories_created"),
       speechSeconds: _required(_readFieldValue<int>(_readField(json, const ["speech_seconds"]), "speech_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "speech_seconds"),
       transcriptionSeconds: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds"]), "transcription_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "transcription_seconds"),
+      transcriptionSecondsContextForClaude: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_context_for_claude"]), "transcription_seconds_context_for_claude", _readInt, requiredField: false, nullable: false, defaultValue: 0), "transcription_seconds_context_for_claude"),
       wordsTranscribed: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed"]), "words_transcribed", _readInt, requiredField: false, nullable: false, defaultValue: 0), "words_transcribed"),
     );
   }
@@ -378,6 +385,7 @@ class GeneratedUsageHistoryPoint {
       'memories_created': memoriesCreated,
       'speech_seconds': speechSeconds,
       'transcription_seconds': transcriptionSeconds,
+      'transcription_seconds_context_for_claude': transcriptionSecondsContextForClaude,
       'words_transcribed': wordsTranscribed,
     };
   }
