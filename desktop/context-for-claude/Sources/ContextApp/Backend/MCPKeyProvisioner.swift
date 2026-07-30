@@ -59,7 +59,10 @@ final class MCPKeyProvisioner: ObservableObject {
     /// Set when a key was minted but could not be stored. Retrying would mint another key on every
     /// call and leave the account holding credentials nobody has — the failure is the disk, and it
     /// will not heal inside one launch.
-    private var isBlockedForThisLaunch = false
+    private(set) var isBlockedForThisLaunch = false
+
+    /// False when disk storage failed permanently this launch — retry would only mint more keys.
+    var canRetry: Bool { !isBlockedForThisLaunch }
 
     private var didLogSignedOut = false
     private var didLogReuse = false
@@ -81,6 +84,18 @@ final class MCPKeyProvisioner: ObservableObject {
         inFlight = nil
     }
 
+    /// Deletes the on-disk MCP credential so Claude cannot keep reading a signed-out account.
+    func clearKeyForSignOut() {
+        inFlight?.cancel()
+        inFlight = nil
+        try? FileManager.default.removeItem(at: Self.keyFileURL)
+        try? FileManager.default.removeItem(at: Self.uidFileURL)
+        didLogReuse = false
+        didLogSignedOut = false
+        status = .signedOut
+        ContextLog.info("Cleared Omi MCP key on sign-out", Self.category)
+    }
+
     // MARK: - Provisioning
 
     private func provision() async {
@@ -89,14 +104,27 @@ final class MCPKeyProvisioner: ObservableObject {
         // The file is the reuse mechanism, and deliberately the only one: the backend's list
         // endpoint returns a key's *prefix*, never its secret, so a key we did not write down at the
         // moment we minted it can never be used again — only recognised, and retired.
-        if Self.storedKey(at: url) != nil {
-            if !didLogReuse {
-                didLogReuse = true
-                ContextLog.info("Reusing the Omi MCP key already on disk", Self.category)
+        if let existing = Self.storedKey(at: url) {
+            _ = existing
+            if let storedUid = Self.storedUid(),
+               let currentUid = OmiAuth.shared.userId,
+               !currentUid.isEmpty,
+               storedUid != currentUid
+            {
+                ContextLog.info(
+                    "Stored MCP key belongs to a different uid; re-provisioning", Self.category)
+                try? FileManager.default.removeItem(at: url)
+                try? FileManager.default.removeItem(at: Self.uidFileURL)
+                didLogReuse = false
+            } else {
+                if !didLogReuse {
+                    didLogReuse = true
+                    ContextLog.info("Reusing the Omi MCP key already on disk", Self.category)
+                }
+                status = .ready
+                Self.persistUidIfNeeded()
+                return
             }
-            status = .ready
-            Self.persistUidIfNeeded()
-            return
         }
 
         guard !isBlockedForThisLaunch else {
@@ -163,6 +191,14 @@ final class MCPKeyProvisioner: ObservableObject {
     private static func persistUidIfNeeded() {
         guard let uid = OmiAuth.shared.userId, !uid.isEmpty else { return }
         try? uid.data(using: .utf8)?.write(to: uidFileURL, options: .atomic)
+    }
+
+    private static func storedUid() -> String? {
+        guard let data = try? Data(contentsOf: uidFileURL),
+              let text = String(data: data, encoding: .utf8)
+        else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// Ids of the keys on the account carrying `name`, so the ones this Mac can no longer read get

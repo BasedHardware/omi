@@ -89,11 +89,15 @@ final class ConversationUploader: ObservableObject {
     ///
     /// Fire-and-forget on purpose: the caller is finishing a conversation, and an upload must never
     /// be in front of that.
-    func enqueue(sessionId: Int64) {
+    /// - Parameter clientSessionId: Shared listen/from-segments identity when Engine supplied one.
+    func enqueue(sessionId: Int64, clientSessionId: String? = nil) {
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await self.database.perform { try UploadQueue.markPending($0, sessionId: sessionId) }
+                try await self.database.perform {
+                    try UploadQueue.markPending(
+                        $0, sessionId: sessionId, clientSessionId: clientSessionId)
+                }
                 ContextLog.info("Session \(sessionId) queued for upload", Self.category)
             } catch {
                 // The session is still on disk and reconciliation will find it again; this is a
@@ -189,7 +193,8 @@ final class ConversationUploader: ObservableObject {
         let parts = UploadPayload.parts(
             for: content,
             deviceIdHash: OmiAPI.deviceIdHash,
-            maxSegments: Self.maxSegmentsPerRequest)
+            maxSegments: Self.maxSegmentsPerRequest,
+            sharedClientSessionId: entry.clientSessionId)
         guard !parts.isEmpty else {
             await skip(sessionId, reason: "no usable transcript lines")
             return .stopped
@@ -534,7 +539,10 @@ private enum UploadPayload {
     /// line — except the first part, which starts at the session's own start when that is earlier,
     /// because that is when the conversation actually began.
     static func parts(
-        for content: UploadQueue.SessionUpload, deviceIdHash: String, maxSegments: Int
+        for content: UploadQueue.SessionUpload,
+        deviceIdHash: String,
+        maxSegments: Int,
+        sharedClientSessionId: String? = nil
     ) -> [Part] {
         let lines = content.lines
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -584,7 +592,8 @@ private enum UploadPayload {
                         deviceIdHash: deviceIdHash,
                         sessionId: content.sessionId,
                         sessionStartedAt: content.startedAt,
-                        part: partNumber),
+                        part: partNumber,
+                        sharedClientSessionId: sharedClientSessionId),
                     startedAt: base,
                     finishedAt: finishedAt,
                     segments: segments))
@@ -596,24 +605,23 @@ private enum UploadPayload {
         return parts
     }
 
-    /// The idempotency key. `uuid5(uid, this)` is the conversation id the backend will use, so a
-    /// retry after a crash, a timeout, or a 500 lands on the conversation that already exists
-    /// instead of creating a second one.
-    ///
-    /// Three ingredients, and each is load-bearing:
-    /// - the device hash, so two Macs on one account never collide;
-    /// - the local session id, which is what "this conversation" means here;
-    /// - the session's start, so that deleting `context.db` and starting over — which resets the
-    ///   autoincrement to 1 — cannot make tomorrow's session id 1 look like a retry of a
-    ///   conversation that is already in the account, which would silently drop it.
+    /// The idempotency key. Prefer Engine's shared listen UUID when present so from-segments merges
+    /// with the live conversation; otherwise derive a stable legacy key from device + session.
     ///
     /// The part suffix keeps a split session's uploads distinct while leaving each one derivable.
     static func clientSessionId(
-        deviceIdHash: String, sessionId: Int64, sessionStartedAt: Double, part: Int
+        deviceIdHash: String,
+        sessionId: Int64,
+        sessionStartedAt: Double,
+        part: Int,
+        sharedClientSessionId: String? = nil
     ) -> String {
-        let stamp = Int64(sessionStartedAt.rounded())
-        let base = "context-for-claude-\(deviceIdHash)-s\(sessionId)-\(stamp)"
-        return part <= 1 ? base : "\(base)-\(part)"
+        CaptureSessionIdentity.clientSessionId(
+            deviceIdHash: deviceIdHash,
+            sessionId: sessionId,
+            sessionStartedAt: sessionStartedAt,
+            part: part,
+            sharedClientSessionId: sharedClientSessionId)
     }
 
     static func iso(_ epoch: Double) -> String {
@@ -645,6 +653,27 @@ private enum UploadPayload {
         formatter.timeZone = TimeZone(identifier: "UTC")
         return formatter
     }()
+}
+
+/// Shared listen / from-segments idempotency key. Kept free of the private upload wire types so
+/// unit tests can pin Engine ↔ uploader identity without opening the network.
+enum CaptureSessionIdentity {
+    static func clientSessionId(
+        deviceIdHash: String,
+        sessionId: Int64,
+        sessionStartedAt: Double,
+        part: Int,
+        sharedClientSessionId: String? = nil
+    ) -> String {
+        if let shared = sharedClientSessionId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !shared.isEmpty
+        {
+            return part <= 1 ? shared : "\(shared)-\(part)"
+        }
+        let stamp = Int64(sessionStartedAt.rounded())
+        let base = "context-for-claude-\(deviceIdHash)-s\(sessionId)-\(stamp)"
+        return part <= 1 ? base : "\(base)-\(part)"
+    }
 }
 
 // MARK: - Storage

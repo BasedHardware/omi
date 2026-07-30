@@ -13,6 +13,7 @@ struct StatusView: View {
     @ObservedObject private var engine = Engine.shared
     @ObservedObject private var auth = OmiAuth.shared
     @ObservedObject private var uploads = ConversationUploader.shared
+    @ObservedObject private var screenSync = ScreenActivityUploader.shared
     @ObservedObject private var mcpKey = MCPKeyProvisioner.shared
 
     @State private var claude: (claudeCode: Bool, claudeDesktop: Bool) = (false, false)
@@ -219,6 +220,13 @@ struct StatusView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                if let note = screenSyncNote {
+                    Text(note)
+                        .inkStyle(.statusLabel)
+                        .foregroundStyle(screenSync.lastError == nil ? Color(nsColor: .secondaryLabelColor) : Color(nsColor: .systemRed))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 if let mcpNote = mcpKeyNote {
                     Text(mcpNote)
                         .inkStyle(.statusLabel)
@@ -255,7 +263,7 @@ struct StatusView: View {
 
     private var needsMCPKeyRetry: Bool {
         switch mcpKey.status {
-        case .missing, .failed: return auth.isSignedIn
+        case .missing, .failed: return auth.isSignedIn && mcpKey.canRetry
         case .ready, .signedOut, .unknown: return false
         }
     }
@@ -277,6 +285,10 @@ struct StatusView: View {
             return "\(uploads.pendingCount) conversation\(uploads.pendingCount == 1 ? "" : "s") waiting to upload"
         }
         return nil
+    }
+
+    private var screenSyncNote: String? {
+        screenSync.lastError
     }
 
     private var isConnected: Bool { claude.claudeCode || claude.claudeDesktop }
@@ -331,7 +343,10 @@ struct StatusView: View {
     /// open is enough — parsing `~/.claude.json` is not something to do on a one-second tick.
     private func refresh() {
         engine.refreshCapabilities()
+        ClaudeRegistrar.refreshStalePaths()
         claude = ClaudeRegistrar.status()
-        claudeNote = nil
+        if isConnected {
+            claudeNote = nil
+        }
     }
 }

@@ -1632,7 +1632,10 @@ def get_conversation_endpoint(
 
 
 def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
-    return str(uuid.uuid5(_FROM_SEGMENTS_CONVERSATION_NAMESPACE, f'{uid}\0{client_session_id}'))
+    try:
+        return str(uuid.UUID(client_session_id.strip()))
+    except ValueError:
+        return str(uuid.uuid5(_FROM_SEGMENTS_CONVERSATION_NAMESPACE, f'{uid}\0{client_session_id}'))
 
 
 def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, now: datetime) -> bool:
@@ -1768,6 +1771,7 @@ def _create_conversation_from_segments(
             source=source,
             client_device_id=resolved_client_device_id,
             client_platform=resolved_client_platform,
+            app_product=app_product,
             structured=Structured(),
             external_data={
                 'from_segments_client_session_id': request.client_session_id,
@@ -1798,6 +1802,7 @@ def _create_conversation_from_segments(
             source=source,
             client_device_id=resolved_client_device_id,
             client_platform=resolved_client_platform,
+            app_product=app_product,
         )
 
     # Process conversation. The idempotent (client_session_id) path creates a

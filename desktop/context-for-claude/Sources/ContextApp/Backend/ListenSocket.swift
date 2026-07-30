@@ -88,6 +88,12 @@ final class ListenSocket: ObservableObject {
         case paywalled
     }
 
+    /// Why cloud STT is latched off. Survives Pause/Resume; cleared only on sign-out.
+    enum PaywallReason: Equatable {
+        case freemiumExhausted
+        case trialExpired
+    }
+
     /// Fired for every batch the server sends, on the main actor, in arrival order.
     var onSegments: (([CloudSegment]) -> Void)?
     /// The backend conversation these segments belong to. Fires again on every reconnect, and again
@@ -147,9 +153,10 @@ final class ListenSocket: ObservableObject {
 
     /// The caller wants a socket. Distinct from `state`, which says whether there is one.
     private var wantsConnection = false
-    /// Latched by freemium exhaustion / trial-expired close and cleared only by an explicit `stop()`,
-    /// so no automatic path can reopen a socket the backend has already refused on billing grounds.
-    private var isPaywalled = false
+    /// Sticky billing latch. Freemium exhaustion / trial-expired close set this; Pause/Resume must
+    /// never clear it (that was reopening STT spend after the backend already refused). Cleared only
+    /// on sign-out.
+    private(set) var paywallReason: PaywallReason?
     /// One forced token refresh per connection, reset once a connection opens.
     private var didRefreshToken = false
     /// Freemium limit alert is one-shot per process; the menu bar reason stays latched.
@@ -157,8 +164,8 @@ final class ListenSocket: ObservableObject {
 
     private var reconnectAttempt = 0
 
-    /// Held across reconnects; minted fresh by `start()`. This is what stops a flaky network from
-    /// fragmenting one meeting into a row of two-minute conversations.
+    /// Held across reconnects. Engine supplies one shared session identity so listen and
+    /// from-segments land on the same conversation; when omitted, `start()` mints a fresh UUID.
     private var clientConversationId: String?
     private var serverConversationId: String?
 
@@ -203,16 +210,47 @@ final class ListenSocket: ObservableObject {
     /// Opens the socket, or reports `.idle` and does nothing at all when nobody is signed in.
     ///
     /// Idempotent: calling it again while a socket is up or coming up changes nothing.
-    func start() async {
+    /// A sticky paywall latch refuses reconnect — Pause/Resume must not reopen STT spend.
+    /// - Parameter clientConversationId: Shared session identity from Engine; minted when nil.
+    func start(clientConversationId providedId: String? = nil) async {
         startPump()
         guard !wantsConnection else { return }
+        if paywallReason != nil {
+            state = .paywalled
+            ContextLog.info("Refusing listen connect — transcription paywall still latched", Self.logCategory)
+            return
+        }
         wantsConnection = true
-        isPaywalled = false
         reconnectAttempt = 0
-        clientConversationId = UUID().uuidString.lowercased()
+        let trimmed = providedId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        clientConversationId = trimmed.isEmpty ? UUID().uuidString.lowercased() : trimmed
         serverConversationId = nil
         conversationStartedAt = nil
         observeSignIn()
+        await connect(forceTokenRefresh: false)
+    }
+
+    /// Clears the billing latch after sign-out so a different account is not blocked by the prior one.
+    func clearPaywallLatch() {
+        paywallReason = nil
+        if state == .paywalled {
+            state = wantsConnection ? .connecting : .idle
+        }
+    }
+
+    /// Mid-capture session gap: switch the shared listen/from-segments identity and reconnect.
+    /// No-op when the id is unchanged or the socket is not wanted.
+    func rotateClientConversationId(_ id: String) async {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != clientConversationId else { return }
+        guard wantsConnection, paywallReason == nil else {
+            clientConversationId = trimmed
+            return
+        }
+        clientConversationId = trimmed
+        serverConversationId = nil
+        conversationStartedAt = nil
+        closeConnection(normally: true)
         await connect(forceTokenRefresh: false)
     }
 
@@ -228,11 +266,12 @@ final class ListenSocket: ObservableObject {
     }
 
     /// Closes the socket and forgets the conversation. The server finalizes what it has on its own
-    /// timeout; there is nothing to tell it.
+    /// timeout; there is nothing to tell it. Does **not** clear a paywall latch — Resume must not
+    /// reopen STT after freemium/trial refusal.
     func stop() {
-        guard wantsConnection || state != .idle else { return }
+        let latched = paywallReason != nil
+        guard wantsConnection || state != .idle || latched else { return }
         wantsConnection = false
-        isPaywalled = false
         signIn = nil
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -242,14 +281,14 @@ final class ListenSocket: ObservableObject {
         serverConversationId = nil
         conversationStartedAt = nil
         reconnectAttempt = 0
-        state = .idle
+        state = latched ? .paywalled : .idle
         ContextLog.info("Stopped", Self.logCategory)
     }
 
     // MARK: - Connecting
 
     private func connect(forceTokenRefresh: Bool) async {
-        guard wantsConnection, !isPaywalled else { return }
+        guard wantsConnection, paywallReason == nil else { return }
         guard OmiAuth.shared.isSignedIn else {
             reportSignedOut()
             return
@@ -449,7 +488,7 @@ final class ListenSocket: ObservableObject {
         case "freemium_threshold_reached":
             let remaining = FreemiumLimitGate.remainingSeconds(in: payload)
             ContextLog.error(
-                "Transcription freemium threshold (remaining_seconds=\(remaining))",
+                "Transcription freemium threshold (remaining_seconds=\(remaining.map(String.init) ?? "absent"))",
                 Self.logCategory)
             guard FreemiumLimitGate.shouldLatchPaywall(remainingSeconds: remaining) else { return }
             applyTranscriptionLimitReached()
@@ -460,8 +499,8 @@ final class ListenSocket: ObservableObject {
 
     /// Stops STT spend client-side when the monthly freemium pool is exhausted.
     private func applyTranscriptionLimitReached() {
-        guard !isPaywalled else { return }
-        isPaywalled = true
+        guard paywallReason == nil else { return }
+        paywallReason = .freemiumExhausted
         state = .paywalled
         discardBuffer(reason: "transcription limit")
         closeConnection(normally: true)
@@ -517,7 +556,7 @@ final class ListenSocket: ObservableObject {
         // 1008 + `trial_expired`: the desktop paywall. The backend has decided this account may not
         // transcribe, and it will decide the same thing every time. Stop, say why, and stay stopped.
         if detail.localizedCaseInsensitiveContains("trial_expired") {
-            isPaywalled = true
+            paywallReason = .trialExpired
             state = .paywalled
             discardBuffer(reason: "trial expired")
             ContextLog.error(
@@ -573,8 +612,8 @@ final class ListenSocket: ObservableObject {
     }
 
     private func scheduleReconnect(reason: String) {
-        guard wantsConnection, !isPaywalled else {
-            state = .idle
+        guard wantsConnection, paywallReason == nil else {
+            state = paywallReason != nil ? .paywalled : .idle
             return
         }
         guard OmiAuth.shared.isSignedIn else {
@@ -751,7 +790,7 @@ final class ListenSocket: ObservableObject {
             .dropFirst()
             .sink { [weak self] signedIn in
                 Task { @MainActor in
-                    guard let self, self.wantsConnection, !self.isPaywalled else { return }
+                    guard let self, self.wantsConnection, self.paywallReason == nil else { return }
                     if signedIn {
                         guard self.state == .idle else { return }
                         ContextLog.info("Signed in — connecting", Self.logCategory)
@@ -862,15 +901,17 @@ final class ListenSocket: ObservableObject {
 
 /// Pure freemium-threshold parsing — kept free of AppKit so unit tests can pin the latch.
 enum FreemiumLimitGate {
-    static func remainingSeconds(in payload: [String: Any]) -> Int {
+    /// Remaining freemium seconds when the payload carries the field; nil when absent (do not latch).
+    static func remainingSeconds(in payload: [String: Any]) -> Int? {
         if let value = payload["remaining_seconds"] as? Int { return value }
         if let value = payload["remaining_seconds"] as? Double { return Int(value) }
         if let value = payload["remaining_seconds"] as? NSNumber { return value.intValue }
-        return 0
+        return nil
     }
 
-    static func shouldLatchPaywall(remainingSeconds: Int) -> Bool {
-        remainingSeconds <= 0
+    static func shouldLatchPaywall(remainingSeconds: Int?) -> Bool {
+        guard let remainingSeconds else { return false }
+        return remainingSeconds <= 0
     }
 }
 

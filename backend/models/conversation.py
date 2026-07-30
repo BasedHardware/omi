@@ -278,6 +278,7 @@ class CreateConversation(BaseModel):
 
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+    app_product: Optional[str] = None
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(

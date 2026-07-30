@@ -13,10 +13,15 @@ final class FreemiumLimitGateTests: XCTestCase {
         XCTAssertFalse(FreemiumLimitGate.shouldLatchPaywall(remainingSeconds: 60))
     }
 
+    func testDoesNotLatchWhenRemainingSecondsAbsent() {
+        XCTAssertNil(FreemiumLimitGate.remainingSeconds(in: [:]))
+        XCTAssertFalse(FreemiumLimitGate.shouldLatchPaywall(remainingSeconds: nil))
+    }
+
     func testParsesRemainingSecondsFromPayloadShapes() {
         XCTAssertEqual(FreemiumLimitGate.remainingSeconds(in: ["remaining_seconds": 0]), 0)
         XCTAssertEqual(FreemiumLimitGate.remainingSeconds(in: ["remaining_seconds": 12]), 12)
         XCTAssertEqual(FreemiumLimitGate.remainingSeconds(in: ["remaining_seconds": 3.9]), 3)
-        XCTAssertEqual(FreemiumLimitGate.remainingSeconds(in: [:]), 0)
+        XCTAssertNil(FreemiumLimitGate.remainingSeconds(in: [:]))
     }
 }

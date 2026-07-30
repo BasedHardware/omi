@@ -6,7 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from utils.observability.fallback import record_fallback
-from utils.product_entitlements import CONTEXT_RECENT_ENRICH_N
+from utils.product_entitlements import CONTEXT_RECENT_ENRICH_N, is_context_for_claude
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,8 @@ def kick_recent_context_enrichment(uid: str, *, n: Optional[int] = None) -> int:
     failed = 0
     for conv in recent:
         if not conv.get('deferred'):
+            continue
+        if not is_context_for_claude(conv.get('app_product')):
             continue
         try:
             enrich_deferred_conversation(uid, conv)

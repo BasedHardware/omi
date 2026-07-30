@@ -180,6 +180,8 @@ final class OmiAuth: ObservableObject {
         isSignedIn = false
         SessionStore.clear()
         ContextAnalytics.reset()
+        MCPKeyProvisioner.shared.clearKeyForSignOut()
+        ListenSocket.shared.clearPaywallLatch()
         ContextLog.info("Signed out", "auth")
     }
 

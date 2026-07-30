@@ -209,6 +209,33 @@ final class ToolsTests: XCTestCase {
         XCTAssertTrue(text.contains("pricing change"), "recall did not render the line it found: \(text)")
     }
 
+    func testDeferredConversationTitleMarksEnrichmentPending() throws {
+        let deferred = try JSONDecoder().decode(
+            OmiConversation.self,
+            from: Data("""
+                {"id":"abc","deferred":true,"structured":{"title":"Standup","overview":"still processing"}}
+                """.utf8))
+        XCTAssertEqual(
+            Tools.omiConversationDisplayTitle(deferred),
+            "Standup (enrichment pending)")
+
+        let processing = try JSONDecoder().decode(
+            OmiConversation.self,
+            from: Data("""
+                {"id":"def","status":"processing","structured":{"title":"Call","overview":""}}
+                """.utf8))
+        XCTAssertEqual(
+            Tools.omiConversationDisplayTitle(processing),
+            "Call (enrichment pending)")
+
+        let ready = try JSONDecoder().decode(
+            OmiConversation.self,
+            from: Data("""
+                {"id":"ghi","status":"completed","structured":{"title":"Done","overview":"summary"}}
+                """.utf8))
+        XCTAssertEqual(Tools.omiConversationDisplayTitle(ready), "Done")
+    }
+
     // MARK: - A search that ran vs. a search that could not run
     //
     // The suite this joins had 67 green tests while every tool asserted an empty history from a

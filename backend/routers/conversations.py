@@ -119,7 +119,14 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
             conv_obj.deferred = False
             conv_obj.status = ConversationStatus.processing
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
-                process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
+                process_conversation(
+                    uid,
+                    conv_obj.language or 'en',
+                    conv_obj,
+                    force_process=True,
+                    is_reprocess=False,
+                    app_product=getattr(conv_obj, 'app_product', None),
+                )
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")

@@ -107,6 +107,9 @@ final class Engine: ObservableObject {
     /// duplicates. Cleared whenever the server rolls to a new conversation.
     private var cloudSegmentText: [String: String] = [:]
     private var cloudConversationId: String?
+    /// Shared listen + from-segments identity for the open capture cycle. Minted on resume/start;
+    /// cleared on pause so the next cycle does not merge into the prior conversation.
+    private var clientSessionId: String?
 
     static let shared = Engine()
 
@@ -276,6 +279,12 @@ final class Engine: ObservableObject {
     }
 
     private func startCloudTranscription() {
+        if clientSessionId == nil {
+            clientSessionId = UUID().uuidString.lowercased()
+        }
+        let sessionIdentity = clientSessionId!
+        store.bindClientSessionId(sessionIdentity)
+
         mixer.start { chunk in
             ListenSocket.shared.send(chunk)
         }
@@ -312,7 +321,7 @@ final class Engine: ObservableObject {
                 .store(in: &listenObservations)
         }
 
-        Task { await ListenSocket.shared.start() }
+        Task { await ListenSocket.shared.start(clientConversationId: sessionIdentity) }
     }
 
     /// Maps `/v4/listen` health onto the same per-source reason channel as mic/screen, so the menu
@@ -323,7 +332,10 @@ final class Engine: ObservableObject {
             ContextAnalytics.listenConnected()
         }
         if let reason = ListenSpeechStatus.reason(
-            state: state, signedIn: OmiAuth.shared.isSignedIn, isPaused: isPaused)
+            state: state,
+            paywall: ListenSocket.shared.paywallReason,
+            signedIn: OmiAuth.shared.isSignedIn,
+            isPaused: isPaused)
         {
             note(.speech, reason)
         } else {
@@ -382,7 +394,10 @@ final class Engine: ObservableObject {
         // Ends the conversation, not just the capture. The app delegate also routes quit through
         // here, and a session left open reports a recording that stopped hours ago.
         store.closeOpenSession()
+        clientSessionId = nil
         ContextLog.info("Capture paused", "engine")
+        // Re-publish speech reasons so a sticky paywall still shows while paused.
+        applyListenState(ListenSocket.shared.state)
         publishState(synchronously: true)
     }
 
@@ -396,6 +411,8 @@ final class Engine: ObservableObject {
         startCloudTranscription()
         startPermittedSources()
         ContextLog.info("Capture resumed", "engine")
+        // start() may refuse without flipping @Published state when already paywalled.
+        applyListenState(ListenSocket.shared.state)
         publishState()
     }
 
@@ -759,12 +776,27 @@ enum TranscriptOwnership {
 /// MainActor / ObservableObject so a regression test can pin paywall and sign-out without spinning
 /// up capture.
 enum ListenSpeechStatus {
-    static func reason(state: ListenSocket.State, signedIn: Bool, isPaused: Bool) -> String? {
+    static func reason(
+        state: ListenSocket.State,
+        paywall: ListenSocket.PaywallReason?,
+        signedIn: Bool,
+        isPaused: Bool
+    ) -> String? {
+        // Sticky paywall outranks Pause — Resume must still show why speech stays off.
+        if let paywall {
+            switch paywall {
+            case .freemiumExhausted:
+                return "Speech off — monthly transcription limit reached. Capture resumes next month."
+            case .trialExpired:
+                return "Speech off — desktop trial ended. Upgrade to keep transcribing."
+            }
+        }
         guard !isPaused else { return nil }
         switch state {
         case .live, .connecting:
             return nil
         case .paywalled:
+            // Defense-in-depth if state is paywalled without a typed reason.
             return "Speech off — monthly transcription limit reached. Capture resumes next month."
         case .failed(let message):
             return message
@@ -796,6 +828,10 @@ private final class EngineStore: @unchecked Sendable {
 
     private var store: ContextStore?
     private var openSessionId: Int64?
+    /// Shared with ListenSocket / from-segments for the open session (Engine-owned UUID).
+    private var openClientSessionId: String?
+    /// Bound by Engine when cloud transcription starts; applied to the next opened session.
+    private var boundClientSessionId: String?
     /// The latest segment end across *both* transcribers. Session boundaries are a property of the
     /// conversation, not of one microphone.
     private var lastSegmentEndedAt: Double?
@@ -909,13 +945,26 @@ private final class EngineStore: @unchecked Sendable {
                     nextSegmentStartedAt: line.startedAt)
             {
                 if let previous = openSessionId {
+                    let previousClientId = openClientSessionId
                     try store.closeSession(previous, at: lastSegmentEndedAt ?? line.startedAt)
                     // A closed session is a finished conversation; the uploader turns it into a
                     // real one in the user's Omi account. Enqueued, not sent — it survives being
                     // signed out, offline, or rate limited.
-                    Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: previous) }
+                    Task { @MainActor in
+                        ConversationUploader.shared.enqueue(
+                            sessionId: previous, clientSessionId: previousClientId)
+                    }
+                    // Gap rollover needs a fresh identity so from-segments does not idempotency-hit
+                    // the prior conversation and drop the new transcript.
+                    boundClientSessionId = UUID().uuidString.lowercased()
+                    let rotated = boundClientSessionId!
+                    Task { @MainActor in
+                        await ListenSocket.shared.rotateClientConversationId(rotated)
+                    }
                 }
                 openSessionId = try store.openSession(at: line.startedAt, appHint: appHint)
+                openClientSessionId = boundClientSessionId ?? UUID().uuidString.lowercased()
+                boundClientSessionId = openClientSessionId
             }
             guard let sessionId = openSessionId else { return }
 
@@ -1033,10 +1082,19 @@ private final class EngineStore: @unchecked Sendable {
     func closeOpenSession() {
         queue.sync {
             guard let store = self.store, let id = self.openSessionId else { return }
+            let clientId = self.openClientSessionId
             try? store.closeSession(id, at: self.lastSegmentEndedAt ?? ContextTime.now)
             self.openSessionId = nil
-            Task { @MainActor in ConversationUploader.shared.enqueue(sessionId: id) }
+            self.openClientSessionId = nil
+            Task { @MainActor in
+                ConversationUploader.shared.enqueue(sessionId: id, clientSessionId: clientId)
+            }
         }
+    }
+
+    /// Engine supplies the listen/from-segments identity before the first transcript line lands.
+    func bindClientSessionId(_ id: String) {
+        queue.async { self.boundClientSessionId = id }
     }
 
     /// A crash or a force-quit leaves `endedAt` null forever, so an old session would still look

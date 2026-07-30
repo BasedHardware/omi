@@ -245,9 +245,9 @@ extension Tools {
     """
 
     static let conversationsDescription = """
-    List the user's conversations: their Omi account's recorded conversations — each with the title \
-    and summary Omi wrote for it — merged with any conversation Context for Claude captured on this Mac that \
-    has not reached the account yet.
+    List the user's conversations: their Omi account's recorded conversations — each with a title and \
+    summary when Omi has finished enriching it (some entries may still be enriching) — merged with \
+    any conversation Context for Claude captured on this Mac that has not reached the account yet.
 
     Reach for this when the user points at a conversation rather than a fact — "my call with \
     Sarah", "the standup this morning", "that interview last week", "what did I agree to \
@@ -259,8 +259,9 @@ extension Tools {
 
     static let transcriptDescription = """
     Read one whole conversation line by line. From the Omi account the speakers are resolved to real \
-    names and the conversation carries Omi's own title and summary; from this Mac's local capture \
-    the lines are attributed to *me* (the user) and *them* (whoever they were speaking with).
+    names when enrichment has finished; the conversation may carry Omi's title and summary or mark \
+    enrichment as still pending. From this Mac's local capture the lines are attributed to *me* \
+    (the user) and *them* (whoever they were speaking with).
 
     Reach for this once `conversations` or `recall` has pointed you at a conversation and you need \
     what was actually said — the exact commitment, number, name, date or decision — rather than a \
@@ -1351,7 +1352,7 @@ extension Tools {
         let at = conversation.startedAt ?? 0
         var line = "- "
         line += at > 0 ? "**\(timeFormatter.string(from: Date(timeIntervalSince1970: at)))** · " : "**undated** · "
-        line += "*conversation* · omi: **\(collapse(conversation.title))**"
+        line += "*conversation* · omi: **\(omiConversationDisplayTitle(conversation))**"
         let overview = collapse(conversation.overview)
         if !overview.isEmpty { line += " — \(truncate(overview, to: omiOverviewLimit))" }
         line += " (id `\(conversation.id)`)"
@@ -1572,6 +1573,14 @@ private struct ConversationEntry {
 }
 
 extension Tools {
+    /// Title Claude sees for an Omi conversation, with an explicit pending marker when enrichment
+    /// is not finished yet.
+    static func omiConversationDisplayTitle(_ conversation: OmiConversation) -> String {
+        let title = collapse(conversation.title)
+        guard conversation.isEnrichmentPending else { return title }
+        return title + " (enrichment pending)"
+    }
+
     private static func omiConversationEntry(_ conversation: OmiConversation) -> ConversationEntry {
         let at = conversation.startedAt ?? 0
         var meta: [String] = ["Omi"]
@@ -1591,7 +1600,7 @@ extension Tools {
         return ConversationEntry(
             at: at,
             origin: .omi,
-            title: collapse(conversation.title),
+            title: omiConversationDisplayTitle(conversation),
             meta: meta.joined(separator: " · "),
             identifier: conversation.id,
             body: body

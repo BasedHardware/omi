@@ -11,15 +11,30 @@ final class TranscriptOwnershipTests: XCTestCase {
 
     func testPaywalledListenSurfacesASpeechReason() {
         let reason = ListenSpeechStatus.reason(
-            state: .paywalled, signedIn: true, isPaused: false)
+            state: .paywalled,
+            paywall: .freemiumExhausted,
+            signedIn: true,
+            isPaused: false)
         XCTAssertEqual(
             reason,
             "Speech off — monthly transcription limit reached. Capture resumes next month.")
     }
 
+    func testTrialPaywallHasDistinctCopy() {
+        let reason = ListenSpeechStatus.reason(
+            state: .paywalled,
+            paywall: .trialExpired,
+            signedIn: true,
+            isPaused: false)
+        XCTAssertEqual(
+            reason,
+            "Speech off — desktop trial ended. Upgrade to keep transcribing.")
+    }
+
     func testPermanentListenFailureSurfacesTheSocketMessage() {
         let reason = ListenSpeechStatus.reason(
             state: .failed("Sign in to Omi again to keep transcribing."),
+            paywall: nil,
             signedIn: true,
             isPaused: false)
         XCTAssertEqual(reason, "Sign in to Omi again to keep transcribing.")
@@ -27,18 +42,55 @@ final class TranscriptOwnershipTests: XCTestCase {
 
     func testSignedOutIdleAsksForSignIn() {
         let reason = ListenSpeechStatus.reason(
-            state: .idle, signedIn: false, isPaused: false)
+            state: .idle, paywall: nil, signedIn: false, isPaused: false)
         XCTAssertEqual(reason, "Sign in to Omi to transcribe speech")
     }
 
     func testHealthyListenClearsTheSpeechReason() {
-        XCTAssertNil(ListenSpeechStatus.reason(state: .live, signedIn: true, isPaused: false))
-        XCTAssertNil(ListenSpeechStatus.reason(state: .connecting, signedIn: true, isPaused: false))
-        XCTAssertNil(ListenSpeechStatus.reason(state: .idle, signedIn: true, isPaused: false))
+        XCTAssertNil(
+            ListenSpeechStatus.reason(state: .live, paywall: nil, signedIn: true, isPaused: false))
+        XCTAssertNil(
+            ListenSpeechStatus.reason(
+                state: .connecting, paywall: nil, signedIn: true, isPaused: false))
+        XCTAssertNil(
+            ListenSpeechStatus.reason(state: .idle, paywall: nil, signedIn: true, isPaused: false))
     }
 
-    func testPausedCaptureHidesListenReasons() {
+    func testPausedCaptureStillSurfacesStickyPaywall() {
+        // Pause/Resume must not hide the freemium latch — that was the Resume STT bypass.
+        XCTAssertEqual(
+            ListenSpeechStatus.reason(
+                state: .idle, paywall: .freemiumExhausted, signedIn: true, isPaused: true),
+            "Speech off — monthly transcription limit reached. Capture resumes next month.")
+        XCTAssertEqual(
+            ListenSpeechStatus.reason(
+                state: .paywalled, paywall: .trialExpired, signedIn: true, isPaused: true),
+            "Speech off — desktop trial ended. Upgrade to keep transcribing.")
+    }
+
+    func testPausedCaptureHidesNonPaywallListenReasons() {
         XCTAssertNil(
-            ListenSpeechStatus.reason(state: .paywalled, signedIn: true, isPaused: true))
+            ListenSpeechStatus.reason(
+                state: .failed("network blip"), paywall: nil, signedIn: true, isPaused: true))
+    }
+
+    func testSharedUploadClientSessionIdPrefersEngineIdentity() {
+        let shared = "11111111-2222-3333-4444-555555555555"
+        XCTAssertEqual(
+            CaptureSessionIdentity.clientSessionId(
+                deviceIdHash: "abcd",
+                sessionId: 7,
+                sessionStartedAt: 1_700_000_000,
+                part: 1,
+                sharedClientSessionId: shared),
+            shared)
+        XCTAssertEqual(
+            CaptureSessionIdentity.clientSessionId(
+                deviceIdHash: "abcd",
+                sessionId: 7,
+                sessionStartedAt: 1_700_000_000,
+                part: 2,
+                sharedClientSessionId: shared),
+            "\(shared)-2")
     }
 }

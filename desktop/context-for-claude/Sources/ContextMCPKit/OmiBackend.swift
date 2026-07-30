@@ -237,6 +237,18 @@ public struct OmiConversation: Sendable {
     public let language: String?
     /// Whatever Omi's own apps wrote about the conversation (summaries, action items).
     public let appNotes: [String]
+    /// True when enrichment is deferred (free-tier stub or not yet summarized).
+    public let deferred: Bool?
+    /// Omi lifecycle status (`processing`, `completed`, …).
+    public let status: String?
+
+    public var isEnrichmentPending: Bool {
+        if deferred == true { return true }
+        guard let status = status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !status.isEmpty
+        else { return false }
+        return status == "processing" || status == "in_progress" || status == "merging"
+    }
 
     public var durationSeconds: Double? {
         guard let startedAt, let finishedAt, finishedAt > startedAt else { return nil }
@@ -246,7 +258,7 @@ public struct OmiConversation: Sendable {
 
 extension OmiConversation: Decodable {
     private enum Key: String, CodingKey {
-        case id, structured, language
+        case id, structured, language, deferred, status
         case startedAt = "started_at"
         case finishedAt = "finished_at"
         case appsResults = "apps_results"
@@ -262,6 +274,8 @@ extension OmiConversation: Decodable {
         startedAt = OmiDate.parse(container.optionalString(.startedAt))
         finishedAt = OmiDate.parse(container.optionalString(.finishedAt))
         language = container.optionalString(.language)
+        deferred = try container.decodeIfPresent(Bool.self, forKey: .deferred)
+        status = container.optionalString(.status)
 
         let structured = try? container.nestedContainer(keyedBy: StructuredKey.self, forKey: .structured)
         title = (structured?.optionalString(.title) ?? nil) ?? "Untitled conversation"
@@ -426,6 +440,8 @@ public final class OmiBackend: @unchecked Sendable {
 
     /// The *name* of the source, never the key.
     public var keySourceLabel: String? { credential?.source.label }
+
+    public var keySource: OmiKeySource? { credential?.source }
 
     /// Oldest / newest conversation start this process has seen from Omi, across every call made so
     /// far. Cheap extra evidence for `status` that costs no request.

@@ -202,6 +202,32 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     claim.assert_not_called()
 
 
+def test_client_session_id_uuid_uses_client_session_id_directly():
+    client_uuid = '550e8400-e29b-41d4-a716-446655440000'
+    assert developer._from_segments_conversation_id('uid1', client_uuid) == client_uuid
+    assert developer._from_segments_conversation_id('uid1', f'  {client_uuid}  ') == client_uuid
+
+
+def test_client_session_id_uuid_persists_with_client_uuid(monkeypatch):
+    client_uuid = '550e8400-e29b-41d4-a716-446655440000'
+    captured = {}
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+
+    def _process(_uid, _language, conversation, **_kwargs):
+        captured['conversation'] = conversation
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(developer, 'process_conversation', _process)
+
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id=client_uuid))
+
+    assert response.id == client_uuid
+    assert captured['conversation'].id == client_uuid
+
+
 def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     captured = {}
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))

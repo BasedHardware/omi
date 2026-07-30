@@ -102,6 +102,22 @@ enum ClaudeRegistrar {
         return (isRegistered(.claudeCode, binary: binary), isRegistered(.claudeDesktop, binary: binary))
     }
 
+    /// Rewrites an existing `context-for-claude` entry when the app bundle moved but Claude still
+    /// points at the old MCP binary path.
+    static func refreshStalePaths() {
+        let binary = mcpBinaryPath
+        guard FileManager.default.isExecutableFile(atPath: binary) else { return }
+        for surface in Surface.allCases {
+            guard surface.isInstalled,
+                  let existing = try? currentDocument(at: surface.configURL),
+                  let servers = existing["mcpServers"] as? [String: Any],
+                  servers[ClaudeConfig.serverName] != nil,
+                  !ClaudeConfig.isRegistered(in: existing, mcpBinaryPath: binary)
+            else { continue }
+            _ = connect(surface, binary: binary)
+        }
+    }
+
     // MARK: - One surface at a time
 
     private enum Outcome: Equatable {

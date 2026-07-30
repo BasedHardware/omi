@@ -42,6 +42,8 @@ public enum UploadQueue {
         /// Omi conversation ids created so far, oldest part first.
         public let conversationIds: [String]
         public let lastError: String?
+        /// Shared listen / from-segments identity when Engine supplied one at enqueue time.
+        public let clientSessionId: String?
 
         public init(
             sessionId: Int64,
@@ -52,7 +54,8 @@ public enum UploadQueue {
             updatedAt: Double,
             nextAttemptAt: Double,
             conversationIds: [String],
-            lastError: String?
+            lastError: String?,
+            clientSessionId: String? = nil
         ) {
             self.sessionId = sessionId
             self.state = state
@@ -63,6 +66,7 @@ public enum UploadQueue {
             self.nextAttemptAt = nextAttemptAt
             self.conversationIds = conversationIds
             self.lastError = lastError
+            self.clientSessionId = clientSessionId
         }
     }
 
@@ -114,6 +118,7 @@ public enum UploadQueue {
     /// distinct name cannot collide, and GRDB tolerates unregistered identifiers in the ledger —
     /// `runMigrations` only ever looks at the intersection of registered and applied.
     public static let migrationIdentifier = "v2-uploads"
+    public static let clientSessionMigrationIdentifier = "v3-upload-client-session"
 
     /// Creates the queue tables if they are not there yet, and records the migration in the same
     /// ledger the store's own migrations use. Idempotent, and cheap enough to call on every launch.
@@ -128,39 +133,55 @@ public enum UploadQueue {
                 db,
                 sql: "SELECT identifier FROM grdb_migrations WHERE identifier = ?",
                 arguments: [migrationIdentifier])
-            guard applied == nil else { return }
+            if applied == nil {
+                // One row per local session, keyed by it: a session can be enqueued twice — by the
+                // engine when it closes and by reconciliation afterwards — and the primary key is what
+                // makes the second one a no-op instead of a duplicate conversation.
+                try db.execute(
+                    sql: """
+                        CREATE TABLE IF NOT EXISTS uploads (
+                          sessionId INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+                          state TEXT NOT NULL,
+                          attempts INTEGER NOT NULL DEFAULT 0,
+                          partsDone INTEGER NOT NULL DEFAULT 0,
+                          queuedAt DOUBLE NOT NULL,
+                          updatedAt DOUBLE NOT NULL,
+                          nextAttemptAt DOUBLE NOT NULL DEFAULT 0,
+                          conversationIds TEXT,
+                          lastError TEXT)
+                        """)
+                // The drain's only hot query is "oldest thing that is due now".
+                try db.execute(
+                    sql: """
+                        CREATE INDEX IF NOT EXISTS idx_uploads_due
+                        ON uploads(state, nextAttemptAt, queuedAt)
+                        """)
+                try db.execute(
+                    sql: """
+                        CREATE TABLE IF NOT EXISTS upload_meta (
+                          key TEXT PRIMARY KEY,
+                          value TEXT NOT NULL)
+                        """)
+                try db.execute(
+                    sql: "INSERT OR IGNORE INTO grdb_migrations (identifier) VALUES (?)",
+                    arguments: [migrationIdentifier])
+            }
 
-            // One row per local session, keyed by it: a session can be enqueued twice — by the
-            // engine when it closes and by reconciliation afterwards — and the primary key is what
-            // makes the second one a no-op instead of a duplicate conversation.
-            try db.execute(
-                sql: """
-                    CREATE TABLE IF NOT EXISTS uploads (
-                      sessionId INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
-                      state TEXT NOT NULL,
-                      attempts INTEGER NOT NULL DEFAULT 0,
-                      partsDone INTEGER NOT NULL DEFAULT 0,
-                      queuedAt DOUBLE NOT NULL,
-                      updatedAt DOUBLE NOT NULL,
-                      nextAttemptAt DOUBLE NOT NULL DEFAULT 0,
-                      conversationIds TEXT,
-                      lastError TEXT)
-                    """)
-            // The drain's only hot query is "oldest thing that is due now".
-            try db.execute(
-                sql: """
-                    CREATE INDEX IF NOT EXISTS idx_uploads_due
-                    ON uploads(state, nextAttemptAt, queuedAt)
-                    """)
-            try db.execute(
-                sql: """
-                    CREATE TABLE IF NOT EXISTS upload_meta (
-                      key TEXT PRIMARY KEY,
-                      value TEXT NOT NULL)
-                    """)
-            try db.execute(
-                sql: "INSERT OR IGNORE INTO grdb_migrations (identifier) VALUES (?)",
-                arguments: [migrationIdentifier])
+            let clientSessionApplied = try String.fetchOne(
+                db,
+                sql: "SELECT identifier FROM grdb_migrations WHERE identifier = ?",
+                arguments: [clientSessionMigrationIdentifier])
+            if clientSessionApplied == nil {
+                // Older DBs already have `uploads` without this column.
+                let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(uploads)")
+                let hasClientSession = columns.contains { ($0["name"] as String?) == "clientSessionId" }
+                if !hasClientSession {
+                    try db.execute(sql: "ALTER TABLE uploads ADD COLUMN clientSessionId TEXT")
+                }
+                try db.execute(
+                    sql: "INSERT OR IGNORE INTO grdb_migrations (identifier) VALUES (?)",
+                    arguments: [clientSessionMigrationIdentifier])
+            }
         }
     }
 
@@ -170,19 +191,24 @@ public enum UploadQueue {
     ///
     /// Deliberately does nothing to a session that is already `uploaded` or `skipped`: the engine
     /// re-enqueueing a session it closed twice must never turn a finished upload back into work.
-    public static func markPending(_ store: ContextStore, sessionId: Int64) throws {
+    public static func markPending(
+        _ store: ContextStore, sessionId: Int64, clientSessionId: String? = nil
+    ) throws {
         let now = ContextTime.now
+        let trimmed = clientSessionId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sharedId = (trimmed?.isEmpty == false) ? trimmed : nil
         try store.write { db in
             try db.execute(
                 sql: """
                     INSERT INTO uploads
-                      (sessionId, state, attempts, partsDone, queuedAt, updatedAt, nextAttemptAt)
-                    VALUES (?, 'pending', 0, 0, ?, ?, 0)
+                      (sessionId, state, attempts, partsDone, queuedAt, updatedAt, nextAttemptAt, clientSessionId)
+                    VALUES (?, 'pending', 0, 0, ?, ?, 0, ?)
                     ON CONFLICT(sessionId) DO UPDATE SET
-                      state = 'pending', nextAttemptAt = 0, updatedAt = excluded.updatedAt
+                      state = 'pending', nextAttemptAt = 0, updatedAt = excluded.updatedAt,
+                      clientSessionId = COALESCE(excluded.clientSessionId, uploads.clientSessionId)
                     WHERE uploads.state = 'failed'
                     """,
-                arguments: [sessionId, now, now])
+                arguments: [sessionId, now, now, sharedId])
         }
     }
 
@@ -454,7 +480,8 @@ public enum UploadQueue {
             updatedAt: row["updatedAt"] as Double? ?? 0,
             nextAttemptAt: row["nextAttemptAt"] as Double? ?? 0,
             conversationIds: ids,
-            lastError: row["lastError"] as String?)
+            lastError: row["lastError"] as String?,
+            clientSessionId: row["clientSessionId"] as String?)
     }
 
     private static func appended(_ conversationId: String, to existing: String?) -> String {

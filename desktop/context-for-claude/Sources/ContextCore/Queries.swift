@@ -388,7 +388,12 @@ public enum Queries {
         let capturing = live && (state?.capturing ?? false)
         let pausedReason: String?
         if capturing {
-            pausedReason = nil
+            if let reason = state?.pausedReason?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !reason.isEmpty {
+                pausedReason = "Capturing with gaps — \(reason)"
+            } else {
+                pausedReason = nil
+            }
         } else if live {
             pausedReason = state?.pausedReason ?? "Capture is paused"
         } else {

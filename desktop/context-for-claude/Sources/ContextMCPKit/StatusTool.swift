@@ -118,6 +118,14 @@ extension Tools {
         }
 
         var out: [String] = ["**The Omi account — history**", ""]
+        if backend.keySource == .claudeConfig {
+            out.append("""
+            **Warning:** the Omi MCP key is coming from the `omi-memory` entry in ~/.claude.json — a \
+            fallback, not the key Context for Claude provisions. It may authenticate a different Omi \
+            account than the one signed into the menu-bar app.
+            """)
+            out.append("")
+        }
         switch backend.history() {
         case let .ok(probe):
             out.append("Reachable. Key source: \(source) — Context for Claude reads that key and never prints, copies, or stores it.")

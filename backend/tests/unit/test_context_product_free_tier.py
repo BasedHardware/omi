@@ -185,6 +185,33 @@ def test_listen_conversation_stamps_app_product():
     assert "app_product=getattr(conversation, 'app_product', None)" in finalizer
 
 
+def test_from_segments_stamps_app_product():
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2].joinpath('routers/developer.py').read_text()
+    assert 'app_product=app_product' in src
+    model_src = Path(__file__).resolve().parents[2].joinpath('models/conversation.py').read_text()
+    assert 'class CreateConversation' in model_src
+    create_block = model_src.split('class CreateConversation', 1)[1].split(
+        'class ExternalIntegrationCreateConversation', 1
+    )[0]
+    assert 'app_product: Optional[str] = None' in create_block
+
+
+def test_enrich_passes_app_product():
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2].joinpath('routers/conversations.py').read_text()
+    assert "app_product=getattr(conv_obj, 'app_product', None)" in src
+
+
+def test_kick_recent_context_enrichment_filters_non_cfc_product():
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2].joinpath('utils/conversations/context_demand_enrich.py').read_text()
+    assert 'is_context_for_claude(conv.get(' in src
+
+
 def test_reacquire_accepts_completed_deferred_context_stub():
     """MCP-listable Context stubs are completed+deferred; reacquire must move them to processing."""
     from database.conversation_finalization_jobs import _reacquire_deferred_processing_txn
@@ -236,9 +263,10 @@ def test_kick_recent_context_enrichment_only_deferred(monkeypatch):
     from utils.conversations import context_demand_enrich as enrich
 
     recent = [
-        {'id': 'a', 'deferred': True},
-        {'id': 'b', 'deferred': False},
-        {'id': 'c', 'deferred': True},
+        {'id': 'a', 'deferred': True, 'app_product': 'context-for-claude'},
+        {'id': 'b', 'deferred': False, 'app_product': 'context-for-claude'},
+        {'id': 'c', 'deferred': True, 'app_product': 'context-for-claude'},
+        {'id': 'd', 'deferred': True, 'app_product': 'omi-desktop'},
     ]
     kicked_ids = []
 
@@ -262,5 +290,5 @@ def test_kick_recent_context_enrichment_only_deferred(monkeypatch):
     monkeypatch.setattr(database_pkg, 'conversations', db_mod, raising=False)
     monkeypatch.setattr(routers_pkg, 'conversations', router_mod, raising=False)
 
-    assert enrich.kick_recent_context_enrichment('uid', n=3) == 2
+    assert enrich.kick_recent_context_enrichment('uid', n=4) == 2
     assert kicked_ids == ['a', 'c']

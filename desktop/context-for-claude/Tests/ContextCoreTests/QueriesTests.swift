@@ -500,6 +500,29 @@ final class QueriesTests: XCTestCase {
         XCTAssertEqual(status.coverage, "no data captured yet")
     }
 
+    func testStatusKeepsPausedReasonWhileCapturing() throws {
+        let heartbeat = ContextPaths.heartbeatURL
+        let backup = try? Data(contentsOf: heartbeat)
+        defer {
+            if let backup {
+                try? backup.write(to: heartbeat, options: .atomic)
+            } else {
+                try? FileManager.default.removeItem(at: heartbeat)
+            }
+        }
+
+        try ContextPaths.ensureSupportDirectory()
+        try CaptureState(capturing: true, pausedReason: "System audio unavailable").write(to: heartbeat)
+        let withGaps = try Queries.status(fixture.store)
+        XCTAssertTrue(withGaps.capturing)
+        XCTAssertEqual(withGaps.pausedReason, "Capturing with gaps — System audio unavailable")
+
+        try CaptureState(capturing: true).write(to: heartbeat)
+        let clean = try Queries.status(fixture.store)
+        XCTAssertTrue(clean.capturing)
+        XCTAssertNil(clean.pausedReason)
+    }
+
     func testStatusIsNotCapturingWithoutALiveHeartbeat() throws {
         // `status` reads the process-wide heartbeat path and the contract gives it no injection
         // point, so the expectation is derived from that same file. The test never writes it — a
