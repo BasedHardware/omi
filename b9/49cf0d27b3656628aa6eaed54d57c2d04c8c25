@@ -1,0 +1,74 @@
+desktop/context-for-claude/Tests/ContextAppTests/ShortcutsTests.swift
+  s_18cae1c5af4258::t_b8fe09e477b2e1 315,329,350,363,375,385,394,409,424,434,447,456,468,480
+  s_18cae1c5af4258::t_bf4416d344b9c6 1-314,316-328,330-349,351-362,364-374,376-384,386-393,395-408,410-423,425-433,435-446,448-455,457-467,469-479,481-486,509-520
+  s_18cae1c5af4258::t_7b07790e33799c 487-508
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/ShortcutConflicts.swift
+  s_18cae1c5af4258::t_6374e6b53d5661 33,53,72,78,107,111,115,124,136,176,181-198,220,228,248,255,265,272,288,295,326,336,345,355,370,387,396,407,410,435,454,477
+  s_18cae1c5af4258::t_16a9dd5d73449b 30-32
+  s_18cae1c5af4258::t_5899cd6d994c1f 34-36,50-52
+  s_18cae1c5af4258::t_ca02f38d297a90 54-56,69-71
+  s_18cae1c5af4258::t_e48cb47d718ec4 73-77
+  s_18cae1c5af4258::t_c717eb410cf265 79-81,104-106
+  s_18cae1c5af4258::t_736d4a595c4c82 108-110
+  s_18cae1c5af4258::t_acc180fef2df54 112-114
+  s_18cae1c5af4258::t_b2cd139985020b 116-118,121-123
+  s_18cae1c5af4258::t_6be516048a6e8b 125-127,133-135
+  s_18cae1c5af4258::t_67a91e054e87fe 137-139,173-175
+  s_18cae1c5af4258::t_e03a733c3d7ec2 177-180
+  s_18cae1c5af4258::t_27338b65f3988e 199-201,217-219
+  s_18cae1c5af4258::t_52c0086723d28f 221-223,225-227
+  s_18cae1c5af4258::t_15bc5caa965462 229-231,245-247
+  s_18cae1c5af4258::t_968926c7adc87d 249-254
+  s_18cae1c5af4258::t_814ae4e071b572 256-258,262-264
+  s_18cae1c5af4258::t_1cdec070e6fa75 266-271
+  s_18cae1c5af4258::t_c0c31ea90d3374 273-275,285-287
+  s_18cae1c5af4258::t_66fccd760a2dbc 289-294
+  s_18cae1c5af4258::t_711f3f35bcef79 296-298,323-325
+  s_18cae1c5af4258::t_c0c22f40b6f7f5 327-329,333-335
+  s_18cae1c5af4258::t_0479e154c32a74 337-339,342-344
+  s_18cae1c5af4258::t_9c6455c60c5d08 346-348,352-354
+  s_18cae1c5af4258::t_463b0fabb593b8 356-358,367-369
+  s_18cae1c5af4258::t_82a71b6b7d2985 371-373,384-386
+  s_18cae1c5af4258::t_ec8f8110674a02 388-390,393-395
+  s_18cae1c5af4258::t_030cdc25d409b0 397-399,404-406
+  s_18cae1c5af4258::t_9d69d70017b014 408-409
+  s_18cae1c5af4258::t_ca64b9e9a8183a 411-413,432-434
+  s_18cae1c5af4258::t_abd049616b0b64 436-438,451-453
+  s_18cae1c5af4258::t_53003947b4b454 455-457,474-476
+  s_18cae1c5af4258::t_8a901ceb99b1ff 478-480
+  s_b7fd52d475a64f::t_d0eac5913505e5 1-29,37-49,57-68,82-103,119-120,128-132,140-172,202-216,224,232-244,259-261,276-284,299-322,330-332,340-341,349-351,359-366,374-383,391-392,400-403,414-431,439-450,458-473,481-499
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/GlobalShortcuts.swift
+  s_b1812d7d48f7ef::t_9777747dfbbbe6 1-661
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "b949cf0d27b3656628aa6eaed54d57c2d04c8c25",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_b1812d7d48f7ef": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-acfb1647c9814fb6f",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_b7fd52d475a64f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ad8df0dbeca0e7530",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
