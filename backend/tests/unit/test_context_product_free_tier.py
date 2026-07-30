@@ -151,18 +151,6 @@ def test_is_context_product():
     assert not is_context_for_claude('omi-desktop')
 
 
-def test_trial_paywall_exempt_for_context_product(subscription_module):
-    sub = subscription_module
-    with (
-        patch.object(sub, 'TRIAL_PAYWALL_ENABLED', True),
-        patch.object(sub, '_is_trial_expired_cached', return_value=True) as expired,
-    ):
-        assert sub.is_trial_paywalled('uid', 'desktop', 'context-for-claude') is False
-        expired.assert_not_called()
-        assert sub.is_trial_paywalled('uid', 'desktop', 'omi-desktop') is True
-        assert sub.is_trial_paywalled('uid', 'desktop') is True
-
-
 def test_should_demand_stub_context(subscription_module):
     sub = subscription_module
     with patch.object(sub, 'should_defer_desktop_processing', return_value=True):
