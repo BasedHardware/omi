@@ -198,7 +198,8 @@ Runtime-selected providers must keep model-token parsing and required environmen
 
 HTTP endpoints: `uid: str = Depends(get_current_user_uid)` from `utils.other.endpoints`.
 
-Authenticated requests may send `X-App-Product` (`context-for-claude` / `omi-desktop` / `omi-mobile` / `omi-web`) orthogonal to `X-App-Platform`. The auth dependency records it via `record_user_product` onto `signup_product` / `products_used` / `last_active_product`. Context for Claude STT cost meters into `llm_usage` bucket `context_for_claude_stt`.
+`X-App-Product` (`context-for-claude`/`omi-*`) is orthogonal to platform; auth records
+`signup_product`/`products_used`/`last_active_product`. Context STT → `context_for_claude_stt`.
 
 WebSocket endpoints: use `WebSocketException(code=1008)`, **not** `HTTPException` — HTTPException exits ASGI without handshake, causing LB 5xx.
 
