@@ -10,6 +10,8 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 from unittest.mock import patch
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 import pytest
 
 
@@ -183,17 +185,35 @@ def test_get_action_items_skips_deleted_in_active_bucket(ai_mod, monkeypatch):
     assert ids[0] == 'a1'
 
 
-def test_knowledge_graph_get_is_bounded(monkeypatch, kg_module):
+@pytest.mark.parametrize(
+    ('node_total', 'edge_total', 'expected_nodes', 'expected_edges', 'expected_truncated'),
+    (
+        (0, 0, 0, 0, False),
+        (3, 2, 3, 2, False),
+        (20_000, 20_000, 500, 1000, True),
+    ),
+)
+def test_knowledge_graph_get_is_deterministic_and_bounded_for_large_fixtures(
+    kg_module,
+    node_total,
+    edge_total,
+    expected_nodes,
+    expected_edges,
+    expected_truncated,
+):
     kg = kg_module
-    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_NODES', 2)
-    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_EDGES', 3)
-    monkeypatch.setattr(kg, 'MAX_KNOWLEDGE_GRAPH_ASSERTIONS', 4)
 
     class _StreamColl:
         def __init__(self, n, *, edge=False):
             self.n = n
             self.edge = edge
             self.limit_n = None
+            self.order_fields = []
+            self.streamed = 0
+
+        def order_by(self, field_path, *args, **kwargs):
+            self.order_fields.append(field_path)
+            return self
 
         def limit(self, n):
             self.limit_n = n
@@ -212,10 +232,11 @@ def test_knowledge_graph_get_is_bounded(monkeypatch, kg_module):
                     if self.edge
                     else {'id': f'n{i}', 'label': f'L{i}'}
                 )
+                self.streamed += 1
                 yield SimpleNamespace(to_dict=lambda payload=payload: payload)
 
-    nodes = _StreamColl(10)
-    edges = _StreamColl(10, edge=True)
+    nodes = _StreamColl(node_total)
+    edges = _StreamColl(edge_total, edge=True)
     assertions = _StreamColl(0)
 
     collections = {
@@ -227,12 +248,19 @@ def test_knowledge_graph_get_is_bounded(monkeypatch, kg_module):
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
 
     graph = kg.get_knowledge_graph('uid', db_client=client)
-    assert len(graph['nodes']) == kg.MAX_KNOWLEDGE_GRAPH_NODES
-    assert len(graph['edges']) == kg.MAX_KNOWLEDGE_GRAPH_EDGES
-    assert graph['truncated'] is True
+    assert len(graph['nodes']) == expected_nodes
+    assert len(graph['edges']) == expected_edges
+    assert graph['node_count'] == expected_nodes
+    assert graph['edge_count'] == expected_edges
+    assert graph['truncated'] is expected_truncated
     assert nodes.limit_n == kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
     assert edges.limit_n == kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
     assert assertions.limit_n == kg.MAX_KNOWLEDGE_GRAPH_ASSERTIONS + 1
+    assert nodes.streamed <= kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
+    assert edges.streamed <= kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
+    assert nodes.order_fields == [kg.KNOWLEDGE_GRAPH_DOCUMENT_ORDER]
+    assert edges.order_fields == [kg.KNOWLEDGE_GRAPH_DOCUMENT_ORDER]
+    assert assertions.order_fields == [kg.KNOWLEDGE_GRAPH_DOCUMENT_ORDER]
 
 
 def test_legacy_get_memories_no_first_page_5000_force():
@@ -260,12 +288,24 @@ def test_knowledge_graph_route_exposes_truncation(monkeypatch):
         'nodes': [{'id': 'n1'}],
         'edges': [],
         'truncated': True,
-        'node_limit': 2000,
-        'edge_limit': 5000,
+        'node_count': 1,
+        'edge_count': 0,
+        'node_limit': 500,
+        'edge_limit': 1000,
     }
     monkeypatch.setattr(kg_router, 'get_knowledge_graph_payload', lambda uid: payload)
-    resp = kg_router.get_knowledge_graph(uid='u')
-    assert resp.truncated is True
-    assert resp.node_limit == 2000
-    assert resp.edge_limit == 5000
-    assert resp.nodes == payload['nodes']
+    app = FastAPI()
+    app.include_router(kg_router.router)
+    app.dependency_overrides[kg_router.auth.get_current_user_uid] = lambda: 'u'
+
+    response = TestClient(app).get('/v1/knowledge-graph')
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_knowledge_graph_route_keeps_firebase_auth_dependency():
+    from routers import knowledge_graph as kg_router
+
+    route = next(route for route in kg_router.router.routes if route.path == '/v1/knowledge-graph')
+    assert [dependency.call for dependency in route.dependant.dependencies] == [kg_router.auth.get_current_user_uid]
