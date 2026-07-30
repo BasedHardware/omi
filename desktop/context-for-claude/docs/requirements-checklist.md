@@ -38,36 +38,36 @@ distrust.
 
 | # | Requirement | Status |
 |---|---|---|
-| D1 | Big centred logo on a dimmed desktop at first launch | IN FLIGHT |
-| D2 | The logo BUILDS ITSELF with animation (not a fade-in of a finished image) | IN FLIGHT |
-| D3 | Background music plays through the sequence | IN FLIGHT |
-| D4 | Logo morphs into a horizontal BAR | IN FLIGHT |
-| D5 | The bar STRETCHES into a search-bar shape | IN FLIGHT |
-| D6 | A question types itself into the bar | IN FLIGHT |
-| D7 | Populated by a large swarm of windows flying in | IN FLIGHT |
-| D8 | Swooshing sounds on the window fly-in, staggered | IN FLIGHT |
-| D9 | Click sounds on interaction throughout | IN FLIGHT |
-| D10 | Interactive and immersive overall; skippable | IN FLIGHT |
+| D1 | Big centred logo on a dimmed desktop at first launch | DONE — `Cinematic.swift` beat 1, scrim 0.96 |
+| D2 | The logo BUILDS ITSELF with animation (not a fade-in of a finished image) | DONE — head, eyes, legs stroke on in sequence, then the wordmark. `CinematicMarkGeometry` scales stroke weight back with size, because `ContextMark`'s 9.5% menu-bar weight renders a torus at 132pt |
+| D3 | Background music plays through the sequence | DONE — `Sound.music.start()` on beat 1, faded out over 2.0s at hand-off |
+| D4 | Logo morphs into a horizontal BAR | DONE — beat 3, matched geometry, screenshot caught mid-morph |
+| D5 | The bar STRETCHES into a search-bar shape | DONE — beat 4, swoosh on the stretch |
+| D6 | A question types itself into the bar | DONE — "what was I working on today?" with a caret, keystroke sound every 4th char |
+| D7 | Populated by a large swarm of windows flying in | DONE — REAL captured frames, verified on screen (Xcode with the user's own projects, Chrome with their own bookmarks). Picks one frame per app before a second of any, because an even spread returned five of six identical Cursor frames |
+| D8 | Swooshing sounds on the window fly-in, staggered | DONE — one swoosh per card, 0.13s stagger |
+| D9 | Click sounds on interaction throughout | DONE — cinematic beats, card advance (`go(to:)`), chime on every grant |
+| D10 | Interactive and immersive overall; skippable | PARTIAL — "Skip intro" and a music mute are on screen and abort is tested from all six beats, but Esc/Skip are NOT verified on hardware: synthetic Escape does not reach a borderless window of an inactive accessory app |
 
 ## E. Onboarding cards
 
 | # | Requirement | Status |
 |---|---|---|
-| E1 | Welcome card: title, one-line value, "Get started" + "Skip intro" | IN FLIGHT |
-| E2 | Value card: heading, paragraph, three bulleted claims, "Continue" | IN FLIGHT |
-| E3 | "Enable permissions" card listing each permission with its own explanation | IN FLIGHT |
+| E1 | Welcome card: title, one-line value, "Get started" + "Skip intro" | PARTIAL — card and action DONE; there is no "Skip intro" on the CARD (the cinematic carries it). Skipping the cards would leave a non-functional app |
+| E2 | Value card: heading, paragraph, three bulleted claims, "Continue" | DONE |
+| E3 | "Enable permissions" card listing each permission with its own explanation | DONE — each row renders its own first-person sentence via `Capability.title` |
 | E4 | Sign in with the Omi account | EXISTS — restyle only |
 | E5 | Connectors card: which agent surfaces to register with, checkboxes | EXISTS — restyle only |
-| E6 | Progress dots across the flow | IN FLIGHT |
+| E6 | Progress dots across the flow | DONE — 5 dots when sign-in is needed, 4 when the session restores |
 | E7 | An optional "stay in touch" email step exists in the reference | DECIDED OUT — the Omi account already identifies the user; do not add a second email capture |
 
 ## F. Permission choreography
 
 | # | Requirement | Status |
 |---|---|---|
-| F1 | An animation showing the app being dragged into the permissions list | IN FLIGHT |
-| F2 | It highlights exactly where the row needs to go | IN FLIGHT |
-| F3 | Same treatment for Screen Recording | IN FLIGHT |
+| F1 | An animation showing the app being dragged into the permissions list | DONE — `GhostRowReplica`, ours, captioned as a preview |
+| F2 | It highlights exactly where the row needs to go | DONE — AX ring on the REAL System Settings row. 477/477 exact rects live, cross-checked against an independent AX dump; 112 refusals all correct. `PermissionGuidance` is `.pointing` or `.instruction` only, so a mispositioned ring is unrepresentable |
+| F3 | Same treatment for Screen Recording | DONE — overlay in `openScreenSettingsOnce`, relaunch nudge preserved |
 | F4 | "Very accurate" to the reference | NOT BUILT — this row previously described the replica-then-ring-the-real-row design as though it existed. It does not; there is no such code. The CONSTRAINT is real and still governs the design: on macOS 26 the dashed "Drag this row up into the list" affordance is System Settings' OWN UI, no app can draw inside that window, and the reference app did not build it either. `MenuBarSpotlight` rings *this app's own status item*, not a System Settings row. |
 | F5 | Permissions requested one at a time, paced | DONE — preserve |
 | F6 | Screen Recording relaunch nudge | DONE — preserve |
@@ -90,7 +90,7 @@ distrust.
 | G12 | Result appears, then "Found it! Tap the memory to jump back to that exact moment" | DONE — verified live on a real hit (a frame captured at 12:40:21 AM whose OCR carried the page title); tapping it loads that frame's real picture and labels it with the captured second. No button can satisfy the gate |
 | G13 | "You are all set" completion card | DONE — and its sentence changes when the frame gate was waived, so a waived run is never told its screen is searchable |
 | G14 | "One more thing — you can always find it up here in the menu bar" | DONE — the `menuBar` step calls `MenuBarSpotlight.show()`, and teardown hides it |
-| G15 | Shortcut-conflict notification with a one-click remedy | IN FLIGHT (shortcuts agent) |
+| G15 | Shortcut-conflict notification with a one-click remedy | PARTIAL — `ShortcutConflicts.scan` reads other tools' real config files and the row renders only on evidence. On THIS machine the reference's "Codex also uses ⌘⌘" is FALSE (those Codex commands ship with no default binding and no keymap file exists), so no row appears — correct, but unexercised against a real conflict. The one-click write is deliberately NOT implemented: Codex rewrites keybindings.json wholesale from an in-memory keymap, so writing it under a running Codex leaves the old chord live and the button would report success while the conflict persisted |
 | G16 | Progress dots through the tutorial | DONE — `TutorialProgressDots`, counting this run's plan (13 beats when Screen Recording is already granted) |
 | G17 | Music throughout, click sounds on every step | DONE — `Sound.music.start()` at `begin()`, stopped by the one teardown; a click on every advance, a swoosh on the page and on the timeline, a chime on each earned gate |
 
@@ -122,9 +122,9 @@ title, a grey subtitle, and a right-hand control.
 ### I-General
 | # | Requirement | Status |
 |---|---|---|
-| I1 | Open Timeline Shortcut — recorder, default double-Command, "Clear it to use ⌘⌘" | IN FLIGHT |
-| I2 | Open Search Shortcut — recorder, default ⌘⌘⇧ | IN FLIGHT |
-| I3 | Conflict row, shown ONLY on a real conflict, with a one-click switch | IN FLIGHT |
+| I1 | Open Timeline Shortcut — recorder, default double-Command, "Clear it to use ⌘⌘" | PARTIAL — recorder, copy, cleared-state and rejection are real, but bound to `SettingsShortcutChord`, a stub. `GlobalShortcuts` now exists and must be adapted onto `ShortcutBindingProvider` |
+| I2 | Open Search Shortcut — recorder, default ⌘⌘⇧ | PARTIAL — same stub binding as I1 |
+| I3 | Conflict row, shown ONLY on a real conflict, with a one-click switch | PARTIAL — UI live-queries and never persists; the real `ShortcutConflicts` scanner exists but the pane still reads the stub |
 | I4 | Launch on Login toggle | MISSING (LoginItem exists) |
 | I5 | Airgap Mode toggle — suppresses telemetry, update checks, remote favicon requests; takes effect after relaunch | MISSING (engine flag exists) |
 | I6 | Updates row showing the real version | MISSING |
@@ -134,7 +134,7 @@ title, a grey subtitle, and a right-hand control.
 | # | Requirement | Status |
 |---|---|---|
 | I8 | Route to Agent dropdown | MISSING |
-| I9 | Claude target dropdown: Claude app (prompt pre-filled) or the `claude` CLI in Terminal | IN FLIGHT (routing) |
+| I9 | Claude target dropdown: Claude app (prompt pre-filled) or the `claude` CLI in Terminal | DONE — `ClaudeRouter`. Pre-fill is genuinely supported, not a fallback: `claude://code/new?q=` read out of the installed Claude's own router and verified by watching text land in the Code composer unsent. Clipboard fallback only when nothing claims the scheme |
 | I10 | Tip line about mentioning the app inside Claude Code/Codex/Cursor | MISSING |
 | I11 | An illustrative mock of an agent prompt box | MISSING |
 | I12 | CLI toggle installing a command to `~/.local/bin` | MISSING — decide whether we ship a CLI at all; our equivalent is the MCP registration |
@@ -187,8 +187,8 @@ title, a grey subtitle, and a right-hand control.
 
 | # | Requirement | Status |
 |---|---|---|
-| J1 | Music playing throughout the experience | Sound DONE; wiring IN FLIGHT |
-| J2 | Sounds on clicks | Sound DONE; wiring IN FLIGHT |
+| J1 | Music playing throughout the experience | DONE — cinematic starts the bed and fades it at hand-off; the tutorial runs its own from `begin()` to teardown |
+| J2 | Sounds on clicks | DONE — click on every card and tutorial advance, swoosh on page open and timeline, chime on each earned gate. Chrome cues honour the system UI-sound setting; the bed has its own mute |
 | J3 | Interactive and immersive; better than the reference | JUDGEMENT — verify by screenshot |
 | J4 | Everything verified by screenshots and screen observation | ONGOING |
 | J5 | All edits land on the upstream PR | ONGOING |

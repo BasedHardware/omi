@@ -55,12 +55,26 @@ final class OnboardingWindow {
         presentCinematic(on: screen)
     }
 
+    /// The tutorial hand-off, shared by both entry points.
+    ///
+    /// `OnboardingView` has taken an `onTutorial` closure since the flow gained its final step, but
+    /// both call sites here constructed `OnboardingView()` without it — so "Show me" fell through to
+    /// `.done` and the entire tutorial was unreachable. Same shape of defect as the timeline window
+    /// having no call site: built, tested, and impossible to get to.
+    ///
+    /// The card is dismissed first. The tutorial drives real windows and real coach marks anchored to
+    /// them, and a floating onboarding card left on top would sit over the very UI it is pointing at.
+    private static let startTutorial: () -> Void = {
+        dismiss()
+        Tutorial.start()
+    }
+
     /// The welcome card, with no intro. The state onboarding actually runs in, and where the
     /// cinematic lands.
     static func presentCard(on screen: NSScreen) {
         let frame = centredFrame(on: screen)
         let window = makeWindow(contentRect: frame)
-        window.contentView = makeRoot(size: frame.size, hosting: OnboardingView())
+        window.contentView = makeRoot(size: frame.size, hosting: OnboardingView(onTutorial: startTutorial))
         window.setFrame(frame, display: true)
 
         current = window
@@ -135,7 +149,7 @@ final class OnboardingWindow {
         window.level = .floating
         window.setFrame(frame, display: true)
 
-        let root = makeRoot(size: frame.size, hosting: OnboardingView())
+        let root = makeRoot(size: frame.size, hosting: OnboardingView(onTutorial: startTutorial))
         // `NSView.alphaValue` is only honoured on a layer-backed view, and `animator()` can only
         // animate it through Core Animation. Without this the card either never fades or — worse —
         // is left sitting at the alpha it started from, which is a first run with no visible

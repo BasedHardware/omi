@@ -98,7 +98,13 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // Closes the open session and writes a final heartbeat. Without this the last session stays
         // open forever and `status()` reports a recording that stopped hours ago.
-        MainActor.assumeIsolated { Engine.shared.pause() }
+        MainActor.assumeIsolated {
+            // The tutorial owns borderless overlay windows and the menu-bar spotlight. Quitting
+            // mid-walkthrough without tearing them down leaves them on screen with no process behind
+            // them, which the user cannot dismiss.
+            Tutorial.abandon()
+            Engine.shared.pause()
+        }
     }
 
     /// The typefaces ship as loose font files in `Contents/Resources/Fonts` (assembled by
