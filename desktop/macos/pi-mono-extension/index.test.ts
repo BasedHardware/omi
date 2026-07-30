@@ -1158,7 +1158,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     send_agent_message: ["sessionId", "originSurfaceKind", "prompt"],
     spawn_background_agent: ["prompt"],
     delegate_agent: ["mode", "parentRunId", "objective"],
-    spawn_agent: ["brief"],
+    spawn_agent: ["objective"],
     manage_agent_pills: ["action"],
     setup_agent_provider: ["provider"],
     search_tasks: ["query"],
