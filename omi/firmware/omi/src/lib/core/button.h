@@ -9,6 +9,7 @@ typedef enum { IDLE, GRACE } FSM_STATE_T;
 int button_init();
 void activate_button_work();
 void register_button_service();
+void button_notify(uint8_t event);
 void turnoff_all();
 FSM_STATE_T get_current_button_state();
 
