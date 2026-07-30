@@ -133,7 +133,9 @@ def conversations_db():
 
     database_client = ModuleType("database._client")
     database_client.db = firestore
+    database_client.delete_collection_recursive = MagicMock()
     database_client.get_firestore_client = MagicMock()
+    database_client.run_transactional = MagicMock()
     database_helpers = ModuleType("database.helpers")
     database_helpers.set_data_protection_level = MagicMock()
     database_helpers.prepare_for_write = _decorator

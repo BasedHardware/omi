@@ -462,6 +462,11 @@ class TestMemoryServiceParity:
     @pytest.mark.parametrize("canonical_enabled", [False, True])
     def test_memory_service_forwards_read_clock_to_selected_backend(self, monkeypatch, canonical_enabled):
         service_mod = _load_memory_service(monkeypatch)
+        monkeypatch.setattr(
+            service_mod,
+            "resolve_memory_system",
+            lambda *args, **kwargs: MemorySystem.CANONICAL if canonical_enabled else MemorySystem.LEGACY,
+        )
         monkeypatch.setattr(service_mod, "canonical_read_enabled", lambda *args, **kwargs: canonical_enabled)
         service = service_mod.MemoryService(db_client=_FirestoreFake())
         service._legacy.read = MagicMock(return_value=[])
