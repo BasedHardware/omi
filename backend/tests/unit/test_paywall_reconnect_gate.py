@@ -55,7 +55,7 @@ class TestAdmissionPhase:
 
         async def fake_run_blocking(_executor, function, *args):
             assert function.__name__ == 'is_trial_paywalled'
-            assert args == ('test-user', 'desktop')
+            assert args == ('test-user', 'desktop', None)
             return True
 
         monkeypatch.setattr('routers.listen.runtime.run_blocking', fake_run_blocking)
@@ -199,9 +199,12 @@ class TestPlatformFiltering:
         admission_start = src.find('async def _admit(')
         admission_end = src.find('    async def _bootstrap', admission_start)
         admission_body = src[admission_start:admission_end]
+        assert 'is_trial_paywalled' in admission_body
+        assert 'self.request.uid' in admission_body
+        assert 'self.request.source' in admission_body
         assert (
-            'run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source)' in admission_body
-        ), "admission phase must offload is_trial_paywalled with uid and source"
+            'self.request.app_product' in admission_body
+        ), "admission phase must offload is_trial_paywalled with uid, source, and app_product"
 
 
 class TestIsTrialPaywalledBehavioral:
@@ -280,6 +283,16 @@ class TestIsTrialPaywalledBehavioral:
 
     def test_desktop_expired_returns_true(self):
         assert self._sub.is_trial_paywalled('uid1', 'desktop') is True
+
+    def test_context_for_claude_product_exempt(self):
+        # CFC freemium pool is the limiter; Desktop 3-day trial must not block.
+        assert self._sub.is_trial_paywalled('uid1', 'desktop', 'context-for-claude') is False
+        assert self._sub.is_trial_paywalled('uid1', 'macos', 'context-for-claude') is False
+        self._mock_expired.assert_not_called()
+
+    def test_omi_desktop_product_still_paywalled(self):
+        assert self._sub.is_trial_paywalled('uid1', 'desktop', 'omi-desktop') is True
+        assert self._sub.is_trial_paywalled('uid1', 'macos', None) is True
 
     def test_macos_expired_returns_true(self):
         assert self._sub.is_trial_paywalled('uid1', 'macos') is True

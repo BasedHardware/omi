@@ -3,10 +3,10 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from database.screen_activity import upsert_screen_activity
@@ -42,8 +42,12 @@ class ScreenActivitySyncRequest(BaseModel):
     rows: list[ScreenActivityRow]
 
 
-async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
+async def _authorized_desktop_user(
+    uid: str = Depends(get_current_user_uid),
+    x_app_product: Optional[str] = Header(None, alias="X-App-Product"),
+) -> str:
+    # Context for Claude is exempt from the Desktop trial (freemium STT pool is the limiter).
+    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop", x_app_product):
         raise HTTPException(status_code=402, detail="trial_expired")
     return uid
 

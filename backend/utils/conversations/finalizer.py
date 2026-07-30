@@ -104,6 +104,7 @@ async def finalize_persisted_conversation(
                 defer_derived_effects=True,
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,
+                app_product=getattr(conversation, 'app_product', None),
             )
         # If lifecycle persistence lost to discard/terminal state, no canonical
         # memory or derived side effect may happen.  process_conversation

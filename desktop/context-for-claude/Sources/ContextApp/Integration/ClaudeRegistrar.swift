@@ -66,10 +66,22 @@ enum ClaudeRegistrar {
         let desktop = connect(.claudeDesktop, binary: binary)
         let message = registerMessage([(.claudeCode, code), (.claudeDesktop, desktop)])
         ContextLog.info(message, logCategory)
-        return Result(
+        let result = Result(
             claudeCode: isConnected(after: code),
             claudeDesktop: isConnected(after: desktop),
             message: message)
+        if result.claudeCode || result.claudeDesktop {
+            Task { @MainActor in
+                ContextAnalytics.capture(
+                    "claude_connector_configured",
+                    properties: [
+                        "claude_code": result.claudeCode,
+                        "claude_desktop": result.claudeDesktop,
+                        "restart_hinted": true,
+                    ])
+            }
+        }
+        return result
     }
 
     /// The exact inverse, for when the user wants Context for Claude out of Claude again. Removes the entry
@@ -194,6 +206,10 @@ enum ClaudeRegistrar {
             sentences.append(contentsOf: absent.map { "\($0) isn't installed yet — I'll be there when it is." })
         }
         sentences.append(contentsOf: failureSentences(outcomes))
+        if !connected.isEmpty || !already.isEmpty {
+            sentences.append(
+                "Quit and reopen Claude Code / Claude Desktop so they load the connector.")
+        }
         return sentences.joined(separator: " ")
     }
 

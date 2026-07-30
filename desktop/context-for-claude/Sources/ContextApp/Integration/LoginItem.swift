@@ -18,6 +18,16 @@ enum LoginItem {
         SMAppService.mainApp.status == .enabled
     }
 
+    /// True when the running bundle lives under `/Applications` (the path LaunchServices trusts).
+    static var isInstalledInApplications: Bool {
+        Bundle.main.bundleURL.path.hasPrefix("/Applications/")
+    }
+
+    /// Registration succeeded but macOS is holding the item until the user approves it.
+    static var requiresApproval: Bool {
+        SMAppService.mainApp.status == .requiresApproval
+    }
+
     @discardableResult
     static func enable() -> Bool {
         do {

@@ -13,11 +13,13 @@ import Foundation
 /// from-segments is a plain request that either succeeded or did not — a queue can retry it, which
 /// is not true of a stream.
 ///
-/// **Why `source: "phone"`.** `"desktop"` opts the session into the desktop trial paywall (and the
-/// legacy desktop-only defer path). Free Context for Claude instead uses product-aware demand-side
-/// enrichment on the backend (`X-App-Product: context-for-claude`): capture stores a listable stub;
-/// heavy memory/structure LLM runs for the last few sessions and when Claude touches a conversation
-/// via MCP. Local FTS on this Mac covers keyword search before that enrich finishes.
+/// **Source is honest `desktop`.** Product header `X-App-Product: context-for-claude` selects the
+/// CFC freemium STT pool and demand-side enrichment, and exempts Desktop's 3-day trial. Free CFC
+/// stores MCP-listable stubs on capture; heavy enrich runs for recent sessions and when Claude
+/// touches a conversation via MCP. Local FTS covers keyword search before enrich finishes.
+///
+/// Free STT is **wall-clock** (silence counts while audio flows) at 3000 min/mo — see product
+/// entitlements — not speech-only.
 ///
 /// Everything else here follows from one rule: **nothing the user said is ever dropped.** Not while
 /// they are signed out, not across a crash, not when the backend is down. The queue is on disk
@@ -511,8 +513,8 @@ private enum UploadPayload {
             UploadRequestBody(
                 transcriptSegments: segments,
                 clientSessionId: clientSessionId,
-                // Avoid source "desktop" (trial paywall). Product-aware demand enrich runs server-side.
-                source: "phone",
+                // Honest desktop source; X-App-Product selects CFC freemium + demand enrich.
+                source: "desktop",
                 startedAt: UploadPayload.iso(startedAt),
                 finishedAt: UploadPayload.iso(finishedAt),
                 language: language,

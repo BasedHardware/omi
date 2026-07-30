@@ -239,7 +239,9 @@ class ListenSessionRuntime:
             await self.request.websocket.close(code=1008, reason='Bad uid')
             return False
         set_byok_keys(extract_byok_from_websocket(self.request.websocket))
-        if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
+        if await run_blocking(
+            db_executor, is_trial_paywalled, self.request.uid, self.request.source, self.request.app_product
+        ):
             await self.request.websocket.send_json(
                 FreemiumThresholdReachedEvent(remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT).to_json()
             )

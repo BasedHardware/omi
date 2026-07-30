@@ -765,7 +765,7 @@ enum ListenSpeechStatus {
         case .live, .connecting:
             return nil
         case .paywalled:
-            return "Speech off — Omi trial expired. Upgrade to keep transcribing."
+            return "Speech off — monthly transcription limit reached. Capture resumes next month."
         case .failed(let message):
             return message
         case .idle:

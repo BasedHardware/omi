@@ -293,13 +293,15 @@ def decide_stt_buffer_flush(
     fair_use_dg_budget_exhausted: bool,
     fair_use_track_dg_usage: bool,
     sample_rate: int,
+    user_has_credits: bool = True,
 ) -> SttBufferFlushDecision:
     if buffer_len == 0:
         return SttBufferFlushDecision(False, False, False, 0)
     if not force and buffer_len < flush_size:
         return SttBufferFlushDecision(False, False, False, 0)
 
-    send_to_stt = socket_available and not socket_dead and not fair_use_dg_budget_exhausted
+    # Freemium exhaustion and fair-use DG budget both stop vendor STT spend.
+    send_to_stt = socket_available and not socket_dead and not fair_use_dg_budget_exhausted and user_has_credits
     dg_usage_ms = 0
     if send_to_stt and fair_use_track_dg_usage:
         dg_usage_ms = buffer_len * 1000 // (sample_rate * 2)
@@ -307,9 +309,14 @@ def decide_stt_buffer_flush(
 
 
 def decide_multi_channel_stt_send(
-    *, socket_available: bool, fair_use_dg_budget_exhausted: bool, pcm_len: int, fair_use_track_dg_usage: bool
+    *,
+    socket_available: bool,
+    fair_use_dg_budget_exhausted: bool,
+    pcm_len: int,
+    fair_use_track_dg_usage: bool,
+    user_has_credits: bool = True,
 ) -> tuple[bool, int]:
-    should_send = socket_available and not fair_use_dg_budget_exhausted
+    should_send = socket_available and not fair_use_dg_budget_exhausted and user_has_credits
     dg_usage_ms = 0
     if should_send and fair_use_track_dg_usage:
         dg_usage_ms = pcm_len * 1000 // (TARGET_SAMPLE_RATE * 2)

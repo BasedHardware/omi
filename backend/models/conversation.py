@@ -210,6 +210,10 @@ class Conversation(BaseModel):
     # Capture-device provenance (optional; absent on legacy conversations).
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+    # Product surface that created the conversation (e.g. context-for-claude). Used so
+    # async listen finalization can apply product-scoped free-tier enrich rules without
+    # the original WebSocket request.
+    app_product: Optional[str] = None
 
     def __init__(self, **data):
         super().__init__(**data)

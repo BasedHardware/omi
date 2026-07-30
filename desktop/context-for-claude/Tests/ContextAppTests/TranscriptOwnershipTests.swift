@@ -14,7 +14,7 @@ final class TranscriptOwnershipTests: XCTestCase {
             state: .paywalled, signedIn: true, isPaused: false)
         XCTAssertEqual(
             reason,
-            "Speech off — Omi trial expired. Upgrade to keep transcribing.")
+            "Speech off — monthly transcription limit reached. Capture resumes next month.")
     }
 
     func testPermanentListenFailureSurfacesTheSocketMessage() {

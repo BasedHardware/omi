@@ -151,6 +151,18 @@ def test_is_context_product():
     assert not is_context_for_claude('omi-desktop')
 
 
+def test_trial_paywall_exempt_for_context_product(subscription_module):
+    sub = subscription_module
+    with (
+        patch.object(sub, 'TRIAL_PAYWALL_ENABLED', True),
+        patch.object(sub, '_is_trial_expired_cached', return_value=True) as expired,
+    ):
+        assert sub.is_trial_paywalled('uid', 'desktop', 'context-for-claude') is False
+        expired.assert_not_called()
+        assert sub.is_trial_paywalled('uid', 'desktop', 'omi-desktop') is True
+        assert sub.is_trial_paywalled('uid', 'desktop') is True
+
+
 def test_should_demand_stub_context(subscription_module):
     sub = subscription_module
     with patch.object(sub, 'should_defer_desktop_processing', return_value=True):
@@ -164,6 +176,25 @@ def test_screen_activity_sync_rate_policy_present():
     from utils.rate_limit_config import RATE_POLICIES
 
     assert RATE_POLICIES['screen_activity:sync'] == (120, 3600)
+
+
+def test_screen_sync_auth_reads_app_product_header():
+    """CFC must not 402 on Desktop trial expiry — auth must pass X-App-Product through."""
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2].joinpath('routers/desktop_screen_crisp.py').read_text()
+    assert 'X-App-Product' in src
+    assert 'is_trial_paywalled' in src
+    assert 'x_app_product' in src
+
+
+def test_listen_conversation_stamps_app_product():
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2].joinpath('routers/listen/conversations.py').read_text()
+    assert 'app_product=request.app_product' in src
+    finalizer = Path(__file__).resolve().parents[2].joinpath('utils/conversations/finalizer.py').read_text()
+    assert "app_product=getattr(conversation, 'app_product', None)" in finalizer
 
 
 def test_reacquire_accepts_completed_deferred_context_stub():

@@ -368,10 +368,11 @@ class ListenReceiver:
             fair_use_dg_budget_exhausted=self.host.state.fair_use_dg_budget_exhausted,
             fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
             sample_rate=request.sample_rate,
+            user_has_credits=self.host.user_has_credits,
         )
         if not decision.should_flush:
             return
-        if self.host.state.fair_use_dg_budget_exhausted:
+        if self.host.state.fair_use_dg_budget_exhausted or not self.host.user_has_credits:
             buffer.clear()
             return
         outbound_audio = bytes(buffer)
@@ -417,6 +418,7 @@ class ListenReceiver:
                 fair_use_dg_budget_exhausted=self.host.state.fair_use_dg_budget_exhausted,
                 pcm_len=len(pcm),
                 fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
+                user_has_credits=self.host.user_has_credits,
             )
             if should_send:
                 sent = await send_live_stt_audio(

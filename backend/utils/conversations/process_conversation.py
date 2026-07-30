@@ -1479,7 +1479,7 @@ def process_conversation(
     if (
         hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
-        and is_trial_paywalled(uid, 'macos')
+        and is_trial_paywalled(uid, 'macos', app_product)
     ):
         logger.info(
             "trial paywall: skipping post-processing for uid=%s conv=%s source=desktop",
@@ -1499,7 +1499,7 @@ def process_conversation(
 
     # Free Context for Claude: store a MCP-listable stub (completed + deferred) and skip heavy
     # LLM/embeddings. Enrichment runs on MCP touch / recent warm (demand-side), not on capture.
-    # Keep source=phone to avoid desktop trial-paywall coupling; product header selects this path.
+    # Product header selects this path; source may be honest `desktop` (trial exempt via app_product).
     if not force_process and not is_reprocess and should_demand_stub_context_enrichment(uid, app_product):
         stub = _store_context_enrichment_pending(uid, conversation)
         report_persistence(False)

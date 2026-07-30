@@ -13,6 +13,7 @@ struct StatusView: View {
     @ObservedObject private var engine = Engine.shared
     @ObservedObject private var auth = OmiAuth.shared
     @ObservedObject private var uploads = ConversationUploader.shared
+    @ObservedObject private var mcpKey = MCPKeyProvisioner.shared
 
     @State private var claude: (claudeCode: Bool, claudeDesktop: Bool) = (false, false)
     @State private var claudeNote: String?
@@ -183,6 +184,20 @@ struct StatusView: View {
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            if !LoginItem.isInstalledInApplications {
+                Text("Move Context for Claude into /Applications so launch at login survives a reboot.")
+                    .inkStyle(.statusLabel)
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if LoginItem.requiresApproval {
+                Text("Approve launch at login in System Settings → General → Login Items.")
+                    .inkStyle(.statusLabel)
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -203,15 +218,32 @@ struct StatusView: View {
                         .foregroundStyle(uploads.lastError == nil ? Color(nsColor: .secondaryLabelColor) : Color(nsColor: .systemRed))
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                if let mcpNote = mcpKeyNote {
+                    Text(mcpNote)
+                        .inkStyle(.statusLabel)
+                        .foregroundStyle(Color(nsColor: .systemRed))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer(minLength: 0)
 
             if auth.isSignedIn {
-                Button("Sign out") { auth.signOut() }
-                    .buttonStyle(.plain)
-                    .inkStyle(.statusLabel)
-                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                HStack(spacing: 10) {
+                    if needsMCPKeyRetry {
+                        Button("Retry") {
+                            Task { await MCPKeyProvisioner.shared.ensureKey() }
+                        }
+                        .buttonStyle(.plain)
+                        .inkStyle(.statusLabel)
+                        .foregroundStyle(Color(nsColor: .controlAccentColor))
+                    }
+                    Button("Sign out") { auth.signOut() }
+                        .buttonStyle(.plain)
+                        .inkStyle(.statusLabel)
+                        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                }
             }
         }
     }
@@ -219,6 +251,24 @@ struct StatusView: View {
     private var accountSummary: String {
         guard auth.isSignedIn else { return "Not signed in — nothing is reaching your Omi account" }
         return "Syncing to \(auth.email ?? "your Omi account")"
+    }
+
+    private var needsMCPKeyRetry: Bool {
+        switch mcpKey.status {
+        case .missing, .failed: return auth.isSignedIn
+        case .ready, .signedOut, .unknown: return false
+        }
+    }
+
+    private var mcpKeyNote: String? {
+        switch mcpKey.status {
+        case .missing:
+            return "Claude connector key missing — Claude cannot reach your Omi account yet"
+        case .failed(let detail):
+            return "Claude connector key failed: \(detail)"
+        case .ready, .signedOut, .unknown:
+            return nil
+        }
     }
 
     private var uploadNote: String? {

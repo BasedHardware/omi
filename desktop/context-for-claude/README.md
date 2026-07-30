@@ -88,6 +88,10 @@ Conversations still upload through `POST /v1/conversations/from-segments` for du
 and (product-aware) enrichment; `/v4/listen` is the live transcription path, not the upload path.
 Local FTS searches the Mac copy of those segments before account enrichment finishes.
 
+Free Context for Claude meters STT as **wall-clock** minutes while audio flows (silence counts) at
+**3000 min/mo**, in a product-scoped pool separate from Omi Desktop. When that pool is exhausted,
+the server stops forwarding audio to STT and the app latches speech capture off until next month.
+
 Detail: `ARCHITECTURE.md`. The interface contracts every file was built against: `CONTRACTS.md`.
 Exact visual values: `docs/design-system.md`.
 

@@ -1,5 +1,6 @@
 import Combine
 import ContextCore
+import AppKit
 import Foundation
 
 /// One transcript line, attributed by the Omi backend rather than by this app.
@@ -83,7 +84,7 @@ final class ListenSocket: ObservableObject {
         case live
         /// Dropped, with a reconnect already scheduled. Audio is being buffered.
         case failed(String)
-        /// The account's trial is over. A permanent stop — never a retry loop.
+        /// The account cannot transcribe (monthly freemium exhausted, or desktop trial). Permanent stop.
         case paywalled
     }
 
@@ -146,11 +147,13 @@ final class ListenSocket: ObservableObject {
 
     /// The caller wants a socket. Distinct from `state`, which says whether there is one.
     private var wantsConnection = false
-    /// Latched by a trial-expired close and cleared only by an explicit `stop()`, so no automatic
-    /// path can reopen a socket the backend has already refused on billing grounds.
+    /// Latched by freemium exhaustion / trial-expired close and cleared only by an explicit `stop()`,
+    /// so no automatic path can reopen a socket the backend has already refused on billing grounds.
     private var isPaywalled = false
     /// One forced token refresh per connection, reset once a connection opens.
     private var didRefreshToken = false
+    /// Freemium limit alert is one-shot per process; the menu bar reason stays latched.
+    private var didShowTranscriptionLimitAlert = false
 
     private var reconnectAttempt = 0
 
@@ -444,13 +447,40 @@ final class ListenSocket: ObservableObject {
             let status = (payload["status"] as? String) ?? "unknown"
             ContextLog.info("Service status: \(status)", Self.logCategory)
         case "freemium_threshold_reached":
-            // Sent when the account runs out of transcription credit. Sometimes it precedes a
-            // trial-expired close, sometimes the socket stays open — the close is the authority, so
-            // this only goes in the log.
-            ContextLog.error("The account has reached its transcription limit", Self.logCategory)
+            let remaining = FreemiumLimitGate.remainingSeconds(in: payload)
+            ContextLog.error(
+                "Transcription freemium threshold (remaining_seconds=\(remaining))",
+                Self.logCategory)
+            guard FreemiumLimitGate.shouldLatchPaywall(remainingSeconds: remaining) else { return }
+            applyTranscriptionLimitReached()
         default:
             ContextLog.info("Event \(type)", Self.logCategory)
         }
+    }
+
+    /// Stops STT spend client-side when the monthly freemium pool is exhausted.
+    private func applyTranscriptionLimitReached() {
+        guard !isPaywalled else { return }
+        isPaywalled = true
+        state = .paywalled
+        discardBuffer(reason: "transcription limit")
+        closeConnection(normally: true)
+        ContextAnalytics.capture("transcription_limit_reached")
+        showTranscriptionLimitAlertOnce()
+        ContextLog.error(
+            "Monthly transcription limit reached — cloud speech capture is paused until next month",
+            Self.logCategory)
+    }
+
+    private func showTranscriptionLimitAlertOnce() {
+        guard !didShowTranscriptionLimitAlert else { return }
+        didShowTranscriptionLimitAlert = true
+        let alert = NSAlert()
+        alert.messageText = "Monthly transcription limit reached"
+        alert.informativeText = "Speech capture is paused until next month."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     /// Pins the conversation's relative timeline to wall clock, once per conversation.
@@ -474,6 +504,15 @@ final class ListenSocket: ObservableObject {
 
         let detail = reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let raw = code.rawValue
+
+        var disconnectProps: [String: Any] = [
+            "close_code": raw,
+            "reason": detail.isEmpty ? "none" : String(detail.prefix(120)),
+        ]
+        if let httpStatus {
+            disconnectProps["http_status"] = httpStatus
+        }
+        ContextAnalytics.capture("listen_disconnected", properties: disconnectProps)
 
         // 1008 + `trial_expired`: the desktop paywall. The backend has decided this account may not
         // transcribe, and it will decide the same thing every time. Stop, say why, and stay stopped.
@@ -809,9 +848,8 @@ final class ListenSocket: ObservableObject {
             URLQueryItem(name: "channels", value: "1"),
             // The account's enrolled voice profile is what turns "SPEAKER_01" into a person.
             URLQueryItem(name: "include_speech_profile", value: "true"),
-            // Match from-segments: "desktop" opts the listen session into the desktop trial
-            // paywall. Context stamps X-App-Product separately for the STT pool.
-            URLQueryItem(name: "source", value: "phone"),
+            // Honest desktop source; Context stamps X-App-Product for the CFC STT pool and trial exempt.
+            URLQueryItem(name: "source", value: "desktop"),
             URLQueryItem(name: "speaker_auto_assign", value: "enabled"),
         ]
         if let clientConversationId, !clientConversationId.isEmpty {
@@ -819,6 +857,20 @@ final class ListenSocket: ObservableObject {
         }
         components.queryItems = query
         return components.url
+    }
+}
+
+/// Pure freemium-threshold parsing — kept free of AppKit so unit tests can pin the latch.
+enum FreemiumLimitGate {
+    static func remainingSeconds(in payload: [String: Any]) -> Int {
+        if let value = payload["remaining_seconds"] as? Int { return value }
+        if let value = payload["remaining_seconds"] as? Double { return Int(value) }
+        if let value = payload["remaining_seconds"] as? NSNumber { return value.intValue }
+        return 0
+    }
+
+    static func shouldLatchPaywall(remainingSeconds: Int) -> Bool {
+        remainingSeconds <= 0
     }
 }
 

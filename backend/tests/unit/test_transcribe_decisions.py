@@ -485,6 +485,21 @@ def test_stt_buffer_flush_dead_socket_and_budget_do_not_send_or_bill():
     assert exhausted.send_to_stt is False
     assert exhausted.dg_usage_ms == 0
 
+    no_credits = decide_stt_buffer_flush(
+        buffer_len=960,
+        flush_size=960,
+        force=False,
+        socket_dead=False,
+        socket_available=True,
+        fair_use_dg_budget_exhausted=False,
+        fair_use_track_dg_usage=True,
+        sample_rate=16000,
+        user_has_credits=False,
+    )
+    assert no_credits.should_flush is True
+    assert no_credits.send_to_stt is False
+    assert no_credits.dg_usage_ms == 0
+
 
 def test_multi_channel_send_and_mix_plans():
     should_send, dg_ms = decide_multi_channel_stt_send(
@@ -504,6 +519,16 @@ def test_multi_channel_send_and_mix_plans():
     )
     assert blocked is False
     assert blocked_ms == 0
+
+    no_credits_send, no_credits_ms = decide_multi_channel_stt_send(
+        socket_available=True,
+        fair_use_dg_budget_exhausted=False,
+        pcm_len=TARGET_SAMPLE_RATE * 2,
+        fair_use_track_dg_usage=True,
+        user_has_credits=False,
+    )
+    assert no_credits_send is False
+    assert no_credits_ms == 0
 
     not_ready = decide_multi_channel_mix([bytearray(b'ab'), bytearray()], audio_bytes_enabled=True)
     assert not_ready.should_mix is False

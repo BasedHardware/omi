@@ -267,16 +267,23 @@ def _is_trial_expired_cached(uid: str) -> bool:
     return expired
 
 
-def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
+def is_trial_paywalled(uid: str, platform: Optional[str], app_product: Optional[str] = None) -> bool:
     """True iff the request is from a desktop client AND the user has used
     their full 3-day free trial without subscribing or activating BYOK.
 
     `platform` is the X-App-Platform header for HTTP requests or the
     `source` query param for the listen WebSocket. Mobile (ios/android),
     Omi devices, and any unknown/missing platform are never paywalled.
+
+    Context for Claude (`app_product`) is exempt: its monthly freemium STT
+    pool is the product limiter, not the Desktop 3-day trial.
     """
+    from utils.product_entitlements import is_context_for_claude
+
     if not TRIAL_PAYWALL_ENABLED:
         return False  # trial paywall disabled — never block on account age
+    if is_context_for_claude(app_product):
+        return False
     if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
         return False
     return _is_trial_expired_cached(uid)
@@ -766,7 +773,7 @@ def get_chat_quota_snapshot(
     # Paywall test override — surface as exhausted Free-plan quota so the
     # client renders the same over-limit popup it shows for normal users
     # past 30/mo.
-    if is_trial_paywalled(uid, platform):
+    if is_trial_paywalled(uid, platform, app_product):
         usage = user_usage_db.get_monthly_chat_usage(uid)
         return {
             'plan': PlanType.basic,
@@ -830,7 +837,7 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None, app_product: Op
     # Paywall test override — bypass BYOK + plan checks so the same 402
     # surfaces that a free user past 30 questions would hit. Desktop only;
     # mobile callers continue down the normal plan path.
-    if is_trial_paywalled(uid, platform):
+    if is_trial_paywalled(uid, platform, app_product):
         snapshot = get_chat_quota_snapshot(uid, platform=platform, app_product=app_product)
         raise HTTPException(
             status_code=402,
@@ -1208,7 +1215,8 @@ def has_transcription_credits(uid: str, source: Optional[str] = None, app_produc
     from utils.product_entitlements import apply_product_free_limits, transcription_usage_field
 
     # Desktop trial paywall: paywalled users have zero transcription credits.
-    if is_trial_paywalled(uid, source):
+    # Context for Claude is exempt via app_product (freemium STT pool is the limiter).
+    if is_trial_paywalled(uid, source, app_product):
         return False
 
     # BYOK users pay Deepgram directly — there's no Omi-side transcription quota to enforce.
@@ -1249,7 +1257,8 @@ def get_remaining_transcription_seconds(
 
     # Single-user paywall test override — surface 0 so the freemium-threshold
     # event fires and the client renders its usage-limit popup.
-    if is_trial_paywalled(uid, source):
+    # Context for Claude is exempt via app_product.
+    if is_trial_paywalled(uid, source, app_product):
         return 0
 
     # BYOK: user brings their own Deepgram — no Omi quota, no freemium threshold.

@@ -1166,7 +1166,11 @@ async def test_finalizer_retries_canonical_memory_extraction_before_fanout(monke
         return func(*args, **kwargs)
 
     conversation = SimpleNamespace(
-        id='conversation-1', status=ConversationStatus.processing, language='en', discarded=False
+        id='conversation-1',
+        status=ConversationStatus.processing,
+        language='en',
+        discarded=False,
+        app_product='context-for-claude',
     )
     process = MagicMock(return_value=conversation)
     extract = MagicMock(side_effect=RuntimeError('canonical write gate unavailable'))
@@ -1195,6 +1199,7 @@ async def test_finalizer_retries_canonical_memory_extraction_before_fanout(monke
         )
 
     assert process.call_args.kwargs['defer_derived_effects'] is True
+    assert process.call_args.kwargs['app_product'] == 'context-for-claude'
     # The ownership fence (fanout claim) now runs before extract_memories;
     # a failing canonical extraction still raises for retry, and the fanout
     # lease is left for the next delivery to re-claim.

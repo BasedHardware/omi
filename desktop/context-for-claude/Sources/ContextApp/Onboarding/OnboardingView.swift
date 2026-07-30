@@ -219,7 +219,12 @@ struct OnboardingView: View {
             connectorSurfaces = configuredSurfaces(from: result)
             connectorMessage = connectorSurfaces.isEmpty
                 ? "No local Claude configuration was changed. You can continue and connect it later."
-                : "The connector was configured locally. It will be available when you open Claude."
+                : "The connector was configured locally. Quit and reopen Claude Code / Claude Desktop so they load the connector."
+            if !connectorSurfaces.isEmpty {
+                ContextAnalytics.capture(
+                    "claude_connector_configured",
+                    properties: ["restart_hinted": true, "surface": "onboarding"])
+            }
             configuringConnector = false
         }
     }
@@ -393,6 +398,20 @@ struct OnboardingView: View {
                 .inkStyle(.prose)
                 .foregroundStyle(Ink.mid)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if !LoginItem.isInstalledInApplications {
+                Text("Move me into /Applications so launch at login survives a reboot.")
+                    .inkStyle(.statusLabel)
+                    .foregroundStyle(Ink.faint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if LoginItem.requiresApproval {
+                Text("Approve launch at login in System Settings → General → Login Items.")
+                    .inkStyle(.statusLabel)
+                    .foregroundStyle(Ink.faint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if !isGranted(.screen) {
                 InkButton("Open Screen Recording", kind: .secondary) {

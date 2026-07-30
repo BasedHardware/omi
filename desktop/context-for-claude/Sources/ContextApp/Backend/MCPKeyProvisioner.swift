@@ -1,4 +1,5 @@
 import ContextCore
+import Combine
 import Foundation
 
 /// Gives `context-for-claude-mcp` a credential of its own.
@@ -18,15 +19,30 @@ import Foundation
 /// Everything here is best-effort. Capture, upload and the local MCP tools do not depend on it: a
 /// failure costs account history, never the app.
 @MainActor
-final class MCPKeyProvisioner {
+final class MCPKeyProvisioner: ObservableObject {
     static let shared = MCPKeyProvisioner()
 
     private static let category = "omi-key"
+
+    enum Status: Equatable {
+        case unknown
+        case signedOut
+        case ready
+        case missing
+        case failed(String)
+    }
+
+    @Published private(set) var status: Status = .unknown
 
     /// Must match `OmiKeyResolver.keyFileURL` in `ContextMCPKit`. The two halves of this contract
     /// live in separate targets because the MCP binary cannot link `ContextApp`.
     private static var keyFileURL: URL {
         ContextPaths.supportDirectory.appendingPathComponent("mcp-key")
+    }
+
+    /// Sidecar so MCP PostHog can stamp a uid-scoped distinct_id (not a shared blob).
+    private static var uidFileURL: URL {
+        ContextPaths.supportDirectory.appendingPathComponent("mcp-uid")
     }
 
     /// Scoped to this Mac, and stable across renames, because one account is shared by every device
@@ -78,10 +94,15 @@ final class MCPKeyProvisioner {
                 didLogReuse = true
                 ContextLog.info("Reusing the Omi MCP key already on disk", Self.category)
             }
+            status = .ready
+            Self.persistUidIfNeeded()
             return
         }
 
-        guard !isBlockedForThisLaunch else { return }
+        guard !isBlockedForThisLaunch else {
+            status = .failed("Could not store the Omi MCP key on disk")
+            return
+        }
 
         guard OmiAuth.shared.isSignedIn else {
             // Routine, not a failure: the app runs before anyone signs in, and signing in calls back
@@ -90,8 +111,11 @@ final class MCPKeyProvisioner {
                 didLogSignedOut = true
                 ContextLog.info("Signed out; no Omi MCP key to provision yet", Self.category)
             }
+            status = .signedOut
             return
         }
+
+        status = .missing
 
         let name = Self.keyName
         let superseded = await Self.keyIds(named: name)
@@ -106,23 +130,39 @@ final class MCPKeyProvisioner {
             // Offline, rate-limited, a token that would not refresh. The resolver falls back to
             // whatever else it can find, and the tools report the account unreachable — which is true.
             ContextLog.error("Could not provision an Omi MCP key: \(error.localizedDescription)", Self.category)
+            status = .failed(error.localizedDescription)
+            ContextAnalytics.capture(
+                "mcp_key_provision_failed",
+                properties: ["reason": String(error.localizedDescription.prefix(120))])
             return
         }
 
         do {
             try Self.persist(created.key, to: url)
+            Self.persistUidIfNeeded()
         } catch {
             isBlockedForThisLaunch = true
             ContextLog.error(
                 "Provisioned an Omi MCP key but could not store it: \(error.localizedDescription)", Self.category)
+            status = .failed(error.localizedDescription)
+            ContextAnalytics.capture(
+                "mcp_key_provision_failed",
+                properties: ["reason": "store_failed"])
             return
         }
         ContextLog.info("Provisioned an Omi MCP key for this Mac", Self.category)
+        status = .ready
+        ContextAnalytics.capture("mcp_key_provision_succeeded")
 
         // Only now: a mint that failed must leave the account exactly as it was.
         for id in superseded {
             await Self.retire(id)
         }
+    }
+
+    private static func persistUidIfNeeded() {
+        guard let uid = OmiAuth.shared.userId, !uid.isEmpty else { return }
+        try? uid.data(using: .utf8)?.write(to: uidFileURL, options: .atomic)
     }
 
     /// Ids of the keys on the account carrying `name`, so the ones this Mac can no longer read get

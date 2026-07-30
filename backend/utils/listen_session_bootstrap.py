@@ -146,8 +146,9 @@ async def load_listen_connect_context(
     use_custom_stt: bool,
     onboarding_mode: bool,
     stt_language: str,
+    app_product: Optional[str] = None,
 ) -> ListenConnectContext:
-    base = await load_listen_connect_base(uid, source=source, use_custom_stt=use_custom_stt)
+    base = await load_listen_connect_base(uid, source=source, use_custom_stt=use_custom_stt, app_product=app_product)
     return finalize_listen_connect_context(
         base,
         language=language,
