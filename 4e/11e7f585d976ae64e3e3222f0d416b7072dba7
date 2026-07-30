@@ -1,0 +1,27 @@
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_18cae1c5af4258::t_af83e44bc65a74 300-320
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_18cae1c5af4258::t_b645018f8bab09 84
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsGeneralPane.swift
+  s_18cae1c5af4258::t_7b79b7e12c870e 170,213-214,217,280
+desktop/context-for-claude/Sources/ContextApp/Settings/ShortcutBinding.swift
+  s_18cae1c5af4258::t_6ea4c6139de143 12,101,103-104,123,127,166,168-169,172,191-194,197-198,202-203,211,213,215,232
+desktop/context-for-claude/Tests/ContextAppTests/SettingsTests.swift
+  s_18cae1c5af4258::t_ce65865df2a479 583,593,610
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "4e11e7f585d976ae64e3e3222f0d416b7072dba7",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
