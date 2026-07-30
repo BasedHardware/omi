@@ -17,8 +17,18 @@ struct OnboardingView: View {
     }
 
     /// Fixed order. Microphone first because it is the one people expect; the system tap second
-    /// because it only makes sense once the mic has been explained.
-    private let capabilities: [Capability] = [.microphone, .systemAudio, .screen]
+    /// because it only makes sense once the mic has been explained; screen, and then the window text
+    /// that sharpens it, because the second is worth nothing without the first.
+    private let capabilities: [Capability] = [.microphone, .systemAudio, .screen, .accessibility]
+
+    /// The grants without which the app does nothing, and therefore the only ones this step waits on.
+    ///
+    /// Accessibility is deliberately outside this list. It cannot be prompted — macOS grants it by
+    /// hand in System Settings and offers no dialog at all — so gating completion on it would strand
+    /// anyone unwilling to leave the flow on a step with no button that could finish it. Capture
+    /// degrades to OCR-only without it: a worse product, and a working one. The row stays visible so
+    /// the offer is on the table, and the menu bar asks again later.
+    private var requiredCapabilities: [Capability] { [.microphone, .systemAudio, .screen] }
 
     /// Owned by the auth layer, observed here. Everything Context for Claude records lands in this account, so
     /// the step machine asks it who the user is before it asks macOS for a microphone.
@@ -313,6 +323,16 @@ struct OnboardingView: View {
                 .inkStyle(.firstTitle)
                 .foregroundStyle(Ink.ink)
 
+            // Said before the first dialog, never after. macOS asks in its own words — terse,
+            // system-voiced, and identical to the prompt of every app that ever abused the same
+            // permission — and a user meeting that cold has only the app's reputation to go on.
+            // Screen-recording tools die at exactly this prompt. Naming what is coming, in order,
+            // in the app's own voice, is the difference between consenting and being startled.
+            Text(setupPreamble)
+                .inkStyle(.prose)
+                .foregroundStyle(Ink.mid)
+                .fixedSize(horizontal: false, vertical: true)
+
             VStack(spacing: 8) {
                 ForEach(capabilities, id: \.self) { capability in
                     InkPermissionRow(
@@ -335,6 +355,23 @@ struct OnboardingView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermissions()
         }
+    }
+
+    /// What is about to happen, in the order it happens, before any of it happens.
+    ///
+    /// Changes once the run starts: standing still, it is a warning; running, it is a caption for
+    /// the row that is lit. Accessibility is named as optional here rather than discovered as an
+    /// unaskable fourth row later.
+    private var setupPreamble: String {
+        if granting {
+            return "One at a time. Answer each one and I’ll wait for it to land before the next."
+        }
+        return """
+        macOS will ask three times — microphone, then the audio of your calls, then your screen. \
+        Each one is a separate question and I’ll ask them one at a time. The fourth, window text, \
+        only System Settings can grant; it makes me quote exactly instead of guessing, and I work \
+        without it.
+        """
     }
 
     private var setupTitle: String {
@@ -517,7 +554,8 @@ struct OnboardingView: View {
         reported = true
 
         // No continue button anywhere: the step ends the moment the grants are real.
-        guard step == .setup, !granting, capabilities.allSatisfy({ next[$0] == true }) else { return }
+        guard step == .setup, !granting, requiredCapabilities.allSatisfy({ next[$0] == true })
+        else { return }
         go(to: .done)
     }
 
@@ -549,17 +587,56 @@ struct OnboardingView: View {
     /// Registration and the login item happen at the end, whether or not every permission landed —
     /// Claude should be able to reach Context for Claude and report the gap, which is far better than Context for Claude
     /// being invisible because a microphone was declined.
+    /// How long a row is lit before its dialog opens. Long enough to read the sentence it is asking
+    /// about, short enough that nobody wonders whether the button worked.
+    private static let leadIn: UInt64 = 900_000_000
+    /// How long the new checkmark sits alone before the next dialog opens over it.
+    private static let afterGrant: UInt64 = 1_100_000_000
+    /// The longest we wait for TCC to finish writing a grant it has already accepted.
+    private static let settleDeadline: TimeInterval = 2.0
+
+    /// Polls until the grant the user just gave actually reads back, or the deadline passes.
+    ///
+    /// Bounded, and indifferent to the answer: a decline never becomes true, so this returns on the
+    /// deadline and the sequence carries on to the next capability rather than stalling on a "no".
+    private func settle(_ capability: Capability) async {
+        let deadline = Date().addingTimeInterval(Self.settleDeadline)
+        while Date() < deadline {
+            if Permissions.check(capability) { return }
+            try? await Task.sleep(nanoseconds: 120_000_000)
+        }
+    }
+
     private func runSetup() {
         guard !granting else { return }
         granting = true
 
         Task { @MainActor in
-            for capability in capabilities where !isGranted(capability) {
-                asked.insert(capability)
+            // Only the promptable ones. Asking for Accessibility here would throw System Settings
+            // over the card mid-sequence, with no dialog to answer and nothing to come back to —
+            // the run has to stay inside the window it started in. Its row is tappable for anyone
+            // who wants it now.
+            for capability in requiredCapabilities where !isGranted(capability) {
+                // The row lights up first, alone, before anything covers it. Without this the
+                // dialogs arrive stacked on each other and the user answers three prompts having
+                // read none of them — they are consenting to a queue rather than to three separate
+                // things. One at a time, with air around each, is the whole point of asking.
                 requesting.insert(capability)
+                try? await Task.sleep(nanoseconds: Self.leadIn)
+
+                asked.insert(capability)
                 _ = await Permissions.request(capability)
+
+                // TCC answers the dialog before it has finished writing the grant, so a check taken
+                // the instant `request` returns still reads false and the row would flash "action
+                // required" over a permission the user just gave.
+                await settle(capability)
                 requesting.remove(capability)
                 refreshPermissions()
+
+                // And the checkmark has to be seen. A confirmation the user cannot witness is the
+                // same as no confirmation: the step succeeded and they have no way to know it.
+                try? await Task.sleep(nanoseconds: Self.afterGrant)
             }
 
             if !LoginItem.isEnabled { _ = LoginItem.enable() }

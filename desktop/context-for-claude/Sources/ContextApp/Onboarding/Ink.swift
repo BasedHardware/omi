@@ -51,9 +51,13 @@ enum Ink {
     // The site's seven variables, spelled the same way they are spelled in its `:root`.
 
     /// `--paper`. Every surface in the app: the onboarding oval, the popover.
-    static let paper = Color(hex: 0xFBF8F4)
+    ///
+    /// Anthropic's ivory rather than the site's slightly pinker cream. This app sits beside Claude
+    /// in the same menu bar and hands its output to the same model, so reading as part of that
+    /// family is worth more than matching a marketing page — and the two were a hair apart anyway.
+    static let paper = Color(hex: 0xFAF9F5)
     /// `--ink`. Primary type, the primary button's fill, the granted checkbox.
-    static let ink = Color(hex: 0x171412)
+    static let ink = Color(hex: 0x141413)
     /// `--mid`. Secondary type: prose under a headline, the popover's status lines.
     static let mid = Color(hex: 0x6B625B)
     /// `--faint`. Tertiary type: a status word, a count, "Quit". Never a whole sentence someone
@@ -62,7 +66,12 @@ enum Ink {
     /// `--line`. Rules and card hairlines. Barely there on purpose.
     static let line = Color(hex: 0xE6DFD6)
     /// `--bronze`. The one accent: an actionable link, and nothing else.
-    static let bronze = Color(hex: 0x8F6420)
+    ///
+    /// Anthropic's clay. Kept under the old name because it is still the same role — one accent,
+    /// spent on the one thing that is actionable — and renaming it would touch every call site to
+    /// say nothing new. Warmer and lighter than the bronze it replaces, so anything relying on it
+    /// for contrast against paper has to earn that with weight or size rather than with hue.
+    static let bronze = Color(hex: 0xD97757)
     /// `--red`. The site draws its card outline in this; here it is the error colour, which is the
     /// only place the app ever needs to raise its voice.
     static let errorRed = Color(hex: 0xC9352B)
@@ -75,20 +84,20 @@ enum Ink {
     // between `paper` and `line`, which is what lets a permission row read as a card without a
     // border heavy enough to box it in.
     /// Permission-row fill.
-    static let surface = Color(hex: 0xF3EEE5)
+    static let surface = Color(hex: 0xF0EEE6)
     /// The same row under the pointer. A tappable row has to say so, and macOS has no other
     /// affordance for it.
-    static let surfaceHover = Color(hex: 0xECE5D9)
+    static let surfaceHover = Color(hex: 0xE8E5DA)
 
     /// A drawn hairline: the secondary button's outline, the empty checkbox. `line` is right for a
     /// rule between blocks and too faint for the edge of something you are meant to press.
-    static let inkHairline = Color(hex: 0x171412, opacity: 0.28)
+    static let inkHairline = Color(hex: 0x141413, opacity: 0.28)
     /// The pressed state of anything with no fill of its own.
-    static let inkWash = Color(hex: 0x171412, opacity: 0.06)
+    static let inkWash = Color(hex: 0x141413, opacity: 0.06)
 
     // AppKit twins for the layers below SwiftUI.
-    static let nsPaper = NSColor(hex: 0xFBF8F4)
-    static let nsInk = NSColor(hex: 0x171412)
+    static let nsPaper = NSColor(hex: 0xFAF9F5)
+    static let nsInk = NSColor(hex: 0x141413)
 }
 
 /// One backdrop blob: a unit position relative to the frame, and its colour.
