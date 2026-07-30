@@ -1,0 +1,28 @@
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsStoragePane.swift
+  s_18cae1c5af4258::t_701fa1f84d2051 18-101,103-111,113-119,121,123-133,136-144,146-150,152-158,160-171,173-179,185-205
+  s_18cae1c5af4258::t_a9f62a41aa7e0d 1-17,102,112,120,122,134-135,145,151,159,172,180-184,206-207
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsAppearancePane.swift
+  s_18cae1c5af4258::t_701fa1f84d2051 15-69,71-86,89-113,124-150,153-169,186-277,279-299,301-347,349-350,352-355,358-362,364-375,377-385
+  s_18cae1c5af4258::t_7de21b5992ef26 1-14,70,87-88,115-123,151-152,170-185,278,300,348,351,356-357,363,376,386-387
+  s_18cae1c5af4258::t_f6a0ae59396c92 114
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsExclusionsPane.swift
+  s_18cae1c5af4258::t_f545434222728d 1-11,26,31-40,122,127,159,168,174,185,187,192,194,201,214-215,225,349,354,358-359,368-369,394-395
+  s_18cae1c5af4258::t_f6a0ae59396c92 317,344
+  s_18cae1c5af4258::t_701fa1f84d2051 12-25,27-30,41-121,123-126,128-158,160-167,169-173,175-184,186,188-191,193,195-200,202-213,216-224,226-316,318-343,345-348,350-353,355-357,360-367,370-393
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2a7daf443fbef618cbb17a646fce1defd3a7b896",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
