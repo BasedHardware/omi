@@ -4249,6 +4249,24 @@
         "title": "BatchDeleteActionItemsResponse",
         "type": "object"
       },
+      "BatchDeleteMemoriesRequest": {
+        "properties": {
+          "memory_ids": {
+            "description": "Memory IDs to delete in a single batch request",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Memory Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memory_ids"
+        ],
+        "title": "BatchDeleteMemoriesRequest",
+        "type": "object"
+      },
       "BatchMemoriesRequest": {
         "properties": {
           "memories": {
@@ -4491,6 +4509,23 @@
           "file"
         ],
         "title": "Body_import_limitless_data_v1_import_limitless_post",
+        "type": "object"
+      },
+      "Body_migrate_app_owner_v1_apps_migrate_owner_post": {
+        "properties": {
+          "source_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Token"
+          }
+        },
+        "title": "Body_migrate_app_owner_v1_apps_migrate_owner_post",
         "type": "object"
       },
       "Body_sync_local_files_v2_v2_sync_local_files_post": {
@@ -6649,6 +6684,47 @@
           "conversation_id"
         ],
         "title": "ConversationActionItemsResponse",
+        "type": "object"
+      },
+      "ConversationAnalytics": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "speaker_count": {
+            "title": "Speaker Count",
+            "type": "integer"
+          },
+          "speakers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpeakerAnalytics"
+            },
+            "title": "Speakers",
+            "type": "array"
+          },
+          "total_seconds": {
+            "title": "Total Seconds",
+            "type": "number"
+          },
+          "total_words": {
+            "title": "Total Words",
+            "type": "integer"
+          },
+          "words_per_minute": {
+            "title": "Words Per Minute",
+            "type": "number"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "total_seconds",
+          "total_words",
+          "words_per_minute",
+          "speaker_count"
+        ],
+        "title": "ConversationAnalytics",
         "type": "object"
       },
       "ConversationAudio": {
@@ -11045,6 +11121,14 @@
       },
       "FullConversation": {
         "properties": {
+          "apps_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppResult"
+            },
+            "title": "Apps Results",
+            "type": "array"
+          },
           "finished_at": {
             "anyOf": [
               {
@@ -11093,14 +11177,6 @@
               "$ref": "#/components/schemas/SimpleTranscriptSegment"
             },
             "title": "Transcript Segments",
-            "type": "array"
-          },
-          "apps_results": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/AppResult"
-            },
-            "title": "Apps Results",
             "type": "array"
           }
         },
@@ -11224,10 +11300,64 @@
             "title": "Google Place Id"
           },
           "latitude": {
-            "title": "Latitude",
-            "type": "number",
             "maximum": 90.0,
-            "minimum": -90.0
+            "minimum": -90.0,
+            "title": "Latitude",
+            "type": "number"
+          },
+          "location_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Type"
+          },
+          "longitude": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude",
+            "type": "number"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "title": "Geolocation",
+        "type": "object"
+      },
+      "GeolocationInput": {
+        "description": "Released wire contract for coordinates accepted at legacy API boundaries.\n\nBounds are enforced before any value is cached, geocoded, or persisted. Keeping\nthis transport shape broad preserves clients released before the bound contract\nexisted, while ``Geolocation`` remains the only usable server-side value.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "google_place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Place Id"
+          },
+          "latitude": {
+            "title": "Latitude",
+            "type": "number"
           },
           "location_type": {
             "anyOf": [
@@ -11242,16 +11372,14 @@
           },
           "longitude": {
             "title": "Longitude",
-            "type": "number",
-            "maximum": 180.0,
-            "minimum": -180.0
+            "type": "number"
           }
         },
         "required": [
           "latitude",
           "longitude"
         ],
-        "title": "Geolocation",
+        "title": "GeolocationInput",
         "type": "object"
       },
       "GoalCreate": {
@@ -12552,22 +12680,6 @@
       },
       "KnowledgeGraphResponse": {
         "properties": {
-          "edges": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Edges",
-            "type": "array"
-          },
-          "nodes": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Nodes",
-            "type": "array"
-          },
           "edge_limit": {
             "anyOf": [
               {
@@ -12579,6 +12691,14 @@
             ],
             "title": "Edge Limit"
           },
+          "edges": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
           "node_limit": {
             "anyOf": [
               {
@@ -12589,6 +12709,14 @@
               }
             ],
             "title": "Node Limit"
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "array"
           },
           "truncated": {
             "default": false,
@@ -12698,6 +12826,73 @@
           "period_days"
         ],
         "title": "LlmUsageResponse",
+        "type": "object"
+      },
+      "LocationContextConsentResponse": {
+        "properties": {
+          "disclosed_providers": {
+            "default": [
+              "Google Maps",
+              "the configured AI chat provider"
+            ],
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Disclosed Providers",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "purpose": {
+            "default": "chat_city_context",
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "LocationContextConsentResponse",
+        "type": "object"
+      },
+      "LocationContextConsentUpdate": {
+        "properties": {
+          "disclosure_accepted": {
+            "default": false,
+            "description": "Required to enable city context: Google Maps reverse-geocodes the device location and the configured AI chat provider receives city, region, and country only.",
+            "title": "Disclosure Accepted",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "LocationContextConsentUpdate",
         "type": "object"
       },
       "MaterializePromptsRequest": {
@@ -13774,6 +13969,11 @@
             ],
             "title": "Invalid At"
           },
+          "is_baseline": {
+            "default": false,
+            "title": "Is Baseline",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",
@@ -13975,11 +14175,6 @@
             ],
             "default": "public",
             "title": "Visibility"
-          },
-          "is_baseline": {
-            "default": false,
-            "title": "Is Baseline",
-            "type": "boolean"
           }
         },
         "required": [
@@ -18063,6 +18258,14 @@
       },
       "SimpleConversation": {
         "properties": {
+          "apps_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppResult"
+            },
+            "title": "Apps Results",
+            "type": "array"
+          },
           "finished_at": {
             "anyOf": [
               {
@@ -18104,14 +18307,6 @@
           },
           "structured": {
             "$ref": "#/components/schemas/SimpleStructured"
-          },
-          "apps_results": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/AppResult"
-            },
-            "title": "Apps Results",
-            "type": "array"
           }
         },
         "required": [
@@ -18265,6 +18460,55 @@
           "expires_at"
         ],
         "title": "SnapshotReceipt",
+        "type": "object"
+      },
+      "SpeakerAnalytics": {
+        "properties": {
+          "is_user": {
+            "default": false,
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "speaker": {
+            "title": "Speaker",
+            "type": "string"
+          },
+          "talk_seconds": {
+            "title": "Talk Seconds",
+            "type": "number"
+          },
+          "talk_share": {
+            "title": "Talk Share",
+            "type": "number"
+          },
+          "word_count": {
+            "title": "Word Count",
+            "type": "integer"
+          },
+          "words_per_minute": {
+            "title": "Words Per Minute",
+            "type": "number"
+          }
+        },
+        "required": [
+          "speaker",
+          "talk_seconds",
+          "word_count",
+          "words_per_minute",
+          "talk_share"
+        ],
+        "title": "SpeakerAnalytics",
         "type": "object"
       },
       "SpeechProfileMutationResponse": {
@@ -20364,7 +20608,7 @@
       },
       "TaskWorkflowControl": {
         "additionalProperties": false,
-        "description": "Per-user universal-contract migration control; defaults preserve legacy behavior.",
+        "description": "Persisted workflow metadata plus the derived Chat-first capability.\n\n``workflow_mode`` remains readable for legacy records and operational\nhistory. It is not an entitlement. ``chat_first_ui`` is derived only from\nthe canonical-memory selector; persistence excludes it so clients cannot\nturn a sampled response into later authority.",
         "properties": {
           "account_generation": {
             "default": 0,
@@ -23204,250 +23448,6 @@
           "unit_amount"
         ],
         "title": "PricingOption",
-        "type": "object"
-      },
-      "BatchDeleteMemoriesRequest": {
-        "properties": {
-          "memory_ids": {
-            "description": "Memory IDs to delete in a single batch request",
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 100,
-            "title": "Memory Ids",
-            "type": "array"
-          }
-        },
-        "required": [
-          "memory_ids"
-        ],
-        "title": "BatchDeleteMemoriesRequest",
-        "type": "object"
-      },
-      "Body_migrate_app_owner_v1_apps_migrate_owner_post": {
-        "properties": {
-          "source_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Token"
-          }
-        },
-        "title": "Body_migrate_app_owner_v1_apps_migrate_owner_post",
-        "type": "object"
-      },
-      "ConversationAnalytics": {
-        "properties": {
-          "conversation_id": {
-            "title": "Conversation Id",
-            "type": "string"
-          },
-          "speaker_count": {
-            "title": "Speaker Count",
-            "type": "integer"
-          },
-          "speakers": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/SpeakerAnalytics"
-            },
-            "title": "Speakers",
-            "type": "array"
-          },
-          "total_seconds": {
-            "title": "Total Seconds",
-            "type": "number"
-          },
-          "total_words": {
-            "title": "Total Words",
-            "type": "integer"
-          },
-          "words_per_minute": {
-            "title": "Words Per Minute",
-            "type": "number"
-          }
-        },
-        "required": [
-          "conversation_id",
-          "total_seconds",
-          "total_words",
-          "words_per_minute",
-          "speaker_count"
-        ],
-        "title": "ConversationAnalytics",
-        "type": "object"
-      },
-      "GeolocationInput": {
-        "description": "Released wire contract for coordinates accepted at legacy API boundaries.\n\nBounds are enforced before any value is cached, geocoded, or persisted. Keeping\nthis transport shape broad preserves clients released before the bound contract\nexisted, while ``Geolocation`` remains the only usable server-side value.",
-        "properties": {
-          "address": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Address"
-          },
-          "google_place_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Google Place Id"
-          },
-          "latitude": {
-            "title": "Latitude",
-            "type": "number"
-          },
-          "location_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Location Type"
-          },
-          "longitude": {
-            "title": "Longitude",
-            "type": "number"
-          }
-        },
-        "required": [
-          "latitude",
-          "longitude"
-        ],
-        "title": "GeolocationInput",
-        "type": "object"
-      },
-      "LocationContextConsentResponse": {
-        "properties": {
-          "disclosed_providers": {
-            "default": [
-              "Google Maps",
-              "the configured AI chat provider"
-            ],
-            "maxItems": 2,
-            "minItems": 2,
-            "prefixItems": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "string"
-              }
-            ],
-            "title": "Disclosed Providers",
-            "type": "array"
-          },
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "expires_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires At"
-          },
-          "purpose": {
-            "default": "chat_city_context",
-            "title": "Purpose",
-            "type": "string"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "LocationContextConsentResponse",
-        "type": "object"
-      },
-      "LocationContextConsentUpdate": {
-        "properties": {
-          "disclosure_accepted": {
-            "default": false,
-            "description": "Required to enable city context: Google Maps reverse-geocodes the device location and the configured AI chat provider receives city, region, and country only.",
-            "title": "Disclosure Accepted",
-            "type": "boolean"
-          },
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "LocationContextConsentUpdate",
-        "type": "object"
-      },
-      "SpeakerAnalytics": {
-        "properties": {
-          "is_user": {
-            "default": false,
-            "title": "Is User",
-            "type": "boolean"
-          },
-          "person_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Person Id"
-          },
-          "speaker": {
-            "title": "Speaker",
-            "type": "string"
-          },
-          "talk_seconds": {
-            "title": "Talk Seconds",
-            "type": "number"
-          },
-          "talk_share": {
-            "title": "Talk Share",
-            "type": "number"
-          },
-          "word_count": {
-            "title": "Word Count",
-            "type": "integer"
-          },
-          "words_per_minute": {
-            "title": "Words Per Minute",
-            "type": "number"
-          }
-        },
-        "required": [
-          "speaker",
-          "talk_seconds",
-          "word_count",
-          "words_per_minute",
-          "talk_share"
-        ],
-        "title": "SpeakerAnalytics",
         "type": "object"
       }
     },
@@ -27594,6 +27594,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_migrate_app_owner_v1_apps_migrate_owner_post"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -27627,16 +27636,7 @@
         "summary": "Migrate App Owner",
         "tags": [
           "v1"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_migrate_app_owner_v1_apps_migrate_owner_post"
-              }
-            }
-          }
-        }
+        ]
       }
     },
     "/v1/apps/popular": {
@@ -31420,6 +31420,24 @@
             }
           },
           {
+            "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+              "title": "Sources"
+            }
+          },
+          {
             "description": "Filter by start date (inclusive)",
             "in": "query",
             "name": "start_date",
@@ -31761,7 +31779,7 @@
             }
           },
           {
-            "description": "Comma-separated source filter (e.g. friend,omi)",
+            "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
             "in": "query",
             "name": "sources",
             "required": false,
@@ -31774,7 +31792,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Comma-separated source filter (e.g. friend,omi)",
+              "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
               "title": "Sources"
             }
           },
@@ -32223,6 +32241,34 @@
             "schema": {
               "title": "Conversation Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Optional provenance constraint for a detail read",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional provenance constraint for a detail read",
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_discarded",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Discarded",
+              "type": "boolean"
             }
           },
           {
@@ -32760,6 +32806,96 @@
           }
         ],
         "summary": "Update Action Item Description",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/analytics": {
+      "get": {
+        "description": "Per-speaker analytics for a conversation (issue #4481).\n\nReturns each speaker's talk time, word count, and words per minute, plus the\nconversation totals. Speakers are the account owner (\"You\"), identified people\n(resolved to their name), and any remaining diarization speakers.",
+        "operationId": "get_conversation_analytics_v1_conversations__conversation_id__analytics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationAnalytics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Analytics",
         "tags": [
           "conversations"
         ]
@@ -38323,6 +38459,94 @@
           "goals"
         ]
       },
+      "get": {
+        "description": "Fetch a single goal by id.\n\nThe list routes cap how many goals are returned, and update/delete/progress/history/advice\nalready address a goal by id, so this exposes the matching read for one goal (404 if it does\nnot exist or belongs to another user).",
+        "operationId": "get_goal_by_id_v1_goals__goal_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goal_id",
+            "required": true,
+            "schema": {
+              "title": "Goal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Goal By Id",
+        "tags": [
+          "goals"
+        ]
+      },
       "patch": {
         "description": "Update an existing goal.",
         "operationId": "update_goal_v1_goals__goal_id__patch",
@@ -38417,94 +38641,6 @@
           }
         ],
         "summary": "Update Goal",
-        "tags": [
-          "goals"
-        ]
-      },
-      "get": {
-        "description": "Fetch a single goal by id.\n\nThe list routes cap how many goals are returned, and update/delete/progress/history/advice\nalready address a goal by id, so this exposes the matching read for one goal (404 if it does\nnot exist or belongs to another user).",
-        "operationId": "get_goal_by_id_v1_goals__goal_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "goal_id",
-            "required": true,
-            "schema": {
-              "title": "Goal Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GoalResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Get Goal By Id",
         "tags": [
           "goals"
         ]
@@ -48735,6 +48871,170 @@
         ]
       }
     },
+    "/v1/users/location-context-consent": {
+      "get": {
+        "description": "Return the current city-context disclosure and active server-side consent state.",
+        "operationId": "get_location_context_consent_v1_users_location_context_consent_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationContextConsentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Location Context Consent",
+        "tags": [
+          "v1"
+        ]
+      },
+      "put": {
+        "description": "Grant, renew, or revoke city-only location context for interactive chat.",
+        "operationId": "set_location_context_consent_v1_users_location_context_consent_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocationContextConsentUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationContextConsentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Set Location Context Consent",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
     "/v1/users/me/byok-active": {
       "delete": {
         "description": "Drop the user off the BYOK free plan (keys were cleared client-side).",
@@ -55977,91 +56277,6 @@
       }
     },
     "/v3/memories/batch": {
-      "post": {
-        "operationId": "create_memories_batch_v3_memories_batch_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/routers__memories__BatchMemoriesRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/routers__memories__BatchMemoriesResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Create Memories Batch",
-        "tags": [
-          "memories"
-        ]
-      },
       "delete": {
         "description": "Delete up to MEMORIES_BATCH_MAX memories in one request.\n\nReplaces the N concurrent DELETE /v3/memories/{id} calls the web UI used to fan out\non bulk selection, which blew through the per-UID rate limiter and 429'd.\n\nAuthorization parity with DELETE /v3/memories/{memory_id}: every requested id is\nvalidated with the SAME business rules as the single-delete path. Validation is\nall-or-nothing — if any id fails, nothing is deleted, so the batch route can never\nbypass the single-delete guardrails (missing/not-owned -> 404, locked paid-plan\nmemory -> 402).",
         "operationId": "delete_memories_batch_v3_memories_batch_delete",
@@ -56144,6 +56359,91 @@
           }
         ],
         "summary": "Delete Memories Batch",
+        "tags": [
+          "memories"
+        ]
+      },
+      "post": {
+        "operationId": "create_memories_batch_v3_memories_batch_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/routers__memories__BatchMemoriesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/routers__memories__BatchMemoriesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Create Memories Batch",
         "tags": [
           "memories"
         ]
@@ -56647,6 +56947,105 @@
           }
         ],
         "summary": "Edit Memory",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/v3/memories/{memory_id}/baseline": {
+      "patch": {
+        "description": "Toggle the baseline flag for a memory.\n\nBaseline memories are always injected first into the AI context window.\nNot supported for canonical-path users: MemoryItem has no is_baseline field,\nso writing to the legacy store would silently have no effect for canonical readers.\nCanonical users receive 503 explicitly rather than a silent wrong-store write.",
+        "operationId": "update_memory_baseline_v3_memories__memory_id__baseline_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value",
+            "required": true,
+            "schema": {
+              "title": "Value",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Memory Baseline",
         "tags": [
           "memories"
         ]
@@ -57317,359 +57716,6 @@
         "summary": "Get Speech Profile",
         "tags": [
           "v3"
-        ]
-      }
-    },
-    "/v1/conversations/{conversation_id}/analytics": {
-      "get": {
-        "description": "Per-speaker analytics for a conversation (issue #4481).\n\nReturns each speaker's talk time, word count, and words per minute, plus the\nconversation totals. Speakers are the account owner (\"You\"), identified people\n(resolved to their name), and any remaining diarization speakers.",
-        "operationId": "get_conversation_analytics_v1_conversations__conversation_id__analytics_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationAnalytics"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Get Conversation Analytics",
-        "tags": [
-          "conversations"
-        ]
-      }
-    },
-    "/v1/users/location-context-consent": {
-      "get": {
-        "description": "Return the current city-context disclosure and active server-side consent state.",
-        "operationId": "get_location_context_consent_v1_users_location_context_consent_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocationContextConsentResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Get Location Context Consent",
-        "tags": [
-          "v1"
-        ]
-      },
-      "put": {
-        "description": "Grant, renew, or revoke city-only location context for interactive chat.",
-        "operationId": "set_location_context_consent_v1_users_location_context_consent_put",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LocationContextConsentUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LocationContextConsentResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Set Location Context Consent",
-        "tags": [
-          "v1"
-        ]
-      }
-    },
-    "/v3/memories/{memory_id}/baseline": {
-      "patch": {
-        "description": "Toggle the baseline flag for a memory.\n\nBaseline memories are always injected first into the AI context window.\nNot supported for canonical-path users: MemoryItem has no is_baseline field,\nso writing to the legacy store would silently have no effect for canonical readers.\nCanonical users receive 503 explicitly rather than a silent wrong-store write.",
-        "operationId": "update_memory_baseline_v3_memories__memory_id__baseline_patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "memory_id",
-            "required": true,
-            "schema": {
-              "title": "Memory Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "value",
-            "required": true,
-            "schema": {
-              "title": "Value",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemoryMutationResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Update Memory Baseline",
-        "tags": [
-          "memories"
         ]
       }
     }
