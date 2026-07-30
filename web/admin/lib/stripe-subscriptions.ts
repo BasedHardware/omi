@@ -34,6 +34,22 @@ export interface SubscriptionFetch {
   partial: boolean;
 }
 
+/**
+ * Stripe product ids for the Omi subscription plans, comma-separated. Metrics count these and
+ * nothing else. One id per plan covers both its monthly and annual price, so launching a plan
+ * is a one-value change here rather than a code change.
+ *
+ * Left unset, metrics fall back to every first-party subscription. That is wider than the plan
+ * set — the same account also holds internal test products — so configure it in any environment
+ * whose numbers are read as revenue.
+ */
+export function omiProductIds(): string[] {
+  return (process.env.STRIPE_OMI_PRODUCT_IDS ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
 /** Thrown when every status leg fails, so callers never publish a fabricated zero. */
 export class AllSubscriptionSourcesFailedError extends Error {}
 
@@ -141,9 +157,18 @@ export async function fetchOmiSubscriptions(
     throw new AllSubscriptionSourcesFailedError('All subscription data sources failed');
   }
 
+  const allowedProducts = omiProductIds();
   const subscriptions = results
     .flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
-    .filter((subscription) => !isAppSubscription(subscription));
+    .filter((subscription) => !isAppSubscription(subscription))
+    .filter(
+      (subscription) =>
+        allowedProducts.length === 0 ||
+        subscription.items.data.some((item) => {
+          const productId = productIdOf(item);
+          return productId !== null && allowedProducts.includes(productId);
+        }),
+    );
 
   return { subscriptions, partial: results.some((result) => result.status === 'rejected') };
 }

@@ -179,6 +179,39 @@ describe('listSubscriptions', () => {
   });
 });
 
+describe('omi product scoping', () => {
+  it('counts only the configured Omi plans when the allowlist is set', async () => {
+    const { stripe } = stripeWithPages({
+      active: [[
+        sub([{ unit_amount: 2000, product: 'prod_plus' }], { id: 'sub#0' }),
+        sub([{ unit_amount: 9900, product: 'prod_internal_test' }], { id: 'sub#1' }),
+      ]],
+      past_due: [[]],
+    });
+
+    vi.stubEnv('STRIPE_OMI_PRODUCT_IDS', 'prod_plus, prod_operator');
+    const { subscriptions } = await fetchOmiSubscriptions(stripe);
+    vi.unstubAllEnvs();
+
+    // The internal test product is first-party but is not a plan, so it is not revenue.
+    expect(subscriptions).toHaveLength(1);
+    expect(productIdOf(subscriptions[0].items.data[0])).toBe('prod_plus');
+  });
+
+  it('falls back to every first-party subscription when the allowlist is unset', async () => {
+    const { stripe } = stripeWithPages({
+      active: [[sub([{ unit_amount: 2000, product: 'prod_anything' }], { id: 'sub#0' })]],
+      past_due: [[]],
+    });
+
+    vi.stubEnv('STRIPE_OMI_PRODUCT_IDS', '');
+    const { subscriptions } = await fetchOmiSubscriptions(stripe);
+    vi.unstubAllEnvs();
+
+    expect(subscriptions).toHaveLength(1);
+  });
+});
+
 describe('fetchOmiSubscriptions', () => {
   it('merges the status legs and drops marketplace app subscriptions', async () => {
     const { stripe } = stripeWithPages({
