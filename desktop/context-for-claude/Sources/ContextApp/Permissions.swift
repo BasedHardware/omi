@@ -74,6 +74,20 @@ enum CapabilityGroup: String, CaseIterable {
         case .screen: return "Screen"
         }
     }
+
+    /// The first member still missing, or nil when the whole group is in.
+    ///
+    /// The one rule this surface cannot break: a group reads "Granted" only when **every** member
+    /// is granted. A row that says granted over a half-missing capability is the row lying, and it
+    /// is the failure the menu bar can least afford — so the rule is a pure function of the answers,
+    /// separable from how they were obtained, and asserted as such.
+    func firstMissing(_ granted: (Capability) -> Bool) -> Capability? {
+        members.first { !granted($0) }
+    }
+
+    func isGranted(_ granted: (Capability) -> Bool) -> Bool {
+        firstMissing(granted) == nil
+    }
 }
 
 enum Permissions {
@@ -103,9 +117,12 @@ enum Permissions {
     /// still missing would be the row lying, which is the one failure this surface cannot afford.
     /// The status word comes from the first member still waiting, so the row describes the work that
     /// remains rather than the best case.
-    static func groupedReport() -> [CapabilityReport] {
+    ///
+    /// `granted` is injectable so the grouping rule can be asserted without live TCC state; nothing
+    /// in the app passes it.
+    static func groupedReport(granted isGranted: (Capability) -> Bool = { check($0) }) -> [CapabilityReport] {
         CapabilityGroup.allCases.map { group in
-            let waiting = group.members.first { !check($0) }
+            let waiting = group.firstMissing(isGranted)
             let granted = waiting == nil
             // Granted groups still defer to the first member's word, because `screen` reports
             // "action required" while a grant is waiting on a relaunch.
@@ -419,6 +436,105 @@ enum Permissions {
                 continuation.resume(returning: work())
             }
         }
+    }
+}
+
+// MARK: - Asking one at a time
+
+/// Everything the sequencer needs from `Permissions`, so the sequence itself can be exercised with
+/// no TCC involved.
+///
+/// The sequence is the part with a wrong answer available — the wrong order, two dialogs at once, a
+/// refusal that stalls the rest of the run — and every one of those is a bug a user meets on their
+/// first thirty seconds with the app. It is not testable through the static `Permissions` API, so
+/// this protocol exists purely as the seam.
+@MainActor
+protocol PermissionAsking {
+    func isGranted(_ capability: Capability) -> Bool
+    /// Raises the system prompt, or opens the pane when TCC will not prompt again.
+    func request(_ capability: Capability) async -> Bool
+}
+
+/// `PermissionAsking` on the real `Permissions`.
+@MainActor
+struct LivePermissionAsking: PermissionAsking {
+    func isGranted(_ capability: Capability) -> Bool { Permissions.check(capability) }
+    func request(_ capability: Capability) async -> Bool { await Permissions.request(capability) }
+}
+
+/// Asks for a list of capabilities **one at a time**, with air around each ask.
+///
+/// This is a deliberate earlier fix, extracted rather than rewritten. macOS shows one TCC alert at a
+/// time, and firing three concurrently stacks dialogs the user answers blind — they consent to a
+/// queue rather than to three separate things. So:
+///
+/// - The row lights up **alone** for `leadIn` before its dialog opens, long enough to read the
+///   sentence it is asking about and short enough that nobody wonders whether the button worked.
+/// - After the answer, the new checkmark sits alone for `afterGrant` before the next dialog covers
+///   it. A confirmation the user cannot witness is the same as no confirmation.
+/// - `settle` polls until the grant reads back, because TCC answers the dialog before it finishes
+///   writing the grant, and a check taken the instant `request` returns still reads false — the row
+///   would flash "action required" over a permission the user just gave.
+///
+/// It is bounded and indifferent to the answer. A decline never becomes true, so `settle` returns on
+/// its deadline and the run carries on to the next capability rather than stalling on a "no".
+@MainActor
+struct PermissionRun {
+    /// How long a row is lit before its dialog opens.
+    static let leadIn: Duration = .milliseconds(900)
+    /// How long the new checkmark sits alone before the next dialog opens over it.
+    static let afterGrant: Duration = .milliseconds(1_100)
+    /// The longest we wait for TCC to finish writing a grant it has already accepted.
+    static let settleDeadline: Duration = .seconds(2)
+    static let settlePoll: Duration = .milliseconds(120)
+
+    let asking: any PermissionAsking
+    var leadIn: Duration = PermissionRun.leadIn
+    var afterGrant: Duration = PermissionRun.afterGrant
+    var settleDeadline: Duration = PermissionRun.settleDeadline
+    var settlePoll: Duration = PermissionRun.settlePoll
+
+    /// What the view needs to know as the run moves.
+    struct Callbacks {
+        /// The row is lit and nothing is covering it yet.
+        var willAsk: (Capability) -> Void = { _ in }
+        /// The answer is in and has been read back. `granted` is what TCC actually reports now, not
+        /// what the dialog returned.
+        var didAnswer: (Capability, Bool) -> Void = { _, _ in }
+    }
+
+    /// Runs `order`, skipping anything already granted. Returns the capabilities that ended granted.
+    @discardableResult
+    func run(_ order: [Capability], callbacks: Callbacks = Callbacks()) async -> Set<Capability> {
+        var landed: Set<Capability> = []
+        for capability in order {
+            if asking.isGranted(capability) {
+                landed.insert(capability)
+                continue
+            }
+
+            callbacks.willAsk(capability)
+            try? await Task.sleep(for: leadIn)
+
+            _ = await asking.request(capability)
+            let granted = await settle(capability)
+            if granted { landed.insert(capability) }
+            callbacks.didAnswer(capability, granted)
+
+            try? await Task.sleep(for: afterGrant)
+        }
+        return landed
+    }
+
+    /// Polls until the grant reads back or the deadline passes. Never waits on a refusal.
+    private func settle(_ capability: Capability) async -> Bool {
+        if asking.isGranted(capability) { return true }
+        let deadline = ContinuousClock.now.advanced(by: settleDeadline)
+        while ContinuousClock.now < deadline {
+            try? await Task.sleep(for: settlePoll)
+            if asking.isGranted(capability) { return true }
+        }
+        return false
     }
 }
 
