@@ -24,6 +24,16 @@ def _prepend_dev_harness_pythonpath(env: dict[str, str]) -> None:
     env["PYTHONPATH"] = os.pathsep.join(entries)
 
 
+def test_child_pythonpath_uses_the_selected_host_separator(tmp_path: Path) -> None:
+    env = {"PYTHONPATH": str(tmp_path / "existing")}
+    first = tmp_path / "scripts" / "dev-harness"
+    second = tmp_path / "backend"
+
+    cli._prepend_pythonpath(env, first, second)
+
+    assert env["PYTHONPATH"].split(os.pathsep) == [str(first), str(second), str(tmp_path / "existing")]
+
+
 def test_offline_check_skips_provider_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)

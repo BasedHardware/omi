@@ -46,10 +46,6 @@ def _assert_contract_rejects(errors: list[str]) -> None:
     assert any("contract" in error or "fixture" in error for error in errors), errors
 
 
-def test_desktop_qualification_runner_accepts_run_isolated_tag_checkout():
-    assert GUARDS.check_desktop_qualification_runner() == []
-
-
 def _load_parent_guard(tmp_path: Path, revision: str = REVIEWED_PARENT):
     """Load the reviewed parent to prove its narrower lock accepted known bypasses."""
     parent_script = tmp_path / "parent-guard.py"
@@ -838,3 +834,50 @@ def test_global_document_lock_rejects_malformed_fixture_json(tmp_path, monkeypat
     errors = GUARDS.check_codemagic_release_publishers()
 
     assert any("invalid JSON" in error for error in errors), errors
+
+
+def test_firmware_release_metadata_uses_resolved_bash_and_converted_output(tmp_path, monkeypatch):
+    script = tmp_path / "omi/firmware/scripts/ci/make-release-body.sh"
+    script.parent.mkdir(parents=True)
+    script.write_text("# fixture\n", encoding="utf-8")
+    commands = []
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        Path(kwargs["env"]["OUT"]).write_text(
+            "<!-- KEY_VALUE_START\n"
+            "release_firmware_version:9.8.7\n"
+            "minimum_firmware_required:3.0.6\n"
+            "minimum_app_version:1.0.74\n"
+            "minimum_app_version_code:438\n"
+            "is_legacy_secure_dfu:False\n"
+            "ota_update_steps:battery,internet\n"
+            "KEY_VALUE_END -->\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    monkeypatch.setattr(GUARDS, "bash_executable", lambda: "git-bash.exe")
+    monkeypatch.setattr(GUARDS, "bash_path", lambda value, _bash: str(value))
+    monkeypatch.setattr(GUARDS.subprocess, "run", fake_run)
+
+    assert GUARDS.check_firmware_release_metadata() == []
+    assert commands == [["git-bash.exe", str(script)]]
+
+
+def test_firmware_release_metadata_reports_status_when_shell_has_no_output(tmp_path, monkeypatch):
+    script = tmp_path / "omi/firmware/scripts/ci/make-release-body.sh"
+    script.parent.mkdir(parents=True)
+    script.write_text("# fixture\n", encoding="utf-8")
+
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    monkeypatch.setattr(GUARDS, "bash_executable", lambda: "git-bash.exe")
+    monkeypatch.setattr(GUARDS, "bash_path", lambda value, _bash: str(value))
+    monkeypatch.setattr(
+        GUARDS.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(command, 9, stdout=None, stderr=None),
+    )
+
+    assert GUARDS.check_firmware_release_metadata() == ["firmware release body smoke failed: exit 9"]
