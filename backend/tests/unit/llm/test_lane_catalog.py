@@ -37,19 +37,22 @@ class TestLoadCatalog:
     def test_load_catalog_from_default_path(self):
         catalog = load_catalog()
         assert isinstance(catalog, LaneCatalog)
-        assert len(catalog.lanes) == 16
+        assert len(catalog.lanes) == 17
 
     def test_catalog_entries_have_required_fields(self):
         catalog = load_catalog()
         for entry in catalog.lanes:
             assert entry.lane_id.startswith("omi:auto:")
             assert entry.provider in {"openai", "anthropic", "tbd"}
-            assert entry.surface in {"openai.chat_completions", "unknown"}
+            assert entry.surface in {"openai.chat_completions", "chat", "unknown"}
 
-    def test_catalog_has_one_prod_ready_lane(self):
+    def test_catalog_has_two_prod_ready_lanes(self):
         catalog = load_catalog()
         prod_ready = catalog.prod_ready_lane_ids()
-        assert prod_ready == {"omi:auto:chat-structured"}
+        assert prod_ready == {
+            "omi:auto:chat-structured",
+            "omi:auto:public-shared-conversation-chat",
+        }
 
     def test_catalog_has_twelve_dev_only_lanes(self):
         catalog = load_catalog()
@@ -199,22 +202,22 @@ class TestValidateServingConfig:
 
     def test_valid_serving_config_passes(self):
         catalog = load_catalog()
-        validate_serving_config(catalog, self._minimal_serving_config())
+        validate_serving_config(catalog, load_gateway_config(prod_mode=False))
 
     def test_serving_lane_not_in_catalog_is_allowed(self):
         """Generated feature routes are not required to be catalogued yet."""
         catalog = load_catalog()
         cfg = self._minimal_serving_config(lane_id="omi:auto:not-in-catalog")
-        # Still must satisfy prod_ready completeness for chat-structured.
-        # Minimal config without chat-structured fails that check; include it.
-        base = self._minimal_serving_config()
+        # Start from the complete real config so all prod_ready catalog lanes
+        # are present before adding the uncatalogued generated lane.
+        base = load_gateway_config(prod_mode=False)
         base.lanes["omi:auto:not-in-catalog"] = cfg.lanes["omi:auto:not-in-catalog"]
         base.route_artifacts.update(cfg.route_artifacts)
         validate_serving_config(catalog, base)
 
     def test_serving_lane_marked_dev_only_is_rejected(self):
         catalog = load_catalog()
-        base = self._minimal_serving_config()
+        base = load_gateway_config(prod_mode=False)
         extra = self._minimal_serving_config(lane_id="omi:auto:chat-extraction")
         base.lanes["omi:auto:chat-extraction"] = extra.lanes["omi:auto:chat-extraction"]
         base.route_artifacts.update(extra.route_artifacts)
@@ -223,7 +226,7 @@ class TestValidateServingConfig:
 
     def test_serving_lane_marked_planned_is_rejected(self):
         catalog = load_catalog()
-        base = self._minimal_serving_config()
+        base = load_gateway_config(prod_mode=False)
         extra = self._minimal_serving_config(lane_id="omi:auto:stt-realtime")
         base.lanes["omi:auto:stt-realtime"] = extra.lanes["omi:auto:stt-realtime"]
         base.route_artifacts.update(extra.route_artifacts)
@@ -257,7 +260,10 @@ class TestValidateServingConfig:
         chat-extraction (dev_only), so chat-structured has no artifact
         of its own. The count check would have passed this.
         """
-        catalog = load_catalog()
+        default_catalog = load_catalog()
+        chat_structured = default_catalog.get("omi:auto:chat-structured")
+        assert chat_structured is not None
+        catalog = LaneCatalog(lanes=[chat_structured])
         from llm_gateway.gateway.config_loader import ConfigValidationError
         from llm_gateway.gateway.schemas import (
             Capabilities,
@@ -354,11 +360,10 @@ class TestValidateServingConfig:
 
 class TestLoadGatewayConfigWithCatalog:
     def test_load_default_config_cross_validates_against_catalog(self):
-        """The default config (with 1 lane: chat-structured) loads
-        successfully because the catalog has chat-structured as prod_ready.
-        """
+        """The default config includes every prod-ready catalog lane."""
         cfg = load_gateway_config(prod_mode=False)
         assert "omi:auto:chat-structured" in cfg.lanes
+        assert "omi:auto:public-shared-conversation-chat" in cfg.lanes
         assert len(cfg.route_artifacts) >= 2  # active + LKG (+ generated feature routes)
 
     def test_load_with_explicit_catalog(self, tmp_path):
@@ -460,32 +465,34 @@ class TestLoadGatewayConfigWithCatalog:
 
 
 class TestResolverDerivation:
-    def test_resolver_supported_lane_ids_is_just_chat_structured(self):
-        """R0.5 review fix F7: pin that SUPPORTED_AUTO_LANE_IDS is the
-        single prod_ready entry from the catalog. When R3.2 promotes more
-        lanes, this test is updated in the same PR.
-        """
-        from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS
+    def test_resolver_supported_lane_ids_match_prod_ready_catalog_lanes(self):
+        """The resolver allowlist is derived from the current prod-ready catalog."""
+        from llm_gateway.gateway.resolver import get_supported_auto_lane_ids
 
-        assert SUPPORTED_AUTO_LANE_IDS == frozenset({"omi:auto:chat-structured"})
+        assert get_supported_auto_lane_ids() == {
+            "omi:auto:chat-structured",
+            "omi:auto:public-shared-conversation-chat",
+        }
 
     def test_resolver_supported_lane_ids_excludes_placeholder_lanes(self):
         """Per David: 'No prod-loadable placeholder route artifacts'.
         The 3 R0 placeholders must NOT be in the allowlist.
         """
-        from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS
+        from llm_gateway.gateway.resolver import get_supported_auto_lane_ids
 
-        assert "omi:auto:stt-realtime" not in SUPPORTED_AUTO_LANE_IDS
-        assert "omi:auto:transcription" not in SUPPORTED_AUTO_LANE_IDS
-        assert "omi:auto:screenshot-embedding" not in SUPPORTED_AUTO_LANE_IDS
+        supported_lane_ids = get_supported_auto_lane_ids()
+        assert "omi:auto:stt-realtime" not in supported_lane_ids
+        assert "omi:auto:transcription" not in supported_lane_ids
+        assert "omi:auto:screenshot-embedding" not in supported_lane_ids
 
     def test_resolver_supported_lane_ids_excludes_dev_only_lanes(self):
         """Per David: 'If a lane doesn't have the real surface / provider
         support / eval yet, keep it catalog-only'. The 12 R0 dev_only
         lanes must NOT be in the allowlist.
         """
-        from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS
+        from llm_gateway.gateway.resolver import get_supported_auto_lane_ids
 
+        supported_lane_ids = get_supported_auto_lane_ids()
         for dev_only_lane in [
             "omi:auto:chat-extraction",
             "omi:auto:daily-summary",
@@ -493,7 +500,7 @@ class TestResolverDerivation:
             "omi:auto:persona-chat",
         ]:
             assert (
-                dev_only_lane not in SUPPORTED_AUTO_LANE_IDS
+                dev_only_lane not in supported_lane_ids
             ), f"{dev_only_lane} is dev_only in the catalog but in the allowlist"
 
 

@@ -12,7 +12,7 @@ from llm_gateway.gateway.errors import (
     GatewayModelNotFoundError,
     GatewayUnsupportedModelError,
 )
-from llm_gateway.gateway.lane_catalog import load_catalog
+from llm_gateway.gateway.lane_catalog import LaneCatalog, load_catalog
 from llm_gateway.gateway.schemas import FailureClass, LaneConfig, RouteArtifact, Surface
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest, validate_chat_completion_request
 
@@ -47,9 +47,8 @@ def _get_catalog() -> 'LaneCatalog | None':
             _catalog = load_catalog()
         except Exception as _exc:
             import logging as _logging
-            _logging.getLogger(__name__).warning(
-                "lane catalog not loaded: %s", _exc
-            )
+
+            _logging.getLogger(__name__).warning("lane catalog not loaded: %s", _exc)
             _catalog = None
     return _catalog
 
@@ -78,6 +77,8 @@ def get_supported_auto_lane_ids() -> frozenset[str]:
     if the catalog isn't loaded.
     """
     return _supported_lane_ids()
+
+
 AUTO_LANE_PREFIX = 'omi:auto:'
 NEVER_LKG_FAILURE_CLASSES = frozenset(
     {

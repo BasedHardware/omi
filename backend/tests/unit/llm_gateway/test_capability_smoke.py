@@ -407,15 +407,14 @@ class TestIterTargetLanes:
     def test_iterates_all_supported_lanes(self):
         cfg = load_gateway_config(DEFAULT_CONFIG_DIR, prod_mode=False)
         pairs = _iter_target_lanes(cfg)
-        # 13 chat-completion lanes (R5b's restricted set)
-        from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS as _SUPPORTED
+        # The catalog-derived supported lanes must all be smoke-testable.
+        from llm_gateway.gateway.resolver import get_supported_auto_lane_ids
 
-        assert len(pairs) == len(_SUPPORTED)
+        supported_lane_ids = get_supported_auto_lane_ids()
+        assert len(pairs) == len(supported_lane_ids)
         assert len(pairs) >= 1
-        # All returned lane_ids are in SUPPORTED_AUTO_LANE_IDS
-        from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS
-
-        assert all(lane.lane_id in SUPPORTED_AUTO_LANE_IDS for lane, _ in pairs)
+        # All returned lane_ids are catalog-approved.
+        assert all(lane.lane_id in supported_lane_ids for lane, _ in pairs)
         # All returned lanes have a valid active_route
         for lane, artifact in pairs:
             assert artifact is not None
@@ -549,13 +548,12 @@ class TestCLI:
 
     def test_default_provider_is_fake(self, capsys):
         rc = main([])
-        # All 13 lanes pass under default (fake + pass scenario)
         assert rc == 0
         captured = capsys.readouterr()
         payload = json.loads(captured.out)
-        assert payload["summary"]["total"] == len(
-            __import__("llm_gateway.gateway.resolver", fromlist=["SUPPORTED_AUTO_LANE_IDS"]).SUPPORTED_AUTO_LANE_IDS
-        )
+        from llm_gateway.gateway.resolver import get_supported_auto_lane_ids
+
+        assert payload["summary"]["total"] == len(get_supported_auto_lane_ids())
         assert payload["summary"]["failed"] == 0
 
     def test_dry_run_prints_summary_only(self, capsys):
@@ -592,9 +590,9 @@ class TestCLI:
         assert rc == 0
         assert out_path.exists()
         payload = json.loads(out_path.read_text())
-        from llm_gateway.gateway.resolver import SUPPORTED_AUTO_LANE_IDS
+        from llm_gateway.gateway.resolver import get_supported_auto_lane_ids
 
-        assert payload["summary"]["total"] == len(SUPPORTED_AUTO_LANE_IDS)
+        assert payload["summary"]["total"] == len(get_supported_auto_lane_ids())
         captured = capsys.readouterr()
         assert f"wrote {out_path}" in captured.err
 
@@ -629,9 +627,9 @@ class TestCLIEndToEnd:
         assert result.returncode == 0, f"stderr: {result.stderr}"
         payload = json.loads(result.stdout)
         assert "summary" in payload
-        assert payload["summary"]["total"] == len(
-            __import__("llm_gateway.gateway.resolver", fromlist=["SUPPORTED_AUTO_LANE_IDS"]).SUPPORTED_AUTO_LANE_IDS
-        )
+        from llm_gateway.gateway.resolver import get_supported_auto_lane_ids
+
+        assert payload["summary"]["total"] == len(get_supported_auto_lane_ids())
 
     def test_cli_out_path_round_trip(self, tmp_path):
         """--out writes a parseable JSON file with the same content as stdout."""
@@ -650,6 +648,6 @@ class TestCLIEndToEnd:
         )
         assert result.returncode == 0
         file_payload = json.loads(out_path.read_text())
-        assert file_payload["summary"]["total"] == len(
-            __import__("llm_gateway.gateway.resolver", fromlist=["SUPPORTED_AUTO_LANE_IDS"]).SUPPORTED_AUTO_LANE_IDS
-        )
+        from llm_gateway.gateway.resolver import get_supported_auto_lane_ids
+
+        assert file_payload["summary"]["total"] == len(get_supported_auto_lane_ids())
