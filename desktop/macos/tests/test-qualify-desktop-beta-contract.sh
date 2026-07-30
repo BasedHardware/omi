@@ -77,7 +77,11 @@ require_order "$QUALIFIER" \
   './scripts/desktop-core-harness.sh --tier 2' \
   'if ! run_qualification_cleanup; then' \
   'if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]'
-require_text 'terminate_qualification_desktop "$BUNDLE"'
+require_text 'automation bridge healthy on port $port (authenticated; token=$token_file)'
+require_text 'automation_token_lib'
+require_text 'OMI_AUTOMATION_TOKEN_FILE' "$RUN_SH"
+require_text 'OMI_AUTOMATION_TOKEN_FILE="$OMI_AUTOMATION_TOKEN_FILE"'
+require_text 'omi_automation_token_file'
 require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
 require_text '"$SCRIPT_DIR/qualification-swift-cache.sh" prepare'
 require_text 'QUALIFICATION_CACHE_LEASE_ID'

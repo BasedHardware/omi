@@ -16,6 +16,10 @@ from pathlib import Path
 
 
 DEFAULT_PORT = 47777
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from automation_token_lib import automation_token  # noqa: E402
 
 
 @dataclass
@@ -104,21 +108,6 @@ def parse_port(raw_port: str) -> int | None:
     if port < 1 or port > 65535:
         return None
     return port
-
-
-def automation_token(port: int) -> str | None:
-    token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
-    if token:
-        return token
-    token_file = Path(
-        os.environ.get("OMI_AUTOMATION_TOKEN_FILE")
-        or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token")
-    )
-    try:
-        token = token_file.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        return None
-    return token or None
 
 
 def check_bridge(raw_port: str, required: bool) -> CheckResult:
