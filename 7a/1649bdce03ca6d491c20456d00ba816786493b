@@ -1,0 +1,43 @@
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarView.swift
+  s_18cae1c5af4258::t_4c90d6e651216b 192-197,225-229
+  s_18cae1c5af4258::t_4e2c75478b78b7 80,152-176,179-183,185-190,198-224,230-247,252-266
+  s_18cae1c5af4258::t_8300695e429d7e 1-79,81-151,248-251
+  s_18cae1c5af4258::t_b2c5660ac61a30 177-178,184,191
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarWindow.swift
+  s_18cae1c5af4258::t_01ec8a17d82b96 137-141
+  s_18cae1c5af4258::t_6fe2c98f4a069c 82-83
+  s_18cae1c5af4258::t_c5105da4a0f000 32,43,126-128,142-143,151,154,163,176,178,184,189-200
+  s_18cae1c5af4258::t_b9c95c7a462d90 20-30
+  s_18cae1c5af4258::t_c7e921add123eb 96-108,124-125
+  s_18cae1c5af4258::t_123948bb196cdb 109-115
+  s_18cae1c5af4258::t_4142068ff2d4df 177,179-183,185-188
+  s_18cae1c5af4258::t_bf3cd3ef74ac30 1-19,31,33-42,44-81,84-95,116-123,129-136,144-150,152-153,155-162,164-175,201-216
+desktop/context-for-claude/Sources/ContextApp/Search/ClaudeRouter.swift
+  s_b7fd52d475a64f::t_f4d2ac99073115 1-337
+desktop/context-for-claude/Tests/ContextAppTests/ClaudeRouterTests.swift
+  s_b7fd52d475a64f::t_8e676a29c403ae 1-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "7a1649bdce03ca6d491c20456d00ba816786493b",
+  "prompts": {},
+  "sessions": {
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_b7fd52d475a64f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ad8df0dbeca0e7530",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
