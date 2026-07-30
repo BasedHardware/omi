@@ -45,9 +45,11 @@ dev_harness_python() {
 
 dev_harness_python_uses_windows_paths() {
   local python_bin="$1"
-  local resolved
+  local resolved resolved_lower
   resolved="$(command -v "$python_bin" 2>/dev/null || printf '%s' "$python_bin")"
-  case "${resolved,,}" in
+  # bash 3.2 (macOS) has no ${var,,}; use tr for case-insensitive .exe match
+  resolved_lower="$(echo "$resolved" | tr '[:upper:]' '[:lower:]')"
+  case "$resolved_lower" in
     *.exe)
       return 0
       ;;
