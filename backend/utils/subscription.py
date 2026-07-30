@@ -696,6 +696,14 @@ def get_plan_type_from_price_id(price_id: str) -> PlanType:
 def validate_stripe_price_ids():
     """Validate configured Stripe price IDs at startup outside the dev environment."""
     if os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'dev':
+        record_fallback(
+            component='other',
+            from_mode='stripe_price_validation',
+            to_mode='dev_skip',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
         logger.info('Skipping Stripe price validation during dev startup.')
         return
 

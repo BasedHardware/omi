@@ -62,13 +62,23 @@ def test_dev_startup_skips_stripe_price_validation(monkeypatch, subscription_mod
     caplog.set_level(logging.INFO, logger=subscription_module.__name__)
     definitions = MagicMock()
     retrieve = MagicMock()
+    fallback = MagicMock()
     monkeypatch.setattr(subscription_module, 'get_paid_plan_definitions', definitions)
     monkeypatch.setattr(subscription_module.stripe.Price, 'retrieve', retrieve)
+    monkeypatch.setattr(subscription_module, 'record_fallback', fallback)
 
     subscription_module.validate_stripe_price_ids()
 
     definitions.assert_not_called()
     retrieve.assert_not_called()
+    fallback.assert_called_once_with(
+        component='other',
+        from_mode='stripe_price_validation',
+        to_mode='dev_skip',
+        reason='policy',
+        outcome='degraded',
+        log=subscription_module.logger,
+    )
     assert 'Skipping Stripe price validation during dev startup.' in caplog.messages
 
 
