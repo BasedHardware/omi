@@ -4,18 +4,20 @@ import Foundation
 
 /// Pushes finished local sessions into the user's real Omi account.
 ///
-/// **Why `POST v1/conversations/from-segments` and not the `/v4/listen` websocket.** Context for Claude has
-/// already transcribed the audio on this Mac; the websocket exists to carry audio to a cloud STT,
-/// so using it would mean re-uploading speech we have already turned into text. Two concrete
-/// consequences settle it: the explicit-finalize path that websocket sessions end through is capped
-/// at 10 conversations an hour (`conversations:create`) while from-segments allows 30
-/// (`conversations:from-segments`), and from-segments is a plain request that either succeeded or
-/// did not — a queue can retry it, which is not true of a stream.
+/// **Why `POST v1/conversations/from-segments` and not the `/v4/listen` websocket.** Speech was already
+/// transcribed by cloud `/v4/listen`; the resulting segments live in `context.db`. This path uploads
+/// that **text** for account storage and enrichment — not audio again. Re-streaming through the
+/// websocket would re-bill STT and could not be queued/retried. Two concrete consequences settle it:
+/// the explicit-finalize path websocket sessions end through is capped at 10 conversations an hour
+/// (`conversations:create`) while from-segments allows 30 (`conversations:from-segments`), and
+/// from-segments is a plain request that either succeeded or did not — a queue can retry it, which
+/// is not true of a stream.
 ///
-/// **Why `source: "phone"`.** It is the source the backend treats as "a transcript arrived,
-/// process it": memories are extracted immediately. `"desktop"` defers extraction lazily *and*
-/// opts the session into the desktop trial paywall, which can hard-close it — a conversation that
-/// silently never produces memories is worse than no upload at all.
+/// **Why `source: "phone"`.** `"desktop"` opts the session into the desktop trial paywall (and the
+/// legacy desktop-only defer path). Free Context for Claude instead uses product-aware demand-side
+/// enrichment on the backend (`X-App-Product: context-for-claude`): capture stores a listable stub;
+/// heavy memory/structure LLM runs for the last few sessions and when Claude touches a conversation
+/// via MCP. Local FTS on this Mac covers keyword search before that enrich finishes.
 ///
 /// Everything else here follows from one rule: **nothing the user said is ever dropped.** Not while
 /// they are signed out, not across a crash, not when the backend is down. The queue is on disk
@@ -509,7 +511,7 @@ private enum UploadPayload {
             UploadRequestBody(
                 transcriptSegments: segments,
                 clientSessionId: clientSessionId,
-                // See the type doc: "phone" is the source that gets memories extracted now.
+                // Avoid source "desktop" (trial paywall). Product-aware demand enrich runs server-side.
                 source: "phone",
                 startedAt: UploadPayload.iso(startedAt),
                 finishedAt: UploadPayload.iso(finishedAt),

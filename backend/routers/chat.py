@@ -286,6 +286,7 @@ def send_message(
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
 ):
     # Hard cap: Free by question count, Architect by cost_usd. Operator enters
     # overage mode silently. If exceeded, instead of raising 402 (which mobile
@@ -295,7 +296,7 @@ def send_message(
     # any other reply. Desktop pre-checks via /v1/users/me/usage-quota and
     # never reaches here when over.
     try:
-        enforce_chat_quota(uid, platform=x_app_platform)
+        enforce_chat_quota(uid, platform=x_app_platform, app_product=x_app_product)
     except HTTPException as exc:
         if exc.status_code != 402 or not isinstance(exc.detail, dict):
             raise
@@ -581,8 +582,9 @@ def create_voice_message_stream(
     language: Optional[str] = Form(None),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
 ):
-    enforce_chat_quota(uid, platform=x_app_platform)
+    enforce_chat_quota(uid, platform=x_app_platform, app_product=x_app_product)
 
     resolved_language = resolve_voice_message_language(uid, language)
     stt_provider, _, _stt_model = get_prerecorded_service(resolved_language)
@@ -707,6 +709,7 @@ async def transcribe_voice_message(
     request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
 ):
     """Transcribe audio and return the transcript text.
 
@@ -988,6 +991,7 @@ async def transcribe_voice_message_stream(
     channels: int = 1,
     keywords: Optional[str] = None,
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
 ):
     """WebSocket endpoint for PTT live mode transcription-only streaming.
 

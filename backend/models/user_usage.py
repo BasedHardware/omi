@@ -13,6 +13,7 @@ class UsageStats(BaseModel):
     """Represents a set of usage metrics for a period."""
 
     transcription_seconds: int = 0
+    transcription_seconds_context_for_claude: int = 0
     words_transcribed: int = 0
     insights_gained: int = 0
     memories_created: int = 0

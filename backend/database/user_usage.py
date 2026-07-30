@@ -117,7 +117,14 @@ def update_hourly_usage(uid: str, date: datetime, updates: Dict[str, Any], platf
     for key, value in updates.items():
         if (
             key
-            in ['transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds']
+            in [
+                'transcription_seconds',
+                'transcription_seconds_context_for_claude',
+                'words_transcribed',
+                'insights_gained',
+                'memories_created',
+                'speech_seconds',
+            ]
             and value > 0
         ):
             update_doc[key] = firestore.Increment(value)
@@ -171,7 +178,14 @@ def update_hourly_usage_once(uid: str, date: datetime, updates: Dict[str, Any], 
     for key, value in updates.items():
         if (
             key
-            in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
+            in {
+                'transcription_seconds',
+                'transcription_seconds_context_for_claude',
+                'words_transcribed',
+                'insights_gained',
+                'memories_created',
+                'speech_seconds',
+            }
             and value > 0
         ):
             update_doc[key] = firestore.Increment(value)
@@ -252,6 +266,7 @@ def _aggregate_stats_from_docs(docs: Iterable[Any]) -> Dict[str, Any]:
 def _aggregate_stats_with_count(docs: Iterable[Any]) -> Tuple[Dict[str, Any], int]:
     stats: Dict[str, Any] = {
         'transcription_seconds': 0,
+        'transcription_seconds_context_for_claude': 0,
         'words_transcribed': 0,
         'insights_gained': 0,
         'memories_created': 0,
@@ -262,6 +277,7 @@ def _aggregate_stats_with_count(docs: Iterable[Any]) -> Tuple[Dict[str, Any], in
         document_count += 1
         data: Dict[str, Any] = _typed_doc(doc)
         stats['transcription_seconds'] += data.get('transcription_seconds', 0)
+        stats['transcription_seconds_context_for_claude'] += data.get('transcription_seconds_context_for_claude', 0)
         stats['words_transcribed'] += data.get('words_transcribed', 0)
         stats['insights_gained'] += data.get('insights_gained', 0)
         stats['memories_created'] += data.get('memories_created', 0)

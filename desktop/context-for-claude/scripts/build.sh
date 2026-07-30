@@ -237,12 +237,13 @@ log "copied $BUNDLE_COUNT SPM resource bundle(s)"
 [[ "$SIGN_IDENTITY" != "-" ]] || die "ad-hoc signing is forbidden — it resets Screen Recording consent for every Omi app"
 assert_not_production "signing target" "$APP_BUNDLE"
 
+# --timestamp is required for Apple notarization (Developer ID distribution).
 log "signing nested context-for-claude-mcp"
-codesign --force --options runtime --entitlements "$ENTITLEMENTS" \
+codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" \
     --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/MacOS/context-for-claude-mcp"
 
 log "signing $APP_NAME.app with '$SIGN_IDENTITY'"
-codesign --force --options runtime --entitlements "$ENTITLEMENTS" \
+codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" \
     --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
 
 codesign --verify --strict "$APP_BUNDLE" \

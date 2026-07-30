@@ -809,7 +809,9 @@ final class ListenSocket: ObservableObject {
             URLQueryItem(name: "channels", value: "1"),
             // The account's enrolled voice profile is what turns "SPEAKER_01" into a person.
             URLQueryItem(name: "include_speech_profile", value: "true"),
-            URLQueryItem(name: "source", value: "desktop"),
+            // Match from-segments: "desktop" opts the listen session into the desktop trial
+            // paywall. Context stamps X-App-Product separately for the STT pool.
+            URLQueryItem(name: "source", value: "phone"),
             URLQueryItem(name: "speaker_auto_assign", value: "enabled"),
         ]
         if let clientConversationId, !clientConversationId.isEmpty {

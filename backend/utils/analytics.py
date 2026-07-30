@@ -42,24 +42,32 @@ def record_usage(
 ):
     """Records hourly usage stats for a user.
 
-    When ``app_product`` is ``context-for-claude``, also dual-writes an estimated
-    STT ``cost_usd`` into the product-tagged llm_usage bucket so admin infra-costs
-    can segment Context spend without joining last_active_product.
+    When ``app_product`` is ``context-for-claude``, STT seconds go to the product
+    pool field (not the shared Desktop ``transcription_seconds`` counter), and an
+    estimated STT ``cost_usd`` is dual-written into the product-tagged llm_usage
+    bucket for admin infra-cost segmentation.
     """
+    from utils.product_entitlements import CONTEXT_TRANSCRIPTION_SECONDS_FIELD, is_context_for_claude
+
     now = datetime.now(timezone.utc)
+    product = normalize_product(app_product)
     updates = {
-        'transcription_seconds': transcription_seconds,
         'words_transcribed': words_transcribed,
         'insights_gained': insights_gained,
         'memories_created': memories_created,
         'speech_seconds': speech_seconds,
     }
+    if is_context_for_claude(product):
+        updates[CONTEXT_TRANSCRIPTION_SECONDS_FIELD] = transcription_seconds
+        updates['transcription_seconds'] = 0
+    else:
+        updates['transcription_seconds'] = transcription_seconds
+
     if idempotency_key:
         user_usage_db.update_hourly_usage_once(uid, now, updates, idempotency_key)
     else:
         user_usage_db.update_hourly_usage(uid, now, updates)
 
-    product = normalize_product(app_product)
     if product == 'context-for-claude' and transcription_seconds > 0:
         cost_usd = round((transcription_seconds / 60.0) * _STT_USD_PER_MINUTE, 6)
         record_llm_usage_bucket(

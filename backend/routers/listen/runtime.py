@@ -254,7 +254,12 @@ class ListenSessionRuntime:
 
     async def _bootstrap(self) -> bool:
         request = self.request
-        base = await load_listen_connect_base(request.uid, source=request.source, use_custom_stt=self.use_custom_stt)
+        base = await load_listen_connect_base(
+            request.uid,
+            source=request.source,
+            use_custom_stt=self.use_custom_stt,
+            app_product=request.app_product,
+        )
         if not base.user_exists:
             await request.websocket.close(code=1008, reason='Bad user')
             return False
@@ -379,7 +384,12 @@ class ListenSessionRuntime:
                     )
                     if caps:
                         start_background_task(
-                            trigger_classifier_if_needed(self.request.uid, caps, self.session_id),
+                            trigger_classifier_if_needed(
+                                self.request.uid,
+                                caps,
+                                self.session_id,
+                                app_product=self.request.app_product,
+                            ),
                             name=f'fair_use_classifier:{self.request.uid}:{self.session_id}',
                         )
                         if FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
@@ -425,7 +435,10 @@ class ListenSessionRuntime:
         )
         if needs_refresh:
             self.state.remaining_seconds_cache = await self.persistence.call(
-                get_remaining_transcription_seconds, self.request.uid, source=self.request.source
+                get_remaining_transcription_seconds,
+                self.request.uid,
+                source=self.request.source,
+                app_product=self.request.app_product,
             )
             self.state.remaining_seconds_cache_ts = now
             self.state.remaining_seconds_cache_initialized = True

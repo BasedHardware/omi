@@ -104,6 +104,14 @@ class TestIsFreeCreditsExhausted:
 
         assert fair_use_mod.is_free_credits_exhausted('test-uid') is False
 
+    def test_product_pool_is_passed_to_credits_check(self):
+        fair_use_mod.users_db.get_user_valid_subscription = MagicMock(return_value=None)
+        fair_use_mod.is_paid_plan = MagicMock(return_value=False)
+        fair_use_mod.has_transcription_credits = MagicMock(return_value=True)
+
+        assert fair_use_mod.is_free_credits_exhausted('test-uid', app_product='context-for-claude') is False
+        fair_use_mod.has_transcription_credits.assert_called_once_with('test-uid', app_product='context-for-claude')
+
 
 # ---------------------------------------------------------------------------
 # trigger_classifier_if_needed tests — free-exhausted synthetic score

@@ -360,7 +360,8 @@ def reacquire_deferred_processing(uid: str, conversation_id: str) -> bool:
     delayed first heartbeat leaves a window where the stale-processing sweep
     can terminalize the row; the stale processor would then persist derived
     side effects after ownership loss.  This transaction closes that window and
-    fails closed if the row is no longer ``processing`` or was discarded.
+    fails closed if the row is not enrichable (``processing``, or MCP-listable
+    ``completed`` + ``deferred`` Context stubs) or was discarded.
     """
     return jobs_db.reacquire_deferred_processing(uid, conversation_id)
 

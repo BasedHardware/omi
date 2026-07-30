@@ -411,17 +411,19 @@ def invalidate_enforcement_cache(uid: str) -> None:
         pass
 
 
-def is_free_credits_exhausted(uid: str) -> bool:
+def is_free_credits_exhausted(uid: str, app_product: Optional[str] = None) -> bool:
     """Check if a user is on a free (basic) plan with exhausted transcription credits.
 
-    Returns True only for non-paid users who have used all monthly credits.
-    Paid users and users with remaining credits return False.
+    Returns True only for non-paid users who have used all monthly credits for the
+    requested product pool (``app_product``). Missing product keeps the Desktop /
+    default ``transcription_seconds`` pool. Paid users and users with remaining
+    credits return False.
     """
     try:
         subscription = users_db.get_user_valid_subscription(uid)
         if subscription and is_paid_plan(subscription.plan):
             return False
-        return not has_transcription_credits(uid)
+        return not has_transcription_credits(uid, app_product=app_product)
     except Exception as e:
         logger.error(f'fair_use: error checking free credits for {uid}: {e}')
         return False
@@ -751,7 +753,12 @@ def is_dg_budget_exhausted(uid: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, Any]], session_id: str = '') -> None:
+async def trigger_classifier_if_needed(
+    uid: str,
+    triggered_caps: List[Dict[str, Any]],
+    session_id: str = '',
+    app_product: Optional[str] = None,
+) -> None:
     """Check if we should run the LLM classifier and handle enforcement.
 
     Uses a Redis lock to prevent concurrent runs for the same user.
@@ -759,6 +766,8 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, 
 
     Free-exhausted users (#6083) get a synthetic score of 1.0 instead of
     the LLM classifier, then follow the same graduated escalation pipeline.
+    ``app_product`` scopes the free-exhausted check to the listen session's
+    STT pool (Context vs Desktop).
     """
     # Already at terminal stage — no escalation possible, skip LLM + lock (#6316)
     try:
@@ -790,7 +799,7 @@ async def trigger_classifier_if_needed(uid: str, triggered_caps: List[Dict[str, 
 
     try:
         # Free-exhausted users: synthetic score > 0.7, skip LLM classifier (#6083)
-        if await run_blocking(db_executor, is_free_credits_exhausted, uid):
+        if await run_blocking(db_executor, is_free_credits_exhausted, uid, app_product):
             classifier_result = {'misuse_score': 1.0, 'usage_type': 'free_exhausted'}
             logger.info(f'fair_use: free-exhausted uid={uid}, using synthetic score 1.0')
         else:

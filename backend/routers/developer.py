@@ -1666,10 +1666,11 @@ def _create_conversation_from_segments(
     *,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
+    app_product: Optional[str] = None,
 ) -> ConversationResponse:
-    """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
-    processing pipeline (title, memories, action items, sync), and return the result. Used by both
-    the developer-API-key endpoint and the Firebase-authed user endpoint (on-device transcription)."""
+    """Shared impl: validate already-transcribed segments, build a CreateConversation, run the
+    processing pipeline, and return the result. Used by both the developer-API-key endpoint and the
+    Firebase-authed user endpoint (e.g. Context for Claude uploading text from cloud `/v4/listen`)."""
     if not request.transcript_segments or len(request.transcript_segments) == 0:
         raise HTTPException(status_code=422, detail="transcript_segments cannot be empty")
 
@@ -1806,9 +1807,11 @@ def _create_conversation_from_segments(
     try:
         if conversation_id:
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
-                conversation = process_conversation(uid, language_code, create_conversation_obj)
+                conversation = process_conversation(
+                    uid, language_code, create_conversation_obj, app_product=app_product
+                )
         else:
-            conversation = process_conversation(uid, language_code, create_conversation_obj)
+            conversation = process_conversation(uid, language_code, create_conversation_obj, app_product=app_product)
     except Exception:
         if request.client_session_id and conversation_id:
             conversations_db.delete_conversation(uid, conversation_id)
@@ -1837,15 +1840,17 @@ def create_conversation_from_segments_user(
 ):
     """Create a conversation from already-transcribed segments (Firebase-authed).
 
-    Used by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need
-    the conversation persisted, processed (memories/summaries), and synced across devices — exactly
-    like a cloud-transcribed conversation, but without the live `/v4/listen` websocket."""
+    Used by clients that already have transcript text (e.g. Context for Claude after cloud
+    `/v4/listen`) and need the conversation persisted and product-aware enrichment applied.
+    """
     device_ctx = resolve_client_device_from_request(http_request)
+    raw_product = http_request.headers.get('x-app-product') or http_request.headers.get('X-App-Product')
     return _create_conversation_from_segments(
         uid,
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        app_product=raw_product,
     )
 
 

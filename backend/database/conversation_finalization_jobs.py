@@ -1306,17 +1306,30 @@ def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, 
 
     This eliminates the window between clearing ``deferred`` and the first
     heartbeat renewal where the orphan sweep could terminalize the row.  If
-    the row is no longer ``processing`` or was discarded, the transition
-    fails closed so a stale processor produces no derived side effects.
+    the row is no longer enrichable or was discarded, the transition fails
+    closed so a stale processor produces no derived side effects.
+
+    Desktop freemium stubs sit in ``processing`` + ``deferred``. Free Context
+    stubs are MCP-listable as ``completed`` + ``deferred``; those transition
+    back to ``processing`` here so the admission lease / orphan sweep still apply.
     """
     snapshot = conversation_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
-    if data.get('status') != 'processing' or data.get('discarded'):
+    if data.get('discarded'):
         return False
-    transaction.update(conversation_ref, {'deferred': False, 'processing_admitted_at': now})
-    return True
+    status = data.get('status')
+    if status == 'processing':
+        transaction.update(conversation_ref, {'deferred': False, 'processing_admitted_at': now})
+        return True
+    if status == 'completed' and data.get('deferred'):
+        transaction.update(
+            conversation_ref,
+            {'status': 'processing', 'deferred': False, 'processing_admitted_at': now},
+        )
+        return True
+    return False
 
 
 def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:

@@ -3,8 +3,9 @@
 A menu-bar-only macOS app that keeps Claude caught up on what you see and say.
 
 It captures the two ambient streams Omi already captures — audio (your mic, plus the other side of
-your calls) and screen (active window and its text) — transcribes the audio **on device**, uploads
-finished conversations to your Omi account, and serves all of it to Claude over MCP.
+your calls) and screen (active window and its text). Speech is transcribed in the cloud via
+`/v4/listen`; screen text is OCR'd on device. Finished transcript segments are stored locally and
+uploaded to your Omi account, and all of it is served to Claude over MCP.
 
 The point: you stop explaining context to Claude. It asks Context for Claude instead.
 
@@ -84,7 +85,8 @@ Speaker attribution comes from the backend: mic-vs-system heuristics are only a 
 line has no diarization label.
 
 Conversations still upload through `POST /v1/conversations/from-segments` for durable cloud storage
-and memory extraction; `/v4/listen` is the live transcription path, not the upload path.
+and (product-aware) enrichment; `/v4/listen` is the live transcription path, not the upload path.
+Local FTS searches the Mac copy of those segments before account enrichment finishes.
 
 Detail: `ARCHITECTURE.md`. The interface contracts every file was built against: `CONTRACTS.md`.
 Exact visual values: `docs/design-system.md`.

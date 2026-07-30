@@ -749,14 +749,20 @@ def get_plan_display_name(plan: PlanType) -> str:
     return PLAN_DISPLAY_NAMES.get(plan, plan.value.capitalize())
 
 
-def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[str, Any]:
+def get_chat_quota_snapshot(
+    uid: str, platform: Optional[str] = None, app_product: Optional[str] = None
+) -> Dict[str, Any]:
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
 
     `platform` (X-App-Platform header) gates the paywall test override — only
     desktop callers can be paywalled; mobile callers fall through to the
     real plan logic.
+
+    `app_product` (X-App-Product) overlays Context free chat caps (0 questions).
     """
+    from utils.product_entitlements import apply_product_free_limits
+
     # Paywall test override — surface as exhausted Free-plan quota so the
     # client renders the same over-limit popup it shows for normal users
     # past 30/mo.
@@ -773,7 +779,7 @@ def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[st
 
     subscription = users_db.get_user_valid_subscription(uid)
     plan = subscription.plan if subscription else PlanType.basic
-    limits = get_plan_limits(plan)
+    limits = apply_product_free_limits(plan, get_plan_limits(plan), app_product)
     usage = user_usage_db.get_monthly_chat_usage(uid)
 
     if limits.chat_cost_usd_per_month is not None:
@@ -786,7 +792,12 @@ def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[st
         limit_value = float(limits.chat_questions_per_month) if limits.chat_questions_per_month is not None else None
 
     allowed = True
-    if limit_value is not None and limit_value > 0:
+    if limit_value is None:
+        allowed = True
+    elif limit_value <= 0:
+        # Explicit zero cap (Context free chat) — deny all questions.
+        allowed = False
+    else:
         allowed = used < limit_value
 
     return {
@@ -806,7 +817,7 @@ def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[st
 OVERAGE_ENABLED_PLANS = {PlanType.operator, PlanType.unlimited, PlanType.architect}
 
 
-def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
+def enforce_chat_quota(uid: str, platform: Optional[str] = None, app_product: Optional[str] = None) -> None:
     """Block or allow a chat request based on the user's plan + usage.
 
     - BYOK users with an LLM key attached: always allowed, no Omi-side cost.
@@ -814,12 +825,13 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
       accrues an overage charge. See ``utils.overage``.
     - Free plan past its cap: blocked (no card on file) → 402, which the
       chat endpoint converts into a canned AI reply for mobile UX.
+    - Context for Claude free: 0 chat questions → 402 for basic.
     """
     # Paywall test override — bypass BYOK + plan checks so the same 402
     # surfaces that a free user past 30 questions would hit. Desktop only;
     # mobile callers continue down the normal plan path.
     if is_trial_paywalled(uid, platform):
-        snapshot = get_chat_quota_snapshot(uid, platform=platform)
+        snapshot = get_chat_quota_snapshot(uid, platform=platform, app_product=app_product)
         raise HTTPException(
             status_code=402,
             detail={
@@ -840,7 +852,7 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
     if users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic')):
         return
 
-    snapshot = get_chat_quota_snapshot(uid, platform=platform)
+    snapshot = get_chat_quota_snapshot(uid, platform=platform, app_product=app_product)
     if snapshot['allowed']:
         return
 
@@ -1183,14 +1195,18 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     return user_usage_db.get_monthly_usage_stats_since(uid, now, launch_date)
 
 
-def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
+def has_transcription_credits(uid: str, source: Optional[str] = None, app_product: Optional[str] = None) -> bool:
     """
     Checks if a user has transcribing credits by verifying their valid subscription and usage.
 
     `source` is the listen-WS `source` query param (`desktop`, `omi`, `phone_call`,
     etc). The paywall test override only fires for desktop sources so that
     phone-call / Omi-device traffic for cohort UIDs is unaffected.
+
+    `app_product` selects the Context-for-Claude STT pool when set.
     """
+    from utils.product_entitlements import apply_product_free_limits, transcription_usage_field
+
     # Desktop trial paywall: paywalled users have zero transcription credits.
     if is_trial_paywalled(uid, source):
         return False
@@ -1202,23 +1218,24 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
         return True
 
     subscription = users_db.get_user_valid_subscription(uid)
-    if not subscription:
-        return False
-
-    limits = get_plan_limits(subscription.plan)
+    plan = subscription.plan if subscription else PlanType.basic
+    limits = apply_product_free_limits(plan, get_plan_limits(plan), app_product)
 
     # Paid and other unlimited-transcription plans do not need a monthly usage scan.
     if not limits.transcription_seconds or limits.transcription_seconds <= 0:
         return True
 
     usage = get_monthly_usage_for_subscription(uid)
-    if usage.get('transcription_seconds', 0) >= limits.transcription_seconds:
+    field = transcription_usage_field(app_product)
+    if usage.get(field, 0) >= limits.transcription_seconds:
         return False
 
     return True
 
 
-def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) -> int | None:
+def get_remaining_transcription_seconds(
+    uid: str, source: Optional[str] = None, app_product: Optional[str] = None
+) -> int | None:
     """
     Get remaining transcription seconds for the user.
     Returns None if unlimited, otherwise the remaining seconds (>= 0).
@@ -1226,7 +1243,10 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
 
     `source` gates the desktop-only paywall test override (see
     `is_trial_paywalled`).
+    `app_product` selects the Context-for-Claude STT pool when set.
     """
+    from utils.product_entitlements import apply_product_free_limits, transcription_usage_field
+
     # Single-user paywall test override — surface 0 so the freemium-threshold
     # event fires and the client renders its usage-limit popup.
     if is_trial_paywalled(uid, source):
@@ -1239,23 +1259,31 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
 
     subscription = users_db.get_user_valid_subscription(uid)
     if not subscription:
-        # No subscription = use basic limits
-        limits = get_basic_plan_limits()
+        limits = apply_product_free_limits(PlanType.basic, get_basic_plan_limits(), app_product)
     else:
         # Resolve the plan's limits and let the transcription_seconds check below decide
         # unlimited-ness. Do NOT short-circuit on is_paid_plan(): Plus is a paid plan that
         # still carries a bounded monthly transcription cap (PLUS_TIER_MONTHLY_SECONDS_LIMIT),
         # so treating every paid plan as unlimited leaked its cap and never triggered the
         # freemium on-device switch. This mirrors has_transcription_credits().
-        limits = get_plan_limits(subscription.plan)
+        limits = apply_product_free_limits(subscription.plan, get_plan_limits(subscription.plan), app_product)
 
     if not limits.transcription_seconds or limits.transcription_seconds <= 0:
         return None  # Unlimited (limit is 0 or not set — operator/architect/neo/unlimited_v2)
 
     usage = get_monthly_usage_for_subscription(uid)
-    used_seconds = usage.get('transcription_seconds', 0)
+    used_seconds = usage.get(transcription_usage_field(app_product), 0)
 
     return max(0, limits.transcription_seconds - used_seconds)
+
+
+def should_demand_stub_context_enrichment(uid: str, app_product: Optional[str]) -> bool:
+    """Free Context capture skips heavy LLM until MCP demand / recent warm."""
+    from utils.product_entitlements import is_context_for_claude
+
+    if not is_context_for_claude(app_product):
+        return False
+    return should_defer_desktop_processing(uid)
 
 
 def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None) -> Subscription | None:

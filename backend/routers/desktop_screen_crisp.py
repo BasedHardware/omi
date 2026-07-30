@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from database.screen_activity import upsert_screen_activity
 from database.vector_db import upsert_screen_activity_vectors
 from utils.executors import critical_executor, db_executor, run_blocking
-from utils.other.endpoints import get_current_user_uid, get_user
+from utils.other.endpoints import get_current_user_uid, get_user, with_rate_limit
 from utils.subscription import is_trial_paywalled
 
 logger = logging.getLogger(__name__)
@@ -97,7 +97,8 @@ async def _find_session(email: str, website_id: str, headers: dict[str, str]) ->
 
 @router.post("/v1/screen-activity/sync")
 async def sync_screen_activity(
-    request: ScreenActivitySyncRequest, uid: str = Depends(_authorized_desktop_user)
+    request: ScreenActivitySyncRequest,
+    uid: str = Depends(with_rate_limit(_authorized_desktop_user, "screen_activity:sync")),
 ) -> dict[str, int]:
     if len(request.rows) > 100:
         raise HTTPException(status_code=400, detail="Maximum 100 rows per batch")

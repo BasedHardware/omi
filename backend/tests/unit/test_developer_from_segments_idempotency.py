@@ -173,7 +173,7 @@ def _request(**overrides):
 def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     captured = {}
 
-    def _process(uid, language, conversation):
+    def _process(uid, language, conversation, **_kwargs):
         captured['uid'] = uid
         captured['language'] = language
         captured['conversation'] = conversation
@@ -210,7 +210,7 @@ def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     persisted = MagicMock()
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    def _process(uid, language, conversation):
+    def _process(uid, language, conversation, **_kwargs):
         captured['conversation'] = conversation
         conversation.status = ConversationStatus.completed
         return conversation
@@ -241,7 +241,7 @@ def test_client_session_id_persists_when_processor_returns_without_saving(monkey
     persisted = MagicMock()
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    def _process(_uid, _language, conversation):
+    def _process(_uid, _language, conversation, **_kwargs):
         conversation.status = ConversationStatus.completed
         return conversation
 
@@ -303,7 +303,7 @@ def test_client_session_id_stale_claim_is_deleted_and_reprocessed(monkeypatch):
         },
     }
     delete = MagicMock()
-    process = MagicMock(side_effect=lambda _uid, _language, conversation: conversation)
+    process = MagicMock(side_effect=lambda _uid, _language, conversation, **_kwargs: conversation)
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=stale_claim))
     monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
@@ -336,7 +336,7 @@ def test_client_session_id_claim_is_released_when_processing_fails(monkeypatch):
 
 
 def test_client_session_id_atomic_claim_winner_processes_once(monkeypatch):
-    process = MagicMock(side_effect=lambda _uid, _language, conversation: conversation)
+    process = MagicMock(side_effect=lambda _uid, _language, conversation, **_kwargs: conversation)
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
@@ -370,7 +370,7 @@ def test_from_segments_renews_processing_lease_during_live_processing(monkeypatc
     monkeypatch.setattr(developer.lifecycle_service.jobs_db, 'renew_processing_lease', fake_renew)
     monkeypatch.setattr(developer.lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
 
-    def blocking_process(_uid, _language, conversation):
+    def blocking_process(_uid, _language, conversation, **_kwargs):
         assert lease_renewed.wait(timeout=5.0), 'lease not renewed during from-segments processing'
         conversation.status = ConversationStatus.completed
         return conversation

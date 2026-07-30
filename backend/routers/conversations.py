@@ -112,6 +112,7 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
+            conv_obj.status = ConversationStatus.processing
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
                 process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
@@ -125,7 +126,9 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
 
     submit_with_context(postprocess_executor, _run_enrichment)
     # Return immediately — still status=processing, no summary yet; the client polls for completion.
+    # Context stubs may have been completed+deferred; reacquire moved them to processing.
     conversation['deferred'] = False
+    conversation['status'] = 'processing'
     return conversation
 
 

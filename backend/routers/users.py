@@ -100,6 +100,7 @@ from utils.subscription import (
     clear_trial_paywall_cache,
     get_trial_metadata,
 )
+from utils.product_entitlements import apply_product_free_limits, transcription_usage_field
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.cloud_tasks import (
@@ -1143,6 +1144,7 @@ def get_user_subscription_endpoint(
     # must still see their plan so they can recover.
     uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
     """Gets the user's subscription plan and usage."""
@@ -1211,7 +1213,9 @@ def get_user_subscription_endpoint(
             logger.error(f"Error retrieving current price ID: {e}")
 
     # Populate dynamic fields for the response
-    subscription.limits = get_plan_limits(subscription.plan)
+    subscription.limits = apply_product_free_limits(
+        subscription.plan, get_plan_limits(subscription.plan), x_app_product
+    )
     is_mobile = x_app_platform in ('ios', 'android')
     subscription.features = get_plan_features(subscription.plan, simplified=is_mobile)
 
@@ -1225,8 +1229,8 @@ def get_user_subscription_endpoint(
     # Get current usage
     usage = get_monthly_usage_for_subscription(uid)
 
-    # Calculate usage metrics
-    transcription_seconds_used = usage.get('transcription_seconds', 0)
+    # Calculate usage metrics (Context uses a separate STT counter)
+    transcription_seconds_used = usage.get(transcription_usage_field(x_app_product), 0)
     words_transcribed_used = usage.get('words_transcribed', 0)
     insights_gained_used = usage.get('insights_gained', 0)
 
@@ -1319,7 +1323,7 @@ def get_user_subscription_endpoint(
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
 
     # Chat quota — reuse the shared snapshot helper
-    chat_snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
+    chat_snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform, app_product=x_app_product)
     chat_percent = 0.0
     if chat_snapshot['limit'] is not None and chat_snapshot['limit'] > 0:
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
@@ -1354,6 +1358,7 @@ def get_user_subscription_endpoint(
 def get_user_chat_usage_quota(
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
 ):
     """Current-month chat usage for the user, plus their plan's cap.
 
@@ -1374,7 +1379,7 @@ def get_user_chat_usage_quota(
             reset_at=None,
         )
 
-    snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
+    snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform, app_product=x_app_product)
     plan = snapshot['plan']
 
     if snapshot['limit'] is not None and snapshot['limit'] > 0:

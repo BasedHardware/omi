@@ -497,6 +497,14 @@ def get_conversations(
         categories=[c.value for c in category_list],
     )
 
+    # Demand-side: warm last-N free Context stubs when Claude lists history.
+    try:
+        from utils.conversations.context_demand_enrich import kick_recent_context_enrichment
+
+        kick_recent_context_enrichment(uid)
+    except Exception as e:  # noqa: BLE001
+        logger.warning('MCP list recent enrich kick failed uid=%s: %s', uid, type(e).__name__)
+
     redact_conversations_for_list(conversations)
     # Validate each record individually so one malformed conversation (e.g. a category
     # no longer in CategoryEnum) cannot 500 the whole page via response_model coercion.
@@ -565,6 +573,12 @@ def get_conversation_by_id(
 
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+
+    # Demand-side enrich for free Context / desktop deferred rows (same as app open).
+    if conversation.get('deferred'):
+        from routers.conversations import _enrich_deferred_conversation
+
+        conversation = _enrich_deferred_conversation(uid, conversation)
 
     populate_speaker_names(uid, [conversation])
 

@@ -77,6 +77,7 @@ async def load_listen_connect_base(
     *,
     source: Optional[str],
     use_custom_stt: bool,
+    app_product: Optional[str] = None,
 ) -> ListenConnectBase:
     """Load connect-time Firestore state off the event loop."""
     user_exists = await run_blocking(db_executor, user_db.is_exists_user, uid)
@@ -84,7 +85,9 @@ async def load_listen_connect_base(
     if use_custom_stt:
         user_has_credits = True
     else:
-        user_has_credits = await run_blocking(db_executor, has_transcription_credits, uid, source=source)
+        user_has_credits = await run_blocking(
+            db_executor, has_transcription_credits, uid, source=source, app_product=app_product
+        )
 
     transcription_prefs = await run_blocking(db_executor, get_user_transcription_preferences, uid)
 

@@ -4,7 +4,7 @@ import base64
 import json
 import time
 from collections.abc import AsyncIterator, Mapping
-from typing import Any, cast
+from typing import Optional, Any, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -410,13 +410,14 @@ async def chat_completions(
     body: dict[str, object],
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_app_product: Optional[str] = Header(None, alias='X-App-Product'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
 ) -> JSONResponse | StreamingResponse:
     if x_omi_chat_contract_version not in {None, '1'}:
         raise HTTPException(status_code=426, detail='Unsupported chat contract version')
     try:
-        enforce_chat_quota(uid, platform=x_app_platform)
+        enforce_chat_quota(uid, platform=x_app_platform, app_product=x_app_product)
         await _meter_server_request(uid)
         public_model, payload = _request(body)
     except HTTPException:

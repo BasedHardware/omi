@@ -56,7 +56,11 @@ from utils.memory.memory_system_pin import memory_system_request_scope
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
-from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
+from utils.subscription import (
+    is_trial_paywalled,
+    should_defer_desktop_processing,
+    should_demand_stub_context_enrichment,
+)
 from models.other import Person
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.notifications import send_important_conversation_message
@@ -1403,23 +1407,46 @@ def _store_deferred_conversation(
     all enrichment. Mirrors the tail of process_conversation's persistence (cheap structured →
     `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
     later via the lazy trigger in `get_conversation_by_id`."""
+    return _persist_enrichment_stub(uid, conversation, mcp_listable=False)
+
+
+def _store_context_enrichment_pending(
+    uid: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation]
+) -> Conversation:
+    """Free Context stub: raw transcript + cheap title, ``completed`` so MCP list can see it,
+    ``deferred=True`` so MCP/open triggers demand-side enrichment."""
+    return _persist_enrichment_stub(uid, conversation, mcp_listable=True)
+
+
+def _persist_enrichment_stub(
+    uid: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    *,
+    mcp_listable: bool,
+) -> Conversation:
     is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
     structured = _build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     conversation.deferred = True
-    # `processing` (not completed) is the user-facing "awaiting enrichment" state. Unlike the
-    # `deferred` flag it survives the desktop's local conversation cache, so the client shows a
-    # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
-    # back to `completed`.
-    conversation.status = ConversationStatus.processing
+    # Desktop freemium uses `processing` (client spinner). Context MCP filters `completed` only,
+    # so free CFC stubs must be completed while still deferred for demand enrich.
+    conversation.status = ConversationStatus.completed if mcp_listable else ConversationStatus.processing
     if is_initial_creation:
-        persisted = lifecycle_service.create_processing_conversation(uid, conversation.dict(), idempotent=True)
+        if mcp_listable:
+            persisted = lifecycle_service.create_completed_conversation(uid, conversation.dict(), idempotent=True)
+        else:
+            persisted = lifecycle_service.create_processing_conversation(uid, conversation.dict(), idempotent=True)
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
     if not persisted:
         logger.info('lazy: deferred conversation creation fenced uid=%s conv=%s', uid, conversation.id)
         return conversation
-    logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
+    logger.info(
+        "lazy: stored enrichment stub uid=%s conv=%s mcp_listable=%s",
+        uid,
+        conversation.id,
+        mcp_listable,
+    )
     return conversation
 
 
@@ -1434,6 +1461,7 @@ def process_conversation(
     defer_memory_extraction: bool = False,
     defer_derived_effects: bool = False,
     derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
+    app_product: Optional[str] = None,
 ) -> Conversation:
     def report_persistence(current: bool) -> None:
         if persistence_observer is not None:
@@ -1468,6 +1496,14 @@ def process_conversation(
                 pass
         report_persistence(False)
         return cast(Conversation, conversation)
+
+    # Free Context for Claude: store a MCP-listable stub (completed + deferred) and skip heavy
+    # LLM/embeddings. Enrichment runs on MCP touch / recent warm (demand-side), not on capture.
+    # Keep source=phone to avoid desktop trial-paywall coupling; product header selects this path.
+    if not force_process and not is_reprocess and should_demand_stub_context_enrichment(uid, app_product):
+        stub = _store_context_enrichment_pending(uid, conversation)
+        report_persistence(False)
+        return stub
 
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
     # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM

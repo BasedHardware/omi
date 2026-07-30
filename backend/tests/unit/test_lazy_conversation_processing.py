@@ -121,7 +121,13 @@ class TestDeferredNotRequeuedBySweeper:
     background-process deferred rows and defeat the cost saving)."""
 
     def test_get_processing_conversations_excludes_deferred(self):
-        import database.conversations as cdb
+        # Other unit suites (e.g. from-segments) leave database.conversations as an
+        # AutoMockModule in sys.modules; force the real module for this filter check.
+        import importlib
+        import sys
+
+        sys.modules.pop('database.conversations', None)
+        cdb = importlib.import_module('database.conversations')
 
         def _doc(d):
             m = MagicMock()
