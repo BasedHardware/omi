@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.147",
+      "date": "2026-07-30",
+      "changes": [
+        "Updated desktop dependencies to patch security vulnerabilities."
+      ]
+    },
+    {
       "version": "0.12.146",
       "date": "2026-07-30",
       "changes": [
