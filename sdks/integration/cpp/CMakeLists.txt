@@ -16,5 +16,12 @@ target_include_directories(omi_integration
 )
 target_link_libraries(omi_integration PUBLIC CURL::libcurl)
 
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(omi_integration_regression_test test/regression_test.cpp)
+  target_link_libraries(omi_integration_regression_test PRIVATE omi_integration)
+  add_test(NAME omi_integration_regression_test COMMAND omi_integration_regression_test)
+endif()
+
 install(TARGETS omi_integration)
 install(DIRECTORY include/ DESTINATION include)

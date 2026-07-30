@@ -6,19 +6,25 @@ import 'package:omi_integration/omi_integration.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('sends bearer auth and app_id path', () async {
-    late http.Request seen;
+  test('parses typed responses and sends bearer auth', () async {
+    final responses = <http.Response>[
+      http.Response(jsonEncode({'memories': []}), 200),
+      http.Response(jsonEncode({'conversations': []}), 200),
+    ];
+    final requests = <http.Request>[];
     final mock = MockClient((request) async {
-      seen = request;
-      return http.Response(jsonEncode({'memories': []}), 200);
+      requests.add(request);
+      return responses.removeAt(0);
     });
-    final client = OmiIntegrationClient(apiKey: 'test-key', appId: 'app-123', httpClient: mock);
-    final body = await client.listMemories(uid: 'user-1', limit: 10);
-    expect(body, isA<MemoriesResponse>());
-    expect(seen.headers['Authorization'], 'Bearer test-key');
-    expect(seen.url.path, '/v2/integrations/app-123/memories');
-    expect(seen.url.queryParameters['uid'], 'user-1');
-    client.close();
+    final client = OmiIntegrationClient(apiKey: 'key-1', appId: 'app-9', httpClient: mock);
+
+    final memories = await client.listMemories(uid: 'user-2');
+    final conversations = await client.listConversations(uid: 'user-2');
+
+    expect(memories, isA<MemoriesResponse>());
+    expect(conversations, isA<ConversationsResponse>());
+    expect(requests.first.url.path, '/v2/integrations/app-9/memories');
+    expect(requests.first.headers['authorization'], 'Bearer key-1');
   });
 
   test('preserves repeated list query params', () async {
