@@ -12,11 +12,12 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, watch};
 use uuid::Uuid;
 
 const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
+const MAX_JSONL_LINE_BYTES: usize = 1024 * 1024;
 
 mod tool_authority;
 use tool_authority::{RunningQuery, ToolRequest};
@@ -528,7 +529,12 @@ impl Runtime {
         ) else {
             return;
         };
-        let key = (owner_id.clone(), surface_kind.clone(), external_ref_kind.clone(), external_ref_id.clone());
+        let key = (
+            owner_id.clone(),
+            surface_kind.clone(),
+            external_ref_kind.clone(),
+            external_ref_id.clone(),
+        );
         let session_id = match self.surfaces.get(&key).cloned() {
             Some(id) => id,
             None => {
@@ -1160,14 +1166,26 @@ impl Runtime {
             );
             return;
         }
-        let session = self
-            .sessions
-            .get(&session_id)
-            .filter(|session| session.owner_id == credentials.owner_id);
-        let profile_generation = session.map_or(1, |session| session.profile.generation);
-        let surface_kind = session
-            .map(|session| session.surface_kind.clone())
-            .unwrap_or_else(|| "main_chat".into());
+        let Some(session) = self.sessions.get(&session_id) else {
+            self.emit_error(
+                Some(request_id),
+                Some(client_id),
+                "invalid_request",
+                "agent session is unavailable",
+            );
+            return;
+        };
+        if session.owner_id != credentials.owner_id {
+            self.emit_error(
+                Some(request_id),
+                Some(client_id),
+                "authentication",
+                "query is not authorized for this session",
+            );
+            return;
+        }
+        let profile_generation = session.profile.generation;
+        let surface_kind = session.surface_kind.clone();
         let run_identity =
             match self
                 .journal
@@ -1504,6 +1522,50 @@ fn hash_json(value: &Value) -> String {
     format!("sha256:{:x}", Sha256::digest(encoded))
 }
 
+async fn read_bounded_jsonl_line<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+    max_line_bytes: usize,
+) -> std::io::Result<Option<Vec<u8>>> {
+    let mut line = Vec::new();
+    let mut oversized = false;
+    loop {
+        let (consumed, newline) = {
+            let available = reader.fill_buf().await?;
+            if available.is_empty() {
+                if oversized {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "JSONL line exceeds maximum size",
+                    ));
+                }
+                return Ok((!line.is_empty()).then_some(line));
+            }
+            let newline = available.iter().position(|byte| *byte == b'\n');
+            let consumed = newline.map_or(available.len(), |position| position + 1);
+            let content_bytes = newline.unwrap_or(available.len());
+            if !oversized {
+                if line.len().saturating_add(content_bytes) > max_line_bytes {
+                    oversized = true;
+                } else {
+                    line.extend_from_slice(&available[..consumed]);
+                }
+            }
+            (consumed, newline.is_some())
+        };
+        reader.consume(consumed);
+        if newline {
+            return if oversized {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "JSONL line exceeds maximum size",
+                ))
+            } else {
+                Ok(Some(line))
+            };
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let (output, mut output_receiver) = mpsc::unbounded_channel();
@@ -1518,6 +1580,10 @@ async fn main() {
     };
     if let Err(error) = journal.reconcile_pending_tool_claims(None) {
         eprintln!("unable to reconcile Omi tool claims: {error}");
+        return;
+    }
+    if let Err(error) = journal.prune_expired_runtime_state() {
+        eprintln!("unable to prune expired Omi runtime state: {error}");
         return;
     }
     let daemon_boot_epoch = Uuid::new_v4().to_string();
@@ -1537,19 +1603,21 @@ async fn main() {
             json!({"sessionId": "", "agentControlTools": [], "runtimeVersion": RUNTIME_VERSION, "runtimeCapabilities": ["journal_import_remote_turn", "runtime_adapter_availability"], "runtimeAdapterIds": ["rx4"]}),
         ),
     );
-    let stdin = BufReader::new(tokio::io::stdin());
-    let mut lines = stdin.lines();
+    let mut stdin = BufReader::new(tokio::io::stdin());
     let mut stdout = tokio::io::stdout();
     loop {
         tokio::select! {
-            line = lines.next_line() => match line {
-                Ok(Some(line)) if !line.trim().is_empty() => {
-                    if let Ok(message) = parse_line(&line) {
-                        runtime.handle(message);
+            line = read_bounded_jsonl_line(&mut stdin, MAX_JSONL_LINE_BYTES) => match line {
+                Ok(Some(line)) if !line.iter().all(u8::is_ascii_whitespace) => {
+                    if let Ok(line) = std::str::from_utf8(&line) {
+                        if let Ok(message) = parse_line(line) {
+                            runtime.handle(message);
+                        }
                     }
                 }
+                Err(error) => runtime.emit_error(None, None, "invalid_request", &error.to_string()),
                 Ok(Some(_)) => {}
-                Ok(None) | Err(_) => break,
+                Ok(None) => break,
             },
             Some(request_id) = completed_receiver.recv() => {
                 runtime.running.remove(&request_id);
@@ -1751,6 +1819,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rejects_an_oversized_jsonl_frame_without_losing_the_next_frame() {
+        let oversized = format!("{}\n{{\"type\":\"stop\"}}\n", "x".repeat(33));
+        let mut reader = BufReader::new(std::io::Cursor::new(oversized));
+
+        let error = read_bounded_jsonl_line(&mut reader, 32)
+            .await
+            .expect_err("oversized JSONL frame must reject");
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        let next = read_bounded_jsonl_line(&mut reader, 32)
+            .await
+            .expect("next frame must be readable")
+            .expect("next frame must exist");
+        assert_eq!(next, b"{\"type\":\"stop\"}\n");
+    }
+
+    #[tokio::test]
     async fn interrupt_emits_existing_cancel_ack_shape() {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
@@ -1830,6 +1914,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn query_rejects_an_invalidated_session_before_run_admission() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(Some("https://api.omi.me/v2".into()), output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
+        runtime.credentials = Some(ManagedCredentials {
+            owner_id: "owner".into(),
+            bearer_token: "test-token".into(),
+        });
+        runtime.handle(parse_line(r#"{"type":"resolve_surface_session","requestId":"resolve","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("surface fixture must parse"));
+        let resolved = receiver.recv().await.expect("surface response must emit");
+        let session_id = resolved.fields["sessionId"]
+            .as_str()
+            .expect("session id must be present")
+            .to_owned();
+        runtime.handle(parse_line(r#"{"type":"invalidate_session","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("invalidation fixture must parse"));
+        let _ = receiver.recv().await.expect("invalidation must emit");
+
+        runtime.handle(parse_line(&format!(r#"{{"type":"query","requestId":"query","clientId":"client","ownerId":"owner","sessionId":"{session_id}","prompt":"hello"}}"#)).expect("query fixture must parse"));
+        let rejection = receiver.recv().await.expect("stale session must reject");
+        assert_eq!(rejection.kind, "error");
+        assert_eq!(
+            rejection.fields["failure"]["failureCode"],
+            "invalid_request"
+        );
+        assert!(!runtime.running.contains_key("query"));
+    }
+
+    #[tokio::test]
     async fn invalidating_a_session_revokes_its_pending_tool_claims() {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
@@ -1896,9 +2012,15 @@ mod tests {
             result.remove(key);
         }
         runtime.authorized_tool_execution_result(result);
-        let rejection = receiver.recv().await.expect("revoked claim must reject completion");
+        let rejection = receiver
+            .recv()
+            .await
+            .expect("revoked claim must reject completion");
         assert_eq!(rejection.kind, "error");
-        assert_eq!(rejection.fields["failure"]["failureCode"], "invalid_request");
+        assert_eq!(
+            rejection.fields["failure"]["failureCode"],
+            "invalid_request"
+        );
     }
 
     #[tokio::test]
