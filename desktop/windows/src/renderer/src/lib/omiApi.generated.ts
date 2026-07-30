@@ -10117,7 +10117,7 @@ export async function materialize_prompts_v1_chat_materialize_prompts_post(heade
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversations_v1_conversations_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
+export async function get_conversations_v1_conversations_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, sources?: string | null, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations`;
   const _params = query ? Object.entries(query)
@@ -10245,10 +10245,13 @@ export async function search_conversations_endpoint_v1_conversations_search_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversation_by_id_v1_conversations__conversation_id__get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
+export async function get_conversation_by_id_v1_conversations__conversation_id__get(path: { conversation_id: string }, query: { source?: string | null, include_discarded?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
     headers: {
