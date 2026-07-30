@@ -4,16 +4,12 @@ import Foundation
 
 /// Microphone capture, delivered as 16 kHz mono Int16 little-endian PCM.
 ///
-/// Runs a CoreAudio IOProc directly on the default input device rather than using
-/// `AVAudioEngine`: the engine creates an implicit aggregate device, which degrades system
-/// audio *output* quality — most visibly by dragging Bluetooth headphones out of A2DP into
-/// the 16 kHz SCO/HFP profile and chopping whatever the user is listening to. Ported from
-/// Omi desktop's `AudioCaptureService`, which learned every detail here the hard way.
+/// Uses `AVAudioEngine` input tap → 16 kHz mono Int16. The HAL `AudioDeviceStart` IOProc path
+/// was abandoned here after repeated −667 start timeouts left capture permanently dead on this
+/// machine. Engine can pull Bluetooth headphones into HFP; built-in mic / wired is the happy path.
 ///
-/// Threading: `queue` is the single owner of all mutable state. The HAL IO thread reads that
-/// state inside `handleAudioInput` and owns the watchdog counters, which is safe because a
-/// device's IOProc is serial and the queue only touches those counters while no IOProc is
-/// running.
+/// Threading: `queue` owns start/stop/teardown; the engine tap callback delivers PCM and runs the
+/// silent-mic watchdog counters.
 final class MicCapture: AudioSource, @unchecked Sendable {
 
     // MARK: - Types
@@ -75,6 +71,11 @@ final class MicCapture: AudioSource, @unchecked Sendable {
     private var targetFormat: AVAudioFormat?
     private var detectedSampleRate: Double = 0
     private var smoothedLevel: Float = 0
+
+    /// Mic capture via `AVAudioEngine`. The HAL `AudioDeviceStart` IOProc path hung indefinitely
+    /// on this machine (−667 after an 8 s cap), which left capture dead with no audio. Engine is
+    /// the sole mic path here; the Bluetooth-HFP aggregate caveat still applies on BT headsets.
+    private var audioEngine: AVAudioEngine?
 
     // Silent-mic watchdog, owned by the IO thread. Tracks the peak amplitude inside a ~1 s
     // window so a mic that is alive-but-silent (the Bluetooth A2DP/HFP profile flip) is
@@ -212,29 +213,103 @@ final class MicCapture: AudioSource, @unchecked Sendable {
 
     private func startOnQueue() throws {
         resetWatchdog()
+        try startEngineOnQueue()
+        installDefaultDeviceListener()
+    }
 
-        let inputDeviceID = try resolveInputDeviceID()
-        self.deviceID = inputDeviceID
-
-        guard let streamFormat = getStreamFormat(for: inputDeviceID),
-            streamFormat.mSampleRate > 0,
-            streamFormat.mChannelsPerFrame > 0
-        else {
+    private func startEngineOnQueue() throws {
+        let eng = AVAudioEngine()
+        let input = eng.inputNode
+        let hwFormat = input.inputFormat(forBus: 0)
+        guard hwFormat.sampleRate > 0, hwFormat.channelCount > 0 else {
             throw AudioCaptureError.formatUnavailable
         }
-        detectedSampleRate = streamFormat.mSampleRate
+        detectedSampleRate = hwFormat.sampleRate
+        deviceID = Self.currentDefaultInputDeviceID() ?? kAudioObjectUnknown
+        try buildConverter(sourceSampleRate: hwFormat.sampleRate)
 
-        try buildConverter(sourceSampleRate: streamFormat.mSampleRate)
-        try startIOProc()
-
+        input.installTap(onBus: 0, bufferSize: 1024, format: hwFormat) { [weak self] buffer, _ in
+            self?.handleEngineBuffer(buffer)
+        }
+        do {
+            try eng.start()
+        } catch {
+            input.removeTap(onBus: 0)
+            throw AudioCaptureError.ioProcFailed(OSStatus(error._code))
+        }
+        audioEngine = eng
         isCapturing = true
         setRunning(true)
         ContextLog.info(
-            "capturing device \(inputDeviceID) at \(Int(streamFormat.mSampleRate))Hz "
-                + "\(streamFormat.mChannelsPerFrame)ch → 16kHz mono", "mic")
+            "capturing via AVAudioEngine at \(Int(hwFormat.sampleRate))Hz "
+                + "\(hwFormat.channelCount)ch → 16kHz mono", "mic")
+    }
 
-        installDefaultDeviceListener()
-        installDeviceFormatListener()
+    private func handleEngineBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard isCapturing,
+            let converter = audioConverter,
+            let targetFmt = targetFormat,
+            let inputFmt = inputFormat,
+            let srcChannels = buffer.floatChannelData
+        else { return }
+
+        let frameCount = buffer.frameLength
+        guard frameCount > 0 else { return }
+
+        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFmt, frameCapacity: frameCount)
+        else { return }
+        inputBuffer.frameLength = frameCount
+        guard let monoPtr = inputBuffer.floatChannelData?[0] else { return }
+
+        let channelCount = Int(buffer.format.channelCount)
+        if channelCount >= 2 {
+            let left = srcChannels[0]
+            let right = srcChannels[1]
+            for i in 0..<Int(frameCount) {
+                monoPtr[i] = (left[i] + right[i]) / 2.0
+            }
+        } else {
+            memcpy(monoPtr, srcChannels[0], Int(frameCount) * MemoryLayout<Float>.size)
+        }
+
+        let outputFrameCapacity = Self.resampledFrameCapacity(
+            frameCount: frameCount, sourceSampleRate: detectedSampleRate, targetSampleRate: targetSampleRate)
+        guard outputFrameCapacity > 0,
+            let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFmt, frameCapacity: outputFrameCapacity)
+        else { return }
+
+        var error: NSError?
+        hasConsumedInput = false
+        let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
+            if self.hasConsumedInput {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            self.hasConsumedInput = true
+            outStatus.pointee = .haveData
+            return inputBuffer
+        }
+        converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
+        guard error == nil, let channelData = outputBuffer.floatChannelData?[0] else { return }
+        let processedFrameLength = Int(outputBuffer.frameLength)
+        guard processedFrameLength > 0 else { return }
+
+        var pcm = [Int16]()
+        pcm.reserveCapacity(processedFrameLength)
+        var sumOfSquares: Float = 0
+        for i in 0..<processedFrameLength {
+            let sample = channelData[i]
+            let pcmSample = Int16(max(-32768, min(32767, sample * 32767)))
+            pcm.append(pcmSample)
+            let normalized = Float(pcmSample) / 32767.0
+            sumOfSquares += normalized * normalized
+            let absoluteSample = pcmSample == Int16.min ? Int16.max : Int16(pcmSample.magnitude)
+            if absoluteSample > watchdogWindowPeak { watchdogWindowPeak = absoluteSample }
+        }
+        let byteData = pcm.withUnsafeBufferPointer { Data(buffer: $0) }
+        checkSilentMicWindow()
+        reportLevel(rms: sqrt(sumOfSquares / Float(processedFrameLength)))
+        onChunk?(byteData)
     }
 
     /// Builds the mono input format, the 16 kHz target format, and the converter between them.
@@ -257,25 +332,6 @@ final class MicCapture: AudioSource, @unchecked Sendable {
         audioConverter = converter
     }
 
-    private func startIOProc() throws {
-        var procID: AudioDeviceIOProcID?
-        let createStatus = AudioDeviceCreateIOProcIDWithBlock(&procID, deviceID, nil) {
-            [weak self] _, inInputData, _, _, _ in
-            self?.handleAudioInput(inInputData)
-        }
-        guard createStatus == noErr, let validProcID = procID else {
-            throw AudioCaptureError.ioProcFailed(createStatus)
-        }
-        ioProcID = validProcID
-
-        let startStatus = AudioDeviceStart(deviceID, validProcID)
-        guard startStatus == noErr else {
-            AudioDeviceDestroyIOProcID(deviceID, validProcID)
-            ioProcID = nil
-            throw AudioCaptureError.ioProcFailed(startStatus)
-        }
-    }
-
     private func teardownOnQueue() {
         removePropertyListeners()
 
@@ -286,6 +342,12 @@ final class MicCapture: AudioSource, @unchecked Sendable {
         isCapturing = false
         isReconfiguring = false
         fallbackDeviceID = nil
+
+        if let eng = audioEngine {
+            eng.inputNode.removeTap(onBus: 0)
+            eng.stop()
+            audioEngine = nil
+        }
 
         if let procID, devID != kAudioObjectUnknown {
             AudioDeviceStop(devID, procID)
@@ -333,96 +395,6 @@ final class MicCapture: AudioSource, @unchecked Sendable {
     }
 
     /// Called on the CoreAudio HAL IO thread. Must never block: no locks, no I/O, no `sync`.
-    private func handleAudioInput(_ inputData: UnsafePointer<AudioBufferList>?) {
-        guard isCapturing,
-            let bufferList = inputData?.pointee,
-            let converter = audioConverter,
-            let targetFmt = targetFormat,
-            let inputFmt = inputFormat
-        else { return }
-
-        let buffer = bufferList.mBuffers
-        guard let data = buffer.mData, buffer.mDataByteSize > 0 else { return }
-
-        let bytesPerFrame = UInt32(MemoryLayout<Float32>.size) * buffer.mNumberChannels
-        guard bytesPerFrame > 0 else { return }
-        let frameCount = buffer.mDataByteSize / bytesPerFrame
-        guard frameCount > 0 else { return }
-
-        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFmt, frameCapacity: frameCount) else { return }
-        inputBuffer.frameLength = frameCount
-
-        let srcPtr = data.assumingMemoryBound(to: Float32.self)
-        let channelCount = Int(buffer.mNumberChannels)
-        guard let floatData = inputBuffer.floatChannelData else { return }
-        let monoPtr = floatData[0]
-
-        if channelCount >= 2 {
-            // Stereo (or more) down to mono by averaging the first two channels.
-            for i in 0..<Int(frameCount) {
-                let left = srcPtr[i * channelCount]
-                let right = srcPtr[i * channelCount + 1]
-                monoPtr[i] = (left + right) / 2.0
-            }
-        } else {
-            memcpy(monoPtr, srcPtr, Int(buffer.mDataByteSize))
-        }
-
-        let outputFrameCapacity = Self.resampledFrameCapacity(
-            frameCount: frameCount, sourceSampleRate: detectedSampleRate, targetSampleRate: targetSampleRate)
-        guard outputFrameCapacity > 0,
-            let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFmt, frameCapacity: outputFrameCapacity)
-        else { return }
-
-        var error: NSError?
-        hasConsumedInput = false
-        let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-            if self.hasConsumedInput {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-            self.hasConsumedInput = true
-            outStatus.pointee = .haveData
-            return inputBuffer
-        }
-        converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
-
-        if let error {
-            ContextLog.error("conversion failed: \(error.localizedDescription)", "mic")
-            return
-        }
-
-        guard let channelData = outputBuffer.floatChannelData?[0] else { return }
-        let processedFrameLength = Int(outputBuffer.frameLength)
-        guard processedFrameLength > 0 else { return }
-
-        var pcm = [Int16]()
-        pcm.reserveCapacity(processedFrameLength)
-        var sumOfSquares: Float = 0
-
-        for i in 0..<processedFrameLength {
-            let sample = channelData[i]
-            let pcmSample = Int16(max(-32768, min(32767, sample * 32767)))
-            pcm.append(pcmSample)
-
-            let normalized = Float(pcmSample) / 32767.0
-            sumOfSquares += normalized * normalized
-
-            // Accumulate the watchdog peak here rather than in a second pass over the buffer:
-            // this is the audio callback hot path.
-            let absoluteSample = pcmSample == Int16.min ? Int16.max : Int16(pcmSample.magnitude)
-            if absoluteSample > watchdogWindowPeak { watchdogWindowPeak = absoluteSample }
-        }
-
-        // Little-endian, which is native on Apple platforms.
-        let byteData = pcm.withUnsafeBufferPointer { Data(buffer: $0) }
-
-        checkSilentMicWindow()
-        reportLevel(rms: sqrt(sumOfSquares / Float(processedFrameLength)))
-
-        onChunk?(byteData)
-    }
-
     private func reportLevel(rms: Float) {
         guard let levelHandler = onLevel else { return }
 
@@ -581,18 +553,22 @@ final class MicCapture: AudioSource, @unchecked Sendable {
 
     // MARK: - Rebuilding the stack
 
-    /// Tears the IOProc down and rebuilds it against whatever the device situation now is:
+    /// Tears the engine down and rebuilds it against whatever the device situation now is:
     /// a new default input, a format change, or a device that went silent.
     private func handleConfigurationChange() {
         guard isCapturing, !isReconfiguring else { return }
         isReconfiguring = true
 
+        if let eng = audioEngine {
+            eng.inputNode.removeTap(onBus: 0)
+            eng.stop()
+            audioEngine = nil
+        }
         if let procID = ioProcID, deviceID != kAudioObjectUnknown {
             AudioDeviceStop(deviceID, procID)
             AudioDeviceDestroyIOProcID(deviceID, procID)
             ioProcID = nil
         }
-        // The device is about to change, so its format listener has to go with it.
         removeDeviceFormatListener()
 
         // Let the hardware settle before reopening; a device queried immediately after a route
@@ -605,27 +581,8 @@ final class MicCapture: AudioSource, @unchecked Sendable {
     private func reconfigure(retryCount: Int) {
         guard isCapturing, isReconfiguring else { return }
 
-        let newDeviceID: AudioDeviceID
         do {
-            newDeviceID = try resolveInputDeviceID()
-        } catch {
-            retryOrGiveUp(retryCount: retryCount, reason: "no input device")
-            return
-        }
-        deviceID = newDeviceID
-
-        guard let streamFormat = getStreamFormat(for: newDeviceID),
-            streamFormat.mSampleRate > 0,
-            streamFormat.mChannelsPerFrame > 0
-        else {
-            retryOrGiveUp(retryCount: retryCount, reason: "no usable stream format")
-            return
-        }
-        detectedSampleRate = streamFormat.mSampleRate
-
-        do {
-            try buildConverter(sourceSampleRate: streamFormat.mSampleRate)
-            try startIOProc()
+            try startEngineOnQueue()
         } catch {
             retryOrGiveUp(retryCount: retryCount, reason: error.localizedDescription)
             return
@@ -633,11 +590,8 @@ final class MicCapture: AudioSource, @unchecked Sendable {
 
         resetWatchdog()
         installDefaultDeviceListener()
-        installDeviceFormatListener()
         isReconfiguring = false
-        ContextLog.info(
-            "rebuilt on device \(newDeviceID) at \(Int(streamFormat.mSampleRate))Hz "
-                + "\(streamFormat.mChannelsPerFrame)ch", "mic")
+        ContextLog.info("rebuilt AVAudioEngine mic capture", "mic")
     }
 
     private func retryOrGiveUp(retryCount: Int, reason: String) {

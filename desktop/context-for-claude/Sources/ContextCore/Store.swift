@@ -397,16 +397,21 @@ public final class ContextStore: @unchecked Sendable {
 
     /// PRAGMAs both processes depend on. WAL and `synchronous` are writer-only settings — issuing
     /// them on a read-only connection fails, and a failed `prepareDatabase` aborts the open.
+    ///
+    /// `busy_timeout` must be set *before* `journal_mode`: two writers in this process (the engine
+    /// and the upload queue) open the same file on launch, and without a timeout the second open's
+    /// `PRAGMA journal_mode = WAL` fails immediately with SQLITE_BUSY ("database is locked"), which
+    /// surfaces as capture never starting.
     private static func makeConfiguration(readOnly: Bool) -> Configuration {
         var config = Configuration()
         config.readonly = readOnly
         config.prepareDatabase { db in
+            try db.execute(sql: "PRAGMA busy_timeout = 5000")
             if !readOnly {
                 try db.execute(sql: "PRAGMA journal_mode = WAL")
                 try db.execute(sql: "PRAGMA synchronous = NORMAL")
             }
             try db.execute(sql: "PRAGMA foreign_keys = ON")
-            try db.execute(sql: "PRAGMA busy_timeout = 5000")
         }
         return config
     }

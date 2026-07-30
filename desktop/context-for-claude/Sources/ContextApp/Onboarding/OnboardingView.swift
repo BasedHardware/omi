@@ -46,8 +46,6 @@ struct OnboardingView: View {
     @State private var connectorSurfaces: Set<ClaudeSurface> = []
     @State private var connectorMessage: String?
     @State private var configuringConnector = false
-    @State private var modelProgress: Double?
-    @State private var warmingModels = false
 
     @State private var granting = false
     @State private var openedScreenSettings = false
@@ -473,7 +471,7 @@ struct OnboardingView: View {
     private var working: Bool {
         switch step {
         case .signIn: return auth.isSigningIn
-        case .setup: return granting || warmingModels
+        case .setup: return granting
         case .connector: return configuringConnector
         case .intro, .value, .done: return false
         }
@@ -640,7 +638,6 @@ struct OnboardingView: View {
             }
 
             if !LoginItem.isEnabled { _ = LoginItem.enable() }
-            warmModels()
 
             granting = false
             // Give the last row's checkmark a beat to land before the card changes under it.
@@ -651,27 +648,6 @@ struct OnboardingView: View {
             // process, so it never satisfies `refreshPermissions` in this one. Move on anyway and
             // let the last screen offer the restart.
             if step == .setup { go(to: .done) }
-        }
-    }
-
-    // MARK: - Models
-
-    /// The first model pull is ~600 MB. Warming it behind this step costs the user nothing;
-    /// leaving it to the first conversation costs them the conversation.
-    private func warmModels() {
-        guard !Transcriber.isModelReady else { return }
-        warmingModels = true
-        modelProgress = 0
-        Task { @MainActor in
-            do {
-                try await Transcriber.prepareModels { value in
-                    Task { @MainActor in modelProgress = min(max(value, 0), 1) }
-                }
-            } catch {
-                ContextLog.error("transcription model warm-up failed: \(error)", "onboarding")
-            }
-            warmingModels = false
-            modelProgress = nil
         }
     }
 

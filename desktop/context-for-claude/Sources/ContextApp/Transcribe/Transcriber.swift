@@ -29,7 +29,7 @@ actor Transcriber {
     /// `ASRConstants.sampleRate` is 16 kHz too) rather than merely under it, because the Parakeet
     /// encoder is a fixed-shape CoreML graph: `Encoder.mlmodelc` declares `mel [1, 128, 1501]` with
     /// `hasShapeFlexibility = 0` and always emits 188 frames, and on v3 even the preprocessor is
-    /// pinned to `audio_signal [1, 240000]`. FluidAudio zero-pads whatever it is handed up to that
+    /// pinned to `audio_signal [1, 240000]`. FluidAudio zero-pads shorter windows up to that
     /// length before inference (`AsrManager+Transcription`), so a 10 s window and a 15 s window are
     /// the *same* encoder pass at the same cost — the short one merely discards a third of it, and
     /// discards it unread, since `TdtFrameNavigation` clamps the decode to `min(encoderSequenceLength,
@@ -43,13 +43,27 @@ actor Transcriber {
     /// for it; at exactly 240 000 both `frameAlignedAudio` and `padAudioIfNeeded` are no-ops, so the
     /// tensor handed to the ANE is all real audio and nothing else.
     ///
-    /// What it costs is latency — a line lands ~15 s after it was spoken, plus a pump tick. Nothing
-    /// in Context for Claude cares (there is no live caption UI; the transcript is read minutes to
-    /// months later), and the decoder seeing whole clauses instead of fragments is exactly why the
-    /// text comes out punctuated and cased like written English rather than like a live caption.
-    /// Fewer, longer windows also mean fewer seams, and every seam costs the words that straddle it
-    /// — see the fresh-decoder-state note in ``drain(force:)``.
-    private static let windowSamples = ASRConstants.maxModelSamples
+    /// What it costs is latency — a line lands ~15 s after it was spoken, plus a pump tick. The
+    /// decoder seeing whole clauses instead of fragments is exactly why the text comes out
+    /// punctuated and cased like written English rather than like a live caption. Fewer, longer
+    /// windows also mean fewer seams, and every seam costs the words that straddle it — see the
+    /// fresh-decoder-state note in ``drain(force:)``.
+    ///
+    /// Override with `CONTEXT_STT_WINDOW_SECONDS` only when deliberately trading quality for snappier
+    /// live captions (e.g. `3` for the debug UI).
+    private static var windowSamples: Int {
+        let seconds: Double = {
+            if let env = ProcessInfo.processInfo.environment["CONTEXT_STT_WINDOW_SECONDS"],
+                let value = Double(env), value > 0
+            {
+                return value
+            }
+            return Double(ASRConstants.maxModelSamples) / Double(sampleRate)
+        }()
+        let samples = Int((seconds * Double(sampleRate)).rounded())
+        let minimum = ASRConstants.minimumRequiredSamples(forSampleRate: sampleRate)
+        return min(ASRConstants.maxModelSamples, max(minimum, samples))
+    }
 
     /// The pump interval. Shorter than a window on purpose: a window becomes complete at an
     /// arbitrary moment, and polling at 1 s means it waits at most a second to be decoded.

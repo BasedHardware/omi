@@ -80,8 +80,9 @@ private enum CaptureComponent: CaseIterable {
     var segmentSource: SegmentSource { self == .microphone ? .mic : .system }
 }
 
-/// The capture pipeline: three sensors, two transcribers, one database writer, and the published
-/// state the menu bar and `context-for-claude-mcp` read.
+/// The capture pipeline: three sensors, cloud `/v4/listen` for speech, local Vision OCR for
+/// screenshots, one database writer, and the published state the menu bar and
+/// `context-for-claude-mcp` read.
 ///
 /// The organising rule is that **every source fails alone**. A mic that never comes back, a system
 /// tap the OS refuses, a Screen Recording grant that only takes effect after a relaunch — each one
@@ -135,7 +136,6 @@ final class Engine: ObservableObject {
     private var reasons: [CaptureComponent: String] = [:]
 
     private var audioSources: [CaptureComponent: AudioSource] = [:]
-    private var transcribers: [CaptureComponent: Transcriber] = [:]
     private var chunkFeeds: [CaptureComponent: AsyncStream<Data>.Continuation] = [:]
     private var pumps: [CaptureComponent: Task<Void, Never>] = [:]
     private var starts: [CaptureComponent: Task<Void, Never>] = [:]
@@ -261,12 +261,7 @@ final class Engine: ObservableObject {
 
     /// Streams mixed audio to the Omi backend, which transcribes it with real diarization and the
     /// user's own speech profile — attribution this app can only approximate locally as
-    /// "mic is me, system is everyone else".
-    ///
-    /// The local transcriber is deliberately left running underneath. Cloud transcription needs a
-    /// network and an account in good standing; when either is missing the socket reports it and
-    /// the local path is already producing lines, so the failure costs transcript *quality* rather
-    /// than the recording itself.
+    /// "mic is me, system is everyone else". Local Parakeet is not used for speech.
     func mixerInput(mic: Data? = nil, system: Data? = nil) {
         if let mic { mixer.setMicAudio(mic) }
         if let system { mixer.setSystemAudio(system) }
@@ -407,8 +402,9 @@ final class Engine: ObservableObject {
         stopScreen()
     }
 
-    /// Wires one audio device into one transcriber. Identical for the mic and the system tap: the
-    /// only difference is which device can fail and what the user is told when it does.
+    /// Wires one audio device into the cloud mixer. Identical for the mic and the system tap: the
+    /// only difference is which device can fail and what the user is told when it does. Speech
+    /// transcription is owned by `/v4/listen`, not on-device Parakeet.
     private func startAudio(_ component: CaptureComponent) {
         guard starts[component] == nil, !running.contains(component) else { return }
         guard let capability = component.capability, Permissions.check(capability) else {
@@ -417,60 +413,29 @@ final class Engine: ObservableObject {
         }
         guard let device = makeAudioSource(component) else { return }
 
-        let transcriber = Transcriber(source: component.segmentSource)
-        let segmentSource = component.segmentSource
-        let lines = lineFeed
-        // A stream rather than a task per chunk: tasks reach an actor in whatever order the pool
+        // A stream rather than a task per chunk: tasks reach the mixer in whatever order the pool
         // schedules them, and reordered audio is a corrupted transcript. Bounded, because a stalled
-        // transcriber must cost a few dropped seconds rather than the whole machine's memory.
+        // socket must cost a few dropped seconds rather than the whole machine's memory.
         let (chunks, feed) = AsyncStream<Data>.makeStream(
             of: Data.self, bufferingPolicy: .bufferingNewest(512))
 
         audioSources[component] = device
-        transcribers[component] = transcriber
         chunkFeeds[component] = feed
 
         starts[component] = Task { [weak self] in
             do {
-                await transcriber.setOnLine { text, startedAt, endedAt in
-                    lines?.yield(
-                        TranscriptLine(
-                            text: text, startedAt: startedAt, endedAt: endedAt, source: segmentSource))
-                }
-                if !Transcriber.isModelReady {
-                    // ~600 MB on first run. Say so rather than looking silently broken for minutes.
-                    self?.note(
-                        component,
-                        "\(component.label) warming up — first run downloads the transcription model")
-                    self?.publishState()
-                }
-                // The model load is a cold-start compile measured in minutes, and the device must
-                // not wait behind it — every second spent loading used to be a second of the user's
-                // life that was never recorded. `Transcriber` buffers from the moment `start()` is
-                // entered, so the capture begins now and the backlog decodes once the model lands.
-                let modelReady = Task { try await transcriber.start() }
                 self?.pumps[component] = Task.detached(priority: .userInitiated) {
                     for await chunk in chunks {
-                        // Every chunk reaches the cloud. The local model owns only the fallback:
-                        // feeding both while cloud is live persists two independent transcripts of
-                        // the same audio. Decide at ingestion time, before model latency can blur a
-                        // cloud-state transition with the line it later emits.
-                        let useLocalFallback = await MainActor.run { () -> Bool in
+                        await MainActor.run {
                             switch component {
                             case .microphone: Engine.shared.mixerInput(mic: chunk)
                             case .systemAudio: Engine.shared.mixerInput(system: chunk)
                             default: break
                             }
-                            return TranscriptOwnership.shouldFeedLocalFallback(
-                                when: ListenSocket.shared.state)
-                        }
-                        if useLocalFallback {
-                            await transcriber.append(chunk)
                         }
                     }
                 }
                 try await device.start(onChunk: { feed.yield($0) }, onLevel: { _ in })
-                try await modelReady.value
 
                 guard let self, !Task.isCancelled else {
                     // Stopped while the device was still coming up; do not leave an IOProc behind.
@@ -519,11 +484,6 @@ final class Engine: ObservableObject {
         pumps[component] = nil
         audioSources[component]?.stop()
         audioSources[component] = nil
-        if let transcriber = transcribers.removeValue(forKey: component) {
-            // Flushes the window in flight. On quit this never gets to run, which costs at most the
-            // last partial window — the alternative is blocking termination on the model.
-            Task { await transcriber.finish() }
-        }
         running.remove(component)
     }
 
@@ -555,9 +515,7 @@ final class Engine: ObservableObject {
 
     // MARK: - Transcript lines
 
-    /// One consumer for both transcribers, on the main actor. Lines arrive from two actors on two
-    /// threads; funnelling them through a single stream keeps `lastLine` and the session boundary
-    /// decision in one order.
+    /// One consumer for cloud transcript lines, on the main actor.
     private func startLineConsumer() {
         let (lines, feed) = AsyncStream<TranscriptLine>.makeStream(
             of: TranscriptLine.self, bufferingPolicy: .bufferingNewest(256))
@@ -575,6 +533,9 @@ final class Engine: ObservableObject {
         // Read the frontmost app here: the store's queue must not touch AppKit, and by the time a
         // session opens on that queue the user may already have switched windows.
         store.record(line, appHint: NSWorkspace.shared.frontmostApplication?.localizedName)
+        // Stamp the heartbeat immediately so live readers can rewrite the in-flight caption
+        // without waiting for the next timer tick.
+        publishState()
     }
 
     // MARK: - Published state
@@ -620,7 +581,10 @@ final class Engine: ObservableObject {
         if pausedReason != reason { pausedReason = reason }
 
         let state = CaptureState(
-            capturing: capturing, pausedReason: reason, capabilities: capabilities)
+            capturing: capturing,
+            pausedReason: reason,
+            capabilities: capabilities,
+            lastLine: lastLine)
         // Before the write, so a timer tick that fires in between re-stamps the new state, not the
         // one it replaced.
         heartbeat.set(state)
@@ -667,13 +631,17 @@ final class Engine: ObservableObject {
     private func startMaintenanceLoop() {
         maintenanceTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
+                // Mic −667 failures need a faster retry than the 30 s storage/capability tick —
+                // otherwise a wedged start looks "dead" for half a minute in the debug UI.
+                let micDown = self?.reasons[.microphone] != nil
+                try? await Task.sleep(for: .seconds(micDown ? 5 : 30))
                 guard let self else { return }
                 if self.isPaused {
                     self.publishState()
                 } else {
                     await self.ensureStorage()
                     self.refreshCapabilities()
+                    self.startPermittedSources()
                 }
             }
         }
@@ -726,7 +694,10 @@ final class Engine: ObservableObject {
         // The same sentence `Queries.status` uses for a stale heartbeat, so Claude reads one story.
         pausedReason = "Context for Claude is not running"
         let final = CaptureState(
-            capturing: false, pausedReason: pausedReason, capabilities: capabilities)
+            capturing: false,
+            pausedReason: pausedReason,
+            capabilities: capabilities,
+            lastLine: lastLine)
         // Snapshot first, then write on the heartbeat queue: a timer tick already in flight runs
         // ahead of this write and re-stamps `final` rather than resurrecting a "capturing" state on
         // top of it.
@@ -736,13 +707,10 @@ final class Engine: ObservableObject {
     }
 }
 
-/// Chooses one transcript owner for each audio chunk. Cloud is preferred only after the socket is
-/// truly live; every other state is an explicit local-fallback state so a sign-in delay, reconnect,
-/// or permanent cloud refusal never turns capture into silence.
+/// Cloud `/v4/listen` owns all speech transcripts. Local Parakeet is not fed — on-device
+/// understanding is limited to screenshot OCR.
 enum TranscriptOwnership {
-    static func shouldFeedLocalFallback(when cloudState: ListenSocket.State) -> Bool {
-        cloudState != .live
-    }
+    static func shouldFeedLocal() -> Bool { false }
 }
 
 // MARK: - Store writer

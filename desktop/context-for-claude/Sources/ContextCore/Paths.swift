@@ -106,17 +106,22 @@ public struct CaptureState: Codable, Sendable, Equatable {
     public var capturing: Bool
     public var pausedReason: String?
     public var capabilities: [CapabilityReport]
+    /// Most recent transcript line text (mic or system). Readers may replace an in-flight
+    /// caption with this as it updates; absent when nothing has been decoded yet.
+    public var lastLine: String?
     public var updatedAt: Double
 
     public init(
         capturing: Bool,
         pausedReason: String? = nil,
         capabilities: [CapabilityReport] = [],
+        lastLine: String? = nil,
         updatedAt: Double = ContextTime.now
     ) {
         self.capturing = capturing
         self.pausedReason = pausedReason
         self.capabilities = capabilities
+        self.lastLine = lastLine
         self.updatedAt = updatedAt
     }
 
