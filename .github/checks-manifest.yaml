@@ -24,6 +24,11 @@ checks:
     triggers: [".github/scripts/verify-pre-tag-readiness.py", ".github/scripts/test_verify_pre_tag_readiness.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the receipt verifier must reject stale, non-offline, failed, and promotion-bearing readiness evidence before a tag mutation"
+  - id: windows-update-feed-probe-tests
+    command: ["python3", ".github/scripts/test_probe_windows_update_feed.py"]
+    triggers: [".github/scripts/probe_windows_update_feed.py", ".github/scripts/test_probe_windows_update_feed.py", ".github/workflows/desktop_windows_release.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Windows releases must not tag while production is missing /v2/desktop/update-feed/windows; the probe's trust-boundary validation is the release-lane guard"
   - id: pre-push-final-pr-diff
     command: ["bash", "scripts/test-pre-push-diff-base.sh"]
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]

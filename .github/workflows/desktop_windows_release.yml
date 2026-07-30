@@ -68,6 +68,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Windows clients since #10610 fail closed without this production route.
+      # Probe before tagging so a missing deploy cannot mint another broken cohort.
+      - name: Probe production Windows update-feed
+        shell: bash
+        run: python3 .github/scripts/probe_windows_update_feed.py --channel beta
+
       - name: Plan release (compute next version, tag, sync back to main)
         id: plan
         env:
@@ -308,7 +314,7 @@ jobs:
 
           ${SIGN_NOTE}
 
-          Install: download and run the \`.exe\`. Installed apps auto-update from stable releases."
+          Install: download and run the \`.exe\`. Installed apps auto-update through \`/v2/desktop/update-feed/windows\` (beta when Settings → Receive beta updates is on; otherwise stable)."
 
           # Create the release if the plan job did not (idempotent on re-run).
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
