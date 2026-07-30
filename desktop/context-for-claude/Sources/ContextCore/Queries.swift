@@ -147,7 +147,22 @@ public enum Queries {
         until: Double? = nil,
         limit: Int = 40
     ) throws -> [Hit] {
-        guard limit > 0, let match = ftsExpression(for: query) else { return [] }
+        guard limit > 0 else { return [] }
+        // A query the tokenizer cannot represent at all — a lone emoji, a glyph, any script
+        // `unicode61` treats as punctuation — produces no terms and therefore no MATCH. Returning
+        // nothing there is the dangerous answer: it is indistinguishable from a search that ran and
+        // found nothing, which is exactly the licence a reader has to conclude the thing never
+        // happened. The text is in the database; only the index cannot hold it. So scan for it
+        // literally, bounded by the same limit, on the one path where the index has already refused.
+        guard let match = ftsExpression(for: query) else {
+            // Only for content the tokenizer drops but a person still means: emoji, pictographs,
+            // symbols like ✳. A query of bare punctuation — a lone quote, a star, an FTS keyword —
+            // also yields no terms, but scanning for it matches every row that happens to contain
+            // that character, which is noise dressed as an answer. The test is therefore not "did
+            // the index refuse" but "is there something here worth looking for literally".
+            guard carriesUnindexableContent(query) else { return [] }
+            return try literalScan(store, needle: query, since: since, until: until, limit: limit)
+        }
         let terms = distinctTerms(in: query)
         // `limit` is caller-supplied, so the widening saturates rather than trapping.
         let pool = limit >= Int.max / candidatePoolFactor
@@ -164,6 +179,16 @@ public enum Queries {
                 db, match: match, terms: terms, since: since, until: until,
                 limit: max(pool, momentPoolMinimum))
             return spoken + seen
+        }
+        // The index answered nothing. That is usually the truth, and the scan below then returns
+        // nothing too — the honest empty answer survives. But it is also what happens when the text
+        // is present in a form the tokenizer cannot reach it by: a stem that folded differently, a
+        // word welded to punctuation, a script it segments unlike the query. Those were silently
+        // reported as absent, and absence is the one answer a reader acts on irreversibly.
+        //
+        // Only on empty, so it costs nothing whenever the index did its job.
+        if matched.isEmpty {
+            return try literalScan(store, needle: query, since: since, until: until, limit: limit)
         }
         return cap(ranked(matched), to: limit)
     }
@@ -539,6 +564,76 @@ public enum Queries {
                 return text ?? ""
             },
             signature: { _ in nil })
+    }
+
+    /// Whether a query holds anything the index cannot represent but a reader still meant.
+    ///
+    /// True for emoji, pictographs and symbols — `unicode61` treats them as separators, so they are
+    /// in no index and a substring scan is the only way to them. False for punctuation and
+    /// whitespace, which are separators everywhere and mean nothing on their own: scanning for a
+    /// bare `"` returns every row containing a quotation mark, which answers a question nobody
+    /// asked. Alphanumerics are excluded because the index already holds them.
+    private static func carriesUnindexableContent(_ query: String) -> Bool {
+        query.unicodeScalars.contains { scalar in
+            !CharacterSet.alphanumerics.contains(scalar)
+                && !CharacterSet.punctuationCharacters.contains(scalar)
+                && !CharacterSet.whitespacesAndNewlines.contains(scalar)
+                && !CharacterSet.controlCharacters.contains(scalar)
+        }
+    }
+
+    /// Substring search, for the queries no index can answer.
+    ///
+    /// Deliberately the narrow path and not a general fallback: it runs only when `ftsExpression`
+    /// produced nothing, so a query with any searchable word never reaches it and never pays for it.
+    /// `LIKE` cannot use the FTS index and scans, which is affordable exactly because this case is
+    /// rare and the row cap applies to the scan itself.
+    ///
+    /// Case folding is left to SQLite's `LIKE`, which is ASCII-only — irrelevant here, since the
+    /// characters that land on this path (emoji, symbols, pictographs) have no case at all.
+    private static func literalScan(
+        _ store: ContextStore,
+        needle: String,
+        since: Double?,
+        until: Double?,
+        limit: Int
+    ) throws -> [Hit] {
+        let trimmed = needle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let pattern = "%\(trimmed)%"
+
+        return try store.read { db -> [Hit] in
+            var frameSQL = """
+                SELECT capturedAt AS at, appName, windowTitle, ocrText, axText
+                FROM frames
+                WHERE (ocrText LIKE ? OR windowTitle LIKE ? OR axText LIKE ?)
+                """
+            var frameArgs: [(any DatabaseValueConvertible)?] = [pattern, pattern, pattern]
+            if let since { frameSQL += "\n  AND capturedAt >= ?"; frameArgs.append(since) }
+            if let until { frameSQL += "\n  AND capturedAt <= ?"; frameArgs.append(until) }
+            frameSQL += "\nORDER BY capturedAt DESC\nLIMIT ?"
+            frameArgs.append(limit)
+
+            var spokenSQL = """
+                SELECT startedAt AS at, source, text, sessionId, confidence, speakerLabel, personId
+                FROM segments
+                WHERE text LIKE ?
+                """
+            var spokenArgs: [(any DatabaseValueConvertible)?] = [pattern]
+            if let since { spokenSQL += "\n  AND startedAt >= ?"; spokenArgs.append(since) }
+            if let until { spokenSQL += "\n  AND startedAt <= ?"; spokenArgs.append(until) }
+            spokenSQL += "\nORDER BY startedAt DESC\nLIMIT ?"
+            spokenArgs.append(limit)
+
+            let frames = try Row.fetchAll(db, sql: frameSQL, arguments: StatementArguments(frameArgs))
+            let spoken = try Row.fetchAll(db, sql: spokenSQL, arguments: StatementArguments(spokenArgs))
+
+            // Newest first and capped, matching what the ranked path returns. There is no lexical
+            // score to rank by — every row contains the needle exactly, so recency is the only
+            // signal left and pretending otherwise would invent an ordering.
+            let hits = (spoken.map(segmentHit) + frames.map(frameHit)).sorted { $0.at > $1.at }
+            return Array(hits.prefix(limit))
+        }
     }
 
     private static func matchedFrames(
