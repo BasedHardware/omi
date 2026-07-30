@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 import database.dev_api_key as dev_api_key_db
 import database.mcp_api_key as mcp_api_key_db
 from database.api_key_metadata import ApiKeyRevocationUnavailableError, ApiKeyValidationError
-from database.user_product import _normalize_product
+from database.user_product import normalize_product
 from dependencies import get_current_user_id
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
@@ -52,8 +52,8 @@ def create_mcp_key(
 
     # Product stamps only from X-App-Product so clients cannot mint Context-tagged
     # keys via a JSON body field alone. Optional body product must match the header.
-    header_product = _normalize_product(x_app_product)
-    body_product = _normalize_product(key_data.product)
+    header_product = normalize_product(x_app_product)
+    body_product = normalize_product(key_data.product)
     if body_product and body_product != header_product:
         raise HTTPException(status_code=422, detail="product body requires matching X-App-Product")
     product = header_product

@@ -24,7 +24,7 @@ from database.api_key_metadata import (
     valid_api_key_app_id,
 )
 from models.mcp_api_key import McpApiKey
-from database.user_product import _normalize_product
+from database.user_product import normalize_product
 from utils.mcp_api_keys import generate_api_key, hash_api_key
 from utils.mcp_scopes import (
     MCP_APP_KEY_MEMORY_GRANTS_DOC_ID,
@@ -175,7 +175,7 @@ def create_mcp_key(
         resolved_app_id = valid_api_key_app_id(app_id)
         if resolved_app_id is None:
             raise ApiKeyValidationError("Invalid MCP API key app_id")
-    resolved_product = _normalize_product(product)
+    resolved_product = normalize_product(product)
     raw_key, hashed_key, key_prefix = generate_api_key()
     key_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -243,7 +243,7 @@ def get_mcp_keys_for_user_with_repair_info(
             missing_is_valid=False,
         ):
             repairs.add(ApiKeyMetadataRepair.SCOPES)
-        projected["product"] = _normalize_product(data.get("product") if isinstance(data.get("product"), str) else None)
+        projected["product"] = normalize_product(data.get("product") if isinstance(data.get("product"), str) else None)
         keys.append(McpApiKey.model_validate(projected))
     keys.sort(key=lambda key: key.id)
     keys.sort(key=lambda key: key.created_at, reverse=True)
@@ -359,7 +359,7 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     ):
         repairs.add(ApiKeyAuthRepair.SCOPES)
 
-    product = _normalize_product(key_data.get("product") if isinstance(key_data.get("product"), str) else None)
+    product = normalize_product(key_data.get("product") if isinstance(key_data.get("product"), str) else None)
 
     key_ref = key_doc.reference
     key_ref.update({"id": key_id, "last_used_at": datetime.now(timezone.utc), "app_id": app_id, "scopes": scopes})

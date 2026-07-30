@@ -3,7 +3,7 @@ from typing import Optional
 
 from database import user_usage as user_usage_db
 from database.llm_usage import record_llm_usage_bucket
-from database.user_product import _normalize_product
+from database.user_product import normalize_product
 
 
 def billable_transcription_seconds(
@@ -59,7 +59,7 @@ def record_usage(
     else:
         user_usage_db.update_hourly_usage(uid, now, updates)
 
-    product = _normalize_product(app_product)
+    product = normalize_product(app_product)
     if product == 'context-for-claude' and transcription_seconds > 0:
         cost_usd = round((transcription_seconds / 60.0) * _STT_USD_PER_MINUTE, 6)
         record_llm_usage_bucket(

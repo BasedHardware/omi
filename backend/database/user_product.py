@@ -24,16 +24,12 @@ _PRODUCT_ALLOWLIST = frozenset(
 
 def normalize_product(raw: Optional[str]) -> Optional[str]:
     """Return a canonical product id for a raw `X-App-Product` header, or None."""
-    if not raw or not isinstance(raw, str):
+    if not raw:
         return None
     product = raw.strip().lower()
     if product not in _PRODUCT_ALLOWLIST:
         return None
     return product
-
-
-# Kept for call sites that already imported the underscored name.
-_normalize_product = normalize_product
 
 
 def record_user_product(uid: str, raw_product: Optional[str]) -> None:
