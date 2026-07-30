@@ -1,0 +1,31 @@
+desktop/macos/Desktop/Sources/WhatsAppModels.swift
+  s_af46e601b96e35::t_a7b03181513a26 107-110,118-122
+backend/models/imessage.py
+  s_af46e601b96e35::t_d6850080029d04 42-45
+backend/models/telegram.py
+  s_af46e601b96e35::t_ce2a58b477e286 41-44
+backend/tests/unit/test_imessage_connector.py
+  s_af46e601b96e35::t_499265c77a892d 304-317
+desktop/macos/Desktop/Sources/IMessageModels.swift
+  s_af46e601b96e35::t_12e99d0bb7d870 119-125
+backend/models/whatsapp.py
+  s_af46e601b96e35::t_15ae8fd5947d43 41-43
+desktop/macos/Desktop/Sources/TelegramModels.swift
+  s_af46e601b96e35::t_82c06e6884158a 141-144,152-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ff6e88475f019653c7f1dd5f353c19f743467d0e",
+  "prompts": {},
+  "sessions": {
+    "s_af46e601b96e35": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "24944110-38a6-4ab7-9810-6f523ae27ac2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
