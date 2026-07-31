@@ -31,7 +31,7 @@ struct ImportConnector: Identifiable {
       brand: .appleCalendar,
       statusText: "Not connected",
       metricText: nil,
-      actionTitle: "Connect",
+      actionTitle: "Connect Apple Calendar",
       isConnected: false
     ),
     ImportConnector(
