@@ -23,7 +23,8 @@ from llm_gateway.gateway.config_loader import (
     load_gateway_config,
 )
 from llm_gateway.gateway.daily_refresh import DailyRefreshCache
-from llm_gateway.gateway.resolver import get_supported_auto_lane_ids
+from llm_gateway.gateway.lane_catalog import load_catalog
+from llm_gateway.gateway.resolver import ensure_catalog_loaded
 
 logger = logging.getLogger(__name__)
 
@@ -105,12 +106,16 @@ class GatewayConfigReloader:
         propagates if first-call).
         """
         prod_mode = self._prod_mode_fn() if self._prod_mode_fn is not None else None
+        catalog_path = self.config_dir / 'lanes_catalog.yaml'
+        catalog = await asyncio.to_thread(load_catalog, catalog_path) if catalog_path.exists() else None
         cfg = await asyncio.to_thread(
             load_gateway_config,
             self.config_dir,
             prod_mode=prod_mode,
-            required_lane_ids=get_supported_auto_lane_ids(),
+            catalog=catalog,
         )
+        if catalog is not None:
+            ensure_catalog_loaded(catalog)
         self._cached = cfg
         return cfg
 

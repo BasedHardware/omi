@@ -19,11 +19,13 @@ import time
 from pathlib import Path
 
 import pytest
+import yaml
 
 from llm_gateway.gateway.config_loader import (
     ConfigValidationError,
     load_gateway_config,
 )
+from llm_gateway.gateway.lane_catalog import load_catalog
 from llm_gateway.gateway.config_reload import (
     GatewayConfigReloader,
     _CONFIG_FILES,
@@ -142,6 +144,29 @@ async def test_reloader_reloads_when_generated_route_overrides_changes(tmp_path)
     cfg_initial = await reloader.get()
     _bump_mtime(config_dir / "generated_route_overrides.yaml")
     assert await reloader.get() is not cfg_initial
+
+
+@pytest.mark.asyncio
+async def test_reloader_removes_demoted_catalog_lane(tmp_path, monkeypatch):
+    config_dir = _copy_default_config_to(tmp_path)
+    catalog_path = config_dir / "lanes_catalog.yaml"
+    import llm_gateway.gateway.resolver as resolver
+
+    monkeypatch.setattr(resolver, "_catalog", load_catalog(catalog_path))
+    reloader = GatewayConfigReloader(config_dir)
+    cfg_initial = await reloader.get()
+    lane_id = "omi:auto:public-shared-conversation-chat"
+    assert lane_id in cfg_initial.lanes
+
+    catalog = yaml.safe_load(catalog_path.read_text())
+    entry = next(item for item in catalog["lanes"] if item["lane_id"] == lane_id)
+    entry.update(provider_support_status="dev_only", eval_suite=None, promoted_at=None)
+    _bump_mtime(catalog_path)
+    catalog_path.write_text(yaml.safe_dump(catalog, sort_keys=False))
+
+    cfg_reloaded = await reloader.get()
+    assert lane_id not in cfg_reloaded.lanes
+    assert all(artifact.lane_id != lane_id for artifact in cfg_reloaded.route_artifacts.values())
 
 
 # ---------------------------------------------------------------------------
