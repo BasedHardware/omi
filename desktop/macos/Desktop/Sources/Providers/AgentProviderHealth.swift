@@ -65,8 +65,20 @@ enum AgentProviderHealth {
           provider: provider, readiness: .needsSetup,
           detail: "Codex is installed but the codex-acp bridge is missing.")
       }
+      // Codex-acp accepts either a local ChatGPT login (`~/.codex/auth.json`)
+      // or an OpenAI API key. Settings BYOK is injected as OMI_BYOK_OPENAI and
+      // mapped to OPENAI_API_KEY for the codex adapter — treat that as signed-in
+      // so health-gated routing matches the working runtime path.
+      func nonEmptyEnv(_ name: String) -> Bool {
+        !(environment[name]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
+      }
       let authPath = (homeDirectory as NSString).appendingPathComponent(".codex/auth.json")
-      guard nonEmptyRegularFile(authPath) else {
+      let hasCodexCredentials =
+        nonEmptyRegularFile(authPath)
+        || nonEmptyEnv("OPENAI_API_KEY")
+        || nonEmptyEnv("OMI_BYOK_OPENAI")
+        || APIKeyService.byokKey(.openai) != nil
+      guard hasCodexCredentials else {
         return AgentProviderHealthReport(
           provider: provider, readiness: .needsSetup,
           detail: "Codex is installed but not signed in (codex login).")

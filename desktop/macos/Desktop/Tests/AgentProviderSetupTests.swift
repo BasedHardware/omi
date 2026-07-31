@@ -5,13 +5,25 @@ import XCTest
 final class AgentProviderSetupTests: XCTestCase {
 
   private var tempHome: String = ""
+  private var savedOpenAIByokKey: String?
 
   override func setUpWithError() throws {
     tempHome = NSTemporaryDirectory() + "omi-setup-tests-" + UUID().uuidString
     try FileManager.default.createDirectory(atPath: tempHome, withIntermediateDirectories: true)
+    // Codex health now probes Settings BYOK; keep UserDefaults clean so
+    // needs_setup cases are not polluted by leftover keys from other suites.
+    let storageKey = BYOKProvider.openai.storageKey
+    savedOpenAIByokKey = UserDefaults.standard.string(forKey: storageKey)
+    UserDefaults.standard.removeObject(forKey: storageKey)
   }
 
   override func tearDownWithError() throws {
+    let storageKey = BYOKProvider.openai.storageKey
+    if let savedOpenAIByokKey {
+      UserDefaults.standard.set(savedOpenAIByokKey, forKey: storageKey)
+    } else {
+      UserDefaults.standard.removeObject(forKey: storageKey)
+    }
     try? FileManager.default.removeItem(atPath: tempHome)
   }
 
@@ -71,6 +83,34 @@ final class AgentProviderSetupTests: XCTestCase {
     try installFakeExecutable("codex-acp")
     try writeFile(".codex/auth.json")
     XCTAssertEqual(health(.codex).readiness, .ready)
+  }
+
+  func testCodexReadyWithSettingsByokOpenAIKeyWithoutAuthFile() throws {
+    try installFakeExecutable("codex")
+    try installFakeExecutable("codex-acp")
+    let storageKey = BYOKProvider.openai.storageKey
+    let previous = UserDefaults.standard.string(forKey: storageKey)
+    UserDefaults.standard.set("sk-settings-byok", forKey: storageKey)
+    defer {
+      if let previous {
+        UserDefaults.standard.set(previous, forKey: storageKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: storageKey)
+      }
+    }
+    XCTAssertEqual(health(.codex).readiness, .ready)
+  }
+
+  func testCodexReadyWithByokOpenAIEnvWithoutAuthFile() throws {
+    try installFakeExecutable("codex")
+    try installFakeExecutable("codex-acp")
+    let report = AgentProviderHealth.report(
+      for: .codex,
+      environment: ["OMI_BYOK_OPENAI": "sk-env-byok"],
+      fileManager: .default,
+      homeDirectory: tempHome,
+      searchDirectories: searchDirs)
+    XCTAssertEqual(report.readiness, .ready)
   }
 
   func testOpenClawNeedsSetupWithoutConfig() throws {
