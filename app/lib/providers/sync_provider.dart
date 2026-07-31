@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -8,6 +9,7 @@ import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/services/wals/conversation_audio_assembler.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/mutex.dart';
@@ -20,6 +22,11 @@ import 'package:omi/utils/waveform_utils.dart';
 enum WalStatusFilter { pending, synced, corrupted }
 
 enum WalDisplayFilter { all, pending, synced }
+
+typedef LogicalArchivePlaybackMaterializer = Future<Wal?> Function(
+  Wal logicalWal,
+  List<Wal> members,
+);
 
 bool _isPhysicalRingArchive(Wal wal) =>
     wal.originalStorage == WalStorage.sdcard &&
@@ -96,6 +103,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   final Future<void> Function(LocalWalSyncImpl phone) _waitForWalReady;
   final Future<void> Function() _startRecovery;
   final Future<void> Function(WakeTrigger trigger) _wakeTransfer;
+  final LogicalArchivePlaybackMaterializer? _logicalArchivePlaybackMaterializer;
   final Mutex _syncOperationMutex = Mutex();
 
   /// Completes after WAL loading and startup fair-use reconciliation finish.
@@ -108,6 +116,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   RingBacklogDrainReceipt? _manualRingBacklogReceipt;
   List<Wal>? _userVisibleWalsCache;
   int _userVisibleWalsCacheStamp = 0;
+  final Map<String, Future<Wal?>> _logicalPlaybackWals = {};
 
   int get _effectiveConversationBoundarySeconds => effectiveConversationBoundarySeconds(
         SharedPreferencesUtil().conversationSilenceDuration,
@@ -489,12 +498,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
     @visibleForTesting Future<void> Function()? startRecovery,
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
+    @visibleForTesting LogicalArchivePlaybackMaterializer? logicalArchivePlaybackMaterializer,
   })  : _walServiceOverride = walService,
         _uploadGate = uploadGate ?? SyncUploadGate.instance,
         _startBackgroundSync = startBackgroundSync,
         _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
         _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
-        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
+        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)),
+        _logicalArchivePlaybackMaterializer = logicalArchivePlaybackMaterializer {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
@@ -997,6 +1008,77 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool isWalPlaying(String walId) => _audioPlayerUtils.isPlaying(walId);
   bool canPlayOrShareWal(Wal wal) => _audioPlayerUtils.canPlayOrShare(wal);
 
+  /// Resolves a user-visible logical ring row to one playable, ordered file.
+  /// Physical storage archives remain hidden; the detail page receives the
+  /// same conversation-shaped audio boundary used by cloud upload.
+  Future<Wal?> resolveWalForDetail(Wal wal) async {
+    final members = _logicalMembersFor(wal);
+    if (members.isEmpty) return wal;
+
+    final cached = _logicalPlaybackWals[wal.id];
+    if (cached != null) return cached;
+
+    final materialization = _logicalArchivePlaybackMaterializer != null
+        ? _logicalArchivePlaybackMaterializer!(wal, members)
+        : _materializeLogicalArchiveForPlayback(wal, members);
+    _logicalPlaybackWals[wal.id] = materialization;
+    final resolved = await materialization;
+    if (resolved == null) _logicalPlaybackWals.remove(wal.id);
+    return resolved;
+  }
+
+  Future<Wal?> _materializeLogicalArchiveForPlayback(
+    Wal logicalWal,
+    List<Wal> members,
+  ) async {
+    try {
+      final parts = <ConversationAudioPart>[];
+      for (final member in members) {
+        final path = await Wal.getFilePath(member.filePath);
+        if (path == null || !await File(path).exists()) return null;
+        parts.add(ConversationAudioPart(wal: member, file: File(path)));
+      }
+
+      final firstFile = parts.first.file;
+      final safeSource = logicalWal.sourceId!.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
+      final destination = File('${firstFile.parent.path}/playback_$safeSource.bin');
+      final assembly = await assembleConversationAudio(
+        parts: parts,
+        destination: destination,
+        silenceFrameFactory: encodeOpusSilenceFrame,
+        conversationBoundarySeconds: _effectiveConversationBoundarySeconds,
+      );
+      final framesPerSecond = logicalWal.codec.getFramesPerSecond();
+      final playable = Wal(
+        timerStart: assembly.timerStart,
+        codec: logicalWal.codec,
+        seconds: framesPerSecond > 0 ? (assembly.totalFrames + framesPerSecond - 1) ~/ framesPerSecond : 0,
+        captureEndSeconds: assembly.captureEndSeconds,
+        sampleRate: logicalWal.sampleRate,
+        channel: logicalWal.channel,
+        status: logicalWal.status,
+        storage: WalStorage.disk,
+        filePath: destination.path.split('/').last,
+        device: logicalWal.device,
+        deviceModel: logicalWal.deviceModel,
+        totalFrames: assembly.totalFrames,
+        originalStorage: WalStorage.sdcard,
+        sourceId: logicalWal.sourceId,
+        uploadIntent: logicalWal.uploadIntent,
+        retryCount: logicalWal.retryCount,
+      );
+      playable.isSyncing = logicalWal.isSyncing;
+      return playable;
+    } catch (error, stackTrace) {
+      Logger.handle(
+        error,
+        stackTrace,
+        message: 'Unable to assemble logical recording for playback',
+      );
+      return null;
+    }
+  }
+
   Future<void> toggleWalPlayback(Wal wal) async {
     await _audioPlayerUtils.togglePlayback(wal);
   }
@@ -1017,15 +1099,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _audioPlayerUtils.skipBackward(duration: duration);
   }
 
-  Future<List<double>?> getWaveformForWal(String walId) async {
-    final wal = _allWals.firstWhere((w) => w.id == walId, orElse: () => throw Exception('WAL not found'));
-
-    String? wavFilePath = _audioPlayerUtils.getCachedAudioPath(walId);
+  Future<List<double>?> getWaveformForWal(Wal wal) async {
+    String? wavFilePath = _audioPlayerUtils.getCachedAudioPath(wal.id);
     if (wavFilePath == null && canPlayOrShareWal(wal)) {
       wavFilePath = await _audioPlayerUtils.ensureAudioFileExists(wal);
     }
 
-    return await compute(_generateWaveformInBackground, {'walId': walId, 'wavFilePath': wavFilePath});
+    return await compute(_generateWaveformInBackground, {'walId': wal.id, 'wavFilePath': wavFilePath});
   }
 
   static Future<List<double>?> _generateWaveformInBackground(Map<String, dynamic> params) async {

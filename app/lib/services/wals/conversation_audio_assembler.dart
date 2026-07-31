@@ -1,11 +1,33 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:opus_dart/opus_dart.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/wal.dart';
 
 typedef OpusSilenceFrameFactory = List<int> Function(BleAudioCodec codec);
+
+/// Encodes one silent Opus frame in the same format used by CV1 capture.
+///
+/// Conversation assembly and user-visible playback must share this encoder so
+/// an on-demand preview cannot compress wall-clock gaps differently from the
+/// canonical upload artifact.
+List<int> encodeOpusSilenceFrame(BleAudioCodec codec) {
+  final encoder = SimpleOpusEncoder(
+    sampleRate: 16000,
+    channels: 1,
+    application: Application.voip,
+  );
+  try {
+    return encoder.encode(
+      input: Int16List(codec.getFrameSize()),
+    );
+  } finally {
+    encoder.destroy();
+  }
+}
 
 class ConversationAudioPart {
   const ConversationAudioPart({

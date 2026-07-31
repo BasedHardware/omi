@@ -601,6 +601,46 @@ void main() {
     expect(provider.uploadedWals, hasLength(10), reason: 'server reconciliation still retains every physical member');
   });
 
+  test('logical recording opens one materialized playback artifact', () async {
+    SharedPreferences.setMockInitialValues({'conversationSilenceDuration': 120});
+    await SharedPreferencesUtil.init();
+    final archives = [
+      _ringArchive(timerStart: 1000, startSequence: 0, endSequence: 100),
+      _ringArchive(timerStart: 1300, startSequence: 100, endSequence: 200),
+    ];
+    var materializationCalls = 0;
+    List<Wal>? materializedMembers;
+    final provider = SyncProvider(
+      walService: _FakeWalService(_FakeSyncs(archives)),
+      startBackgroundSync: false,
+      logicalArchivePlaybackMaterializer: (logicalWal, members) async {
+        materializationCalls++;
+        materializedMembers = members;
+        return Wal(
+          timerStart: logicalWal.timerStart,
+          codec: logicalWal.codec,
+          seconds: logicalWal.seconds,
+          status: logicalWal.status,
+          storage: WalStorage.disk,
+          filePath: 'logical-playback.bin',
+          device: logicalWal.device,
+          sourceId: logicalWal.sourceId,
+        );
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.initialized;
+
+    final logical = provider.userVisibleWals.single;
+    final first = await provider.resolveWalForDetail(logical);
+    final second = await provider.resolveWalForDetail(logical);
+
+    expect(materializedMembers, archives);
+    expect(first, same(second));
+    expect(provider.canPlayOrShareWal(first!), isTrue);
+    expect(materializationCalls, 1);
+  });
+
   test('backend-minimum silence boundary joins inside the boundary and splits at it', () async {
     SharedPreferences.setMockInitialValues({'conversationSilenceDuration': 30});
     await SharedPreferencesUtil.init();

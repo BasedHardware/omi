@@ -591,16 +591,25 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
+      onTap: () async {
         final syncProvider = context.read<SyncProvider>();
-        if (syncProvider.isLogicalRingArchiveDisplayWal(wal)) return;
         if (syncProvider.isSyncing && wal.storage == WalStorage.sdcard) {
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text(context.l10n.syncInProgress), duration: const Duration(seconds: 2)));
           return;
         }
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalItemDetailPage(wal: wal)));
+        final detailWal = await syncProvider.resolveWalForDetail(wal);
+        if (!mounted) return;
+        if (detailWal == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.audioPlaybackUnavailable)),
+          );
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => WalItemDetailPage(wal: detailWal)),
+        );
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

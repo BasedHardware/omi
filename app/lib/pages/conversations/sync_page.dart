@@ -154,9 +154,18 @@ class WalListItem extends StatelessWidget {
             },
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () {
-                if (syncProvider.isLogicalRingArchiveDisplayWal(wal)) return;
-                Navigator.of(context).push(MaterialPageRoute(builder: (context) => WalItemDetailPage(wal: wal)));
+              onTap: () async {
+                final detailWal = await syncProvider.resolveWalForDetail(wal);
+                if (!context.mounted) return;
+                if (detailWal == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(context.l10n.audioPlaybackUnavailable)),
+                  );
+                  return;
+                }
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => WalItemDetailPage(wal: detailWal)),
+                );
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
