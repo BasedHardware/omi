@@ -245,6 +245,6 @@ struct AICloneReplyDecision: Codable, Equatable {
   }
 
   private static func normalizedSafetyText(_ value: String) -> String {
-    value.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).joined(separator: " ")
+    value.lowercased().split { !$0.isLetter && !$0.isNumber }.joined(separator: " ")
   }
 }
