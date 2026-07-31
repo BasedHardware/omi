@@ -48,7 +48,10 @@ class SyncUploadGate {
   /// Reconciles a previously confirmed fair-use restriction with the server.
   /// Returns whether uploads are currently allowed after all cooldowns.
   Future<bool> prepareToUpload({SyncUploadLane lane = SyncUploadLane.fresh}) async {
-    if (lane == SyncUploadLane.fresh && _limiter.hasPersistedFairUseState) {
+    // Reconcile on every lane, not just fresh. A persisted fair-use cooldown does not gate
+    // backfill, but it keeps the account in a limited state that nothing else clears, so a user
+    // whose whole backlog is backfill never reaches the self-heal.
+    if (_limiter.hasPersistedFairUseState) {
       await reconcileFairUseStatus();
     }
     return !_limiter.isLimitedForLane(lane.name);

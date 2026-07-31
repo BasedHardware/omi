@@ -143,7 +143,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final hasAnyRecording = p.allWals.isNotEmpty;
 
     final isActive = s.isSyncing || s.isFetchingConversations;
-    final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimited;
+    final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimitedForPendingUploads;
 
     String title;
     String? progressText;
@@ -175,7 +175,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           title = s.isFetchingConversations ? l.syncCardProcessing : l.syncCardUploadingTitle;
       }
       action = _statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
-    } else if (p.isRateLimited) {
+    } else if (p.isRateLimitedForPendingUploads) {
       title = switch (p.rateLimitReason) {
         RateLimitReason.backendBusy => l.syncCardBackendBusy,
         RateLimitReason.backfillPaced => l.syncCardReadyCount(readyToBackUp),
