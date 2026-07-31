@@ -243,7 +243,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
   private func shortcutChoiceButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
     let isSelected = shortcutSettings.askOmiShortcut == shortcut && !shortcutSettings.askOmiUsesCustomShortcut
     return Button {
-      beginCustomShortcutCapture()
+      Self.selectPreset(shortcut, settings: shortcutSettings)
+      isRecordingCustomShortcut = false
+      captureError = nil
+      resetDetectionState()
     } label: {
       HStack(spacing: OmiSpacing.xxs) {
         ForEach(Array(shortcut.displayTokens.enumerated()), id: \.offset) { _, symbol in
@@ -260,6 +263,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
       )
     }
     .buttonStyle(.plain)
+  }
+
+  static func selectPreset(_ shortcut: ShortcutSettings.KeyboardShortcut, settings: ShortcutSettings) {
+    settings.askOmiShortcut = shortcut
   }
 
   private func beginCustomShortcutCapture() {

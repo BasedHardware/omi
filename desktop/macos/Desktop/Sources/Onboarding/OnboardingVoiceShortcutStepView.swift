@@ -245,7 +245,10 @@ struct OnboardingVoiceShortcutStepView: View {
   private func shortcutChoiceButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
     let isSelected = shortcutSettings.pttShortcut == shortcut && !shortcutSettings.pttUsesCustomShortcut
     return Button {
-      beginCustomShortcutCapture()
+      Self.selectPreset(shortcut, settings: shortcutSettings)
+      isRecordingCustomShortcut = false
+      captureError = nil
+      resetDetectionState()
     } label: {
       HStack(spacing: OmiSpacing.xs) {
         ForEach(Array(shortcut.displayTokens.enumerated()), id: \.offset) { _, token in
@@ -262,6 +265,10 @@ struct OnboardingVoiceShortcutStepView: View {
       )
     }
     .buttonStyle(.plain)
+  }
+
+  static func selectPreset(_ shortcut: ShortcutSettings.KeyboardShortcut, settings: ShortcutSettings) {
+    settings.pttShortcut = shortcut
   }
 
   private func beginCustomShortcutCapture() {
