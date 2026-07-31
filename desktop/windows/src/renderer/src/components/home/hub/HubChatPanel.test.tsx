@@ -34,7 +34,7 @@ const messages: ChatMsg[] = [
 
 function renderPanel(): HTMLDivElement {
   const { container } = render(
-    <HubChatPanel messages={messages} sending={true}>
+    <HubChatPanel messages={messages} sending={true} onDismiss={() => {}}>
       <div>ask bar</div>
     </HubChatPanel>
   )

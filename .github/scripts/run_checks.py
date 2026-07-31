@@ -264,6 +264,31 @@ def resolve_checks(
     ]
 
 
+def resolve_explicit_checks(
+    manifest: Manifest,
+    check_ids: list[str],
+    lane: str,
+    *,
+    include_pr_body_checks: bool,
+    platform: str,
+) -> list[CheckSelection]:
+    """Resolve named manifest checks without duplicating their commands in callers."""
+    checks_by_id = {check.id: check for check in manifest.checks}
+    selections: list[CheckSelection] = []
+    for check_id in dict.fromkeys(check_ids):
+        check = checks_by_id.get(check_id)
+        if check is None:
+            raise ValueError(f"unknown check id: {check_id}")
+        if lane not in check.lanes:
+            raise ValueError(f"{check_id}: check is not available in the {lane} lane")
+        if not include_pr_body_checks and check.requires_pr_body:
+            raise ValueError(f"{check_id}: check requires pull-request metadata")
+        if not _platform_matches(check, platform):
+            raise ValueError(f"{check_id}: check does not support platform {platform}")
+        selections.append(CheckSelection(check=check, matched_paths=()))
+    return selections
+
+
 def skipped_platform_checks(manifest: Manifest, files: list[str], lane: str, platform: str) -> list[Check]:
     """Checks that match lane+triggers but are skipped due to platform."""
     return [
@@ -370,6 +395,12 @@ def parse_args() -> argparse.Namespace:
         help="Exclude checks declared as requiring pull-request metadata.",
     )
     parser.add_argument("--skip-changelog", action="store_true")
+    parser.add_argument(
+        "--check-id",
+        action="append",
+        default=[],
+        help="Run a named manifest check regardless of path triggers; repeat for multiple checks.",
+    )
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--root", type=Path)
     parser.add_argument(
@@ -411,14 +442,28 @@ def main() -> int:
         print(f"FAIL: could not resolve manifest checks: {exc}", file=sys.stderr)
         return 2
     detected_platform = args.platform or detect_platform()
-    selections = resolve_check_selections(
-        manifest,
-        files,
-        args.lane,
-        include_pr_body_checks=not args.skip_pr_body_checks,
-        platform=detected_platform,
-        exclusive_platform=args.exclusive_platform,
-    )
+    try:
+        selections = (
+            resolve_explicit_checks(
+                manifest,
+                args.check_id,
+                args.lane,
+                include_pr_body_checks=not args.skip_pr_body_checks,
+                platform=detected_platform,
+            )
+            if args.check_id
+            else resolve_check_selections(
+                manifest,
+                files,
+                args.lane,
+                include_pr_body_checks=not args.skip_pr_body_checks,
+                platform=detected_platform,
+                exclusive_platform=args.exclusive_platform,
+            )
+        )
+    except ValueError as exc:
+        print(f"FAIL: could not select manifest checks: {exc}", file=sys.stderr)
+        return 2
     checks = [selection.check for selection in selections]
     if args.output == "json":
         print(
@@ -446,10 +491,11 @@ def main() -> int:
     )
     for check in checks:
         print(f"  SELECTED {check.id}: {check.reason}")
-    for skip in skipped_platform_checks(manifest, files, args.lane, detected_platform):
-        print(
-            f"  SKIPPED {skip.id}: platform-only (requires {', '.join(skip.platforms)}, running on {detected_platform})"
-        )
+    if not args.check_id:
+        for skip in skipped_platform_checks(manifest, files, args.lane, detected_platform):
+            print(
+                f"  SKIPPED {skip.id}: platform-only (requires {', '.join(skip.platforms)}, running on {detected_platform})"
+            )
     if args.list:
         return 0
 

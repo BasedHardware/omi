@@ -49,6 +49,7 @@ pub fn active_tier() -> ModelTier {
 pub const fn gemini_proxy_allowed() -> &'static [&'static str] {
     &[
         "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
         "gemini-2.5-pro",
         "gemini-3-flash-preview",
         "gemini-embedding-001",
@@ -60,7 +61,12 @@ pub const fn gemini_degrade_target() -> &'static str {
     "gemini-2.5-flash"
 }
 
-const VERTEX_AI_MODELS: &[&str] = &["gemini-2.5-flash", "gemini-2.5-pro", "gemini-embedding-001"];
+const VERTEX_AI_MODELS: &[&str] = &[
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
+    "gemini-embedding-001",
+];
 
 /// Returns whether a model is available on Vertex AI.
 pub fn is_vertex_available(model: &str) -> bool {
@@ -179,6 +185,15 @@ mod tests {
         assert_eq!(route.vertex_action, Some("predict"));
         assert_eq!(route.request_transform, BodyTransform::EmbedToPredict);
         assert_eq!(route.response_transform, ResponseTransform::PredictToEmbed);
+    }
+
+    #[test]
+    fn resolve_route_should_send_live_suggestions_to_vertex() {
+        // ModelQoS.Gemini.suggestions ships Flash-Lite on the default premium tier.
+        assert_eq!(
+            resolve_route("gemini-2.5-flash-lite", "generateContent").provider,
+            Provider::VertexAi
+        );
     }
 
     #[test]

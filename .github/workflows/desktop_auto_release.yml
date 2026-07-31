@@ -14,9 +14,14 @@ permissions:
 jobs:
   plan-release:
     runs-on: ubuntu-latest
+    # Allow the full CI gate wait (default 60m) plus planner overhead.
+    timeout-minutes: 75
     concurrency:
       group: desktop-release-planner-main
       cancel-in-progress: false
+    env:
+      # Override via repo Actions variable DESKTOP_CI_GATE_TIMEOUT_SECONDS if needed.
+      CI_GATE_TIMEOUT_SECONDS: ${{ vars.DESKTOP_CI_GATE_TIMEOUT_SECONDS || '3600' }}
     outputs:
       should_release: ${{ steps.plan.outputs.should_release }}
       reason: ${{ steps.plan.outputs.reason }}
@@ -41,11 +46,33 @@ jobs:
         run: |
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
-            --source-check-wait-seconds 1200 \
+            --source-check-wait-seconds "${CI_GATE_TIMEOUT_SECONDS}" \
             --source-check-poll-seconds 30
 
       - name: Show release plan
         run: echo "${{ steps.plan.outputs.reason }}"
+
+      # tag-release is skipped whenever should_release!=true. Make that decision
+      # obvious in the Actions UI: fail hard on source-gate blocks/timeouts, and
+      # emit a warning annotation for intentional deferrals so a green run with
+      # only plan-release is never silent.
+      - name: Surface planner non-release decision
+        if: steps.plan.outputs.should_release != 'true'
+        env:
+          PLAN_REASON: ${{ steps.plan.outputs.reason }}
+        run: |
+          set -euo pipefail
+          reason="${PLAN_REASON:-unknown reason}"
+          echo "Planner decided not to release: ${reason}"
+          case "${reason}" in
+            *"source gate blocked"*|*"Could not resolve the newest releasable desktop source SHA"*)
+              echo "::error::Desktop release planner blocked: ${reason}"
+              exit 1
+              ;;
+            *)
+              echo "::warning::Desktop release planner skipped tagging: ${reason}"
+              ;;
+          esac
 
   # Candidate publication is one serialized trusted-M1 transaction: after the
   # immutable final-source binding it runs offline readiness, verifies that
@@ -58,6 +85,8 @@ jobs:
     concurrency:
       group: desktop-auto-release-tag-main
       cancel-in-progress: false
+    env:
+      CI_GATE_TIMEOUT_SECONDS: ${{ vars.DESKTOP_CI_GATE_TIMEOUT_SECONDS || '3600' }}
     steps:
       - name: Generate Omi Bot token
         id: app-token
@@ -87,7 +116,7 @@ jobs:
 
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
-            --source-check-wait-seconds 1200 \
+            --source-check-wait-seconds "${CI_GATE_TIMEOUT_SECONDS}" \
             --source-check-poll-seconds 30
 
       - name: Checkout exact releasable desktop source
@@ -300,10 +329,23 @@ jobs:
 
           PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
           if [ "$PR_STATE" != "MERGED" ]; then
-            # This remains a regular merge. If the bot lacks the protected
-            # branch override, the workflow must fail before it can create a
-            # tag instead of tagging a side branch.
-            gh pr merge "$PR_NUMBER" --merge --admin || gh pr merge "$PR_NUMBER" --merge
+            # main branch policy blocks ordinary merges. Use admin override so
+            # the Omi Bot can sync the changelog without waiting on checks.
+            # Do not fall back to a non-admin merge: a transient --admin failure
+            # (e.g. HTTP 502) would otherwise retry without override and fail
+            # on branch policy (see run 30581710658 / PR #10910).
+            merge_ok=0
+            for attempt in 1 2 3; do
+              if gh pr merge "$PR_NUMBER" --admin --merge; then
+                merge_ok=1
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "Admin merge attempt ${attempt}/3 failed; retrying in 5s..."
+                sleep 5
+              fi
+            done
+            test "$merge_ok" = "1"
           fi
 
           PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
@@ -340,7 +382,7 @@ jobs:
 
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
-            --source-check-wait-seconds 1200 \
+            --source-check-wait-seconds "${CI_GATE_TIMEOUT_SECONDS}" \
             --source-check-poll-seconds 30
 
       - name: Select final release plan

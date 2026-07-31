@@ -85,9 +85,12 @@ rejects a new or modified raw/unsupported serving shape, a coverage decrease, an
 unexpired date. To intentionally update the generated Firebase manifest, edit the registry and run
 `python3 backend/scripts/generate_firestore_indexes.py --write`.
 
-The automatic and manual backend deployment paths install the lockfile-pinned Firebase CLI, reconcile only this
-generated manifest, and poll Firestore until every declared composite index is `READY` before a Cloud Run revision is
-deployed or receives traffic. The development verification job then calls `/v1/what-matters-now` as a configured
+Backend deploy workflows install the lockfile-pinned Firebase CLI and run `reconcile_firestore_indexes.py
+--check-only` against the generated manifest; they fail closed when any declared composite index is not `READY`.
+Index creation is a separate, human-approved operation: dispatch `.github/workflows/gcp_firestore_indexes.yml` on
+`main` with `APPLY_FIRESTORE_INDEXES` so `reconcile_firestore_indexes.py --provision-missing` can create missing
+indexes and wait for readiness before retrying deploy. The development verification job then calls
+`/v1/what-matters-now` as a configured
 synthetic user; it records only the HTTP status, never the user ID, credentials, or response body. It requires the
 development secret `OMI_TASK_INTELLIGENCE_SMOKE_UID`; provisioning or changing that secret is an operational action,
 not part of a code merge.

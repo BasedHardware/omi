@@ -12442,6 +12442,11 @@
       },
       "KnowledgeGraphResponse": {
         "properties": {
+          "edge_count": {
+            "default": 0,
+            "title": "Edge Count",
+            "type": "integer"
+          },
           "edge_limit": {
             "anyOf": [
               {
@@ -12460,6 +12465,11 @@
             },
             "title": "Edges",
             "type": "array"
+          },
+          "node_count": {
+            "default": 0,
+            "title": "Node Count",
+            "type": "integer"
           },
           "node_limit": {
             "anyOf": [

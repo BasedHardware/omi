@@ -19,6 +19,13 @@ enum PersistedCaptureLaunchPolicy {
   }
 }
 
+enum DesktopHomeEscapeNavigation {
+  static func shouldNavigateHome(selectedIndex: Int, usesLegacyHomeDesign: Bool) -> Bool {
+    guard !usesLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
+    return [.conversations, .memories, .tasks, .rewind].contains(item)
+  }
+}
+
 // MARK: - NSHostingView sizingOptions access
 
 /// Protocol to access sizingOptions on any NSHostingView<Content> regardless of the generic parameter.
@@ -825,10 +832,10 @@ struct DesktopHomeView: View {
     let scheduled = viewModelContainer.scheduleSessionWarmup(
       id: .agentVMProvisioning,
       delay: StartupWarmupPolicy.agentVMProvisioningDelay,
-      onCancel: { didScheduleAgentVMProvisioning = false }
-    ) {
-      await AgentVMService.shared.ensureProvisioned()
-    }
+      onCancel: { didScheduleAgentVMProvisioning = false },
+      operation: {
+        await AgentVMService.shared.ensureProvisioned()
+      })
     if !scheduled { didScheduleAgentVMProvisioning = false }
   }
 
@@ -839,16 +846,16 @@ struct DesktopHomeView: View {
     let scheduled = viewModelContainer.scheduleSessionWarmup(
       id: .conversationWarmup,
       delay: StartupWarmupPolicy.conversationWarmupDelay,
-      onCancel: { didScheduleConversationWarmup = false }
-    ) {
-      async let conversations: Void = loadConversationsIfNeeded()
-      async let folders: Void = loadFoldersIfNeeded()
-      // Warm memories + tasks too so the top bar's new-item counter has data
-      // even before those tabs are visited.
-      async let memories: Void = viewModelContainer.memoriesViewModel.loadMemoriesIfNeeded()
-      async let tasks: Void = viewModelContainer.tasksStore.loadTasksIfNeeded()
-      _ = await (conversations, folders, memories, tasks)
-    }
+      onCancel: { didScheduleConversationWarmup = false },
+      operation: {
+        async let conversations: Void = loadConversationsIfNeeded()
+        async let folders: Void = loadFoldersIfNeeded()
+        // Warm memories + tasks too so the top bar's new-item counter has data
+        // even before those tabs are visited.
+        async let memories: Void = viewModelContainer.memoriesViewModel.loadMemoriesIfNeeded()
+        async let tasks: Void = viewModelContainer.tasksStore.loadTasksIfNeeded()
+        _ = await (conversations, folders, memories, tasks)
+      })
     if !scheduled { didScheduleConversationWarmup = false }
   }
 
@@ -869,30 +876,30 @@ struct DesktopHomeView: View {
     else { return }
 
     let sessionScope = StartupWarmupSessionScope(
-      userId: UserDefaults.standard.string(forKey: "auth_userId"))
+      userId: UserDefaults.standard.string(forKey: .authUserId))
     let scheduled = viewModelContainer.scheduleSessionWarmup(
       id: .initialFileIndexing,
       delay: StartupWarmupPolicy.initialFileIndexingDelay,
-      onCancel: { initialFileIndexingBackfill.releaseReservation() }
-    ) {
-      log("DesktopHomeView: Running delayed background file scan for existing user")
-      await FileIndexerService.shared.backgroundRescan()
-      guard !Task.isCancelled,
-        sessionScope.matches(
-          currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
-          isSignedIn: AuthState.shared.isSignedIn)
-      else {
-        initialFileIndexingBackfill.releaseReservation()
-        return
-      }
-      initialFileIndexingBackfill.markScanCompleted()
-      if initialFileIndexingBackfill.shouldMarkComplete {
-        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-        log(
-          "DesktopHomeView: Marked existing-user file indexing backfill complete after background scan returned"
-        )
-      }
-    }
+      onCancel: { initialFileIndexingBackfill.releaseReservation() },
+      operation: {
+        log("DesktopHomeView: Running delayed background file scan for existing user")
+        await FileIndexerService.shared.backgroundRescan()
+        guard !Task.isCancelled,
+          sessionScope.matches(
+            currentUserId: UserDefaults.standard.string(forKey: .authUserId),
+            isSignedIn: AuthState.shared.isSignedIn)
+        else {
+          initialFileIndexingBackfill.releaseReservation()
+          return
+        }
+        initialFileIndexingBackfill.markScanCompleted()
+        if initialFileIndexingBackfill.shouldMarkComplete {
+          UserDefaults.standard.set(true, forKey: .hasCompletedFileIndexing)
+          log(
+            "DesktopHomeView: Marked existing-user file indexing backfill complete after background scan returned"
+          )
+        }
+      })
     if !scheduled { initialFileIndexingBackfill.releaseReservation() }
   }
 
@@ -907,32 +914,32 @@ struct DesktopHomeView: View {
     let scheduled = viewModelContainer.scheduleSessionWarmup(
       id: .proactiveAssistantsStart,
       delay: delay,
-      onCancel: { proactiveMonitoringStartGate.finishAttempt() }
-    ) {
-      let plugin = ProactiveAssistantsPlugin.shared
-      guard AssistantSettings.shared.screenAnalysisEnabled, !plugin.isMonitoring else {
-        proactiveMonitoringStartGate.finishAttempt()
-        return
-      }
-      guard APIKeyService.keysAvailable else {
-        proactiveMonitoringStartGate.finishAttempt()
-        log("DesktopHomeView: Screen analysis still deferred after \(reason) — API keys not yet loaded")
-        return
-      }
-
-      plugin.startMonitoring { success, error in
-        Task { @MainActor in
+      onCancel: { proactiveMonitoringStartGate.finishAttempt() },
+      operation: {
+        let plugin = ProactiveAssistantsPlugin.shared
+        guard AssistantSettings.shared.screenAnalysisEnabled, !plugin.isMonitoring else {
           proactiveMonitoringStartGate.finishAttempt()
-          if success {
-            log("DesktopHomeView: Screen analysis started (\(reason), delayed)")
-          } else {
-            log(
-              "DesktopHomeView: Screen analysis failed to start (\(reason)): \(error ?? "unknown") — setting remains enabled for next launch"
-            )
+          return
+        }
+        guard APIKeyService.keysAvailable else {
+          proactiveMonitoringStartGate.finishAttempt()
+          log("DesktopHomeView: Screen analysis still deferred after \(reason) — API keys not yet loaded")
+          return
+        }
+
+        plugin.startMonitoring { success, error in
+          Task { @MainActor in
+            proactiveMonitoringStartGate.finishAttempt()
+            if success {
+              log("DesktopHomeView: Screen analysis started (\(reason), delayed)")
+            } else {
+              log(
+                "DesktopHomeView: Screen analysis failed to start (\(reason)): \(error ?? "unknown") — setting remains enabled for next launch"
+              )
+            }
           }
         }
-      }
-    }
+      })
     if !scheduled { proactiveMonitoringStartGate.finishAttempt() }
   }
 
@@ -1017,12 +1024,12 @@ struct DesktopHomeView: View {
           SidebarView(
             selectedIndex: $selectedIndex,
             isCollapsed: $isSidebarCollapsed,
+            memoryDestinationRawValue: $memoryDestinationRawValue,
             appState: appState
           )
           .opacity(0)
           .allowsHitTesting(false)
         }
-
         SettingsSidebar(
           selectedSection: $selectedSettingsSection,
           highlightedSettingId: $highlightedSettingId,
@@ -1044,12 +1051,12 @@ struct DesktopHomeView: View {
           SidebarView(
             selectedIndex: $selectedIndex,
             isCollapsed: $isSidebarCollapsed,
+            memoryDestinationRawValue: $memoryDestinationRawValue,
             appState: appState
           )
           .opacity(isInSettings ? 0 : 1)
           .allowsHitTesting(!isInSettings)
         }
-
       }
       .fixedSize(horizontal: true, vertical: false)
       .clipped()
@@ -1104,9 +1111,7 @@ struct DesktopHomeView: View {
           isShowingMemoryAtlasPage: $isShowingMemoryAtlasPage
         )
       }
-      .onExitCommand {
-        navigateHomeOnEscapeIfNeeded()
-      }
+      .onEscapeKey(priority: .navigation) { navigateHomeOnEscapeIfNeeded() }
       .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
     }
     .padding(OmiSpacing.md)
@@ -1265,17 +1270,21 @@ struct DesktopHomeView: View {
       }
   }
 
-  private func navigateHomeOnEscapeIfNeeded() {
+  private func navigateHomeOnEscapeIfNeeded() -> Bool {
     if isShowingMemoryAtlasPage {
       isShowingMemoryAtlasPage = false
-      return
+      return true
     }
-    guard !useLegacyHomeDesign else { return }
-    guard let item = SidebarNavItem(rawValue: selectedIndex) else { return }
-    guard [.conversations, .memories, .tasks, .rewind].contains(item) else { return }
+    guard
+      DesktopHomeEscapeNavigation.shouldNavigateHome(
+        selectedIndex: selectedIndex,
+        usesLegacyHomeDesign: useLegacyHomeDesign
+      )
+    else { return false }
     OmiMotion.withGated(Self.pageNavigationAnimation) {
       selectedIndex = SidebarNavItem.dashboard.rawValue
     }
+    return true
   }
 }
 

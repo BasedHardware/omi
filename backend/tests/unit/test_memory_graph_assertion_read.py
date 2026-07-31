@@ -57,6 +57,9 @@ class _CollectionRef:
         self._limit = count
         return self
 
+    def order_by(self, _field_path: str, *_args, **_kwargs):
+        return self
+
     def stream(self):
         prefix = f"{self.path}/"
         depth = self.path.count("/")
@@ -218,6 +221,8 @@ def test_loader_excludes_assertions_not_fenced_to_an_active_current_item(item_ov
         "nodes": [],
         "edges": [],
         "truncated": False,
+        "node_count": 0,
+        "edge_count": 0,
         "node_limit": kg_db.MAX_KNOWLEDGE_GRAPH_NODES,
         "edge_limit": kg_db.MAX_KNOWLEDGE_GRAPH_EDGES,
     }
@@ -259,6 +264,8 @@ def test_tombstoned_canonical_item_fences_legacy_graph_before_projection_prune()
         "nodes": [],
         "edges": [],
         "truncated": False,
+        "node_count": 0,
+        "edge_count": 0,
         "node_limit": kg_db.MAX_KNOWLEDGE_GRAPH_NODES,
         "edge_limit": kg_db.MAX_KNOWLEDGE_GRAPH_EDGES,
     }
