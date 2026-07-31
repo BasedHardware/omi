@@ -25,6 +25,9 @@ const sourceLabels: Record<MemorySource, string> = {
 
 export function memorySource(memory: Memory): MemorySource {
   const tags = memory.tags ?? []
+  const evidenceTypes = memory.evidence?.flatMap((evidence) =>
+    evidence.source_type ? [evidence.source_type] : []
+  )
   if (tags.includes(SCREEN_TAG)) return 'screen'
   if (tags.includes(APP_INDEX_TAG)) return 'file-index'
   if (tags.some((tag) => tag.startsWith('gmail/'))) return 'gmail'
@@ -32,7 +35,24 @@ export function memorySource(memory: Memory): MemorySource {
   if (memory.manually_added || memory.category === 'manual') return 'manual'
   if (memory.conversation_id) return 'conversation'
   if (memory.app_id) return 'app'
-  if (memory.evidence?.some((evidence) => evidence.source_type?.startsWith('integration:'))) {
+  if (evidenceTypes?.includes('manual')) return 'manual'
+  if (
+    evidenceTypes?.some((type) =>
+      ['conversation', 'chat', 'chat_exchange', 'transcript', 'voice_transcript'].includes(type)
+    )
+  ) {
+    return 'conversation'
+  }
+  if (evidenceTypes?.includes('screenshot_ocr')) return 'screen'
+  if (
+    evidenceTypes?.some(
+      (type) =>
+        type === 'api' ||
+        type === 'developer_api' ||
+        type === 'mcp' ||
+        type.startsWith('integration:')
+    )
+  ) {
     return 'app'
   }
   return 'unknown'

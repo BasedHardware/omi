@@ -25,12 +25,21 @@ describe('memorySource', () => {
     expect(memorySource(memory({ tags: ['sticky_notes/import/profile'] }))).toBe('sticky-notes')
   })
 
-  it('uses explicit manual, conversation, and app fields without guessing', () => {
+  it('uses explicit record fields and recorded evidence without guessing', () => {
     expect(memorySource(memory({ manually_added: true }))).toBe('manual')
     expect(memorySource(memory({ category: 'manual' }))).toBe('manual')
     expect(memorySource(memory({ conversation_id: 'conversation-1' }))).toBe('conversation')
     expect(memorySource(memory({ app_id: 'app-1' }))).toBe('app')
+    expect(memorySource(memory({ evidence: [{ source_type: 'manual' }] }))).toBe('manual')
+    expect(memorySource(memory({ evidence: [{ source_type: 'voice_transcript' }] }))).toBe(
+      'conversation'
+    )
+    expect(memorySource(memory({ evidence: [{ source_type: 'screenshot_ocr' }] }))).toBe('screen')
+    expect(memorySource(memory({ evidence: [{ source_type: 'api' }] }))).toBe('app')
+    expect(memorySource(memory({ evidence: [{ source_type: 'developer_api' }] }))).toBe('app')
+    expect(memorySource(memory({ evidence: [{ source_type: 'mcp' }] }))).toBe('app')
     expect(memorySource(memory({ evidence: [{ source_type: 'integration:gmail' }] }))).toBe('app')
+    expect(memorySource(memory({ evidence: [{ source_type: 'unknown' }] }))).toBe('unknown')
     expect(memorySource(memory())).toBe('unknown')
   })
 
