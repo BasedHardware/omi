@@ -64,6 +64,51 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertEqual(model.thread.map(\.text), [SBOnboardingLanguageCopy.question])
   }
 
+  func testBackSkipsPermissionsThatWereNeverDisplayed() {
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    UserDefaults.standard.set("Student", forKey: DefaultsKey.onboardingRole)
+    model.role = "Student"
+    model.roleDraft = "Student"
+    model.thread = [
+      .init(isOmi: true, text: "What do your days look like?"),
+      .init(isOmi: false, text: "Student"),
+      .init(isOmi: true, text: "Let me read your files."),
+    ]
+    model.displayedSteps = [.role, .files]
+    model.step = .files
+
+    model.goBack()
+
+    XCTAssertEqual(model.step, .role)
+    XCTAssertNil(model.role)
+    XCTAssertEqual(model.thread.map(\.text), ["What do your days look like?"])
+  }
+
+  func testCancelledStreamCannotRestoreTextAfterBack() async {
+    var continuation: AsyncStream<Void>.Continuation?
+    let pauses = AsyncStream<Void> { continuation = $0 }
+    let model = SBOnboardingModel(
+      appState: AppState(),
+      chatProvider: ChatProvider(),
+      streamSleeper: { _ in
+        for await _ in pauses {
+          return
+        }
+      },
+      onComplete: nil)
+    model.step = .name
+    model.streamMessage(for: .name)
+    await Task.yield()
+
+    model.goBack()
+    continuation?.yield()
+    await Task.yield()
+
+    XCTAssertNil(model.streamingText)
+    XCTAssertFalse(model.typing)
+  }
+
   func testAssistantChoicesAreAlwaysPresentedAsSeparateOptions() {
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)

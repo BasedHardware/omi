@@ -69,6 +69,7 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   typealias FileScanRunner = @MainActor (AppState) async -> LocalFileProfileState
+  typealias StreamSleeper = @MainActor (UInt64) async -> Void
 
   @Published var step: Step = .promise
   @Published var thread: [Msg] = []
@@ -156,8 +157,11 @@ final class SBOnboardingModel: ObservableObject {
   /// question never lets an earlier request finish after the user's revision.
   private let answerWriteGate = OnboardingAnswerWriteGate()
   let fileScanRunner: FileScanRunner
+  let streamSleeper: StreamSleeper
   private let onComplete: (() -> Void)?
   var streamTask: Task<Void, Never>?
+  var streamGeneration = 0
+  var displayedSteps: [Step] = []
   var localFileScanTask: Task<Void, Never>?
   var localFileScanID: UUID?
   /// Permission-grant pollers, one per permission key. Keyed so requesting a
@@ -210,12 +214,16 @@ final class SBOnboardingModel: ObservableObject {
         memoryCount: coordinator.localFileMemoriesSaved,
         deniedFolders: outcome.deniedUserFolders)
     },
+    streamSleeper: @escaping StreamSleeper = { nanoseconds in
+      try? await Task.sleep(nanoseconds: nanoseconds)
+    },
     onComplete: (() -> Void)?
   ) {
     self.appState = appState
     self.chatProvider = chatProvider
     self.importConnectorStatusStore = importConnectorStatusStore
     self.fileScanRunner = fileScanRunner
+    self.streamSleeper = streamSleeper
     self.onComplete = onComplete
     // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
     // journal surface so they never pollute the real Chat tab. Cleared on
@@ -355,17 +363,21 @@ final class SBOnboardingModel: ObservableObject {
 
   func streamMessage(for step: Step) {
     streamTask?.cancel()
+    streamGeneration &+= 1
+    let generation = streamGeneration
     showWidget = false
     typing = true
     let full = message(for: step)
     streamTask = Task { [weak self] in
-      try? await Task.sleep(nanoseconds: 700_000_000)
-      guard let self, !Task.isCancelled else { return }
+      guard let self else { return }
+      await self.streamSleeper(700_000_000)
+      guard !Task.isCancelled, self.streamGeneration == generation else { return }
       self.typing = false
       self.streamingText = "▍"
       let words = full.split(separator: " ").map(String.init)
       var i = 0
       while i < words.count {
+        guard !Task.isCancelled, self.streamGeneration == generation else { return }
         i += 1 + Int.random(in: 0...1)
         let shown = words.prefix(min(i, words.count)).joined(separator: " ")
         if i < words.count {
@@ -373,10 +385,9 @@ final class SBOnboardingModel: ObservableObject {
         } else {
           self.streamingText = full
         }
-        if Task.isCancelled { return }
-        try? await Task.sleep(nanoseconds: UInt64((55 + Int.random(in: 0...95)) * 1_000_000))
+        await self.streamSleeper(UInt64((55 + Int.random(in: 0...95)) * 1_000_000))
       }
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled, self.streamGeneration == generation else { return }
       self.thread.append(Msg(isOmi: true, text: full))
       self.streamingText = nil
       self.showWidget = true
@@ -387,6 +398,9 @@ final class SBOnboardingModel: ObservableObject {
   /// Hook fired right after a step's message finishes streaming and its widget
   /// appears — used to kick off per-step live work (screen capture, demo setup).
   private func onStepShown(_ step: Step) {
+    if displayedSteps.last != step {
+      displayedSteps.append(step)
+    }
     switch step {
     case .mic: precheckPerm("microphone")
     case .systemAudio: precheckPerm("system_audio")
@@ -416,15 +430,23 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   func goBack() {
-    guard let previous = Step(rawValue: step.rawValue - 1) else { return }
+    guard let rawPrevious = Step(rawValue: step.rawValue - 1) else { return }
+    let previous =
+      displayedSteps.last == step
+      ? displayedSteps.dropLast().last ?? rawPrevious
+      : rawPrevious
     teardownStep(step)
     cancelPermissionPollForCurrentStep()
+    streamGeneration &+= 1
     streamTask?.cancel()
     streamTask = nil
     typing = false
     streamingText = nil
     retractCurrentExchange()
     resetAnswer(for: previous)
+    if displayedSteps.last == step {
+      displayedSteps.removeLast()
+    }
     step = previous
     UserDefaults.standard.set(previous.rawValue, forKey: Self.resumeStepKey)
     showWidget = true

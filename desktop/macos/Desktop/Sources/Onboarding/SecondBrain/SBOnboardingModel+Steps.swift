@@ -6,6 +6,18 @@ import Foundation
 // MARK: - Permissions (one at a time)
 
 extension SBOnboardingModel {
+  static func preferredLanguageCodes(localeCode: String?) -> [String] {
+    let common = ["en", "es", "fr", "de", "pt", "ja", "zh", "ko", "hi"]
+    let preferred = [localeCode?.lowercased()].compactMap { $0 } + common
+    return preferred.reduce(into: []) { codes, code in
+      if !codes.contains(code) { codes.append(code) }
+    }
+  }
+
+  static func shouldSelectLanguageOnSubmit(_ draft: String) -> Bool {
+    !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
   func requestPerm(_ key: String) {
     // The user may have changed a grant in System Settings while this step was
     // onscreen. Re-check it before opening another pane or asking macOS again.

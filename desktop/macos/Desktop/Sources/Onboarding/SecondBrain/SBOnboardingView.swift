@@ -311,7 +311,9 @@ struct SBOnboardingView: View {
       let filter = draft.lowercased()
       let matches: [(code: String, name: String)] =
         filter.isEmpty
-        ? Array(all.prefix(6))
+        ? SBOnboardingModel.preferredLanguageCodes(
+          localeCode: Locale.current.language.languageCode?.identifier
+        ).compactMap { code in all.first { $0.code == code } }
         : Array(
           all.filter { $0.name.lowercased().contains(filter) || $0.code.lowercased().hasPrefix(filter) }.prefix(6))
       TextField("Type a language…", text: $model.languageDraft)
@@ -321,7 +323,12 @@ struct SBOnboardingView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(sb.ink(.w12), lineWidth: 1))
         .focused($languageFieldFocused)
         .onAppear { languageFieldFocused = true }
-        .onSubmit { if let first = matches.first { model.pickLanguage(code: first.code, name: first.name) } }
+        .onSubmit {
+          guard SBOnboardingModel.shouldSelectLanguageOnSubmit(model.languageDraft), let first = matches.first else {
+            return
+          }
+          model.pickLanguage(code: first.code, name: first.name)
+        }
       if !matches.isEmpty {
         VStack(spacing: 0) {
           ForEach(matches, id: \.code) { lang in
@@ -647,24 +654,30 @@ struct SBOnboardingView: View {
   private func agentToggleRow(id: String, _ name: String, _ detail: String, state: String, action: @escaping () -> Void)
     -> some View
   {
-    HStack(spacing: 12) {
-      ConnectorBrandIcon(brand: model.connectorBrand(id), size: 26, cornerRadius: 7)
-      VStack(alignment: .leading, spacing: 1) {
-        Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
-        Text(state == "unavailable" ? "not installed" : detail).geist(size: 12).foregroundStyle(sb.ink(.w4))
-      }
-      Spacer(minLength: 8)
-      Toggle(
-        name,
-        isOn: Binding(
-          get: { state == "on" },
-          set: { enabled in if enabled { action() } }
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 12) {
+        ConnectorBrandIcon(brand: model.connectorBrand(id), size: 26, cornerRadius: 7)
+        VStack(alignment: .leading, spacing: 1) {
+          Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+          Text(state == "unavailable" ? "not installed" : (state == "connecting" ? "connecting…" : detail))
+            .geist(size: 12).foregroundStyle(sb.ink(.w4))
+        }
+        Spacer(minLength: 8)
+        Toggle(
+          name,
+          isOn: Binding(
+            get: { state == "on" || state == "connecting" },
+            set: { enabled in if enabled { action() } }
+          )
         )
-      )
-      .labelsHidden()
-      .toggleStyle(OmiToggleStyle())
-      .disabled(state != "idle")
-      .accessibilityLabel(name)
+        .labelsHidden()
+        .toggleStyle(OmiToggleStyle())
+        .disabled(state != "idle")
+        .accessibilityLabel(name)
+      }
+      if id == "claudeCode", state == "on" {
+        ClaudeCodeRestartSubtitle()
+      }
     }
     .padding(.vertical, 10)
   }
