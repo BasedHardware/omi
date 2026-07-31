@@ -149,6 +149,20 @@ docker run --rm --network host \
 # expected: 5 passed  (embed -> upsert -> query ranks the right doc first; metadata round-trips)
 ```
 
+Live translation through the backend path against a running NLLB server (CTranslate2). Provision the
+model into the volume, run the server (CPU shown; drop `CT2_DEVICE` for GPU), then test:
+
+```
+# one-time: convert facebook/nllb-200-distilled-600M -> CT2 int8 into $MODELS/nllb-200-distilled-600M-ct2-int8
+docker run -d --name nllb --network host -e CT2_DEVICE=cpu -e CT2_COMPUTE_TYPE=int8 \
+  -e NLLB_MODEL_DIR=/models/nllb-200-distilled-600M-ct2-int8 -v $MODELS:/models omi-nllb:test
+docker run --rm --network host \
+  -e HOSTED_TRANSLATION_API_URL=http://127.0.0.1:8080 -e TRANSLATION_SERVICE_MODELS=nllb \
+  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+  python -m pytest tests/contract/test_translation_nllb_live_contract.py -q -p no:cacheprovider
+# expected: 4 passed  (en->it/fr/es real translations + en->it->en round-trip via TranslationService)
+```
+
 **STT / diarization / translation — the in-repo GPU servers (optional `inference` profile).**
 These build from `backend/{parakeet,diarizer,nllb_translation}/Dockerfile`:
 
@@ -157,7 +171,14 @@ docker compose --profile inference up -d --build
 ```
 
 Requirements and gotchas:
-- **GPU:** the host needs the NVIDIA Container Toolkit (the compose `deploy.resources` GPU reservation).
+- **GPU passthrough is a container-runtime concern, not just a driver.** A working `nvidia-smi` on
+  the host is NOT enough: Docker needs the **NVIDIA Container Toolkit** installed and the CDI/runtime
+  configured, or `--gpus all` / the compose `deploy.resources` reservation fail with
+  *"failed to discover GPU vendor from CDI: no known GPU vendor found"*. Install
+  `nvidia-container-toolkit` and run `nvidia-ctk runtime configure` (or set up CDI) on the host first.
+- **CPU fallback for a smoke test:** NLLB and the diarizer both run CPU-only — set `CT2_DEVICE=cpu`
+  (NLLB) or `CUDA_VISIBLE_DEVICES=""` (diarizer). Useful to validate wiring on a host without GPU
+  passthrough; production STT/diarization/translation want the GPU.
 - **Parakeet base is on NGC:** `docker login nvcr.io` (free NVIDIA NGC account) before building —
   base `nvcr.io/nvidia/nemo:26.02`. NLLB uses a public CUDA base; diarizer's private base is
   overridden to `python:3.11-slim` via the `PYTHON_BASE_IMAGE` build-arg (already set in compose).
