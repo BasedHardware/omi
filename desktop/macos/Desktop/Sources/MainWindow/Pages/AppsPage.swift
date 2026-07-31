@@ -799,7 +799,7 @@ final class ImportConnectorStatusStore: ObservableObject {
     if manualConnectorIDs.contains(connector.id) {
       actionTitle = isConnected ? "Update" : "Connect"
     } else {
-      actionTitle = isConnected ? "Sync now" : "Connect"
+      actionTitle = isConnected ? "Sync now" : connector.actionTitle
     }
 
     return Snapshot(
