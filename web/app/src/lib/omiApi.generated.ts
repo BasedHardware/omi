@@ -2006,6 +2006,10 @@ export interface DeveloperTranscriptSegment {
   text: string;
 }
 
+export interface DeviceToolResultRequest {
+  result: Record<string, unknown>;
+}
+
 export interface DiagnosticsReceipt {
   ticket: string;
 }
@@ -4055,6 +4059,7 @@ export interface Section {
 
 export interface SendMessageRequest {
   context?: PageContext | null;
+  device_tools?: Array<string> | null;
   file_ids?: Array<string> | null;
   text: string;
   time_zone?: string | null;
@@ -5631,6 +5636,7 @@ export interface OmiApiSchemas {
   "DeveloperMemoryVectorSearchResponse": DeveloperMemoryVectorSearchResponse;
   "DeveloperSuccessResponse": DeveloperSuccessResponse;
   "DeveloperTranscriptSegment": DeveloperTranscriptSegment;
+  "DeviceToolResultRequest": DeviceToolResultRequest;
   "DiagnosticsReceipt": DiagnosticsReceipt;
   "DiagnosticsUpload": DiagnosticsUpload;
   "DismissAnnouncementRequest": DismissAnnouncementRequest;
@@ -10591,6 +10597,16 @@ export interface OmiApiPaths {
       operationId: "clear_chat_messages_v2_messages_delete";
       responses: {
         "200": Message;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/messages/device-tool/{call_id}/result": {
+    post: {
+      operationId: "submit_device_tool_result_v2_messages_device_tool__call_id__result_post";
+      responses: {
+        "200": unknown;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -19772,6 +19788,27 @@ export async function clear_chat_messages_v2_messages_delete(query: { app_id?: s
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function submit_device_tool_result_v2_messages_device_tool__call_id__result_post(path: { call_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DeviceToolResultRequest, init?: OmiApiClientInit): Promise<unknown> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/messages/device-tool/${path.call_id}/result`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function share_chat_messages_v2_messages_share_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ShareChatMessagesRequest, init?: OmiApiClientInit): Promise<ShareChatMessagesResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/messages/share`;
@@ -20440,4 +20477,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 475 client methods generated.
+// Total: 476 client methods generated.
