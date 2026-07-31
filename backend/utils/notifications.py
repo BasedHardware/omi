@@ -5,7 +5,7 @@ import math
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
-from firebase_admin import messaging, auth
+from firebase_admin import messaging
 import database.notifications as notification_db
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from database.redis_db import (
@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 
 
 def _get_user(uid: str) -> Any:
-    return auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+    from utils.auth import get_auth_provider
+
+    return get_auth_provider().get_user_profile(uid)  # UserProfile: .display_name / .email etc.
 
 
 # iOS bundle ID for APNs

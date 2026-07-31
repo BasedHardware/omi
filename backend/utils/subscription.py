@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 from fastapi import HTTPException
-from firebase_admin import auth as firebase_auth
 import stripe
 
 import database.users as users_db
@@ -21,7 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 def _get_user(uid: str) -> Any:
-    return firebase_auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+    from utils.auth import get_auth_provider
+
+    return get_auth_provider().get_user_profile(uid)
 
 
 PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.plus, PlanType.unlimited_v2}

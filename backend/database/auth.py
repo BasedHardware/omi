@@ -1,7 +1,5 @@
 from typing import Any, Dict, Optional, cast
 
-from firebase_admin import auth
-
 from database.store import get_document_store
 from database.redis_db import cache_user_name
 import logging
@@ -14,13 +12,12 @@ def _store():
 
 
 def _firebase_get_user(uid: str) -> Any:
-    """Wrap firebase_admin.auth.get_user at the SDK boundary.
+    """Look up a user's profile through the neutral auth port (ADR-0034). Returns a UserProfile whose
+    fields (uid/email/email_verified/phone_number/display_name/photo_url/disabled) get_user_from_uid
+    reads by attribute — same names as the former Firebase UserRecord, so no caller change."""
+    from utils.auth import get_auth_provider
 
-    firebase_admin.auth ships incomplete type stubs; its UserRecord fields
-    surface as partially-unknown. Sealing the call here lets callers treat the
-    result as Any and read fields without propagating Unknown.
-    """
-    return auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin.auth stub gap
+    return get_auth_provider().get_user_profile(uid)
 
 
 def get_user_from_uid(uid: str) -> Optional[Dict[str, Any]]:
