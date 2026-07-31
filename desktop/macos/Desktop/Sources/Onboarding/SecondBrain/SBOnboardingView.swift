@@ -343,6 +343,8 @@ struct SBOnboardingView: View {
         }
         .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w1), lineWidth: 1))
       }
+      SBInkButton(title: "Continue", isDefaultAction: true) { model.answerLanguageText() }
+        .disabled(draft.isEmpty)
     }
     .frame(maxWidth: 340, alignment: .leading)
   }
