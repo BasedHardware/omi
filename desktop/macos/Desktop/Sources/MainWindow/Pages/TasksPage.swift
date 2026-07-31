@@ -411,7 +411,9 @@ class TasksViewModel: ObservableObject {
           if showCompleted {
             await store.loadCompletedTasks()
           } else {
-            await store.loadIncompleteTasks()
+            // Initial loading owns the legacy-recovery boundary. A tab toggle
+            // must never bypass it and reconcile an unresolved empty response.
+            await store.loadIncompleteTasks(allowInitialReconciliation: false)
           }
         }
       }
@@ -897,14 +899,13 @@ class TasksViewModel: ObservableObject {
   func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
     guard let lease = captureOwnerLease() else { return }
     log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
-    var order = categoryOrder[category] ?? categorizedTasks[category]?.map { $0.id } ?? []
-
-    // Remove task from current position
-    order.removeAll { $0 == task.id }
-
-    // Insert at new position
-    let safeIndex = min(targetIndex, order.count)
-    order.insert(task.id, at: safeIndex)
+    // The drop target is an index in the rendered sortOrder sequence. Mutating
+    // the legacy UserDefaults projection (or categorizedTasks' due-date order)
+    // applies that coordinate to a different list and can move a task far from
+    // where it was dropped after sync, pagination, or another-device changes.
+    // Always start from the exact visual sequence instead.
+    let order = Self.reorderedTaskIDs(
+      getOrderedTasks(for: category).map(\.id), moving: task.id, toPostRemovalIndex: targetIndex)
 
     categoryOrder[category] = order
 
@@ -934,6 +935,41 @@ class TasksViewModel: ObservableObject {
 
     // Schedule debounced sync to SQLite + backend
     scheduleSortOrderSync(lease: lease)
+  }
+
+  /// Move `task` immediately before the rendered target row. Row drops supply a
+  /// target position from the list before the source row is removed, whereas
+  /// `moveTask(_:toIndex:inCategory:)` takes a post-removal insertion index.
+  func moveTask(_ task: TaskActionItem, before targetTaskID: String, inCategory category: TaskCategory) {
+    let visibleOrder = getOrderedTasks(for: category).map(\.id)
+    guard
+      task.id != targetTaskID,
+      let targetIndex = visibleOrder.firstIndex(of: targetTaskID)
+    else { return }
+
+    let insertionIndex = Self.insertionIndex(
+      beforeTargetAt: targetIndex,
+      removingSourceAt: visibleOrder.firstIndex(of: task.id)
+    )
+    moveTaskToCategory(task, toIndex: insertionIndex, inCategory: category)
+  }
+
+  /// Translate a before-target index from the pre-removal visual list into the
+  /// insertion index accepted by `moveTask`. If the source precedes the target,
+  /// removal shifts that target one slot toward the start.
+  nonisolated static func insertionIndex(beforeTargetAt targetIndex: Int, removingSourceAt sourceIndex: Int?) -> Int {
+    max(0, targetIndex - ((sourceIndex ?? .max) < targetIndex ? 1 : 0))
+  }
+
+  /// Apply one move to a current visual order. This is the single production
+  /// mutation used before sort orders are rebased and persisted.
+  nonisolated static func reorderedTaskIDs(
+    _ visibleOrder: [String], moving taskID: String, toPostRemovalIndex targetIndex: Int
+  ) -> [String] {
+    var order = visibleOrder
+    order.removeAll { $0 == taskID }
+    order.insert(taskID, at: min(max(0, targetIndex), order.count))
+    return order
   }
 
   /// Move a task to first position in category
@@ -3302,7 +3338,11 @@ struct TasksPage: View {
                   },
                   onIncrementIndent: { viewModel.incrementIndent(for: $0) },
                   onDecrementIndent: { viewModel.decrementIndent(for: $0) },
-                  onMoveTask: { task, index, cat in viewModel.moveTaskToCategory(task, toIndex: index, inCategory: cat)
+                  onMoveTask: { task, index, category in
+                    viewModel.moveTaskToCategory(task, toIndex: index, inCategory: category)
+                  },
+                  onMoveTaskBeforeTarget: { task, targetTaskID, cat in
+                    viewModel.moveTask(task, before: targetTaskID, inCategory: cat)
                   },
                   onClearTodayDeadlines: { await viewModel.clearTodayDeadlinesForIncompleteTasks() },
                   onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled)
@@ -3595,6 +3635,7 @@ struct TaskCategorySection: View {
   var onIncrementIndent: ((String) -> Void)?
   var onDecrementIndent: ((String) -> Void)?
   var onMoveTask: ((TaskActionItem, Int, TaskCategory) -> Void)?
+  var onMoveTaskBeforeTarget: ((TaskActionItem, String, TaskCategory) -> Void)?
   var onClearTodayDeadlines: (() async -> Void)?
   var onOpenChat: ((TaskActionItem) -> Void)?
   var onInvestigate: ((TaskActionItem) -> Void)?
@@ -3762,9 +3803,8 @@ struct TaskCategorySection: View {
                   isDropTarget: dropTargetTaskId == task.id,
                   dropAbove: dropAbove,
                   findTask: { id in findTaskGlobal?(id) ?? orderedTasks.first(where: { $0.id == id }) },
-                  findTargetIndex: { orderedTasks.firstIndex(where: { $0.id == task.id }) },
-                  onMoveTask: { droppedTask, targetIndex in
-                    onMoveTask?(droppedTask, targetIndex, category)
+                  onMoveTaskBeforeTarget: { droppedTask in
+                    onMoveTaskBeforeTarget?(droppedTask, task.id, category)
                   },
                   onDragEnded: onDragEnded,
                   onHoverChanged: onDragHoverChanged
@@ -3817,8 +3857,7 @@ struct TaskDragDropModifier: ViewModifier {
   var isDropTarget: Bool = false
   var dropAbove: Bool = true
   var findTask: ((String) -> TaskActionItem?)?
-  var findTargetIndex: (() -> Int?)?
-  var onMoveTask: ((TaskActionItem, Int) -> Void)?
+  var onMoveTaskBeforeTarget: ((TaskActionItem) -> Void)?
   /// Called with the id of the dragged task when a drop lands, so the drag-end
   /// reset stays scoped to that task (BL-030).
   var onDragEnded: (@Sendable (String) -> Void)?
@@ -3870,13 +3909,9 @@ struct TaskDragDropModifier: ViewModifier {
               // fires the same scoped reset as the catch-all; both are
               // idempotent via the draggedTaskId == endedId guard (BL-030).
               onDragEnded?(droppedId)
-              guard let targetIndex = findTargetIndex?() else {
-                log("DROP: findTargetIndex returned nil")
-                return
-              }
               if let droppedTask = findTask?(droppedId) {
-                log("DROP: Moving task \(droppedId) to index \(targetIndex)")
-                onMoveTask?(droppedTask, targetIndex)
+                log("DROP: Moving task \(droppedId) before target \(taskId)")
+                onMoveTaskBeforeTarget?(droppedTask)
               } else {
                 log("DROP: Could not find task for id \(droppedId)")
               }

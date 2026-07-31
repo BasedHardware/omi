@@ -69,6 +69,14 @@ struct ScopedDefaultsKey {
   static func trialNudge(_ kind: String, ownerHash: String) -> Self {
     Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
   }
+
+  static func tasksFullSyncCompleted(ownerID: String) -> Self {
+    Self(rawValue: "tasksFullSyncCompleted_v9_\(ownerID)")
+  }
+
+  static func restoreLegacyConversationItemsCompleted(ownerID: String) -> Self {
+    Self(rawValue: "restoreLegacyConversationItemsCompleted_v1_\(ownerID)")
+  }
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.

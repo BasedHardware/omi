@@ -53,32 +53,22 @@ extension APIClient {
     return response.ids
   }
 
-  func migrateStagedTasks(
+  /// Restore rows the retired migration moved out of action_items. A pre-fix
+  /// backend returns a safe 404 for this new route, so a client update can never
+  /// trigger the old destructive migration during a staggered rollout.
+  func restoreLegacyConversationItems(
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
-  ) async throws {
-    struct StatusResponse: Decodable { let status: String }
-    let _: StatusResponse = try await post(
-      "v1/staged-tasks/migrate",
-      expectedOwnerId: expectedOwnerId,
-      authorizationSnapshot: authorizationSnapshot
-    )
-  }
-
-  func migrateConversationItemsToStaged(
-    expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
-  ) async throws {
-    struct MigrateResponse: Decodable {
-      let status: String
-      let migrated: Int
-      let deleted: Int
+  ) async throws -> Int {
+    struct RestoreResponse: Decodable {
+      let restored: Int
     }
-    let _: MigrateResponse = try await post(
-      "v1/staged-tasks/migrate-conversation-items",
+    let response: RestoreResponse = try await post(
+      "v1/action-items/restore-legacy-conversation-items",
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )
+    return response.restored
   }
 
   func batchUpdateScores(

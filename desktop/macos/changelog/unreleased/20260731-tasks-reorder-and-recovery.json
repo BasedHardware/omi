@@ -1,0 +1,3 @@
+{
+  "change": "Fixed task drag-and-drop placement and protected existing task lists from being cleared during migration recovery"
+}

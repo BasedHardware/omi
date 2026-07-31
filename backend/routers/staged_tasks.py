@@ -18,12 +18,13 @@ from models.staged_task import (
     StagedTaskListResponse,
     PromoteStagedTaskResponse,
     MigrateConversationItemsResponse,
+    RestoreLegacyConversationItemsResponse,
 )
 from models.shared import StatusResponse
 from utils.other import endpoints as auth
 from utils.observability.fallback import record_fallback
 from utils.task_intelligence import candidate_service
-from utils.task_intelligence.staged_migration import migrate_staged_tasks, proposal_from_legacy_staged
+from utils.task_intelligence.staged_migration import proposal_from_legacy_staged
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -566,13 +567,9 @@ def promote_staged_task_by_id(task_id: str, uid: str = Depends(auth.get_current_
 
 @router.post('/v1/staged-tasks/migrate', tags=['staged-tasks'], response_model=StatusResponse)
 def migrate_ai_tasks(uid: str = Depends(auth.get_current_user_uid)):
-    control = task_control_db.get_task_workflow_control(uid)
-    if control.workflow_mode == TaskWorkflowMode.read:
-        return {'status': 'canonical read mode; no legacy migration performed'}
-    result = staged_tasks_db.migrate_ai_tasks(uid)
-    if control.workflow_mode == TaskWorkflowMode.write:
-        migrate_staged_tasks(uid, control)
-    return {'status': f"moved {result['moved']}, kept {result['kept']}"}
+    # Retain the released endpoint for older desktop clients, but never move
+    # live action items off the collection rendered by the legacy Tasks UI.
+    return {'status': 'legacy task migration retired; no action taken'}
 
 
 @router.post(
@@ -582,9 +579,29 @@ def migrate_ai_tasks(uid: str = Depends(auth.get_current_user_uid)):
 )
 def migrate_conversation_items(uid: str = Depends(auth.get_current_user_uid)):
     control = task_control_db.get_task_workflow_control(uid)
-    if control.workflow_mode == TaskWorkflowMode.read:
-        return {'status': 'ok', 'migrated': 0, 'deleted': 0}
-    result = staged_tasks_db.migrate_conversation_items_to_staged(uid)
+    # In canonical-write mode, a marked row may already have a matching
+    # legacy_staged Candidate. Restoring it as an action item while that
+    # Candidate is pending or accepted would create a duplicate. That mode
+    # retains the Candidate as the canonical representation instead.
     if control.workflow_mode == TaskWorkflowMode.write:
-        migrate_staged_tasks(uid, control)
-    return {'status': 'ok', 'migrated': result['moved'], 'deleted': 0}
+        return {'status': 'ok', 'migrated': 0, 'deleted': 0, 'restored': 0, 'skipped_existing': 0}
+
+    # The legacy route remains response-compatible but now restores only rows
+    # that it explicitly marked, never live action items.
+    result = staged_tasks_db.restore_legacy_conversation_items(uid)
+    return {'status': 'ok', 'migrated': 0, 'deleted': 0, **result}
+
+
+@router.post(
+    '/v1/action-items/restore-legacy-conversation-items',
+    tags=['action-items'],
+    response_model=RestoreLegacyConversationItemsResponse,
+)
+def restore_legacy_conversation_items(uid: str = Depends(auth.get_current_user_uid)):
+    """Safely restore rows moved by the now-retired desktop migration."""
+
+    control = task_control_db.get_task_workflow_control(uid)
+    if control.workflow_mode == TaskWorkflowMode.write:
+        return {'status': 'ok', 'restored': 0, 'skipped_existing': 0}
+    result = staged_tasks_db.restore_legacy_conversation_items(uid)
+    return {'status': 'ok', **result}

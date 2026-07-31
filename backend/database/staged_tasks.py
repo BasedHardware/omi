@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -345,70 +346,46 @@ def clear_staged_tasks(uid: str) -> int:
     return total
 
 
-def migrate_ai_tasks(uid: str) -> dict:
-    """One-time migration: move excess AI tasks from action_items to staged_tasks.
+def restore_legacy_conversation_items(uid: str) -> dict:
+    """Restore rows moved by the retired desktop conversation migration.
 
-    Keeps top 3 AI tasks in action_items, moves the rest to staged_tasks.
-    Uses a 'source' field marker to identify AI-created tasks.
+    Only active ``conversation_migration`` rows qualify. Each row is restored
+    with an atomic create+delete batch, so an existing action item is never
+    overwritten; an action item created or restored concurrently wins.
     """
-    col = _user_col(uid, 'action_items')
-    query = col.where(filter=FieldFilter('completed', '==', False))
 
-    all_items = []
-    for doc in query.stream():
-        data = doc.to_dict()
-        data['id'] = doc.id
-        if data.get('deleted'):
-            continue
-        all_items.append(data)
-
-    # Separate AI-generated tasks from manual ones
-    ai_tasks = [item for item in all_items if 'screenshot' in (item.get('source') or '')]
-    if len(ai_tasks) <= 3:
-        return {'moved': 0, 'kept': len(ai_tasks)}
-
-    # Sort by relevance_score ascending (best first). relevance_score is an int in
-    # 0-1000 where 0 is the most relevant, so only a genuinely missing (None) score
-    # should sort last: `or 999` would also demote a valid best score of 0.
-    ai_tasks.sort(key=lambda x: 999 if x.get('relevance_score') is None else x.get('relevance_score'))
-    keep = ai_tasks[:3]
-    to_move = ai_tasks[3:]
-
+    action_items_col = _user_col(uid, 'action_items')
     staged_col = _user_col(uid, 'staged_tasks')
-    batch = db.batch()
-    batch_count = 0
-    for task in to_move:
-        batch.set(staged_col.document(task['id']), task)
-        batch.delete(col.document(task['id']))
-        batch_count += 2  # set + delete = 2 operations
-        batch, batch_count = _commit_batch(batch, batch_count)
-    if batch_count > 0:
-        batch.commit()
+    migrated_rows = staged_col.where(filter=FieldFilter('source', '==', 'conversation_migration')).stream()
+    restored = 0
+    skipped_existing = 0
 
-    return {'moved': len(to_move), 'kept': len(keep)}
-
-
-def migrate_conversation_items_to_staged(uid: str) -> dict:
-    """Move conversation-sourced action items (without 'source') to staged_tasks."""
-    col = _user_col(uid, 'action_items')
-    staged_col = _user_col(uid, 'staged_tasks')
-
-    batch = db.batch()
-    moved = 0
-    batch_count = 0
-    for doc in col.stream():
-        data = doc.to_dict()
-        if data.get('deleted') or data.get('completed'):
+    for staged_snapshot in migrated_rows:
+        staged_row = staged_snapshot.to_dict() or {}
+        # Keep the marker check in addition to the indexed query so a permissive
+        # fake or future query refactor can never restore an ordinary staged row.
+        if staged_row.get('source') != 'conversation_migration' or staged_row.get('completed'):
             continue
-        if data.get('conversation_id') and not data.get('source'):
-            data['id'] = doc.id
-            data['source'] = 'conversation_migration'
-            batch.set(staged_col.document(doc.id), data)
-            batch.delete(col.document(doc.id))
-            moved += 1
-            batch_count += 2  # set + delete = 2 operations
-            batch, batch_count = _commit_batch(batch, batch_count)
-    if batch_count > 0:
-        batch.commit()
 
-    return {'moved': moved}
+        action_item_ref = action_items_col.document(staged_snapshot.id)
+        action_item = dict(staged_row)
+        # `id` is document identity and `source` is the recovery marker, not
+        # original action-item data. Recreating either would mutate the legacy
+        # task's meaning rather than restoring it.
+        action_item.pop('id', None)
+        action_item.pop('source', None)
+
+        batch = db.batch()
+        batch.create(action_item_ref, action_item)
+        batch.delete(staged_col.document(staged_snapshot.id))
+        try:
+            batch.commit()
+        except AlreadyExists:
+            # A current action item has the authoritative identity. Preserve it
+            # and preserve the staged row for manual inspection rather than
+            # deleting either record after a race.
+            skipped_existing += 1
+            continue
+        restored += 1
+
+    return {'restored': restored, 'skipped_existing': skipped_existing}

@@ -84,6 +84,47 @@ final class TaskReorderMirroredArraysTests: XCTestCase {
     XCTAssertLessThan(cat0Max, cat1Min, "category 0's band must sit entirely below category 1's")
   }
 
+  func testDroppingAnEarlierTaskBeforeTargetUsesPostRemovalIndex() {
+    // The row drop points at C in the rendered pre-removal order. Removing A
+    // shifts C left, so inserting at C's old index would incorrectly land A
+    // below C. This is the exact downward-drag regression from the Tasks UI.
+    let renderedOrder = ["a", "b", "c", "d"]
+    guard let targetIndex = renderedOrder.firstIndex(of: "c"),
+      let sourceIndex = renderedOrder.firstIndex(of: "a")
+    else {
+      return XCTFail("test fixture must contain both the source and target")
+    }
+
+    let insertionIndex = TasksViewModel.insertionIndex(
+      beforeTargetAt: targetIndex, removingSourceAt: sourceIndex)
+    let reordered = TasksViewModel.reorderedTaskIDs(
+      renderedOrder, moving: "a", toPostRemovalIndex: insertionIndex)
+
+    XCTAssertEqual(reordered, ["b", "a", "c", "d"])
+  }
+
+  func testReorderUsesRenderedOrderInsteadOfStaleFallbackOrder() {
+    // Persisted fallback ordering can retain ids that are no longer visible and
+    // diverge from server-backed sortOrder. A row drop must mutate the rendered
+    // sequence, otherwise its target coordinate can jump many rows.
+    let renderedOrder = ["current-3", "current-1", "current-2"]
+    let staleFallbackOrder = ["current-1", "removed", "current-2", "current-3"]
+
+    guard let renderedTarget = renderedOrder.firstIndex(of: "current-2"),
+      let renderedSource = renderedOrder.firstIndex(of: "current-3")
+    else {
+      return XCTFail("test fixture must contain both the source and target")
+    }
+    let insertionIndex = TasksViewModel.insertionIndex(
+      beforeTargetAt: renderedTarget, removingSourceAt: renderedSource)
+    let reordered = TasksViewModel.reorderedTaskIDs(
+      renderedOrder, moving: "current-3", toPostRemovalIndex: insertionIndex)
+
+    XCTAssertEqual(reordered, ["current-1", "current-3", "current-2"])
+    XCTAssertFalse(reordered.contains("removed"))
+    XCTAssertNotEqual(reordered, staleFallbackOrder)
+  }
+
   /// BL-030 regression guard: `moveTask` must fan the reorder out to ALL THREE mirrored
   /// arrays — dropping any one diverges when filters/search are active. `moveTask` is
   /// `@MainActor` and needs the full store/state, so the fan-out is source-pinned by the
