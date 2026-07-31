@@ -4,11 +4,9 @@ import Foundation
 /// Gives `context-for-claude-mcp` a credential of its own.
 ///
 /// The MCP server is spawned per Claude session, lives for seconds, and has nowhere to show a
-/// browser, so it can only ever read a key that is already on disk. Nothing used to put one there:
-/// the resolver's last resort is the `omi-memory` entry in `~/.claude.json`, which belongs to a
-/// *different* MCP server, so a Mac that never configured one reported the Omi account unreachable
-/// while Omi was demonstrably working everywhere else in the same session. Reading someone else's
-/// credential is not a design; it is a coincidence that happened to hold on the author's machine.
+/// browser, so it can only ever read a key that is already on disk. Nothing used to put one there,
+/// so a Mac without a provisioned key reported the Omi account unreachable while Omi was
+/// demonstrably working everywhere else in the same session.
 ///
 /// The app is the only part of the product that can fix that. It is signed in with a real Firebase
 /// ID token, so it asks the backend for an `omi_mcp_…` key of its own and writes it where the

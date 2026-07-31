@@ -110,10 +110,10 @@ extension Tools {
             **The Omi account — history**
 
             Not configured: no Omi MCP API key was found in the \(OmiKeyResolver.environmentVariable) \
-            environment variable, in ~/Library/Application Support/ContextForClaude/mcp-key, or in the \
-            omi-memory entry in ~/.claude.json. The account's conversations and remembered facts \
-            cannot be read, so every tool above answers from this Mac's local capture only. That is a \
-            missing connection, not an empty life — do not tell the user their history is empty.
+            environment variable or in ~/Library/Application Support/ContextForClaude/mcp-key. \
+            The account's conversations and remembered facts cannot be read, so every tool above \
+            answers from this Mac's local capture only. That is a missing connection, not an empty \
+            life — do not tell the user their history is empty.
             """
         }
 

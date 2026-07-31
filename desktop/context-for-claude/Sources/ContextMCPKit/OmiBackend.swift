@@ -9,18 +9,16 @@ import Foundation
 /// echoed back to the model — this process only ever reads it and puts it in an Authorization
 /// header.
 ///
-/// `appSupportFile` is the credential this product actually owns; the other two are an escape hatch
-/// and a scavenge, in that order.
+/// `appSupportFile` is the credential this product actually owns; the environment variable is a
+/// development override only.
 public enum OmiKeySource: Sendable {
     case environment
     case appSupportFile
-    case claudeConfig
 
     public var label: String {
         switch self {
         case .environment: return "the CONTEXT_OMI_MCP_KEY environment variable"
         case .appSupportFile: return "~/Library/Application Support/ContextForClaude/mcp-key"
-        case .claudeConfig: return "the omi-memory entry in ~/.claude.json"
         }
     }
 }
@@ -33,9 +31,8 @@ public enum OmiKeySource: Sendable {
 ///
 /// **The key file is the one that is meant to answer.** The app provisions it: signed in with a real
 /// Firebase ID token, `MCPKeyProvisioner` asks the backend for an `omi_mcp_…` key of this account's
-/// own and writes it there. The environment variable is an override for development, and the Claude
-/// config is a last-resort scavenge that must never be mistaken for the design — see
-/// `fromClaudeConfig`.
+/// own and writes it there. The environment variable is an override for development only; nothing else
+/// on the machine is a legitimate credential source.
 enum OmiKeyResolver {
     static let environmentVariable = "CONTEXT_OMI_MCP_KEY"
 
@@ -66,8 +63,6 @@ enum OmiKeyResolver {
         if let key = fromEnvironment() { return (key, .environment) }
         // The expected source.
         if let key = fromKeyFile() { return (key, .appSupportFile) }
-        // Fallback only, and another server's property. See `fromClaudeConfig`.
-        if let key = fromClaudeConfig() { return (key, .claudeConfig) }
         return nil
     }
 
@@ -92,48 +87,6 @@ enum OmiKeyResolver {
             MCPServer.note("omi: key file is group/other-readable; it should be chmod 600")
         }
         return normalize(text)
-    }
-
-    /// **Last resort, and someone else's credential.**
-    ///
-    /// This reads the Authorization header of the `omi-memory` MCP server — a *different* server,
-    /// configured by the user for their own reasons. It is kept only because it costs nothing and
-    /// rescues an install whose own key has not been provisioned yet (offline at first launch,
-    /// still signed out, a wiped support directory).
-    ///
-    /// It is not a source anything may rely on. The entry belongs to another product: it exists
-    /// only if the user happens to have set that server up, it disappears the moment they remove or
-    /// re-register it, and it may authenticate a different Omi account than the one this app is
-    /// signed in to. Depending on it is exactly the bug this fallback used to be — the app looked
-    /// for a key nothing ever wrote, found this one on the author's Mac, and reported the account
-    /// unreachable on every Mac that had never configured `omi-memory`.
-    private static func fromClaudeConfig() -> String? {
-        guard let data = try? Data(contentsOf: ClaudeConfig.claudeCodeConfigURL),
-              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-        else { return nil }
-
-        if let key = authorization(inServers: root["mcpServers"]) { return key }
-
-        // Older Claude Code versions scope MCP servers per project rather than globally.
-        if let projects = root["projects"] as? [String: Any] {
-            for (_, project) in projects {
-                guard let project = project as? [String: Any] else { continue }
-                if let key = authorization(inServers: project["mcpServers"]) { return key }
-            }
-        }
-        return nil
-    }
-
-    private static func authorization(inServers servers: Any?) -> String? {
-        guard let servers = servers as? [String: Any],
-              let omi = servers["omi-memory"] as? [String: Any],
-              let headers = omi["headers"] as? [String: Any]
-        else { return nil }
-        // Header names are case-insensitive on the wire and hand-edited configs vary.
-        for (name, value) in headers where name.lowercased() == "authorization" {
-            if let key = normalize(value as? String) { return key }
-        }
-        return nil
     }
 
     // MARK: Normalization
