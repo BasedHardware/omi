@@ -4486,7 +4486,7 @@ class ChatProvider: ObservableObject {
         // Never let it resurrect the old bubble, overwrite a newer
         // turn's bridge ownership, or persist a response the user did
         // not accept. Remove only this turn's buffered segments.
-        streamingBuffer.flushPendingSegments(aiMessageId, messages: &messages, normalizeText: Self.normalizeStreaming)
+        streamingBuffer.discardPendingSegments(messageId: aiMessageId)
         var hadPartialResponse = false
         if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
           hadPartialResponse =
@@ -4757,7 +4757,7 @@ class ChatProvider: ObservableObject {
         turnGeneration: sendGen,
         turnAcceptsResult: turnLifecycle.acceptsResult
       ) {
-        streamingBuffer.flushPendingSegments(aiMessageId, messages: &messages, normalizeText: Self.normalizeStreaming)
+        streamingBuffer.discardPendingSegments(messageId: aiMessageId)
         let watchdogFired =
           sendWatchdogFiredGeneration == sendGen
           || turnLifecycle.revocationReason == .watchdogTimeout
