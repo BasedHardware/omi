@@ -7,7 +7,6 @@ from typing import Any, Callable, Dict, Optional, TypeVar, cast
 from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
 from starlette.websockets import WebSocket
-from firebase_admin import auth  # still used by get_user + the Firebase-only anonymous migrate path (Phase B)
 from utils.auth import get_auth_provider
 from utils.auth import errors as auth_errors
 import logging
@@ -28,9 +27,9 @@ WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
 
 
 def get_user(uid: str) -> Any:
-    # Kept on the raw Firebase UserRecord for now: the anonymous migrate-owner path (routers/apps.py)
-    # reads UserRecord-specific fields (.provider_data). Migrated to the port's UserProfile in Phase B.
-    return auth.get_user(uid)  # type: ignore[reportUnknownVariableType,reportUnknownMemberType]  # firebase_admin auth untyped
+    # Returns the neutral UserProfile (ADR-0034). Callers read .providers (list of provider ids) where
+    # they used to read the Firebase UserRecord's .provider_data.
+    return get_auth_provider().get_user_profile(uid)
 
 
 def verify_token(token: str) -> str:

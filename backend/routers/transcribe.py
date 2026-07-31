@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
-from firebase_admin.auth import InvalidIdTokenError
+from utils.auth.errors import AuthError
 
 from routers.listen.contracts import CustomSttMode, ListenRequest
 from routers.listen.runtime import run_listen_session
@@ -191,7 +191,7 @@ async def web_listen_handler(
     except ValueError as error:
         await websocket.close(code=1008, reason=str(error))
         return
-    except InvalidIdTokenError:
+    except AuthError:
         await websocket.send_json({'type': 'auth_response', 'success': False})
         await websocket.close(code=1008, reason='Invalid token')
         return

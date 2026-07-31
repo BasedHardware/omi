@@ -1652,9 +1652,9 @@ async def verify_twitter_ownership_tweet(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Get provider info from Firebase
+    # Get provider info via the auth port (UserProfile.providers is already a list of provider ids)
     user_info = auth.get_user(uid)
-    provider_data = [p.provider_id for p in user_info.provider_data]
+    provider_data = list(user_info.providers)
 
     # Verify handle
     if handle.startswith('@'):
@@ -1715,7 +1715,7 @@ async def migrate_app_owner(
 
     # is_anonymous replaces the raw firebase.sign_in_provider=='anonymous' claim read (ADR-0034 §3:
     # anonymous stays Firebase-only — on OIDC is_anonymous is always False, so migration always rejects).
-    if source_principal.uid != old_id or not source_principal.is_anonymous or source_user.disabled or source_user.provider_data:
+    if source_principal.uid != old_id or not source_principal.is_anonymous or source_user.disabled or source_user.providers:
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
     await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
