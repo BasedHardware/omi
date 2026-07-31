@@ -50,6 +50,7 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
+from utils.security.tool_results import screen_tool_result
 from utils.retrieval.safety import (
     AgentSafetyGuard,
     SafetyGuardError,
@@ -365,6 +366,7 @@ async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, config
     config = RunnableConfig(configurable=configurable)
     result = await tool_obj.ainvoke(tool_input, config=config)
     result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
+    result = await screen_tool_result(tool_name, result)
     return result
 
 
