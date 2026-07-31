@@ -236,7 +236,7 @@ final class LocalAgentProviderInstaller {
     sigemptyset(&emptyMask)
     try check(posix_spawnattr_setsigmask(&attributes, &emptyMask))
 
-    var argv: [UnsafeMutablePointer<CChar>?] = ["/bin/bash", "-c", command].map { strdup($0) }
+    var argv: [UnsafeMutablePointer<CChar>?] = ["/bin/bash", "-c", command].map { $0.withCString { strdup($0) } }
     argv.append(nil)
     var envp: [UnsafeMutablePointer<CChar>?] = environment.map { strdup("\($0.key)=\($0.value)") }
     envp.append(nil)
