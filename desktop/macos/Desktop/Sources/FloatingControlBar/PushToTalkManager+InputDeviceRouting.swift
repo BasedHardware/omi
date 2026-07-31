@@ -7,6 +7,12 @@ struct PTTAudioDeviceProbe: Sendable {
   var inputDeviceID: @Sendable (String) -> AudioDeviceID?
   var outputIsBluetooth: @Sendable () -> Bool
   var builtInMicDeviceID: @Sendable () -> AudioDeviceID?
+  var defaultInputDeviceID: @Sendable () -> AudioDeviceID? = {
+    AudioCaptureService.currentDefaultInputDeviceID()
+  }
+  var isBluetoothInput: @Sendable (AudioDeviceID) -> Bool = {
+    AudioCaptureService.isBluetoothTransport(deviceID: $0)
+  }
 
   static let coreAudio = PTTAudioDeviceProbe(
     inputDeviceID: { AudioCaptureService.inputDeviceID(forUID: $0) },
@@ -41,6 +47,8 @@ enum PTTInputDeviceRouting {
     let selectedDeviceID: AudioDeviceID?
     let outputIsBluetooth: Bool
     let builtInDeviceID: AudioDeviceID?
+    var defaultInputDeviceID: AudioDeviceID? = nil
+    var defaultInputIsBluetooth: Bool = false
 
     var overrideDeviceID: AudioDeviceID? {
       PTTInputDeviceRouting.overrideDeviceID(
@@ -82,12 +90,17 @@ enum PTTInputDeviceRouting {
     probeQueue.async {
       let selectedDeviceID = selectedUID.isEmpty ? nil : probe.inputDeviceID(selectedUID)
       let outputIsBluetooth = probe.outputIsBluetooth()
+      let defaultInputDeviceID = probe.defaultInputDeviceID()
       store.finishRefresh(
         Snapshot(
           selectedUID: selectedUID,
           selectedDeviceID: selectedDeviceID,
           outputIsBluetooth: outputIsBluetooth,
-          builtInDeviceID: outputIsBluetooth ? probe.builtInMicDeviceID() : nil
+          // Mic-contention fallback needs the built-in mic even on non-Bluetooth
+          // output, so always resolve it here (still off the main actor).
+          builtInDeviceID: probe.builtInMicDeviceID(),
+          defaultInputDeviceID: defaultInputDeviceID,
+          defaultInputIsBluetooth: defaultInputDeviceID.map(probe.isBluetoothInput) ?? false
         ))
       completion?()
     }
@@ -152,7 +165,40 @@ extension PushToTalkManager {
         outcome: .degraded)
     }
     PTTInputDeviceRouting.refresh(selectedUID: selectedUID)
-    return snapshot?.overrideDeviceID
+    return applyMicContentionPolicy(to: snapshot)
+  }
+
+  /// PTT must not open a second CoreAudio IOProc against a device another
+  /// capture in this process already holds (e.g. transcription capturing from
+  /// Ray-Ban Meta glasses), and must not join a Bluetooth mic's A2DP↔HFP
+  /// profile flap while any capture runs — both race the two captures'
+  /// stream-format reconfiguration. The active-capture registry is lock-guarded
+  /// process state, not a HAL read, so consulting it here is main-actor safe.
+  /// This manager's own parked warm capture is excluded: adopting it is reuse,
+  /// not contention. An explicit user mic choice is always respected.
+  private func applyMicContentionPolicy(
+    to snapshot: PTTInputDeviceRouting.Snapshot?
+  ) -> AudioDeviceID? {
+    guard let snapshot else { return nil }
+    let overrideID = snapshot.overrideDeviceID
+    let parkedCapture = parkedMicCapture?.service
+    if snapshot.selectedDeviceID == nil, overrideID == nil,
+      let defaultInput = snapshot.defaultInputDeviceID,
+      let builtIn = snapshot.builtInDeviceID,
+      defaultInput != builtIn
+    {
+      if AudioCaptureService.isDeviceActivelyCaptured(defaultInput, excluding: parkedCapture) {
+        log("PushToTalkManager: default input is held by another capture — using built-in mic")
+        return builtIn
+      }
+      if AudioCaptureService.hasActiveCapture(excluding: parkedCapture),
+        snapshot.defaultInputIsBluetooth
+      {
+        log("PushToTalkManager: Bluetooth input while another capture is live — using built-in mic")
+        return builtIn
+      }
+    }
+    return overrideID
   }
 
   /// Warms the routing snapshot at the start of a turn, before the turn's own setup
