@@ -9664,6 +9664,21 @@
         "title": "DeveloperTranscriptSegment",
         "type": "object"
       },
+      "DeviceToolResultRequest": {
+        "description": "A client's result for one in-flight device tool call.",
+        "properties": {
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "DeviceToolResultRequest",
+        "type": "object"
+      },
       "DismissAnnouncementRequest": {
         "description": "Request body for dismissing an announcement.",
         "properties": {
@@ -16833,6 +16848,20 @@
                 "type": "null"
               }
             ]
+          },
+          "device_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Tools"
           },
           "file_ids": {
             "anyOf": [
@@ -54097,6 +54126,101 @@
           }
         ],
         "summary": "Send Message",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/v2/messages/device-tool/{call_id}/result": {
+      "post": {
+        "description": "Deliver a client's result for an in-flight device tool call.\n\nThe awaiting tool coroutine may be on a different worker than this request,\nso the result is handed over through Redis rather than an in-process future.\nThe key is scoped by uid, so one user cannot answer another user's call.",
+        "operationId": "submit_device_tool_result_v2_messages_device_tool__call_id__result_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "call_id",
+            "required": true,
+            "schema": {
+              "title": "Call Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceToolResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Submit Device Tool Result",
         "tags": [
           "chat"
         ]
