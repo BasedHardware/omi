@@ -354,8 +354,13 @@ const omi: OmiBridgeApi = {
   // --- Track 4 (Rewind semantic search) --- Phase 2 of a search: the same results
   // with semantic hits merged in, pushed if/when the embedding round-trip lands.
   // Keyword results are already on screen by then — see the rewind:search handler.
-  onRewindSearchResults: (cb: (r: { query: string; groups: RewindSearchGroup[] }) => void) => {
-    const listener = (_e: unknown, r: { query: string; groups: RewindSearchGroup[] }): void => cb(r)
+  onRewindSearchResults: (
+    cb: (r: { query: string; normalizedQuery: string; groups: RewindSearchGroup[] }) => void
+  ) => {
+    const listener = (
+      _e: unknown,
+      r: { query: string; normalizedQuery: string; groups: RewindSearchGroup[] }
+    ): void => cb(r)
     ipcRenderer.on('rewind:search-results', listener)
     return () => ipcRenderer.removeListener('rewind:search-results', listener)
   },

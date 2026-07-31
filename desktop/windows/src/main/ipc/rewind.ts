@@ -39,11 +39,11 @@ const VECTOR_TOP_K = 50
  * out, embedding backend down, nothing indexed yet). Never throws: on macOS the
  * whole vector leg is a `try?`, and keyword results must render regardless.
  */
-async function vectorHits(query: string): Promise<VectorHit[]> {
+async function vectorHits(query: string, scope?: { from: number; to: number }): Promise<VectorHit[]> {
   try {
     const vec = await embedRewindQuery(query)
     if (!vec) return []
-    const scored = await searchRewindEmbeddings(vec, VECTOR_TOP_K)
+    const scored = await searchRewindEmbeddings(vec, VECTOR_TOP_K, scope)
     const frames = rewindFramesByIds(scored.map((s) => s.frameId))
     const byId = new Map(frames.map((f) => [f.id, f]))
     return scored
@@ -90,7 +90,7 @@ export function registerRewindHandlers(): void {
   // `try?`), which is only true if keyword results don't depend on it.
   ipcMain.handle('rewind:search', async (e, query: string) => {
     const { query: q, from, to } = parseRewindNaturalSearch(query)
-    if (!q && (from == null || to == null)) return []
+    if (!q && (from == null || to == null)) return { groups: [], normalizedQuery: q }
     const seq = ++searchSeq
     const inScope = (ts: number): boolean =>
       (from == null || ts >= from) && (to == null || ts <= to)
@@ -102,7 +102,7 @@ export function registerRewindHandlers(): void {
     // and it must never reject into the handler.
     void (async () => {
       if (!q) return
-      const hits = (await vectorHits(q)).filter((hit) => inScope(hit.frame.ts))
+      const hits = await vectorHits(q, from != null && to != null ? { from, to } : undefined)
       if (hits.length === 0) return // keyword-only; the phase-1 reply already stands
       if (seq !== searchSeq) return // a newer query has since been issued
       if (e.sender.isDestroyed()) return
@@ -111,11 +111,12 @@ export function registerRewindHandlers(): void {
       const keywordIds = new Set(fts.map((f) => f.id).filter((id): id is number => id != null))
       e.sender.send('rewind:search-results', {
         query: query.trim(),
+        normalizedQuery: q,
         groups: groupFrames(mergeRewindSearchResults(fts, hits), q, { keywordIds })
       })
     })()
 
-    return groupFrames(fts, q)
+    return { groups: groupFrames(fts, q), normalizedQuery: q }
   })
   // Relay of the renderer's Firebase session — the embedding indexer and the
   // query embedder are inert without it (the token only exists in the renderer).

@@ -26,6 +26,26 @@ describe('parseRewindNaturalSearch', () => {
     })
   })
 
+  it('treats activity questions as time-only searches', () => {
+    const parsed = parseRewindNaturalSearch('What did I do yesterday?', NOW)
+    expect(parsed.query).toBe('')
+  })
+
+  it('keeps combined relative dates and day parts in one scope', () => {
+    const parsed = parseRewindNaturalSearch('meeting notes yesterday morning', NOW)
+    const yesterdayMorning = new Date(2026, 6, 30, 6)
+    expect(parsed).toEqual({
+      query: 'meeting notes',
+      from: yesterdayMorning.getTime(),
+      to: yesterdayMorning.getTime() + 21_599_999
+    })
+  })
+
+  it('does not produce an inverted evening scope before evening starts', () => {
+    const parsed = parseRewindNaturalSearch('this evening', NOW)
+    expect(parsed.from).toBe(parsed.to)
+  })
+
   it('leaves ordinary search unchanged', () => {
     expect(parseRewindNaturalSearch('quarterly review', NOW)).toEqual({
       query: 'quarterly review',

@@ -6,6 +6,39 @@ export type RewindSearchScope = {
 
 const TIME_PHRASES: Array<{ pattern: RegExp; range: (now: Date) => [Date, Date] }> = [
   {
+    pattern: /\byesterday morning\b/i,
+    range: (now) => {
+      const from = new Date(now)
+      from.setDate(from.getDate() - 1)
+      from.setHours(6, 0, 0, 0)
+      const to = new Date(from)
+      to.setHours(11, 59, 59, 999)
+      return [from, to]
+    }
+  },
+  {
+    pattern: /\byesterday afternoon\b/i,
+    range: (now) => {
+      const from = new Date(now)
+      from.setDate(from.getDate() - 1)
+      from.setHours(12, 0, 0, 0)
+      const to = new Date(from)
+      to.setHours(17, 59, 59, 999)
+      return [from, to]
+    }
+  },
+  {
+    pattern: /\byesterday evening\b/i,
+    range: (now) => {
+      const from = new Date(now)
+      from.setDate(from.getDate() - 1)
+      from.setHours(18, 0, 0, 0)
+      const to = new Date(from)
+      to.setHours(23, 59, 59, 999)
+      return [from, to]
+    }
+  },
+  {
     pattern: /\byesterday\b/i,
     range: (now) => {
       const from = new Date(now)
@@ -49,12 +82,12 @@ const TIME_PHRASES: Array<{ pattern: RegExp; range: (now: Date) => [Date, Date] 
     range: (now) => {
       const from = new Date(now)
       from.setHours(18, 0, 0, 0)
-      return [from, now]
+      return now < from ? [from, from] : [from, now]
     }
   }
 ]
 
-const QUESTION_WORDS = /\b(?:what|was|were|did|i|my|on|the|screen|show|me|find|for)\b/gi
+const QUESTION_WORDS = /\b(?:what|was|were|did|do|i|my|on|the|screen|show|me|find|for)\b/gi
 
 export function parseRewindNaturalSearch(input: string, now = new Date()): RewindSearchScope {
   let query = input.trim()
