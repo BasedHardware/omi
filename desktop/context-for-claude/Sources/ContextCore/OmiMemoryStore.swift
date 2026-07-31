@@ -10,15 +10,11 @@ public struct LocalMemory: Sendable, Equatable {
     public let id: String
     public let content: String
     public let category: String?
-    public let tier: String?
-    public let createdAt: Double?
 
-    public init(id: String, content: String, category: String?, tier: String?, createdAt: Double?) {
+    public init(id: String, content: String, category: String?) {
         self.id = id
         self.content = content
         self.category = category
-        self.tier = tier
-        self.createdAt = createdAt
     }
 }
 
@@ -64,7 +60,7 @@ public final class OmiMemoryStore: @unchecked Sendable {
             try LocalMemoryRow.fetchAll(
                 db,
                 sql: """
-                SELECT id, backendId, content, category, tier, createdAt
+                SELECT id, backendId, content, category
                 FROM memories
                 WHERE deleted = 0 AND isDismissed = 0
                   AND content LIKE ? ESCAPE '\\'
@@ -75,25 +71,6 @@ public final class OmiMemoryStore: @unchecked Sendable {
             )
         })?.compactMap { $0.toMemory() } ?? []
     }
-
-    /// The newest memories regardless of query, for `status` and recall breadth.
-    public func recentMemories(limit: Int) -> [LocalMemory] {
-        guard let pool else { return [] }
-        let clamped = max(1, min(limit, 50))
-        return (try? pool.read { db in
-            try LocalMemoryRow.fetchAll(
-                db,
-                sql: """
-                SELECT id, backendId, content, category, tier, createdAt
-                FROM memories
-                WHERE deleted = 0 AND isDismissed = 0
-                ORDER BY createdAt DESC
-                LIMIT ?
-                """,
-                arguments: [clamped]
-            )
-        })?.compactMap { $0.toMemory() } ?? []
-    }
 }
 
 private struct LocalMemoryRow: FetchableRecord {
@@ -101,11 +78,9 @@ private struct LocalMemoryRow: FetchableRecord {
     let backendId: String?
     let content: String
     let category: String?
-    let tier: String?
-    let createdAt: Date?
 
     enum Columns: String, ColumnExpression {
-        case id, backendId, content, category, tier, createdAt
+        case id, backendId, content, category
     }
 
     init(row: Row) {
@@ -113,14 +88,11 @@ private struct LocalMemoryRow: FetchableRecord {
         backendId = row[Columns.backendId]
         content = row[Columns.content] ?? ""
         category = row[Columns.category]
-        tier = row[Columns.tier]
-        createdAt = row[Columns.createdAt]
     }
 
     func toMemory() -> LocalMemory? {
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let memoryId = backendId ?? (id.map { "local_\($0)" } ?? "")
-        let epoch = createdAt?.timeIntervalSince1970
-        return LocalMemory(id: memoryId, content: content, category: category, tier: tier, createdAt: epoch)
+        return LocalMemory(id: memoryId, content: content, category: category)
     }
 }
