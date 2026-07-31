@@ -2285,14 +2285,23 @@ final class DesktopAutomationActionRegistry {
         let model =
           ShortcutSettings.shared.selectedModel.isEmpty
           ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+        let selectedHarness = directedProvider?.harnessMode
+        var fallbackChain: [AgentHarnessMode?] = [selectedHarness]
+        fallbackChain.append(contentsOf: routedFallbacks.map { $0?.harnessMode })
+        let spawnContext = AgentSpawnContext(
+          taskKind: LocalAgentProviderRouting.classifyTask(brief),
+          explicitProvider: routeReason == "explicit" ? directedProvider : nil,
+          fallbackChain: fallbackChain,
+          attemptedHarnesses: [selectedHarness]
+        )
         let pill = AgentPillsManager.shared.spawnFromUserQuery(
           brief,
           model: model,
           fromVoice: false,
           preFetchedTitle: directedProvider?.displayName,
-          bridgeHarnessOverride: directedProvider?.harnessMode
+          bridgeHarnessOverride: directedProvider?.harnessMode,
+          spawnContext: spawnContext
         )
-        pill.fallbackProviders = routedFallbacks
         return [
           "pillId": pill.id.uuidString,
           "title": pill.title,

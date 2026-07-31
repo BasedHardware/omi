@@ -511,8 +511,7 @@ final class AgentPillsManager: ObservableObject {
     bridgeHarnessOverride: AgentHarnessMode? = nil,
     spawnContext: AgentSpawnContext? = nil
   ) -> AgentPill {
-    _ = spawnContext  // reserved for fallback-chain handoff; spawn path is owner-bound.
-    return spawn(
+    let pill = spawn(
       query: query,
       model: model,
       originSurface: .floatingBar,
@@ -521,6 +520,10 @@ final class AgentPillsManager: ObservableObject {
       preFetchedAck: preFetchedAck,
       bridgeHarnessOverride: bridgeHarnessOverride
     )
+    if let spawnContext {
+      pill.fallbackProviders = AgentSpawnFallbackPolicy.remainingProviders(from: spawnContext)
+    }
+    return pill
   }
 
   /// Start a provider-setup projection. Install work is owned by
@@ -618,10 +621,6 @@ final class AgentPillsManager: ObservableObject {
     }
 
     let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
-    let modelForSpawn =
-      bridgeHarnessOverride == nil
-      ? (FloatingControlBarManager.shared.sharedFloatingProvider?.modelOverride ?? pill.model)
-      : nil
     let generation = nextRunAttemptGeneration(for: pill.id)
     let runTask = Task { @MainActor [weak self, weak pill, onAccepted] in
       guard !Task.isCancelled else {
@@ -632,125 +631,165 @@ final class AgentPillsManager: ObservableObject {
         onAccepted?(.failure(CancellationError()))
         return
       }
-      do {
-        let producerJournal = producerJournalIntent.map {
-          DesktopCoordinatorProducerJournalDescriptor(
-            surface: $0.surface,
-            continuityKey: "floating_spawn:\(pill.id.uuidString)",
-            pillId: pill.id,
-            userText: $0.userText,
-            assistantText: $0.assistantText,
-            objective: pill.query,
-            title: pill.title
-          )
-        }
-        let ownerBoundReceipt = try await Self.performOwnerBoundSpawn(
-          ownerID: spawnOwnerID
-        ) {
-          try await DesktopCoordinatorService.shared.spawnAgent(
-            objective: pill.query,
-            title: pill.title,
-            pillId: pill.id,
-            originSurface: originSurface,
-            provider: bridgeHarnessOverride?.rawValue,
-            parentRunId: nil,
-            visible: true,
-            model: modelForSpawn,
-            harnessMode: bridgeHarnessOverride,
-            cwd: workingDirectory,
-            producerJournal: producerJournal
-          )
-        }
-        let accepted: DesktopCoordinatorSpawnedAgent
-        switch ownerBoundReceipt {
-        case .accepted(let receipt):
-          accepted = receipt
-        case .staleReceipt(let receipt):
-          Task {
-            _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(
-              runId: receipt.runId)
+      var activeHarness = bridgeHarnessOverride
+      spawnAttempt: while true {
+        let modelForSpawn =
+          activeHarness == nil
+          ? (FloatingControlBarManager.shared.sharedFloatingProvider?.modelOverride ?? pill.model)
+          : nil
+        do {
+          let producerJournal = producerJournalIntent.map {
+            DesktopCoordinatorProducerJournalDescriptor(
+              surface: $0.surface,
+              continuityKey: "floating_spawn:\(pill.id.uuidString)",
+              pillId: pill.id,
+              userText: $0.userText,
+              assistantText: $0.assistantText,
+              objective: pill.query,
+              title: pill.title
+            )
           }
-          self.removeRenderedProjection(pillID: pill.id)
-          onAccepted?(.failure(AuthError.userChangedDuringRequest))
+          let ownerBoundReceipt = try await Self.performOwnerBoundSpawn(
+            ownerID: spawnOwnerID
+          ) {
+            try await DesktopCoordinatorService.shared.spawnAgent(
+              objective: pill.query,
+              title: pill.title,
+              pillId: pill.id,
+              originSurface: originSurface,
+              provider: activeHarness?.rawValue,
+              parentRunId: nil,
+              visible: true,
+              model: modelForSpawn,
+              harnessMode: activeHarness,
+              cwd: workingDirectory,
+              producerJournal: producerJournal
+            )
+          }
+          let accepted: DesktopCoordinatorSpawnedAgent
+          switch ownerBoundReceipt {
+          case .accepted(let receipt):
+            accepted = receipt
+          case .staleReceipt(let receipt):
+            Task {
+              _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(
+                runId: receipt.runId)
+            }
+            self.removeRenderedProjection(pillID: pill.id)
+            onAccepted?(.failure(AuthError.userChangedDuringRequest))
+            return
+          case .rejectedBeforeDispatch:
+            // Keep a user-initiated spawn visible instead of vanishing.
+            self.fail(
+              pill: pill,
+              errorText: AgentFailureTranscriptFormatter.userFacingFailure(
+                for: AuthError.userChangedDuringRequest,
+                harnessMode: activeHarness ?? pill.providerIdentity))
+            onAccepted?(.failure(AuthError.userChangedDuringRequest))
+            return
+          }
+          if Task.isCancelled || !self.isCurrentRunAttempt(pillID: pill.id, generation: generation)
+            || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished
+          {
+            Task {
+              _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: accepted.runId)
+            }
+            onAccepted?(.failure(CancellationError()))
+            return
+          }
+          pill.canonicalSessionId = accepted.sessionId
+          self.updateCanonicalRun(
+            for: pill,
+            runId: accepted.runId,
+            attemptId: accepted.attemptId,
+            preservingAttemptForSameRun: false
+          )
+          pill.title = accepted.title
+          pill.status = .running
+          pill.completedAt = nil
+          pill.suggestedFollowUps = []
+          pill.latestActivity = "Working…"
+          Self.ensureStreamingAssistantMessage(for: pill)
+          pill.markContentChanged()
+          AgentRuntimeStatusStore.shared.recordAcceptedRun(
+            surface: surfaceRef,
+            sessionId: accepted.sessionId,
+            runId: accepted.runId,
+            attemptId: accepted.attemptId,
+            statusText: "Working…"
+          )
+          self.ensureCanonicalReconciliation()
+          if fromVoice {
+            if let acknowledgement = producerJournalIntent?.assistantText,
+              !acknowledgement.isEmpty
+            {
+              FloatingBarVoicePlaybackService.shared.speakOneShot(acknowledgement)
+            } else {
+              FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
+            }
+          }
+          onAccepted?(.success(pill))
+          let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
+          if !queuedFollowUps.isEmpty {
+            self.continueAgent(
+              from: pill,
+              text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
+              attachments: queuedFollowUps.flatMap(\.attachments)
+            )
+            return
+          }
+          await self.pollCanonicalRun(for: pill, generation: generation)
           return
-        case .rejectedBeforeDispatch:
-          // Keep a user-initiated spawn visible instead of vanishing.
+        } catch {
+          let rawMessage = AgentSpawnFallbackPolicy.rawSpawnFailureMessage(for: error)
+          if let nextProvider = AgentSpawnFallbackPolicy.takeNextFallback(
+            remaining: &pill.fallbackProviders,
+            rawErrorMessage: rawMessage
+          ),
+            !Task.isCancelled,
+            RuntimeOwnerIdentity.currentOwnerId() == spawnOwnerID,
+            self.isCurrentRunAttempt(pillID: pill.id, generation: generation),
+            self.pills.contains(where: { $0.id == pill.id })
+          {
+            let from = activeHarness?.rawValue ?? "default"
+            let to = nextProvider?.rawValue ?? "default"
+            DesktopDiagnosticsManager.shared.recordFallback(
+              area: "agent_runtime",
+              from: from,
+              to: to,
+              reason: "spawn_failed",
+              outcome: .degraded
+            )
+            activeHarness = nextProvider?.harnessMode
+            pill.status = .starting
+            pill.completedAt = nil
+            if let nextProvider {
+              pill.latestActivity = "Retrying with \(nextProvider.displayName)…"
+              pill.applyCanonicalProviderIdentity(nextProvider.rawValue)
+            } else {
+              pill.latestActivity = "Retrying with default agent…"
+            }
+            pill.markContentChanged()
+            continue spawnAttempt
+          }
+          onAccepted?(.failure(error))
+          guard !Task.isCancelled,
+            RuntimeOwnerIdentity.currentOwnerId() == spawnOwnerID,
+            self.isCurrentRunAttempt(pillID: pill.id, generation: generation)
+          else { return }
+          AgentRuntimeStatusStore.shared.recordLocalFailure(
+            surface: surfaceRef,
+            error: AgentFailureTranscriptFormatter.userFacingFailure(
+              for: error,
+              harnessMode: activeHarness ?? pill.providerIdentity)
+          )
           self.fail(
             pill: pill,
             errorText: AgentFailureTranscriptFormatter.userFacingFailure(
-              for: AuthError.userChangedDuringRequest,
-              harnessMode: bridgeHarnessOverride ?? pill.providerIdentity))
-          onAccepted?(.failure(AuthError.userChangedDuringRequest))
+              for: error,
+              harnessMode: activeHarness ?? pill.providerIdentity))
           return
         }
-        if Task.isCancelled || !self.isCurrentRunAttempt(pillID: pill.id, generation: generation)
-          || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished
-        {
-          Task {
-            _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: accepted.runId)
-          }
-          onAccepted?(.failure(CancellationError()))
-          return
-        }
-        pill.canonicalSessionId = accepted.sessionId
-        self.updateCanonicalRun(
-          for: pill,
-          runId: accepted.runId,
-          attemptId: accepted.attemptId,
-          preservingAttemptForSameRun: false
-        )
-        pill.title = accepted.title
-        pill.status = .running
-        pill.completedAt = nil
-        pill.suggestedFollowUps = []
-        pill.latestActivity = "Working…"
-        Self.ensureStreamingAssistantMessage(for: pill)
-        pill.markContentChanged()
-        AgentRuntimeStatusStore.shared.recordAcceptedRun(
-          surface: surfaceRef,
-          sessionId: accepted.sessionId,
-          runId: accepted.runId,
-          attemptId: accepted.attemptId,
-          statusText: "Working…"
-        )
-        self.ensureCanonicalReconciliation()
-        if fromVoice {
-          if let acknowledgement = producerJournalIntent?.assistantText,
-            !acknowledgement.isEmpty
-          {
-            FloatingBarVoicePlaybackService.shared.speakOneShot(acknowledgement)
-          } else {
-            FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
-          }
-        }
-        onAccepted?(.success(pill))
-        let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
-        if !queuedFollowUps.isEmpty {
-          self.continueAgent(
-            from: pill,
-            text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
-            attachments: queuedFollowUps.flatMap(\.attachments)
-          )
-          return
-        }
-        await self.pollCanonicalRun(for: pill, generation: generation)
-      } catch {
-        onAccepted?(.failure(error))
-        guard !Task.isCancelled,
-          RuntimeOwnerIdentity.currentOwnerId() == spawnOwnerID,
-          self.isCurrentRunAttempt(pillID: pill.id, generation: generation)
-        else { return }
-        AgentRuntimeStatusStore.shared.recordLocalFailure(
-          surface: surfaceRef,
-          error: AgentFailureTranscriptFormatter.userFacingFailure(
-            for: error,
-            harnessMode: bridgeHarnessOverride ?? pill.providerIdentity)
-        )
-        self.fail(
-          pill: pill,
-          errorText: AgentFailureTranscriptFormatter.userFacingFailure(
-            for: error,
-            harnessMode: bridgeHarnessOverride ?? pill.providerIdentity))
       }
     }
     runTasksByPill[pill.id] = runTask

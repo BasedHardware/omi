@@ -145,6 +145,47 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
     XCTAssertEqual(context.nextFallback(after: .openclaw), .some(nil))
   }
 
+  func testRemainingProvidersDropsAttemptedHarnesses() {
+    let context = AgentSpawnContext(
+      taskKind: .coding,
+      explicitProvider: nil,
+      fallbackChain: [.codex, .hermes, .openclaw, nil],
+      attemptedHarnesses: [.codex]
+    )
+    XCTAssertEqual(
+      AgentSpawnFallbackPolicy.remainingProviders(from: context),
+      [.hermes, .openclaw, nil])
+  }
+
+  func testTakeNextFallbackConsumesRetriableChain() {
+    var remaining: [AgentPillsManager.DirectedProvider?] = [.hermes, nil]
+    XCTAssertEqual(
+      AgentSpawnFallbackPolicy.takeNextFallback(
+        remaining: &remaining,
+        rawErrorMessage: "Failed to start child process"),
+      .some(.hermes))
+    XCTAssertEqual(remaining, [nil])
+    XCTAssertEqual(
+      AgentSpawnFallbackPolicy.takeNextFallback(
+        remaining: &remaining,
+        rawErrorMessage: "ENOENT: no such file or directory"),
+      .some(nil))
+    XCTAssertTrue(remaining.isEmpty)
+    XCTAssertNil(
+      AgentSpawnFallbackPolicy.takeNextFallback(
+        remaining: &remaining,
+        rawErrorMessage: "Failed to start child process"))
+  }
+
+  func testTakeNextFallbackIgnoresNonRetriableErrors() {
+    var remaining: [AgentPillsManager.DirectedProvider?] = [.openclaw, nil]
+    XCTAssertNil(
+      AgentSpawnFallbackPolicy.takeNextFallback(
+        remaining: &remaining,
+        rawErrorMessage: "Could not find the email thread"))
+    XCTAssertEqual(remaining, [.openclaw, nil])
+  }
+
   func testIsRetriableSpawnFailureMatchesInfrastructureErrors() {
     XCTAssertTrue(LocalAgentProviderRouting.isRetriableSpawnFailure("AI not available: adapter failed"))
     XCTAssertTrue(LocalAgentProviderRouting.isRetriableSpawnFailure("ENOENT: no such file or directory"))

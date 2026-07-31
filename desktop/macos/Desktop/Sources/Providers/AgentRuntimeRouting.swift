@@ -214,6 +214,43 @@ struct AgentSpawnContext: Equatable {
   }
 }
 
+enum AgentSpawnFallbackPolicy {
+  static func remainingProviders(from context: AgentSpawnContext) -> [AgentPillsManager.DirectedProvider?] {
+    var remaining: [AgentPillsManager.DirectedProvider?] = []
+    for harness in context.fallbackChain {
+      guard !context.attemptedHarnesses.contains(where: { $0 == harness }) else { continue }
+      if let harness {
+        switch harness {
+        case .hermes: remaining.append(.hermes)
+        case .openclaw: remaining.append(.openclaw)
+        case .codex: remaining.append(.codex)
+        case .piMono, .acp: continue
+        }
+      } else {
+        remaining.append(nil)
+      }
+    }
+    return remaining
+  }
+
+  static func takeNextFallback(
+    remaining: inout [AgentPillsManager.DirectedProvider?],
+    rawErrorMessage: String
+  ) -> AgentPillsManager.DirectedProvider?? {
+    guard LocalAgentProviderRouting.isRetriableSpawnFailure(rawErrorMessage), !remaining.isEmpty else {
+      return nil
+    }
+    return .some(remaining.removeFirst())
+  }
+
+  static func rawSpawnFailureMessage(for error: Error) -> String {
+    if let runtime = error as? BridgeError, case .agentRuntimeFailure(let failure) = runtime {
+      return failure.displayMessage
+    }
+    return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+  }
+}
+
 enum LocalAgentProviderRouting {
   enum Resolution: Equatable {
     case spawn(AgentSpawnPlan)
