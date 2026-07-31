@@ -95,7 +95,7 @@ export function registerRewindHandlers(): void {
     const inScope = (ts: number): boolean =>
       (from == null || ts >= from) && (to == null || ts <= to)
     const fts = q
-      ? searchRewindFrames(q).filter((frame) => inScope(frame.ts))
+      ? searchRewindFrames(q, 500, from != null && to != null ? { from, to } : undefined)
       : listRewindFramesSampled(from ?? 0, to ?? Date.now())
 
     // Fire-and-forget: nothing about the reply below depends on this resolving,

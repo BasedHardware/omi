@@ -1481,18 +1481,24 @@ export function listRewindFramesSampled(
 // REWIND_COLUMNS_QUALIFIED (columns qualified to `rewind_frames.`, so the FTS
 // join's identically named ocr_text/window_title/app aren't ambiguous) is shared
 // with the backfill work-query and now lives in rewindEmbeddingSql.ts.
-export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
+export function searchRewindFrames(
+  query: string,
+  limit = 500,
+  scope?: { from: number; to: number }
+): RewindFrame[] {
   return timed('searchRewindFrames', () => {
     const match = buildRewindFtsMatch(query)
     if (!match) return []
+    const scoped = scope != null
     return cachedStmt(
       get(),
       `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
            JOIN rewind_frames_fts ON rewind_frames.id = rewind_frames_fts.rowid
           WHERE rewind_frames_fts MATCH ?
+          ${scoped ? 'AND rewind_frames.ts BETWEEN ? AND ?' : ''}
           ORDER BY bm25(rewind_frames_fts) ASC, rewind_frames.ts DESC
           LIMIT ?`
-    ).all(match, limit) as RewindFrame[]
+    ).all(match, ...(scoped ? [scope.from, scope.to] : []), limit) as RewindFrame[]
   })
 }
 
