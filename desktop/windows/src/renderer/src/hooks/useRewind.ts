@@ -27,6 +27,7 @@ export type RewindState = {
   playing: boolean
   setPlaying: (p: boolean) => void
   results: RewindSearchGroup[]
+  normalizedQuery: string
   search: (q: string) => Promise<void>
 }
 

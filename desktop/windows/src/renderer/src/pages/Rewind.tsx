@@ -26,12 +26,12 @@ export function Rewind(): React.JSX.Element {
   // Stable useCallbacks — destructured so effects can depend on them without
   // re-running on every render (the `r` object identity changes each render).
   const { search, jumpTo } = r
-  const highlightQuery = searching ? r.normalizedQuery : query
   // The search field is always present in the top bar (macOS keeps one page — the
   // content switches between the day timeline and the search results, it is not a
   // separate mode/route). A non-empty query IS "searching".
   const [query, setQuery] = useState('')
   const searching = query.trim().length > 0
+  const highlightQuery = searching ? r.normalizedQuery : query
   // The query whose results are on screen — set only when a search resolves, so
   // "still loading" is a pure derivation (no setState-in-effect).
   const [resolvedQuery, setResolvedQuery] = useState('')
@@ -153,7 +153,11 @@ export function Rewind(): React.JSX.Element {
             <ChevronLeft className="h-4 w-4" />
             Back to results
           </button>
-          <RewindPlayer frames={group.frames} cursorTs={r.cursorTs} highlightQuery={highlightQuery} />
+          <RewindPlayer
+            frames={group.frames}
+            cursorTs={r.cursorTs}
+            highlightQuery={highlightQuery}
+          />
           <RewindTimelineBar
             frames={group.frames}
             bounds={null}
