@@ -1,8 +1,8 @@
 //
 //  Ink.swift — the shared visual vocabulary for the onboarding window and the menu bar popover.
 //
-//  Every colour here is a macOS semantic colour, and the single accent is
-//  `NSColor.controlAccentColor` — the accent the user picked in System Settings. Nothing is
+//  Every colour here is a macOS semantic colour or a fixed alpha on one, and the single accent is
+//  `NSColor.controlAccentColor` — the accent the user picked in System Settings. No hue is
 //  hand-mixed, so there is exactly one palette in the product and it follows the system's
 //  appearance for free: no `NSApp.appearance` override, no light-only assumption, no second set of
 //  values for dark mode. The palette this replaces was Anthropic's own (ivory paper, clay accent),
@@ -16,8 +16,10 @@
 //
 //  Roles are exposed as whole styles rather than loose numbers because the character of the type
 //  lives in the tracking as much as the point size — a caller that hand-assembles
-//  `.font(.openRunde(32, .semiBold))` and forgets `.tracking(-1.12)` has quietly shipped a
-//  different product. `Text.inkStyle(_:)` makes that mistake unavailable.
+//  `.font(.openRunde(34, .semiBold))` and forgets `.tracking(-1.19)` has quietly shipped a
+//  different product. And because tracking is derived from the size (`em × size`, see `InkType`),
+//  loose numbers also mean the two drift apart the first time a role is resized.
+//  `Text.inkStyle(_:)` makes both mistakes unavailable.
 //
 //  Brand: system semantics and neutrals only. Never purple, anywhere (INV-UI-1) — and note that
 //  the accent is the *user's* choice rather than a value this file picks, which is the only way an
@@ -31,8 +33,8 @@ import SwiftUI
 
 // MARK: - Colour
 
-/// The whole palette. Twelve roles, every one of them a system semantic colour — a colour literal
-/// anywhere else in the app is a bug.
+/// The whole palette. Twelve roles, every one of them a system semantic colour or a fixed alpha on
+/// one — a colour literal anywhere else in the app is a bug.
 enum Ink {
     // Surfaces.
 
@@ -44,14 +46,55 @@ enum Ink {
 
     // Type, in three steps and no fourth. Which step a run gets is decided by what the reader has
     // to do with it, not by how deep it sits in a stack.
+    //
+    // The lower two steps are an alpha on `labelColor` and *not* `secondaryLabelColor` /
+    // `tertiaryLabelColor`, which is a legibility decision with measurements behind it. The system's
+    // own steps are 50% and 26% black in Light, tuned for dense system chrome — an inspector row, a
+    // table cell, a menu — where the reader glances at a word beside its subject. Composited over
+    // `surface` they measure **3.95:1** and **1.88:1**, so the step that carries whole sentences
+    // failed WCAG AA for body text (4.5:1) and the glance step was barely a shade of grey. That is
+    // the "greyish hue" onboarding was reported as being hard to read in, and onboarding is the one
+    // screen in this app that asks for sustained reading rather than a glance.
+    //
+    // Alpha on `labelColor` keeps every property this file already relies on: `labelColor` is
+    // near-black in Light and near-white in Dark, so one value darkens a light sheet and lightens a
+    // dark one — no hardcoded grey, no second set of values for Dark, and it still composites
+    // correctly over the popover's vibrant material.
+    //
+    // The hierarchy survives because it is a hierarchy of *lightness*, not of washing-out. Over
+    // `surface` the three steps land at L* 15.6 / 35.0 / 47.4 in Light and 88.0 / 74.2 / 64.3 in
+    // Dark — roughly even rungs, and an order of magnitude more separation than the eye needs to
+    // read them as three.
 
     /// Headlines, row copy, the primary button's fill, the granted checkbox — and any state with
     /// something to do about it.
     static let primary = Color(nsColor: .labelColor)
     /// A sentence someone reads: prose, a status line, an upload note.
-    static let secondary = Color(nsColor: .secondaryLabelColor)
+    ///
+    /// `labelColor` at 0.80 — 7.8:1 over `surface` in Light and 8.3:1 in Dark. AAA (7:1), which is
+    /// the right target for the only step that carries whole sentences.
+    ///
+    /// Most of this app's surfaces are glass now, so `surface` is no longer the whole ground: it is
+    /// `InkGlass.scrim` of `surface` over a light-pinned blurred desktop. Because the glass pins its
+    /// appearance, that ground does not depend on the machine's — measured through the real material
+    /// over the two desktops that can exist, this step lands at **6.86:1 over a solid black desktop
+    /// and 7.79:1 over a solid white one**, in both system appearances. AA everywhere with room to
+    /// spare, and AAA on everything but the worst desktop there is.
+    static let secondary = Color(nsColor: .labelColor).opacity(0.80)
     /// A word someone glances at: `Granted`, `Quit`, `Sign out`. Never a whole sentence.
-    static let tertiary = Color(nsColor: .tertiaryLabelColor)
+    ///
+    /// `labelColor` at 0.66 — 4.9:1 over `surface` in Light, 6.1:1 in Dark. The alpha is set by the
+    /// worst ground rather than the best: on the glass, over a solid black desktop, it measures
+    /// **4.55:1**, and thinning it would put that under AA.
+    ///
+    /// This is the floor of the ladder and there is no room below it. It is also, and much more
+    /// consequentially, **the constraint that decides how translucent every glass surface in the app
+    /// is allowed to be**: `InkGlass` is already using the brightest material macOS offers, so the
+    /// only way a panel can pass more of the desktop through is for this rung to get darker. The
+    /// arithmetic is in `InkGlass.scrim` — at 0.66 the ceiling is 14.1% passthrough over a black
+    /// desktop, and the shipped scrim spends 12.8% of that. Anyone asked for "more see-through" has
+    /// been asked to change this line, not that one.
+    static let tertiary = Color(nsColor: .labelColor).opacity(0.66)
 
     // Edges.
 
@@ -60,6 +103,14 @@ enum Ink {
     /// The edge of something you are meant to press: the secondary button, the empty checkbox.
     /// `separator` is right for a rule and too faint for a control's outline.
     static let hairline = Color(nsColor: .labelColor).opacity(0.22)
+    /// The edge of a *panel*, which is a different job and a much fainter one.
+    ///
+    /// `hairline` outlines a control, where the border is the affordance. A floating glass panel is
+    /// defined by its brightness and its shadow; at 0.22 the outline is the loudest thing on the
+    /// surface and the panel reads as a drawn box rather than as a piece of glass. The value lives
+    /// beside its sibling so the two cannot be confused at a call site — the whole reason the
+    /// palette is named roles rather than numbers. See `InkGlass.edgeAlpha`, which is this value.
+    static let glassEdge = Color(nsColor: .labelColor).opacity(InkGlass.edgeAlpha)
 
     /// The one accent, spent on the one thing that is actionable and is not already a button.
     ///
@@ -87,6 +138,10 @@ enum Ink {
     /// A *menu* row under the pointer, on the popover. Fainter than `rowFillHover` and over nothing
     /// at rest: the popover's material is already separating the panel from the window, so anything
     /// heavier reads as a second, competing background.
+    ///
+    /// Deliberately still `tertiaryLabelColor` and not the ladder's `tertiary`: this is a fill, it
+    /// is meant to be barely there, and the legibility reason the type ladder moved does not apply
+    /// to something nobody reads.
     static let rowHover = Color(nsColor: .tertiaryLabelColor).opacity(0.12)
     /// The pressed state of anything with no fill of its own.
     static let wash = Color(nsColor: .labelColor).opacity(0.06)
@@ -108,53 +163,36 @@ enum Ink {
     static let nsAccent = NSColor.controlAccentColor
 }
 
-/// One backdrop blob: a unit position relative to the frame, and its colour.
-/// Positions are in frame units, so `x = -1.25` means one and a quarter frame widths off the
-/// leading edge — the blobs sit outside the frame and only their falloff is visible.
-struct InkBlob: Equatable {
-    let x: CGFloat
-    let y: CGFloat
-    let color: Color
-}
-
-extension Ink {
-    /// The nine backdrop blobs, in paint order. The geometry has never changed; the colour has, and
-    /// this is the third palette it has worn.
-    ///
-    /// Every blob is now the *same* colour — `labelColor` — and differs only in alpha, which is what
-    /// makes the field neutral rather than the warm clay wash it replaces. This is not a shortcut:
-    /// `labelColor` is near-black in Light and near-white in Dark, so a low-alpha wash of it darkens
-    /// a light sheet and lightens a dark one. Both directions read as *shading across a sheet*,
-    /// which is the whole intent of the field. Nine distinct hues could not do that — a fixed tone
-    /// tuned to look like light on paper looks like dirt on a dark ground.
-    ///
-    /// The alphas keep the old field's relative intensity (its tones sat 5–9% off `paper`, blurred
-    /// 24σ and composited at 0.55) and are nudged up a little, because a 3% wash that is legible as
-    /// shading on white is invisible as light on near-black.
-    ///
-    /// Saturated colour here would read as nine coloured lights, which is a bug and not a backdrop.
-    static let backdropBlobs: [InkBlob] = [
-        InkBlob(x: -1.25, y: -1.20, color: primary.opacity(0.16)),
-        InkBlob(x: -0.25, y: -1.25, color: primary.opacity(0.11)),
-        InkBlob(x: 0.35, y: -1.25, color: primary.opacity(0.08)),
-        InkBlob(x: 1.20, y: -1.05, color: primary.opacity(0.15)),
-        InkBlob(x: 1.25, y: 0.05, color: primary.opacity(0.12)),
-        InkBlob(x: 1.20, y: 1.15, color: primary.opacity(0.14)),
-        InkBlob(x: 0.05, y: 1.25, color: primary.opacity(0.13)),
-        InkBlob(x: -0.75, y: 1.20, color: primary.opacity(0.17)),
-        InkBlob(x: -1.25, y: 0.45, color: primary.opacity(0.10)),
-    ]
-}
-
 // MARK: - Layout
 
 enum InkLayout {
-    /// Content column ceiling for every step. The card is 560 pt wide, so this is the width left
-    /// after the page padding — the column never has to compete with the window edge.
+    /// The reading column: a headline and the sentences under it, centred on the card.
+    ///
+    /// 488 pt is the width left inside a 560 pt card after the page padding, and it is also the
+    /// measure `prose` was sized against — at 17 pt that is a little under 80 characters a line,
+    /// which is the top of the range a paragraph stays readable across. Wider is not more generous
+    /// here; it is a longer distance for the eye to travel back along.
     static let contentMaxWidth: CGFloat = 488
-    /// The permissions step uses the full column: three rows read as a list at any narrower width.
-    static let permissionsMaxWidth: CGFloat = 488
+    /// The list column: the permissions step and the other left-aligned cards.
+    ///
+    /// Wider than the reading column, and this is what pays for the larger type. A permission row is
+    /// not a paragraph — it is a first-person sentence with a checkbox before it and a status word
+    /// after it, and those two fixtures take ~116 pt out of the row before the sentence starts. At
+    /// 488 pt and 15 pt row copy every row wrapped to two lines and the setup preamble ran to five,
+    /// which put the card 23 pt past the window; at 560 the preamble loses a line, a row or two come
+    /// back to one, and the card fits with room to spare. Nothing about the measure argument applies
+    /// to a list, so the list takes the width the reading column deliberately does not.
+    ///
+    /// 560 is the card's own width — the reading column plus both gutters — so the list spans the
+    /// pane and the 36 pt page padding becomes its margin against the window rather than a second
+    /// inset inside it. It is also as wide as the column should go: 560 plus its padding leaves 80 pt
+    /// of glass either side, and content that runs closer than that to a rounded edge reads as
+    /// content that did not fit.
+    static let permissionsMaxWidth: CGFloat = 560
     static let pagePaddingHorizontal: CGFloat = 36
+    /// The margin between the copy and the top and bottom edges of the glass. Deliberately *not* a
+    /// place to find height for bigger type: it is the only thing keeping a 34 pt headline off a
+    /// rounded corner. Width was the lever; this is not one.
     static let pagePaddingVertical: CGFloat = 34
     /// The vertical rhythm. Pick from this ladder rather than inventing a gap.
     static let rhythm: [CGFloat] = [28, 22, 18, 14, 12, 10, 8, 6]
@@ -166,14 +204,28 @@ enum InkLayout {
 enum InkMotion {
     static let stepTransition: Double = 0.240
     static let wordReveal: Double = 1.200
-    static let backdropFadeIn: Double = 0.900
-    static let backdropRise: Double = 1.800
-    static let backdropDrift: Double = 14.0
     static let settle: Double = 0.280
     static let checkbox: Double = 0.180
     static let finaleGlow: Double = 0.550
     /// Not in the doc: button press feedback, fast enough to read as pressure rather than animation.
     static let press: Double = 0.090
+}
+
+/// Reduce Transparency in one place, for the same reason `InkReduceMotion` exists: the setting is
+/// honoured by a call, not by a discipline nobody keeps.
+///
+/// It has exactly one customer today — the onboarding window's glass — and it lives here anyway,
+/// beside the sibling setting and on the same notification, so the second translucent surface this
+/// app grows cannot honour it a different way or forget to.
+enum InkReduceTransparency {
+    static var isEnabled: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+    }
+
+    /// Fires when the user flips the setting. The same notification `InkReduceMotion` watches —
+    /// macOS posts one for the whole accessibility display group — so an observer has to re-read the
+    /// setting it cares about rather than assume which one changed.
+    static let didChangeNotification = NSWorkspace.accessibilityDisplayOptionsDidChangeNotification
 }
 
 /// Reduce Motion in one place. Every animation in the app goes through this, so honouring the
@@ -418,48 +470,86 @@ struct InkTextStyle {
     }
 }
 
+/// The scale, and the two rules that generate it.
+///
+/// **Sizes.** Every role is one step larger than the ladder that shipped — 32/25/15/13/11/14 became
+/// 34/27/17/15/12/15 — because onboarding was reported as being set too small to read comfortably.
+/// This is the whole of that fix: nothing here changes which face, which colour, or which leading
+/// multiple a role has, so the card reads as the same design at a size that does not ask the reader
+/// to lean in. The two step-defining thresholds still hold at the new sizes and are what bound the
+/// change: every reading role stays under `Font.inkDisplayThreshold` (22 pt) so it is still SF Pro
+/// and not Open Runde, and `prose` stays under 18 pt so it is still *normal* text under WCAG and
+/// the label ladder's AA bar stays the 4.5:1 one rather than the 3:1 large-text allowance.
+///
+/// **Tracking.** Every value below is `em × size`, recomputed at the new size and never carried over
+/// from the old one: tracking in points is a function of the size it was struck at, so a role that
+/// grows and keeps its old point value has quietly loosened. The `em` ratios are the site's and are
+/// the thing that is fixed — −0.035 at display, −0.03 at headline, −0.01 at reading size — and each
+/// role names the one it was converted from.
 enum InkType {
-    /// Open Runde 32 / semibold / −1.12 / 1.10 — the site's `h1` (600, −0.035 em, 1.08), at the
-    /// scale a 720 pt card can hold. The largest thing on screen, and the only reason the tracking
-    /// is this tight: at display size a geometric sans falls apart if the words do not lock up.
+    /// Open Runde 34 / semibold / −1.19 (−0.035 em) / 1.10 — the site's `h1` (600, −0.035 em, 1.08),
+    /// at the scale a 720 pt card can hold. The largest thing on screen, and the only reason the
+    /// tracking is this tight: at display size a geometric sans falls apart if the words do not lock
+    /// up. 0.07 pt tighter than the −1.12 it was struck at when this role was 32 pt, which is the two
+    /// points of growth at −0.035 em and not a new decision.
     static var introHero: InkTextStyle {
-        runde(32, .semiBold, tracking: -1.12, lineHeight: 1.10)
+        runde(34, .semiBold, tracking: -1.19, lineHeight: 1.10)
     }
 
-    /// Open Runde 25 / semibold / −0.75 (−0.03 em) / 1.18.
+    /// Open Runde 27 / semibold / −0.81 (−0.03 em) / 1.18.
     static var stepHeadline: InkTextStyle {
-        runde(25, .semiBold, tracking: -0.75, lineHeight: 1.18)
+        runde(27, .semiBold, tracking: -0.81, lineHeight: 1.18)
     }
 
     /// The "First…" line. Same face, size and tracking as `stepHeadline` — one headline size, as on
     /// the site — and no leading multiple, because it is always a single line over a list.
     static var firstTitle: InkTextStyle {
-        runde(25, .semiBold, tracking: -0.75)
+        runde(27, .semiBold, tracking: -0.81)
     }
 
-    /// Open Runde 15 / regular / −0.15 (−0.01 em) / 1.55 — the site's body (400 at 1.6). Pair with
-    /// `Ink.secondary`.
+    /// SF Pro 17 / regular / −0.17 (−0.01 em) / 1.55 — the site's body (400 at 1.6), at the system's
+    /// own body size. Pair with `Ink.secondary`.
+    ///
+    /// 17 and not 18: `NSFont.systemFontSize` is 13 and this is the one role that carries paragraphs
+    /// on a card, so it wants to be visibly larger than a menu without becoming a headline — and at
+    /// 18 pt WCAG reclassifies it as large text, which would drop the label ladder's contrast bar
+    /// from 4.5:1 to 3:1 for the step that does the most reading. The bar should not get easier
+    /// because the type got bigger.
     static var prose: InkTextStyle {
-        runde(15, .regular, tracking: -0.15, lineHeight: 1.55)
+        runde(17, .regular, tracking: -0.17, lineHeight: 1.55)
     }
 
-    /// Open Runde 13 / medium / −0.13 / 1.40. Row copy and the popover's headline state. Medium,
-    /// not regular: at 13 pt on a card, regular goes weedy. Pair with `Ink.primary`.
+    /// SF Pro 15 / medium / −0.15 (−0.01 em) / 1.40. Row copy and the popover's headline state.
+    /// Medium, not regular: on a card, a row's sentence sits beside a heavier headline and regular
+    /// goes weedy next to it — as true at 15 pt as it was at 13. Pair with `Ink.primary`.
     static var rowCopy: InkTextStyle {
-        runde(13, .medium, tracking: -0.13, lineHeight: 1.40)
+        runde(15, .medium, tracking: -0.15, lineHeight: 1.40)
     }
 
-    /// Open Runde 11 / regular. Every small line in the popover and the status word in a permission
-    /// row. No tracking: below 12 pt, tightening a geometric sans only closes the counters. Pair
-    /// with `Ink.secondary`, or `Ink.tertiary` for a single glanceable word.
+    /// SF Pro 12 / regular. Every small line in the popover and the status word in a permission row.
+    /// Pair with `Ink.secondary`, or `Ink.tertiary` for a single glanceable word.
+    ///
+    /// No tracking, and now for a boundary rather than a margin: 12 pt is the floor the ladder
+    /// tightens *above*. At this size and under, closing the counters costs more legibility than
+    /// locking the words up buys — true of the SF Pro this role actually resolves to, and truer still
+    /// of the geometric display face the ladder is derived from. This role sits exactly on the floor,
+    /// where the −0.01 em the reading roles take would come to −0.12 pt: not a letterform decision,
+    /// a rounding error with a legibility cost.
     static var statusLabel: InkTextStyle {
-        runde(11, .regular)
+        runde(12, .regular)
     }
 
-    /// Open Runde 14 / semibold / −0.14 (−0.01 em).
+    /// SF Pro 15 / semibold / −0.15 (−0.01 em).
     static var buttonLabel: InkTextStyle {
-        runde(14, .semiBold, tracking: -0.14)
+        runde(15, .semiBold, tracking: -0.15)
     }
+
+    /// The smallest size any role is allowed to resolve at.
+    ///
+    /// Not a style value — a floor, and the one the scale is guarded against sliding back under. It
+    /// is also the size the tracking ladder stops at, so a role that ever lands below this has both
+    /// gone under the legible minimum and left the part of the ladder where tracking is defined.
+    static let minimumSize: CGFloat = 12
 
     /// The roles, in the order they appear in the design doc. Used by previews and by the
     /// completeness test that every role resolves to a real face.

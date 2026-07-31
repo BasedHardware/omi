@@ -34,7 +34,10 @@ struct RewindView: View {
             frameStage
             track
         }
-        .background(Ink.surface)
+        // Deliberately no background. `RewindWindow` hosts this on `InkGlassView`, which owns the
+        // material and the scrim; an opaque `Ink.surface` here would paint over the glass and this
+        // window would be the one surface in the app that is not translucent. Two grounds is how a
+        // translucent surface ends up opaque in one appearance and muddy in the other.
         .onAppear { model.loadInitial() }
         // The frame-image zoom, which the spec insists is a different feature from the track zoom.
         // Both live here so the two key paths cannot be confused at the call site.
@@ -369,7 +372,7 @@ struct RewindView: View {
             trackSpan: model.trackSpan,
             playheadAt: model.currentFrame?.capturedAt,
             onScrub: { model.scrub(to: $0) },
-            onPan: { model.panTrack(by: $0) }
+            onTravel: { model.travel(by: $0) }
         )
         .frame(height: RewindTrackView.height)
         .padding(.horizontal, 18)

@@ -1,9 +1,9 @@
 # Context for Claude — design system
 
 **The app is a native macOS app, so its palette is macOS's.** Every colour is a system semantic
-colour and the single accent is `NSColor.controlAccentColor` — whatever the user picked in System
-Settings. Nothing is hand-mixed, so the app follows the system's appearance with no override, no
-light-only assumption, and no second set of values for Dark. Display type is **Open Runde**, bundled
+colour or a fixed alpha on one, and the single accent is `NSColor.controlAccentColor` — whatever the
+user picked in System Settings. No hue is hand-mixed, so the app follows the system's appearance with
+no override, no light-only assumption, and no second set of values for Dark. Display type is **Open Runde**, bundled
 and ours; reading type is SF Pro.
 
 This replaces an Anthropic palette (ivory `#FAF9F5` paper, `#141413` ink, clay `#D97757`) over New
@@ -19,8 +19,8 @@ Twelve roles. The right-hand column is the whole definition; there are no hex va
 ```
 surface        NSColor.controlBackgroundColor   the onboarding sheet, the popover ground
 primary        NSColor.labelColor               headlines, row copy, the primary button fill
-secondary      NSColor.secondaryLabelColor      a sentence someone reads
-tertiary       NSColor.tertiaryLabelColor       a word someone glances at
+secondary      labelColor @ 0.80                a sentence someone reads
+tertiary       labelColor @ 0.66                a word someone glances at
 separator      NSColor.separatorColor           a rule between blocks
 hairline       labelColor @ 0.22                the edge of something you press
 accent         NSColor.controlAccentColor       the one actionable link
@@ -47,9 +47,33 @@ the reader has to do with the text, not by how deep it sits in a stack:
 A state with something to do about it ("Not signed in…", "Not connected to Claude") gets full
 `primary`, not less. `tertiary` is for a single word beside its subject and never for a sentence.
 
-Why the fills are **alpha on `labelColor`** rather than named fill colours: they have to composite
-correctly over both the onboarding sheet *and* the popover's vibrant material. A wash that darkens in
-Light and lightens in Dark does; a fixed grey does not.
+Why the two lower steps are **alpha on `labelColor`** and not `secondaryLabelColor` /
+`tertiaryLabelColor`: the system's steps are 50% and 26% black in Light, tuned for dense system
+chrome — an inspector row, a table cell, a menu — where the reader glances at a word beside its
+subject. Over `surface` they measure 3.95:1 and 1.88:1, so the step that carries onboarding's prose
+was under WCAG AA for body text (4.5:1) and the step below it was barely a shade. Onboarding is the
+one screen that asks for sustained reading, and it was reported as hard to read.
+
+Measured over `surface`, composited in linear light (`MenuBarPresentationTests` asserts these):
+
+| step | Light | Dark |
+|---|---|---|
+| `primary` (`labelColor`, 0.85) | 14.9:1 | 12.2:1 |
+| `secondary` (`labelColor` @ 0.80) | 7.8:1 | 8.3:1 |
+| `tertiary` (`labelColor` @ 0.66) | 4.9:1 | 6.1:1 |
+
+`secondary` is held to AAA (7:1) because it is the only step that carries whole sentences.
+`tertiary`'s alpha is set by the *worst* ground rather than the best: on the glass over a solid black
+desktop it falls to 4.55:1, and thinning it would put it under AA. The ladder is still three visible
+steps — L\* 15.6 / 35.0 / 47.4 in Light, 88.0 / 74.2 / 64.3 in Dark. **`surface` is no longer the
+whole ground on any window that wears the glass** — see *The glass* for the ladder measured there, and
+for why `tertiary`'s alpha, not the scrim, is what caps how see-through every panel in the app can be.
+
+Why the fills are **alpha on `labelColor`** rather than named fill colours, and the same reason the
+type steps are: they have to composite correctly over both the onboarding sheet *and* the popover's
+vibrant material. A wash that darkens in Light and lightens in Dark does; a fixed grey does not.
+`rowHover` is the one exception that stays on `tertiaryLabelColor` — it is a fill nobody reads, and
+it is supposed to be barely there.
 
 Why the primary button is **not** accent-filled: `controlAccentColor` is the user's choice, so its
 luminance is unknowable and no single label colour is legible against every accent. Inverting the
@@ -66,54 +90,96 @@ to `.aqua` rendered a light popover inside a dark system menu — the loudest si
 read as wrong — and it silently overrode every AppKit surface the app does not draw itself: focus
 rings, scrollers, the popover window's own background and corner rounding.
 
-### Backdrop
+### The glass
 
-Nine blobs, at the same nine unit positions as ever — the geometry has never changed, the colour has.
-Every blob is now the **same** colour, `primary` (`labelColor`), and differs only in alpha:
+**Every translucent surface in this app is one component: `InkGlassView`** — the onboarding card, the
+timeline, the settings window, the menu bar popover, the search panels and the tutorial's coach
+marks. One `NSVisualEffectView`, one scrim, one corner, one shadow, built in `InkGlass.swift` and
+hosted everywhere else. A translucent surface has four numbers that have to agree and six windows
+copy-pasting them is six chances to disagree.
 
-| unit position (x, y) | alpha |
-|---|---|
-| −1.25, −1.20 | 0.16 |
-| −0.25, −1.25 | 0.11 |
-|  0.35, −1.25 | 0.08 |
-|  1.20, −1.05 | 0.15 |
-|  1.25,  0.05 | 0.12 |
-|  1.20,  1.15 | 0.14 |
-|  0.05,  1.25 | 0.13 |
-| −0.75,  1.20 | 0.17 |
-| −1.25,  0.45 | 0.10 |
+**It is pinned to a light appearance** (`NSAppearance(named: .aqua)`, set on the panel view — or on
+the whole window where there is a title bar to convert with it). `NSVisualEffectView` renders a
+*different, dark* material in `.darkAqua`, and `controlBackgroundColor` resolves near-black there, so
+on a Dark machine this surface read as a black slab pasted over the desktop rather than as glass. The
+pin is also what makes `labelColor` — and therefore the whole `Ink` ladder — resolve **dark** on the
+panel; a surface forced light whose type did not follow is white-on-white, which is nothing on screen
+at all. `InkGlassTests.testTheTypeResolvesDarkOnTheLightGlass` is that assertion.
 
-One colour is the point, not a shortcut. `labelColor` is near-black in Light and near-white in Dark,
-so a low-alpha wash of it **darkens a light sheet and lightens a dark one** — both read as shading
-across a sheet, which is the whole intent of the field. Nine fixed hues cannot do that: a tone tuned
-to look like light on paper looks like dirt on a dark ground. Saturated colour here would read as
-nine coloured lights, which is a bug and not a backdrop.
+**The material is `.headerView`, and it was measured rather than picked.** Fourteen candidates were
+put over solid black and solid white full-screen backdrops, pinned to `.aqua`, and sampled
+(macOS 15.5, `.behindWindow`, `.active`). Solving each composite for its own opacity and tint:
 
-The alphas keep the previous warm field's relative intensity (its tones sat 5–9% off its paper) and
-are nudged up, because a 3% wash that reads as shading on white is invisible as light on near-black.
+| material | opacity | tint | material | opacity | tint |
+|---|---|---|---|---|---|
+| `headerView` | 0.800 | (255,255,255) | `hudWindow` | 0.525 | (221,221,221) |
+| `titlebar` | 0.809 | (246,246,247) | `fullScreenUI` | 0.525 | (221,221,219) |
+| `sidebar` | 0.903 | (228,228,228) | `popover` | 0.651 | (229,229,229) |
+| `menu` | 0.776 | (227,227,227) | `underWindowBackground` | 0.906 | (222,222,222) |
+| `toolTip` | 0.902 | (222,222,222) | `selection` | 0.902 | (200,200,200) |
 
-Each blob is a radial gradient from its colour to clear at radius 0.65 of the frame. The stack is
-blurred **24σ** and composited at **0.55** peak opacity over a **`surface` @ 0.985** floor. Past ~0.6
-the wash stops looking like light across the sheet and starts looking like a stain on it.
+`sheet`, `windowBackground`, `contentBackground` and `underPageBackground` are opaque in `.aqua`.
 
-The floor stops just short of opaque: the last one and a half per cent let the desktop through as
-a tint, which is what keeps the oval reading as a sheet lying on the screen rather than a window
-pasted over it — and it is little enough that `primary` type holds its full contrast over any
-desktop, in either appearance.
+The choice is not "which is most translucent" — it is **"which passes the most desktop through at a
+fixed legibility floor"**, which is a different question with a different answer. Writing the ground
+over a black desktop as `255·s + tint·a·(1−s)` and the desktop's share as `(1−a)(1−s)`, a **pure white
+tint is optimal**: it is the only tint for which brightening the panel costs nothing in passthrough.
+`.headerView` is the only translucent candidate that measures pure white. At the shared floor it
+passes **12.8%** of the desktop; `titlebar` and `hudWindow` pass 11.6%, `popover` 11.2%, `sidebar`
+6.7%.
 
-Two masks, both elliptical, both essential:
+The pin, not the machine, decides: re-run under a Light system and under a Dark one, the sampled
+composites are identical, and a live render over a neutral desktop is pixel-identical between the two.
 
-- The **composite** mask — floor and field together, never each layer separately — stops
-  `[0, 0.52, 0.78, 0.92, 1]` at alphas `[1, 1, 0.72, 0.26, 0]`. This is the only thing between a
-  rectangular window and a visible box on the desktop. Alpha reaches zero before the frame edge, so
-  there is nothing left to clip at the corners.
-- The **hollow**, on the field alone: stops `[0, 0.54, 0.72, 1]`, alphas `[1 − clarity·0.82, 1, 1, 0]`
-  with farthest-corner radius (√2⁄2). `clarity` goes 0 → 1 over 280 ms when the step settles, which
-  empties the centre so headline copy sits on a clean sheet.
+**The scrim is `surface` @ 0.36**, flat and full-bleed, painted over the material and under the
+content. It is not a style choice — it is the floor of the label ladder. Measured through the real
+material over the two extreme desktops, in both system appearances:
 
-**No rectangle may appear at any point, in any state.** Anything that paints the window edge —
-a shadow, an opaque root layer, an `NSVisualEffectView` — puts back the border the mask exists to
-remove.
+| step | black desktop | white desktop |
+|---|---|---|
+| `primary` | 11.87:1 | 14.94:1 |
+| `secondary` | 6.86:1 | 7.79:1 |
+| `tertiary` | 4.55:1 | 4.92:1 |
+
+`tertiary` is the binding rung, and it needs a ground of **219/255** to clear WCAG AA — which for a
+pure-white material at 0.800 opacity is a scrim of 0.295. 0.36 is that floor plus a margin, and the
+margin costs 1.2 points of passthrough (12.8% rather than 14.1%).
+
+**The number worth knowing before re-tuning this**: the panel can never pass more than
+`1 − 219/255 = 14.1%` of the desktop while `tertiary` stays at `labelColor` @ 0.66, because the
+material is already the brightest thing available. A request for a more see-through panel than that
+is a request to darken the bottom rung of the type ladder — a change to `Ink`, and to every opaque
+surface in the app, not to the scrim.
+
+A scrim only *under the copy* would be the speech bubble's grey slab drawn a second time, so it is
+full-bleed. `InkGlassTests` asserts the ladder on a two-layer model of this ground — checked against
+the real composite to under 1/255 — and `InkGlass.measuredMaterialOpacity` / `measuredMaterialTint`
+record the samples the model needs, because a material's opacity is not published and cannot be
+derived.
+
+**The corner is 22 pt**, continuous, and it is one value for every panel: a 56 pt bar and a 760 pt
+timeline rounded differently read as two products. **The edge is `labelColor` @ 0.06** — much fainter
+than `hairline` (0.22), which is the outline of a *control*; a panel that needs a drawn border is a
+panel whose brightness and shadow are not doing their job.
+
+**The shadow is broad and faint**: 34 pt radius, 0.24 opacity, 10 pt down. Almost all of the floating
+quality comes from this, and the wrong shadow is not a missing one but a tight dark one. It is cast
+from a `shadowPath` and masked so it never falls *under* the panel — behind a 13%-transparent surface
+a filled blurred rounded rect is very much visible. A floating panel's window is therefore larger than
+the panel by `InkGlassStyle.floating.inset` (56 pt), because a borderless window clips at its own
+bounds and a panel drawn edge to edge has nowhere to cast into.
+
+**Three styles, and they are not variations on a theme.** `.floating` is a free-floating object over
+the desktop (rounded, edged, ambient shadow, inset). `.fullBleed` is the inside of an ordinary titled
+window — the timeline, settings — square and shadowless because the window frame already owns both.
+`.panel(cornerRadius:)` fills its host exactly, for a surface something else already positions and
+shadows.
+
+**Reduce Transparency is honoured**, and it is the one branch in the file: the ground goes fully
+opaque and the material is *removed*, not covered. `InkGlassView.apply(reduceTransparency:)` takes the
+setting rather than reading it, because the domain that holds it cannot be written even by `defaults`,
+so a view that read it directly would have an accessibility path nothing could assert. The shadow
+stays — the panel is still a floating object and still has to read as one.
 
 ## Type
 
@@ -149,20 +215,33 @@ font **and** SF Pro's metrics together, so the drawn face and the measured face 
 
 | role | weight | size | tracking | em | line height |
 |---|---|---|---|---|---|
-| intro hero | semibold | 32 | −1.12 | −0.035 | 1.10 |
-| step headline | semibold | 25 | −0.75 | −0.03 | 1.18 |
-| "First…" | semibold | 25 | −0.75 | −0.03 | — |
-| body prose | regular | 15 | −0.15 | −0.01 | 1.55 |
-| permission row copy | medium | 13 | −0.13 | −0.01 | 1.40 |
-| status label | regular | 11 | — | — | — |
-| button label | semibold | 14 | −0.14 | −0.01 | — |
+| intro hero | semibold | 34 | −1.19 | −0.035 | 1.10 |
+| step headline | semibold | 27 | −0.81 | −0.03 | 1.18 |
+| "First…" | semibold | 27 | −0.81 | −0.03 | — |
+| body prose | regular | 17 | −0.17 | −0.01 | 1.55 |
+| permission row copy | medium | 15 | −0.15 | −0.01 | 1.40 |
+| status label | regular | 12 | — | — | — |
+| button label | semibold | 15 | −0.15 | −0.01 | — |
 
-The tracking ladder is converted from `em` at each size: tight at display, barely there at body,
-**nothing below 12 pt** — under 12 pt, tightening a geometric sans only closes its counters. The
-hero's −0.035 em is the signature: at 32 pt a round, wide sans falls apart unless the words lock up.
+Every size is one step up from the ladder that shipped (32/25/15/13/11/14), because onboarding was
+reported as being set too small to read comfortably. Nothing else about a role changed — same face,
+same colour, same leading multiple — so the card reads as the same design at a size that does not ask
+the reader to lean in. Two thresholds bound the change and are asserted: every reading role stays
+under the 22 pt display threshold, so it is still SF Pro; and `prose` stays under 18 pt, so WCAG still
+treats it as normal text and the label ladder's bar stays 4.5:1 rather than the 3:1 large-text
+allowance. **The bar must not get easier because the type got bigger.**
 
-The hero is the largest thing on any screen and stays that way. Row copy is medium rather than
-regular because 13 pt regular goes weedy on a card.
+The tracking ladder is converted from `em` **at each size**, and this is the rule a size change
+breaks silently: tracking is stored in points, so a role that grows and keeps its old point value has
+quietly loosened — bigger letterforms with the same gap between them. Recompute from the `em`, which
+is the fixed part. Tight at display, barely there at body, and **nothing at 12 pt or under** — there,
+tightening closes the counters faster than it locks the words up. The hero's −0.035 em is the
+signature: at display size a round, wide sans falls apart unless the words lock up.
+
+`InkType.minimumSize` (12 pt) is the floor, and the status label sits exactly on it — which is why
+that role is also the one with no tracking. The hero is the largest thing on any screen and stays that
+way. Row copy is medium rather than regular because a row's sentence sits beside a heavier headline
+and regular goes weedy next to it.
 
 **None of these roles appear in the menu bar popover.** That surface is a menu and is set in plain
 SF Pro at system sizes — see below.
@@ -173,19 +252,45 @@ leading. `InkTextStyle.leadingDelta` is the escape hatch for a caller laying out
 
 ## Layout
 
-- Content column max width **488 pt**; the permissions step uses the same width, left-aligned.
-- Page padding **36 pt horizontal, 34 pt vertical**.
-- Everything centred, except the permissions step, which is left-aligned and stretched.
+Two column widths, and the difference between them is deliberate.
+
+- **Reading column 488 pt** (`contentMaxWidth`) — a headline and the sentences under it, centred.
+  At 17 pt prose that is a little under 80 characters a line, the top of the range a paragraph stays
+  readable across. Wider is not more generous; it is a longer distance for the eye to travel back
+  along.
+- **List column 560 pt** (`permissionsMaxWidth`) — the permissions step and the other left-aligned
+  cards. This is what pays for the larger type: a permission row is not a paragraph but a sentence
+  with a checkbox before it and a status word after it, and those fixtures take ~116 pt out of the
+  row before the sentence starts. At 488 pt and 15 pt row copy every row wrapped to two lines and the
+  setup preamble ran to five, putting the card 23 pt past the window. 560 pt is the card's own width
+  (reading column plus both gutters), and it is also as wide as the column should go: 560 plus its
+  padding leaves 80 pt of glass either side, and content that runs closer than that to a rounded edge
+  reads as content that did not fit.
+- Page padding **36 pt horizontal, 34 pt vertical**. The vertical figure is *not* a place to find
+  height for bigger type: it is the only thing keeping a 34 pt headline off a rounded corner, and
+  height is the dimension the cards actually run out of — the window is fixed and does not scroll.
+- Everything centred, except the permissions, value, connector and tutorial steps, which are
+  left-aligned and take the list column.
 - Vertical rhythm: 28, 22, 18, 14, 12, 10, 8, 6.
-- The onboarding window is 720 × 520 pt. Roughly a third of that is falloff.
+- The onboarding window is 720 × 520 pt, and all of it is legible area — there is no falloff now.
+
+**Known overflow — the by-hand permission card.** When Accessibility is not granted, the permissions
+step draws its headline, preamble and four rows *and* the by-hand choreography panel underneath, which
+needs ~516 pt in a card that has 452. It truncates the row sentences. This predates the type scale —
+at the old sizes it needed 488 pt and truncated too — and it survives the speech bubble's removal,
+which bought the card width and not height. No column width or padding fixes it: the
+four rows cannot come back to one line at any width the sheet will hold, so the panel is always the
+overflow. The fix belongs in `OnboardingView`: the by-hand panel should *replace* the row list rather
+than sit under it, or the step needs a taller window.
 
 ## Buttons
 
 The onboarding sheet's only action shape, and the popover has none of them.
 
 Primary: **`primary`** fill, **`surface`** label, **stadium** (fully rounded), min height 42 pt, 24 pt
-horizontal padding, Open Runde 14 semibold. Secondary: same metrics, clear fill, `primary` label, 1 pt
-`hairline` border. No rounded rectangles for actions — always a full pill.
+horizontal padding, the button-label role (15 semibold, and SF Pro like every role under the display
+threshold). Secondary: same metrics, clear fill, `primary` label, 1 pt `hairline` border. No rounded
+rectangles for actions — always a full pill.
 
 Pressed **lets the surface through**: primary drops to `primary` @ 0.82, secondary fills with `wash`.
 Colour only, no scale: a pill this size bouncing reads as a toy.
@@ -199,8 +304,10 @@ The same row renders on two surfaces that must not look alike, selected by `InkP
 sentences into three grey slabs. Hover goes to `rowFillHover`.
 
 Leading: an 18 × 18 checkbox, corner radius 6, 1 pt `hairline`, filling **`primary` with a `surface`
-checkmark** when granted (180 ms). Then an 11 pt gap, the first-person sentence in `primary`, then the
-status word in `tertiary`, 11 pt: `Granted` / `Open` / `Checking` / `Action required`.
+checkmark** when granted (180 ms). Then an 11 pt gap, the first-person sentence in `primary` at the
+row-copy role, then the status word in `tertiary` at the status-label role: `Granted` / `Open` /
+`Checking` / `Action required`. The checkbox and the two gaps take ~116 pt out of the row before the
+sentence starts, which is why the list column is wider than the reading one.
 
 **Menu bar (`native: true`) — a menu item.** See the next section. No fill at rest, no border, no
 tracking, no drawn checkbox.
@@ -250,10 +357,7 @@ when sign-in failed, Open Runde first in the font stack.
 |---|---|
 | step transition | 240 ms `easeOut`, fade + slide from y +0.015 |
 | word reveal | 1200 ms total; each word delay = 0.05 + random·0.18; opacity = easeOutExpo of `((t − delay) / 0.62)` clamped |
-| backdrop fade-in | 900 ms easeOut, 0 → 0.55 |
-| backdrop rise | 1800 ms easeOut; blobs start `(1 − rise)·0.72` lower |
-| backdrop drift (while working) | 14 s loop; blob i orbits `cos(t·2π + i·0.71)·0.16` in x, `sin(phase·0.83)·0.12` in y |
-| settle | 280 ms easeOut on `clarity` |
+| settle | 280 ms easeOut |
 | checkbox | 180 ms |
 | press | 90 ms |
 | finale glow burst | 550 ms ease-out over a full-screen edge glow |
@@ -264,9 +368,9 @@ value available or there is nothing to burn out to — over a dark sheet, adding
 invisible. On a light sheet a fade to transparent would just be the surface becoming the surface.
 
 **Honour Reduce Motion everywhere.** `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion`
-→ all durations zero, word reveal jumps to 1, drift stops, the backdrop renders its resolved state
-immediately. Everything routes through `InkReduceMotion`, so honouring it is a call rather than a
-discipline nobody keeps.
+→ all durations zero and the word reveal jumps to 1. Everything routes through `InkReduceMotion`, so
+honouring it is a call rather than a discipline nobody keeps. Reduce *Transparency* is separate and
+routes through `InkReduceTransparency`; see *The glass*.
 
 ## Window chrome
 
@@ -331,8 +435,11 @@ Literata headlines over Inter body:
 - **The intro hero's drop shadow** and the whole `InkTextShadow` mechanism. There is no shadow
   anywhere in the system now.
 - **`cursorBlue` `#96C4FF`** and **`errorRed` `#FFB4AB`**, both tuned for a dark ground.
-- **`NSVisualEffectView` behind the card**, and not coming back: a behind-window material takes its
-  brightness from whatever is on the desktop, which is exactly what a sheet must not do.
+- **`NSVisualEffectView` behind the card.** This one *did* come back — see *The glass*.
+  The original objection was right and is unchanged: a behind-window material takes its brightness
+  from whatever is on the desktop. What was missing was the answer to it, which is a scrim thick
+  enough that the material never sets the type's ground on its own, chosen by measurement rather
+  than by eye.
 
 **The Anthropic system** — ivory `#FAF9F5` paper, `#141413` ink, clay `#D97757`, New York display:
 

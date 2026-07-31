@@ -256,7 +256,7 @@ struct TimelinePreview: View {
                 // Inert: this is a preview of the chrome, and a preview that scrubbed would be a
                 // second, silent timeline.
                 onScrub: { _ in },
-                onPan: { _ in }
+                onTravel: { _ in }
             )
             .frame(height: RewindTrackView.height)
             .padding(.horizontal, 10)

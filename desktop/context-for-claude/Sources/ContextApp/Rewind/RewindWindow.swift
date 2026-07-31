@@ -68,6 +68,16 @@ enum RewindWindow {
         // every other window is something to fight rather than something to read.
         window.level = .normal
 
+        // Glass, and pinned light like every other surface in the app. On a titled window the pin has
+        // to be on the *window* rather than on the content view: pinning only the content leaves the
+        // title bar and the traffic lights in the system's appearance, which on a Dark machine is a
+        // dark bar sitting on a white sheet. `.fullSizeContentView` plus a transparent title bar
+        // means the glass runs edge to edge under it.
+        InkGlass.pin(window)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarSeparatorStyle = .none
+
         // CRITICAL: Use a container view instead of making NSHostingView the contentView directly.
         // When NSHostingView IS the contentView of a borderless window, it tries to negotiate
         // window sizing through updateWindowContentSizeExtremaIfNecessary and updateAnimatedWindowSize,
@@ -78,9 +88,13 @@ enum RewindWindow {
         // its SwiftUI ideal size. Keep .minSize and .maxSize for proper min/max constraints.
         // Setting [] removes ALL sizing info (broken). Default includes .intrinsicContentSize
         // which pins the view to its ideal size (prevents expansion). [.minSize, .maxSize] is correct.
-        let container = NSView(frame: NSRect(origin: .zero, size: window.frame.size))
+        // The shared glass, full-bleed: no corner and no shadow of its own, because the window frame
+        // already owns both. Everything the app draws on glass goes through this one component.
+        let container = InkGlassView(
+            frame: NSRect(origin: .zero, size: window.frame.size), style: .fullBleed)
         container.autoresizingMask = [.width, .height]
         window.contentView = container
+        container.layoutSubtreeIfNeeded()
 
         let hosting = NSHostingView(
             rootView: RewindView(model: model, onOpenSettings: onOpenSettings, onSearch: onSearch))

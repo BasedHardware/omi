@@ -72,7 +72,8 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .background(Ink.surface)
+        // Deliberately no background: `SettingsWindow` hosts this on `InkGlassView`, which owns the
+        // material and the scrim. An opaque `Ink.surface` here would paint the glass out.
         // The accent choice takes effect the moment it is picked, everywhere in this window: toggles,
         // radio fills, the selected-tile ring and the preview all read `.tint`.
         .tint(store.accentColor)
@@ -95,7 +96,11 @@ struct SettingsView: View {
         .padding(.horizontal, 8)
         .padding(.top, 14)
         .frame(width: SettingsMetrics.sidebarWidth)
-        .background(.regularMaterial)
+        // A half-step of shading, not a second material. `.regularMaterial` here was a *within-window*
+        // blur stacked on the window's own glass — two materials in one window, and on the light glass
+        // it reads as a grey slab down the side. A faint wash separates the sidebar without competing
+        // with the ground it sits on.
+        .background(Ink.rowFill)
     }
 
     // MARK: - Header

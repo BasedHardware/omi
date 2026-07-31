@@ -67,10 +67,18 @@ enum SettingsWindow {
         window.isReleasedWhenClosed = false
         // Deliberately `.normal`: settings is worked in beside other windows, not floated over them.
         window.level = .normal
+        // Glass, pinned light on the *window* so the title bar and traffic lights convert with it.
+        // `RewindWindow` carries the same three lines and the same reason.
+        InkGlass.pin(window)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarSeparatorStyle = .none
 
-        let container = NSView(frame: NSRect(origin: .zero, size: window.frame.size))
+        let container = InkGlassView(
+            frame: NSRect(origin: .zero, size: window.frame.size), style: .fullBleed)
         container.autoresizingMask = [.width, .height]
         window.contentView = container
+        container.layoutSubtreeIfNeeded()
 
         let hosting = NSHostingView(
             rootView: SettingsView(

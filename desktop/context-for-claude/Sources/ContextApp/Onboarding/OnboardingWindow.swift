@@ -1,20 +1,33 @@
 import AppKit
 import SwiftUI
 
-/// The onboarding surface: one small, centred oval of paper that dissolves into the desktop.
+/// The onboarding surface: one small, centred pane of frosted glass, floating over the desktop.
 ///
-/// No title bar, no traffic lights, no second window — and deliberately **no edge**. The paper
-/// floor and the warm wash over it are masked by the same radial falloff, so the surface has no
-/// border to notice and no rectangle to read as a dialog. It is a sheet lying on the desktop that
-/// happens to have words on it.
+/// No title bar, no traffic lights, no second window. It shipped once as an edgeless oval — a paper
+/// floor and a nine-blob wash, both masked by the same radial falloff — and the wash was reported as
+/// an ugly hue behind the copy. The mask and the wash are both gone. What replaces them is the app's
+/// shared glass — `InkGlassView`, the same component the timeline, settings, the popover, the search
+/// bar and the coach marks are built on — pinned to a light appearance and scrimmed just enough to
+/// read type on.
 ///
-/// The window is larger than the legible area on purpose: the outer third is falloff, and cropping
-/// it would put back the hard edge the mask exists to remove.
+/// The whole card is legible area — there is no falloff to keep content out of — so the margins in
+/// `InkLayout` are real margins rather than the inner third of a dissolve. The *window* is larger
+/// than the card by `InkGlassStyle.floating.inset`, which is the room the ambient shadow needs; see
+/// `windowSize`.
 @MainActor
 final class OnboardingWindow {
-    /// Fixed size, so the surface never resizes under the user mid-flow. Roughly a third of this is
-    /// falloff; `InkLayout.contentMaxWidth` is what actually holds type.
+    /// The glass panel's size. Fixed, so the surface never resizes under the user mid-flow.
     static let cardSize = NSSize(width: 720, height: 520)
+
+    /// The window's size, which is the panel plus the margin its ambient shadow casts into.
+    ///
+    /// A borderless window clips at its own bounds, so a panel drawn edge to edge has nowhere to put
+    /// a shadow. The window is bigger than the card and transparent everywhere the card is not; the
+    /// user sees the card and the light under it, which is the whole point of the extra room.
+    static var windowSize: NSSize {
+        let pad = InkGlassStyle.floating.inset
+        return NSSize(width: cardSize.width + pad * 2, height: cardSize.height + pad * 2)
+    }
 
     private static var current: NSWindow?
     /// The cinematic's own layer, held only while it plays so it can be torn out afterwards.
@@ -78,6 +91,7 @@ final class OnboardingWindow {
         window.setFrame(frame, display: true)
 
         current = window
+        isHiddenIntent = false
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -161,13 +175,15 @@ final class OnboardingWindow {
         window.makeKeyAndOrderFront(nil)
 
         let duration = InkReduceMotion.isEnabled ? 0 : InkMotion.finaleGlow
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = duration
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            root.animator().alphaValue = 1
-        }, completionHandler: {
-            MainActor.assumeIsolated { root.alphaValue = 1 }
-        })
+        NSAnimationContext.runAnimationGroup(
+            { context in
+                context.duration = duration
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                root.animator().alphaValue = 1
+            },
+            completionHandler: {
+                MainActor.assumeIsolated { root.alphaValue = 1 }
+            })
 
         ContextLog.info("cinematic handed off to the welcome card (\(end))", "onboarding")
     }
@@ -205,8 +221,9 @@ final class OnboardingWindow {
         )
         window.isOpaque = false
         window.backgroundColor = .clear
-        // A shadow would trace the window's rectangle around an oval that has no edge — the one
-        // thing that gives the illusion away.
+        // The card draws its own ambient shadow — a broad, diffuse one that AppKit's window shadow
+        // cannot express — so the window must not draw a second, tighter one around the transparent
+        // margin the card floats in. See `InkGlassShadow`.
         window.hasShadow = false
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -216,30 +233,30 @@ final class OnboardingWindow {
         return window
     }
 
-    /// Not layer-backed with a colour: the root has to stay clear, or it paints the rectangle the
-    /// mask is there to dissolve.
+    /// The card's root: the app's shared glass panel, with the SwiftUI card hosted inside it.
     ///
-    /// Deliberately no NSVisualEffectView. Its material is a rectangle, and every way of masking one
-    /// down to an ellipse leaves a faint straight edge somewhere. The surface is painted entirely in
-    /// SwiftUI instead, where a single elliptical mask is exact.
+    /// The ground is AppKit's and not SwiftUI's, all of it — material, scrim, corner, edge and
+    /// shadow — so there is exactly one owner of "what is under the type" and the SwiftUI side stays
+    /// entirely transparent. Two grounds is how a translucent surface ends up opaque in one
+    /// appearance and muddy in the other. It is `InkGlassView` and not a pane built here, so this
+    /// window cannot drift from the five other surfaces wearing the same glass.
     private static func makeRoot<Content: View>(size: NSSize, hosting content: Content) -> NSView {
-        let root = FirstMouseView(frame: NSRect(origin: .zero, size: size))
+        let root = InkGlassView(frame: NSRect(origin: .zero, size: size), style: .floating)
         root.autoresizingMask = [.width, .height]
-
-        let hosting = FirstMouseHostingView(rootView: content)
-        hosting.frame = root.bounds
-        hosting.autoresizingMask = [.width, .height]
-        root.addSubview(hosting)
+        root.layoutSubtreeIfNeeded()
+        root.setContent(FirstMouseHostingView(rootView: content))
         return root
     }
 
     /// Centred horizontally, and sitting slightly above true centre — optical centre reads as
-    /// centred where geometric centre reads as low.
+    /// centred where geometric centre reads as low. Sized to the *window*, which is the card plus
+    /// the margin its shadow needs; the card itself still lands where it always did.
     private static func centredFrame(on screen: NSScreen) -> NSRect {
         let visible = screen.visibleFrame
-        let x = visible.midX - cardSize.width / 2
-        let y = visible.midY - cardSize.height / 2 + visible.height * 0.05
-        return NSRect(x: x.rounded(), y: y.rounded(), width: cardSize.width, height: cardSize.height)
+        let size = windowSize
+        let x = visible.midX - size.width / 2
+        let y = visible.midY - size.height / 2 + visible.height * 0.05
+        return NSRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height)
     }
 
     /// Gets out of the way while the user is dealing with something else on screen — the browser
@@ -249,25 +266,93 @@ final class OnboardingWindow {
     /// the moment it is not: an always-on-top window over the account chooser is something to click
     /// around. Hiding is `orderOut`, not a close, so the step machine underneath keeps running and
     /// the same window comes back with its state intact.
+    ///
+    /// **It fades.** It used to be a bare `orderOut`, and on the permissions card that is three
+    /// vanish-and-reappear pops per grant — the card blinking out of existence and back while the
+    /// user is reading it, which is what "it glitches a lot" was. A yield is a step aside, not a
+    /// disappearance, so it is a 240 ms fade in both directions; Reduce Motion collapses that to
+    /// zero and it is a show/hide again.
     static func setHidden(_ hidden: Bool) {
         guard let window = current else { return }
+        // Idempotent on *intent*, not on `isVisible`: mid-fade the window is still visible while
+        // hiding and already visible while showing, so `isVisible` would re-arm a transition that is
+        // already running and stutter exactly the way this exists to stop.
+        guard hidden != isHiddenIntent else { return }
+        isHiddenIntent = hidden
+        hideGeneration &+= 1
+        let generation = hideGeneration
+        let duration = InkReduceMotion.duration(InkMotion.stepTransition)
+
         if hidden {
-            guard window.isVisible else { return }
-            window.orderOut(nil)
+            NSAnimationContext.runAnimationGroup(
+                { context in
+                    context.duration = duration
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    window.animator().alphaValue = 0
+                },
+                completionHandler: {
+                    MainActor.assumeIsolated {
+                        // The one rule that cannot be got wrong. This app is `LSUIElement` — no Dock
+                        // icon, nothing for a user to click to get the window back — so an `orderOut`
+                        // that lands *after* a show request would strand first-run onboarding off
+                        // screen with no way back to it. A show that arrived mid-fade always wins.
+                        guard
+                            hideMayComplete(
+                                startedAt: generation, current: hideGeneration, stillHidden: isHiddenIntent),
+                            current === window
+                        else { return }
+                        window.orderOut(nil)
+                    }
+                })
         } else {
-            guard !window.isVisible else { return }
+            // Ordered in *before* the fade, and from wherever the alpha currently is: a show that
+            // interrupts a half-faded hide picks the card back up rather than restarting it, and a
+            // show of an already-ordered-out window starts from zero instead of flashing at full
+            // opacity for a frame.
+            if !window.isVisible { window.alphaValue = 0 }
             // `orderFrontRegardless`, not `makeKeyAndOrderFront` + activate: coming back should not
             // yank focus off whatever the user just finished doing.
-            window.alphaValue = 1
             window.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup(
+                { context in
+                    context.duration = duration
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    window.animator().alphaValue = 1
+                },
+                completionHandler: {
+                    MainActor.assumeIsolated {
+                        guard generation == hideGeneration, current === window else { return }
+                        // Pinned regardless of how the animation ended, so the card can never be left
+                        // sitting at a partial alpha.
+                        window.alphaValue = 1
+                    }
+                })
         }
     }
+
+    /// Whether a hide that began at `startedAt` is still the current intent by the time its fade
+    /// finishes — which is to say, whether it is allowed to take the window off screen.
+    ///
+    /// A free function on three values rather than two `if`s inside a completion handler, because the
+    /// failure it guards against is unobservable after the fact: the window is simply gone, on a
+    /// Dock-less app, during first run. The generation is what makes a *second* hide arriving while
+    /// the first is still fading not count as the first one completing.
+    /// `nonisolated` because it is a function of its three arguments and nothing else — which is the
+    /// property that makes it worth extracting at all.
+    nonisolated static func hideMayComplete(startedAt: Int, current: Int, stillHidden: Bool) -> Bool {
+        startedAt == current && stillHidden
+    }
+
+    /// The last thing `setHidden` was asked for, and a token identifying that request.
+    private static var isHiddenIntent = false
+    private static var hideGeneration = 0
 
     /// Dissolves the surface. The finale's glow is drawn by `OnboardingView`; this is the fade it
     /// burns out through.
     static func dismiss() {
         guard let window = current else { return }
         current = nil
+        isHiddenIntent = false
         // Belt and braces: onboarding cannot finish while the cinematic is still on screen, but if
         // it somehow did, the key monitor must not outlive the window that owns it.
         removeEscapeMonitor()
@@ -275,16 +360,18 @@ final class OnboardingWindow {
         cinematicDirector = nil
 
         let duration: TimeInterval = InkReduceMotion.isEnabled ? 0 : 0.55
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = duration
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            window.animator().alphaValue = 0
-        }, completionHandler: {
-            MainActor.assumeIsolated {
-                window.orderOut(nil)
-                window.close()
-            }
-        })
+        NSAnimationContext.runAnimationGroup(
+            { context in
+                context.duration = duration
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                window.animator().alphaValue = 0
+            },
+            completionHandler: {
+                MainActor.assumeIsolated {
+                    window.orderOut(nil)
+                    window.close()
+                }
+            })
     }
 }
 

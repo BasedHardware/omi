@@ -47,9 +47,18 @@ final class StatusItemController: NSObject {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 320, height: 380)
         popover.contentViewController = NSHostingController(rootView: StatusView())
-        // Deliberately no `appearance` override, here or process-wide. This popover is a system
-        // surface, so it follows the system: forcing light meant dark-mode users got a white sheet
-        // among their dark menu bar extras, and the vibrancy behind it had nothing to blend with.
+        // Pinned light, like every other surface this app draws.
+        //
+        // This reverses an earlier decision, and the reason is worth keeping: the popover used to
+        // follow the system on the argument that it is a system surface sitting beside other menu
+        // bar extras. That argument loses to a stronger one — the popover is *this app's* panel, and
+        // when the onboarding card, the timeline, settings and the coach marks are all light frosted
+        // glass, a popover that is near-black on a Dark machine is the one surface that does not look
+        // like the product. `.appearance` on the popover reaches its content view controller, so the
+        // vibrancy behind it and `Ink`'s dynamic colours resolve in the same appearance the rest of
+        // the app's glass does — which is also what keeps the label ladder's contrast measurements
+        // true here.
+        popover.appearance = InkGlass.appearance
         self.popover = popover
 
         // The icon answers "is it listening?" without a click, so it has to follow the engine
