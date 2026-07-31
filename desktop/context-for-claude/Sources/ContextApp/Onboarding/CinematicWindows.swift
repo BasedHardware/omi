@@ -1,186 +1,39 @@
 import AppKit
-import ContextCore
 import SwiftUI
 
-//  Beat 5 — the window cards — and the composition that holds every beat.
+//  Beat 5 — the window field — and the composition that holds every beat.
 //
-//  The cards render the user's **own** recent captured frames, read through
-//  `RewindQueries.frames`. On a fresh install there are none, and the cards fall back to neutral
-//  placeholders: a ground, a hairline, three window dots and a few grey bars. There is deliberately
-//  no third option. This app's entire claim is that it does not invent context, so a mocked-up
-//  screenshot of an app the user does not have — or an app name attached to a frame we did not
-//  read — would be the single most expensive lie in the product. A placeholder names nothing.
+//  ## Why these windows are synthetic, and only synthetic
 //
-//  Nothing on this path can hold a beat up. The store read happens on a detached task started
-//  before beat 1 and is never awaited; a real frame's image decodes through `FrameLoader` (off the
-//  main thread, and already the tested decode path for the Rewind timeline) and cross-fades in
-//  whenever it lands. A card whose image never arrives simply stays the neutral card it started as.
-
-// MARK: - Cards
-
-/// One window card.
-struct CinematicCard: Identifiable, Equatable, Sendable {
-    /// Real cards carry the frame's row id. Placeholders take a negative id derived from their slot,
-    /// so the two can never collide in a `ForEach`.
-    let id: Int64
-    /// `nil` for a placeholder. The only source of an app name or an image on this surface.
-    let frame: RewindFrame?
-
-    var isPlaceholder: Bool { frame == nil }
-
-    /// The app the frame was captured from, when we actually read one. Never synthesised.
-    var appName: String? { frame?.appName }
-
-    static func placeholder(slot: Int) -> CinematicCard {
-        CinematicCard(id: Int64(-(slot + 1)), frame: nil)
-    }
-
-    static func placeholders(count: Int) -> [CinematicCard] {
-        (0..<max(0, count)).map(placeholder(slot:))
-    }
-
-    static func real(_ frame: RewindFrame) -> CinematicCard {
-        CinematicCard(id: frame.id, frame: frame)
-    }
-}
-
-/// Turns the frames we read into the cards beat 5 shows.
-///
-/// Pure, and the whole of the "never fabricate" rule in one place: zero frames means every card is
-/// a placeholder, and any frame at all means every card is real. The two are never mixed, because a
-/// grid of two screenshots and four grey rectangles reads as four failures rather than as two
-/// successes.
-enum CinematicFrameSelection {
-    /// - Parameters:
-    ///   - frames: oldest first, as `RewindQueries.frames` returns them.
-    ///   - slots: how many cards the grid can hold.
-    static func cards(from frames: [RewindFrame], slots: Int) -> [CinematicCard] {
-        let slots = max(0, slots)
-        guard slots > 0 else { return [] }
-        guard !frames.isEmpty else { return CinematicCard.placeholders(count: slots) }
-
-        return select(frames, count: min(slots, frames.count)).map(CinematicCard.real)
-    }
-
-    /// Which frames the grid shows.
-    ///
-    /// Two passes, and the first one is the point. Taking the last six rows would be six pictures of
-    /// the same window — capture writes a frame every couple of seconds — and even an evenly spread
-    /// sample over an hour of focused work comes back as five frames of one editor, which is exactly
-    /// what it looked like the first time this was rendered on a real store. So: **the most recent
-    /// frame from each distinct app first**, then an even spread of everything else to fill. Every
-    /// card is still a frame we actually read; the choice only decides which real frames get shown.
-    ///
-    /// Result is ordered oldest first, which is the order the grid fills in.
-    static func select(_ frames: [RewindFrame], count: Int) -> [RewindFrame] {
-        guard count > 0, !frames.isEmpty else { return [] }
-        guard count < frames.count else { return frames }
-
-        var chosen: [Int64: RewindFrame] = [:]
-
-        // Pass 1: one per app, the most recent of each. `frames` is oldest first, so the last write
-        // for an app name wins.
-        var latestPerApp: [String: RewindFrame] = [:]
-        for frame in frames { latestPerApp[frame.appName] = frame }
-        let apps = latestPerApp.values.sorted {
-            $0.capturedAt == $1.capturedAt ? $0.id > $1.id : $0.capturedAt > $1.capturedAt
-        }
-        for frame in apps.prefix(count) { chosen[frame.id] = frame }
-
-        // Pass 2: fill from an even spread of the whole window.
-        for frame in sample(frames, count: count) where chosen.count < count {
-            chosen[frame.id] = frame
-        }
-        // Pass 3: the spread can collide with what pass 1 already took. Walk back from the newest
-        // until the grid is full — `count < frames.count`, so this always can be.
-        for frame in frames.reversed() where chosen.count < count {
-            chosen[frame.id] = frame
-        }
-
-        return chosen.values.sorted {
-            $0.capturedAt == $1.capturedAt ? $0.id < $1.id : $0.capturedAt < $1.capturedAt
-        }
-    }
-
-    /// Evenly spaced across the range, newest last.
-    static func sample(_ frames: [RewindFrame], count: Int) -> [RewindFrame] {
-        guard count > 0, !frames.isEmpty else { return [] }
-        guard count < frames.count else { return frames }
-        let step = Double(frames.count - 1) / Double(count - 1 == 0 ? 1 : count - 1)
-        var picked: [RewindFrame] = []
-        var seen = Set<Int>()
-        for index in 0..<count {
-            let position = min(frames.count - 1, Int((Double(index) * step).rounded()))
-            guard seen.insert(position).inserted else { continue }
-            picked.append(frames[position])
-        }
-        return picked
-    }
-}
-
-// MARK: - Where the frames come from
-
-/// Beat 5's frames.
-///
-/// A protocol so the selection rule is tested without a database, and so a caller can hand the
-/// director an empty source to see the fresh-install path.
-protocol CinematicFrameSource: Sendable {
-    func recent(limit: Int) async -> [CinematicCard]
-}
-
-/// The real thing: a read-only snapshot of the capture store.
-///
-/// Read-only and opened here rather than borrowed from `Engine`, exactly as
-/// `ScreenActivityUploader` does — WAL means this never blocks the writer, and a fresh install
-/// throws `notInitialized`, which is not an error but the answer "nothing captured yet".
-struct StoredCinematicFrames: CinematicFrameSource {
-    /// Widened until a window holds enough frames. Bounded on purpose: `frames(_:since:until:)`
-    /// materialises every row in the window, and asking for a month up front to fill six cards
-    /// would decode thousands of rows nobody looks at.
-    static let windows: [Double] = [3600, 12 * 3600, 30 * 86_400]
-
-    func recent(limit: Int) async -> [CinematicCard] {
-        await Task.detached(priority: .utility) {
-            StoredCinematicFrames.read(limit: limit)
-        }.value
-    }
-
-    /// Every failure here means the same thing to the caller — no frames, so placeholders — which
-    /// is why nothing is rethrown.
-    private static func read(limit: Int) -> [CinematicCard] {
-        guard let store = try? ContextStore(readOnly: true) else {
-            return []
-        }
-        // The end of what has actually been captured, not `Date()`: an install that ran a week ago
-        // and has been quiet since still has frames worth showing.
-        let end = (try? RewindQueries.coverage(store))?.upperBound ?? Date().timeIntervalSince1970
-
-        var best: [RewindFrame] = []
-        for window in windows {
-            guard let frames = try? RewindQueries.frames(store, since: end - window, until: end) else {
-                continue
-            }
-            if frames.count > best.count { best = frames }
-            if best.count >= limit { break }
-        }
-        return CinematicFrameSelection.cards(from: best, slots: limit)
-    }
-}
-
-/// A fixed set of frames, for tests and previews.
-struct StaticCinematicFrames: CinematicFrameSource {
-    let frames: [RewindFrame]
-
-    func recent(limit: Int) async -> [CinematicCard] {
-        CinematicFrameSelection.cards(from: frames, slots: limit)
-    }
-}
+//  This beat used to render the user's **own** recent captured frames, read live from the capture
+//  store, and fall back to a grey skeleton — a hairline, three dots, three bars — when the store
+//  had nothing in it. That fallback was not the rare path. It was the *only* path:
+//
+//  - The cinematic is gated on `context.onboarded` (`CinematicGate`), so the only person who ever
+//    sees it is someone running the app for the first time.
+//  - Screen capture is not granted until Phase 4, which happens *after* this. A first-run store is
+//    empty by construction, not by accident.
+//
+//  So every real user got six identical unfinished-looking cards, and the branch that was supposed
+//  to be the good one could only fire for a developer with a pre-seeded database. Keeping a
+//  real-frames path would mean keeping the branch nobody sees, in front of the one everybody does.
+//  It is also the wrong thing to *want*: a full-screen intro that flashes the user's own recent
+//  screenshots is a shoulder-surfing hazard in a product whose pitch is privacy, and a composition
+//  that changes with the store cannot be reviewed against a screenshot.
+//
+//  These windows are therefore drawn, always, for everyone. There is no store read on this path,
+//  no image decode, no `CinematicFrameSource`, and so no fallback branch and nothing to record —
+//  the honest way to satisfy `docs/agents/fallback-telemetry.md` is to not have a second path.
+//
+//  What they must never be is *plausible*. `CinematicWindowArt.swift` holds the drawing, and the
+//  invariant that makes this safe: a window is built from numbers only and no view in that file can
+//  draw text, so no synthetic window can carry a name, a message, or an app. See its header.
 
 // MARK: - Grid
 
-/// Where the cards settle, and where they fly in from.
+/// Where the windows settle, where they fly in from, and how they sit once they land.
 ///
-/// Every value is a function of the card's index, with no randomness anywhere: a cinematic that
+/// Every value is a function of the window's index, with no randomness anywhere: a cinematic that
 /// looks different on each run cannot be reviewed against a screenshot, and a stagger built on
 /// `Double.random` is the same bug `RandomizedText` documents at length.
 enum CinematicGrid {
@@ -205,8 +58,8 @@ enum CinematicGrid {
         return CGFloat(rows) * cardSize.height + CGFloat(rows - 1) * gap
     }
 
-    /// The card's resting offset from the grid's centre. The last row is centred rather than
-    /// left-aligned, so four cards read as a deliberate arrangement instead of a truncated one.
+    /// The window's resting offset from the grid's centre. The last row is centred rather than
+    /// left-aligned, so four windows read as a deliberate arrangement instead of a truncated one.
     static func slot(_ index: Int, count: Int) -> CGSize {
         let rowCount = rows(for: count)
         guard rowCount > 0, index < count else { return .zero }
@@ -222,7 +75,7 @@ enum CinematicGrid {
         return CGSize(width: x, height: y)
     }
 
-    /// Off-screen, on a fan around the composition, so the swarm arrives from every direction
+    /// Off-screen, on a fan around the composition, so the field arrives from every direction
     /// rather than sliding in from one edge.
     static func entry(_ index: Int, count: Int, in size: CGSize) -> CGSize {
         guard count > 0 else { return .zero }
@@ -231,134 +84,104 @@ enum CinematicGrid {
         return CGSize(width: cos(angle) * radius, height: sin(angle) * radius)
     }
 
-    /// The tilt a card carries while it is still in the air. Alternates side, so the swarm does not
-    /// read as one sheet of paper folded over.
+    /// The tilt a window carries while it is still in the air. Alternates side, so the field does
+    /// not read as one sheet of paper folded over.
     static func entryRotation(_ index: Int) -> Double {
         let magnitude = 9 + Double(index % 3) * 4.5
         return index.isMultiple(of: 2) ? -magnitude : magnitude
     }
-}
 
-// MARK: - One card
-
-/// A window card: a header strip with three neutral dots, and either a real captured frame or a
-/// neutral placeholder body.
-///
-/// The dots are `CinematicPalette.cardLine` and not red/amber/green on purpose — this is a card
-/// that reads as a window, not a forgery of macOS's own chrome.
-struct CinematicCardView: View {
-    let card: CinematicCard
-    /// The decoded frame, once it has arrived. Until then, and for a placeholder, the body is
-    /// neutral.
-    let image: NSImage?
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
+    /// The tilt a window keeps *after* it lands.
+    ///
+    /// The product page's windows rest at ±2.2°, and it is the single detail that makes a set of
+    /// rectangles read as a field of windows rather than as a table. Pulled in slightly here,
+    /// because a 3-wide grid still has to read as rows.
+    static func restRotation(_ index: Int) -> Double {
+        let magnitude = [1.5, 0.7, 1.2, 0.9, 1.6, 1.0][abs(index) % 6]
+        return index.isMultiple(of: 2) ? -magnitude : magnitude
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-            Group {
-                if let image {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(
-                            width: CinematicGrid.cardSize.width,
-                            height: CinematicGrid.cardSize.height - Self.headerHeight)
-                        .clipped()
-                } else {
-                    placeholderBody
-                }
-            }
-        }
-        .frame(width: CinematicGrid.cardSize.width, height: CinematicGrid.cardSize.height)
-        .background(CinematicPalette.cardFill)
-        .clipShape(shape)
-        .overlay(shape.strokeBorder(CinematicPalette.hairline, lineWidth: 1))
-        // A card in flight needs to read as being in front of the scrim; a dark shadow is the only
-        // thing that separates a translucent white-edged card from a black ground.
-        .shadow(color: .black.opacity(0.55), radius: 14, x: 0, y: 7)
-        .accessibilityHidden(true)
+    /// How large a window sits at rest.
+    ///
+    /// The page runs 0.64–0.88, which is a 27% spread. At that range a grid stops being a grid, so
+    /// this is the same idea across a twentieth of it: enough that the field has a near and a far,
+    /// not enough to unalign the rows.
+    static func restScale(_ index: Int) -> CGFloat {
+        [1.0, 0.965, 0.985, 0.955, 1.0, 0.97][abs(index) % 6]
     }
 
-    static let headerHeight: CGFloat = 20
+    static let nearestScale: CGFloat = 1.0
+    static let farthestScale: CGFloat = 0.955
 
-    private var header: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<3, id: \.self) { _ in
-                Circle()
-                    .fill(CinematicPalette.cardLine)
-                    .frame(width: 5, height: 5)
-            }
-            // Only ever the app name of a frame we genuinely read. A placeholder has no name, and
-            // no stand-in for one.
-            if let appName = card.appName {
-                Text(appName)
-                    .inkStyle(InkType.statusLabel, color: CinematicPalette.inkSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.leading, 2)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: Self.headerHeight)
-        .background(Ink.glow.opacity(0.05))
-    }
-
-    /// Neutral geometry — the shape of a document, with nothing written on it. Widths are a
-    /// function of the card's slot so the six placeholders are not six identical rectangles.
-    private var placeholderBody: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            ForEach(0..<3, id: \.self) { line in
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(CinematicPalette.cardLine)
-                    .frame(width: lineWidth(line), height: 6)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 12)
-        .frame(
-            width: CinematicGrid.cardSize.width,
-            height: CinematicGrid.cardSize.height - Self.headerHeight,
-            alignment: .topLeading)
-    }
-
-    private func lineWidth(_ line: Int) -> CGFloat {
-        let base: [CGFloat] = [0.82, 0.62, 0.44]
-        let jitter = CGFloat((abs(Int(card.id)) + line * 3) % 4) * 0.03
-        let usable = CinematicGrid.cardSize.width - 24
-        return usable * min(0.94, base[line % base.count] + jitter)
+    /// How much of the float a window takes: the near ones move more than the far ones, which is
+    /// the page's parallax expressed through the same scale that sets it.
+    static func depth(_ index: Int) -> CGFloat {
+        let span = nearestScale - farthestScale
+        guard span > 0 else { return 1 }
+        let position = (restScale(index) - farthestScale) / span
+        return 0.75 + position * 0.45
     }
 }
 
-// MARK: - The swarm
+// MARK: - The field
 
-/// Every card, flying in and settling.
-struct CinematicCardGrid: View {
-    let cards: [CinematicCard]
-    /// Cards `0..<settled` have arrived; the rest are still off-screen.
+/// Every window, flying in, settling, and then floating.
+struct CinematicWindowGrid: View {
+    let windows: [CinematicWindowSpec]
+    /// Windows `0..<settled` have arrived; the rest are still off-screen.
     let settled: Int
     /// The window's size, which is what "off-screen" is measured against.
     let stageSize: CGSize
-    /// Reduce Motion: no travel and no tilt, just the cross-fade.
+    /// Reduce Motion: no travel, no tilt, no float — just the cross-fade.
     let crossFade: Bool
 
-    /// Decoded frames, keyed by card id. Populated off the main thread by `FrameLoader`.
-    @State private var images: [Int64: NSImage] = [:]
-    @State private var loader = FrameLoader()
+    /// Overridden by the render harness and by tests so a phase of the float is a value rather
+    /// than a moment. `nil` in production, where the clock is `TimelineView`'s.
+    var pinnedPhase: TimeInterval?
+
+    private var drifts: Bool {
+        pinnedPhase == nil
+            && CinematicWindowMotion.allowsDrift(
+                crossFade: crossFade, reduceMotion: InkReduceMotion.isEnabled)
+    }
 
     var body: some View {
-        ZStack {
-            ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
-                let hasArrived = index < settled
-                let slot = CinematicGrid.slot(index, count: cards.count)
-                let entry = CinematicGrid.entry(index, count: cards.count, in: stageSize)
+        Group {
+            if drifts {
+                // The float is a function of the clock, not a repeating animation: six independent
+                // `repeatForever` springs would each own their own transaction and fight the
+                // settle, and none of them could be rendered at a chosen phase for review.
+                TimelineView(.animation) { context in
+                    field(at: context.date.timeIntervalSinceReferenceDate)
+                }
+            } else {
+                field(at: pinnedPhase)
+            }
+        }
+        .frame(width: CinematicGrid.width, height: CinematicGrid.height(for: windows.count))
+    }
 
-                CinematicCardView(card: card, image: images[card.id])
+    /// The whole field at one instant. `nil` is the static composition Reduce Motion gets.
+    private func field(at time: TimeInterval?) -> some View {
+        ZStack {
+            ForEach(Array(windows.enumerated()), id: \.element.id) { index, spec in
+                let hasArrived = index < settled
+                let slot = CinematicGrid.slot(index, count: windows.count)
+                let entry = CinematicGrid.entry(index, count: windows.count, in: stageSize)
+                let drift =
+                    time.map {
+                        CinematicWindowMotion.drift(
+                            index: index, at: $0, depth: CinematicGrid.depth(index))
+                    } ?? .still
+
+                CinematicWindowView(spec: spec, size: CinematicGrid.cardSize)
+                    .rotationEffect(
+                        .degrees(CinematicGrid.restRotation(index) + drift.rotation))
+                    .scaleEffect(CinematicGrid.restScale(index))
+                    .offset(x: drift.dx, y: drift.dy)
+                    // The float updates every frame and must never be animated: inside the settle
+                    // spring's transaction it would lag a frame behind itself and smear.
+                    .transaction { $0.animation = nil }
                     .rotationEffect(
                         .degrees(hasArrived || crossFade ? 0 : CinematicGrid.entryRotation(index)))
                     .scaleEffect(hasArrived ? 1 : (crossFade ? 1 : 0.84))
@@ -368,25 +191,12 @@ struct CinematicCardGrid: View {
                     .opacity(hasArrived ? 1 : 0)
             }
         }
-        .frame(width: CinematicGrid.width, height: CinematicGrid.height(for: cards.count))
-        // Kicks whenever the card set changes — the placeholders are replaced in place the moment
-        // the store read lands, and each real frame then decodes on its own.
-        .task(id: cards.map(\.id)) { decodeFrames() }
-    }
-
-    private func decodeFrames() {
-        for card in cards {
-            guard let frame = card.frame else { continue }
-            loader.load(frame) { image in
-                images[card.id] = image
-            }
-        }
     }
 }
 
 // MARK: - The composition
 
-/// The whole cinematic: the scrim, the one object beats 2–4 build, the card grid, and the two
+/// The whole cinematic: the scrim, the one object beats 2–4 build, the window field, and the two
 /// controls that can stop it.
 struct CinematicView: View {
     @ObservedObject var director: CinematicDirector
@@ -422,18 +232,18 @@ struct CinematicView: View {
         .contentShape(Rectangle())
     }
 
-    /// The vessel and the grid, positioned as one block so opening the grid lifts the prompt rather
-    /// than pushing it off centre.
+    /// The vessel and the field, positioned as one block so opening the field lifts the prompt
+    /// rather than pushing it off centre.
     private func composition(in stageSize: CGSize) -> some View {
-        let count = director.cards.count
+        let count = director.windows.count
         let gridHeight = director.gridOpen ? CinematicGrid.height(for: count) : 0
         let blockHeight = CinematicVesselMetrics.promptShellHeight + Self.gridGap + gridHeight
         let vesselY = director.gridOpen ? -(blockHeight - CinematicVesselMetrics.promptShellHeight) / 2 : 0
         let gridY = (blockHeight - gridHeight) / 2
 
         return ZStack {
-            CinematicCardGrid(
-                cards: director.cards,
+            CinematicWindowGrid(
+                windows: director.windows,
                 settled: director.settledCards,
                 stageSize: stageSize,
                 crossFade: director.timing.isCrossFade
@@ -453,7 +263,7 @@ struct CinematicView: View {
         .frame(width: Self.designSize.width, height: Self.designSize.height)
     }
 
-    /// Between the prompt field and the top of the grid.
+    /// Between the prompt field and the top of the field.
     private static let gridGap: CGFloat = 30
 
     /// "Skip intro", and the bed's own mute control.
@@ -491,7 +301,7 @@ struct CinematicView: View {
             }
             .padding(.bottom, 44)
             // Arrives with the dim rather than before it, and leaves with beat 6 — a "Skip intro"
-            // button hanging over the welcome card would be pointing at nothing.
+            // button hanging over the field would be pointing at nothing.
             .opacity(director.dim > 0.35 && !director.receding ? 1 : 0)
             .animation(
                 InkReduceMotion.animation(.easeOut(duration: CinematicTiming.crossFade)),

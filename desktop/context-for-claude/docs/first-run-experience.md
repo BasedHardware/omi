@@ -155,9 +155,14 @@ Beats, each with its own sound:
 3. **Collapse to a bar** — mark and wordmark morph via matched geometry into a single horizontal bar.
 4. **Stretch into a prompt** — the bar widens into a prompt field with the mark at the left and a
    caret; a question types itself ("what was I working on today?"). Swoosh on the stretch.
-5. **Windows swoosh in** — a swarm of window cards flies in from off-screen on staggered swooshes and
-   settles into a grid. These render the user's **real** recent captured frames when any exist, and
-   fall back to neutral placeholders on a fresh install — never fabricated screenshots of fake apps.
+5. **Windows swoosh in** — a field of window cards flies in from off-screen on staggered swooshes,
+   settles into a grid, and then floats: each window on its own long period, with a resting tilt and
+   a parallax that follows its resting scale. The windows are **synthetic and identical on every
+   run** — generic app windows drawn from `CinematicWindowArt.swift`, never the user's captured
+   frames and never a fabricated screenshot. That file's types carry numbers only and no view in it
+   can draw text, so a window cannot name an app, a person, or a message. See the header of
+   `CinematicWindows.swift` for why the real-frames path was removed rather than kept as a fallback:
+   first-run stores are empty by construction, so the fallback *was* the shipping path.
 6. **Recede** into the welcome card.
 
 Constraints: `Esc` and a visible "Skip intro" abort at any point; `InkReduceMotion` (already present)
@@ -202,9 +207,22 @@ Permissions stay one-at-a-time with the existing lead-in/after-grant pacing
 2. **Collect frames.** Open a Wikipedia article, with a coach mark: "Scroll around and collect your
    first frames." A **live counter reads our own store** — real frames, not a timer pretending.
 3. **"Your screen is now searchable."** Only shown once frames actually landed.
-4. **Hand off to Claude.** Explain that Claude reads its MCP config at startup and must be restarted;
-   offer a button that relaunches Claude Desktop, shows the `claude` CLI equivalent, and puts a
-   suggested question on the clipboard.
+4. **Hand off to Claude — by doing it.** Direct user instruction: "Open claude for me and type the
+   first thing in." The tutorial routes the suggested question through `ClaudeRouter` as
+   `claude://code/new?q=…`, which lands it in the composer. The prompt is **pre-filled, not sent** —
+   pressing Return stays the user's. Every branch that could not pre-fill says so instead: no
+   `claude://` handler falls back to the clipboard, and no Claude Desktop at all is its own admission
+   (`TutorialClaudeAsk`).
+
+   **The restart is conditional and consented.** Claude reads its MCP config at startup, so a Claude
+   open from *before* we registered cannot call our tools — but that is a conditional justification
+   and `ClaudeHandoff` tests the condition rather than assuming it: `launchDate <=
+   ClaudeRegistrar.claudeDesktopRegisteredAt`, with either date missing answering "no restart". A
+   Claude launched after we wrote already has us and is never touched. When a restart genuinely is
+   needed the card *asks* ("Claude is open already… May I close and reopen it?") with a real second
+   choice — declining still hands the question over and the copy says the reach may be stale, which
+   beats quitting somebody's conversation to force a gate. What comes back reports what happened, so
+   an app that refuses to quit is `restarted: false`.
 5. **Prove it.** The MCP server writes a last-query timestamp into the data directory; the app watches
    for it, so "Found it" appears only when Claude has genuinely called one of our tools. This is the
    payoff beat, and it is earned rather than staged.

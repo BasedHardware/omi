@@ -18,9 +18,9 @@ import SwiftUI
 //
 //  - **Decoration must never be able to block onboarding.** Nothing here throws, nothing here
 //    waits on I/O, and `CinematicDirector.finish` is latched and idempotent — Esc, the Skip
-//    button, the last beat and the watchdog all land in the same terminal state exactly once. The
-//    frames for beat 5 are loaded *concurrently* with the sequence and are never awaited: beat 5
-//    renders whatever arrived, and neutral placeholders when nothing did.
+//    button, the last beat and the watchdog all land in the same terminal state exactly once. Beat
+//    5's windows are drawn rather than read (`CinematicWindows.swift`), so there is no I/O on the
+//    sequence's path at all — not a read that is raced, a read that does not exist.
 //  - **The sequence is a value, the timing is a value, and the cues go through a seam.** So the
 //    part worth testing — beat order, abort from any beat, reduce-motion collapse, which sound
 //    belongs to which beat — runs with no window, no clock and no audio device.
@@ -439,10 +439,10 @@ final class CinematicDirector: ObservableObject {
     @Published private(set) var form: CinematicForm = .mark
     /// Characters of `question` shown so far.
     @Published private(set) var typedCount: Int = 0
-    /// Beat 5's cards. Seeded with placeholders at `start()` and replaced in place if real frames
-    /// arrive, so beat 5 always has something honest to show.
-    @Published private(set) var cards: [CinematicCard] = []
-    /// How many cards have arrived. Card `i` is in flight until `i < settledCards`.
+    /// Beat 5's windows. Fixed, synthetic, and identical on every run — see
+    /// `CinematicWindows.swift` for why there is no longer a path that reads the user's frames.
+    @Published private(set) var windows: [CinematicWindowSpec] = []
+    /// How many windows have arrived. Window `i` is in flight until `i < settledCards`.
     @Published private(set) var settledCards: Int = 0
     /// Beat 5 has made room: the prompt has lifted and the grid's space is open. Never closes.
     @Published private(set) var gridOpen = false
@@ -456,13 +456,11 @@ final class CinematicDirector: ObservableObject {
     let timing: CinematicTiming
     private let cues: CinematicCues
     private let sleep: Sleep
-    private let frames: CinematicFrameSource
 
     // MARK: Private
 
     private var sequence = CinematicSequence()
     private var runTask: Task<Void, Never>?
-    private var frameTask: Task<Void, Never>?
     private var watchdogTask: Task<Void, Never>?
     private var onFinish: ((CinematicEnd) -> Void)?
     /// Latched. Esc, the Skip button, the last beat and the watchdog can all arrive; exactly one
@@ -472,12 +470,10 @@ final class CinematicDirector: ObservableObject {
     init(
         timing: CinematicTiming = .current,
         cues: CinematicCues = SystemCinematicCues(),
-        frames: CinematicFrameSource = StoredCinematicFrames(),
         sleep: @escaping Sleep = CinematicDirector.realSleep
     ) {
         self.timing = timing
         self.cues = cues
-        self.frames = frames
         self.sleep = sleep
         self.musicEnabled = cues.isMusicEnabled
     }
@@ -503,9 +499,9 @@ final class CinematicDirector: ObservableObject {
         self.onFinish = onFinish
 
         cues.prepare()
-        // Placeholders first, so beat 5 is valid before any I/O has happened at all.
-        cards = CinematicCard.placeholders(count: CinematicGrid.slots)
-        loadFrames()
+        // The full composition, immediately. There is nothing to wait for and nothing that can
+        // arrive late, which is the whole of the fix for the empty first-run grid.
+        windows = CinematicWindowDeck.windows(count: CinematicGrid.slots)
         armWatchdog()
 
         runTask = Task { [weak self] in
@@ -636,18 +632,18 @@ final class CinematicDirector: ObservableObject {
     /// not a typewriter.
     private static let keystrokeEvery = 4
 
-    /// Beat 5. Cards arrive one at a time, each on its own swoosh.
+    /// Beat 5. Windows arrive one at a time, each on its own swoosh.
     private func playWindows() async {
-        let count = cards.count
+        let count = windows.count
         guard count > 0 else {
-            // No cards at all should be impossible — `start()` seeds placeholders — but a beat that
-            // silently does nothing is still better than one that hangs.
+            // No windows at all should be impossible — `start()` seeds the whole deck — but a beat
+            // that silently does nothing is still better than one that hangs.
             await sleep(timing.windows)
             return
         }
 
         // Make room first: the prompt lifts and the grid's space opens under it. The lift rides the
-        // first card's spring rather than getting a beat of its own.
+        // first window's spring rather than getting a beat of its own.
         animate(timing.cardFlight, curve: .spring(response: timing.cardFlight, dampingFraction: 0.85)) {
             self.gridOpen = true
         }
@@ -661,7 +657,7 @@ final class CinematicDirector: ObservableObject {
             if Task.isCancelled { return }
         }
 
-        // The last card is still flying when the loop ends; let it land before beat 6 starts.
+        // The last window is still flying when the loop ends; let it land before beat 6 starts.
         let flown = timing.cardStagger * Double(count)
         await sleep(max(0, timing.windows - flown))
     }
@@ -718,8 +714,6 @@ final class CinematicDirector: ObservableObject {
 
         runTask?.cancel()
         runTask = nil
-        frameTask?.cancel()
-        frameTask = nil
         watchdogTask?.cancel()
         watchdogTask = nil
 
@@ -737,25 +731,6 @@ final class CinematicDirector: ObservableObject {
         handoff?(end)
     }
 
-    // MARK: Frames
-
-    /// Beat 5's frames, loaded beside the sequence and never awaited by it.
-    ///
-    /// If the read is slow, or the store does not exist yet, or every image is unreadable, beat 5
-    /// simply keeps the placeholders it was seeded with. There is no path here that can delay a
-    /// beat, and no path that fabricates a screenshot.
-    private func loadFrames() {
-        let slots = CinematicGrid.slots
-        let source = frames
-        frameTask = Task { [weak self] in
-            let loaded = await source.recent(limit: slots)
-            guard !Task.isCancelled, !loaded.isEmpty else { return }
-            await MainActor.run {
-                guard let self, !self.didFinish else { return }
-                self.cards = loaded
-            }
-        }
-    }
 }
 
 /// The two curves the cinematic uses, named so `animate` reads as intent.

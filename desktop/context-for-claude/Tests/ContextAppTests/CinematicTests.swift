@@ -1,4 +1,6 @@
+import AppKit
 import ContextCore
+import SwiftUI
 import XCTest
 @testable import ContextApp
 
@@ -55,27 +57,14 @@ final class CinematicTests: XCTestCase {
     /// actually suspends and the `@Published` writes interleave the way they do in production.
     private static let instantSleep: CinematicDirector.Sleep = { _ in await Task.yield() }
 
-    private static func frame(id: Int64, at seconds: Double, app: String = "Xcode") -> RewindFrame {
-        RewindFrame(
-            id: id,
-            capturedAt: seconds,
-            appName: app,
-            bundleId: "com.example.\(app)",
-            windowTitle: nil,
-            ocrText: nil,
-            imagePath: "/tmp/context-cinematic-tests/\(id).heic")
-    }
-
     @MainActor
     private func makeDirector(
-        timing: CinematicTiming = .standard,
-        frames: CinematicFrameSource = StaticCinematicFrames(frames: [])
+        timing: CinematicTiming = .standard
     ) -> (CinematicDirector, RecordingCues) {
         let cues = RecordingCues()
         let director = CinematicDirector(
             timing: timing,
             cues: cues,
-            frames: frames,
             sleep: Self.instantSleep)
         return (director, cues)
     }
@@ -240,15 +229,14 @@ final class CinematicTests: XCTestCase {
     }
 
     @MainActor
-    func testOneSwooshPerCard() async throws {
-        let frames = (0..<12).map { Self.frame(id: Int64($0), at: 1_000 + Double($0) * 30) }
-        let (director, cues) = makeDirector(frames: StaticCinematicFrames(frames: frames))
+    func testOneSwooshPerWindow() async throws {
+        let (director, cues) = makeDirector()
         _ = try await runToEnd(director)
 
         XCTAssertEqual(
             cues.effects.filter { $0 == .swoosh }.count,
-            1 + director.cards.count,
-            "the stretch, plus one swoosh per card that flew in")
+            1 + director.windows.count,
+            "the stretch, plus one swoosh per window that flew in")
     }
 
     @MainActor
@@ -333,99 +321,180 @@ final class CinematicTests: XCTestCase {
 
     // MARK: - Beat 5
 
-    func testAnEmptyStoreStillProducesAValidBeatFive() {
-        let cards = CinematicFrameSelection.cards(from: [], slots: CinematicGrid.slots)
-
-        XCTAssertEqual(cards.count, CinematicGrid.slots, "a fresh install still gets a full grid")
-        XCTAssertTrue(cards.allSatisfy(\.isPlaceholder))
-        XCTAssertTrue(
-            cards.allSatisfy { $0.appName == nil },
-            "a placeholder never names an app — that would be a fabricated screenshot")
-        XCTAssertEqual(Set(cards.map(\.id)).count, cards.count, "ids stay unique for ForEach")
-    }
-
+    /// The regression this beat exists to have caught.
+    ///
+    /// Beat 5 used to read the capture store and fall back to a grey skeleton when it was empty.
+    /// Every first-run user has an empty store — the cinematic is gated on `context.onboarded` and
+    /// capture is not granted until Phase 4 — so the fallback was what shipped. There is now one
+    /// path, and this asserts a cold start reaches it with a full composition.
     @MainActor
-    func testDirectorSeedsPlaceholdersBeforeAnyFrameIsRead() async throws {
+    func testAColdStoreStillProducesAFullBeatFive() async throws {
         let (director, _) = makeDirector()
         director.start { _ in }
+        defer { director.skip() }
 
-        XCTAssertEqual(director.cards.count, CinematicGrid.slots)
-        XCTAssertTrue(
-            director.cards.allSatisfy(\.isPlaceholder),
-            "beat 5 is valid before the store has been touched")
-        director.skip()
-    }
-
-    func testRealFramesReplaceEveryPlaceholderRatherThanSomeOfThem() {
-        let frames = [Self.frame(id: 7, at: 1_000), Self.frame(id: 9, at: 1_100)]
-        let cards = CinematicFrameSelection.cards(from: frames, slots: CinematicGrid.slots)
-
-        XCTAssertEqual(cards.count, 2, "two frames means two cards, not two plus four grey holes")
-        XCTAssertTrue(cards.allSatisfy { !$0.isPlaceholder })
-        XCTAssertEqual(cards.map(\.id), [7, 9])
-    }
-
-    func testFramesAreSampledAcrossTheWindowRatherThanTakenFromTheEnd() {
-        // One app for the whole window, so the app-diversity pass contributes a single frame and the
-        // even spread has to do the rest.
-        let frames = (0..<60).map { Self.frame(id: Int64($0), at: 1_000 + Double($0) * 2) }
-        let cards = CinematicFrameSelection.cards(from: frames, slots: 6)
-
-        XCTAssertEqual(cards.count, 6)
-        XCTAssertEqual(Set(cards.map(\.id)).count, 6, "no frame is shown twice")
         XCTAssertEqual(
-            cards.map(\.id).sorted(), cards.map(\.id),
-            "the grid fills oldest first")
-        XCTAssertLessThan(
-            try XCTUnwrap(cards.map(\.id).min()), 20,
-            "spread across the window: the six most recent frames are six pictures of one window")
-        XCTAssertGreaterThan(try XCTUnwrap(cards.map(\.id).max()), 40)
+            director.windows.count, CinematicGrid.slots,
+            "a brand-new install gets every slot filled, not a partial grid")
+        XCTAssertEqual(
+            Set(director.windows.map(\.id)).count, director.windows.count,
+            "ids stay unique for ForEach")
+        XCTAssertEqual(
+            Set(director.windows.map(\.layout)).count, director.windows.count,
+            "no two windows in the grid are the same drawing")
     }
 
-    func testTheGridPrefersOneFramePerAppOverSixOfTheSameOne() {
-        // What a real hour looks like: fifty frames of one editor, a couple of everything else. The
-        // first render on this machine's own store came back five-of-six identical, which is what
-        // this rule exists to stop.
-        var frames: [RewindFrame] = []
-        for index in 0..<50 {
-            frames.append(Self.frame(id: Int64(index), at: 1_000 + Double(index), app: "Cursor"))
+    /// The composition is complete the instant `start()` returns: there is no read to be raced and
+    /// nothing that can arrive late, which is what removed the empty-grid failure rather than
+    /// papering over it.
+    @MainActor
+    func testTheCompositionIsCompleteBeforeAnyBeatHasPlayed() async throws {
+        let (director, _) = makeDirector()
+        director.start { _ in }
+        defer { director.skip() }
+
+        XCTAssertEqual(director.windows, CinematicWindowDeck.windows(count: CinematicGrid.slots))
+        XCTAssertEqual(director.settledCards, 0, "complete, and not yet arrived")
+    }
+
+    /// **No fabricated personal content.** The primary guarantee is the type: no case of
+    /// `CinematicWindowLayout` and no field of `CinematicWindowSpec` carries a `String`, so a
+    /// window has nothing to say a name, an address, or a message with. This walks the shipping
+    /// deck through an exhaustive switch, so adding a text-bearing case fails to compile here.
+    func testNoSyntheticWindowCanCarryPersonalContent() {
+        for window in CinematicWindowDeck.windows(count: CinematicGrid.slots) {
+            switch window.layout {
+            case .document(let heading, let lines):
+                XCTAssertGreaterThan(heading, 0)
+                XCTAssertFalse(lines.isEmpty)
+            case .media(let cover, let captions):
+                XCTAssertGreaterThan(cover, 0)
+                XCTAssertFalse(captions.isEmpty)
+            case .chat(let turns):
+                XCTAssertFalse(turns.isEmpty)
+            case .terminal(let rows):
+                XCTAssertFalse(rows.isEmpty)
+            case .feed(let rows):
+                XCTAssertGreaterThan(rows, 0)
+            case .gallery(let columns, let rows):
+                XCTAssertGreaterThan(columns * rows, 0)
+            case .chart(let bars):
+                XCTAssertFalse(bars.isEmpty)
+            case .sidebar(let rail, let lines):
+                XCTAssertFalse(rail.isEmpty)
+                XCTAssertFalse(lines.isEmpty)
+            }
         }
-        frames.append(Self.frame(id: 100, at: 1_060, app: "Arc"))
-        frames.append(Self.frame(id: 101, at: 1_061, app: "Terminal"))
-        frames.append(Self.frame(id: 102, at: 1_062, app: "Mail"))
-
-        let cards = CinematicFrameSelection.cards(from: frames, slots: 6)
-        let apps = cards.compactMap(\.appName)
-
-        XCTAssertEqual(cards.count, 6)
-        XCTAssertEqual(
-            Set(apps), ["Cursor", "Arc", "Terminal", "Mail"],
-            "every distinct app is represented before a second frame of any of them")
-        XCTAssertEqual(
-            apps.filter { $0 == "Cursor" }.count, 3,
-            "the remaining slots fill from the app that actually dominated the window")
-        XCTAssertTrue(cards.allSatisfy { !$0.isPlaceholder }, "still every card a real frame")
     }
 
-    func testSelectionIsDeterministic() {
-        var frames: [RewindFrame] = []
-        for index in 0..<40 {
-            let app = ["Cursor", "Arc", "Terminal"][index % 3]
-            frames.append(Self.frame(id: Int64(index), at: 1_000 + Double(index), app: app))
+    /// A **static tripwire**, not behavioural coverage: it reads the drawing's source and asserts
+    /// no view in it can put glyphs on screen. The type check above is the real guard; this catches
+    /// the other way the rule breaks — a `Text` added straight into a window body.
+    func testTheWindowDrawingHasNoTextInIt() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // ContextAppTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // package root
+            .appendingPathComponent("Sources/ContextApp/Onboarding/CinematicWindowArt.swift")
+        let text = try String(contentsOf: source, encoding: .utf8)
+
+        for banned in ["Text(", "Label(", "Image(", "SF Symbol"] {
+            XCTAssertFalse(
+                text.contains(banned),
+                "a synthetic window must not be able to draw \(banned) — see the file's header")
         }
-        let first = CinematicFrameSelection.cards(from: frames, slots: 6).map(\.id)
+    }
+
+    func testTheDeckIsDeterministicAndTotal() {
+        let first = CinematicWindowDeck.windows(count: CinematicGrid.slots)
         for _ in 0..<20 {
             XCTAssertEqual(
-                CinematicFrameSelection.cards(from: frames, slots: 6).map(\.id), first,
+                CinematicWindowDeck.windows(count: CinematicGrid.slots), first,
                 "a grid that differs run to run cannot be reviewed against a screenshot")
         }
+        XCTAssertEqual(CinematicWindowDeck.windows(count: 0), [])
+        XCTAssertEqual(CinematicWindowDeck.windows(count: -3), [])
+        XCTAssertEqual(
+            CinematicWindowDeck.windows(count: 20).count, 20,
+            "more slots than archetypes cycles rather than truncating")
     }
 
-    func testFrameSelectionIsBoundedBySlots() {
-        let frames = (0..<500).map { Self.frame(id: Int64($0), at: Double($0)) }
-        XCTAssertEqual(CinematicFrameSelection.cards(from: frames, slots: 3).count, 3)
-        XCTAssertEqual(CinematicFrameSelection.cards(from: frames, slots: 0), [])
-        XCTAssertEqual(CinematicFrameSelection.cards(from: frames, slots: -4), [])
+    // MARK: - The float
+
+    /// Reduce Motion gets a *static* composition: no drift, no parallax, one fixed frame.
+    func testReduceMotionStopsTheFloatEntirely() {
+        XCTAssertFalse(
+            CinematicWindowMotion.allowsDrift(crossFade: false, reduceMotion: true),
+            "the workspace setting alone stops the float")
+        XCTAssertFalse(
+            CinematicWindowMotion.allowsDrift(crossFade: true, reduceMotion: false),
+            "so does the director's reduced timing table")
+        XCTAssertFalse(CinematicWindowMotion.allowsDrift(crossFade: true, reduceMotion: true))
+        XCTAssertTrue(CinematicWindowMotion.allowsDrift(crossFade: false, reduceMotion: false))
+
+        XCTAssertEqual(CinematicWindowDrift.still.dx, 0)
+        XCTAssertEqual(CinematicWindowDrift.still.dy, 0)
+        XCTAssertEqual(CinematicWindowDrift.still.rotation, 0)
+    }
+
+    /// The float is bounded and out of step. Bounded, because a window that wandered would leave
+    /// its slot and break the grid; out of step, because six windows on one period read as a single
+    /// sheet rather than as a field.
+    func testTheFloatIsBoundedAndNeverInStep() {
+        var seen: [[CGFloat]] = []
+        for phase in stride(from: 0.0, through: 24.0, by: 0.25) {
+            var atThisPhase: [CGFloat] = []
+            for index in 0..<CinematicGrid.slots {
+                let depth = CinematicGrid.depth(index)
+                let drift = CinematicWindowMotion.drift(index: index, at: phase, depth: depth)
+                XCTAssertLessThanOrEqual(
+                    abs(drift.dy), CinematicWindowMotion.verticalAmplitude * depth + 0.001,
+                    "a floating window must stay inside its slot")
+                XCTAssertLessThanOrEqual(
+                    abs(drift.dx), CinematicWindowMotion.horizontalAmplitude * depth + 0.001)
+                XCTAssertLessThanOrEqual(
+                    abs(drift.rotation),
+                    CinematicWindowMotion.rotationAmplitude * Double(depth) + 0.001)
+                // Small enough that the grid still reads as a grid: a tenth of the gap between
+                // two windows, not a card that wanders out of its slot.
+                XCTAssertLessThan(
+                    abs(drift.dy), CinematicGrid.gap / 2,
+                    "a window that drifts half a gutter has left its slot")
+                atThisPhase.append(drift.dy)
+            }
+            XCTAssertGreaterThan(
+                Set(atThisPhase.map { ($0 * 1_000).rounded() }).count, 1,
+                "at \(phase)s every window sat at the same height")
+            seen.append(atThisPhase)
+        }
+        XCTAssertGreaterThan(seen.count, 90, "sampled across more than one full cycle")
+    }
+
+    /// Pure, so the composition at a moment is a value a review can be run against.
+    func testTheFloatIsAFunctionOfTheClockAlone() {
+        for index in 0..<CinematicGrid.slots {
+            XCTAssertEqual(
+                CinematicWindowMotion.drift(index: index, at: 3.5),
+                CinematicWindowMotion.drift(index: index, at: 3.5))
+        }
+        XCTAssertEqual(CinematicWindowMotion.drift(index: -1, at: 3.5), .still)
+    }
+
+    /// The near windows move more than the far ones — the page's parallax, taken from the same
+    /// resting scale that sets it.
+    func testNearerWindowsCarryMoreOfTheFloat() {
+        let depths = (0..<CinematicGrid.slots).map(CinematicGrid.depth)
+        XCTAssertGreaterThan(
+            try XCTUnwrap(depths.max()), try XCTUnwrap(depths.min()),
+            "a field with one depth has no parallax")
+        for index in 0..<CinematicGrid.slots {
+            XCTAssertGreaterThan(CinematicGrid.restScale(index), 0.9)
+            XCTAssertLessThanOrEqual(CinematicGrid.restScale(index), 1)
+            XCTAssertNotEqual(
+                CinematicGrid.restRotation(index), 0,
+                "a settled window keeps a tilt: that is what makes the grid read as a field")
+            XCTAssertLessThanOrEqual(abs(CinematicGrid.restRotation(index)), 2.2)
+        }
     }
 
     func testEveryCardGetsADistinctSlotInsideTheGrid() {
@@ -510,24 +579,18 @@ final class CinematicTests: XCTestCase {
         }
     }
 
+    /// The sequence's path has no I/O left on it at all, which is the strongest version of
+    /// "decoration cannot block onboarding": there is no read to time out and no task to race.
     @MainActor
-    func testAFrameSourceThatNeverAnswersDoesNotHoldTheRunUp() async throws {
-        /// Never returns. The sequence must not be waiting on it.
-        struct StalledFrames: CinematicFrameSource {
-            func recent(limit: Int) async -> [CinematicCard] {
-                while !Task.isCancelled { await Task.yield() }
-                return []
-            }
-        }
-
-        let (director, _) = makeDirector(frames: StalledFrames())
+    func testTheRunHasNothingToWaitOn() async throws {
+        let (director, _) = makeDirector()
         let end = try await runToEnd(director)
 
         XCTAssertEqual(end, .completed)
         XCTAssertEqual(director.visitedBeats, CinematicBeat.allCases)
         XCTAssertEqual(
-            director.cards.count, CinematicGrid.slots,
-            "beat 5 kept the placeholders it was seeded with")
+            director.windows.count, CinematicGrid.slots,
+            "beat 5 played the whole composition it was seeded with")
     }
 
     @MainActor
@@ -605,5 +668,159 @@ final class CinematicTests: XCTestCase {
         XCTAssertTrue(CinematicCaret.isOn(at: start))
         XCTAssertFalse(CinematicCaret.isOn(at: start.addingTimeInterval(half + 0.01)))
         XCTAssertTrue(CinematicCaret.isOn(at: start.addingTimeInterval(2 * half + 0.01)))
+    }
+
+    // MARK: - Vertical alignment
+
+    /// Everything in the prompt bar sits on the shell's centre, which is where the mark already is.
+    ///
+    /// Rendered rather than asserted on constants, because the defect this pins is not visible in
+    /// one. `questionField` used to be an `HStack(alignment: .firstTextBaseline)` containing a caret
+    /// that is a `Rectangle`, and SwiftUI resolves the text baselines of a view holding no text to
+    /// its own bottom edge — so the caret hung its whole bar above the baseline (4 pt higher than
+    /// the line it belongs to) and the stack's inflated above-baseline extent carried the question
+    /// 2 pt below the mark. Both numbers came out of a render, so a render is what guards them.
+    ///
+    /// Each measurement is the *difference* between two renders of the real `CinematicVessel`, so
+    /// the shell and the mark cancel and only the thing under test survives. Nothing here needs the
+    /// bundled faces: `InkType.prose` is 17 pt, under `Font.inkDisplayThreshold`, so it resolves to
+    /// the system font on any machine — and the wordmark, which is the one bundled role in the
+    /// vessel, is at zero opacity in `.prompt` and identical in both renders regardless.
+    /// The caret's height is a *derived* constant, and nothing else notices when it goes stale:
+    /// centring keeps text and caret on the same centre whatever the bar's height, so the centring
+    /// test below stays green while the caret is quietly the wrong size for its line. That is
+    /// exactly what happened when `InkType.prose` went 15 pt → 17 pt and `barHeight` stayed 19.
+    ///
+    /// So derive it here from the face itself rather than restating the number: TextKit rounds the
+    /// ascender and descender away from the baseline, and the line box is their sum. Resizing prose
+    /// without recomputing `barHeight` now fails.
+    func testTheCaretIsExactlyTheLineBoxOfTheRoleItSitsIn() {
+        // Deliberately *not* `InkTextStyle.naturalLineHeight`: that is the face's own line height
+        // (20.02 at 17 pt) and it is not the box SwiftUI lays a `Text` out in. TextKit rounds the
+        // ascender and the descender away from the baseline independently, so the laid-out box is
+        // `ceil(ascender) + ceil(descender)` — 21 — and it is that box the caret has to match.
+        // Asserting the wrong one of the two would pass while the caret stayed a point short.
+        //
+        // prose is under `Font.inkDisplayThreshold`, so it resolves to the system face on any
+        // machine — the same reason the render test above can rely on it.
+        let face = NSFont.systemFont(ofSize: InkType.prose.size)
+        let lineBox = ceil(face.ascender) + ceil(-face.descender)
+        XCTAssertEqual(
+            CinematicCaret.barHeight, lineBox, accuracy: 0.01,
+            "InkType.prose is \(InkType.prose.size) pt, whose laid-out line box is \(lineBox) — "
+                + "CinematicCaret.barHeight must follow it, not the size prose used to be")
+    }
+
+    @MainActor
+    func testThePromptCentresTheQuestionAndTheCaretOnTheShell() throws {
+        let stageCentre = CinematicVesselMetrics.stageHeight / 2
+        let blank = try render(question: "", showsCaret: false)
+
+        let caret = try XCTUnwrap(
+            Self.changedRows(blank, try render(question: "", showsCaret: true)),
+            "the caret drew nothing to measure")
+        XCTAssertEqual(
+            caret.bottom - caret.top, CinematicCaret.barHeight, accuracy: 0.5,
+            "the caret is one line box tall, which is what lets it be centred rather than sat on a "
+                + "baseline")
+        XCTAssertEqual(
+            (caret.top + caret.bottom) / 2, stageCentre, accuracy: 0.5,
+            "the caret straddles the shell's centre rather than hanging above it")
+
+        // "H" is a cap-height glyph with no descender, so the bottom of its ink is the baseline
+        // exactly. The line box around that baseline follows from the face's own metrics — and it is
+        // the line box, not the ink, that has to be centred, because the caret and the mark are
+        // centred on their boxes too.
+        let glyph = try XCTUnwrap(
+            Self.changedRows(blank, try render(question: "H", showsCaret: false)),
+            "the question drew nothing to measure")
+        let face = NSFont.systemFont(ofSize: InkType.prose.size, weight: .regular)
+        XCTAssertEqual(
+            glyph.bottom - (face.ascender + face.descender) / 2, stageCentre, accuracy: 0.75,
+            "the question's line box sits on the shell's centre, where the mark is")
+
+        // The render above is `.prompt`, and `.bar` is the same field in a shorter shell: the
+        // question is laid out in a frame the height of `shellSize` and centred in it, so the one
+        // thing that could still part the two is the mark leaving the centre the field is centred
+        // on. It does not, in either form — which is what makes one render cover both.
+        for form in [CinematicForm.bar, .prompt] {
+            XCTAssertEqual(
+                CinematicVesselMetrics.metrics(for: form).markOffset.height, 0,
+                "the mark is on the shell's centre in \(form)")
+        }
+    }
+
+    /// A bitmap and the scale it was drawn at, so a row index can be read back as a point.
+    private struct Bitmap {
+        let width: Int
+        let height: Int
+        let scale: CGFloat
+        let bytes: [UInt8]
+    }
+
+    /// The vessel in its `.prompt` form at 4×, so one pixel is a quarter of a point. Black behind
+    /// it only so the white ink has something to differ from; it changes no layout.
+    @MainActor
+    private func render(question: String, showsCaret: Bool) throws -> Bitmap {
+        let scale: CGFloat = 4
+        let renderer = ImageRenderer(
+            content: ZStack {
+                Color.black
+                CinematicVessel(
+                    draw: .complete,
+                    form: .prompt,
+                    question: question,
+                    showsCaret: showsCaret,
+                    // Static: a `TimelineView` caret would render a different frame each run.
+                    animatesCaret: false)
+            }
+            .frame(
+                width: CinematicVesselMetrics.promptWidth,
+                height: CinematicVesselMetrics.stageHeight))
+        renderer.scale = scale
+
+        let image = try XCTUnwrap(renderer.cgImage, "ImageRenderer produced no bitmap")
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        let drew = bytes.withUnsafeMutableBytes { raw -> Bool in
+            guard
+                let context = CGContext(
+                    data: raw.baseAddress,
+                    width: image.width,
+                    height: image.height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: image.width * 4,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            return true
+        }
+        XCTAssertTrue(drew, "could not back the render with a bitmap")
+        return Bitmap(width: image.width, height: image.height, scale: scale, bytes: bytes)
+    }
+
+    /// The band of rows two renders disagree in, in points from the top of the stage. Nil when they
+    /// are identical, which for these pairs means the thing under test never drew.
+    private static func changedRows(_ a: Bitmap, _ b: Bitmap) -> (top: CGFloat, bottom: CGFloat)? {
+        guard a.width == b.width, a.height == b.height else { return nil }
+        var first: Int?
+        var last: Int?
+        for y in 0..<a.height {
+            for x in 0..<a.width {
+                let i = (y * a.width + x) * 4
+                // 8/255 keeps the faintest antialiased edge out of the band symmetrically, which
+                // moves neither the centre nor the height by more than a pixel.
+                let differs = (0..<3).contains {
+                    abs(Int(a.bytes[i + $0]) - Int(b.bytes[i + $0])) > 8
+                }
+                if differs {
+                    first = first ?? y
+                    last = y
+                    break
+                }
+            }
+        }
+        guard let first, let last else { return nil }
+        return (CGFloat(first) / a.scale, CGFloat(last + 1) / a.scale)
     }
 }

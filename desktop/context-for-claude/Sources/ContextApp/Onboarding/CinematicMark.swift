@@ -220,6 +220,22 @@ struct CinematicMarkView: View {
     var draw: CinematicMarkDraw
     var size: CGFloat
     var color: Color = CinematicPalette.ink
+    /// How open the eyes are, vertically. 1 is the drawing; `TalkingMark` squashes this towards
+    /// `TalkingMarkMotion.blinkFloor` and back to blink. Defaulted, so every call site that predates
+    /// blinking draws exactly what it drew before.
+    ///
+    /// A blink has to be a *vertical* squash and cannot be `draw.eyes`, which scales both axes:
+    /// shrinking an eye uniformly reads as the eye receding, not as a lid coming down. This is the
+    /// one expressive control the drawing has — the mark has no mouth — so it belongs with the
+    /// geometry rather than being faked by an overlay somewhere else.
+    var eyeOpen: Double = 1
+
+    /// How much wider a closing eye gets, at fully closed.
+    ///
+    /// The eye is a fill: what it loses in height it has to keep somewhere or it is gone before it
+    /// reads as shut. 22% is a real lid's spread, and it is what makes the closed frame a *line*
+    /// rather than an absence.
+    private static let eyeWidenAtClosed: CGFloat = 0.22
 
     private var scale: CGFloat { size / CinematicMarkGeometry.box }
     /// See `CinematicMarkGeometry.lineWidthScale`: the paths are `ContextMark`'s, the weight is not
@@ -259,10 +275,14 @@ struct CinematicMarkView: View {
     private func eye(_ index: Int) -> some View {
         let centre = CinematicMarkGeometry.eyeCentres[index]
         let radii = CinematicMarkGeometry.eyeRadii
+        let open = min(max(eyeOpen, 0), 1)
+        let widen = 1 + (1 - open) * Self.eyeWidenAtClosed
         return Ellipse()
             .fill(color)
             .frame(width: radii.width * 2 * scale, height: radii.height * 2 * scale)
-            .scaleEffect(draw.eyes)
+            // `draw.eyes` is the place-on scale from the cinematic and `open` is the lid; they
+            // multiply, so an eye that has not been placed yet cannot be blinked into existence.
+            .scaleEffect(x: draw.eyes * widen, y: draw.eyes * open)
             .opacity(draw.eyes > 0 ? 1 : 0)
             .offset(
                 x: (centre.x - CinematicMarkGeometry.box / 2) * scale,
@@ -395,8 +415,25 @@ struct CinematicVessel: View {
             .fixedSize()
     }
 
+    /// The typed question, and the caret that follows it.
+    ///
+    /// `.center` and deliberately **not** `.firstTextBaseline`, which is the alignment this wants to
+    /// be and cannot: `CinematicCaret` is a `Rectangle`, and SwiftUI resolves both text baselines of
+    /// a view that contains no text to its own *bottom edge*. So under baseline alignment the caret
+    /// hung its entire 19 pt above the baseline instead of straddling it, and the stack's
+    /// above-baseline extent became the caret's 19 rather than the text's ~15 pt ascent. Measured on
+    /// this machine at the `.prompt` shell's 58 pt: the caret sat 4 pt higher than the line it
+    /// belongs to, and the whole stack — text included — was pushed 2 pt below the shell's centre.
+    /// The mark was never the thing that moved; `markOffset.height` is 0 in `.bar` and in `.prompt`,
+    /// so the mark has always been exactly on the shell's centre and the text was simply low.
+    ///
+    /// Centring costs nothing, because `CinematicCaret.barHeight` is exactly the line box the text
+    /// is laid out in: concentric with that line box is where a text caret goes, so `.center`
+    /// *reaches* baseline alignment's intended result along the one axis SwiftUI can measure here
+    /// without being told the face's ascent. Text and caret then both land on the shell's centre, in
+    /// every form, next to a mark that is already there.
     private func questionField(_ m: CinematicVesselMetrics) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 3) {
+        HStack(alignment: .center, spacing: 3) {
             Text(verbatim: question)
                 .inkStyle(InkType.prose, color: CinematicPalette.ink)
                 .fixedSize()
@@ -419,6 +456,21 @@ struct CinematicCaret: View {
 
     /// The period macOS blinks a text caret at.
     static let blinkSeconds: Double = 1.06
+
+    /// The bar's height, and the reason `questionField` can centre rather than baseline-align it.
+    ///
+    /// 21 pt is the line box SwiftUI lays `InkType.prose` out in: at 17 pt the system face measures
+    /// ascender 16.44 and descender 3.59, and TextKit rounds each away from the baseline, so
+    /// `ceil(16.44) + ceil(3.59)` = 21 — the height a single-line `Text` in this role actually
+    /// reports, verified by measuring the face. A caret exactly one line box tall, centred on that
+    /// line box, is the same bar a text view would draw from the baseline; it is only the *route*
+    /// to it that changes, because a `Rectangle` has no baseline to align to.
+    ///
+    /// This tracks `InkType.prose`'s size and must be recomputed when it moves: it was 19 when
+    /// prose was 15 pt (ascender 14.50, descender 3.16). A stale value does not fail the centring
+    /// test — text and caret share a centre either way — it just quietly makes the caret the wrong
+    /// height for the line it belongs to, which is the defect centring was chosen to avoid.
+    static let barHeight: CGFloat = 21
 
     /// Phase as a pure function of the clock, so the caret does not need state and cannot get out
     /// of step with itself across a re-render.
@@ -444,6 +496,6 @@ struct CinematicCaret: View {
     private var bar: some View {
         Rectangle()
             .fill(CinematicPalette.ink)
-            .frame(width: 2, height: 19)
+            .frame(width: 2, height: Self.barHeight)
     }
 }
