@@ -63,17 +63,20 @@ const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
   "https_proxy",
   "no_proxy",
   "SSL_CERT_FILE",
-  // Codex-acp: needs OPENAI_API_KEY for auth, NO_BROWSER to suppress
-  // interactive browser login, and INITIAL_AGENT_MODE for headless operation.
-  "OPENAI_API_KEY",
-  "NO_BROWSER",
-  "INITIAL_AGENT_MODE",
   "SSL_CERT_DIR",
   "NODE_EXTRA_CA_CERTS",
   // Adapter-specific home directory. Swift seeds HERMES_HOME before launching
   // the Node bridge; forwarding it lets the spawned `hermes acp` subprocess
   // locate its config/state instead of falling back to defaults.
   "HERMES_HOME",
+] as const;
+
+const CODEX_ADAPTER_ENV_ALLOWLIST = [
+  // Codex-acp: needs OPENAI_API_KEY for auth, NO_BROWSER to suppress
+  // interactive browser login, and INITIAL_AGENT_MODE for headless operation.
+  "OPENAI_API_KEY",
+  "NO_BROWSER",
+  "INITIAL_AGENT_MODE",
 ] as const;
 
 /**
@@ -318,7 +321,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       const externalEnv: NodeJS.ProcessEnv = {
         OMI_ADAPTER_ID: this.adapterId,
       };
-      for (const key of EXTERNAL_ADAPTER_ENV_ALLOWLIST) {
+      const allowlist = this.adapterId === "codex"
+        ? [...EXTERNAL_ADAPTER_ENV_ALLOWLIST, ...CODEX_ADAPTER_ENV_ALLOWLIST]
+        : EXTERNAL_ADAPTER_ENV_ALLOWLIST;
+      for (const key of allowlist) {
         if (process.env[key] !== undefined) {
           // Proxy URLs may carry embedded credentials (user:pass@host).
           // Strip them before forwarding to untrusted subprocesses.

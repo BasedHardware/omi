@@ -73,11 +73,11 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
-  func testChatSpawnAgentRejectsVagueBriefsBeforeSpawning() async {
+  func testChatSpawnAgentRequiresObjectiveBeforeSpawning() async {
     let before = AgentPillsManager.shared.pills.count
     let toolCall = ToolCall(
       name: "spawn_agent",
-      arguments: ["objective": "Private owner A task", "title": "Agent"],
+      arguments: ["title": "Agent"],
       thoughtSignature: nil)
 
     let result = await ChatToolExecutor.execute(
@@ -85,7 +85,7 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
       originatingChatMode: .act,
       expectedOwnerID: "spawn-test-owner")
 
-    XCTAssertEqual(result, "Unknown tool: spawn_agent")
+    XCTAssertEqual(result, "Error: Missing objective. Pass a clear, self-contained task objective.")
     XCTAssertEqual(AgentPillsManager.shared.pills.count, before)
   }
 }

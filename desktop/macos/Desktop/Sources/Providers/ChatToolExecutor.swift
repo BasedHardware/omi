@@ -211,6 +211,23 @@ class ChatToolExecutor {
       return message
     }
 
+    if toolCall.name == "manage_agent_pills" {
+      return await executeManageAgentPills(toolCall.arguments)
+    }
+    if toolCall.name == "setup_agent_provider" {
+      return await executeSetupAgentProvider(
+        toolCall.arguments,
+        originatingChatMode: originatingChatMode,
+        originatingClientScope: originatingClientScope
+      )
+    }
+    if toolCall.name == "spawn_agent" {
+      return await executeSpawnAgent(
+        toolCall.arguments,
+        originatingClientScope: originatingClientScope
+      )
+    }
+
     switch GeneratedToolExecutors.chatDispatch(for: toolCall.name) {
     case .executeSql:
       return await executeSQL(toolCall.arguments, expectedOwnerID: expectedOwnerID)
@@ -228,34 +245,6 @@ class ChatToolExecutor {
       return await executeCompleteTask(
         toolCall.arguments,
         expectedOwnerID: expectedOwnerID)
-
-    case "manage_agent_pills":
-      return await executeManageAgentPills(toolCall.arguments)
-
-    case "setup_agent_provider":
-      return await executeSetupAgentProvider(
-        toolCall.arguments,
-        originatingChatMode: originatingChatMode,
-        originatingClientScope: originatingClientScope
-      )
-
-    case "execute_sql":
-      return await executeSQL(toolCall.arguments)
-
-    case "semantic_search", "search_screen_history":
-      return await executeSemanticSearch(toolCall.arguments)
-
-    case "get_daily_recap":
-      return await executeDailyRecap(toolCall.arguments)
-
-    case "search_tasks":
-      return await executeSearchTasks(toolCall.arguments)
-
-    case "complete_task":
-      return await executeCompleteTask(toolCall.arguments)
-
-    case "delete_task":
-      return await executeDeleteTask(toolCall.arguments)
 
     // Onboarding tools
     case .requestPermission:
@@ -1032,14 +1021,21 @@ class ChatToolExecutor {
       await retryUnsyncedTasks()
       guard ownerIsCurrent(expectedOwnerID) else { return false }
     }
-    if originatingClientScope == AgentLegacyClientScope.floatingPill {
+    return true
+  }
+
+  private static func executeSpawnAgent(
+    _ args: [String: Any],
+    originatingClientScope: String?
+  ) async -> String {
+    if originatingClientScope == AgentClientScope.floatingPill {
       return
         "Error: spawn_agent is unavailable from an existing floating background agent. Complete the assigned task directly in this agent."
     }
-    let brief = ((args["brief"] as? String) ?? (args["query"] as? String) ?? "")
+    let brief = (args["objective"] as? String ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !brief.isEmpty else {
-      return "Error: Missing brief. Pass a clear, self-contained task brief."
+      return "Error: Missing objective. Pass a clear, self-contained task objective."
     }
     let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
     let providerName = ((args["provider"] as? String) ?? "")
@@ -1121,8 +1117,9 @@ class ChatToolExecutor {
     guard originatingChatMode != .ask else {
       return "Error: setup_agent_provider is unavailable in Ask mode. Switch to Act mode to install agent providers."
     }
-    if originatingClientScope == AgentLegacyClientScope.floatingPill {
-      return "Error: setup_agent_provider is unavailable from an existing floating background agent. Type in the chat bar to install a provider."
+    if originatingClientScope == AgentClientScope.floatingPill {
+      return
+        "Error: setup_agent_provider is unavailable from an existing floating background agent. Type in the chat bar to install a provider."
     }
     let raw = (args["provider"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !raw.isEmpty, let provider = AgentPillsManager.DirectedProvider(rawValue: raw.lowercased()) else {

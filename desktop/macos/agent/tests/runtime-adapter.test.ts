@@ -219,7 +219,7 @@ describe("AcpRuntimeAdapter process spawning", () => {
     const saved: Record<string, string | undefined> = {};
     const secretKeys = [
       "OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI", "OMI_BYOK_ANTHROPIC", "OMI_BYOK_GEMINI", "OMI_BYOK_DEEPGRAM",
-      "ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "CI_JOB_TOKEN",
+      "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "NO_BROWSER", "INITIAL_AGENT_MODE", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "CI_JOB_TOKEN",
     ];
     for (const key of secretKeys) {
       saved[key] = process.env[key];
