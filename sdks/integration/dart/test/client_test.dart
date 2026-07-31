@@ -58,7 +58,12 @@ void main() {
     final mock = MockClient((request) async {
       seen = request;
       return http.Response(
-        jsonEncode({'conversations': [], 'current_page': 1, 'per_page': 20, 'total_pages': 1}),
+        jsonEncode({
+          'conversations': [],
+          'current_page': 1,
+          'per_page': 20,
+          'total_pages': 1,
+        }),
         200,
       );
     });
