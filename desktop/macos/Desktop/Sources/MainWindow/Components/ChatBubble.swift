@@ -207,7 +207,7 @@ struct ChatBubble: View {
         if let backgroundAgentSummary {
           BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
         } else if !message.text.isEmpty {
-          StreamingAssistantText(displayText, isStreaming: message.isStreaming)
+          StreamingAssistantText(displayText, isStreaming: message.isStreaming, sender: message.sender)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
             .background(
