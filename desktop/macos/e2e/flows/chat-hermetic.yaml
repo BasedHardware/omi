@@ -21,6 +21,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/ChatOmiMark.swift
 - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatStreamingRevealAutomation.swift
   - desktop/macos/Desktop/Sources/Chat/ChatTurnLifecycle.swift
   - desktop/macos/Desktop/Sources/Chat/SmoothStreamReveal.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
