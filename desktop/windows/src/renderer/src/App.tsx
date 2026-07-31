@@ -36,6 +36,7 @@ import { runAnimBench } from './lib/dev/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
 import { ChatBridgeHost } from './components/chat/ChatBridgeHost'
+import { AiCloneDraftHost } from './components/chat/AiCloneDraftHost'
 import { VoiceHubDriverHost } from './components/chat/VoiceHubDriverHost'
 import { UsageLimitPopup } from './components/settings/billing/UsageLimitPopup'
 import { ClaudeAuthSheet } from './components/settings/billing/ClaudeAuthSheet'
@@ -145,6 +146,7 @@ function AppShellInner(): React.JSX.Element {
           state back to the bar. Main window only (this shell never mounts in the
           bar/capture windows). */}
       <ChatBridgeHost />
+      <AiCloneDraftHost />
       {/* Warm-hub PTT driver (A5 PR-6b, gated on pttHubEnabled). Main window only:
           the coordinator + hub + pcmPlayer live here (D1). Inert until the bar
           delegates a hold (flag on) — flag off it never receives a begin. */}

@@ -165,7 +165,7 @@ import {
 import { getAppSettings, setAppSettings, onAppSettingsChanged } from './appSettings'
 import { showBestEffortNotification } from './notify'
 import { buildHotkeyConflictNotice } from './hotkeyNotice'
-
+import { registerAiCloneHandlers } from './ipc/aiClone'
 // Default main-window content size. Single source of truth for both window
 // creation and the Settings → Font Size "Reset Window Size" affordance
 // (window:resetSize), so the two can never drift.
@@ -937,6 +937,9 @@ app.whenReady().then(async () => {
   // Coding-agent task IPC (cheap handler registration; adapter subprocesses spawn
   // only when a task actually runs).
   registerCodingAgentHandlers()
+
+
+  registerAiCloneHandlers()
   // Main-chat (kernel-routed pi-mono) IPC. DARK: the door exists but nothing in the
   // renderer calls it yet; default typed chat still routes through /v2/messages.
   registerMainChatHandlers()

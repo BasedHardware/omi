@@ -20,6 +20,7 @@ import {
   type RuntimeAdapter
 } from './interface'
 import { failureFromError, messageFrom } from './failures'
+import { rankAgentsForTask } from './agentSelection'
 import { isRecoverableAcpAuthError } from './acp'
 import { claudeAuthStatus } from './claudeOAuth'
 import type {
@@ -31,17 +32,29 @@ import type {
 
 const CLAUDE_SIGN_IN_HINT = 'Sign in to Claude to use Claude Code.'
 
-/** Preference order when no agent is named (or the named one falls over). */
+/** Base preference order — used as the stable tiebreak inside rankAgentsForTask
+ *  when the task text carries no capability signal, so behavior is unchanged
+ *  for prompt-less callers (e.g. existing tests, or an empty prompt). */
 export const AGENT_FALLBACK_ORDER = PRODUCTION_ADAPTER_IDS
 
+/**
+ * Connected agents to try, in order. When no agent is named, the connected
+ * set is ranked by fit for the task (see agentSelection.ts) rather than
+ * always leading with Claude Code — e.g. a tool-heavy task skips past
+ * OpenClaw (which can't use Omi's tools) to an agent that can. When an agent
+ * is named, it always goes first (the user's explicit choice is never
+ * second-guessed); only the *fallback* agents behind it are ranked by fit.
+ */
 export function candidateAgents(
   named: CodingAgentAdapterId | undefined,
   overrides: AdapterCommandOverrides,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  prompt = ''
 ): CodingAgentAdapterId[] {
   const connected = AGENT_FALLBACK_ORDER.filter((id) => adapterIsActivated(id, overrides, env))
-  if (!named) return [...connected]
-  return [named, ...connected.filter((id) => id !== named)]
+  const ranked = rankAgentsForTask(connected, prompt)
+  if (!named) return ranked
+  return [named, ...ranked.filter((id) => id !== named)]
 }
 
 const CONNECTION_TEST_TIMEOUT_MS = 20_000
@@ -127,7 +140,7 @@ export async function runCodingAgentTask(
   log: (message: string) => void = () => {}
 ): Promise<CodingAgentResult> {
   const overrides = args.commandOverrides ?? {}
-  const candidates = candidateAgents(args.agentId, overrides)
+  const candidates = candidateAgents(args.agentId, overrides, process.env, args.prompt)
   if (candidates.length === 0) {
     return {
       taskId: args.taskId,
