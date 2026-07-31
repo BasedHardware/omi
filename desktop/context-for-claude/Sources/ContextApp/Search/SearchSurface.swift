@@ -1,0 +1,550 @@
+//
+//  SearchSurface.swift — the two floating panels the search surface is made of, and the pure
+//  values behind them.
+//
+//  The whole point of this file is that the search surface is **two objects, not one**. A prompt bar
+//  and a panel of things to filter or look at are different in kind: one is a place you type, the
+//  other is a place you look. Drawing them as one tall slab with a rule across it says they are the
+//  same object, and that is exactly what the surface used to say. Here they are two panels with real
+//  air between them, each with its own corner, its own glass and its own shadow — so the eye reads
+//  two floating things over the desktop rather than one window pretending not to be a window.
+//
+//  Everything a test can hold is a value in here rather than a number inside a `body`: the gap, the
+//  grid's column count and the card width it implies, the relative timestamp, the result count
+//  sentence, the domain a window title carries. A view then has no arithmetic of its own to get
+//  wrong.
+//
+//  Colour and type come from `Ink` / `InkType`. The two tokens this file adds (`SearchInk`) are the
+//  query chip's tint, and they are here rather than in `Ink` because they are the only place in the
+//  app that needs a hue at all — see the note there for why the hue is `systemBlue` and never
+//  `controlAccentColor`.
+//
+
+import AppKit
+import ContextCore
+import SwiftUI
+
+// MARK: - The glass
+
+/// One floating panel of the app's **one** glass.
+///
+/// Everything about what the panel is made of — the `.headerView` material, the 0.36 scrim, the 22 pt
+/// corner, the broad ambient shadow, the light-appearance pin that makes the type on it dark — comes
+/// from `InkGlass`, which is the shared surface every window in this app now wears. Nothing about the
+/// material is decided here, and a second `NSVisualEffectView` configured in this file would be the
+/// defect that component exists to prevent.
+///
+/// What this type adds is only the *arrangement*: there are two of these, they are the same width,
+/// and there is `SearchLayout.panelGap` of real air between them.
+struct SearchGlassPanel<Content: View>: View {
+    var cornerRadius: CGFloat = InkGlass.cornerRadius
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .inkGlassPanel(cornerRadius: cornerRadius, shadow: .ambient)
+            // The hit shape is the panel, not its bounding box, so the rounded corners are really
+            // corners: a click in the notch outside the curve belongs to whatever is behind.
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
+
+// MARK: - Metrics
+
+/// Every number the search surface is laid out from.
+///
+/// Sizes that already exist elsewhere are taken from there — the vertical rhythm is
+/// `InkLayout.rhythm`, the type is `InkType` — and only the values this surface genuinely
+/// introduces are stated here, each with what set it.
+enum SearchLayout {
+
+    /// The width of both panels. Wide enough for a three-across grid of legible cards (see
+    /// `cardWidth`) and no wider: past this the prompt bar stops reading as a bar.
+    static let panelWidth: CGFloat = 760
+
+    /// **The gap.** The single most important number in this file.
+    ///
+    /// Two panels 12 pt apart read as two objects; the same two at 0 read as one slab with a rule
+    /// through it, which is what the surface looked like before. It is a hair under the 14 pt rung of
+    /// `InkLayout.rhythm` on purpose: the panels have their own shadows, and a shadow already reads
+    /// as a few points of separation, so a rhythm gap on top of one measures as too much air.
+    static let panelGap: CGFloat = 12
+
+    /// The corner is the shared one. Not restated here as a number: a search bar and a timeline cut
+    /// to two different radii read as two products, which is exactly why `InkGlass` owns it.
+    static var panelCornerRadius: CGFloat { InkGlass.cornerRadius }
+
+    /// The prompt bar's height. Roomy — the reference's bar is a place to type, not a control strip.
+    static let barHeight: CGFloat = 60
+
+    /// The second panel is **as tall as what is in it**, between these two bounds.
+    ///
+    /// A fixed height was the first attempt and it is wrong at both ends: on a fresh install the
+    /// panel is three empty sections over 200 pt of nothing, and with a page of results the last row
+    /// of cards is sliced through the middle at the panel's edge — which is precisely the "cards get
+    /// clipped" failure this design is supposed to avoid. The panel measures its own content
+    /// (`SearchPanelHeightKey`) and clamps it here instead, so a sparse panel is short and a full one
+    /// stops at a height that still fits a 13" display.
+    static let minimumResultsBodyHeight: CGFloat = 40
+    /// The ceiling is **set by the cards, not by taste**: it is the filter block plus one whole card
+    /// — thumbnail, title and source line — plus the panel's bottom padding. A ceiling under that is
+    /// the clipped-card defect by another route, because the first row the user sees would be sliced
+    /// through the middle. `testTheCeilingLeavesRoomForAWholeCard` holds it there.
+    static let maximumResultsBodyHeight: CGFloat = 545
+
+    /// What the window opens at, before the view has measured itself. A prediction, not the truth —
+    /// the measured height arrives within a frame and the window resizes to it.
+    static let initialFilterPanelHeight: CGFloat = 430
+
+    /// The scroll view's height for a given natural content height.
+    ///
+    /// The clamp, as a function, so both ends of it are a test rather than a screenshot: below the
+    /// floor the panel is a sliver, above the ceiling it is taller than a 13" display, and inside it
+    /// the panel is exactly as tall as what is in it and nothing scrolls that did not need to.
+    static func resultsBodyHeight(contentHeight: CGFloat) -> CGFloat {
+        min(max(contentHeight, minimumResultsBodyHeight), maximumResultsBodyHeight)
+    }
+
+    /// The filter panel's own header — the `Filter` row and the rule under it.
+    static let panelHeaderHeight: CGFloat = 44
+
+    static let panelPaddingHorizontal: CGFloat = 20
+    static let panelPaddingVertical: CGFloat = 16
+
+    /// Clear margin the window keeps around the panels so the shared ambient shadow has room to fall
+    /// off instead of being clipped at the window's edge. Taken from the shadow itself
+    /// (`InkGlassShadow.padding`), never guessed — a margin that stops tracking the shadow is a
+    /// panel with a straight grey line down one side.
+    static var shadowMargin: CGFloat { InkGlassShadow.ambient.padding }
+
+    // The results grid.
+
+    /// Three across, as in the reference. A count and not a `.adaptive` minimum: the panel is a fixed
+    /// width, so an adaptive grid would silently become two or four across after any padding change
+    /// and nothing would say so.
+    static let resultColumns = 3
+    static let cardGutter: CGFloat = 14
+    /// Cards are wider than they are tall by 4:3 — the shape of the screens they are pictures of.
+    static let thumbnailAspect: CGFloat = 4.0 / 3.0
+    static let cardCornerRadius: CGFloat = 10
+
+    // Chips.
+
+    static let chipHeight: CGFloat = 28
+    static let chipCornerRadius: CGFloat = 14
+    static let chipSpacing: CGFloat = 8
+    /// The app tiles in `FILTER BY APP`, which are icons rather than pills.
+    static let appTileIcon: CGFloat = 46
+    static let appTileWidth: CGFloat = 74
+
+    /// The content width inside a panel.
+    static func contentWidth(panelWidth: CGFloat = panelWidth) -> CGFloat {
+        max(0, panelWidth - panelPaddingHorizontal * 2)
+    }
+
+    /// One result card's width, from the panel width and the gutters between the columns.
+    ///
+    /// A function rather than a constant so the reflow claim is testable: the grid has to keep three
+    /// legible columns at the width it is actually given, and a card that goes under
+    /// `minimumCardWidth` is a clipped one.
+    static func cardWidth(panelWidth: CGFloat = panelWidth, columns: Int = resultColumns) -> CGFloat {
+        let columns = max(1, columns)
+        let gutters = cardGutter * CGFloat(columns - 1)
+        return max(0, (contentWidth(panelWidth: panelWidth) - gutters) / CGFloat(columns))
+    }
+
+    /// Below this a card's title has no room to say anything before it truncates, and the thumbnail
+    /// stops being recognisable as a screen.
+    static let minimumCardWidth: CGFloat = 150
+
+    /// The gap between the thumbnail and the two lines under it, and the height those two lines take.
+    /// Stated rather than measured so `cardHeight` is arithmetic; `testACardIsAsTallAsTheLayoutSays`
+    /// checks it against the real card.
+    static let cardCaptionHeight: CGFloat = 46
+
+    /// One whole card: the picture, plus the title and source under it.
+    static func cardHeight(panelWidth: CGFloat = panelWidth) -> CGFloat {
+        cardWidth(panelWidth: panelWidth) / thumbnailAspect + cardCaptionHeight
+    }
+
+    // The bar's own furniture.
+
+    /// The app glyph at the leading edge.
+    static let glyphSize: CGFloat = 22
+    /// The note that replaces the keyboard hint when there is something to say about the route.
+    static let noteHeight: CGFloat = 34
+
+    /// Room the query chip may grow into before it stops. The bar's content width, less the glyph
+    /// and the space the keyboard hint needs on the other side.
+    static let queryFieldWidth: CGFloat = contentWidth() - glyphSize - 12 - 190
+
+    // The window.
+
+    /// The whole surface including the clear margin the shadows fall into.
+    static var surfaceWidth: CGFloat { panelWidth + shadowMargin * 2 }
+
+    /// The surface's height for a given panel height — what the window is sized to.
+    ///
+    /// The view measures its own content and hands the result back (`onHeightChange`), so this is
+    /// the arithmetic that turns a panel height into a window height and nothing more. The default
+    /// argument is the opening prediction.
+    static func surfaceHeight(
+        showingNote: Bool, panelHeight: CGFloat = initialFilterPanelHeight
+    ) -> CGFloat {
+        let bar = barHeight + (showingNote ? noteHeight : 0)
+        return shadowMargin * 2 + bar + panelGap + panelHeight
+    }
+}
+
+/// The second panel's measured height, on its way up to the window.
+///
+/// A preference and not a constant because the panel is content-sized: three empty sections and a
+/// page of result cards are 300 pt apart, and a window sized for one of them is wrong for the other
+/// in a way the user sees immediately — either a slab of empty glass or a row of cards sliced
+/// through the middle.
+struct SearchPanelHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// The whole surface's measured height, on its way to the window's frame.
+///
+/// A second key rather than the panel's, so the two measurements cannot be confused for each other:
+/// one is what the scroll view may show, the other is what the window has to be.
+struct SearchSurfaceHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Reports the height of whatever it is placed behind. `Color.clear` so it draws nothing.
+struct SearchHeightReader<Key: PreferenceKey>: View where Key.Value == CGFloat {
+    var key: Key.Type
+
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(key: key, value: proxy.size.height)
+        }
+    }
+}
+
+// MARK: - Measurement
+
+/// The one place text is measured, so the chip and the text inside it cannot disagree.
+enum SearchMetrics {
+
+    static let placeholder = "Ask Claude Code…"
+
+    /// The size the query is set at.
+    ///
+    /// 19 and not `InkType.stepHeadline`'s 27, which is what this bar used before: at 27 the query
+    /// is the loudest thing on the whole surface — louder than the results it produced — and it
+    /// overflows the field's line box, which clipped the top of the placeholder's ascenders. 19 is
+    /// still visibly larger than every other run of type here (the next is `rowCopy` at 15), which is
+    /// the hierarchy the bar needs, and it stays under `Font.inkDisplayThreshold` so it is SF Pro
+    /// rather than the display face — a search field is reading type.
+    static let queryFontSize: CGFloat = 19
+
+    /// The face the query is set in, resolved to the AppKit font the field is actually made of. Both
+    /// the chip's width and the field's own text use this exact value; two different faces here is a
+    /// capsule that is a few points too narrow and looks like a rendering bug.
+    static var queryFace: NSFont {
+        InkFonts.role(size: queryFontSize, weight: .semiBold).metrics
+    }
+
+    /// The line box the query needs, with room above the ascenders. The chip and the field row are
+    /// both this tall — a field shorter than its own font is the clipped-placeholder defect.
+    static var queryLineHeight: CGFloat {
+        (InkFonts.naturalLineHeight(queryFace) + 10).rounded()
+    }
+
+    /// Padding inside the query chip, either end.
+    static let chipPaddingHorizontal: CGFloat = 12
+    /// The magnifier plus the gap after it.
+    static let chipGlyphWidth: CGFloat = 13 + 6
+
+    /// How wide the tinted capsule is for a given query.
+    ///
+    /// A pure function of the string and the room it has, which is what makes "the chip hugs the
+    /// text" and "the chip stops at the bar's edge" two things a test can hold rather than two things
+    /// that look right on the one query someone tried.
+    static func chipWidth(for query: String, available: CGFloat) -> CGFloat {
+        guard !query.isEmpty else { return 0 }
+        let text = textWidth(query)
+        let wanted = chipPaddingHorizontal * 2 + chipGlyphWidth + text
+        return min(max(wanted, minimumChipWidth), max(minimumChipWidth, available))
+    }
+
+    /// A chip narrower than this is a coloured smudge rather than a chip.
+    static let minimumChipWidth: CGFloat = 54
+
+    /// The rendered width of a run of text in the query face.
+    static func textWidth(_ text: String, font: NSFont? = nil) -> CGFloat {
+        let face = font ?? queryFace
+        return NSAttributedString(string: text, attributes: [.font: face]).size().width
+    }
+}
+
+// MARK: - Colour
+
+/// The two hues the search surface adds, and the reason each one is a system semantic colour.
+///
+/// `Ink` is the palette; this is not a second one. It exists because the query chip is the only
+/// element in the app that has to read as *tinted* rather than as a neutral wash, and because a
+/// shadow needs a black that is not a label colour.
+enum SearchInk {
+
+    /// The query chip's fill.
+    ///
+    /// `systemBlue` and explicitly **not** `Ink.accent` / `NSColor.controlAccentColor`. The accent is
+    /// the user's own choice, so it is purple on any Mac whose owner picked purple — and purple is
+    /// off-brand everywhere in this product (INV-UI-1). A chip that is purple on some machines and
+    /// not others is not a design, it is a coin flip. `systemBlue` is still a system semantic colour,
+    /// so it tracks the appearance and increases contrast under the accessibility setting, and it is
+    /// the hue the reference reads as.
+    ///
+    /// 0.14 is a wash rather than a fill: the chip's job is to say "this run of text is the query",
+    /// and the text inside it is `Ink.primary`, which has to stay the highest-contrast thing in the
+    /// bar. A saturated fill would put a mid-luminance hue under near-black type on light glass and
+    /// near-white type on dark glass, and only one of those can be legible.
+    static let queryChipFill = Color(nsColor: .systemBlue).opacity(0.14)
+    /// The chip's edge — the same hue, a little stronger, so the capsule has a boundary without a
+    /// border heavy enough to read as a control.
+    static let queryChipStroke = Color(nsColor: .systemBlue).opacity(0.28)
+    /// The magnifier inside the chip. Full-strength `systemBlue` is legible as a *glyph* at 11 pt on
+    /// both grounds where it would not be as text.
+    static let queryChipGlyph = Color(nsColor: .systemBlue)
+
+    /// A filter chip at rest: the near-white/very light grey of the reference, expressed the way
+    /// every other fill in this app is — an alpha on `labelColor`, so it darkens light glass and
+    /// lightens dark glass instead of being one grey that is wrong in one appearance.
+    static let chipFill = Color(nsColor: .labelColor).opacity(0.05)
+    static let chipFillHover = Color(nsColor: .labelColor).opacity(0.09)
+    /// The selected chip. Stronger, still neutral — selection is weight, never hue.
+    static let chipFillSelected = Color(nsColor: .labelColor).opacity(0.14)
+    /// "A very subtle border", per the reference. Half of `Ink.hairline`, which is the edge of
+    /// something you press; a chip is a lighter promise than that.
+    static let chipStroke = Color(nsColor: .labelColor).opacity(0.10)
+
+    /// The neutral standing in for a thumbnail that has not decoded yet, or whose file retention
+    /// already removed. Never a broken-image glyph and never an empty hole.
+    static let thumbnailPlaceholder = Color(nsColor: .labelColor).opacity(0.06)
+}
+
+// MARK: - What a result is
+
+/// One thing the search found, with everything a card draws and nothing it does not.
+///
+/// Distinct from `RewindFrame` because a card shows a *source* — a domain when the window carried
+/// one, the app when it did not — and deriving that in the view would put a string-parsing decision
+/// inside a `body` where no test can reach it.
+struct SearchMoment: Identifiable, Equatable {
+    let id: Int64
+    /// The window title, or the app name when the capture had no title. Never empty.
+    let title: String
+    /// The domain the title carried, or the app name.
+    let source: String
+    let appName: String
+    let bundleId: String?
+    /// Unix epoch seconds.
+    let capturedAt: Double
+    /// The stored frame, when there is a picture on disk. Nil is an ordinary outcome — retention
+    /// unlinks files, and 8.7% of captured rows never had an image at all.
+    let frame: RewindFrame?
+
+    init(
+        id: Int64,
+        title: String,
+        source: String,
+        appName: String,
+        bundleId: String?,
+        capturedAt: Double,
+        frame: RewindFrame?
+    ) {
+        self.id = id
+        self.title = title
+        self.source = source
+        self.appName = appName
+        self.bundleId = bundleId
+        self.capturedAt = capturedAt
+        self.frame = frame
+    }
+
+    /// The card shape for a captured frame, with the title and source already decided.
+    init(frame: RewindFrame) {
+        let title = SearchSource.title(appName: frame.appName, windowTitle: frame.windowTitle)
+        self.init(
+            id: frame.id,
+            title: title,
+            source: SearchSource.source(appName: frame.appName, windowTitle: frame.windowTitle),
+            appName: frame.appName,
+            bundleId: frame.bundleId,
+            capturedAt: frame.capturedAt,
+            frame: frame)
+    }
+}
+
+/// What a card calls the thing it is showing.
+enum SearchSource {
+
+    /// The card's headline. The window title when there is one, otherwise the app — never blank, and
+    /// never the literal string "Untitled", which says less than the app's own name does.
+    static func title(appName: String, windowTitle: String?) -> String {
+        let trimmed = windowTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? appName : trimmed
+    }
+
+    /// The line under the title: the site the window was showing, or the app that owned it.
+    ///
+    /// Browsers put the page's host in the window title often enough that pulling it out is what
+    /// makes a grid of screenshots scannable — twelve cards all sourced "Arc" say nothing, and twelve
+    /// sourced by their domains say where the user was. When no host is present the app name is the
+    /// honest answer; nothing is ever invented.
+    static func source(appName: String, windowTitle: String?) -> String {
+        domain(in: windowTitle) ?? appName
+    }
+
+    /// The first host-looking run in a string, normalised (lowercased, `www.` dropped), or nil.
+    ///
+    /// **The suffix must be one this file knows.** A "looks like `word.word`" rule is the obvious
+    /// implementation and it is wrong in the direction that matters: it reads `Engine.swift`,
+    /// `notes.txt` and `main.py` as websites, which puts a filename under the card of every editor
+    /// screenshot and then offers it as a website chip. Since every one of those is a *confident*
+    /// wrong answer, the rule is inverted — a domain is claimed only when the suffix is a suffix
+    /// people actually browse, and everything else falls back to the app name, which is always true.
+    ///
+    /// The list is not exhaustive and is not meant to be: an unrecognised suffix costs a domain chip
+    /// the user did not need, and a wrong one costs the surface its credibility.
+    static func domain(in text: String?) -> String? {
+        guard let text, !text.isEmpty else { return nil }
+        // Hosts are the only runs of `[A-Za-z0-9.-]` that end in a suffix we recognise.
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
+        for run in text.unicodeScalars.split(whereSeparator: { !allowed.contains($0) }) {
+            let candidate = String(String.UnicodeScalarView(run)).lowercased()
+            let labels = candidate.split(separator: ".", omittingEmptySubsequences: false)
+            guard labels.count >= 2, let tld = labels.last, knownSuffixes.contains(String(tld)) else {
+                continue
+            }
+            guard labels.dropLast().allSatisfy({ !$0.isEmpty }) else { continue }
+            // A leading `www.` is noise on a chip 12 characters wide.
+            let host = candidate.hasPrefix("www.") ? String(candidate.dropFirst(4)) : candidate
+            return host.isEmpty ? nil : host
+        }
+        return nil
+    }
+
+    /// Suffixes a person browses. Deliberately excludes the ones that are also file extensions
+    /// (`.sh`, `.rs`, `.py`, `.go`, `.md`, `.ts`, `.js`) even though several are real country codes:
+    /// on a Mac being screen-captured, `main.rs` is overwhelmingly more likely than a Serbian site,
+    /// and the cost of the two mistakes is not symmetric.
+    static let knownSuffixes: Set<String> = [
+        "com", "net", "org", "edu", "gov", "mil", "int", "info", "biz", "app", "dev", "ai", "io",
+        "co", "me", "tv", "fm", "gg", "xyz", "cloud", "page", "site", "news", "blog", "shop",
+        "store", "tech", "design", "studio", "digital", "media", "online", "live", "life", "world",
+        "email", "chat", "wiki", "space", "link", "team", "works", "systems", "software", "network",
+        "uk", "de", "fr", "es", "it", "nl", "se", "no", "dk", "fi", "pl", "cz", "at", "ch", "be",
+        "ie", "pt", "gr", "hu", "ro", "ru", "ua", "tr", "il", "in", "jp", "kr", "cn", "tw", "hk",
+        "sg", "au", "nz", "za", "br", "mx", "ar", "cl", "ca", "us", "eu",
+    ]
+
+    /// A domain cut to fit a chip, with a real ellipsis.
+    ///
+    /// Truncation is the *expected* state here rather than the failure one — the reference's website
+    /// chips read `shop.flix…`, `archit-lal…`, `now.hdfc…` — so it is a value with a test rather than
+    /// a `.lineLimit(1)` and a hope. The character budget is what fits a chip at
+    /// `InkType.statusLabel`; the ellipsis is one character and is counted.
+    static func truncated(_ text: String, limit: Int = 12) -> String {
+        guard limit > 1, text.count > limit else { return text }
+        return String(text.prefix(limit - 1)) + "…"
+    }
+}
+
+// MARK: - Time
+
+/// The friendly timestamp under a card, and the one place its rules live.
+///
+/// `ContextTime.describe` is the MCP wire format ("Tue 28 Jul 2026 at 2:14 PM") and is deliberately
+/// unfriendly — a model reasons better about a full date than about "yesterday". A person reads the
+/// opposite way, so a card gets this instead. Both exist; neither is a substitute for the other.
+enum SearchTime {
+
+    /// e.g. `Today, 2:14 PM` · `Yesterday, 11:53 AM` · `Monday, 9:02 AM` · `Jul 12, 3:40 PM` ·
+    /// `Jul 12, 2025, 3:40 PM`.
+    ///
+    /// Takes `now` and the calendar rather than reading them, so the whole ladder is assertable in a
+    /// test that does not depend on the day it runs on.
+    static func describe(
+        _ epoch: Double,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = .current
+    ) -> String {
+        let date = Date(timeIntervalSince1970: epoch)
+        let time = formatted(date, template: "j:mm", calendar: calendar, locale: locale)
+
+        // Measured against `now`, not against `Date()`. `Calendar.isDateInToday` reads the wall
+        // clock, so a card rendered from a fixed instant — a test, a golden render — would silently
+        // describe itself relative to the day the process happened to run on.
+        let days =
+            calendar.dateComponents(
+                [.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)
+            ).day ?? 0
+        if days == 0 { return "Today, \(time)" }
+        if days == 1 { return "Yesterday, \(time)" }
+
+        // Inside the last week a weekday name is the most useful thing a person can be told; past
+        // that it stops being a location in time and becomes a riddle ("which Monday?").
+        if (0...6).contains(days) {
+            return "\(formatted(date, template: "EEEE", calendar: calendar, locale: locale)), \(time)"
+        }
+
+        let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
+        let template = sameYear ? "MMM d" : "MMM d, yyyy"
+        return "\(formatted(date, template: template, calendar: calendar, locale: locale)), \(time)"
+    }
+
+    /// Localised field order from a template, so `j:mm` is 24-hour where the user's region is and the
+    /// month/day order follows their format — a hand-written `"MMM d"` pattern would not.
+    private static func formatted(
+        _ date: Date, template: String, calendar: Calendar, locale: Locale
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = locale
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate(template)
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - Copy
+
+/// The sentences the surface says about its own results.
+enum SearchCopy {
+
+    /// The count on the filter row: `109 results` · `1 result` · `No results`.
+    ///
+    /// "No results" and not "0 results", because zero is a number a person has to convert and the
+    /// words are the answer. Singular is not a nicety either — "1 results" is the tell that nobody
+    /// looked at the empty and near-empty cases, which are the two a new install always shows.
+    static func resultCount(_ count: Int) -> String {
+        switch count {
+        case ..<1: return "No results"
+        case 1: return "1 result"
+        default: return "\(count) results"
+        }
+    }
+
+    /// What a section says when it has nothing in it yet.
+    ///
+    /// Every one of these is reachable on a fresh install — a Mac that has captured for ten minutes
+    /// has no websites and two apps — so a bare header with a void under it is the *normal* first
+    /// experience, not an edge case. A sentence in its place is what makes the section read as
+    /// deliberate rather than broken.
+    static let noWebsites = "No sites captured yet"
+    static let noApps = "No apps captured yet"
+    static let noResults = "Nothing captured matches that yet"
+}

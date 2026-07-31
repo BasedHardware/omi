@@ -1,4 +1,5 @@
 import AppKit
+import ContextCore
 import SwiftUI
 
 /// The floating prompt bar. One borderless window, on the display the pointer is on.
@@ -9,10 +10,17 @@ import SwiftUI
 /// pointer-screen rule, same `isReleasedWhenClosed = false` so the window survives being closed.
 @MainActor
 final class SearchBarWindow {
-    /// Wide enough for a real sentence, and short enough to read as a bar rather than a panel. The
-    /// height is the content's: a 40 pt field, one status line, and the page padding — plus room for
-    /// that line to wrap to two, which it does when a route explains itself.
-    static let barSize = NSSize(width: 660, height: 112)
+    /// The window is the whole surface — both panels, the gap between them, and the clear margin the
+    /// shadows fall into. Every number comes from `SearchLayout`, so the window and the view can
+    /// never disagree about how tall the content is.
+    ///
+    /// `showingNote` is the taller state: the bar grows one line when it has something to say about
+    /// where the question went.
+    static func surfaceSize(showingNote: Bool = false) -> NSSize {
+        NSSize(
+            width: SearchLayout.surfaceWidth,
+            height: SearchLayout.surfaceHeight(showingNote: showingNote))
+    }
 
     private static var current: NSWindow?
 
@@ -60,11 +68,20 @@ final class SearchBarWindow {
         )
         window.isFloatingPanel = true
         window.becomesKeyOnlyIfNeeded = false
+        // Pinned to the glass appearance, and this is not cosmetic. `InkGlass` is light in both
+        // system appearances, and the bar's field is an `NSTextField` whose `Ink.nsPrimary` resolves
+        // against its *view's* appearance rather than SwiftUI's environment — so on a Dark Mac an
+        // unpinned window puts near-white type on a near-white panel. Pinning the window is what
+        // makes the AppKit half of this surface agree with the SwiftUI half.
+        InkGlass.pin(window)
         window.isOpaque = false
         window.backgroundColor = .clear
-        // Unlike the onboarding sheet this surface *is* a rectangle, so a shadow traces the shape it
-        // actually has and is what lifts it off whatever is behind.
-        window.hasShadow = true
+        // **No window shadow.** The surface is no longer one rectangle — it is two panels with a gap
+        // between them — and AppKit's window shadow traces the window's frame, so it would draw a
+        // shadow across the gap and weld the two panels back into the slab this design exists to
+        // stop being. Each panel casts its own inside the view instead (`SearchPanel`), which is also
+        // the only shadow that can follow their rounded corners.
+        window.hasShadow = false
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.isReleasedWhenClosed = false
@@ -80,7 +97,14 @@ final class SearchBarWindow {
         root.autoresizingMask = [.width, .height]
 
         let hosting = FirstMouseHostingView(
-            rootView: SearchBarView(initialQuery: prefill, onDismiss: { dismiss() }))
+            rootView: SearchBarView(
+                initialQuery: prefill,
+                // The app's single store, not a second connection: a second writer would be a second
+                // migration racing the first. Nil when capture has not opened one yet, which the
+                // panel renders as its empty state rather than as an error.
+                store: Engine.shared.contextStore,
+                onDismiss: { dismiss() },
+                onHeightChange: { height in resize(to: height) }))
         hosting.frame = root.bounds
         hosting.autoresizingMask = [.width, .height]
         root.addSubview(hosting)
@@ -155,11 +179,31 @@ final class SearchBarWindow {
 
     /// Upper third, horizontally centred. A prompt bar belongs where the eye already is, not at the
     /// optical centre of the display.
-    private static func barFrame(on screen: NSScreen) -> NSRect {
+    ///
+    /// Clamped to the screen: the surface is a tall two-panel object now, and on a 13" display the
+    /// naive upper-third placement puts its bottom edge past the dock.
+    static func barFrame(on screen: NSScreen, showingNote: Bool = false) -> NSRect {
+        let size = surfaceSize(showingNote: showingNote)
         let visible = screen.visibleFrame
-        let x = visible.midX - barSize.width / 2
-        let y = visible.maxY - barSize.height - visible.height * 0.18
-        return NSRect(x: x.rounded(), y: y.rounded(), width: barSize.width, height: barSize.height)
+        let x = visible.midX - size.width / 2
+        let wanted = visible.maxY - size.height - visible.height * 0.10
+        let y = max(visible.minY, wanted)
+        return NSRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height)
+    }
+
+    /// Grows or shrinks the window around its **top** edge.
+    ///
+    /// Around the top and not the centre because the bar is the thing the user is looking at and
+    /// typing into: a window that re-centres itself when a status line appears moves the field out
+    /// from under the cursor mid-sentence.
+    static func resize(to height: CGFloat) {
+        guard let window = current else { return }
+        let frame = window.frame
+        guard abs(frame.height - height) > 0.5 else { return }
+        window.setFrame(
+            NSRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height),
+            display: true,
+            animate: false)
     }
 
 }

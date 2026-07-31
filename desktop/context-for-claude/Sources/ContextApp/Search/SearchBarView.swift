@@ -1,24 +1,52 @@
 import AppKit
 import Combine
+import ContextCore
 import SwiftUI
 
-/// The prompt bar's contents: a mark, a field, and one line of truth underneath it.
+/// The search surface: a prompt bar, a gap, and a panel of what you can filter by and what was
+/// found.
 ///
-/// The line under the field is the point of this view. Before you submit it says where the question
-/// is going and whether that route actually exists on this Mac; after you submit it says what
-/// happened, including when the honest answer is "I put it on your clipboard instead". There is no
-/// results list, because there are no results here — the answer arrives in Claude.
+/// **Two panels, not one.** The bar and the panel under it are separate floating objects with real
+/// air between them (`SearchLayout.panelGap`), each cut to its own corner, each on its own glass,
+/// each casting its own shadow. That separation is the design — it is what says "this is a place you
+/// type" and "this is a place you look" without a label — and it is the one thing a refactor here
+/// must not quietly undo by wrapping both in a single container.
+///
+/// The bar keeps everything it promised before: the typed question routes to Claude on Return, and
+/// the one line of truth about where it went (including the honest "I put it on your clipboard
+/// instead") still appears — it takes the keyboard hint's place rather than a row of its own, so the
+/// bar stays a bar.
 struct SearchBarView: View {
     /// A question to start from, handed over by the timeline's "Search All" pill.
     let initialQuery: String
     let onDismiss: () -> Void
+    /// The surface's total height, whenever it changes. The window owns its own frame; this is how
+    /// it learns the content grew a line.
+    var onHeightChange: (CGFloat) -> Void = { _ in }
 
     @State private var query: String
+    @StateObject private var results: SearchResultsModel
 
-    init(initialQuery: String = "", onDismiss: @escaping () -> Void) {
+    init(
+        initialQuery: String = "",
+        store: ContextStore? = nil,
+        onDismiss: @escaping () -> Void,
+        onHeightChange: @escaping (CGFloat) -> Void = { _ in }
+    ) {
         self.initialQuery = initialQuery
         self.onDismiss = onDismiss
+        self.onHeightChange = onHeightChange
         _query = State(initialValue: initialQuery)
+        _results = StateObject(wrappedValue: SearchResultsModel(store: store))
+    }
+
+    /// The already-answered form, for previews and the render harness. Nothing it draws can reach
+    /// the user's database.
+    init(query: String, results: SearchResultsModel, onDismiss: @escaping () -> Void = {}) {
+        self.initialQuery = query
+        self.onDismiss = onDismiss
+        _query = State(initialValue: query)
+        _results = StateObject(wrappedValue: results)
     }
 
     @State private var target = ClaudeRouter.preferredTarget
@@ -50,89 +78,105 @@ struct SearchBarView: View {
         ClaudeRouter.availability(of: target)
     }
 
+    /// The one line under the field, or nil when there is nothing to say and the keyboard hint has
+    /// the space instead.
+    private var note: String? {
+        if let outcome { return outcome.sentence }
+        if !availability.isAvailable { return availability.detail }
+        return nil
+    }
+
+    private var noteColour: Color {
+        if outcome?.isFailure == true || !availability.isAvailable { return Ink.errorRed }
+        return Ink.secondary
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: InkLayout.rhythm[5]) {
-            field
-            footer
+        VStack(alignment: .leading, spacing: SearchLayout.panelGap) {
+            SearchGlassPanel { promptBar }
+            SearchGlassPanel { SearchResultsView(model: results) }
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 18)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Ink.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(Ink.hairline, lineWidth: 1))
-        )
+        // The clear margin the shadows fall off into. Without it the window clips them and the
+        // panels look stamped onto the desktop rather than floating over it.
+        .padding(SearchLayout.shadowMargin)
+        .frame(width: SearchLayout.surfaceWidth, alignment: .top)
+        .background(SearchHeightReader(key: SearchSurfaceHeightKey.self))
+        // Measured, not predicted. The second panel is content-sized — three empty sections and a
+        // page of cards are 300 pt apart — so the window has to take the height the view arrived at
+        // rather than one this file guessed.
+        .onPreferenceChange(SearchSurfaceHeightKey.self) { height in
+            guard height > 0 else { return }
+            onHeightChange(height)
+        }
+        .onAppear { results.search(query) }
+        .onChange(of: query) { text in
+            outcome = nil
+            results.search(text)
+        }
         .onReceive(NotificationCenter.default.publisher(for: SearchBarWindow.refocusNotification)) { note in
             outcome = nil
             if let prefill = note.userInfo?[SearchBarWindow.prefillKey] as? String { query = prefill }
         }
     }
 
-    // MARK: - Field
+    // MARK: - The bar
 
-    private var field: some View {
-        HStack(spacing: 12) {
-            OmiMark(size: 20, color: Ink.primary)
+    private var promptBar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                SearchTargetGlyph(size: SearchLayout.glyphSize)
+                SearchQueryField(
+                    query: $query,
+                    available: SearchLayout.queryFieldWidth,
+                    onSubmit: submit,
+                    onCancel: onDismiss)
+                Spacer(minLength: 12)
+                if note == nil { keyboardHint }
+            }
+            .frame(height: SearchLayout.barHeight)
 
-            SearchField(text: $query, onSubmit: submit, onCancel: onDismiss)
-
-            if !query.isEmpty {
-                // A hint that is also the control. The reference only shows the keycap, but a bar whose
-                // one action exists solely as a key press is unusable to anyone who cannot press it —
-                // and it gives the gesture a target, which a hint alone does not.
-                Button(action: submit) {
-                    Text("↵").inkStyle(.statusLabel, color: Ink.tertiary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Send to Claude")
-                .help("Send to Claude")
-                .transition(.opacity)
+            if let note {
+                Text(note)
+                    .inkStyle(.statusLabel, color: noteColour)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, SearchLayout.panelPaddingVertical - 4)
+                    .padding(.leading, SearchLayout.glyphSize + 12)
+                    .transition(.opacity)
             }
         }
-        .frame(height: 40)
+        .padding(.horizontal, SearchLayout.panelPaddingHorizontal)
+        .frame(width: SearchLayout.panelWidth, alignment: .leading)
+        .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.settle)), value: note)
     }
 
-    // MARK: - Footer
-
-    private var footer: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            targetPill
-            Text(outcome?.sentence ?? availability.detail)
-                .inkStyle(.statusLabel, color: footerColour)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            Text("esc")
-                .inkStyle(.statusLabel, color: Ink.tertiary)
-        }
-    }
-
-    private var footerColour: Color {
-        if outcome?.isFailure == true { return Ink.errorRed }
-        if outcome != nil { return Ink.secondary }
-        return availability.isAvailable ? Ink.secondary : Ink.errorRed
-    }
-
-    /// The target, and a way to change it without leaving the bar. The accent is spent here because
-    /// this is the one thing in the bar that is actionable and is not the field.
-    private var targetPill: some View {
-        Button {
-            let next: ClaudeRouter.Target = target == .claudeApp ? .terminal : .claudeApp
-            target = next
-            ClaudeRouter.preferredTarget = next
-            outcome = nil
-        } label: {
-            Text(target.title)
-                .inkStyle(.statusLabel, color: Ink.accent)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Capsule(style: .continuous).fill(Ink.rowFill))
+    /// `⌘ ↵  Run on Claude Code`, and it is also the control.
+    ///
+    /// The reference shows only the keycaps. A bar whose one action exists solely as a key press is
+    /// unusable to anyone who cannot press it, so the hint is a button — same glyphs, same weight,
+    /// with a target under them.
+    private var keyboardHint: some View {
+        Button(action: submit) {
+            HStack(spacing: 6) {
+                Text("⌘ ↵").inkStyle(.statusLabel, color: Ink.secondary)
+                Text("Run on \(destinationName)").inkStyle(.statusLabel, color: Ink.tertiary)
+            }
+            .fixedSize()
         }
         .buttonStyle(.plain)
-        .help("Switch where your question goes")
+        .accessibilityLabel("Send to \(destinationName)")
+        .help("Send to \(destinationName)")
+    }
+
+    /// What the hint calls where the question is going.
+    ///
+    /// Not `Target.title`, which is the name of the *application* and is what the old target picker
+    /// needed. The prompt is delivered to `claude://code/new`, so the surface it lands on is Claude
+    /// Code — and a hint that names the app while the delivery note says "Opened a Claude Code tab"
+    /// is two answers to one question.
+    private var destinationName: String {
+        target == .claudeApp ? "Claude Code" : target.title
     }
 
     // MARK: - Submit
@@ -153,8 +197,84 @@ struct SearchBarView: View {
     }
 }
 
+// MARK: - The glyph
+
+/// The small coloured mark at the bar's leading edge: the icon of whatever app actually answers
+/// `claude://` on this Mac, or the app's own mark when nothing does.
+///
+/// A real icon rather than a drawn glyph because it is the one place the bar says *where the
+/// question is going*, and an app's icon says that faster than its name. Resolved through
+/// LaunchServices, so a hit is never the wrong app — and a miss falls back to the Omi mark rather
+/// than to a generic document.
+struct SearchTargetGlyph: View {
+    var size: CGFloat = 22
+
+    @State private var icon: NSImage?
+
+    var body: some View {
+        Group {
+            if let icon {
+                Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit)
+            } else {
+                OmiMark(size: size, color: Ink.primary)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+        .task {
+            guard let url = ClaudeRouter.Probe.live().handlerForClaudeScheme() else { return }
+            icon = NSWorkspace.shared.icon(forFile: url.path)
+        }
+    }
+}
 
 // MARK: - The field
+
+/// The query, drawn as the reference draws it: a tinted capsule around what has been typed, with the
+/// live insertion point sitting after it.
+///
+/// The capsule is sized from the text rather than filling the bar (`SearchMetrics.chipWidth`), which
+/// is what makes it read as a *chip* — a fixed-width tinted box would be a text field with a
+/// background. With nothing typed there is no chip at all, only the placeholder and the cursor,
+/// which is the state the reference shows at rest.
+private struct SearchQueryField: View {
+    @Binding var query: String
+    /// Width available to the chip before it has to stop growing.
+    let available: CGFloat
+    let onSubmit: () -> Void
+    let onCancel: () -> Void
+
+    private var isTyped: Bool { !query.isEmpty }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            if isTyped {
+                Capsule(style: .continuous)
+                    .fill(SearchInk.queryChipFill)
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .strokeBorder(SearchInk.queryChipStroke, lineWidth: 1))
+                    .frame(
+                        width: SearchMetrics.chipWidth(for: query, available: available),
+                        height: SearchMetrics.queryLineHeight)
+            }
+            HStack(spacing: 6) {
+                if isTyped {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(SearchInk.queryChipGlyph)
+                        .accessibilityHidden(true)
+                }
+                SearchField(text: $query, onSubmit: onSubmit, onCancel: onCancel)
+            }
+            .padding(.leading, isTyped ? SearchMetrics.chipPaddingHorizontal : 0)
+        }
+        // The field's line box, with room over the ascenders. A row shorter than the face it is set
+        // in clips the top of the placeholder, which is exactly what a 27 pt query in a 34 pt row did.
+        .frame(height: SearchMetrics.queryLineHeight)
+        .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isTyped)
+    }
+}
 
 /// An AppKit text field, not a SwiftUI `TextField`.
 ///
@@ -171,11 +291,11 @@ private struct SearchField: NSViewRepresentable {
     let onSubmit: () -> Void
     let onCancel: () -> Void
 
-    private static let placeholder = "Ask Claude about your day…"
-
     func makeNSView(context: Context) -> FocusingTextField {
-        // The same role the SwiftUI field used, resolved to the AppKit font it is made of.
-        let face = InkFonts.role(size: InkType.stepHeadline.size, weight: .semiBold).metrics
+        // The same role the chip is measured with, resolved to the AppKit font it is made of. The
+        // two must be the same face or the capsule and the text it wraps disagree about how wide the
+        // query is.
+        let face = SearchMetrics.queryFace
         let field = FocusingTextField()
         field.delegate = context.coordinator
         field.isBordered = false
@@ -184,11 +304,11 @@ private struct SearchField: NSViewRepresentable {
         field.font = face
         field.textColor = Ink.nsPrimary
         field.lineBreakMode = .byTruncatingTail
-        // The placeholder carries the role too, or it renders in the system body font beside a 25 pt
-        // field and the bar looks like two different components.
+        // The placeholder carries the role too, or it renders in the system body font beside the
+        // query and the bar looks like two different components.
         field.placeholderAttributedString = NSAttributedString(
-            string: Self.placeholder,
-            attributes: [.font: face, .foregroundColor: NSColor.tertiaryLabelColor])
+            string: SearchMetrics.placeholder,
+            attributes: [.font: face, .foregroundColor: NSColor(Ink.tertiary)])
         // Both Return paths, because AppKit picks between them depending on whether the field editor
         // is active: a live editor reports `insertNewline:` through the delegate, an inactive one fires
         // the cell's target/action instead. Wiring only one leaves Return dead half the time.

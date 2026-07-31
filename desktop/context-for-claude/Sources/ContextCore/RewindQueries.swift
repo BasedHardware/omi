@@ -71,6 +71,75 @@ public enum RewindQueries {
         }
     }
 
+    /// Showable frames matching `query`, newest first, with how many there were in total.
+    ///
+    /// Lives here and not in `Queries` for the reason stated at the top of this file: this is the one
+    /// module allowed to select `frames.imagePath`, because the search *surface* draws pictures where
+    /// every `Queries` result is destined for a language model over MCP and must never carry a
+    /// filesystem path. A second imagePath-selecting site elsewhere is how a path reaches a tool
+    /// result by accident.
+    ///
+    /// An empty or unindexable query is not an error and does not return nothing: it returns the
+    /// newest captures, which is what a search surface with nothing typed into it should be showing.
+    /// The FTS path unions the OCR index and the accessibility-tree index exactly as
+    /// `Queries.recall` does — the two see different halves of the same window and fail in opposite
+    /// directions, so a frame matched by either is a frame the user saw.
+    ///
+    /// `total` is counted in SQL rather than taken as `frames.count`, because the two answer
+    /// different questions: the array is the page the grid can draw, and the count is what the panel
+    /// says out loud. A surface that reports its page size as the total tells the user there were 60
+    /// results when there were 600.
+    public static func search(
+        _ store: ContextStore,
+        matching query: String,
+        since: Double? = nil,
+        until: Double? = nil,
+        limit: Int = 60
+    ) throws -> (frames: [RewindFrame], total: Int) {
+        guard limit > 0 else { return ([], 0) }
+
+        var conditions = ["f.imagePath IS NOT NULL"]
+        var scope: [(any DatabaseValueConvertible)?] = []
+        var source = "frames f"
+
+        if let match = Queries.ftsExpression(for: query) {
+            source = """
+                (SELECT rowid AS rid FROM frames_fts WHERE frames_fts MATCH ?
+                 UNION SELECT rowid AS rid FROM frames_ax_fts WHERE frames_ax_fts MATCH ?) m
+                JOIN frames f ON f.rowid = m.rid
+                """
+            scope += [match, match]
+        }
+        if let since {
+            conditions.append("f.capturedAt >= ?")
+            scope.append(since)
+        }
+        if let until {
+            conditions.append("f.capturedAt <= ?")
+            scope.append(until)
+        }
+        let where_ = conditions.joined(separator: " AND ")
+
+        return try store.read { db in
+            let total = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM \(source) WHERE \(where_)",
+                arguments: StatementArguments(scope)) ?? 0
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT f.id AS id, f.capturedAt AS capturedAt, f.appName AS appName,
+                           f.bundleId AS bundleId, f.windowTitle AS windowTitle, f.imagePath AS imagePath
+                    FROM \(source)
+                    WHERE \(where_)
+                    ORDER BY f.capturedAt DESC, f.id DESC
+                    LIMIT ?
+                    """,
+                arguments: StatementArguments(scope + [limit]))
+            return (rows.compactMap(RewindFrame.init), total)
+        }
+    }
+
     /// The span the timeline may travel over, or nil when nothing showable was ever captured.
     ///
     /// Bounded to frames that have an image, for the same reason `frames` is: a date picker that
