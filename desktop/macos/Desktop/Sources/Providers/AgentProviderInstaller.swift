@@ -7,6 +7,18 @@ import Foundation
 /// explicit tool/bridge call); this layer never self-triggers.
 enum AgentProviderInstaller {
 
+  static func hasNonemptyRegularFile(
+    at path: String,
+    fileManager: FileManager
+  ) -> Bool {
+    guard
+      let attributes = try? fileManager.attributesOfItem(atPath: path),
+      attributes[.type] as? FileAttributeType == .typeRegular,
+      let size = attributes[.size] as? NSNumber
+    else { return false }
+    return size.intValue > 0
+  }
+
   struct Step {
     enum Kind {
       /// Run to completion via `zsh -lc`, streaming output lines.
@@ -70,14 +82,14 @@ enum AgentProviderInstaller {
             kind: .shell("npm install -g @agentclientprotocol/codex-acp")))
       }
       let authPath = (homeDirectory as NSString).appendingPathComponent(".codex/auth.json")
-      if !fileManager.fileExists(atPath: authPath) {
+      if !hasNonemptyRegularFile(at: authPath, fileManager: fileManager) {
         steps.append(
           Step(
             title: "Sign in to Codex",
             kind: .userAction(
               instructions: "Finish the ChatGPT sign-in in your browser.",
               launch: "codex login",
-              isComplete: { fileManager.fileExists(atPath: authPath) })))
+              isComplete: { hasNonemptyRegularFile(at: authPath, fileManager: fileManager) })))
       }
       return steps
 

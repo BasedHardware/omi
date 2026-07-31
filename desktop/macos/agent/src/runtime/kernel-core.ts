@@ -884,6 +884,7 @@ export class KernelCore {
           source: "runtime",
           adapterId,
           retryable: false,
+          phase: "startup",
           userMessage: `Adapter not registered: ${adapterId}`,
           technicalMessage: `Adapter not registered: ${adapterId}`,
         };

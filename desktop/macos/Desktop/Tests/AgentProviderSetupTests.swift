@@ -213,4 +213,16 @@ final class AgentProviderSetupTests: XCTestCase {
     let steps = plan(.hermes)
     XCTAssertTrue(steps.isEmpty)
   }
+
+  func testCodexPlanRequiresLoginForEmptyAuthPlaceholder() throws {
+    try installFakeExecutable("codex")
+    try installFakeExecutable("codex-acp")
+    let authPath = tempHome + "/.codex/auth.json"
+    try FileManager.default.createDirectory(
+      atPath: (authPath as NSString).deletingLastPathComponent,
+      withIntermediateDirectories: true)
+    FileManager.default.createFile(atPath: authPath, contents: Data())
+
+    XCTAssertEqual(plan(.codex).map(\.title), ["Sign in to Codex"])
+  }
 }

@@ -610,7 +610,7 @@ actor AgentRuntimeProcess {
   /// The Node registry is the authority for adapter activation. Swift must not
   /// re-run local executable detection before advertising a realtime provider.
   func registeredDirectedProviderIDs() -> [String] {
-    runtimeAdapterIDs.intersection(["hermes", "openclaw"]).sorted()
+    runtimeAdapterIDs.intersection(["codex", "hermes", "openclaw"]).sorted()
   }
 
   static func adapterId(forHarnessMode harnessMode: String) -> String? {

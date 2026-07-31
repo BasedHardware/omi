@@ -571,6 +571,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       adapterId: optionalString(value.adapterId) ?? this.adapterId,
       provider: optionalString(value.provider),
       retryable: typeof value.retryable === "boolean" ? value.retryable : undefined,
+      phase: value.phase === "startup" ? value.phase : undefined,
     });
   }
 

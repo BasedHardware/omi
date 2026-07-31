@@ -38,6 +38,7 @@ export interface RuntimeFailure {
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
+  phase?: "startup";
 }
 
 export class AdapterRuntimeError extends Error {

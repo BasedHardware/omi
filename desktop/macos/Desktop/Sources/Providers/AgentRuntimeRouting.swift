@@ -708,9 +708,8 @@ enum LocalAgentProviderAutoInstaller {
     else { return false }
 
     let npmDir = (npmPath as NSString).deletingLastPathComponent
-    var childEnv = environment
-    let existingPath = childEnv["PATH"] ?? "/usr/bin:/bin"
-    childEnv["PATH"] = "\(npmDir):\(existingPath)"
+    let existingPath = environment["PATH"] ?? "/usr/bin:/bin"
+    let childEnv = environment.merging(["PATH": "\(npmDir):\(existingPath)"]) { _, replacement in replacement }
 
     return await withCheckedContinuation { continuation in
       DispatchQueue.global(qos: .userInitiated).async {

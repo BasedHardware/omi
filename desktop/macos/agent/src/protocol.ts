@@ -645,6 +645,7 @@ export interface RuntimeFailurePayload {
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
+  phase?: "startup";
 }
 
 export interface ToolActivityMessage extends QueryScopedOutbound {
