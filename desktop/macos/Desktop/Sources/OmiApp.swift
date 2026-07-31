@@ -1,4 +1,5 @@
-import FirebaseAuthimport FirebaseCore
+import FirebaseAuth
+import FirebaseCore
 import OmiSupport
 import OmiTheme
 import Sentry
