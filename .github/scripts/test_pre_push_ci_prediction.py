@@ -110,6 +110,19 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertTrue(plan.includes("desktop-swift-tests"))
         self.assertEqual(github_outputs(plan)["should_run_tests"], "true")
 
+    def test_rust_agent_runtime_inputs_select_runtime_ci(self) -> None:
+        for path in (
+            "desktop/Cargo.lock",
+            "desktop/Cargo.toml",
+            "desktop/agent-runtime-rust/src/main.rs",
+            "desktop/shared-rust/src/lib.rs",
+            ".github/workflows/desktop-checks.yml",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan([path])
+                self.assertTrue(plan.includes("desktop-agent-runtime"))
+                self.assertEqual(github_outputs(plan)["has_desktop_agent_runtime"], "true")
+
     def test_unknown_component_paths_select_the_normal_component_lane(self) -> None:
         app = self.plan(["app/tooling/unknown-input.txt"])
         desktop = self.plan(["desktop/macos/Resources/unknown-input.txt"])
@@ -122,6 +135,7 @@ class PrePushCiPredictionTests(unittest.TestCase):
             "flutter-codegen",
             "flutter-l10n",
             "desktop-flow-lint",
+            "desktop-agent-runtime",
             "desktop-swift-tests",
             "app-analysis-tests",
         ):
