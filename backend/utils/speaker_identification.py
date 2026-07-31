@@ -13,12 +13,17 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
 )
+from utils.speaker_names import SPEAKER_NAME_STOPWORDS
 from utils.speaker_sample import verify_and_transcribe_sample
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
 
 logger = logging.getLogger(__name__)
+
+SPEAKER_ATTRIBUTION_USER_TAGGED = 'user_tagged'
+
+SPEAKER_ATTRIBUTION_LLM_INFERRED = 'llm_inferred'
 
 
 def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
@@ -229,87 +234,6 @@ patterns_to_check: List[str] = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
 
-# Pronouns and filler words the introduction patterns can capture from run-on
-# transcripts (e.g. "I'm It was great", "I'm You know...") — never real names (#5223).
-SPEAKER_NAME_STOPWORDS = frozenset(
-    {
-        'it',
-        'you',
-        'they',
-        'them',
-        'he',
-        'she',
-        'we',
-        'us',
-        'me',
-        'him',
-        'her',
-        'his',
-        'hers',
-        'its',
-        'my',
-        'mine',
-        'your',
-        'yours',
-        'our',
-        'ours',
-        'their',
-        'theirs',
-        'this',
-        'that',
-        'these',
-        'those',
-        'here',
-        'there',
-        'what',
-        'who',
-        'when',
-        'where',
-        'why',
-        'how',
-        'which',
-        'the',
-        'and',
-        'but',
-        'not',
-        'yes',
-        'no',
-        'okay',
-        'ok',
-        'yeah',
-        'just',
-        'like',
-        'so',
-        'very',
-        'really',
-        'now',
-        'then',
-        'well',
-        'still',
-        'also',
-        'too',
-        'gonna',
-        'going',
-        'sure',
-        'sorry',
-        'good',
-        'fine',
-        'right',
-        'everyone',
-        'everybody',
-        'someone',
-        'somebody',
-        'nobody',
-        'anyone',
-        'anybody',
-        'something',
-        'nothing',
-        'one',
-        'all',
-        'some',
-    }
-)
-
 
 def detect_speaker_from_text(text: str) -> Optional[str]:
     for pattern in patterns_to_check:
@@ -327,6 +251,7 @@ async def extract_speaker_samples(
     conversation_id: str,
     segment_ids: List[str],
     sample_rate: int = 16000,
+    attribution: str = SPEAKER_ATTRIBUTION_USER_TAGGED,
 ):
     """
     Extract speech samples from segments and store as speaker profiles.
@@ -526,7 +451,12 @@ async def extract_speaker_samples(
                     # Convert numpy array to list for Firestore storage
                     embedding_list = embedding.flatten().tolist()
                     await run_blocking(
-                        db_executor, users_db.set_person_speaker_embedding, uid, person_id, embedding_list
+                        db_executor,
+                        users_db.set_person_speaker_embedding,
+                        uid,
+                        person_id,
+                        embedding_list,
+                        attribution,
                     )
                     logger.info(
                         f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"

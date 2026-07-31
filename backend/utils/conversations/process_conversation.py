@@ -1721,6 +1721,10 @@ def process_conversation(
                         submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
             submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
             submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
+            if not is_reprocess:
+                from utils.conversations.speaker_resolution import resolve_conversation_speakers_sync
+
+                submit_with_context(postprocess_executor, resolve_conversation_speakers_sync, uid, conversation)
 
         # Create audio files from chunks if private cloud sync was enabled
         if not is_reprocess and conversation.private_cloud_sync_enabled:
