@@ -118,7 +118,7 @@ class OmiIntegrationClient {
     required Map<String, dynamic> body,
   }) async {
     final parsed = await _request("POST", "/v1/integrations/notification", query: null, body: {...body, 'aid': appId});
-    return IntegrationNotificationResponse.fromJson(parsed as Map<String, dynamic>);
+    return IntegrationNotificationResponse.fromJson((parsed as Map<String, dynamic>?) ?? const <String, dynamic>{});
   }
 
   /// Get Conversations Via Integration
@@ -143,7 +143,7 @@ class OmiIntegrationClient {
     if (endDate != null) query["end_date"] = endDate;
     if (maxTranscriptSegments != null) query["max_transcript_segments"] = maxTranscriptSegments;
     final parsed = await _request("GET", "/v2/integrations/$appId/conversations", query: query, body: null);
-    return ConversationsResponse.fromJson(parsed as Map<String, dynamic>);
+    return ConversationsResponse.fromJson((parsed as Map<String, dynamic>?) ?? const <String, dynamic>{});
   }
 
   /// Get Memories Via Integration
@@ -158,7 +158,7 @@ class OmiIntegrationClient {
     if (limit != null) query["limit"] = limit;
     if (offset != null) query["offset"] = offset;
     final parsed = await _request("GET", "/v2/integrations/$appId/memories", query: query, body: null);
-    return MemoriesResponse.fromJson(parsed as Map<String, dynamic>);
+    return MemoriesResponse.fromJson((parsed as Map<String, dynamic>?) ?? const <String, dynamic>{});
   }
 
   /// Send Notification Via Integration
@@ -171,7 +171,7 @@ class OmiIntegrationClient {
       "uid": uid,
     };
     final parsed = await _request("POST", "/v2/integrations/$appId/notification", query: query, body: null);
-    return IntegrationNotificationResponse.fromJson(parsed as Map<String, dynamic>);
+    return IntegrationNotificationResponse.fromJson((parsed as Map<String, dynamic>?) ?? const <String, dynamic>{});
   }
 
   /// Search Conversations Via Integration
@@ -185,7 +185,7 @@ class OmiIntegrationClient {
     };
     if (maxTranscriptSegments != null) query["max_transcript_segments"] = maxTranscriptSegments;
     final parsed = await _request("POST", "/v2/integrations/$appId/search/conversations", query: query, body: body.toJson());
-    return SearchConversationsResponse.fromJson(parsed as Map<String, dynamic>);
+    return SearchConversationsResponse.fromJson((parsed as Map<String, dynamic>?) ?? const <String, dynamic>{});
   }
 
   /// Get Tasks Via Integration
@@ -212,7 +212,7 @@ class OmiIntegrationClient {
     if (dueStartDate != null) query["due_start_date"] = dueStartDate;
     if (dueEndDate != null) query["due_end_date"] = dueEndDate;
     final parsed = await _request("GET", "/v2/integrations/$appId/tasks", query: query, body: null);
-    return TasksResponse.fromJson(parsed as Map<String, dynamic>);
+    return TasksResponse.fromJson((parsed as Map<String, dynamic>?) ?? const <String, dynamic>{});
   }
 
   /// Create Conversation Via Integration
@@ -224,7 +224,7 @@ class OmiIntegrationClient {
       "uid": uid,
     };
     final parsed = await _request("POST", "/v2/integrations/$appId/user/conversations", query: query, body: body.toJson());
-    return EmptyResponse.fromJson(parsed as Map<String, dynamic>);
+    return EmptyResponse.fromJson((parsed as Map<String, dynamic>?) ?? const <String, dynamic>{});
   }
 
   /// Create Memories Via Integration
@@ -236,7 +236,7 @@ class OmiIntegrationClient {
       "uid": uid,
     };
     final parsed = await _request("POST", "/v2/integrations/$appId/user/memories", query: query, body: body.toJson());
-    return EmptyResponse.fromJson(parsed as Map<String, dynamic>);
+    return EmptyResponse.fromJson((parsed as Map<String, dynamic>?) ?? const <String, dynamic>{});
   }
 
 }
