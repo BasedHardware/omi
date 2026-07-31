@@ -65,12 +65,8 @@ def load_gateway_config(
     if catalog is not None:
         serving_lane_ids = catalog.prod_ready_lane_ids()
         generated_lane_items = [item for item in generated_lane_items if item['lane_id'] in serving_lane_ids]
-        generated_artifact_items = [
-            item for item in generated_artifact_items if item['lane_id'] in serving_lane_ids
-        ]
-        generated_bundle_items = [
-            item for item in generated_bundle_items if item['lane_id'] in serving_lane_ids
-        ]
+        generated_artifact_items = [item for item in generated_artifact_items if item['lane_id'] in serving_lane_ids]
+        generated_bundle_items = [item for item in generated_bundle_items if item['lane_id'] in serving_lane_ids]
 
     # Explicit YAML wins over generated feature routes on the same id.
     lanes = _parse_lanes(generated_lane_items)
