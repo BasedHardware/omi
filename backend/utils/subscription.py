@@ -726,6 +726,13 @@ BASIC_TIER_MONTHLY_SECONDS_LIMIT = BASIC_TIER_MINUTES_LIMIT_PER_MONTH * 60
 BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH', '0'))
 BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH', '0'))
 
+# Fixed non-human UID the desktop-backend release probe signs in as
+# (`PROBE_UID` in backend/scripts/firebase_release_probe_token.py). Its chat turns
+# are deploy-gate traffic, not a user's questions, so they must never be metered
+# against a plan cap — otherwise the gate blocks itself once the probe's own turns
+# exhaust the Free allowance and every desktop-backend deploy fails with 402.
+RELEASE_PROBE_UID = 'omi-release-probe'
+
 # Chat caps per plan. Env-overridable for ops.
 FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
 NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '200'))
@@ -827,6 +834,12 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
     - Free plan past its cap: blocked (no card on file) → 402, which the
       chat endpoint converts into a canned AI reply for mobile UX.
     """
+    # Release-probe traffic is the deploy gate proving the candidate can chat at
+    # all — never paywall it, or the gate hard-blocks its own deploys once the
+    # probe's turns exhaust the Free cap.
+    if uid == RELEASE_PROBE_UID:
+        return
+
     # Paywall test override — bypass BYOK + plan checks so the same 402
     # surfaces that a free user past 30 questions would hit. Desktop only;
     # mobile callers continue down the normal plan path.

@@ -2711,7 +2711,7 @@ class ChatProvider: ObservableObject {
         requestedModelProfile: ModelQoS.Claude.chatLabQuery
       )
       let result = try await resolvedAgentClient().query(
-        prompt: question,
+        prompt: ChatPromptBuilder.currentTimePrompt(for: question),
         session: kernelContext.session,
         surface: surface,
         expectedContext: kernelContext.snapshot.freshness,
@@ -4411,7 +4411,7 @@ class ChatProvider: ObservableObject {
       let queryResult: AgentClient.QueryResult
       do {
         queryResult = try await resolvedAgentClient().query(
-          prompt: trimmedText,
+          prompt: ChatPromptBuilder.currentTimePrompt(for: trimmedText),
           session: kernelContext.session,
           surface: resolvedSurface,
           mode: chatMode.rawValue,
