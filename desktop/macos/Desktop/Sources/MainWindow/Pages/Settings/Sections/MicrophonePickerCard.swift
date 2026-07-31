@@ -88,6 +88,8 @@ struct MicrophonePickerCard: View {
     ""
   @StateObject private var deviceListObserver = AudioInputDeviceListObserver()
   @State private var devices: [PickerInputDevice] = []
+  @State private var refreshInFlight = false
+  @State private var refreshQueued = false
   let onChanged: () -> Void
 
   var body: some View {
@@ -132,19 +134,31 @@ struct MicrophonePickerCard: View {
     .task(id: deviceListObserver.revision) { await refreshDevices() }
   }
 
+  /// Coalesced: HAL property reads have no cancellation or deadline, so a slow
+  /// or wedged driver must strand at most one probe worker no matter how many
+  /// device-list notifications arrive — later revisions fold into a single
+  /// trailing rerun instead of each launching another full enumeration.
   @MainActor
   private func refreshDevices() async {
-    let latest = await Task.detached(priority: .utility) {
-      AudioCaptureService.availableInputDevices().map { device in
-        PickerInputDevice(
-          uid: device.uid,
-          name: device.name,
-          isBluetooth: AudioCaptureService.isBluetoothTransport(deviceID: device.id)
-        )
-      }
-    }.value
-    guard !Task.isCancelled else { return }
-    devices = latest
+    if refreshInFlight {
+      refreshQueued = true
+      return
+    }
+    refreshInFlight = true
+    defer { refreshInFlight = false }
+    repeat {
+      refreshQueued = false
+      let latest = await Task.detached(priority: .utility) {
+        AudioCaptureService.availableInputDevices().map { device in
+          PickerInputDevice(
+            uid: device.uid,
+            name: device.name,
+            isBluetooth: AudioCaptureService.isBluetoothTransport(deviceID: device.id)
+          )
+        }
+      }.value
+      devices = latest
+    } while refreshQueued && !Task.isCancelled
   }
 
   @ViewBuilder

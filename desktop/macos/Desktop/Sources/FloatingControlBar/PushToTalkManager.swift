@@ -446,7 +446,9 @@ class PushToTalkManager: ObservableObject {
       }
     case .terminal(let record):
       RealtimeHubController.shared.voiceTurnDidTerminate(turnID: record.turnID)
-      performTerminalCleanup(discardBufferedAudio: record.reason == .ownerChanged)
+      performTerminalCleanup(
+        discardBufferedAudio: record.reason == .ownerChanged,
+        parkWarm: Self.terminalReasonKeepsWarmCapture(record.reason))
     case .scheduleDeadline, .cancelDeadline, .cancelAllDeadlines,
       .staleEventDropped, .invalidTransition:
       break
@@ -738,13 +740,27 @@ class PushToTalkManager: ObservableObject {
     performTerminalCleanup()
   }
 
-  private func performTerminalCleanup(discardBufferedAudio: Bool = false) {
+  /// Benign turn endings keep the warm capture parked for the keep-alive reuse
+  /// window — success, too-short, silent-rejected, and barge-in all make an
+  /// immediate follow-up turn likely. Cancellations, owner changes, and every
+  /// failure fully release the microphone: an explicitly ended or unhealthy
+  /// session must never leave it open.
+  static func terminalReasonKeepsWarmCapture(_ reason: VoiceTurnTerminalReason) -> Bool {
+    switch reason {
+    case .success, .tooShort, .silentRejected, .interruptedByBargeIn:
+      return true
+    default:
+      return false
+    }
+  }
+
+  private func performTerminalCleanup(discardBufferedAudio: Bool = false, parkWarm: Bool = false) {
     // Always restore audio on teardown (cancel, error, cleanup) so we never leave it muted.
     SystemAudioMuteController.shared.restore()
     contextCaptureTask?.cancel()
     contextCaptureTask = nil
     micCaptureStartInFlight = false
-    stopAudioTranscription(discardBufferedAudio: discardBufferedAudio, parkWarm: false)
+    stopAudioTranscription(discardBufferedAudio: discardBufferedAudio, parkWarm: parkWarm)
     transcriptSegments = []
     seenFinalSegmentIDs.removeAll()
     lastInterimText = ""
@@ -2162,6 +2178,19 @@ class PushToTalkManager: ObservableObject {
       guard let self else { return }
       if let displacedParkedCapture {
         await displacedParkedCapture.waitForPhysicalStop()
+        // The turn may have been cancelled — and another started — while the
+        // displaced teardown was in flight. Revalidate before opening the
+        // device so a stale start can never overlap a newer turn's capture.
+        guard self.micCaptureGeneration == generation, self.shouldKeepMicCaptureAlive else {
+          if self.audioCaptureService === capture {
+            self.audioCaptureService = nil
+          }
+          if self.micCaptureGeneration == generation {
+            self.micCaptureStartInFlight = false
+          }
+          log("PushToTalkManager: turn ended while displaced capture teardown was awaited — not opening")
+          return
+        }
       }
       do {
         try await capture.startCapture(

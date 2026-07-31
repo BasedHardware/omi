@@ -203,6 +203,13 @@ extension AppState {
       // Create crash-safe DB session for persistence
       Task {
         do {
+          // Persist the microphone this session will actually use: an explicit
+          // selection resolves asynchronously (off-main HAL read), so wait for
+          // it here rather than recording the system-default name and leaving
+          // the conversation with wrong input-device provenance.
+          if let preferredName = await Self.resolvePreferredMicrophoneName() {
+            recordingInputDeviceName = preferredName
+          }
           let sessionId = try await TranscriptionStorage.shared.startSession(
             source: currentConversationSource.rawValue,
             language: effectiveLanguage,
@@ -322,6 +329,18 @@ extension AppState {
   ///    outside meetings.
   /// Captured audio is mixed into one mono stream (cloud) or fed to separate Parakeet instances
   /// (local) so calls/videos/music end up in the transcript alongside the user's voice.
+  /// Resolve the persisted preferred-microphone UID to its display name, off
+  /// the main actor (the full-device enumeration has no deadline against a
+  /// wedged HAL). Returns nil when no selection is set or it is unavailable.
+  static func resolvePreferredMicrophoneName() async -> String? {
+    let uid =
+      UserDefaults.standard.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+    guard !uid.isEmpty else { return nil }
+    return await Task.detached(priority: .userInitiated) {
+      AudioCaptureService.inputDeviceID(forUID: uid).flatMap { AudioCaptureService.deviceName(for: $0) }
+    }.value
+  }
+
   /// Silent-mic watchdog: CoreAudio can report a healthy IOProc while a Bluetooth, USB, or
   /// built-in input returns only zeros. Listen/manual/Quick Note all flow through here, so
   /// they must opt into all-transport detection just as PTT does. Shared by the session-arm
