@@ -385,6 +385,90 @@ final class SettingsSpotlightSceneTests: XCTestCase {
             .rightOf(CGPoint(x: 723 + 26, y: 33 + 474)))
     }
 
+    // MARK: Words alone
+
+    /// **The words-alone plate is placed by measurement, not by a constant.**
+    ///
+    /// It was pinned to `bounds.midX, bounds.minY + 140` — a fixed distance into a display of
+    /// unknown height, and the top band of a display is exactly where window title bars and pane
+    /// headers live. It landed over System Settings' own header, which is both our sentence covering
+    /// theirs and a sentence reading as a label on a control we explicitly failed to find.
+    ///
+    /// This tier genuinely has no tracked rect to measure against — `framingOrWords` only reaches it
+    /// when there is no System Settings window rect at all, or the rect is on no display, which is
+    /// the definition of the tier. What it *does* have is the display's usable area, so that is what
+    /// the plate is anchored to: the foot of it, clear of the Dock.
+    func testTheWordsAlonePlateHangsOffTheFootOfTheUsableArea() {
+        // A 1512 × 982 display with a 25 pt menu bar and a 74 pt Dock along the bottom.
+        let visible = CGRect(x: 0, y: 25, width: 1_512, height: 883)
+        let scene = SettingsSpotlightScene(
+            bounds: CGRect(x: 0, y: 0, width: 1_512, height: 982), visibleBounds: visible,
+            area: nil, focus: nil, source: nil, arrow: nil,
+            caption: "Scroll down to Context for Claude and switch it on.")
+
+        XCTAssertEqual(scene.captionPlacement, .above(CGPoint(x: 756, y: 908)))
+        // Which is the whole point: nowhere near the band a pane's header occupies.
+        guard case .above(let anchor) = scene.captionPlacement else { return XCTFail("above") }
+        XCTAssertGreaterThan(
+            anchor.y, scene.bounds.midY,
+            "the unanchored sentence must sit in the lower half of the display, not over the band "
+                + "macOS puts title bars and pane headers in")
+    }
+
+    /// The Dock is not always at the bottom. A Dock on the left moves the usable area's left edge,
+    /// and the plate has to move with it rather than staying where a constant put it — which is the
+    /// difference between measuring and assuming.
+    func testTheWordsAlonePlateFollowsTheUsableAreaRatherThanTheDisplay() {
+        let bounds = CGRect(x: 0, y: 0, width: 1_512, height: 982)
+        func anchor(visible: CGRect?) -> CGPoint {
+            let scene = SettingsSpotlightScene(
+                bounds: bounds, visibleBounds: visible, area: nil, focus: nil, source: nil,
+                arrow: nil, caption: "x")
+            guard case .above(let point) = scene.captionPlacement else { return .zero }
+            return point
+        }
+
+        let bottomDock = anchor(visible: CGRect(x: 0, y: 25, width: 1_512, height: 883))
+        let leftDock = anchor(visible: CGRect(x: 88, y: 25, width: 1_424, height: 957))
+        XCTAssertNotEqual(bottomDock, leftDock, "the plate has to follow the chrome it is clearing")
+        XCTAssertEqual(leftDock.x, 88 + 1_424 / 2, "centred on the usable area, not on the display")
+        XCTAssertEqual(leftDock.y, 982, "a side Dock leaves the foot of the display usable")
+    }
+
+    /// Nothing measured the chrome — a headless space, a display that answered nothing — and the
+    /// placement still has to be a rect, not a crash and not a constant. It falls back to the
+    /// display, which is the largest honest answer available.
+    func testTheWordsAlonePlateFallsBackToTheWholeDisplayWhenNothingMeasuredTheChrome() {
+        let bounds = CGRect(x: 0, y: 0, width: 1_512, height: 982)
+        let scene = SettingsSpotlightScene(
+            bounds: bounds, visibleBounds: nil, area: nil, focus: nil, source: nil, arrow: nil,
+            caption: "x")
+        XCTAssertEqual(scene.usableBounds, bounds)
+        XCTAssertEqual(scene.captionPlacement, .above(CGPoint(x: 756, y: 982)))
+    }
+
+    /// A visible frame that does not overlap the display at all — a stale rect from a monitor that
+    /// has been unplugged — is discarded rather than used to place a plate off screen.
+    func testAnUnusableVisibleFrameIsIgnored() {
+        let bounds = CGRect(x: 0, y: 0, width: 1_512, height: 982)
+        let scene = SettingsSpotlightScene(
+            bounds: bounds, visibleBounds: CGRect(x: 4_000, y: 4_000, width: 100, height: 100),
+            area: nil, focus: nil, source: nil, arrow: nil, caption: "x")
+        XCTAssertEqual(scene.usableBounds, bounds)
+    }
+
+    /// The measured tiers are untouched: a scene with a boundary still puts the plate beside the
+    /// boundary, whatever the display's chrome is doing.
+    func testTheUsableAreaDoesNotDisturbTheTiersThatMeasuredSomething() {
+        let framed = SettingsWindowFrame(
+            window: CGRect(x: 0, y: 33, width: 723, height: 948), instruction: "Switch it on.")
+        guard var scene = SettingsSpotlightScene.make(framing: framed, display: laptop, space: space)
+        else { return XCTFail("expected a scene") }
+        let before = scene.captionPlacement
+        scene.visibleBounds = CGRect(x: 0, y: 25, width: 1_512, height: 883)
+        XCTAssertEqual(scene.captionPlacement, before)
+    }
+
     /// With no room beside it, the plate falls back to hanging off the top of the boundary rather
     /// than off the edge of the display.
     func testTheBoundaryOnlyCaptionFallsBackToTheTopWhenThereIsNoRoomBeside() {

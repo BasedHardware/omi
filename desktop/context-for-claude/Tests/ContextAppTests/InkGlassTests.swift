@@ -289,7 +289,17 @@ final class InkGlassTests: XCTestCase {
         let pad = InkGlassStyle.floating.inset
         let card = OnboardingWindow.cardSize
         let window = OnboardingWindow.windowSize
-        XCTAssertEqual(card, NSSize(width: 720, height: 520))
+        XCTAssertEqual(card.width, 720, "the reading column plus both gutters")
+        // The height is not a free choice and is no longer 520: it is what the permissions card's
+        // tallest state measures, plus the page margins and the band the progress dots are
+        // reserved. `PermissionsCardLayoutTests` derives and enforces it; restated here only so a
+        // change to the pane is a deliberate one rather than a side effect.
+        XCTAssertEqual(card.height, 640)
+        XCTAssertEqual(
+            card.height,
+            OnboardingWindow.cardContentHeight + 2 * InkLayout.pagePaddingVertical
+                + InkLayout.progressBandHeight,
+            "the budget the card is laid out against has to describe the card")
         XCTAssertEqual(window.width, card.width + pad * 2)
         XCTAssertEqual(window.height, card.height + pad * 2)
     }

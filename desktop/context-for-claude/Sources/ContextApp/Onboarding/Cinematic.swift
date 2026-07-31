@@ -5,7 +5,7 @@ import SwiftUI
 //  The first-run cinematic — Phase 3 of docs/first-run-experience.md.
 //
 //  Six beats over ~8.6 s, on one borderless window covering the display under the pointer, which
-//  then shrinks into the 720×520 welcome card (`OnboardingWindow`). Every beat carries a sound.
+//  then shrinks into the 720×640 welcome card (`OnboardingWindow`). Every beat carries a sound.
 //
 //      1  dim      the desktop darkens; the bed fades in
 //      2  mark     the mark draws itself on — head, eyes, legs — then the wordmark resolves

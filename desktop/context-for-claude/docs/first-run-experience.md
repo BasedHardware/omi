@@ -144,7 +144,7 @@ app's own UI sounds, whereas failing closed would silently disable the product's
 ## Phase 3 — The first-run cinematic
 
 One borderless transparent window over a dimmed desktop. `OnboardingWindow` is currently a fixed
-720×520 floating card (`OnboardingWindow.swift:17,44-54`); the cinematic needs a full-screen variant
+720×640 floating card (`OnboardingWindow.swift`, `cardSize`); the cinematic needs a full-screen variant
 on the display under the pointer, then it shrinks back to the card for Phase 4.
 
 Beats, each with its own sound:

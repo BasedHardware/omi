@@ -1097,6 +1097,13 @@ enum PermissionOverlay {
 
     /// Words alone, on the display the pointer is on — anchored to nothing, so a sentence can never
     /// read as a label on the wrong control.
+    ///
+    /// The one thing it is still worth measuring here is the display's *usable* area. This tier is
+    /// reached precisely because System Settings could not be located — `framingOrWords` only gets
+    /// this far when there is no window rect, or the rect is on no display — so there is nothing in
+    /// the pane to place the sentence against. `visibleFrame` is a real measurement of the two
+    /// pieces of chrome that are always somewhere: the menu bar, and the Dock wherever the user
+    /// keeps it. `SettingsSpotlightScene.captionPlacement` pins the plate to the foot of it.
     private static func present(words: String, space: ScreenSpace) {
         let pointer = NSEvent.mouseLocation
         let screen =
@@ -1105,9 +1112,12 @@ enum PermissionOverlay {
         guard let screen else { return }
         let display = DisplayGeometry(screen)
         guard let displayGlobal = space.globalFrame(of: display) else { return }
+        let visible = space.global(from: screen.visibleFrame)
+            .map { $0.offsetBy(dx: -displayGlobal.minX, dy: -displayGlobal.minY) }
         present(
             SettingsSpotlightScene(
                 bounds: CGRect(origin: .zero, size: displayGlobal.size),
+                visibleBounds: visible,
                 area: nil, focus: nil, source: nil, arrow: nil, caption: words,
                 backingScaleFactor: display.backingScaleFactor),
             on: display)
@@ -1239,8 +1249,8 @@ struct GhostRowReplica: View {
         )
     }
 
-    /// A switch, in the accent when on — the user's own accent, which is the only accent this app
-    /// ever draws with.
+    /// A switch, in `Ink.accent` when on — the one accent this app draws with, and a fixed one, so
+    /// this replica is the same colour on every machine (`INV-UI-1`).
     private func switchShape(on: Bool) -> some View {
         Capsule(style: .continuous)
             .fill(on ? Ink.accent : Ink.primary.opacity(0.16))

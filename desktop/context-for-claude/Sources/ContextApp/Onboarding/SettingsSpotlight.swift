@@ -513,6 +513,13 @@ struct ArrowPlan: Equatable, Sendable {
 struct SettingsSpotlightScene: Equatable, Sendable {
     /// The display, in local coordinates: always `(0, 0, w, h)`.
     var bounds: CGRect
+    /// The part of `bounds` no permanent system chrome sits in — `NSScreen.visibleFrame`, which is
+    /// the display less the menu bar and less the Dock wherever the user keeps it.
+    ///
+    /// `nil` when nobody measured it, and `usableBounds` then falls back to the whole display. Only
+    /// the words-alone tier consults it: every other tier is anchored to something it measured in
+    /// System Settings, and this is the one that has nothing to anchor to.
+    var visibleBounds: CGRect?
     /// The dotted boundary. `nil` when nothing at all could be measured, which never happens in
     /// practice — a scene exists because something was.
     var area: CGRect?
@@ -621,13 +628,32 @@ struct SettingsSpotlightScene: Equatable, Sendable {
         case leftOf(CGPoint)
     }
 
+    /// What the plate is allowed to use when it has nothing else to go on: the measured usable area,
+    /// or the whole display when nothing measured it.
+    var usableBounds: CGRect {
+        guard let visibleBounds else { return bounds }
+        let inside = visibleBounds.intersection(bounds)
+        return inside.isNull || inside.isEmpty ? bounds : inside
+    }
+
     var captionPlacement: CaptionPlacement {
         if let arrow, !confirmed { return .above(arrow.tail) }
         guard let area else {
-            // Words alone. Near the top of the display, anchored to nothing — a sentence that floats
-            // beside a control reads as a label on it, and the whole reason we are down to words is
-            // that we do not know which control it would be.
-            return .above(CGPoint(x: bounds.midX, y: bounds.minY + 140))
+            // **Words alone: nothing was located, so nothing may be pointed at.** The plate is
+            // anchored to the only rect this tier actually has — the display's usable area, menu bar
+            // and Dock measured out of it — and pinned to the foot of it.
+            //
+            // The foot, and not the top, because of what the two bands are. This sentence is shown
+            // *because* System Settings could not be found, so the plate has to sit where it is
+            // least likely to cover the pane the user is being told to read — and the top band of a
+            // display is exactly where window title bars and pane headers live, macOS having placed
+            // them there. A plate pinned there both hides the header it lands on and reads as a
+            // label on it, which is the one thing this tier exists to avoid.
+            //
+            // It replaces `minY + 140`, which was neither: 140 pt is a fixed distance into a
+            // display of unknown height, and it put the plate squarely over the pane's own header.
+            let usable = usableBounds
+            return .above(CGPoint(x: usable.midX, y: usable.maxY))
         }
         // A boundary with nothing aimed at it. The plate goes beside the region when the display has
         // room, so it does not cover the pane it is talking about.

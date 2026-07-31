@@ -1,10 +1,10 @@
 # Context for Claude — design system
 
 **The app is a native macOS app, so its palette is macOS's.** Every colour is a system semantic
-colour or a fixed alpha on one, and the single accent is `NSColor.controlAccentColor` — whatever the
-user picked in System Settings. No hue is hand-mixed, so the app follows the system's appearance with
-no override, no light-only assumption, and no second set of values for Dark. Display type is **Open Runde**, bundled
-and ours; reading type is SF Pro.
+colour or a fixed alpha on one, and the single accent is `NSColor.systemBlue` — a *named* system
+colour, picked here rather than read off the machine. No hue is hand-mixed, so the app follows the
+system's appearance with no override, no light-only assumption, and no second set of values for Dark.
+Display type is **Open Runde**, bundled and ours; reading type is SF Pro.
 
 This replaces an Anthropic palette (ivory `#FAF9F5` paper, `#141413` ink, clay `#D97757`) over New
 York, which read as a piece of someone else's brand pasted into the menu bar.
@@ -23,7 +23,7 @@ secondary      labelColor @ 0.80                a sentence someone reads
 tertiary       labelColor @ 0.66                a word someone glances at
 separator      NSColor.separatorColor           a rule between blocks
 hairline       labelColor @ 0.22                the edge of something you press
-accent         NSColor.controlAccentColor       the one actionable link
+accent         NSColor.systemBlue               the one actionable link
 errorRed       NSColor.systemRed                the only place the app raises its voice
 listeningGreen NSColor.systemGreen              the 7 pt live dot
 rowFill        labelColor @ 0.045               onboarding permission-row fill
@@ -33,7 +33,9 @@ wash           labelColor @ 0.06                the pressed state of anything wi
 glow           white                            the finale's `plusLighter` overexposure
 ```
 
-AppKit twins for the layers SwiftUI cannot reach: `nsSurface`, `nsPrimary`, `nsAccent`.
+AppKit twins for the layers SwiftUI cannot reach: `nsSurface`, `nsPrimary`. There is deliberately no
+`nsAccent` — a second definition of the accent is a second thing to keep true, and AppKit callers
+that need it can say `NSColor(Ink.accent)`.
 
 **Three steps of type colour, and no fourth.** `primary` → `secondary` → `tertiary`, chosen by what
 the reader has to do with the text, not by how deep it sits in a stack:
@@ -75,13 +77,25 @@ vibrant material. A wash that darkens in Light and lightens in Dark does; a fixe
 `rowHover` is the one exception that stays on `tertiaryLabelColor` — it is a fill nobody reads, and
 it is supposed to be barely there.
 
-Why the primary button is **not** accent-filled: `controlAccentColor` is the user's choice, so its
-luminance is unknowable and no single label colour is legible against every accent. Inverting the
-label ladder (`primary` fill, `surface` label) is high-contrast in both appearances by construction,
-and it leaves the accent spent on the one link that needs it.
+Why the primary button is **not** accent-filled: a filled accent button owes a label colour legible
+on it in both appearances, which is one more contrast pair to keep true. Inverting the label ladder
+(`primary` fill, `surface` label) is high-contrast in both appearances by construction, and it leaves
+the accent spent on the one link that needs it.
 
-**No purple anywhere** — `INV-UI-1`. Note that the accent is the *user's* value, not one this system
-picks; that is the only way an accent can be native.
+**No purple anywhere** — `INV-UI-1`. The accent used to be `NSColor.controlAccentColor`, the accent
+the user picked in System Settings, on the reasoning that a borrowed brand is worse than a borrowed
+hue. That was wrong in one specific way that no call site could correct: **macOS offers Purple
+there**, so on that machine every ring, checkbox, toggle and link spending the accent rendered
+purple. A rendered-pixel check cannot catch it either — every machine this was developed on has a
+blue accent, so the guard came back green and the defect shipped anyway. The accent is therefore a
+value this system picks. `InkAccentTests` holds the line three ways: the token's rendered pixel
+through the shared `BrandColour` predicate, the token's *catalog identity* (which is what survives
+being run on a blue Mac), and a labelled static tripwire over `Sources/ContextApp` for a view that
+skips `Ink` and reaches for `controlAccentColor` inline.
+
+One exposure of the same class is still open and is listed in that test: `AccentChoice.system`, the
+default in the Appearance pane, resolves to `controlAccentColor` and tints the whole Settings window
+with it. `SettingsTests.testSystemAccentIsTheUsersOwn` currently pins that behaviour deliberately.
 
 ### Appearance
 
@@ -272,16 +286,27 @@ Two column widths, and the difference between them is deliberate.
 - Everything centred, except the permissions, value, connector and tutorial steps, which are
   left-aligned and take the list column.
 - Vertical rhythm: 28, 22, 18, 14, 12, 10, 8, 6.
-- The onboarding window is 720 × 520 pt, and all of it is legible area — there is no falloff now.
+- The onboarding window is 720 × 640 pt, and all of it is legible area — there is no falloff now.
+- The foot of the card is a reserved band, `InkLayout.progressBandHeight` (44 pt), that the progress
+  dots live in. It is subtracted from the height a card's content is laid out in, so the dots can
+  never land on the content — which they did, inside the fourth permission row and on top of the
+  "Show me the row" button, while they were an overlay pinned 62 pt off the bottom edge.
+- **The content budget is `OnboardingWindow.cardContentHeight`** — the pane, less the page's vertical
+  margins, less that band. 492 pt today.
 
-**Known overflow — the by-hand permission card.** When Accessibility is not granted, the permissions
-step draws its headline, preamble and four rows *and* the by-hand choreography panel underneath, which
-needs ~516 pt in a card that has 452. It truncates the row sentences. This predates the type scale —
-at the old sizes it needed 488 pt and truncated too — and it survives the speech bubble's removal,
-which bought the card width and not height. No column width or padding fixes it: the
-four rows cannot come back to one line at any width the sheet will hold, so the panel is always the
-overflow. The fix belongs in `OnboardingView`: the by-hand panel should *replace* the row list rather
-than sit under it, or the step needs a taller window.
+**Resolved — the by-hand permission card's overflow.** When Accessibility is not granted, the
+permissions step draws its headline, preamble and four rows *and* the by-hand choreography panel
+underneath. That needs 505 pt, and the card had 452, so SwiftUI compressed the rows and three of the
+four sentences truncated mid-word. Neither column width nor padding could fix it — the four rows
+cannot come back to one line at any width the sheet will hold, so the panel is always the overflow —
+so the card took the second of the two options this note used to offer and **grew to fit its tallest
+state**. Two things keep it fixed:
+
+- `InkPermissionRow`'s sentence is `.fixedSize` vertically, so a row wraps and can never truncate.
+  Too little room is now a measurement that fails rather than copy that quietly disappears.
+- `PermissionsCardLayoutTests` measures the real `PermissionsCard` through `NSHostingView` in every
+  state the flow reaches and asserts each fits `cardContentHeight`. Longer copy, a fifth row or a new
+  panel fails that test rather than shipping.
 
 ## Buttons
 
@@ -374,7 +399,7 @@ routes through `InkReduceTransparency`; see *The glass*.
 
 ## Window chrome
 
-Borderless, shadowless, floating, fixed 720 × 520 centred on the screen the pointer is on:
+Borderless, shadowless, floating, fixed 720 × 640 centred on the screen the pointer is on:
 
 ```swift
 styleMask = [.borderless]
@@ -406,9 +431,9 @@ from due north; `direction(θ) = (sin θ, −cos θ)`. Each dot is a solid circl
 circle (blur 9·scale, alpha 0.3). It draws in `primary` by default, and `templateImage(size:)` is its
 AppKit form.
 
-The onboarding spotlight ring is drawn in **`nsAccent` @ 0.9**, because it lands on the menu bar —
-the system's own surface, routinely dark *and* routinely light, so neither end of the label ladder is
-guaranteed to show up there.
+The onboarding spotlight ring is drawn in **white over a dark halo**, because it lands on the menu
+bar — the system's own surface, routinely dark *and* routinely light, so nothing that is a single
+colour is guaranteed to show up there, the accent included.
 
 `Resources/ContextForClaude.icns` still carries the old palette and is regenerated separately.
 

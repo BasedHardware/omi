@@ -17,7 +17,27 @@ import SwiftUI
 @MainActor
 final class OnboardingWindow {
     /// The glass panel's size. Fixed, so the surface never resizes under the user mid-flow.
-    static let cardSize = NSSize(width: 720, height: 520)
+    ///
+    /// **The height is the permissions card's, and every other card is a guest on it.** 520 pt was
+    /// the height of the *short* cards — a headline, a sentence and a button — and the permissions
+    /// step is the one screen whose content varies: a preamble that changes length with the gate's
+    /// phase, four first-person sentences that wrap or do not, and either a 44 pt escape panel or a
+    /// 125 pt replica of the row the user is about to flip by hand. At 520 the tallest of those
+    /// states wanted ~40 pt more than the card had, and SwiftUI paid for it by compressing the rows
+    /// until three of the four sentences truncated mid-word ("…so I can hear what you talk…"). A
+    /// card that silently eats its own copy is worse than a slightly larger card, and a resize
+    /// mid-flow would be worse than both — so the pane is sized once, for its tallest state, and
+    /// `PermissionsCardTests` is what keeps that true.
+    static let cardSize = NSSize(width: 720, height: 640)
+
+    /// The height a card's content is actually laid out in: the pane, less the page's own top and
+    /// bottom margins, less the strip reserved for the progress dots.
+    ///
+    /// **The layout budget, stated once**, so the card, the dots and the tests cannot each hold a
+    /// different opinion about how much room there is.
+    static var cardContentHeight: CGFloat {
+        cardSize.height - 2 * InkLayout.pagePaddingVertical - InkLayout.progressBandHeight
+    }
 
     /// The window's size, which is the panel plus the margin its ambient shadow casts into.
     ///

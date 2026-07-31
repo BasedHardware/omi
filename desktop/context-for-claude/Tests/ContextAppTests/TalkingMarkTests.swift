@@ -275,7 +275,7 @@ final class TalkingMarkTests: XCTestCase {
     ///
     /// A headline cannot run off the side of a card: `Text` never draws outside its frame — too
     /// little room and it wraps, and a word it cannot break it wraps *mid-word*. What too little
-    /// width actually costs is **lines**, and lines are height, and the window is a fixed 720 × 520
+    /// width actually costs is **lines**, and lines are height, and the window is a fixed 720 × 640
     /// that does not scroll. That is the whole shape of the regression: the hero went 32 → 34 pt and
     /// the bubble took 52 pt of horizontal budget, the line needed a third row to hold itself, and
     /// the card grew past the bottom of the window it is drawn in.

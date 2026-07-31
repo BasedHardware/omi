@@ -178,17 +178,30 @@ struct OnboardingView: View {
     /// reported as. One ground, owned by the window, and the card draws only type.
     var body: some View {
         GeometryReader { geometry in
-            ZStack(alignment: .topTrailing) {
-                column
-                    .id(step)
-                    .transition(transition(in: geometry.size))
+            // The dots are laid out *under* the column, not over it. They were an
+            // `.overlay(alignment: .bottom)` on the full card with 62 pt of bottom padding, which is
+            // a position and not a reservation: the permissions column is taller than 62 pt from the
+            // foot leaves room for, so the dots landed inside the fourth permission row, over the
+            // consequence line beside "I'll do this later", and — invisibly, `Ink.primary` on a
+            // near-black pill — on top of "Show me the row". A `VStack` is the whole fix: the band
+            // is subtracted from the height the column is offered, so there is nothing for the dots
+            // to collide with. `InkLayout.progressBandHeight` is the same subtraction the layout
+            // tests measure against.
+            VStack(spacing: 0) {
+                ZStack(alignment: .topTrailing) {
+                    column
+                        .id(step)
+                        .transition(transition(in: geometry.size))
 
-                if step == .done {
-                    menuBarCue
+                    if step == .done {
+                        menuBarCue
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                progressBand
             }
             .overlay(alignment: .topLeading) { backCue }
-            .overlay(alignment: .bottom) { progressDots }
             .frame(width: geometry.size.width, height: geometry.size.height)
             .overlay {
                 if finale {
@@ -422,45 +435,19 @@ struct OnboardingView: View {
     // MARK: - 4. Permissions — one at a time, then the one macOS will not prompt for
 
     private var permissions: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            // The preamble is said before the first dialog, never after. macOS asks in its own
-            // words — terse, system-voiced, and identical to the prompt of every app that ever
-            // abused the same permission — and a user meeting that cold has only the app's
-            // reputation to go on. Screen-recording tools die at exactly this prompt. Naming what is
-            // coming, in order, in the app's own voice, is the difference between consenting and
-            // being startled — and it is *this* card where having a face attached to that voice is
-            // worth the most.
-            //
-            // The title changes under the user as the run moves ("First…" → "Say yes."), which
-            // `TalkingMark` treats as a new phrase: the mark says the new line.
-            says([(setupTitle, .plain)], style: .firstTitle, aside: setupPreamble)
-
-            VStack(spacing: 8) {
-                ForEach(capabilities, id: \.self) { capability in
-                    InkPermissionRow(
-                        title: capability.title,
-                        granted: isGranted(capability),
-                        status: status(for: capability),
-                        // The sequence asks for each of these itself. The row stays tappable only
-                        // as the way back for someone who said no and changed their mind.
-                        action: { request(capability) }
-                    )
-                }
-            }
-            // While the gate has an ask in flight the rows are not a second entrance to it. A tap
-            // during the pause between two capabilities used to fire a request for a *different*
-            // one, which is the collision the broker now refuses and this stops from being offered.
-            .disabled(gate.isBusy)
-
-            if case .waitingInSettings(let capability) = gate.phase {
-                postponePanel(for: capability)
-            }
-
-            if let handGrant {
-                handGrantPanel(for: handGrant)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        PermissionsCard(
+            title: setupTitle,
+            preamble: setupPreamble,
+            rows: permissionRows,
+            rowsDisabled: gate.isBusy,
+            postponing: postponing,
+            handGrant: handGrant,
+            guiding: guiding,
+            onRow: { request($0) },
+            onPostpone: { gate.postpone($0) },
+            onShowRow: { beginHandGrant($0) },
+            onSkipHandGrant: { finishHandGrant() }
+        )
         // The watch is unbounded on purpose, so it needs an owner that ends it. Leaving the card is
         // that owner — and the card can only be left once the gate has its answers.
         .onDisappear { setupTask?.cancel() }
@@ -476,32 +463,17 @@ struct OnboardingView: View {
         }
     }
 
-    /// The escape, and the only thing other than a grant that ends a wait.
-    ///
-    /// It is a button the user presses on purpose, with the consequence written next to it — never a
-    /// default, never a timeout, never a quiet Continue. A literal "grant or you cannot proceed" is
-    /// unimplementable on macOS: TCC prompts once, after a Deny only System Settings remains, and a
-    /// user who simply refuses would be stranded on this card forever.
-    @ViewBuilder
-    private func postponePanel(for capability: Capability) -> some View {
-        HStack(spacing: 10) {
-            InkButton("I’ll do this later", kind: .secondary) { gate.postpone(capability) }
-            Text(postponeConsequence(for: capability))
-                .inkStyle(.statusLabel)
-                .foregroundStyle(Ink.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+    /// The four rows, as the card draws them. The card owns the drawing; this owns the state.
+    private var permissionRows: [PermissionsCardRow] {
+        capabilities.map {
+            PermissionsCardRow(capability: $0, granted: isGranted($0), status: status(for: $0))
         }
-        .padding(.top, 2)
     }
 
-    /// What is actually lost by saying "later" — named, so the choice is informed.
-    private func postponeConsequence(for capability: Capability) -> String {
-        switch capability {
-        case .microphone: return "I won’t hear anything you say until you do."
-        case .systemAudio: return "I’ll hear you on calls, but not the other side."
-        case .screen: return "I won’t see your screen at all until you do."
-        case .accessibility: return "I’ll read your screen from pixels rather than text."
-        }
+    /// The capability whose wait may be escaped: the gate is standing in System Settings for it.
+    private var postponing: Capability? {
+        guard case .waitingInSettings(let capability) = gate.phase else { return nil }
+        return capability
     }
 
     /// One subscription for the life of the view, not a fresh publisher on every body pass.
@@ -545,42 +517,6 @@ struct OnboardingView: View {
     }
 
     // MARK: The choreography
-
-    /// The by-hand grant, offered with a replica of what is about to be shown.
-    ///
-    /// The replica is ours and is captioned as ours. What it previews is System Settings' own
-    /// affordance — on macOS 26 a dashed row with an instruction to drag it up into the list — which
-    /// no application can draw and this one does not try to. Half a second of a likeness on our card
-    /// is what makes the real thing recognised rather than puzzled over.
-    @ViewBuilder
-    private func handGrantPanel(for capability: Capability) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            GhostRowReplica()
-                .frame(width: 168)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text(guiding ? "Look for the ring." : "I’ll show you the row.")
-                    .inkStyle(.rowCopy)
-                    .foregroundStyle(Ink.primary)
-
-                Text(
-                    guiding
-                        ? "System Settings is open and I’m pointing at the row. Flip it and I’ll notice."
-                        : "It opens System Settings and rings the row so you don’t have to hunt for it."
-                )
-                .inkStyle(.statusLabel)
-                .foregroundStyle(Ink.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 10) {
-                    InkButton(guiding ? "Waiting…" : "Show me the row") { beginHandGrant(capability) }
-                        .disabled(guiding)
-                    InkButton("Skip it", kind: .secondary) { finishHandGrant() }
-                }
-            }
-        }
-        .padding(.top, 2)
-    }
 
     /// Opens the pane, waits for it to arrive, then points at the real row — and keeps watching for
     /// the grant so the user's part ends at the switch.
@@ -798,6 +734,16 @@ struct OnboardingView: View {
         }
     }
 
+    /// The strip at the foot of the card the dots live in — always the same height, whether or not
+    /// this card has dots, so the column above is offered the same room on every step and the copy
+    /// does not shift by 40 pt between the welcome card and the one after it.
+    private var progressBand: some View {
+        progressDots
+            .frame(height: InkLayout.progressBandHeight)
+            .frame(maxWidth: .infinity)
+            .allowsHitTesting(false)
+    }
+
     /// One dot per card of actual work, the current one filled.
     ///
     /// Deliberately not a percentage or a "step 3 of 6": the count changes with the itinerary — a
@@ -813,11 +759,6 @@ struct OnboardingView: View {
                         .frame(width: 5, height: 5)
                 }
             }
-            // Well clear of the pane's bottom edge. It used to be clear of the mask's falloff, which
-            // no longer exists; the number stays because it is also the distance at which a row of
-            // 5 pt dots reads as belonging to the card rather than sitting on its rim.
-            .padding(.bottom, 62)
-            .allowsHitTesting(false)
             .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.settle)), value: index)
         }
     }
