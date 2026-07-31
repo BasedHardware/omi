@@ -442,9 +442,10 @@ public final class OmiBackend: @unchecked Sendable {
     }
 
     public func searchMemories(query: String, limit: Int) -> OmiResult<[OmiMemory]> {
+        let clamped = clamp(limit, 1, 50)
         // Local memories from the main Omi app's omi.db — always available when the app has run,
         // even without an API key. These include memories that have not synced to the backend yet.
-        let local = OmiMemoryStore.shared.searchMemories(query: query, limit: limit)
+        let local = OmiMemoryStore.shared.searchMemories(query: query, limit: clamped)
         let localMemories = local.map {
             OmiMemory(id: $0.id, content: $0.content, category: $0.category)
         }
@@ -460,15 +461,15 @@ public final class OmiBackend: @unchecked Sendable {
             [OmiMemory].self,
             path: "v1/mcp/memories/search",
             // The endpoint clamps to 20 anyway; asking for more only wastes the budget.
-            query: [.init(name: "query", value: query), .init(name: "limit", value: String(clamp(limit, 1, 20)))],
+            query: [.init(name: "query", value: query), .init(name: "limit", value: String(clamp(clamped, 1, 20)))],
             ttl: 600
         )
 
         switch apiResult {
         case let .ok(apiMemories):
             let seen = Set(localMemories.map(\.id))
-            let merged = localMemories + apiMemories.filter { !seen.contains($0.id) }
-            return .ok(merged)
+            let merged = (localMemories + apiMemories.filter { !seen.contains($0.id) }).prefix(clamped)
+            return .ok(Array(merged))
         case let .unavailable(error):
             return localMemories.isEmpty ? .unavailable(error) : .ok(localMemories)
         }
