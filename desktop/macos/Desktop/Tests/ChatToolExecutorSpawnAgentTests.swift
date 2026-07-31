@@ -70,6 +70,7 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Providers/ChatToolExecutor.swift")
+    // omi-test-quality: source-inspection -- static contract: provider setup must stay on the native installer path and never regain an agent-pill spawn path.
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

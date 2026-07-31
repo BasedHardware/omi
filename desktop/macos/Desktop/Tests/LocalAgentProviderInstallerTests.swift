@@ -26,6 +26,7 @@ final class LocalAgentProviderInstallerTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("agent/src/runtime/omi-tool-manifest.ts")
+    // omi-test-quality: source-inspection -- static contract: the consent rule is intentionally duplicated across Swift and the agent manifest, so literal equality is the drift guard.
     let manifest = try String(contentsOf: manifestURL, encoding: .utf8)
     XCTAssertTrue(manifest.contains("\"\(LocalAgentProviderInstaller.consentRule)\""))
   }
@@ -230,6 +231,7 @@ final class LocalAgentProviderInstallerTests: XCTestCase {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
       if kill(pid, 0) != 0 { return true }
+      // omi-test-quality: wall-clock-wait -- unavoidable integration poll for process-group death after SIGTERM/SIGKILL; the deadline bounds the real OS lifecycle.
       usleep(50_000)
     }
     return kill(pid, 0) != 0
@@ -240,6 +242,7 @@ final class LocalAgentProviderInstallerTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/LocalAgentProviderInstaller.swift")
+    // omi-test-quality: source-inspection -- static contract: installer consent and process-group guarantees are implementation constraints without a narrower runtime seam.
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }
