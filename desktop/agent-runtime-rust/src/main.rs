@@ -2379,19 +2379,24 @@ mod tests {
                 surface_kind: "main_chat".into(),
             },
         );
-        runtime.authorize_tool_request(ToolRequest {
-            request_id: "request".into(),
-            client_id: "client".into(),
-            call: rx4::ToolCall {
-                id: "invoke-1".into(),
-                name: "search".into(),
-                arguments: r#"{"q":"omi"}"#.into(),
-            },
-        });
+        let (tool_requests, mut queued_tool_requests) = mpsc::unbounded_channel();
+        tool_requests
+            .send(ToolRequest {
+                request_id: "request".into(),
+                client_id: "client".into(),
+                call: rx4::ToolCall {
+                    id: "invoke-1".into(),
+                    name: "search".into(),
+                    arguments: r#"{"q":"omi"}"#.into(),
+                },
+            })
+            .expect("queued tool call must send");
+        runtime.complete_run("request".into(), &mut queued_tool_requests);
+        assert!(!runtime.running.contains_key("request"));
         let authorized = receiver
             .recv()
             .await
-            .expect("authorized tool execution must emit");
+            .expect("queued tool execution must authorize before run removal");
         runtime.handle(parse_line(r#"{"type":"invalidate_session","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("invalidation fixture must parse"));
         let invalidation = receiver.recv().await.expect("invalidation must emit");
         assert_eq!(invalidation.kind, "session_invalidated");
