@@ -39,7 +39,10 @@ const VECTOR_TOP_K = 50
  * out, embedding backend down, nothing indexed yet). Never throws: on macOS the
  * whole vector leg is a `try?`, and keyword results must render regardless.
  */
-async function vectorHits(query: string, scope?: { from: number; to: number }): Promise<VectorHit[]> {
+async function vectorHits(
+  query: string,
+  scope?: { from: number; to: number }
+): Promise<VectorHit[]> {
   try {
     const vec = await embedRewindQuery(query)
     if (!vec) return []
@@ -92,8 +95,6 @@ export function registerRewindHandlers(): void {
     const { query: q, from, to } = parseRewindNaturalSearch(query)
     if (!q && (from == null || to == null)) return { groups: [], normalizedQuery: q }
     const seq = ++searchSeq
-    const inScope = (ts: number): boolean =>
-      (from == null || ts >= from) && (to == null || ts <= to)
     const fts = q
       ? searchRewindFrames(q, 500, from != null && to != null ? { from, to } : undefined)
       : listRewindFramesSampled(from ?? 0, to ?? Date.now())
