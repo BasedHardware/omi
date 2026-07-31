@@ -33,9 +33,8 @@ import SwiftUI
 /// `Ink.primary` would draw near-black type on a near-black scrim in Light.
 ///
 /// So: the scrim is black and everything on it is white, at the alphas `Ink` uses for the same
-/// roles. White is also exactly the neutral INV-UI-1 asks for — and note that
-/// `NSColor.controlAccentColor` is deliberately unused here, because the user's chosen accent is
-/// allowed to be purple and this surface has no way to know.
+/// roles. White is also exactly the neutral INV-UI-1 asks for, and this surface spends no accent at
+/// all — the intro has one thing to look at per beat and a hue would be a second.
 enum CinematicPalette {
     /// The dim over the desktop. Not fully opaque: the last few per cent keep the user's own desktop
     /// faintly present, so the intro reads as happening *on their Mac*.

@@ -33,40 +33,136 @@ final class RewindTests: XCTestCase {
         XCTAssertEqual(first, RewindPalette.hue(forApp: "google chrome "))
     }
 
-    /// INV-UI-1: never purple, anywhere.
+    // MARK: - INV-UI-1, decided on the pixel
+    //
+    // ## Why the assertions this replaces passed a violet disc
+    //
+    // They were `hue < RewindPalette.hueCeiling` (250) and `!(250...330).contains(hue)`. The second
+    // was written to be a second opinion — "stated independently of the ceiling constant" — but it
+    // took the *same* boundary as its lower bound, so it was the same opinion twice, and 249.9°
+    // satisfied both. That is the colour that shipped: sRGB (101, 86, 179), a lavender site disc in
+    // the search panel, measured on screen at (134, 121, 191) after compositing. A hue in degrees is
+    // a number; "looks violet" is a property of the pixel, and no inequality between two constants
+    // can stand in for it — a wrong constant is invisible to a test whose only vocabulary is that
+    // constant. So the guard below renders the colour and asks the pixel.
+    //
+    // ## What "looks violet" is, structurally
+    //
+    // Stated once, in `BrandColourGuard.swift`, and shared with the accent guard in `SettingsTests`
+    // — which had the same defect with different constants. Short version: violet is the hue family
+    // the eye reads as a mixture of the spectrum's two ends, `min(R, B) > G`, and `BrandColour`
+    // measures how far a rendered pixel sits clear of it.
+
+    /// The guard, over the palette's **entire** output domain rather than a sample of it.
     ///
-    /// Asserted over the app names actually present in the real database on this machine plus a large
-    /// generated sweep, because the failure mode being guarded is statistical — a hash over a full
-    /// 360° wheel emits purple for roughly one name in six, so a handful of hand-picked names would
-    /// pass a broken implementation.
-    func testNoAppNameEverProducesPurple() {
+    /// Both rendering paths are checked because both ship: `nsColor` draws the timeline segments and
+    /// their badges, `color` draws the search panel's site discs — which is the surface the violet
+    /// was seen on — and the frame border. They are separate constructors in separate colour spaces,
+    /// so agreeing about one of them is not evidence about the other.
+    func testEveryColourThePaletteCanEmitReadsAsBlueNotViolet() {
+        // `BrandColour` skips near-greys, which have no hue to be wrong about. A palette that went
+        // grey would therefore be *skipped* rather than checked, so the rule below would stop being
+        // a rule silently. It cannot: this palette's saturation is fixed and well above the line.
+        XCTAssertGreaterThan(
+            RewindPalette.saturation, BrandColour.neutralSaturation,
+            "a palette this desaturated would be waved through as neutral, not checked")
+
+        var maxHue = 0.0
+        for bucket in 0..<RewindPalette.hueBuckets {
+            let hue = RewindPalette.hue(bucket: bucket)
+            maxHue = max(maxHue, hue)
+            assertReadsOnBrand(RewindPalette.nsColor(hue: hue), "bucket \(bucket) (hue \(hue)), AppKit")
+            assertReadsOnBrand(NSColor(RewindPalette.color(hue: hue)), "bucket \(bucket) (hue \(hue)), SwiftUI")
+        }
+        // Reported rather than asserted as a bound: the property above is the rule, this is what the
+        // arc actually reached while satisfying it.
+        XCTAssertLessThan(maxHue, RewindPalette.hueCeiling)
+        XCTAssertGreaterThan(maxHue, RewindPalette.hueCeiling - 1, "the arc must actually be used")
+    }
+
+    /// The guard's own regression test: it must reject the colour that shipped.
+    ///
+    /// Without this, "the palette is clean" and "the guard cannot see violet" are indistinguishable —
+    /// which is precisely how the old assertion looked healthy for as long as it did.
+    func testTheGuardRejectsTheVioletThatShipped() {
+        // 249.9° is what the 250° ceiling could emit, and did — on both rendering paths.
+        assertReadsOffBrand(RewindPalette.nsColor(hue: 249.9), "the shipped violet, AppKit")
+        assertReadsOffBrand(NSColor(RewindPalette.color(hue: 249.9)), "the shipped violet, SwiftUI")
+
+        // The pixel as measured on screen: the same colour after compositing, which is what a
+        // screenshot of the search panel gives you.
+        assertReadsOffBrand(
+            NSColor(srgbRed: 134 / 255, green: 121 / 255, blue: 191 / 255, alpha: 1),
+            "the measured on-screen pixel")
+
+        // Blend invariance, stated as a test rather than as a claim: the same colour at 45% over a
+        // white ground is a much paler lavender and is still caught.
+        assertReadsOffBrand(
+            NSColor(
+                srgbRed: 0.45 * 101 / 255 + 0.55, green: 0.45 * 86 / 255 + 0.55,
+                blue: 0.45 * 179 / 255 + 0.55, alpha: 1),
+            "a washed-out lavender")
+
+        // The margin's boundary, pinned from both sides. 226° is *outside* the wedge — the old
+        // test's vocabulary could not object to it — and is rejected anyway, because it reads indigo.
+        let indigo = BrandColour.read(RewindPalette.nsColor(hue: 226))
+        XCTAssertGreaterThan(indigo?.clearance ?? -1, 0, "226° is outside the wedge")
+        assertReadsOffBrand(RewindPalette.nsColor(hue: 226), "226°, outside the wedge but hugging it")
+        XCTAssertGreaterThanOrEqual(
+            BrandColour.read(RewindPalette.nsColor(hue: 219))?.clearance ?? 0, BrandColour.blueMargin,
+            "the top of the arc must clear the margin, not sit on it")
+    }
+
+    /// The names side: every real app name and every host the search panel can be asked for lands
+    /// inside that domain. The colours are already proven safe above; what this pins is that the
+    /// mapping from a name cannot escape the arc.
+    ///
+    /// Hosts are here because `SearchFavicon` feeds this palette a domain, not an app name, and the
+    /// violet disc was a domain's.
+    func testEveryNameAndHostMapsIntoTheSafeArc() {
         let realAppNames = [
             "Arc", "Cursor", "Warp", "QuickTime Player", "Preview", "Google Chrome", "Telegram",
             "ChatGPT Atlas", "Claude", "Messages", "Finder", "omi-people-intel", "Notes",
             "System Settings", "Terminal", "Xcode", "Slack", "Safari", "Mail", "Music",
-            "Activity Monitor", "Unknown",
+            "Activity Monitor", "Unknown", "Figma", "iTerm2",
         ]
-        var names = realAppNames
+        // Hosts that landed in the wedge under the 250° arc: gitlab.com was 244.7°, reddit.com
+        // 242.9°, bsky.app 240.8°. They are named here so the case is a fixture, not a memory.
+        let realHosts = [
+            "github.com", "gitlab.com", "reddit.com", "bsky.app", "anthropic.com", "claude.ai",
+            "news.ycombinator.com", "figma.com", "linear.app", "medium.com", "x.com", "google.com",
+        ]
+        var names = realAppNames + realHosts
         for index in 0..<20_000 { names.append("generated-app-\(index)") }
 
         for name in names {
             let hue = RewindPalette.hue(forApp: name)
             XCTAssertGreaterThanOrEqual(hue, 0, "hue below the wheel for \(name)")
-            XCTAssertLessThan(
-                hue, RewindPalette.hueCeiling,
-                "\(name) produced hue \(hue), which is in the violet/purple band")
-            // The band this exists to exclude, stated independently of the ceiling constant so
-            // raising that constant cannot silently re-admit purple.
-            XCTAssertFalse(
-                (250.0...330.0).contains(hue), "\(name) produced a purple/magenta hue: \(hue)")
+            XCTAssertLessThan(hue, RewindPalette.hueCeiling, "\(name) escaped the arc at \(hue)")
+        }
+        // Spot-check the whole pipeline on the real names rather than trusting the arc alone.
+        for name in realAppNames + realHosts {
+            assertReadsOnBrand(RewindPalette.nsColor(forApp: name), name)
+            assertReadsOnBrand(NSColor(RewindPalette.color(forApp: name)), "\(name), SwiftUI")
         }
     }
 
     /// The colour is a real colour rather than a semantic that would collapse to the same value for
     /// every app — and two different apps must actually differ.
+    ///
+    /// The second half is what keeps narrowing the arc honest: a ceiling low enough to satisfy the
+    /// brand rule by squeezing every app into one blue would satisfy the guard above and destroy the
+    /// only thing the palette is for.
     func testDifferentAppsGetDifferentHues() {
         let hues = ["Arc", "Cursor", "Warp", "Messages", "Finder"].map(RewindPalette.hue(forApp:))
         XCTAssertEqual(Set(hues).count, hues.count, "distinct apps must be distinguishable")
+
+        let spread = ["Arc", "Cursor", "Warp", "QuickTime Player", "Google Chrome", "Claude",
+            "Messages", "Finder", "Notes", "Terminal", "Xcode", "Slack", "Safari", "Music"]
+            .map(RewindPalette.hue(forApp:))
+        XCTAssertGreaterThan(
+            (spread.max() ?? 0) - (spread.min() ?? 0), 150,
+            "a real day's apps must still span the arc, not cluster into one colour")
     }
 
     // MARK: - Live Text geometry

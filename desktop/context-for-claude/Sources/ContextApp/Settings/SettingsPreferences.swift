@@ -45,8 +45,11 @@ enum AppearanceOverride: String, CaseIterable, Identifiable, Codable, Sendable {
 ///
 /// **Purple is not in this list and cannot be added** — `INV-UI-1`
 /// (`docs/product/invariants/brand-ui.md`) makes it off-brand anywhere in the product. Pink and
-/// magenta are absent for the same reason `RewindPalette` stops its hue arc at 250°: at accent
+/// magenta are absent for the same reason `RewindPalette` stops its hue arc at 220°: at accent
 /// saturation they read as purple, and a brand rule nobody can eyeball is a brand rule that erodes.
+/// "Cannot be added" is enforced rather than asserted — `SettingsTests` reads the rendered pixel of
+/// every choice below through `BrandColour`, and that predicate rejects `systemIndigo` and
+/// `systemPink` as well as `systemPurple`.
 ///
 /// `system` is the default and means `NSColor.controlAccentColor` — the accent the *user* chose in
 /// System Settings. That one is deliberately not audited here: if they picked purple for their own

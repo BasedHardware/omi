@@ -120,9 +120,9 @@ enum MenuBarSpotlight {
 ///
 /// White over a dark halo, not the accent. This lands on the menu bar, which is the system's own
 /// surface and is routinely dark *and* routinely light, so nothing that is a single colour is
-/// guaranteed to show up on it — and the accent is `controlAccentColor`, which is whatever the user
-/// picked in Appearance and can be purple, which this app never draws. Two passes, the same
-/// treatment `SettingsSpotlightCanvas` uses over System Settings, and for the same reason.
+/// guaranteed to show up on it — including `Ink.accent`. White plus a halo carries both grounds, and
+/// white is the neutral INV-UI-1 asks for. Two passes, the same treatment `SettingsSpotlightCanvas`
+/// uses over System Settings, and for the same reason.
 private final class SpotlightRingView: NSView {
     private let halo = CAShapeLayer()
     private let ring = CAShapeLayer()

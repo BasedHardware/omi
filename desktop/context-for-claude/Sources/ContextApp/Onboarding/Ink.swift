@@ -2,8 +2,8 @@
 //  Ink.swift — the shared visual vocabulary for the onboarding window and the menu bar popover.
 //
 //  Every colour here is a macOS semantic colour or a fixed alpha on one, and the single accent is
-//  `NSColor.controlAccentColor` — the accent the user picked in System Settings. No hue is
-//  hand-mixed, so there is exactly one palette in the product and it follows the system's
+//  `NSColor.systemBlue` — a *named* system colour, chosen here rather than read off the machine.
+//  No hue is hand-mixed, so there is exactly one palette in the product and it follows the system's
 //  appearance for free: no `NSApp.appearance` override, no light-only assumption, no second set of
 //  values for dark mode. The palette this replaces was Anthropic's own (ivory paper, clay accent),
 //  which made the app read as a piece of someone else's brand pasted into the menu bar.
@@ -22,8 +22,9 @@
 //  `Text.inkStyle(_:)` makes both mistakes unavailable.
 //
 //  Brand: system semantics and neutrals only. Never purple, anywhere (INV-UI-1) — and note that
-//  the accent is the *user's* choice rather than a value this file picks, which is the only way an
-//  accent can be native.
+//  the accent is a value *this file picks*, not the one the machine reports. See `Ink.accent`: an
+//  accent read off the machine is a hue this app cannot be held to, which is the one thing
+//  INV-UI-1 does not allow.
 //
 //  The full spec, including every value below, is docs/design-system.md.
 //
@@ -114,10 +115,24 @@ enum Ink {
 
     /// The one accent, spent on the one thing that is actionable and is not already a button.
     ///
-    /// The user's own accent colour, so it can never be a borrowed brand — and it is not this
-    /// file's decision to make, which is the point. Anything relying on it for contrast has to earn
-    /// that with weight or size rather than with hue, because the value is not knowable here.
-    static let accent = Color(nsColor: .controlAccentColor)
+    /// `systemBlue`, and deliberately **not** `NSColor.controlAccentColor`. The accent the user
+    /// picked in System Settings was the obvious choice and it is the wrong one: macOS ships Purple
+    /// as an accent, so on that machine every selection ring, checkbox, toggle and link in this app
+    /// renders purple — and purple is off-brand everywhere in this product (`INV-UI-1`,
+    /// `docs/product/invariants/brand-ui.md`). Nothing here can fix that at the call site, because
+    /// the hue is not knowable here; the only fix is to stop reading it. A colour that is on brand
+    /// on most machines and off brand on the rest is not a palette, it is a coin flip.
+    ///
+    /// It stays a *named system colour* rather than a literal, so it still tracks the appearance and
+    /// still brightens under Increase Contrast — everything `controlAccentColor` was picked for
+    /// except the one property that made it unshippable. `SearchInk.chipTint` reached the same
+    /// conclusion independently for the query chip.
+    ///
+    /// Enforced, not asserted: `InkAccentTests` reads this token's rendered pixel through the shared
+    /// `BrandColour` predicate *and* asserts it is not the `controlAccentColor` catalog entry — the
+    /// second check being the one that survives being run on a machine whose accent happens to be
+    /// blue, which is every machine this has been developed on.
+    static let accent = Color(nsColor: .systemBlue)
 
     /// The error colour: the only place the app ever raises its voice.
     static let errorRed = Color(nsColor: .systemRed)
@@ -157,10 +172,13 @@ enum Ink {
 
     static let nsSurface = NSColor.controlBackgroundColor
     static let nsPrimary = NSColor.labelColor
-    /// The onboarding spotlight ring. Drawn in the accent because it lands on the *menu bar* — the
-    /// system's own surface, which is routinely dark and routinely light, so neither end of the
-    /// label ladder can be relied on to show up there.
-    static let nsAccent = NSColor.controlAccentColor
+    // There is deliberately no `nsAccent`. It was `NSColor.controlAccentColor` and it had no callers
+    // at all — the spotlight ring it was written for draws white over a dark halo instead, because
+    // the menu bar is routinely dark *and* routinely light (see `SpotlightRingView`). Deleting it
+    // rather than repointing it at `systemBlue` is the stronger move: an AppKit twin nothing uses is
+    // a second definition of the accent waiting to drift from the first, and the accent is exactly
+    // the token this app has already been bitten by having two opinions about. AppKit callers that
+    // genuinely need it can say `NSColor(Ink.accent)`.
 }
 
 // MARK: - Layout
@@ -196,6 +214,21 @@ enum InkLayout {
     static let pagePaddingVertical: CGFloat = 34
     /// The vertical rhythm. Pick from this ladder rather than inventing a gap.
     static let rhythm: [CGFloat] = [28, 22, 18, 14, 12, 10, 8, 6]
+
+    /// The strip at the foot of every card that the progress dots occupy.
+    ///
+    /// Reserved rather than drawn over. The dots used to be an `.overlay(alignment: .bottom)` with
+    /// 62 pt of padding — a *position*, which is only a safe one while no card's content reaches
+    /// that far down, and the permissions card does. Subtracting a band is the version of "clear of
+    /// the content" that a longer sentence cannot invalidate. 40 pt is the 5 pt dots plus a rhythm
+    /// step of air either side, rounded, which lands them at much the same optical distance from
+    /// the rim as the padding did.
+    static let progressBandHeight: CGFloat = 44
+
+    /// Between the headline block, the rows, and whichever panel the permissions run has reached.
+    static let permissionsBlockSpacing: CGFloat = 18
+    /// Between two permission rows.
+    static let permissionsRowSpacing: CGFloat = 8
 }
 
 // MARK: - Motion
@@ -674,10 +707,10 @@ struct InkButtonStyle: ButtonStyle {
 
         private var pressed: Bool { configuration.isPressed }
 
-        /// The primary button is deliberately *not* accent-filled. `controlAccentColor` is the
-        /// user's choice, so its luminance is unknowable here and no single label colour is legible
-        /// against all of them — and the accent is already spent on the one link in the popover.
-        /// Inverting the label ladder instead is high-contrast in both appearances by construction.
+        /// The primary button is deliberately *not* accent-filled. The accent is already spent on
+        /// the one link in the popover, and a filled accent button owes a label colour legible on
+        /// it in both appearances — one more contrast pair to keep true. Inverting the label ladder
+        /// instead is high-contrast in both appearances by construction.
         private var fill: Color {
             switch kind {
             // Pressed drops opacity rather than darkening: letting the surface through is the only
@@ -818,6 +851,14 @@ struct InkPermissionRow: View {
             Text(title)
                 .inkStyle(InkType.rowCopy, color: Ink.primary)
                 .multilineTextAlignment(.leading)
+                // **The row wraps; it never truncates.** Without this the sentence is compressible,
+                // and a `VStack` of four rows in a card that is a little too short pays for the
+                // shortfall by squeezing them — which is not a squeeze, it is a `Text` given less
+                // height than it needs, and a `Text` given less height than it needs ends in "…".
+                // Three of these four sentences shipped cut off mid-word. Fixed vertically, the row
+                // can only get taller, so too little room becomes a layout that fails a measurement
+                // instead of copy that quietly disappears.
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(status)
                 .inkStyle(InkType.statusLabel, color: Ink.tertiary)

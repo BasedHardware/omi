@@ -41,8 +41,7 @@
 //  arithmetic — `.headerView` shows the most of what is behind it.
 //
 //  Brand: neutrals and system semantics only, never purple (INV-UI-1). Nothing here reaches for
-//  `Ink.accent`, which is `controlAccentColor` and therefore purple on a machine whose owner chose
-//  purple.
+//  `Ink.accent` at all — glass is defined by its brightness and its shadow, not by a hue.
 //
 
 import AppKit

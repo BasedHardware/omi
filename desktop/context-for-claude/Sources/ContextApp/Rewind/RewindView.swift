@@ -4,8 +4,7 @@ import SwiftUI
 
 /// The timeline window's chrome, laid out to the spec in `docs/rewind-and-settings.md` § Part 1.
 ///
-/// Every colour is a system semantic through `Ink`, or `controlAccentColor`, so the window works in
-/// both appearances. The implementation this was ported from is hardcoded dark — dozens of literal
+/// Every colour is a system semantic through `Ink`, so the window works in both appearances. The implementation this was ported from is hardcoded dark — dozens of literal
 /// `Color.white.opacity(…)` and `NSColor(white:…)` values, plus a forced `.preferredColorScheme(.dark)`
 /// — which is invisible on a light window. There is no `.white` or `NSColor(white:` anywhere in this
 /// directory except the two places a label sits on a saturated app-colour chip, where a fixed light

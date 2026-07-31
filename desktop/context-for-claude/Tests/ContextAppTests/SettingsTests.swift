@@ -56,9 +56,16 @@ final class SettingsTests: XCTestCase {
 
     /// `INV-UI-1`: never purple, anywhere.
     ///
-    /// Asserted on the resolved sRGB hue rather than on the case names, because a future maintainer
-    /// renaming a case does not change what it paints. The excluded band is stated here independently
-    /// of `AccentChoice`, so a change on that side cannot quietly satisfy this test.
+    /// Asserted on the resolved sRGB *pixel* rather than on the case names, because a future
+    /// maintainer renaming a case does not change what it paints — and through `BrandColour` rather
+    /// than through a band of hue degrees.
+    ///
+    /// The band this replaces was `hue >= 250 && hue <= 345`. It looked like a guard and was not one:
+    /// `systemIndigo` renders at 233.8° and slips under the lower bound, `systemPink` at 348.0° and
+    /// slips over the upper one, so the two colours nearest to being wrongly added were exactly the
+    /// two it could not see. It passed only because `AccentChoice` happens to ship neither — the same
+    /// failure the timeline palette shipped a violet through, with different constants.
+    /// `testTheAccentGuardRejectsTheColoursTheOldBandAdmitted` pins that both are now rejected.
     ///
     /// `.system` is excluded from the sweep and that is deliberate: it resolves to
     /// `NSColor.controlAccentColor`, which is the accent the *user* chose in System Settings. If they
@@ -68,20 +75,37 @@ final class SettingsTests: XCTestCase {
     func testAccentPaletteOffersNoPurple() {
         XCTAssertFalse(AccentChoice.named.isEmpty)
         for choice in AccentChoice.named {
-            guard let nsColor = choice.nsColor,
-                let rgb = nsColor.usingColorSpace(.sRGB)
-            else {
-                XCTFail("\(choice.title) has no resolvable sRGB colour")
+            guard let nsColor = choice.nsColor else {
+                XCTFail("\(choice.title) has no colour of its own")
                 continue
             }
-            let hue = Double(rgb.hueComponent) * 360
-            let saturation = Double(rgb.saturationComponent)
-            // A near-grey has no meaningful hue; Graphite is the one such choice.
-            guard saturation >= 0.15 else { continue }
-            XCTAssertFalse(
-                hue >= 250 && hue <= 345,
-                "\(choice.title) resolves to hue \(hue), which is in the violet/magenta band INV-UI-1 forbids")
+            // A near-grey has no meaningful hue; Graphite is the one such choice, and `BrandColour`
+            // skips it on the same 0.15 saturation threshold this used to apply here by hand.
+            assertReadsOnBrand(nsColor, choice.title)
         }
+    }
+
+    /// The accent guard's own regression test: the colours the band it replaced let through.
+    ///
+    /// A brand guard and a blind brand guard are indistinguishable while the list is clean, which is
+    /// how the band survived. This is the difference between them.
+    func testTheAccentGuardRejectsTheColoursTheOldBandAdmitted() {
+        // Both of these satisfied `hue >= 250 && hue <= 345` — indigo below it, pink above it.
+        assertReadsOffBrand(.systemIndigo, "systemIndigo (233.8°)")
+        assertReadsOffBrand(.systemPink, "systemPink (348.0°)")
+        // The one the old band did catch, so the rebase is not a trade.
+        assertReadsOffBrand(.systemPurple, "systemPurple (292.7°)")
+
+        // And everything the pane actually offers must stay offerable — including `systemRed`, which
+        // renders at 359.0° and is a degree inside the wedge's red edge. That is what
+        // `BrandColour.redEdgeTolerance` exists for, and this is the test that would fail if the
+        // tolerance were removed or the rule made symmetric.
+        let offered: [(String, NSColor)] = [
+            ("Azure", .systemBlue), ("Teal", .systemTeal), ("Green", .systemGreen),
+            ("Yellow", .systemYellow), ("Orange", .systemOrange), ("Red", .systemRed),
+            ("Graphite", .systemGray),
+        ]
+        for (title, colour) in offered { assertReadsOnBrand(colour, title) }
     }
 
     /// The default accent must be the user's own, so that picking nothing changes nothing.
@@ -118,20 +142,20 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(TimelineControlVisibility.Control.liveText.shortcutHint)
     }
 
-    /// `INV-UI-1` again, on the one surface that picks its own colours: the preview's sample app names.
+    /// The preview's strip has to read as a *sweep* — that is the property these eight hand-picked
+    /// names own, and the one the palette cannot supply.
     ///
-    /// `RewindPalette`'s arc runs to 250°, and the top of it is blue-violet — Terminal lands at 228° and
-    /// Figma at 244°. The first draft of this preview used both and rendered two visibly violet segments
-    /// in a settings pane. The names are data, so this is the guard that keeps them out of that band.
-    func testTimelinePreviewSampleAppsAreNeverNearViolet() {
+    /// This test used to also assert that none of the eight fell inside `TimelinePreview.violetBand`
+    /// (`215..<250`). That constant and that assertion are gone, retired rather than rebased onto
+    /// `BrandColour`, for two reasons. The brand property is now proven at the generator:
+    /// `RewindTests` checks the rendered colour of all 2503 values `RewindPalette` can emit, so eight
+    /// names drawn from that same generator cannot produce a violet, and restating it here over a
+    /// handful of them is coverage theatre — worse, a band whose floor (215°) sits below the arc's
+    /// ceiling (220°) is a test that has almost no room left to fail. And the constant was a hazard
+    /// in itself: it is exactly the kind of number a future reader uses to re-derive a ceiling, and
+    /// it encoded the *old* one.
+    func testTimelinePreviewSampleAppsSweepTheArc() {
         XCTAssertFalse(TimelinePreview.sampleApps.isEmpty)
-        for app in TimelinePreview.sampleApps {
-            let hue = RewindPalette.hue(forApp: app)
-            XCTAssertFalse(
-                TimelinePreview.violetBand.contains(hue),
-                "\(app) derives hue \(hue), inside the violet band the preview must avoid")
-        }
-        // And the sweep has to actually be a sweep, or the strip reads as one colour.
         let hues = TimelinePreview.sampleApps.map(RewindPalette.hue(forApp:))
         XCTAssertGreaterThan(
             (hues.max() ?? 0) - (hues.min() ?? 0), 150,

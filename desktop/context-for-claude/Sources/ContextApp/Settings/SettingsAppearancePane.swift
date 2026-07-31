@@ -202,19 +202,19 @@ struct TimelinePreview: View {
 
     /// Real apps, so the derived segment colours are the ones the user will actually see.
     ///
-    /// Chosen for the *hues* `RewindPalette` gives them, not arbitrarily. Its arc runs to 250°, and the
-    /// top of that reach (roughly 215°–250°) is blue-violet: Terminal lands at 228°, Figma at 244° and
-    /// iTerm2 at 244°, and a first draft of this preview used them and rendered two visibly violet
-    /// segments — which is exactly what a settings pane must not be showing off under `INV-UI-1`. These
-    /// eight sweep 1° → 211° instead, so the strip reads red → orange → yellow → green → teal → blue and
-    /// nothing in it is near violet. `SettingsTests` pins that, so a future edit here cannot quietly
-    /// reintroduce one.
+    /// Chosen for the *hues* `RewindPalette` gives them, not arbitrarily: these eight sweep 0.9° →
+    /// 186°, so the strip reads red → orange → yellow → green → teal → blue rather than clustering
+    /// into one colour. `SettingsTests` pins the sweep, because it is a property of these names and
+    /// nothing else enforces it.
+    ///
+    /// A first draft used Terminal, Figma and iTerm2, which under the palette's old 250° arc landed
+    /// at 228°, 244° and 244° and rendered visibly violet segments — exactly what a settings pane
+    /// must not show off under `INV-UI-1`. That cannot recur from this side: the arc now stops at
+    /// 220°, and `RewindTests` proves on the rendered pixel that no colour the palette can emit reads
+    /// violet. Under today's arc those three are 200°, 215° and 215°.
     static let sampleApps = [
         "Notes", "Photos", "Warp", "Messages", "Finder", "Arc", "Cursor", "Xcode",
     ]
-
-    /// The band at the top of `RewindPalette`'s arc that reads as violet on screen.
-    static let violetBand: Range<Double> = 215..<250
 
     private static let blocks: [ActivityBlock] = {
         var blocks: [ActivityBlock] = []

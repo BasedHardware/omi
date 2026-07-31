@@ -17,24 +17,34 @@ import SwiftUI
 /// colours meaning the same thing tomorrow. FNV-1a is computed here, in full, over the name's UTF-8:
 /// a fixed function with fixed constants cannot drift with a toolchain or a process.
 ///
-/// **The hue range must skip purple.** A hash swept over all 360° emits purple for roughly one turn
-/// in six, and purple is off-brand anywhere in the product (`INV-UI-1`,
+/// **The hue range must skip violet.** A hash swept over all 360° emits an off-brand hue for
+/// roughly one turn in three, and that family is off-brand anywhere in the product (`INV-UI-1`,
 /// `docs/product/invariants/brand-ui.md`). Excluding it after the fact — clamping, nudging, retrying
 /// the hash — leaves the property untested and one refactor from returning. The range simply does
-/// not contain it: hues are drawn from `[0°, 250°)`, which stops short of violet at 250° and never
-/// reaches magenta, so no input can produce one. `RewindTests` asserts that over every app name in
-/// the real database plus a large generated sweep.
+/// not contain it: hues are drawn from `[0°, 220°)`, which stops a clear distance below pure blue
+/// and never reaches magenta, so no input can produce one. `RewindTests` asserts that on the
+/// *rendered colour* of every value this can emit, not on the constant.
 enum RewindPalette {
 
     /// The hue arc app colours are drawn from, in degrees: red → orange → yellow → green → cyan →
-    /// blue, stopping before violet.
+    /// blue, stopping well short of violet.
     ///
-    /// 250° is the ceiling because violet begins there and purple sits at 270–290°. The upper reach
-    /// of the wheel (magenta and pink, 300–340°) is excluded too — not because those are purple, but
-    /// because at the saturation and brightness below they are close enough to read as it, and a
-    /// brand rule nobody can eyeball is a brand rule that erodes. 250° of arc separates the ~22
-    /// distinct apps in a real database comfortably.
-    static let hueCeiling: Double = 250
+    /// **Why 220°, and why the 250° this shipped with was wrong.** The forbidden family is not a
+    /// stretch of wheel somebody agreed on; in RGB it is a structure — red *and* blue both above
+    /// green, the eye reading a mixture of the spectrum's two ends. That structure begins the
+    /// instant a hue passes pure blue at 240°, so everything in `[240°, 360°)` is in it. A 250°
+    /// ceiling put 4% of this palette's output literally inside that wedge, and 10% of it inside or
+    /// hugging the edge — Figma landed on 244.1°, gitlab.com on 244.7°. It shipped: a monogram disc in
+    /// the search panel rendered sRGB (101, 86, 179) — a lavender — from a hue of 249.9°, and the
+    /// guard passed it because 249.9 is less than 250.
+    ///
+    /// 240° is the wall. 225° is where a colour at the saturation and brightness below still reads
+    /// unambiguously blue rather than indigo — it is `royalblue`'s hue, and equivalently it is the
+    /// point that keeps a quarter of the cyan→blue sector's green lift. 220° sits 5° inside that, so
+    /// bucket quantisation, a colour-space round trip, or a future retune of `saturation` /
+    /// `brightness` cannot walk an emitted colour onto the boundary. The cost is 12% of the arc: 220°
+    /// still separates the ~22 distinct apps in a real database by a median 8°.
+    static let hueCeiling: Double = 220
 
     /// Fixed saturation and brightness, deliberately not appearance-dependent.
     ///
@@ -48,7 +58,11 @@ enum RewindPalette {
 
     /// A prime modulus finer than the arc, so two names that differ only slightly still land on
     /// visibly different hues rather than colliding into the same integer degree.
-    private static let hueBuckets: UInt64 = 2_503
+    ///
+    /// Internal rather than private because it is the size of this type's entire output domain: every
+    /// colour it can ever produce is `hue(bucket:)` for some bucket below this, which is what lets the
+    /// brand guard check all of them instead of sampling names and hoping.
+    static let hueBuckets: UInt64 = 2_503
 
     /// FNV-1a, 64-bit. Written out rather than reached for so the constants are visible and the
     /// result is pinned to this source rather than to the standard library's seed.
@@ -61,18 +75,26 @@ enum RewindPalette {
         return hash
     }
 
-    /// The hue in degrees for an app name. Always in `[0, 250)`, so never purple.
+    /// The hue in degrees for an app name. Always in `[0, hueCeiling)`, so never in the violet family.
     static func hue(forApp appName: String) -> Double {
         // Case- and whitespace-folded: "Google Chrome" and "google chrome " are one app on a
         // timeline, and giving them two colours would split one stretch of a day into two.
         let key = appName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let bucket = stableHash(key) % hueBuckets
-        return Double(bucket) / Double(hueBuckets) * hueCeiling
+        return hue(bucket: stableHash(key) % hueBuckets)
     }
 
-    /// The SwiftUI colour for an app.
+    /// Where one bucket lands on the arc, in degrees.
+    ///
+    /// Split out from `hue(forApp:)` so the output domain is enumerable. A brand rule sampled over
+    /// names is a statistical argument; over `0..<hueBuckets` it is a complete one, and this palette
+    /// is small enough that there is no reason to settle for the weaker kind.
+    static func hue(bucket: UInt64) -> Double {
+        Double(bucket % hueBuckets) / Double(hueBuckets) * hueCeiling
+    }
+
+    /// The SwiftUI colour for an app. Draws the search panel's site discs and the frame border.
     static func color(forApp appName: String) -> Color {
-        Color(hue: hue(forApp: appName) / 360, saturation: saturation, brightness: brightness)
+        color(hue: hue(forApp: appName))
     }
 
     /// The same colour for the AppKit layers that draw the track.
@@ -80,8 +102,18 @@ enum RewindPalette {
     /// `NSColor(hue:saturation:brightness:alpha:)` is device RGB and appearance-independent, which is
     /// what is wanted here — see the note on `saturation`.
     static func nsColor(forApp appName: String) -> NSColor {
+        nsColor(hue: hue(forApp: appName))
+    }
+
+    /// Both renderers, keyed on the arc rather than on a name, so the guard can render a hue it
+    /// chose rather than hunting for a name that hashes to one.
+    static func color(hue: Double) -> Color {
+        Color(hue: hue / 360, saturation: saturation, brightness: brightness)
+    }
+
+    static func nsColor(hue: Double) -> NSColor {
         NSColor(
-            hue: CGFloat(hue(forApp: appName) / 360),
+            hue: CGFloat(hue / 360),
             saturation: CGFloat(saturation),
             brightness: CGFloat(brightness),
             alpha: 1)
