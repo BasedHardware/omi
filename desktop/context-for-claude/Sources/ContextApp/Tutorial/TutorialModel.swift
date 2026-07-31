@@ -26,6 +26,12 @@ import Foundation
 ///    so a user who skipped past a missing grant is never told their screen is searchable.
 /// 5. **Leaving tears everything down.** Both terminal states run the same teardown, so a skip from
 ///    any step cannot leave the timeline, a coach mark, the spotlight or the music behind.
+/// 6. **A beat that asks a question waits for an answer to it.** When a card puts a question to the
+///    user, its own replies are the only ways forward: `isAwaitingAnAnswer` holds `gateIsSatisfied`
+///    down until one of them has been given. `.userAction` describes a card that has to be read, not
+///    one that has to be answered, and the difference is not a detail the view gets to keep — a
+///    Continue live over an unanswered question is a third exit that answers nothing, and it landed
+///    users on the proof beat having sent Claude no question at all.
 @MainActor
 final class TutorialModel: ObservableObject {
 
@@ -197,7 +203,37 @@ final class TutorialModel: ObservableObject {
 
     // MARK: - Gates
 
+    /// Whether this beat has put a question to the user and is still waiting to be answered.
+    ///
+    /// A gate is a fact about the world. This is a fact about the *conversation*, and the two are not
+    /// the same thing: `.userAction` means "pressing continue is the whole requirement", which is true
+    /// of a card that only has to be read and false of one that has asked something and whose answers
+    /// are its own buttons. On such a card Continue is a third exit that answers nothing — and on the
+    /// handoff it was the worst kind of third exit, because the beat it leaves for has a gate only
+    /// Claude can satisfy and it left having sent Claude nothing.
+    ///
+    /// Read by `gateIsSatisfied`, so one condition holds both the button's `disabled` and `advance()`.
+    /// The view used to carry half of this itself, which is how the other half went missing.
+    var isAwaitingAnAnswer: Bool {
+        switch step {
+        case .claudeHandoff:
+            // Two states, one rule. Before the ask: the consent question is on the card and the two
+            // replies to it are the two buttons under it. During the ask: we have asked and Claude
+            // has not answered, and "we asked" is not an outcome. Once `claudeAsk` is set, an answer
+            // really came back — by either route — and the beat is free to be left.
+            return isAskingClaude || (claudeAsk == nil && claudeNeedsRestart)
+        // Listed rather than defaulted: a beat that starts asking something has to come here and say
+        // so, which is the whole reason this is not an `if` inside one card's view.
+        case .invitation, .screenAccess, .collectFrames, .openTimeline, .timeline, .findMoments,
+            .query, .claudeProof, .allSet, .menuBar, .finished, .skipped:
+            return false
+        }
+    }
+
     var gateIsSatisfied: Bool {
+        // Before the gate, because it is true of any beat that asks: a question the user has not
+        // answered is not a requirement the user has met, whatever the step is otherwise waiting on.
+        guard !isAwaitingAnAnswer else { return false }
         switch step.gate {
         case .userAction: return true
         case .screenRecordingGrant: return screenIsGranted

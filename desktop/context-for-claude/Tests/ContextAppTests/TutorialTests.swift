@@ -955,6 +955,56 @@ final class TutorialTests: XCTestCase {
         XCTAssertEqual(world.claudeAsksRestartingFirst, [true])
     }
 
+    /// A question the user has not answered is not a gate the user has met.
+    ///
+    /// The consent beat has exactly two ways forward and they are the two answers on the card.
+    /// Continue was a third, and it answered nothing: pressing it handed Claude no question and then
+    /// parked the user on a payoff beat whose gate only Claude can satisfy — an unwaivable wait for a
+    /// tool call nobody had asked for.
+    func testTheConsentBeatCannotBeWalkedPastWithoutAnswering() {
+        let world = World()
+        world.screenGranted = true
+        world.claudeNeedsRestart = true
+        let model = makeModel(world)
+        drive(model, world, to: .claudeHandoff)
+
+        XCTAssertEqual(model.speech.lead, "Claude is open already.", "the question is on screen")
+        XCTAssertFalse(model.gateIsSatisfied, "an unanswered question is not a satisfied gate")
+        XCTAssertFalse(
+            model.advance(), "“continue” is not an answer to “may I close and reopen it?”")
+        XCTAssertEqual(model.step, .claudeHandoff)
+        XCTAssertTrue(world.claudeAsks.isEmpty, "and nothing was handed to Claude on the way past")
+
+        // Nor is there a labelled way out: this beat is not waiting on the world, it is waiting on a
+        // person, and both of the answers it will take are already on the card.
+        XCTAssertFalse(model.waiverIsOffered)
+        XCTAssertFalse(model.waive())
+        world.clock += TutorialModel.framePatience + 1
+        XCTAssertFalse(model.waiverIsOffered, "waiting longer does not answer it either")
+        XCTAssertFalse(model.advance())
+        XCTAssertEqual(model.step, .claudeHandoff)
+    }
+
+    /// Both answers are ways forward. The bug was never that the beat waited — it is that it could
+    /// also be left without answering at all.
+    func testEitherAnswerToTheConsentQuestionOpensTheWayForward() {
+        for restartingFirst in [true, false] {
+            let world = World()
+            world.screenGranted = true
+            world.claudeNeedsRestart = true
+            let model = makeModel(world)
+            drive(model, world, to: .claudeHandoff)
+
+            model.askClaude(restartingFirst: restartingFirst)
+            XCTAssertEqual(
+                world.claudeAsks, [TutorialModel.suggestedQuestion],
+                "answering “\(restartingFirst)” hands the question over")
+            XCTAssertTrue(model.gateIsSatisfied, "an answered question is a way forward")
+            XCTAssertTrue(model.advance())
+            XCTAssertEqual(model.step, .claudeProof)
+        }
+    }
+
     /// Declining is a real choice, not a dead end: the question still goes over, and the card says
     /// the reach may be stale rather than quietly quitting their session to force the gate.
     func testDecliningTheRestartStillHandsTheQuestionOverAndSaysTheReachMayBeStale() {
@@ -1020,6 +1070,12 @@ final class TutorialTests: XCTestCase {
         XCTAssertTrue(model.isAskingClaude)
         XCTAssertNil(model.claudeAsk, "“we asked” is not an outcome")
         XCTAssertEqual(model.speech.lead, "Let me ask Claude for you.")
+        // The same rule as the consent question, one state later: the beat asked something and has
+        // not been answered, so nothing may leave it. Asserted on the model rather than trusted to a
+        // `.disabled` in the view, which is where it used to live alone.
+        XCTAssertFalse(model.gateIsSatisfied)
+        XCTAssertFalse(model.advance(), "a handoff still in flight cannot be walked past")
+        XCTAssertEqual(model.step, .claudeHandoff)
     }
 
     func testEveryAdvanceClicksAndTheMusicRunsForExactlyOneRun() {

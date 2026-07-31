@@ -18,8 +18,9 @@ import SwiftUI
 ///   card says "Go and look at something" and then "Got it", which is the same fact in a human's
 ///   words. Nothing here is on a timer; see `TutorialModel.outcome`.
 ///
-/// Every colour is an `Ink` token — a system semantic or `controlAccentColor` — so it reads correctly
-/// in both appearances and carries no borrowed brand. Nothing here is purple (`INV-UI-1`).
+/// Every colour is an `Ink` token — a named system colour or an alpha on one — so it reads correctly
+/// in both appearances and carries no borrowed brand. Nothing here is purple, and nothing here reads
+/// a hue off the machine, which is the only way that can be true on every machine (`INV-UI-1`).
 struct TutorialCardView: View {
     @ObservedObject var model: TutorialModel
     @ObservedObject var chrome: TutorialOverlayChrome
@@ -209,10 +210,13 @@ struct TutorialCardView: View {
             HStack(spacing: 12) {
                 if let title = primaryTitle {
                     InkButton(title) { model.advance() }
-                        // Also while the handoff is still running: a Claude being restarted has not
-                        // answered yet, and letting the user walk past that lands them on the proof
-                        // beat with nothing on its way.
-                        .disabled(!model.gateIsSatisfied || model.isAskingClaude)
+                        // One condition, and it is the model's. This used to add "or the handoff is
+                        // running" here, which covered the state where Claude had been asked and
+                        // left uncovered the state before it — the consent question, whose two
+                        // answers are on this very card. `gateIsSatisfied` now holds both
+                        // (`TutorialModel.isAwaitingAnAnswer`), so the button and `advance()` cannot
+                        // disagree about what this beat is waiting for.
+                        .disabled(!model.gateIsSatisfied)
                         .fixedSize()
                 }
                 Spacer(minLength: 8)
