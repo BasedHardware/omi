@@ -250,17 +250,9 @@ impl SubagentSupervisor {
         ));
         let (inbox, inbox_receiver) = mpsc::channel(self.inbox_capacity);
         let (cancel, cancel_receiver) = watch::channel(false);
-        self.entries.lock().await.insert(
-            id.clone(),
-            SubagentEntry {
-                status: SubagentStatus::Running,
-                cancel: cancel.clone(),
-                inbox: inbox.clone(),
-                handle: None,
-            },
-        );
         let entries = Arc::clone(&self.entries);
         let worker_id = id.clone();
+        let mut registry = self.entries.lock().await;
         let handle = tokio::spawn(async move {
             let context = SubagentContext {
                 inbox: inbox_receiver,
@@ -286,12 +278,15 @@ impl SubagentSupervisor {
             }
             completion
         });
-        self.entries
-            .lock()
-            .await
-            .get_mut(&id)
-            .expect("new subagent must be registered before its task starts")
-            .handle = Some(handle);
+        registry.insert(
+            id.clone(),
+            SubagentEntry {
+                status: SubagentStatus::Running,
+                cancel,
+                inbox,
+                handle: Some(handle),
+            },
+        );
         id
     }
 
@@ -369,7 +364,8 @@ async fn wait_for_cancellation(cancelled: &mut watch::Receiver<bool>) {
 mod tests {
     use super::*;
     use serde_json::json;
-    use tokio::sync::oneshot;
+    use std::sync::Arc;
+    use tokio::sync::{oneshot, Barrier};
 
     #[test]
     fn round_trips_v2_runtime_shapes() {
@@ -508,5 +504,40 @@ mod tests {
                 .expect_err("removed subagent must not receive messages"),
             SubagentError::Unknown(id.as_str().into())
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_collect_during_spawn_does_not_report_already_collected() {
+        for _ in 0..64 {
+            let supervisor = SubagentSupervisor::new();
+            let barrier = Arc::new(Barrier::new(2));
+            let collector_supervisor = supervisor.clone();
+            let collector_barrier = Arc::clone(&barrier);
+            let collector = tokio::spawn(async move {
+                let id = SubagentId("subagent-1".into());
+                collector_barrier.wait().await;
+                loop {
+                    match collector_supervisor.collect(&id).await {
+                        Ok(completion) => return Ok(completion),
+                        Err(SubagentError::Unknown(_)) => {
+                            tokio::task::yield_now().await;
+                        }
+                        Err(error) => return Err(error),
+                    }
+                }
+            });
+            barrier.wait().await;
+            let id = supervisor
+                .spawn(|_: SubagentContext| async { Ok(json!("ready")) })
+                .await;
+            assert_eq!(id.as_str(), "subagent-1");
+            assert_eq!(
+                collector
+                    .await
+                    .expect("collector task must join")
+                    .expect("spawn must publish a collectable join handle"),
+                SubagentCompletion::Succeeded(json!("ready"))
+            );
+        }
     }
 }
