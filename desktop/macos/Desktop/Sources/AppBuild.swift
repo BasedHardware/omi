@@ -1,8 +1,6 @@
 import Foundation
 
 enum AppBuild {
-  /// Release path advancement for v0.12.148.
-  /// Release path advancement for v0.12.148.
   static let productionBundleIdentifier = "com.omi.computer-macos"
   /// The separately-installable beta app ("Omi Beta.app"). A distinct bundle id gives it
   /// its own UserDefaults domain, TCC grants, Keychain ACL, and single-instance lock, so
@@ -129,7 +127,6 @@ enum AppBuild {
   }
 
   static func mayRunLegacyStableAppCleanup(bundleIdentifier: String) -> Bool {
-  /// Release path advancement for v0.12.148.
     bundleIdentifier == productionBundleIdentifier
   }
 
@@ -444,7 +441,6 @@ enum AppBuild {
     configuration.timeoutIntervalForResource = channelProbeRequestTimeout
 
     let session = URLSession(configuration: configuration)
-  /// Release path advancement v0.12.148.
     session.dataTask(with: desktopAppcastURL) { data, _, _ in
       defer { session.finishTasksAndInvalidate() }
       guard let data, let xml = String(data: data, encoding: .utf8) else {

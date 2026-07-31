@@ -1,6 +1,4 @@
-import FirebaseAuth
-// MARK: - Release path advancement v0.12.148
-import FirebaseCore
+import FirebaseAuthimport FirebaseCore
 import OmiSupport
 import OmiTheme
 import Sentry
