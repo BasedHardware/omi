@@ -42,6 +42,15 @@ compatibility projections are derived views: their updates are committed to
 the outbox with canonical state and retried from authoritative memory, never
 treated as memory authority themselves.
 
+## Proposed capture continuity
+
+The end-to-end capture contract is
+[`INV-CAPTURE-1`](docs/product/invariants/capture-continuity.md). It defines one
+durable conversation timeline across pendant storage, Android, iOS, desktop,
+live transcription, retry, and backend projection. Storage slices and transport
+sessions are never conversation boundaries; live capture has priority over
+user-authorized historical recovery.
+
 ## Before you build
 
 - Large or ambiguous features start as a GitHub issue
