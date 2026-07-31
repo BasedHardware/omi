@@ -2030,6 +2030,11 @@ class PushToTalkManager: ObservableObject {
   private var discardLateStartsThroughGeneration: UInt64 = 0
   private var activeMicLease: MicCaptureLease?
   private var activeMicOverrideID: AudioDeviceID?
+  /// Route class noted at the last successful capture start. A parked capture's
+  /// physical route cannot change while its IOProc stays open, so warm adoption
+  /// reuses this instead of re-reading the HAL (currentDeviceDescription walks
+  /// the device list; the warm path must stay instant on the main actor).
+  private var lastNotedInputRouteClass: PTTAttemptLifecycleRecorder.InputRouteClass?
   private static let parkedMicKeepAliveSeconds: UInt64 = 120
 
   private func parkMicCapture(_ service: AudioCaptureService, lease: MicCaptureLease, overrideID: AudioDeviceID?) {
@@ -2102,9 +2107,7 @@ class PushToTalkManager: ObservableObject {
       micCaptureStartInFlight = false
       pttLifecycle.captureStartResolved(outcome: .accepted, statusClass: .ok)
       pttLifecycle.noteInputRoute(
-        class: .from(
-          deviceDescription: parked.service.currentDeviceDescription,
-          isBluetooth: parked.service.isCurrentDeviceBluetoothTransport),
+        class: lastNotedInputRouteClass ?? .unknown,
         source: overrideDeviceID == nil ? .default : .override)
       voiceTurnCoordinator.publish(.captureStarted(turnID: turnID, captureID: captureID))
       if let diagnosticRecoveryAction {
@@ -2234,10 +2237,12 @@ class PushToTalkManager: ObservableObject {
         }
         self.micCaptureStartInFlight = false
         self.pttLifecycle.captureStartResolved(outcome: .accepted, statusClass: .ok)
+        let routeClass = PTTAttemptLifecycleRecorder.InputRouteClass.from(
+          deviceDescription: capture.currentDeviceDescription,
+          isBluetooth: capture.isCurrentDeviceBluetoothTransport)
+        self.lastNotedInputRouteClass = routeClass
         self.pttLifecycle.noteInputRoute(
-          class: .from(
-            deviceDescription: capture.currentDeviceDescription,
-            isBluetooth: capture.isCurrentDeviceBluetoothTransport),
+          class: routeClass,
           source: overrideDeviceID == nil ? .default : .override)
         self.voiceTurnCoordinator.publish(
           .captureStarted(turnID: turnID, captureID: captureID))

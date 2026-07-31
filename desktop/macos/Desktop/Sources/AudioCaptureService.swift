@@ -409,12 +409,16 @@ class AudioCaptureService: @unchecked Sendable {
     // clears; startCapture assigns this state on the same queue, so a stop's
     // clear and a restart's fresh assignment can never interleave.
     // AudioDeviceStop can block waiting for the IO thread — run off main thread.
+    let ownerID = ObjectIdentifier(self)
     audioQueue.async { [weak self] in
       if let procID = procID, devID != kAudioObjectUnknown {
         AudioDeviceStop(devID, procID)
         AudioDeviceDestroyIOProcID(devID, procID)
       }
-      self?.unregisterActiveCapture()
+      // Owner-identity unregister: releases physical ownership only after the
+      // HAL teardown above completes, and still runs if the service was
+      // deallocated while this block waited (no reliance on weak self).
+      AudioCaptureService.unregisterActiveCapture(owner: ownerID)
       guard let self else { return }
       self.onAudioChunk = nil
       self.onAudioLevel = nil
@@ -505,9 +509,16 @@ class AudioCaptureService: @unchecked Sendable {
   }
 
   private func unregisterActiveCapture() {
-    Self.activeCapturesLock.lock()
-    Self.activeCaptures.removeValue(forKey: ObjectIdentifier(self))
-    Self.activeCapturesLock.unlock()
+    Self.unregisterActiveCapture(owner: ObjectIdentifier(self))
+  }
+
+  /// Owner-identity form so a queued HAL-teardown block can release the
+  /// registry entry after AudioDeviceStop completes even when the service
+  /// itself was deallocated while the block waited.
+  private static func unregisterActiveCapture(owner: ObjectIdentifier) {
+    activeCapturesLock.lock()
+    activeCaptures.removeValue(forKey: owner)
+    activeCapturesLock.unlock()
   }
 
   /// True when a live capture already holds this device.
@@ -1172,11 +1183,11 @@ class AudioCaptureService: @unchecked Sendable {
         AudioDeviceStop(deviceID, procID)
         AudioDeviceDestroyIOProcID(deviceID, procID)
       }
+      // Direct-teardown path only: after stopCapture() the queued audioQueue
+      // block owns the release (by owner identity, surviving dealloc) and it
+      // must not happen before AudioDeviceStop completes — unregistering here
+      // in that case would mark the device free while its IOProc is alive.
+      unregisterActiveCapture()
     }
-    // Unconditional: stopCapture() queues its unregister behind a weak self,
-    // so a deallocation that outruns the queued block must release the registry
-    // entry here or hasActiveCapture()/isDeviceActivelyCaptured() stay true
-    // forever. Removing an already-removed key is a no-op.
-    unregisterActiveCapture()
   }
 }

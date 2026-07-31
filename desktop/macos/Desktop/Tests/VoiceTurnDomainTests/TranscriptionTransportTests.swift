@@ -204,12 +204,12 @@ final class TranscriptionTransportTests: XCTestCase {
     guard let stopRange = src.range(of: "func stopCapture()") else {
       return XCTFail("stopCapture not found")
     }
-    let stopBody = String(src[stopRange.lowerBound...].prefix(1600))
+    let stopBody = String(src[stopRange.lowerBound...].prefix(1900))
     XCTAssertTrue(stopBody.contains("AudioDeviceDestroyIOProcID(devID, procID)"))
-    XCTAssertTrue(stopBody.contains("unregisterActiveCapture()"))
+    XCTAssertTrue(stopBody.contains("unregisterActiveCapture(owner: ownerID)"))
     guard
       let destroyRange = stopBody.range(of: "AudioDeviceDestroyIOProcID(devID, procID)"),
-      let unregisterRange = stopBody.range(of: "unregisterActiveCapture()")
+      let unregisterRange = stopBody.range(of: "unregisterActiveCapture(owner: ownerID)")
     else {
       return XCTFail("stopCapture teardown ordering markers not found")
     }

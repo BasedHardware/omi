@@ -400,6 +400,17 @@ extension AppState {
         log(
           "Transcription: using preferred microphone \(recordingInputDeviceName ?? "?") (uid=\(preferredUID))"
         )
+      } else {
+        // The user's explicit choice is unavailable — capture continues on the
+        // system default. A silent substitution must be visible to release
+        // health, so record the degradation on the shared fallback surface.
+        log("Transcription: preferred microphone unavailable — using the system default input")
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "transcription_input",
+          from: "preferred_microphone",
+          to: "system_default_input",
+          reason: "device_unavailable",
+          outcome: .degraded)
       }
     }
 
