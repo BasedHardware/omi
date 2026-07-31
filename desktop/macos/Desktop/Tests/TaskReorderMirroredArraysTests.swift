@@ -125,6 +125,33 @@ final class TaskReorderMirroredArraysTests: XCTestCase {
     XCTAssertNotEqual(reordered, staleFallbackOrder)
   }
 
+  func testFilteredReorderMergesVisibleMoveIntoFullCategoryOrder() {
+    // A search/filter may display only A and B while the full category has
+    // hidden tasks before, between, and after them. Moving A below B must keep
+    // those hidden rows in their slots and rebase every item, otherwise the
+    // stale hidden sort orders can collide or interleave after clearing it.
+    let fullOrder = ["hidden-before", "visible-a", "hidden-middle", "visible-b", "hidden-after"]
+    let visibleOrder = ["visible-a", "visible-b"]
+
+    let merged = TasksViewModel.mergedReorderedTaskIDs(
+      fullOrder: fullOrder,
+      visibleOrder: visibleOrder,
+      moving: "visible-a",
+      toPostRemovalIndex: 1
+    )
+
+    XCTAssertEqual(
+      merged,
+      ["hidden-before", "visible-b", "hidden-middle", "visible-a", "hidden-after"]
+    )
+
+    var completeCategory = fullOrder.map { item($0) }
+    TasksViewModel.applyReorder(merged, categoryIndex: 0, to: &completeCategory)
+    let sortOrders = merged.compactMap { sortOrder(completeCategory, $0) }
+    XCTAssertEqual(sortOrders.count, merged.count)
+    XCTAssertEqual(Set(sortOrders).count, merged.count, "a filtered reorder must rebase hidden rows too")
+  }
+
   /// BL-030 regression guard: `moveTask` must fan the reorder out to ALL THREE mirrored
   /// arrays — dropping any one diverges when filters/search are active. `moveTask` is
   /// `@MainActor` and needs the full store/state, so the fan-out is source-pinned by the

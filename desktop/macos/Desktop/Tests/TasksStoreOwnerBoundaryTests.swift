@@ -437,7 +437,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
         probe.hardDeletes += 1
         return 0
       },
-      restoreLegacyConversationItems: { _ in 0 })
+      restoreLegacyConversationItems: { _, _ in .init(restored: 0, skippedExisting: 0, hasMore: false, nextCursor: nil)
+      })
 
     let maintenanceTasks = store.scheduleStartupMaintenanceIfNeeded(
       relevanceBackfill: { _ in },
@@ -476,11 +477,11 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     let gate = TasksStorePauseGate()
     let probe = TasksStoreOperationProbe()
     let operations = TasksStore.OwnerBoundOperations(
-      restoreLegacyConversationItems: { ownerID in
+      restoreLegacyConversationItems: { ownerID, _ in
         XCTAssertEqual(ownerID, "owner-a")
         probe.remoteRequests += 1
         await gate.pause()
-        return 1
+        return .init(restored: 1, skippedExisting: 0, hasMore: false, nextCursor: nil)
       })
 
     let maintenanceTasks = store.scheduleStartupMaintenanceIfNeeded(

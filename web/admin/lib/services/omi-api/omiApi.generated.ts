@@ -2707,6 +2707,8 @@ export interface ResponseMessage {
 }
 
 export interface RestoreLegacyConversationItemsResponse {
+  has_more?: boolean;
+  next_cursor?: string | null;
   restored?: number;
   skipped_existing?: number;
   status?: string;
@@ -8358,10 +8360,13 @@ export async function get_pending_sync_items_v1_action_items_pending_sync_get(qu
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RestoreLegacyConversationItemsResponse> {
+export async function restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post(query: { limit?: number, cursor?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RestoreLegacyConversationItemsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/action-items/restore-legacy-conversation-items`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
     headers: {

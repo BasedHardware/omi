@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
 
+# Recovery uses one atomic create-if-absent batch per row. Keep the page small
+# enough that a user with a large historical migration never holds an HTTP
+# request open for an unbounded number of Firestore commits.
+LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE = 50
+
 
 def _user_col(uid: str, collection: str):
     """Shorthand for users/{uid}/{collection}."""
@@ -346,21 +351,39 @@ def clear_staged_tasks(uid: str) -> int:
     return total
 
 
-def restore_legacy_conversation_items(uid: str) -> dict:
+def restore_legacy_conversation_items(
+    uid: str,
+    *,
+    limit: int = LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE,
+    cursor: Optional[str] = None,
+) -> dict:
     """Restore rows moved by the retired desktop conversation migration.
 
     Only active ``conversation_migration`` rows qualify. Each row is restored
     with an atomic create+delete batch, so an existing action item is never
-    overwritten; an action item created or restored concurrently wins.
+    overwritten; an action item created or restored concurrently wins. Results
+    are ordered by document ID and cursor-paginated so the client can finish a
+    large recovery without one request exceeding its Firestore deadline.
     """
+
+    if limit < 1:
+        raise ValueError('limit must be positive')
 
     action_items_col = _user_col(uid, 'action_items')
     staged_col = _user_col(uid, 'staged_tasks')
-    migrated_rows = staged_col.where(filter=FieldFilter('source', '==', 'conversation_migration')).stream()
+    migrated_query = staged_col.where(filter=FieldFilter('source', '==', 'conversation_migration')).order_by('__name__')
+    if cursor:
+        migrated_query = migrated_query.start_after({'__name__': staged_col.document(cursor)})
+    # Read one look-ahead document so the caller can distinguish a complete
+    # recovery from a page that must be continued with ``next_cursor``.
+    migrated_rows = list(migrated_query.limit(limit + 1).stream())
+    page = migrated_rows[:limit]
+    has_more = len(migrated_rows) > limit
+    next_cursor = page[-1].id if has_more and page else None
     restored = 0
     skipped_existing = 0
 
-    for staged_snapshot in migrated_rows:
+    for staged_snapshot in page:
         staged_row = staged_snapshot.to_dict() or {}
         # Keep the marker check in addition to the indexed query so a permissive
         # fake or future query refactor can never restore an ordinary staged row.
@@ -388,4 +411,9 @@ def restore_legacy_conversation_items(uid: str) -> dict:
             continue
         restored += 1
 
-    return {'restored': restored, 'skipped_existing': skipped_existing}
+    return {
+        'restored': restored,
+        'skipped_existing': skipped_existing,
+        'has_more': has_more,
+        'next_cursor': next_cursor,
+    }

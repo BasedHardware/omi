@@ -7,7 +7,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3530,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 4427,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": 1646,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5751,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5805,
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1627
   },
   "raise_justifications": {
@@ -18,7 +18,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Memory search waits for its active projection, while canonical lifecycle capability, the Brain Map evidence inspector, and the split list/detail presentation remain owned by the Memories page; local-only identity resolution and its guarded delete/undo lifecycle remain with its optimistic mutation owner rather than exposing coordination state across view-model boundaries.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": "The Canonical Memory Atlas owns progressive disclosure, island territories and captions, selection-trail Escape behavior, in-place evidence inspection, and related render policies. Geometry and territory labels are extracted where possible; a further surface split remains tracked separately.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": "Relatedness layout, Louvain neighbourhood detection, and the group-separation and anchor-repulsion forces the island map is built on; no baseline entry existed because the file crossed the threshold in this change. It is already separate from the atlas view \u2014 a further split of detection from simulation is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "Suggested-task loading feedback, rendered-order drag/drop target handling, and the task-list recovery boundary remain with the Tasks page state owner so sort-order coordinates cannot diverge from its displayed rows.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "Suggested-task loading and filter-aware rendered-order drag/drop remain with the Tasks page state owner so persisted sort-order coordinates cannot diverge from its displayed rows; recovery coordination stays separately in TasksStore.",
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "SB redesign: adds the hover-expand AppNavRail (icons\u2192labels) and the merged/simplified navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
   },
   "threshold": 1500

@@ -786,9 +786,23 @@ class TasksViewModel: ObservableObject {
 
   /// Get ordered tasks for a category, using sortOrder when available, falling back to UserDefaults/default sort
   func getOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
-    guard let tasks = categorizedTasks[category], !tasks.isEmpty else {
-      return []
-    }
+    orderedTasks(categorizedTasks[category] ?? [], inCategory: category)
+  }
+
+  /// The category's canonical active-task order, including rows that a search or
+  /// non-status filter has hidden. Reordering a rendered subset must rebase this
+  /// full sequence: assigning new sort orders to only the visible ids leaves
+  /// hidden rows with stale values that can interleave or collide after the
+  /// filter is cleared.
+  private func getFullOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
+    orderedTasks(
+      store.incompleteTasks.filter { currentCategoryFor($0) == category },
+      inCategory: category
+    )
+  }
+
+  private func orderedTasks(_ tasks: [TaskActionItem], inCategory category: TaskCategory) -> [TaskActionItem] {
+    guard !tasks.isEmpty else { return [] }
 
     // Primary: if any task in this category has a sortOrder, use sortOrder-based sorting
     let hasSortOrder = tasks.contains(where: { $0.sortOrder != nil })
@@ -904,8 +918,13 @@ class TasksViewModel: ObservableObject {
     // applies that coordinate to a different list and can move a task far from
     // where it was dropped after sync, pagination, or another-device changes.
     // Always start from the exact visual sequence instead.
-    let order = Self.reorderedTaskIDs(
-      getOrderedTasks(for: category).map(\.id), moving: task.id, toPostRemovalIndex: targetIndex)
+    let visibleOrder = getOrderedTasks(for: category).map(\.id)
+    let order = Self.mergedReorderedTaskIDs(
+      fullOrder: getFullOrderedTasks(for: category).map(\.id),
+      visibleOrder: visibleOrder,
+      moving: task.id,
+      toPostRemovalIndex: targetIndex
+    )
 
     categoryOrder[category] = order
 
@@ -970,6 +989,41 @@ class TasksViewModel: ObservableObject {
     order.removeAll { $0 == taskID }
     order.insert(taskID, at: min(max(0, targetIndex), order.count))
     return order
+  }
+
+  /// Moves one rendered task while retaining every hidden task in its current
+  /// full-category slot. This lets filtered/search list drops keep their visual
+  /// intent without leaving hidden records on old sort orders.
+  nonisolated static func mergedReorderedTaskIDs(
+    fullOrder: [String],
+    visibleOrder: [String],
+    moving taskID: String,
+    toPostRemovalIndex targetIndex: Int
+  ) -> [String] {
+    var knownIDs = Set<String>()
+    var canonicalOrder: [String] = []
+    for id in fullOrder where knownIDs.insert(id).inserted {
+      canonicalOrder.append(id)
+    }
+    for id in visibleOrder where knownIDs.insert(id).inserted {
+      canonicalOrder.append(id)
+    }
+
+    guard visibleOrder.contains(taskID) else { return canonicalOrder }
+    let visibleIDs = Set(visibleOrder)
+    var reorderedVisible = reorderedTaskIDs(
+      visibleOrder, moving: taskID, toPostRemovalIndex: targetIndex
+    ).makeIterator()
+
+    var mergedOrder = canonicalOrder
+    for index in mergedOrder.indices where visibleIDs.contains(mergedOrder[index]) {
+      // `reorderedTaskIDs` preserves the visible count, but if a malformed
+      // caller ever violates that contract, retain the canonical sequence
+      // instead of producing a partial reorder.
+      guard let reorderedID = reorderedVisible.next() else { return canonicalOrder }
+      mergedOrder[index] = reorderedID
+    }
+    return mergedOrder
   }
 
   /// Move a task to first position in category
@@ -1236,7 +1290,7 @@ class TasksViewModel: ObservableObject {
     var updates: [SortOrderUpdate] = []
 
     for category in TaskCategory.allCases {
-      let orderedTasks = getOrderedTasks(for: category)
+      let orderedTasks = getFullOrderedTasks(for: category)
       // Category bands: today=[0,100k), tomorrow=[100k,200k), later=[200k,300k),
       // noDeadline=[300k,400k). Spacing is derived from the per-category count so a
       // large category never overflows its band (BL-016); see TasksViewModel.sortOrder.

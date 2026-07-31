@@ -299,7 +299,7 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
       },
       syncPage: { _, _, _ in cacheSyncs += 1 },
       markAbsent: { _, _ in stagedAbsentTasks += 1 },
-      restoreLegacyConversationItems: { _ in throw URLError(.fileDoesNotExist) })
+      restoreLegacyConversationItems: { _, _ in throw URLError(.fileDoesNotExist) })
 
     let maintenanceTasks = store.scheduleStartupMaintenanceIfNeeded(
       relevanceBackfill: { _ in },
@@ -311,6 +311,110 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
     XCTAssertEqual(stagedAbsentTasks, 0, "failed recovery must never stage cache rows as absent")
     XCTAssertFalse(defaults.bool(forKey: recoveryKey))
     XCTAssertFalse(defaults.bool(forKey: fullSyncKey))
+  }
+
+  @MainActor
+  func testStartupRecoveryFinishesEveryPageBeforeInvalidatingAndRunningFullSync() async {
+    let defaults = UserDefaults.standard
+    let store = TasksStore.shared
+    await prepareStore(store)
+
+    let recoveryKey = "restoreLegacyConversationItemsCompleted_v1_owner-a"
+    let fullSyncKey = "tasksFullSyncCompleted_v9_owner-a"
+    let previousRecoveryValue = defaults.object(forKey: recoveryKey)
+    let previousFullSyncValue = defaults.object(forKey: fullSyncKey)
+    defer {
+      if let previousRecoveryValue {
+        defaults.set(previousRecoveryValue, forKey: recoveryKey)
+      } else {
+        defaults.removeObject(forKey: recoveryKey)
+      }
+      if let previousFullSyncValue {
+        defaults.set(previousFullSyncValue, forKey: fullSyncKey)
+      } else {
+        defaults.removeObject(forKey: fullSyncKey)
+      }
+    }
+    defaults.removeObject(forKey: recoveryKey)
+    // The first page finds only a collision. It must still make the following
+    // full sync run, even though no row was newly restored.
+    defaults.set(true, forKey: fullSyncKey)
+
+    var recoveryCursors: [String?] = []
+    var cloudPageFetches = 0
+    let operations = TasksStore.OwnerBoundOperations(
+      fetchPage: { _, _, _, _ in
+        cloudPageFetches += 1
+        XCTAssertFalse(
+          defaults.bool(forKey: fullSyncKey),
+          "a completed recovery sweep must invalidate the prior full-sync marker before fetching"
+        )
+        return .init(items: [], hasMore: false)
+      },
+      syncPage: { _, _, _ in },
+      purgeDeleted: { _ in 0 },
+      loadIncomplete: { _ in [] },
+      restoreLegacyConversationItems: { _, cursor in
+        recoveryCursors.append(cursor)
+        switch cursor {
+        case nil:
+          return .init(restored: 0, skippedExisting: 1, hasMore: true, nextCursor: "legacy-row-100")
+        case "legacy-row-100":
+          XCTAssertFalse(
+            defaults.bool(forKey: recoveryKey),
+            "the recovery marker must not be written before the final page"
+          )
+          return .init(restored: 0, skippedExisting: 0, hasMore: false, nextCursor: nil)
+        default:
+          return .init(restored: 0, skippedExisting: 0, hasMore: false, nextCursor: nil)
+        }
+      })
+
+    let maintenanceTasks = store.scheduleStartupMaintenanceIfNeeded(
+      relevanceBackfill: { _ in },
+      operations: operations)
+    for task in maintenanceTasks { await task.value }
+
+    XCTAssertEqual(recoveryCursors, [nil, "legacy-row-100"])
+    XCTAssertEqual(cloudPageFetches, 2, "the forced full sync fetches incomplete and completed pages")
+    XCTAssertTrue(defaults.bool(forKey: recoveryKey))
+    XCTAssertTrue(defaults.bool(forKey: fullSyncKey), "the forced full sync completed after the recovery sweep")
+  }
+
+  @MainActor
+  func testDashboardServerRefreshStaysCacheOnlyWhileLegacyRecoveryIsUnresolved() async {
+    let defaults = UserDefaults.standard
+    let previousSignedIn = AuthService.shared.isSignedIn
+    let store = TasksStore.shared
+    defer {
+      store.isActive = false
+      AuthService.shared.isSignedIn = previousSignedIn
+    }
+    await prepareStore(store)
+
+    let recoveryKey = "restoreLegacyConversationItemsCompleted_v1_owner-a"
+    let previousRecoveryValue = defaults.object(forKey: recoveryKey)
+    defer {
+      if let previousRecoveryValue {
+        defaults.set(previousRecoveryValue, forKey: recoveryKey)
+      } else {
+        defaults.removeObject(forKey: recoveryKey)
+      }
+    }
+    defaults.removeObject(forKey: recoveryKey)
+    AuthService.shared.isSignedIn = true
+    store.isActive = false
+    store.isActive = true
+
+    var dashboardServerRefreshes = 0
+    await store.refreshTasksIfNeeded(
+      operations: .init(refreshDashboard: { _ in dashboardServerRefreshes += 1 }))
+
+    XCTAssertEqual(
+      dashboardServerRefreshes,
+      0,
+      "unresolved recovery must not enter dashboard reconciliation, which can hard-delete local task rows"
+    )
   }
 
   // MARK: - Auto-refresh reconcile (refreshTasksIfNeeded)
