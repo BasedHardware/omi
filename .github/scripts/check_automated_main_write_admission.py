@@ -13,6 +13,10 @@ into `main` with no human in the loop. Two properties keep that path honest, and
 2. **The merge must stay revertible.** AGENTS.md ("Merge, never squash") keeps
    merge commits so a bad automated commit on `main` can be undone with
    `git revert -m 1`. A squashed automated merge removes that recovery.
+3. **The app token must exist before the PR opens.** A create-pull-request step
+   that references `steps.<app-token>.outputs.token` proves nothing if that
+   token step is declared later in the job — `steps` is populated top to
+   bottom, so the token is not yet available when the PR is created.
 
 Real instances this would have caught: #8325 (created and merged 4 seconds
 later, check list `skipping`/`skipping`, single-parent merge commit), plus
@@ -67,9 +71,25 @@ def _create_pr_token(step: str) -> str | None:
     return None
 
 
+def _step_blocks(text: str) -> list[tuple[str, int]]:
+    """Split a workflow into its `- ` list-entry blocks.
+
+    Returns (block text, block start offset) pairs, where each block runs from
+    its leading `- ` entry up to (but not including) the next one. The start
+    offsets order the blocks exactly as GitHub Actions runs the steps.
+    """
+    matches = list(re.finditer(r"(?m)^(?=\s*-\s)", text))
+    blocks: list[tuple[str, int]] = []
+    for index, match in enumerate(matches):
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        blocks.append((text[start:end], start))
+    return blocks
+
+
 def _app_token_step_ids(text: str) -> set[str]:
     step_ids: set[str] = set()
-    for step in re.split(r"(?m)^(?=\s*-\s)", text):
+    for step, _ in _step_blocks(text):
         if APP_TOKEN_ACTION not in step:
             continue
         match = re.search(r"(?m)^\s*id:\s*([A-Za-z0-9_-]+)\s*$", step)
@@ -78,15 +98,32 @@ def _app_token_step_ids(text: str) -> set[str]:
     return step_ids
 
 
+def _app_token_step_offsets(text: str) -> dict[str, int]:
+    """Map app-token step id -> index of that step's block in `_step_blocks`.
+
+    `steps` is populated top to bottom, so a step that references another
+    step's output must come after it in the job. Comparing block indices (not
+    character offsets) keeps the check independent of file length.
+    """
+    offsets: dict[str, int] = {}
+    for index, (step, _) in enumerate(_step_blocks(text)):
+        if APP_TOKEN_ACTION not in step:
+            continue
+        match = re.search(r"(?m)^\s*id:\s*([A-Za-z0-9_-]+)\s*$", step)
+        if match:
+            offsets[match.group(1)] = index
+    return offsets
+
+
 def check_workflow(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
     rel = path.relative_to(ROOT)
     errors: list[str] = []
 
-    create_pr_tokens = [
-        _create_pr_token(step) for step in re.split(r"(?m)^(?=\s*-\s)", text) if CREATE_PR_ACTION in step
-    ]
+    create_pr_steps = [(step, index) for index, (step, _) in enumerate(_step_blocks(text)) if CREATE_PR_ACTION in step]
+    create_pr_tokens = [_create_pr_token(step) for step, _ in create_pr_steps]
     app_token_step_ids = _app_token_step_ids(text)
+    app_token_offsets = _app_token_step_offsets(text)
 
     if any(
         token is not None
@@ -111,6 +148,16 @@ def check_workflow(path: Path) -> list[str]:
         errors.append(
             f"{rel}: opens its own auto-merged PR with a token that is not an output of an "
             f"{APP_TOKEN_ACTION} step, so the checkable app-identity contract is not proven (#10535)."
+        )
+    elif any(
+        not (match := APP_TOKEN_OUTPUT.fullmatch(token or ''))
+        or app_token_offsets.get(match.group(1), -1) > pr_offset
+        for token, (_, pr_offset) in zip(create_pr_tokens, create_pr_steps)
+    ):
+        errors.append(
+            f"{rel}: references an {APP_TOKEN_ACTION} step that is declared after the "
+            f"{CREATE_PR_ACTION} step, so the app token is not yet available when the PR is "
+            f"opened and the checkable app-identity contract is not proven (#10535)."
         )
     if not app_token_step_ids:
         errors.append(

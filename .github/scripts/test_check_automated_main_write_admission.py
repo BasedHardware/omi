@@ -4,7 +4,7 @@
 Each case builds a workflow on disk and runs the real checker against it, so the
 guard is exercised through the same file-reading path CI uses rather than through
 a stubbed string. The mutation cases matter most: they reintroduce exactly the
-two defects #10535 describes and assert the guard rejects them.
+defects #10535 describes and assert the guard rejects them.
 """
 
 from __future__ import annotations
@@ -120,6 +120,29 @@ class CheckWorkflowTests(unittest.TestCase):
         self.assertTrue(
             any("app-identity contract" in error for error in errors),
             f"guard missed a non-app PR token: {errors}",
+        )
+
+    def test_rejects_an_app_token_step_declared_after_the_pr_step(self):
+        """MUTATION: token: ${{ steps.app-token.outputs.token }} with the app-token
+        step declared after Create Pull Request — the token is not yet available
+        when the PR opens, so the checkable app-identity contract is unproven."""
+        # Move the app-token step (first step in FIXED) to after Auto-merge PR.
+        wrong_order = "\n".join(
+            line
+            for line in FIXED.splitlines()
+            if "Generate Omi Bot token" not in line and "id: app-token" not in line
+        )
+        wrong_order = wrong_order.replace(
+            "      - name: Auto-merge PR\n",
+            "      - name: Generate Omi Bot token\n"
+            "        id: app-token\n"
+            "        uses: actions/create-github-app-token@v3\n"
+            "      - name: Auto-merge PR\n",
+        )
+        errors = self._errors_for(wrong_order)
+        self.assertTrue(
+            any("declared after" in error for error in errors),
+            f"guard missed the app-token-after-create-pr ordering: {errors}",
         )
 
     def test_ignores_a_commented_out_merge_line(self):
