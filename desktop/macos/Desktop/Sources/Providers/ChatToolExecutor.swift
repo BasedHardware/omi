@@ -1029,6 +1029,22 @@ class ChatToolExecutor {
     return true
   }
 
+  static func spawnAgentResponse(for pill: AgentPill) -> String {
+    if case .failed(let errorText) = pill.status {
+      return """
+        Error: agent FAILED to start: \(errorText)
+        Relay this to the user (including any command verbatim) and offer next steps: fix the provider as instructed, or run the task with the default agent instead.
+        """
+    }
+    return """
+      Floating agent pill created.
+      id: \(pill.id.uuidString)
+      title: \(pill.title)
+      status: \(pill.status.machineLabel)
+      If the user later asks about this agent's status or results, check get_task_agent_status first — never answer from memory.
+      """
+  }
+
   private static func executeSpawnAgent(
     _ args: [String: Any],
     originatingClientScope: String?
@@ -1085,25 +1101,10 @@ class ChatToolExecutor {
       // claiming a dead agent is running.
       try? await Task.sleep(nanoseconds: 1_800_000_000)
       await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
-      let startupFailure = await MainActor.run { () -> String? in
-        guard let live = AgentPillsManager.shared.pills.first(where: { $0.id == pill.id }),
-          case .failed(let errorText) = live.status
-        else { return nil }
-        return errorText
+      return await MainActor.run {
+        let livePill = AgentPillsManager.shared.pills.first(where: { $0.id == pill.id }) ?? pill
+        return spawnAgentResponse(for: livePill)
       }
-      if let startupFailure {
-        return """
-          Error: agent FAILED to start: \(startupFailure)
-          Relay this to the user (including any command verbatim) and offer next steps: fix the provider as instructed, or run the task with the default agent instead.
-          """
-      }
-      return """
-        Agent started as a floating agent pill.
-        id: \(pill.id.uuidString)
-        title: \(pill.title)
-        status: running
-        If the user later asks about this agent's status or results, check get_task_agent_status first — never answer from memory.
-        """
     }
   }
 

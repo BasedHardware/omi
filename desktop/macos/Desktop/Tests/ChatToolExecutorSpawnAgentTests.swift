@@ -94,4 +94,16 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
     XCTAssertEqual(result, "Error: Missing objective. Pass a clear, self-contained task objective.")
     XCTAssertEqual(AgentPillsManager.shared.pills.count, before)
   }
+
+  func testSpawnAgentResponseReportsTheCurrentPillStatus() {
+    let pill = AgentPill(query: "Review the launch status", model: "test")
+
+    for status in [AgentPill.Status.queued, .starting, .running, .done, .stopped] {
+      pill.status = status
+      XCTAssertTrue(ChatToolExecutor.spawnAgentResponse(for: pill).contains("status: \(status.machineLabel)"))
+    }
+
+    pill.status = .failed("Provider exited")
+    XCTAssertTrue(ChatToolExecutor.spawnAgentResponse(for: pill).contains("FAILED to start: Provider exited"))
+  }
 }

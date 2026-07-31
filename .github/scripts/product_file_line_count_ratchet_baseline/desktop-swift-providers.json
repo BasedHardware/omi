@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6276,
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 3050
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 3051
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Routes agent-provider lifecycle and typed failures through the existing user-facing chat ownership surface.",
