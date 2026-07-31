@@ -7,8 +7,9 @@ from typing import Any, Callable, Dict, Optional, TypeVar, cast
 from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
 from starlette.websockets import WebSocket
-from firebase_admin import auth
-from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
+from firebase_admin import auth  # still used by get_user + the Firebase-only anonymous migrate path (Phase B)
+from utils.auth import get_auth_provider
+from utils.auth import errors as auth_errors
 import logging
 import redis as redis_pkg
 
@@ -27,6 +28,8 @@ WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
 
 
 def get_user(uid: str) -> Any:
+    # Kept on the raw Firebase UserRecord for now: the anonymous migrate-owner path (routers/apps.py)
+    # reads UserRecord-specific fields (.provider_data). Migrated to the port's UserProfile in Phase B.
     return auth.get_user(uid)  # type: ignore[reportUnknownVariableType,reportUnknownMemberType]  # firebase_admin auth untyped
 
 
@@ -64,11 +67,10 @@ def verify_token(token: str) -> str:
             logger.warning('ADMIN_KEY auth used to impersonate uid=%s', impersonated_uid)
             return impersonated_uid
 
-    # Verify Firebase token
+    # Verify through the neutral auth port (AUTH_BACKEND: firebase | oidc)
     try:
-        decoded_token = cast(Any, auth.verify_id_token(token))  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
-        return decoded_token['uid']
-    except InvalidIdTokenError:
+        return get_auth_provider().verify_token(token).uid
+    except auth_errors.InvalidToken:
         # Only honored when no real Firebase credential is configured — every
         # legitimate LOCAL_DEVELOPMENT=true path (hermetic e2e harness, the
         # auth-emulator dev harness) already unsets or never sets these, and
@@ -209,7 +211,7 @@ def _verify_ws_auth(authorization: str) -> str:
     try:
         token = authorization.split(' ')[1]
         return verify_token(token)
-    except (InvalidIdTokenError, CertificateFetchError) as e:
+    except auth_errors.AuthError as e:
         close_code, reason = _get_ws_auth_close(e)
         logger.error("WebSocket auth failed: code=%s error=%s", close_code, e)
         raise WebSocketException(code=close_code, reason=reason)
@@ -219,11 +221,11 @@ def _verify_ws_auth(authorization: str) -> str:
 
 
 def _get_ws_auth_close(error: Exception) -> 'tuple[int, str]':
-    if isinstance(error, RevokedIdTokenError):
+    if isinstance(error, auth_errors.RevokedToken):
         return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
-    if isinstance(error, CertificateFetchError):
+    if isinstance(error, auth_errors.JWKSUnavailable):
         return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
-    if isinstance(error, ExpiredIdTokenError):
+    if isinstance(error, auth_errors.ExpiredToken):
         return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
 
     message = str(error).lower()
@@ -525,5 +527,5 @@ def timeit(func: F) -> F:
 
 
 def delete_account(uid: str) -> Dict[str, str]:
-    auth.delete_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+    get_auth_provider().delete_user(uid)
     return {"message": "User deleted"}

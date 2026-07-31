@@ -27,29 +27,29 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from testing.import_isolation import stub_modules
+from utils.auth import errors as auth_errors
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
-# Firebase auth exception classes. Defined at module scope so they are available to
-# ``@patch(..., side_effect=InvalidIdTokenError(...))`` decorators evaluated at class
-# definition time. The module-scoped autouse fixture below installs these *same*
-# class objects onto the ``firebase_admin.auth`` stub, so when
-# ``utils.other.endpoints`` is exec'd against the stub it binds identical class
-# objects -- preserving ``isinstance`` identity for the close-code logic under test.
-class CertificateFetchError(Exception):
+# Firebase auth exception classes used by the ``@patch(verify_token, side_effect=...)`` decorators.
+# verify_token now surfaces the NEUTRAL auth-error taxonomy (the firebase adapter translates the SDK
+# exceptions), and the WS close-code logic branches on THOSE — so these subclass the neutral errors:
+# ``except auth_errors.AuthError`` catches them and _get_ws_auth_close maps them (JWKS/Expired/Revoked
+# by type, the rest by the message string fallback), exactly preserving the codes under test.
+class CertificateFetchError(auth_errors.JWKSUnavailable):
     pass
 
 
-class ExpiredIdTokenError(Exception):
+class ExpiredIdTokenError(auth_errors.ExpiredToken):
     pass
 
 
-class InvalidIdTokenError(Exception):
+class InvalidIdTokenError(auth_errors.InvalidToken):
     pass
 
 
-class RevokedIdTokenError(Exception):
+class RevokedIdTokenError(auth_errors.RevokedToken):
     pass
 
 
