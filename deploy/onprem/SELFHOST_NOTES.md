@@ -224,6 +224,45 @@ docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app 
 docker rm -f oc-rustfs oc-gcs    # cleanup
 ```
 
+### Vector-store contract test (adapter parity)
+
+Proves the Pinecone and Qdrant adapters honor the same neutral vector-store contract (ADR-0033),
+including the neutral `$`-DSL filter (`$exists:false` legacy barrier, `$and`/`$or`, ranges, `$in`).
+The `fake` backend always runs (hermetic); `qdrant` runs against a real Qdrant on `--network host`
+(loopback); `pinecone` is skipped unless configured (no offline emulator — the fake is the reference).
+
+```bash
+docker run -d --name vc-qdrant --network host qdrant/qdrant:latest   # wait: curl 127.0.0.1:6333/readyz -> 200
+docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
+  -e QDRANT_URL=http://127.0.0.1:6333 -e QDRANT_VECTOR_DIM=8 \
+  omi-onprem-backend-test -m pytest -q tests/contract/test_vector_store_contract.py
+# expected: 24 passed, 12 skipped
+docker rm -f vc-qdrant    # cleanup
+```
+
+### Auth contract test (adapter parity)
+
+Proves the OIDC adapter validates a real provider's token to the same neutral Principal as the fake
+(ADR-0034). The `fake` backend always runs; `oidc` runs against a real Keycloak on `--network host`
+(loopback); `firebase` is skipped unless a firebase emulator is wired (the fake is the reference).
+
+```bash
+# 1. Keycloak + a realm/client/user (see the WP3 handoff for the full curl provisioning)
+docker run -d --name kc-contract --network host \
+  -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+  quay.io/keycloak/keycloak:26.0 start-dev --http-port=8080     # wait: curl 127.0.0.1:8080/realms/master -> 200
+# ... provision realm 'omi' + public direct-access client 'omi-test' + user 'testuser' via the Admin API ...
+# 2. Contract suite (mints a token via the password grant, verifies via the adapter's JWKS)
+docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
+  -e OIDC_ISSUER=http://127.0.0.1:8080/realms/omi \
+  -e OIDC_JWKS_URL=http://127.0.0.1:8080/realms/omi/protocol/openid-connect/certs \
+  -e OIDC_TEST_TOKEN_URL=http://127.0.0.1:8080/realms/omi/protocol/openid-connect/token \
+  -e OIDC_TEST_CLIENT_ID=omi-test -e OIDC_TEST_USERNAME=testuser -e OIDC_TEST_PASSWORD=testpass \
+  omi-onprem-backend-test -m pytest -q tests/contract/test_auth_provider_contract.py
+# expected: 5 passed, 4 skipped (firebase cases skipped — no emulator)
+docker rm -f kc-contract    # cleanup
+```
+
 ### Two known residual failures (not our code, not fixable via the harness)
 
 With the harness above the offline unit sweep is green except two files, both pre-existing at the
