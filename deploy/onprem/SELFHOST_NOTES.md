@@ -137,6 +137,18 @@ docker run --rm --network host \
 # expected: 3 passed  (real vector, correct dim, deterministic, no OpenAI/Google egress)
 ```
 
+Full on-prem semantic search round-trip (embeddings + vector store together — Qdrant on loopback):
+
+```
+docker run -d --name qdrant --network host qdrant/qdrant:latest    # 127.0.0.1:6333
+docker run --rm --network host \
+  -e OMI_EMBEDDINGS_BASE_URL=http://127.0.0.1:11434/v1 -e OMI_EMBEDDINGS_MODEL=bge-m3 \
+  -e VECTOR_STORE_BACKEND=qdrant -e QDRANT_URL=http://127.0.0.1:6333 -e QDRANT_VECTOR_DIM=1024 \
+  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+  python -m pytest tests/contract/test_onprem_search_roundtrip.py -q -p no:cacheprovider
+# expected: 5 passed  (embed -> upsert -> query ranks the right doc first; metadata round-trips)
+```
+
 **STT / diarization / translation — the in-repo GPU servers (optional `inference` profile).**
 These build from `backend/{parakeet,diarizer,nllb_translation}/Dockerfile`:
 
