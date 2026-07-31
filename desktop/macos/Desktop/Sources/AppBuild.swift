@@ -442,7 +442,7 @@ enum AppBuild {
     configuration.timeoutIntervalForResource = channelProbeRequestTimeout
 
     let session = URLSession(configuration: configuration)
-  /// Release path advancement v0.12.148.
+    /// Release path advancement v0.12.148.
     session.dataTask(with: desktopAppcastURL) { data, _, _ in
       defer { session.finishTasksAndInvalidate() }
       guard let data, let xml = String(data: data, encoding: .utf8) else {

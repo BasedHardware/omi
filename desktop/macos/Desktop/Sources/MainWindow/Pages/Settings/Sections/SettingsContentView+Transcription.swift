@@ -7,6 +7,11 @@ import WebKit
 extension SettingsContentView {
   var transcriptionSection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      // Microphone (input device — e.g. Ray-Ban Meta glasses)
+      settingsCard(settingId: "transcription.microphone") {
+        MicrophonePickerCard(onChanged: { restartTranscriptionIfNeeded() })
+      }
+
       // Language Mode
       settingsCard(settingId: "transcription.languagemode") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
