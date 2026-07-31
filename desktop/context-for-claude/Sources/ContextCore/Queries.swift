@@ -591,6 +591,17 @@ public enum Queries {
     ///
     /// Case folding is left to SQLite's `LIKE`, which is ASCII-only — irrelevant here, since the
     /// characters that land on this path (emoji, symbols, pictographs) have no case at all.
+    ///
+    /// The escape character keeps user-supplied `%` and `_` from being treated as wildcards.
+    private static let likeEscape = "\\"
+
+    private static func likeLiteral(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+    }
+
     private static func literalScan(
         _ store: ContextStore,
         needle: String,
@@ -600,13 +611,14 @@ public enum Queries {
     ) throws -> [Hit] {
         let trimmed = needle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        let pattern = "%\(trimmed)%"
+        let escaped = likeLiteral(trimmed)
+        let pattern = "%\(escaped)%"
 
         return try store.read { db -> [Hit] in
             var frameSQL = """
                 SELECT capturedAt AS at, appName, windowTitle, ocrText, axText
                 FROM frames
-                WHERE (ocrText LIKE ? OR windowTitle LIKE ? OR axText LIKE ?)
+                WHERE (ocrText LIKE ? ESCAPE '\\' OR windowTitle LIKE ? ESCAPE '\\' OR axText LIKE ? ESCAPE '\\')
                 """
             var frameArgs: [(any DatabaseValueConvertible)?] = [pattern, pattern, pattern]
             if let since { frameSQL += "\n  AND capturedAt >= ?"; frameArgs.append(since) }
@@ -617,7 +629,7 @@ public enum Queries {
             var spokenSQL = """
                 SELECT startedAt AS at, source, text, sessionId, confidence, speakerLabel, personId
                 FROM segments
-                WHERE text LIKE ?
+                WHERE text LIKE ? ESCAPE '\\'
                 """
             var spokenArgs: [(any DatabaseValueConvertible)?] = [pattern]
             if let since { spokenSQL += "\n  AND startedAt >= ?"; spokenArgs.append(since) }
@@ -745,8 +757,9 @@ public enum Queries {
         }
         if let app = app?.trimmingCharacters(in: .whitespacesAndNewlines), !app.isEmpty {
             // Substring match: callers pass "Chrome" and mean "Google Chrome".
-            conditions.append("appName LIKE ?")
-            args.append("%\(app)%")
+            // Escape the user's input so "%" or "_" do not become wildcards.
+            conditions.append("appName LIKE ? ESCAPE '\\'")
+            args.append("%\(likeLiteral(app))%")
         }
         if !conditions.isEmpty {
             sql += "\nWHERE " + conditions.joined(separator: " AND ")
