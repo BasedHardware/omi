@@ -69,13 +69,15 @@ void main() {
   });
 
   test('accepts JSON numbers for integer and double fields', () {
-    final page = SearchConversationsResponse.fromJson({
+    final pageJson = <String, dynamic>{
       'conversations': [],
       'current_page': 1.0,
       'per_page': 20.0,
       'total_pages': 1.0,
-    });
-    final location = ConversationItemGeolocation.fromJson({'latitude': 40, 'longitude': -74});
+    };
+    final locationJson = <String, dynamic>{'latitude': 40, 'longitude': -74};
+    final page = SearchConversationsResponse.fromJson(pageJson);
+    final location = ConversationItemGeolocation.fromJson(locationJson);
 
     expect(page.currentPage, 1);
     expect(page.perPage, 20);
