@@ -7,17 +7,17 @@ struct PTTAudioDeviceProbe: Sendable {
   var inputDeviceID: @Sendable (String) -> AudioDeviceID?
   var outputIsBluetooth: @Sendable () -> Bool
   var builtInMicDeviceID: @Sendable () -> AudioDeviceID?
-  var defaultInputDeviceID: @Sendable () -> AudioDeviceID? = {
-    AudioCaptureService.currentDefaultInputDeviceID()
-  }
-  var isBluetoothInput: @Sendable (AudioDeviceID) -> Bool = {
-    AudioCaptureService.isBluetoothTransport(deviceID: $0)
-  }
+  // Explicit, never defaulted: a defaulted real-HAL closure inside an injected
+  // fake would silently defeat the hermetic probe seam these tests rely on.
+  var defaultInputDeviceID: @Sendable () -> AudioDeviceID?
+  var isBluetoothInput: @Sendable (AudioDeviceID) -> Bool
 
   static let coreAudio = PTTAudioDeviceProbe(
     inputDeviceID: { AudioCaptureService.inputDeviceID(forUID: $0) },
     outputIsBluetooth: { AudioCaptureService.isDefaultOutputBluetooth() },
-    builtInMicDeviceID: { AudioCaptureService.findBuiltInMicDeviceID() }
+    builtInMicDeviceID: { AudioCaptureService.findBuiltInMicDeviceID() },
+    defaultInputDeviceID: { AudioCaptureService.currentDefaultInputDeviceID() },
+    isBluetoothInput: { AudioCaptureService.isBluetoothTransport(deviceID: $0) }
   )
 }
 
@@ -90,15 +90,19 @@ enum PTTInputDeviceRouting {
     probeQueue.async {
       let selectedDeviceID = selectedUID.isEmpty ? nil : probe.inputDeviceID(selectedUID)
       let outputIsBluetooth = probe.outputIsBluetooth()
-      let defaultInputDeviceID = probe.defaultInputDeviceID()
+      // The contention fallback only matters while another capture in this
+      // process is live, so the extra HAL reads it needs — the built-in mic
+      // walk (the most expensive device-list enumeration) and the default
+      // input — are gated on that registry state. With no live capture the
+      // probe pattern is identical to the pre-contention behavior.
+      let contentionPossible = AudioCaptureService.hasActiveCapture()
+      let defaultInputDeviceID = contentionPossible ? probe.defaultInputDeviceID() : nil
       store.finishRefresh(
         Snapshot(
           selectedUID: selectedUID,
           selectedDeviceID: selectedDeviceID,
           outputIsBluetooth: outputIsBluetooth,
-          // Mic-contention fallback needs the built-in mic even on non-Bluetooth
-          // output, so always resolve it here (still off the main actor).
-          builtInDeviceID: probe.builtInMicDeviceID(),
+          builtInDeviceID: (outputIsBluetooth || contentionPossible) ? probe.builtInMicDeviceID() : nil,
           defaultInputDeviceID: defaultInputDeviceID,
           defaultInputIsBluetooth: defaultInputDeviceID.map(probe.isBluetoothInput) ?? false
         ))
@@ -189,12 +193,24 @@ extension PushToTalkManager {
     {
       if AudioCaptureService.isDeviceActivelyCaptured(defaultInput, excluding: parkedCapture) {
         log("PushToTalkManager: default input is held by another capture — using built-in mic")
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "ptt_input_routing",
+          from: "default_input",
+          to: "built_in_mic",
+          reason: "device_contention",
+          outcome: .degraded)
         return builtIn
       }
       if AudioCaptureService.hasActiveCapture(excluding: parkedCapture),
         snapshot.defaultInputIsBluetooth
       {
         log("PushToTalkManager: Bluetooth input while another capture is live — using built-in mic")
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "ptt_input_routing",
+          from: "bluetooth_default_input",
+          to: "built_in_mic",
+          reason: "bluetooth_contention",
+          outcome: .degraded)
         return builtIn
       }
     }

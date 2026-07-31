@@ -106,20 +106,7 @@ extension AppState {
       if effectiveSource == .microphone {
         // Initialize audio capture service, honoring an explicit microphone
         // choice (e.g. Ray-Ban Meta glasses) from Settings -> Transcription.
-        // Device IDs aren't stable across reconnects, so resolve the UID now.
-        if let preferredUID = UserDefaults.standard.string(
-          forKey: AudioCaptureService.preferredInputUIDDefaultsKey),
-          !preferredUID.isEmpty,
-          let preferredID = AudioCaptureService.inputDeviceID(forUID: preferredUID)
-        {
-          audioCaptureService = AudioCaptureService(overrideDeviceID: preferredID)
-          recordingInputDeviceName =
-            AudioCaptureService.deviceName(for: preferredID) ?? recordingInputDeviceName
-          let preferredName = recordingInputDeviceName ?? "?"
-          log("Transcription: using preferred microphone \(preferredName) (uid=\(preferredUID))")
-        } else {
-          audioCaptureService = AudioCaptureService()
-        }
+        audioCaptureService = makeMicrophoneCaptureService()
 
         // Initialize audio mixer for combining mic and system audio
         audioMixer = AudioMixer()
@@ -334,8 +321,30 @@ extension AppState {
   ///    outside meetings.
   /// Captured audio is mixed into one mono stream (cloud) or fed to separate Parakeet instances
   /// (local) so calls/videos/music end up in the transcript alongside the user's voice.
+  /// Build the transcription capture service, honoring the user's persisted
+  /// microphone choice when it resolves. Device IDs aren't stable across
+  /// reconnects, so the UID is resolved at every (re)construction — including
+  /// recovery rebuilds, which must not silently abandon the selection.
+  func makeMicrophoneCaptureService() -> AudioCaptureService {
+    if let preferredUID = UserDefaults.standard.string(
+      forKey: AudioCaptureService.preferredInputUIDDefaultsKey),
+      !preferredUID.isEmpty,
+      let preferredID = AudioCaptureService.inputDeviceID(forUID: preferredUID)
+    {
+      recordingInputDeviceName =
+        AudioCaptureService.deviceName(for: preferredID) ?? recordingInputDeviceName
+      let preferredName = recordingInputDeviceName ?? "?"
+      log("Transcription: using preferred microphone \(preferredName) (uid=\(preferredUID))")
+      return AudioCaptureService(overrideDeviceID: preferredID)
+    }
+    return AudioCaptureService()
+  }
+
   func startMicrophoneAudioCapture() async {
     guard let audioCaptureService = audioCaptureService else { return }
+    // Let the PTT warm keep-alive release a parked capture before ambient
+    // transcription opens (possibly the same) device.
+    NotificationCenter.default.post(name: .ambientMicCaptureStarting, object: nil)
 
     // Silent-mic watchdog: CoreAudio can report a healthy IOProc while a Bluetooth, USB, or
     // built-in input returns only zeros. Listen/manual/Quick Note all flow through here, so
@@ -663,7 +672,7 @@ extension AppState {
     }
 
     audioCaptureService?.stopCapture()
-    audioCaptureService = AudioCaptureService()
+    audioCaptureService = makeMicrophoneCaptureService()
     AudioLevelMonitor.shared.updateMicrophoneLevel(0)
 
     if !sttSession.useLocalSTT {
@@ -671,7 +680,9 @@ extension AppState {
       audioMixer = AudioMixer()
     }
 
-    recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName() ?? recordingInputDeviceName
+    if audioCaptureService?.hasOverrideDevice != true {
+      recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName() ?? recordingInputDeviceName
+    }
     await startMicrophoneAudioCapture()
   }
 

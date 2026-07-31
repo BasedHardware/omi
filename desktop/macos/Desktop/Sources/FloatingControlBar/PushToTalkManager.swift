@@ -140,6 +140,9 @@ struct ModifierOnlyPTTActivationGate {
 
 extension Notification.Name {
   static let coreAudioCaptureRecoveryRequested = Notification.Name("coreAudioCaptureRecoveryRequested")
+  /// Posted just before ambient transcription opens its microphone capture, so
+  /// the PTT warm keep-alive can release a parked device it may still hold.
+  static let ambientMicCaptureStarting = Notification.Name("ambientMicCaptureStarting")
 }
 
 #if DEBUG
@@ -324,6 +327,18 @@ class PushToTalkManager: ObservableObject {
     // Realtime hub: wire it to the bar and warm the WS if it's enabled + BYOK-keyed,
     // so the persistent socket is ready before the first PTT (and stays warm after).
     RealtimeHubController.shared.setup()
+    // Ambient transcription may open the very device a parked warm capture
+    // still holds; release the parked IOProc before that second open can
+    // contend (A2DP↔HFP flap, stream-format reconfiguration races).
+    ambientCaptureObserver = NotificationCenter.default.addObserver(
+      forName: .ambientMicCaptureStarting,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.discardParkedMicCapture()
+      }
+    }
     // Hermetic local harness has no Firebase SDK and no live realtime providers.
     if !DesktopLocalProfile.isEnabled {
       RealtimeHubController.shared.ensureWarm()
@@ -2021,6 +2036,12 @@ class PushToTalkManager: ObservableObject {
 
   var parkedMicCapture: (service: AudioCaptureService, lease: MicCaptureLease, overrideID: AudioDeviceID?)?
   private var parkedMicExpiryTask: Task<Void, Never>?
+  private var ambientCaptureObserver: NSObjectProtocol?
+  /// Set by a terminal (parkWarm: false) stop. A capture start still in flight
+  /// at that moment cannot be stopped yet; when it completes late it must be
+  /// released, not parked — an explicitly cancelled turn may never leave the
+  /// microphone open for the keep-alive window.
+  private var discardLateCaptureStarts = false
   private var activeMicLease: MicCaptureLease?
   private var activeMicOverrideID: AudioDeviceID?
   private static let parkedMicKeepAliveSeconds: UInt64 = 120
@@ -2064,6 +2085,7 @@ class PushToTalkManager: ObservableObject {
       return
     }
     micCaptureStartInFlight = true
+    discardLateCaptureStarts = false
     pttLifecycle.captureStartRequested()
     micCaptureGeneration &+= 1
     let generation = micCaptureGeneration
@@ -2190,6 +2212,16 @@ class PushToTalkManager: ObservableObject {
           }
           if isCurrentGeneration {
             self.micCaptureStartInFlight = false
+          }
+          if self.discardLateCaptureStarts {
+            capture.stopCapture()
+            if let diagnosticRecoveryAction {
+              DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+                recoveryAction: diagnosticRecoveryAction,
+                recoveryResult: "ignored_turn_ended")
+            }
+            log("PushToTalkManager: mic capture start completed after terminal cleanup — stopped")
+            return
           }
           if let diagnosticRecoveryAction {
             DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
@@ -2351,6 +2383,9 @@ class PushToTalkManager: ObservableObject {
       audioCaptureService?.stopCapture()
       if !parkWarm {
         discardParkedMicCapture()
+        // An in-flight startCapture cannot be stopped from here — flag it so
+        // its late completion releases the capture instead of parking it warm.
+        discardLateCaptureStarts = true
       }
     }
     audioCaptureService = nil

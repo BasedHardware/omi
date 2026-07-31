@@ -77,6 +77,9 @@ class AudioCaptureService: @unchecked Sendable {
   /// Used by the silent-mic fallback path to bind directly to the built-in mic.
   private let overrideDeviceID: AudioDeviceID?
 
+  /// True when this service was built to pin capture to an explicit device.
+  var hasOverrideDevice: Bool { overrideDeviceID != nil }
+
   /// Default initializer — opens the system default input device.
   init() {
     self.overrideDeviceID = nil
