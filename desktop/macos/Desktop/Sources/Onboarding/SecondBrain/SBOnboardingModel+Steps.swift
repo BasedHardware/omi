@@ -339,7 +339,10 @@ extension SBOnboardingModel {
 
   func finishFilesStep() {
     guard localFileProfileState.isTerminal else { return }
-    advance(userAnswer: nil, to: .accessibility)
+    let answer =
+      thread.last?.isOmi == true && thread.last?.text == message(for: .files)
+      ? (fdaState == .on ? "Allowed" : "Skip") : nil
+    advance(userAnswer: answer, to: .accessibility)
   }
   func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
   func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }

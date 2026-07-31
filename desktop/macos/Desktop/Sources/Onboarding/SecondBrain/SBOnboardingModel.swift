@@ -547,6 +547,12 @@ final class SBOnboardingModel: ObservableObject {
       let saved = UserDefaults.standard.string(forKey: DefaultsKey.onboardingHowDidYouHearSource)
       if let saved, !saved.isEmpty { howHeard = saved }
     }
+    if languageDraft.isEmpty, AssistantSettings.shared.hasExplicitVoiceLanguages,
+      let code = AssistantSettings.shared.voiceLanguages.first,
+      let language = AssistantSettings.supportedLanguages.first(where: { $0.code == code })
+    {
+      languageDraft = language.name
+    }
   }
 
   // MARK: promise / name / language / role

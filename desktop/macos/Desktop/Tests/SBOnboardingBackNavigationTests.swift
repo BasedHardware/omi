@@ -72,6 +72,20 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertEqual(model.thread.map(\.text), [SBOnboardingLanguageCopy.question])
   }
 
+  func testResumingAfterLanguageSelectionRehydratesItsDraft() {
+    AssistantSettings.shared.voiceLanguages = ["es"]
+    UserDefaults.standard.set(SBOnboardingModel.Step.role.rawValue, forKey: resumeStepKey)
+    let appState = AppState()
+    let chatProvider = ChatProvider()
+    let model = SBOnboardingModel(
+      appState: appState, chatProvider: chatProvider, onComplete: nil)
+
+    model.begin()
+
+    XCTAssertEqual(model.languageDraft, "Spanish")
+    model.streamTask?.cancel()
+  }
+
   func testBackSkipsPermissionsThatWereNeverDisplayed() {
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
@@ -144,6 +158,31 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertEqual(model.step, .role)
     XCTAssertEqual(model.thread.map(\.text), [model.message(for: .role)])
     XCTAssertTrue(model.showWidget)
+  }
+
+  func testReturningToCompletedFilesRestoresItsAnswerOnContinue() {
+    let appState = AppState()
+    let chatProvider = ChatProvider()
+    let model = SBOnboardingModel(
+      appState: appState, chatProvider: chatProvider, onComplete: nil)
+    model.fdaState = .on
+    model.localFileProfileState = .complete(fileCount: 1, memoryCount: 1, deniedFolders: [])
+    model.thread = [
+      .init(isOmi: true, text: model.message(for: .files)),
+      .init(isOmi: false, text: "Allowed"),
+      .init(isOmi: true, text: model.message(for: .accessibility)),
+      .init(isOmi: false, text: "Skip"),
+    ]
+    model.step = .accessibility
+    model.displayedSteps = [.files, .accessibility]
+
+    model.goBack()
+    model.finishFilesStep()
+
+    XCTAssertEqual(
+      model.thread.map(\.text),
+      [model.message(for: .files), "Allowed"])
+    model.streamTask?.cancel()
   }
 
   func testBackStreamsThePriorPromptWhenResumingWithoutHistory() async {
