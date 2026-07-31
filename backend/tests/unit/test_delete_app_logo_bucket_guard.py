@@ -1,69 +1,51 @@
-"""Regression test: delete_app_logo must not IndexError on a URL from another bucket.
+"""Regression test: delete_app_logo must not act on a URL from another bucket.
 
-utils.other.storage.delete_app_logo did img_url.split(prefix)[1] where prefix is the app-logo
-bucket URL. A googleapis URL for a DIFFERENT or legacy bucket makes split return a one-element
-list, so [1] raised IndexError. Callers guard only with the looser
-startswith('https://storage.googleapis.com/'), so such a URL reaches here. It now returns when
-the app-logo bucket prefix is absent, and still deletes a matching URL.
+utils.other.storage.delete_app_logo requires the URL to START WITH the app-logo bucket's public-URL
+prefix (derived from the object-store port, not a hard-wired string). A URL for a different/legacy
+bucket — or one that embeds the prefix later in the path — must not delete anything. Exercised through
+the real port path with the in-memory ``FakeObjectStore`` (the store seam replaced the raw GCS client
+when storage.py migrated to ``utils.object_store``, ADR-0032).
 """
 
 import utils.other.storage as storage
+from tests.object_store_fakes import FakeObjectStore
 
 
-class _FakeBlob:
-    def __init__(self, sink):
-        self._sink = sink
-
-    def delete(self):
-        self._sink.append('deleted')
-
-
-class _FakeBucket:
-    def __init__(self, sink):
-        self._sink = sink
-
-    def blob(self, path):
-        self._sink.append(('blob', path))
-        return _FakeBlob(self._sink)
-
-
-class _FakeClient:
-    def __init__(self, sink):
-        self._sink = sink
-
-    def bucket(self, name):
-        return _FakeBucket(self._sink)
+def _fake_store(monkeypatch) -> FakeObjectStore:
+    # public_endpoint mimics the GCS public host so the legacy googleapis URLs below match the prefix
+    # the guard derives via public_url(); the delete path itself runs against the fake unchanged.
+    store = FakeObjectStore(public_endpoint="https://storage.googleapis.com")
+    monkeypatch.setattr(storage, "_object_store", lambda: store)
+    return store
 
 
 def test_delete_app_logo_ignores_url_from_other_bucket(monkeypatch):
-    sink = []
-    monkeypatch.setattr(storage, '_get_storage_client', lambda: _FakeClient(sink))
+    store = _fake_store(monkeypatch)
+    store.put("some-other-bucket", "x.png", b"logo")
 
-    storage.delete_app_logo('https://storage.googleapis.com/some-other-bucket/x.png')  # must not raise
+    storage.delete_app_logo("https://storage.googleapis.com/some-other-bucket/x.png")  # must not raise
 
-    assert sink == []  # nothing deleted
+    assert store.exists("some-other-bucket", "x.png")  # untouched
 
 
 def test_delete_app_logo_ignores_url_that_embeds_prefix_later(monkeypatch):
-    sink = []
-    monkeypatch.setattr(storage, '_get_storage_client', lambda: _FakeClient(sink))
+    store = _fake_store(monkeypatch)
     # A foreign-bucket URL that embeds the app-logo prefix later in the path must NOT delete: the
     # guard requires the URL to start with the prefix, not merely contain it.
     embedded = (
-        f'https://storage.googleapis.com/other-bucket/https://storage.googleapis.com/{storage.omi_apps_bucket}/x.png'
+        f"https://storage.googleapis.com/other-bucket/https://storage.googleapis.com/{storage.omi_apps_bucket}/x.png"
     )
 
-    storage.delete_app_logo(embedded)
+    storage.delete_app_logo(embedded)  # must not raise, must delete nothing
 
-    assert sink == []  # nothing deleted
+    assert store.list(storage.omi_apps_bucket, "") == []
 
 
 def test_delete_app_logo_deletes_matching_url(monkeypatch):
-    sink = []
-    monkeypatch.setattr(storage, '_get_storage_client', lambda: _FakeClient(sink))
-    url = f'https://storage.googleapis.com/{storage.omi_apps_bucket}/app123.png'
+    store = _fake_store(monkeypatch)
+    store.put(storage.omi_apps_bucket, "app123.png", b"logo")
+    url = f"https://storage.googleapis.com/{storage.omi_apps_bucket}/app123.png"
 
     storage.delete_app_logo(url)
 
-    assert ('blob', 'app123.png') in sink
-    assert 'deleted' in sink
+    assert not store.exists(storage.omi_apps_bucket, "app123.png")  # deleted

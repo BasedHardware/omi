@@ -78,6 +78,15 @@ def _get_storage_client() -> Any:
     return storage_client
 
 
+def _object_store():
+    """Return the configured object-store adapter (ADR-0032). The migration seam: callers use this
+    neutral port instead of GCS ``blob`` ops, so ``OBJECT_STORE_BACKEND`` (gcs|s3) swaps the backend.
+    Kept as a thin function so tests can point it at the in-memory ``FakeObjectStore``."""
+    from utils.object_store import get_object_store
+
+    return get_object_store()
+
+
 speech_profiles_bucket = (os.getenv('BUCKET_SPEECH_PROFILES') or '').strip() or None
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = (os.getenv('BUCKET_MEMORIES_RECORDINGS') or '').strip() or None
@@ -1496,41 +1505,36 @@ def _get_signed_url(blob: Any, minutes: int) -> str:
 
 
 def upload_app_logo(file_path: str, app_id: str):
-    bucket = _get_storage_client().bucket(omi_apps_bucket)
     path = f'{app_id}.png'
-    blob = bucket.blob(path)
-    blob.cache_control = 'public, no-cache'
-    blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{omi_apps_bucket}/{path}'
+    _object_store().put_from_file(
+        omi_apps_bucket, path, file_path, content_type='image/png', cache_control='public, no-cache'
+    )
+    return _object_store().public_url(omi_apps_bucket, path)
 
 
 def delete_app_logo(img_url: str):
-    prefix = f'https://storage.googleapis.com/{omi_apps_bucket}/'
+    prefix = _object_store().public_url(omi_apps_bucket, '')
     # Require the URL to START WITH the app-logo prefix, not merely contain it: a foreign-bucket URL
     # embedding the prefix later could otherwise delete an unrelated object (this is a deletion path).
     if not img_url.startswith(prefix):
         logger.warning(f'delete_app_logo: url not in {omi_apps_bucket}, skipping')
         return
-    bucket = _get_storage_client().bucket(omi_apps_bucket)
     path = img_url[len(prefix) :]
     logger.info(f'delete_app_logo {path}')
-    blob = bucket.blob(path)
-    blob.delete()
+    _object_store().delete(omi_apps_bucket, path)
 
 
 def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
-    bucket = _get_storage_client().bucket(app_thumbnails_bucket)
     path = f'{thumbnail_id}.jpg'
-    blob = bucket.blob(path)
-    blob.cache_control = 'public, no-cache'
-    blob.upload_from_filename(file_path)
-    public_url = f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
-    return public_url
+    _object_store().put_from_file(
+        app_thumbnails_bucket, path, file_path, content_type='image/jpeg', cache_control='public, no-cache'
+    )
+    return _object_store().public_url(app_thumbnails_bucket, path)
 
 
 def get_app_thumbnail_url(thumbnail_id: str) -> str:
     path = f'{thumbnail_id}.jpg'
-    return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+    return _object_store().public_url(app_thumbnails_bucket, path)
 
 
 # **********************************
