@@ -70,6 +70,15 @@ enum AgentRuntimeRouting {
       return .codex
     }
   }
+
+  static func usesNativeModelChoice(for rawHarnessMode: String) -> Bool {
+    switch harnessMode(from: rawHarnessMode) {
+    case .hermes?, .openclaw?, .codex?:
+      return true
+    default:
+      return false
+    }
+  }
 }
 
 struct LocalAgentProviderAvailability: Equatable {

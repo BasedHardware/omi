@@ -50,6 +50,14 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertNil(AgentRuntimeRouting.harnessMode(from: "unknown"))
   }
 
+  func testNativeModelChoiceIncludesCodex() {
+    XCTAssertTrue(AgentRuntimeRouting.usesNativeModelChoice(for: "hermes"))
+    XCTAssertTrue(AgentRuntimeRouting.usesNativeModelChoice(for: "openclaw"))
+    XCTAssertTrue(AgentRuntimeRouting.usesNativeModelChoice(for: "codex"))
+    XCTAssertFalse(AgentRuntimeRouting.usesNativeModelChoice(for: "piMono"))
+    XCTAssertFalse(AgentRuntimeRouting.usesNativeModelChoice(for: "unknown"))
+  }
+
   func testLocalAgentProviderDetectorUsesExplicitCommand() {
     let availability = LocalAgentProviderDetector.availability(
       for: .hermes,
