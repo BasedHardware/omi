@@ -232,7 +232,7 @@ class TestEmulatorHarness:
         )
         assert package["scripts"]["test:memory-vector-repair-outbox-rules:emulator"] == (
             "firebase emulators:exec --only firestore --project demo-memory "
-            '"node backend/scripts/firestore_rules_emulator_test.mjs"'
+            '"bun backend/scripts/firestore_rules_emulator_test.mjs"'
         )
         assert package["scripts"]["test:memory-vector-repair-outbox-lease:emulator"] == (
             "firebase emulators:exec --only firestore --project demo-memory "
