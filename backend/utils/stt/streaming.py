@@ -20,6 +20,7 @@ from config.stt_provider_policy import (
     PARAKEET_PROVIDER,
     STTServingSurface,
     default_models_for_surface,
+    modulate_supports_codec,
     modulate_supports_language,
     normalized_stt_language,
     parakeet_supports_language,
@@ -307,6 +308,7 @@ def get_stt_service_for_language(
     *,
     surface: STTServingSurface = STTServingSurface.STREAMING,
     preferred_service: Optional[str] = None,
+    codec: Optional[str] = None,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a serving STT provider allowed for the requested product surface.
 
@@ -353,6 +355,7 @@ def get_stt_service_for_language(
                 model == 'modulate-velma-2'
                 and provider_is_enabled(MODULATE_PROVIDER, surface)
                 and modulate_supports_language(requested_language)
+                and modulate_supports_codec(codec)
             ):
                 return (STTService.modulate, requested_language, 'velma-2'), parakeet_fallback_reason
         return None, parakeet_fallback_reason
@@ -678,6 +681,7 @@ class SafeModulateSocket(STTSocket):
         stream_transcript: Callable[[List[Dict[str, Any]]], None],
         loop: asyncio.AbstractEventLoop,
         preseconds: int = 0,
+        stream_context: Optional[Dict[str, Any]] = None,
     ) -> None:
         self._ws: Any = ws
         self._stream_transcript: Callable[[List[Dict[str, Any]]], None] = stream_transcript
@@ -699,6 +703,15 @@ class SafeModulateSocket(STTSocket):
         # single odd-length frame ends the session even after valid audio. Nothing upstream
         # guarantees even-length buffers, so carry a trailing odd byte to the next frame.
         self._pending_odd_byte: bytes = b''
+        # Frame shape is the only thing a rejection is known to depend on, and it is
+        # invisible once the socket dies, so it is tallied for the failure log.
+        self._stream_context: Dict[str, Any] = dict(stream_context or {})
+        self._frames_sent = 0
+        self._bytes_sent = 0
+        self._odd_frames = 0
+        self._min_frame = 0
+        self._max_frame = 0
+        self._last_frame = 0
         self._recv_task: asyncio.Task[None] = asyncio.ensure_future(self._recv_loop(), loop=loop)
         self._send_task: asyncio.Task[None] = asyncio.ensure_future(self._send_loop(), loop=loop)
 
@@ -719,6 +732,19 @@ class SafeModulateSocket(STTSocket):
                 self._dead = True
                 self._death_reason = reason
 
+    def _stream_shape_log(self) -> str:
+        """Return the frame-shape tally a provider rejection has to be explained by."""
+        fields = {
+            **self._stream_context,
+            'frames': self._frames_sent,
+            'bytes': self._bytes_sent,
+            'odd_frames': self._odd_frames,
+            'min_frame': self._min_frame,
+            'max_frame': self._max_frame,
+            'last_frame': self._last_frame,
+        }
+        return ' '.join(f'{key}={value}' for key, value in fields.items())
+
     def send(self, data: bytes) -> bool:
         """Synchronously accept audio only when it reaches the provider queue.
 
@@ -737,6 +763,13 @@ class SafeModulateSocket(STTSocket):
                 # later frame would be queued and never sent. The Parakeet sockets guard the same
                 # way. The header stays pending because _header_sent is only set once it is queued.
                 return True
+            self._frames_sent += 1
+            self._bytes_sent += len(data)
+            self._last_frame = len(data)
+            self._max_frame = max(self._max_frame, len(data))
+            self._min_frame = len(data) if self._frames_sent == 1 else min(self._min_frame, len(data))
+            if len(data) % 2:
+                self._odd_frames += 1
             aligned = self._pending_odd_byte + data
             self._pending_odd_byte = aligned[-1:] if len(aligned) % 2 else b''
             if self._pending_odd_byte:
@@ -853,7 +886,7 @@ class SafeModulateSocket(STTSocket):
                 msg_type = msg.get('type', '')
                 if msg_type == 'error':
                     err = msg.get('error', msg.get('message', 'unknown error'))
-                    logger.error(f'Modulate streaming error: {err}')
+                    logger.error('Modulate streaming error: %s %s', err, self._stream_shape_log())
                     if self._prev_partial_text:
                         self._flush_partial()
                     self._done_event.set()
@@ -969,6 +1002,7 @@ async def process_audio_modulate(
     sample_rate: int,
     language: str,
     preseconds: int = 0,
+    codec: Optional[str] = None,
 ) -> SafeModulateSocket:
     api_key = os.getenv('MODULATE_API_KEY')
     if not api_key:
@@ -989,7 +1023,13 @@ async def process_audio_modulate(
     logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
     ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
     loop = asyncio.get_running_loop()
-    sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds)
+    sock = SafeModulateSocket(
+        ws,
+        stream_transcript,
+        loop,
+        preseconds=preseconds,
+        stream_context={'codec': codec or 'unknown', 'sample_rate': sample_rate, 'language': language},
+    )
     logger.info('Modulate Velma-2 streaming connection established')
     return sock
 
