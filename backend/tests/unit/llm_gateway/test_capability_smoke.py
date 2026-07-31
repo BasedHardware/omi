@@ -26,6 +26,7 @@ from llm_gateway.scripts.capability_smoke import (
     Provider,
     ProviderRequest,
     ProviderResponse,
+    RealGatewayProvider,
     SmokeSummary,
     _build_provider,
     _iter_target_lanes,
@@ -38,23 +39,15 @@ from llm_gateway.scripts.capability_smoke import (
 )
 from llm_gateway.scripts.deterministic_provider import (
     FakeProvider,
-    FakeCall,
     ProviderAuthError,
-    ProviderRequest,
-    ProviderResponse,
 )
 from llm_gateway.scripts.capability_smoke import _DEFAULT_GATEWAY_CONFIG_DIR
 from llm_gateway.gateway.schemas import (
     Capabilities,
     StructuredOutputMode,
 )
-from llm_gateway.scripts.deterministic_provider import (
-    FakeCall,
-    FakeProvider,
-    ProviderAuthError,
-    ProviderRequest,
-    ProviderResponse,
-)
+from llm_gateway.gateway.executor import ProviderRegistry
+from llm_gateway.gateway.providers import FakeChatCompletionProvider
 
 # Default config dir: package-relative (NOT CWD-relative) per R5b's design.
 DEFAULT_CONFIG_DIR = _DEFAULT_GATEWAY_CONFIG_DIR
@@ -88,7 +81,7 @@ class TestBuildFixture:
     def test_fixture_uses_lane_model(self):
         lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         req = build_fixture(lane, artifact)
-        assert req.model == artifact.primary.model  # claude-sonnet-4-6
+        assert req.model == lane.lane_id
 
     def test_fixture_json_schema_for_schema_mode(self):
         lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
@@ -96,12 +89,13 @@ class TestBuildFixture:
         assert req.response_format == {
             "type": "json_schema",
             "json_schema": {
+                "name": "capability_smoke",
                 "schema": {
                     "type": "object",
                     "properties": {"answer": {"type": "string"}},
                     "required": ["answer"],
                     "additionalProperties": False,
-                }
+                },
             },
         }
 
@@ -356,6 +350,31 @@ class TestSmokeLane:
         assert all(c.passed for c in result.checks)
 
     @pytest.mark.asyncio
+    async def test_real_provider_runs_through_configured_gateway_route(self):
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
+        fake_provider = FakeChatCompletionProvider()
+        provider = RealGatewayProvider(
+            load_gateway_config(DEFAULT_CONFIG_DIR, prod_mode=False),
+            ProviderRegistry({"openai": fake_provider}),
+        )
+        result = await smoke_lane(lane, artifact, provider)
+        assert result.passed is True
+        assert fake_provider.calls[0].model == artifact.primary.model
+        assert fake_provider.calls[0].request["model"] == artifact.primary.model
+
+    @pytest.mark.asyncio
+    async def test_real_provider_rejects_streaming_lane(self):
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
+        lane = lane.model_copy(update={"capabilities": lane.capabilities.model_copy(update={"streaming": True})})
+        provider = RealGatewayProvider(
+            load_gateway_config(DEFAULT_CONFIG_DIR, prod_mode=False),
+            ProviderRegistry({"openai": FakeChatCompletionProvider()}),
+        )
+        result = await smoke_lane(lane, artifact, provider)
+        assert result.passed is False
+        assert result.failure_reason == "provider_error"
+
+    @pytest.mark.asyncio
     async def test_timeout_lane_records_failure(self):
         lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         fake = FakeProvider()
@@ -519,15 +538,16 @@ class TestResultsToJson:
 
 
 class TestBuildProvider:
-    def test_fake_provider_default(self):
+    def test_fake_provider_is_available_for_tests(self):
         provider = _build_provider("fake")
         # Should be a FakeProvider with default scenario = pass
         assert isinstance(provider, FakeProvider)
         assert provider._default_scenario == "pass"
 
-    def test_real_provider_not_yet_implemented(self):
-        with pytest.raises(NotImplementedError, match="real provider not yet wired"):
-            _build_provider("real")
+    def test_real_provider_uses_gateway_config_and_registry(self):
+        cfg = load_gateway_config(DEFAULT_CONFIG_DIR, prod_mode=False)
+        provider = _build_provider("real", cfg, ProviderRegistry({"openai": FakeChatCompletionProvider()}))
+        assert isinstance(provider, RealGatewayProvider)
 
     def test_unknown_provider_raises(self):
         with pytest.raises(ValueError, match="unknown provider"):
@@ -548,8 +568,8 @@ class TestCLI:
         captured = capsys.readouterr()
         assert "capability smoke" in captured.out.lower()
 
-    def test_default_provider_is_fake(self, capsys):
-        rc = main([])
+    def test_fake_provider_runs_only_when_explicit(self, capsys):
+        rc = main(["--provider", "fake"])
         assert rc == 0
         captured = capsys.readouterr()
         payload = json.loads(captured.out)
@@ -559,7 +579,7 @@ class TestCLI:
         assert payload["summary"]["failed"] == 0
 
     def test_dry_run_prints_summary_only(self, capsys):
-        rc = main(["--dry-run"])
+        rc = main(["--provider", "fake", "--dry-run"])
         assert rc == 0
         captured = capsys.readouterr()
         payload = json.loads(captured.out)
@@ -567,7 +587,7 @@ class TestCLI:
         assert "lanes" not in payload
 
     def test_lane_filter(self, capsys):
-        rc = main(["--lane", "omi:auto:chat-structured"])
+        rc = main(["--provider", "fake", "--lane", "omi:auto:chat-structured"])
         assert rc == 0
         captured = capsys.readouterr()
         payload = json.loads(captured.out)
@@ -576,19 +596,15 @@ class TestCLI:
         assert payload["lanes"][0]["lane_id"] == "omi:auto:chat-structured"
 
     def test_lane_filter_with_unknown_lane_exits_1(self, capsys):
-        rc = main(["--lane", "omi:auto:does-not-exist"])
+        rc = main(["--provider", "fake", "--lane", "omi:auto:does-not-exist"])
         assert rc == 1
         captured = capsys.readouterr()
         # Stderr has the error JSON
         assert "no lanes matched" in captured.err
 
-    def test_real_provider_exits_with_not_implemented(self, capsys):
-        with pytest.raises(NotImplementedError, match="real provider not yet wired"):
-            main(["--provider", "real"])
-
     def test_out_writes_file(self, tmp_path, capsys):
         out_path = tmp_path / "smoke.json"
-        rc = main(["--out", str(out_path)])
+        rc = main(["--provider", "fake", "--out", str(out_path)])
         assert rc == 0
         assert out_path.exists()
         payload = json.loads(out_path.read_text())
@@ -621,7 +637,7 @@ class TestCLIEndToEnd:
     def test_cli_runs_and_outputs_valid_json(self, tmp_path):
         """Run the smoke as a subprocess and verify the JSON output shape."""
         result = subprocess.run(
-            [sys.executable, "-m", "llm_gateway.scripts.capability_smoke", "--dry-run"],
+            [sys.executable, "-m", "llm_gateway.scripts.capability_smoke", "--provider", "fake", "--dry-run"],
             capture_output=True,
             text=True,
             cwd=Path(__file__).resolve().parents[3],  # backend/
@@ -641,6 +657,8 @@ class TestCLIEndToEnd:
                 sys.executable,
                 "-m",
                 "llm_gateway.scripts.capability_smoke",
+                "--provider",
+                "fake",
                 "--out",
                 str(out_path),
             ],

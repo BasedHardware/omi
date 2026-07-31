@@ -7,14 +7,8 @@ lane's declared capabilities (`text_input`, `streaming`, `structured_output`,
   - Structured output parses (json_object / json_schema modes)
   - Latency under the lane's `timeouts.request_ms`
 
-Output: pass/fail per lane as JSON to stdout. The R1 emitter consumes
-this JSON to surface capability-smoke results in the nightly rotation
-PR body. Per PLAN.md §R2: "the smoke has to exist before the rotation
-cron (R4) ships."
-
-Default provider is `fake` (no real HTTP calls) so the smoke is safe
-to run in dev/CI without API costs. Use `--provider real` to call
-the actual gateway providers.
+Output: pass/fail per lane as JSON to stdout. The default provider
+executes the configured gateway route; `fake` is only for tests.
 """
 
 from __future__ import annotations
@@ -27,16 +21,21 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, Mapping, Optional, cast
 
 from llm_gateway.gateway.config_loader import GatewayConfig, load_gateway_config
-from llm_gateway.gateway.resolver import get_supported_auto_lane_ids
+from llm_gateway.gateway.auth import ServiceCaller
+from llm_gateway.gateway.credentials import build_omi_managed_credential_context
+from llm_gateway.gateway.errors import GatewayError
+from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion
+from llm_gateway.gateway.resolver import get_supported_auto_lane_ids, resolve_chat_completion_route
 from llm_gateway.gateway.schemas import (
     Capabilities,
     LaneConfig,
     RouteArtifact,
     StructuredOutputMode,
 )
+from llm_gateway.scripts.deterministic_provider import ProviderAuthError
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +61,6 @@ class ProviderRequest:
     timeout_seconds: float = 8.0
 
 
-class ProviderAuthError(Exception):
-    """Raised when a provider rejects the request due to auth (401/403)."""
-
-
 @dataclass
 class ProviderResponse:
     """The provider's reply. The smoke validates shape; the provider fills it."""
@@ -80,12 +75,37 @@ class Provider:
     """The smoke's contract with the provider layer (duck-typed).
 
     Subclasses or stand-in implementations:
-      - FakeProvider (tests/unit/llm_gateway/_private/fake_capability_provider.py)
-      - RealProvider (future — wraps the gateway's OpenAICompatibleChatCompletionProvider)
+      - FakeProvider
+      - RealGatewayProvider
     """
 
     async def chat_completion(self, request: ProviderRequest) -> ProviderResponse:  # pragma: no cover
         raise NotImplementedError
+
+
+class RealGatewayProvider(Provider):
+    def __init__(self, config: GatewayConfig, registry: ProviderRegistry):
+        self._config = config
+        self._registry = registry
+
+    async def chat_completion(self, request: ProviderRequest) -> ProviderResponse:
+        if request.stream:
+            raise ValueError("streaming smoke is unsupported")
+        payload: dict[str, Any] = {"model": request.model, "messages": request.messages}
+        if request.response_format is not None:
+            payload["response_format"] = request.response_format
+        if request.tools is not None:
+            payload["tools"] = request.tools
+        resolved = resolve_chat_completion_route(self._config, payload)
+        result = await execute_chat_completion(
+            resolved,
+            build_omi_managed_credential_context(ServiceCaller(name="backend", usage_feature="capability-smoke")),
+            self._registry,
+        )
+        return _provider_response_from_gateway(result.response, request)
+
+    async def aclose(self) -> None:
+        await self._registry.aclose()
 
 
 # ---------------------------------------------------------------------------
@@ -133,12 +153,15 @@ def build_fixture(lane: LaneConfig, artifact: RouteArtifact) -> ProviderRequest:
     if lane.capabilities.structured_output == StructuredOutputMode.JSON_OBJECT:
         response_format = {"type": "json_object"}
     elif lane.capabilities.structured_output == StructuredOutputMode.JSON_SCHEMA:
-        response_format = {"type": "json_schema", "json_schema": {"schema": _SAMPLE_JSON_SCHEMA}}
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {"name": "capability_smoke", "schema": _SAMPLE_JSON_SCHEMA},
+        }
 
     tools = [_SAMPLE_TOOL] if lane.capabilities.tools else None
 
     return ProviderRequest(
-        model=artifact.primary.model,
+        model=lane.lane_id,
         messages=messages,
         response_format=response_format,
         tools=tools,
@@ -268,22 +291,29 @@ async def smoke_lane(
             latency_ms=latency_ms,
             failure_reason=f"timeout after {request.timeout_seconds + 1.0:.1f}s",
         )
-    except ProviderAuthError as e:
+    except ProviderAuthError:
         latency_ms = (time.perf_counter() - t0) * 1000
         return LaneResult(
             lane_id=lane.lane_id,
             passed=False,
             latency_ms=latency_ms,
-            failure_reason=f"auth error: {e}",
+            failure_reason="provider_auth_error",
         )
-    except Exception as e:
-        # Provider not registered, network error, etc.
+    except GatewayError as exc:
         latency_ms = (time.perf_counter() - t0) * 1000
         return LaneResult(
             lane_id=lane.lane_id,
             passed=False,
             latency_ms=latency_ms,
-            failure_reason=f"{type(e).__name__}: {e}",
+            failure_reason=f"gateway_{exc.failure_class.value if exc.failure_class else 'error'}",
+        )
+    except Exception:
+        latency_ms = (time.perf_counter() - t0) * 1000
+        return LaneResult(
+            lane_id=lane.lane_id,
+            passed=False,
+            latency_ms=latency_ms,
+            failure_reason="provider_error",
         )
 
     latency_ms = (time.perf_counter() - t0) * 1000
@@ -298,14 +328,12 @@ async def smoke_lane(
     )
 
 
-def _build_provider(provider_arg: str) -> Provider:
-    """Build the Provider implementation. Default: FakeProvider (no HTTP calls).
-
-    For `provider_arg == "real"`, future: wire up the gateway's
-    OpenAICompatibleChatCompletionProvider. For now (R0 / R2), only
-    "fake" is supported — the "real" path is a follow-up after R3
-    registers the Anthropic provider.
-    """
+def _build_provider(
+    provider_arg: str,
+    config: GatewayConfig | None = None,
+    registry: ProviderRegistry | None = None,
+) -> Provider:
+    """Build the selected smoke provider."""
     if provider_arg == "fake":
         # The deterministic provider lives on the production-side import
         # path (NOT in tests/.../_private/) so the smoke's default doesn't
@@ -317,10 +345,36 @@ def _build_provider(provider_arg: str) -> Provider:
         fake.set_default_scenario("pass")
         return cast(Provider, fake)
     if provider_arg == "real":
-        raise NotImplementedError(
-            "real provider not yet wired up — see R3 scope (Anthropic provider). " "Use --provider fake for now."
-        )
+        if config is None:
+            raise ValueError("real provider requires gateway config")
+        if registry is None:
+            from llm_gateway.routers.dependencies import get_provider_registry
+
+            registry = get_provider_registry()
+        return RealGatewayProvider(config, registry)
     raise ValueError(f"unknown provider: {provider_arg!r}")
+
+
+def _provider_response_from_gateway(response: Mapping[str, Any], request: ProviderRequest) -> ProviderResponse:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
+        raise ValueError("gateway response has no choices")
+    message = choices[0].get("message")
+    if not isinstance(message, Mapping):
+        raise ValueError("gateway response has no message")
+    content = message.get("content")
+    text = content if isinstance(content, str) else ""
+    tool_calls = message.get("tool_calls")
+    tool_call = (
+        tool_calls[0] if isinstance(tool_calls, list) and tool_calls and isinstance(tool_calls[0], dict) else None
+    )
+    structured_output: Any = None
+    if request.response_format is not None:
+        try:
+            structured_output = json.loads(text)
+        except json.JSONDecodeError:
+            structured_output = None
+    return ProviderResponse(content=text, tool_call=tool_call, structured_output=structured_output)
 
 
 def _iter_target_lanes(
@@ -376,7 +430,7 @@ def build_summary(results: list[LaneResult]) -> dict[str, Any]:
 
 
 def results_to_json(results: list[LaneResult]) -> dict[str, Any]:
-    """Serialize results to the JSON shape consumed by R1's emitter."""
+    """Serialize smoke results."""
     return {
         "lanes": [
             {
@@ -415,8 +469,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--provider",
         choices=["fake", "real"],
-        default="fake",
-        help="Provider implementation. Default: 'fake' (no real HTTP calls). 'real' is TODO (R3 scope).",
+        default="real",
+        help="Provider implementation. Default: 'real' uses the configured gateway; 'fake' is test-only.",
     )
     parser.add_argument(
         "--out",
@@ -448,13 +502,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    provider = _build_provider(args.provider)
+    provider = _build_provider(args.provider, cfg)
 
     async def _run() -> list[LaneResult]:
-        results: list[LaneResult] = []
-        for lane, artifact in pairs:
-            results.append(await smoke_lane(lane, artifact, provider))
-        return results
+        try:
+            results: list[LaneResult] = []
+            for lane, artifact in pairs:
+                results.append(await smoke_lane(lane, artifact, provider))
+            return results
+        finally:
+            if isinstance(provider, RealGatewayProvider):
+                await provider.aclose()
 
     results = asyncio.run(_run())
     payload = results_to_json(results)
