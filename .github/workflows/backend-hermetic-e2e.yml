@@ -18,7 +18,7 @@ jobs:
   scope:
     name: Detect Hermetic Backend Scope
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
     steps:
@@ -26,6 +26,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Decide whether hermetic backend coverage applies
         id: scope
