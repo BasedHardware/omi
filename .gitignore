@@ -113,6 +113,7 @@ web/app/public/firebase-messaging-sw.js
 !app/ios/Podfile.lock
 !mcp/uv.lock
 *.lock
+!bun.lock
 *.log
 *.swo
 *.swp

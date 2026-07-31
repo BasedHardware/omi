@@ -55,7 +55,7 @@ jobs:
 
           changed_files="$(git diff --name-only "$base_sha"...HEAD)"
           printf '%s\n' "$changed_files"
-          if grep -Eq '^(backend/|package\.json$|package-lock\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
+          if grep -Eq '^(backend/|package\.json$|bun\.lock$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
           else
             echo "applies=false" >> "$GITHUB_OUTPUT"
@@ -133,26 +133,22 @@ jobs:
           uv venv .venv
           uv pip sync pylock.toml --python .venv/bin/python
 
-      - name: Set up Node.js for the Firestore emulator
-        uses: actions/setup-node@v7
+      - name: Set up Bun for the Firestore emulator
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: package-lock.json
+          bun-version: 1.3.14
 
       - name: Install pinned Firebase CLI dependencies
         run: |
           for attempt in 1 2 3; do
-            if npm ci --ignore-scripts --prefer-offline --no-audit --fund=false; then
+            if bun install --frozen-lockfile --ignore-scripts; then
               exit 0
             fi
             if [[ "$attempt" == 3 ]]; then
               echo "Pinned Firebase CLI dependency install failed after 3 attempts." >&2
-              npm cache verify || true
               exit 1
             fi
-            echo "npm ci failed on attempt $attempt/3; verifying cache before bounded retry." >&2
-            npm cache verify
+            echo "bun install failed on attempt $attempt/3; retrying." >&2
             sleep "$attempt"
           done
 
@@ -168,7 +164,7 @@ jobs:
           sudo apt-get install --yes redis-server
 
       - name: Run listen to pusher stack gauntlet
-        run: npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"
+        run: bun run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"
 
       - name: Show listen gauntlet process diagnostics on failure
         if: failure()
@@ -208,26 +204,22 @@ jobs:
           uv venv .venv
           uv pip sync pylock.toml --python .venv/bin/python
 
-      - name: Set up Node.js for the Firestore emulator
-        uses: actions/setup-node@v7
+      - name: Set up Bun for the Firestore emulator
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: package-lock.json
+          bun-version: 1.3.14
 
       - name: Install pinned Firebase CLI dependencies
         run: |
           for attempt in 1 2 3; do
-            if npm ci --ignore-scripts --prefer-offline --no-audit --fund=false; then
+            if bun install --frozen-lockfile --ignore-scripts; then
               exit 0
             fi
             if [[ "$attempt" == 3 ]]; then
               echo "Pinned Firebase CLI dependency install failed after 3 attempts." >&2
-              npm cache verify || true
               exit 1
             fi
-            echo "npm ci failed on attempt $attempt/3; verifying cache before bounded retry." >&2
-            npm cache verify
+            echo "bun install failed on attempt $attempt/3; retrying." >&2
             sleep "$attempt"
           done
 
@@ -243,7 +235,7 @@ jobs:
           sudo apt-get install --yes redis-server
 
       - name: Run Sync Cloud Tasks stack gauntlet
-        run: npm run test:sync-cloud-tasks-stack:emulator
+        run: bun run test:sync-cloud-tasks-stack:emulator
 
   replay-harness-phase0a-gauntlet:
     name: Replay Harness Phase 0A Feasibility (advisory)
@@ -273,15 +265,13 @@ jobs:
           uv venv .venv
           uv pip sync pylock.toml --python .venv/bin/python
 
-      - name: Set up Node.js for the Firestore emulator
-        uses: actions/setup-node@v7
+      - name: Set up Bun for the Firestore emulator
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: package-lock.json
+          bun-version: 1.3.14
 
       - name: Install pinned Firebase CLI dependencies
-        run: npm ci --ignore-scripts
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Set up Java for the Firestore emulator
         uses: actions/setup-java@v5
@@ -299,7 +289,7 @@ jobs:
           # Fixed state root so failed-job evidence (logs/attestations) is retained
           # at a known path for the failure step below.
           OMI_REPLAY_STATE_ROOT: ${{ runner.temp }}/omi-replay-harness
-        run: npm run test:replay-harness-phase0a:emulator
+        run: bun run test:replay-harness-phase0a:emulator
 
       - name: Show replay harness logs on failure
         if: failure()
