@@ -1819,11 +1819,19 @@ class ChatProvider: ObservableObject {
     }
     let capturedAtMs = Int(Date().timeIntervalSince1970 * 1_000)
     let screenOutcome: AgentContextSourceOutcome = screenPayload == nil ? .empty : .available
+    var identityPayload: [String: Any] = [
+      "timeZone": TimeZone.current.identifier,
+      "currentTime": ChatPromptBuilder.currentDatetimeString(),
+      "currentTimeMs": capturedAtMs,
+    ]
+    if !identityText.isEmpty {
+      identityPayload["profile"] = identityText
+    }
     var sources: [(AgentContextSource, AgentContextSourceOutcome, [String: Any], Int?)] = [
       (
         .identity,
-        identityText.isEmpty ? .empty : .available,
-        identityText.isEmpty ? [:] : ["profile": identityText, "timeZone": TimeZone.current.identifier],
+        .available,
+        identityPayload,
         nil
       ),
       (
