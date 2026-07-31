@@ -80,8 +80,12 @@ public final class ContextStore: @unchecked Sendable {
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
                 withIntermediateDirectories: true)
+            ContextPaths.setPermissions(url.deletingLastPathComponent(), mode: 0o700)
             pool = try DatabasePool(path: url.path, configuration: Self.makeConfiguration(readOnly: false))
             try Self.makeMigrator().migrate(pool)
+            ContextPaths.setPermissions(url, mode: 0o600)
+            ContextPaths.setPermissions(URL(fileURLWithPath: url.path + "-wal"), mode: 0o600)
+            ContextPaths.setPermissions(URL(fileURLWithPath: url.path + "-shm"), mode: 0o600)
         }
     }
 

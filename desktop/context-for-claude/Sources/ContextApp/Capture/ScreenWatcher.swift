@@ -863,8 +863,10 @@ private enum ScreenPipeline {
         let name = "frame_\(fileStampFormatter.string(from: Date(timeIntervalSince1970: capturedAt))).heic"
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            ContextPaths.setPermissions(directory, mode: 0o700)
             let url = directory.appendingPathComponent(name)
             try data.write(to: url, options: .atomic)
+            ContextPaths.setPermissions(url, mode: 0o600)
             return url.path
         } catch {
             ContextLog.error("Failed to write frame image: \(error.localizedDescription)", "screen")

@@ -96,6 +96,7 @@ public struct QueryStamp: Codable, Sendable, Equatable {
         let temp = directory.appendingPathComponent(
             ".\(url.lastPathComponent).\(ProcessInfo.processInfo.processIdentifier).\(UUID().uuidString).tmp")
         try JSONEncoder().encode(self).write(to: temp)
+        ContextPaths.setPermissions(temp, mode: 0o600)
         guard rename(temp.path, url.path) == 0 else {
             let reason = String(cString: strerror(errno))
             try? FileManager.default.removeItem(at: temp)

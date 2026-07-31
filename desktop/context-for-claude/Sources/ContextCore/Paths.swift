@@ -67,7 +67,18 @@ public enum ContextPaths {
     public static func ensureSupportDirectory() throws -> URL {
         let dir = supportDirectory
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? setPermissions(dir, mode: 0o700)
         return dir
+    }
+
+    /// Best-effort POSIX permission adjustment for sensitive directories/files. Failures are ignored
+    /// because the path already had default-umask permissions; this is defence-in-depth, not a gate.
+    public static func setPermissions(_ url: URL, mode: UInt16) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        let current = (try? fm.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber)?.intValue ?? 0
+        guard current != Int(mode) else { return }
+        try? fm.setAttributes([.posixPermissions: mode], ofItemAtPath: url.path)
     }
 
     /// Directory names this app has shipped under, oldest first.
@@ -151,6 +162,7 @@ public struct CaptureState: Codable, Sendable, Equatable {
         try ContextPaths.ensureSupportDirectory()
         let data = try JSONEncoder().encode(self)
         try data.write(to: url, options: .atomic)
+        ContextPaths.setPermissions(url, mode: 0o600)
     }
 
     /// Why a reader could not open the capture database — and, crucially, whether "empty" is a
