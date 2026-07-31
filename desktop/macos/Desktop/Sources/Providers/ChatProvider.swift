@@ -5912,21 +5912,31 @@ class ChatProvider: ObservableObject {
     return normalized
   }
 
-  /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
-  /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
+  /// Append text to a streaming message via a buffer that reveals at ~35ms intervals.
+  /// This reduces SwiftUI re-renders from once-per-token while keeping text movement smooth.
   private func appendToMessage(id: String, text: String) {
     streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(revealAll: false)
     }
   }
 
   /// Flush accumulated text and thinking deltas to the published messages array.
-  private func flushStreamingBuffer() {
-    streamingBuffer.flush(messages: &messages) { message, text in
+  private func flushStreamingBuffer(revealAll: Bool = true) {
+    let normalizeText: (ChatMessage, String) -> String = { message, text in
       if message.sender == .ai {
         return Self.normalizeAssistantSentenceSpacing(text)
       }
       return text
+    }
+    if revealAll {
+      streamingBuffer.flush(messages: &messages, normalizeText: normalizeText)
+    } else {
+      streamingBuffer.flushMetered(
+        messages: &messages,
+        normalizeText: normalizeText
+      ) { [weak self] in
+        self?.flushStreamingBuffer(revealAll: false)
+      }
     }
     for message in messages where message.isStreaming {
       scheduleJournalUpdate(messageId: message.id, status: .streaming)

@@ -16,6 +16,10 @@ final class ChatStreamingBuffer {
   private var pendingSegments: [PendingSegment] = []
   private var flushWorkItem: DispatchWorkItem?
   private let flushInterval: TimeInterval
+  private var lastRevealTime: TimeInterval?
+
+  var hasPendingSegments: Bool { !pendingSegments.isEmpty }
+  var hasScheduledFlush: Bool { flushWorkItem != nil }
 
   init(flushInterval: TimeInterval) {
     self.flushInterval = flushInterval
@@ -34,6 +38,7 @@ final class ChatStreamingBuffer {
   func cancelPendingFlush() {
     flushWorkItem?.cancel()
     flushWorkItem = nil
+    lastRevealTime = nil
   }
 
   /// Drop only the buffered deltas for a revoked turn. A newer turn may already
@@ -64,6 +69,53 @@ final class ChatStreamingBuffer {
       case .thinking(_, let text):
         appendThinkingSegment(text, to: &messages[index])
       }
+    }
+    lastRevealTime = nil
+  }
+
+  func flushMetered(
+    messages: inout [ChatMessage],
+    normalizeText: (_ message: ChatMessage, _ text: String) -> String = { _, text in text },
+    scheduleFlush: @escaping () -> Void
+  ) {
+    flushWorkItem?.cancel()
+    flushWorkItem = nil
+
+    let now = ProcessInfo.processInfo.systemUptime
+    let elapsedMs = (now - (lastRevealTime ?? now - flushInterval)) * 1_000
+    lastRevealTime = now
+    guard !pendingSegments.isEmpty else {
+      lastRevealTime = nil
+      return
+    }
+
+    switch pendingSegments[0] {
+    case .text(let messageId, let text):
+      let step = SmoothStreamReveal.step(remaining: text.count, elapsedMs: elapsedMs)
+      let revealed = String(text.prefix(step))
+      let remaining = String(text.dropFirst(step))
+      pendingSegments[0] = .text(messageId: messageId, text: remaining)
+      if remaining.isEmpty {
+        pendingSegments.removeFirst()
+      }
+      guard let index = messages.firstIndex(where: { $0.id == messageId }) else { break }
+      appendTextSegment(revealed, to: &messages[index], normalizeText: normalizeText)
+    case .thinking(let messageId, let text):
+      let step = SmoothStreamReveal.step(remaining: text.count, elapsedMs: elapsedMs)
+      let revealed = String(text.prefix(step))
+      let remaining = String(text.dropFirst(step))
+      pendingSegments[0] = .thinking(messageId: messageId, text: remaining)
+      if remaining.isEmpty {
+        pendingSegments.removeFirst()
+      }
+      guard let index = messages.firstIndex(where: { $0.id == messageId }) else { break }
+      appendThinkingSegment(revealed, to: &messages[index])
+    }
+
+    if pendingSegments.isEmpty {
+      lastRevealTime = nil
+    } else {
+      scheduleFlushIfNeeded(scheduleFlush)
     }
   }
 
