@@ -325,7 +325,7 @@ final class ToolCallStatusTests: XCTestCase {
     XCTAssertFalse(messages[0].text.isEmpty)
   }
 
-  func testTargetedFlushPreservesUnrevealedStoppedText() {
+  func testTargetedDiscardDropsUnrevealedStoppedText() {
     var messages = [
       ChatMessage(id: "stopped", text: "", sender: .ai, isStreaming: true),
       ChatMessage(id: "current", text: "", sender: .ai, isStreaming: true),
@@ -334,9 +334,9 @@ final class ToolCallStatusTests: XCTestCase {
 
     buffer.appendText(messageId: "stopped", text: "Partial answer", scheduleFlush: {})
     buffer.appendText(messageId: "current", text: "Current answer", scheduleFlush: {})
-    buffer.flushPendingSegments("stopped", messages: &messages)
+    buffer.discardPendingSegments(messageId: "stopped")
 
-    XCTAssertEqual(messages[0].text, "Partial answer")
+    XCTAssertTrue(messages[0].text.isEmpty)
     XCTAssertTrue(messages[1].text.isEmpty)
     buffer.flushMetered(messages: &messages, scheduleFlush: {})
     XCTAssertFalse(messages[1].text.isEmpty)
