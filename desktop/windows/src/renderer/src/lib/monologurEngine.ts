@@ -20,7 +20,7 @@ export type MonologurSettings = {
 }
 
 const DEFAULT_SETTINGS: MonologurSettings = {
-  enabled: true,
+  enabled: false,
   intervalMs: 60_000,
   minWordsBeforePrompt: 20,
   cooldownMs: 300_000,
@@ -143,7 +143,9 @@ function buildConversationContext(segments: TranscriptLine[]): string {
 }
 
 // The user's own recent speech only — Monologur reacts to what YOU say, not to
-// other people in the room (identified via the enrolled voiceprint).
+// other people in the room. Currently isUser is undefined on liveConversation
+// segments (voiceprint-based speaker diarization is not wired to the renderer yet);
+// memory ranking silently degrades when isUser is unset. This is a follow-up item.
 function userSpeech(segments: TranscriptLine[]): string {
   return segments
     .filter((s) => s.isUser)
@@ -224,9 +226,15 @@ async function checkAndPrompt(): Promise<void> {
       void saveMonologurInsight(prompt)
 
       if (settings.tts.enabled) {
-        // Try Deepgram TTS first, fall back to Web Speech API
         if (isDeepgramTtsAvailable()) {
-          await speakWithDeepgram(prompt)
+          const deepgramOk = await speakWithDeepgram(prompt)
+          if (!deepgramOk) {
+            onStatusChange?.('speaking')
+            speak(prompt, settings.tts, {
+              onEnd: () => onStatusChange?.('listening'),
+              onError: () => onStatusChange?.('listening')
+            })
+          }
         } else {
           onStatusChange?.('speaking')
           speak(prompt, settings.tts, {
