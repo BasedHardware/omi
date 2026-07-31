@@ -220,7 +220,7 @@ final class TranscriptionTransportTests: XCTestCase {
     guard let deinitRange = src.range(of: "deinit {") else {
       return XCTFail("deinit not found")
     }
-    let deinitBody = String(src[deinitRange.lowerBound...].prefix(900))
+    let deinitBody = String(src[deinitRange.lowerBound...].prefix(1400))
     XCTAssertTrue(deinitBody.contains("unregisterActiveCapture()"))
   }
 

@@ -468,8 +468,12 @@ class AudioCaptureService: @unchecked Sendable {
   /// names precisely rather than anything containing "glass".
   static func isMetaGlassesName(_ name: String) -> Bool {
     let lower = name.lowercased()
+    // Real glasses often present their EssilorLuxottica codename rather than a
+    // product name — observed as "EL AI 000F" on hardware. Prefix-anchored so
+    // it cannot swallow unrelated names like "El Camino AI".
     return lower.contains("ray-ban") || lower.contains("rayban")
       || lower.contains("oakley meta") || lower.contains("meta glasses")
+      || lower.hasPrefix("el ai ")
   }
 
   /// Human-readable name for a CoreAudio device.
@@ -1165,7 +1169,11 @@ class AudioCaptureService: @unchecked Sendable {
         AudioDeviceStop(deviceID, procID)
         AudioDeviceDestroyIOProcID(deviceID, procID)
       }
-      unregisterActiveCapture()
     }
+    // Unconditional: stopCapture() queues its unregister behind a weak self,
+    // so a deallocation that outruns the queued block must release the registry
+    // entry here or hasActiveCapture()/isDeviceActivelyCaptured() stay true
+    // forever. Removing an already-removed key is a no-op.
+    unregisterActiveCapture()
   }
 }
