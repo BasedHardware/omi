@@ -1160,6 +1160,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     delegate_agent: ["mode", "parentRunId", "objective"],
     spawn_agent: ["objective"],
     run_agent_and_wait: ["objective", "originSurfaceKind", "parentRunId"],
+    set_desktop_attention_override: ["subjectId", "subjectKind"],
     manage_agent_pills: ["action"],
     setup_agent_provider: ["provider"],
     search_tasks: ["query"],
