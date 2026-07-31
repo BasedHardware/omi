@@ -359,6 +359,11 @@ checks:
     triggers: ["backend/**/*.py", ".github/scripts/check_vector_store_boundary.py", ".github/scripts/vector_store_boundary_baseline.json", "backend/tests/unit/test_check_vector_store_boundary.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "WP4 seal (ADR-0033/0004): utils/vector/ is the only door to vector search — no pinecone/langchain_pinecone import outside it, so the backend stays swappable (Pinecone | Qdrant). Analogue of firestore/object-store boundary guards; catches a raw Pinecone client reintroduced by an upstream merge (ADR-0029/0030)"
+  - id: auth-boundary
+    command: ["python3", ".github/scripts/check_auth_boundary.py"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_auth_boundary.py", ".github/scripts/auth_boundary_baseline.json", "backend/tests/unit/test_check_auth_boundary.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "WP3 seal (ADR-0034/0004): utils/auth/ is the only door to Firebase Auth — no firebase_admin.auth import or attribute access outside it (initialize_app/messaging/firestore stay allowed), so the backend stays swappable (Firebase | OIDC/Keycloak). Analogue of firestore/object-store/vector boundary guards; catches a raw Firebase-auth call reintroduced by an upstream merge (ADR-0029/0030)"
   - id: lifecycle-header-checker-tests
     command: ["python3", ".github/scripts/test_check_lifecycle_headers.py"]
     triggers: [".github/scripts/check_lifecycle_headers.py", ".github/scripts/test_check_lifecycle_headers.py", ".github/checks-manifest.yaml"]
