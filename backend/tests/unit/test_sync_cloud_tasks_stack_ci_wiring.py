@@ -28,14 +28,13 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
     assert 'uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84' in job
     assert 'uv venv .venv' in job
     assert 'uv pip sync pylock.toml --python .venv/bin/python' in job
-    assert 'uses: actions/setup-node@v7' in job
-    assert "node-version: '22'" in job
-    assert 'cache-dependency-path: package-lock.json' in job
-    assert 'npm ci --ignore-scripts' in job
+    assert 'uses: oven-sh/setup-bun@v2' in job
+    assert 'bun-version: 1.3.14' in job
+    assert 'bun install --frozen-lockfile --ignore-scripts' in job
     assert 'uses: actions/setup-java@v5' in job
     assert "java-version: '21'" in job
     assert 'sudo apt-get install --yes redis-server' in job
-    assert 'npm run test:sync-cloud-tasks-stack:emulator' in job
+    assert 'bun run test:sync-cloud-tasks-stack:emulator' in job
 
     assert package['scripts']['test:sync-cloud-tasks-stack:emulator'] == 'backend/testing/sync_cloud_tasks_stack/run.sh'
     sync_contract = next(contract for contract in contracts['workflows'] if contract['id'] == 'sync_cloud_tasks')
