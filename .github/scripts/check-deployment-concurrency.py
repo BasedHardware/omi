@@ -37,13 +37,13 @@ class LockContract:
 # new deploy writer cannot silently bypass the audited lock graph.
 LOCK_CONTRACTS = {
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
-    "desktop_promote_prod.yml": LockContract("desktop-backend-promote-prod"),
-    "deploy-release-ring.yml": LockContract("deploy-release-ring-${{ inputs.ring }}"),
+    "desktop_backend_prod.yml": LockContract("desktop-backend-prod"),
+    "desktop_backend_recover_prod.yml": LockContract("desktop-backend-prod"),
     "gcp_admin.yml": LockContract(
-        "deploy-cloud-run-omi-admin-dashboard-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
+        "deploy-cloud-run-omi-admin-dashboard-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
     "gcp_app.yml": LockContract(
-        "deploy-cloud-run-omi-web-app-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
+        "deploy-cloud-run-omi-web-app-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
     "gcp_backend.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
     "gcp_firestore_indexes.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
@@ -62,7 +62,6 @@ LOCK_CONTRACTS = {
         "deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
     "gcp_llm_gateway.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
-    "gcp_llm_gateway_auto_dev.yml": LockContract("deploy-backend-stack-development"),
     "gcp_memory_maintenance_job.yml": LockContract(
         "deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}"
     ),
@@ -87,13 +86,7 @@ RUN_SCOPED_EXEMPTIONS = {
     "parakeet_gpu_tests.yml": "JOB_NAME: parakeet-gpu-test-${{ github.run_id }}",
 }
 
-# The record builder reads the serving public ConfigMap so that a record carries
-# deployable public values. It never runs Helm, kubectl apply, or a Cloud Run
-# mutation; classifying credential acquisition alone as a writer would hide
-# that distinction and force a meaningless deploy lock.
-READ_ONLY_WORKFLOW_EXEMPTIONS = {
-    "release-record.yml": 'kubectl -n "${ring}-omi-backend" get configmap "${ring}-omi-backend-config" -o json',
-}
+READ_ONLY_WORKFLOW_EXEMPTIONS: dict[str, str] = {}
 
 # Firestore index creation is a schema migration, not ordinary deploy work.
 # Keep a single auditable writer so backend readiness can stay read-only.
@@ -244,12 +237,16 @@ def validate_serving_release_vector(name: str, text: str) -> list[str]:
         [],
     )
     verifier_text = "\n".join(verifier_step)
-    if "backend/scripts/verify_backend_release_vector.py" not in verifier_text:
+    if not any(
+        marker in verifier_text
+        for marker in ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py")
+    ):
         errors.append(f"{name}: release-vector verification must use the canonical verifier")
     if "--environment" not in verifier_text:
         errors.append(f"{name}: release-vector verification must bind an environment")
-    if name == "gcp_backend.yml" and "github.event.inputs.deploy_targets == 'all'" not in verifier_text:
-        errors.append(f"{name}: all-tier release-vector verification must not run for cloud-run-only deploys")
+    if name == "gcp_backend.yml":
+        if "github.event.inputs.deploy_targets" not in verifier_text or "--cloud-run-only" not in verifier_text:
+            errors.append(f"{name}: cloud-run-only promotion must use the Cloud Run-only release-vector contract")
     return errors
 
 
@@ -269,6 +266,7 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
     snapshot_index = step_index("Capture Cloud Run pre-promotion traffic snapshot")
     promotion_index = step_index("Shift Cloud Run traffic to validated revisions")
     serving_vector_index = step_index("Verify serving backend release vector")
+    production_smoke_index = step_index("Smoke promoted production serving API")
     restore_index = step_index("Restore Cloud Run traffic snapshot after failed promotion")
     required_steps = {
         "candidate acceptance": candidate_index,
@@ -281,9 +279,14 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
 
     candidate_step = steps[candidate_index] if candidate_index >= 0 else []
     candidate_text = "\n".join(candidate_step)
-    for marker in ("backend/scripts/verify_backend_release_vector.py", "--candidate", "--cloud-run-only"):
+    for marker in ("--candidate", "--cloud-run-only"):
         if marker not in candidate_text:
             errors.append(f"{name}: candidate acceptance must include {marker!r}")
+    if not any(
+        marker in candidate_text
+        for marker in ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py")
+    ):
+        errors.append(f"{name}: candidate acceptance must include the canonical release-vector verifier")
 
     for marker in (
         "Apply non-secret backend runtime config",
@@ -302,9 +305,17 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
         errors.append(f"{name}: serving release-vector verification must follow traffic promotion")
     if restore_index <= serving_vector_index:
         errors.append(f"{name}: traffic snapshot restoration must follow serving release-vector verification")
+    if name == "gcp_backend.yml":
+        if production_smoke_index <= serving_vector_index:
+            errors.append(f"{name}: production serving smoke must follow serving release-vector verification")
+        if restore_index <= production_smoke_index:
+            errors.append(f"{name}: traffic snapshot restoration must follow production serving smoke")
 
     snapshot_step = "\n".join(steps[snapshot_index]) if snapshot_index >= 0 else ""
-    if "backend/scripts/cloud_run_traffic_snapshot.py capture" not in snapshot_step:
+    if not any(
+        marker in snapshot_step
+        for marker in ("backend/scripts/cloud_run_traffic_snapshot.py capture", 'cloud_run_traffic_snapshot.py" capture')
+    ):
         errors.append(f"{name}: pre-promotion snapshot must use the canonical Cloud Run snapshot helper")
     for service in ("backend", "backend-sync", "backend-sync-backfill", "backend-integration"):
         if f"--service {service}" not in snapshot_step:
@@ -316,9 +327,21 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
         "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
         "|| steps.verify-serving-release-vector.outcome == 'failure') }}"
     )
+    if name == "gcp_backend.yml":
+        restore_condition = (
+            "if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' "
+            "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
+            "|| steps.verify-serving-release-vector.outcome == 'failure' "
+            "|| steps.smoke-promoted-production-serving-api.outcome == 'failure') }}"
+        )
     if restore_condition not in restore_step:
         errors.append(f"{name}: traffic restoration must run after a failed promotion when its snapshot exists")
-    if "backend/scripts/cloud_run_traffic_snapshot.py restore" not in restore_step:
+    if name == "gcp_backend.yml" and "steps.smoke-promoted-production-serving-api.outcome == 'failure'" not in restore_step:
+        errors.append(f"{name}: traffic restoration must include failed production serving smoke")
+    if not any(
+        marker in restore_step
+        for marker in ("backend/scripts/cloud_run_traffic_snapshot.py restore", 'cloud_run_traffic_snapshot.py" restore')
+    ):
         errors.append(f"{name}: traffic restoration must use the canonical Cloud Run snapshot helper")
     for artifact in ("cloud-run-pre-promotion-traffic-snapshot.json", "cloud-run-traffic-restore.json"):
         if artifact not in text:
@@ -437,7 +460,9 @@ def validate_pusher_config_preflight(name: str, text: str) -> list[str]:
         return [f"{name}: pusher deploy must verify the backend runtime ConfigMap before Helm"]
 
     chart_indexes = [
-        index for index, line in enumerate(block) if PUSHER_CHART_MARKER in line and not line.lstrip().startswith("#")
+        index
+        for index, line in enumerate(block)
+        if PUSHER_CHART_MARKER in line and "helm" in line and not line.lstrip().startswith("#")
     ]
     if not chart_indexes:
         return []
@@ -471,6 +496,32 @@ def development_group(name: str, group: str) -> str:
     return DEVELOPMENT_GROUP_OVERRIDES.get(name, resolve_environment(group, "development"))
 
 
+def validate_automatic_backend_stack_lifecycle(workflow_text: dict[str, str]) -> list[str]:
+    """Keep the shared dev backend lock owned by one automatic lifecycle.
+
+    GitHub Actions retains only one pending run per concurrency group. A second
+    automatic writer can therefore evict the exact Release Eligibility SHA
+    admitted by gcp_backend_auto_dev.yml before either workflow has a job.
+    """
+
+    automatic_writers: list[str] = []
+    for name, text in workflow_text.items():
+        trigger = text.split("\njobs:", 1)[0]
+        if "group: deploy-backend-stack-development" not in trigger:
+            continue
+        if "workflow_run:" in trigger or "\n  push:" in trigger:
+            automatic_writers.append(name)
+    expected = ["gcp_backend_auto_dev.yml"]
+    return (
+        []
+        if sorted(automatic_writers) == expected
+        else [
+            "automatic development backend-stack deployment must be owned only by "
+            f"gcp_backend_auto_dev.yml, found {sorted(automatic_writers)!r}"
+        ]
+    )
+
+
 def validate_shared_families(groups: dict[str, str]) -> list[str]:
     errors: list[str] = []
 
@@ -478,7 +529,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         ("gcp_backend.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_firestore_indexes.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
-        ("gcp_llm_gateway.yml", "gcp_llm_gateway_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_memory_maintenance_job.yml", "gcp_memory_maintenance_job_auto_dev.yml"),
         ("gcp_backend_agent_proxy.yml", "gcp_backend_agent_proxy_auto_deploy.yml"),
@@ -520,6 +570,7 @@ def check_repository() -> list[str]:
         for path in WORKFLOWS.glob(pattern)
     }
     errors.extend(validate_firestore_schema_writers(workflow_text))
+    errors.extend(validate_automatic_backend_stack_lifecycle(workflow_text))
 
     detected = {name for name, text in workflow_text.items() if is_persistent_writer(text)}
     expected = set(LOCK_CONTRACTS) | set(RUN_SCOPED_EXEMPTIONS) | set(READ_ONLY_WORKFLOW_EXEMPTIONS)
@@ -573,8 +624,15 @@ def check_repository() -> list[str]:
     for name, text in workflow_text.items():
         errors.extend(validate_pusher_config_preflight(name, text))
     release_vector_workflows = sorted(
-        name for name, text in workflow_text.items() if "backend/scripts/verify_backend_release_vector.py" in text
+        name
+        for name, text in workflow_text.items()
+        if any(
+            marker in text
+            for marker in ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py")
+        )
     )
+    # Release-ring deploys are admitted from an immutable record and bind the
+    # verifier to that record's source SHA and this deployment run identity.
     allowed_release_vector_workflows = {"gcp_backend.yml", "gcp_backend_auto_dev.yml"}
     for name in release_vector_workflows:
         if name not in allowed_release_vector_workflows:
@@ -815,6 +873,13 @@ jobs:
 """
     if validate_pusher_config_preflight("fixture.yml", reference_preflight):
         raise PolicyError("valid pusher reference preflight was rejected")
+    qualification_source_diff = reference_preflight.replace(
+        "      - run: helm upgrade ./backend/charts/pusher\n",
+        "      - run: git diff --quiet qualified current -- backend/pusher backend/charts/pusher\n"
+        "      - run: helm upgrade ./backend/charts/pusher\n",
+    )
+    if validate_pusher_config_preflight("fixture.yml", qualification_source_diff):
+        raise PolicyError("a non-Helm Pusher source comparison was treated as a deploy mutation")
     missing_preflight = pusher_deploy.replace(
         "kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null\n",
         "",

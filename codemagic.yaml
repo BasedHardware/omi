@@ -23,7 +23,6 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -32,8 +31,13 @@ workflows:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
         - $HOME/Library/Caches/CocoaPods
-    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
-    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -80,7 +84,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -88,7 +92,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -175,7 +178,6 @@ workflows:
 
           flutter build ipa \
             --release \
-            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
@@ -242,7 +244,6 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -252,8 +253,13 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
-    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -330,7 +336,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -338,7 +344,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -416,7 +421,6 @@ workflows:
 
           flutter build appbundle \
             --release \
-            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
@@ -464,7 +468,6 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -525,7 +528,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -533,7 +536,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -567,7 +569,6 @@ workflows:
           BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build ipa \
             --release \
-            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
@@ -640,7 +641,7 @@ workflows:
 
   macos-prod-appstore:
     name: Release macOS to App Store
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     integrations:
       app_store_connect: codemagic_v4
@@ -705,7 +706,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -713,7 +714,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -843,7 +843,6 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -944,7 +943,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -952,7 +951,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -971,7 +969,6 @@ workflows:
           BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build appbundle \
             --release \
-            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
@@ -1018,7 +1015,6 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -1086,7 +1082,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1094,7 +1090,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -1138,7 +1133,10 @@ workflows:
         notify:
           success: true
           failure: false
-    instance_type: mac_mini_m2
+
+  # Retained only for local artifact diagnostics; it has no trigger or publisher.
+  macos-prod-legacy-no-publish:
+    instance_type: mac_mini_m4
     max_build_duration: 120
     integrations:
       app_store_connect: codemagic_v4
@@ -1199,7 +1197,6 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1207,7 +1204,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
           echo GEMINI_API_KEY=$GEMINI_API_KEY >> .env
 
       - name: Extract version (from tag or auto-increment)
@@ -1571,7 +1567,7 @@ workflows:
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
-          DMG_PATH="build/macos/dmg/Omi.dmg"
+          DMG_PATH="build/macos/dmg/omi.dmg"
 
           # Use dmgbuild instead of create-dmg — writes .DS_Store directly
           # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
@@ -1590,7 +1586,7 @@ workflows:
         script: |
           set -e
 
-          DMG_PATH=$(find build/macos/dmg -name "Omi.dmg" | head -1)
+          DMG_PATH=$(find build/macos/dmg -name "omi.dmg" | head -1)
 
           # Check if private key is a file or content
           if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
@@ -1656,79 +1652,6 @@ workflows:
 
           echo "$SIGNATURE" > "$DIST_DIR/signature.txt"
 
-      - name: Create GitHub Release
-        script: |
-          # Get the recent commits for changelog
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${TAG_NAME}^ 2>/dev/null || echo "")
-
-          if [ -n "$PREVIOUS_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"* %s" $PREVIOUS_TAG..$TAG_NAME | grep -v "Merge" | head -20)
-          else
-            CHANGELOG=$(git log --pretty=format:"* %s" -10 | grep -v "Merge")
-          fi
-
-          # Read the EdDSA signature for Sparkle
-          SIGNATURE=$(cat "dist/${VERSION}-${PLATFORM}/signature.txt" 2>/dev/null || echo "")
-
-          # Create release notes
-          cat > /tmp/release_notes.md <<EOF
-          ## What's Changed
-
-          $CHANGELOG
-
-          **Full Changelog**: https://github.com/BasedHardware/omi/compare/${PREVIOUS_TAG}...${TAG_NAME}
-
-          <!-- KEY_VALUE_START
-          changelog: macOS desktop app update | Bug fixes and improvements | Performance enhancements
-          mandatory: false
-          minimum_app_version: 1.0.70
-          isLive: true
-          edSignature: $SIGNATURE
-          KEY_VALUE_END -->
-          EOF
-
-          # Find the DMG file
-          DMG_FILE=$(find build/macos/dmg -name "Omi.dmg" | head -1)
-
-          # Find the Sparkle ZIP and signature files
-          SPARKLE_ZIP="dist/${VERSION}-${PLATFORM}/Omi.zip"
-          SIGNATURE_FILE="dist/${VERSION}-${PLATFORM}/signature.txt"
-
-          # Create GitHub release with DMG, Sparkle ZIP, and signature attachments
-          if [ -f "$DMG_FILE" ]; then
-            # Create the release with the DMG first
-            gh release create "$TAG_NAME" \
-              --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
-              --notes-file /tmp/release_notes.md \
-              --repo BasedHardware/omi \
-              "$DMG_FILE"
-
-            # Upload Sparkle ZIP if it exists
-            if [ -f "$SPARKLE_ZIP" ]; then
-              echo "Uploading Sparkle ZIP: $SPARKLE_ZIP"
-              gh release upload "$TAG_NAME" \
-                "$SPARKLE_ZIP" \
-                --repo BasedHardware/omi \
-                --clobber
-            else
-              echo "WARNING: Sparkle ZIP not found at $SPARKLE_ZIP"
-            fi
-
-            # Upload signature file if it exists
-            if [ -f "$SIGNATURE_FILE" ]; then
-              echo "Uploading signature file: $SIGNATURE_FILE"
-              gh release upload "$TAG_NAME" \
-                "$SIGNATURE_FILE" \
-                --repo BasedHardware/omi \
-                --clobber
-            else
-              echo "WARNING: Signature file not found at $SIGNATURE_FILE"
-            fi
-          else
-            echo "ERROR: DMG file not found"
-            exit 1
-          fi
-
     artifacts:
       - dist/**/*
       - build/macos/**/*.app
@@ -1758,7 +1681,6 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -1866,7 +1788,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1874,7 +1796,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -1918,8 +1839,6 @@ workflows:
   # Required CodeMagic secret group "desktop_secrets":
   #   SPARKLE_PRIVATE_KEY             — EdDSA private key for Sparkle auto-update signing
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
-  #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
-  #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
   #   OMI_DESKTOP_APP_ENV_V3          — base64-encoded .env bundled into .app at build time
   #                                     Contains only secrets (not URLs):
   #                                       FIREBASE_API_KEY=<prod firebase web api key>
@@ -1934,7 +1853,12 @@ workflows:
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
-  #   DESKTOP_AUTO_BETA_ENABLED       — optional emergency pause; set to false to leave candidates non-live
+  #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and qualified Beta promotion
+  #   GITHUB_TOKEN                    — repo-scoped fine-grained token used only to dispatch
+  #                                     desktop_qualify_beta.yml; requires GitHub Actions: write.
+  #                                     Add Contents: write only if this credential is also used for
+  #                                     candidate-release publishing. Do not reuse the legacy
+  #                                     appstore_credentials GH_TOKEN for qualification dispatch.
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
   # Cloud Run secrets (GCP Secret Manager, DESKTOP_ prefix to avoid conflicts with Python backend):
@@ -1950,7 +1874,7 @@ workflows:
   # ============================================
   omi-desktop-swift-release:
     name: Release OMI Desktop (Swift)
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     environment:
       groups:
@@ -1960,7 +1884,7 @@ workflows:
         - desktop_secrets
       vars:
         BINARY_NAME: "Omi Computer"
-        APP_NAME: "omi"
+        APP_NAME: "Omi"
         BUNDLE_ID: "com.omi.computer-macos"
         BUILD_DIR: "build"
         GITHUB_REPO: "BasedHardware/omi"
@@ -2058,8 +1982,14 @@ workflows:
               exit 1
             fi
             URL_SCHEME="omi-computer"
-            DMG_PATH="$BUILD_DIR/$APP_NAME.dmg"
+            DMG_PATH="$BUILD_DIR/omi.dmg"
             SPARKLE_ZIP_PATH="$BUILD_DIR/Omi.zip"
+            # Separately-installable beta identity, packaged from the same build
+            # so stable and Omi Beta can run side-by-side.
+            BETA_APP_NAME="Omi Beta"
+            BETA_BUNDLE_ID="com.omi.computer-macos.beta"
+            BETA_SPARKLE_ZIP_PATH="$BUILD_DIR/Omi.Beta.zip"
+            BETA_DMG_PATH="$BUILD_DIR/omi-beta.dmg"
           fi
           echo "VERSION=$VERSION" >> $CM_ENV
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $CM_ENV
@@ -2069,6 +1999,10 @@ workflows:
           echo "APP_BUNDLE=$BUILD_DIR/$APP_NAME.app" >> $CM_ENV
           echo "DMG_PATH=$DMG_PATH" >> $CM_ENV
           echo "SPARKLE_ZIP_PATH=$SPARKLE_ZIP_PATH" >> $CM_ENV
+          echo "BETA_APP_NAME=${BETA_APP_NAME:-}" >> $CM_ENV
+          echo "BETA_BUNDLE_ID=${BETA_BUNDLE_ID:-}" >> $CM_ENV
+          echo "BETA_SPARKLE_ZIP_PATH=${BETA_SPARKLE_ZIP_PATH:-}" >> $CM_ENV
+          echo "BETA_DMG_PATH=${BETA_DMG_PATH:-}" >> $CM_ENV
           echo "Building OMI Desktop v$VERSION (build $BUILD_NUMBER)"
 
       - name: Set up keychain and import Developer ID certificate
@@ -2509,6 +2443,18 @@ workflows:
           echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
+          # Generate symbols from the final universal executable after lipo and
+          # install_name_tool mutations. The helper fails closed unless the dSYM
+          # UUID set exactly matches both executable slices.
+          DSYM_PATH="$BUILD_DIR/Omi Computer.app.dSYM"
+          DSYM_ARCHIVE="$BUILD_DIR/Omi.dSYM.zip"
+          scripts/publish-desktop-debug-symbols.sh generate \
+            --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
+            --dsym "$DSYM_PATH" \
+            --archive "$DSYM_ARCHIVE"
+          echo "DSYM_PATH=$DSYM_PATH" >> "$CM_ENV"
+          echo "DSYM_ARCHIVE=$DSYM_ARCHIVE" >> "$CM_ENV"
+
       - name: Sign app
         script: |
           scripts/prepare-desktop-bundle-native-deps.sh "$APP_BUNDLE"
@@ -2659,7 +2605,7 @@ workflows:
 
       - name: Create DMG installer
         script: |
-          set -e
+          set -euo pipefail
           pip3 install --break-system-packages "dmgbuild==$DMGBUILD_VERSION"
 
           STAGING_DIR="/tmp/omi-dmg-staging-$$"
@@ -2669,6 +2615,16 @@ workflows:
           # Re-staple in staging dir if needed
           xcrun stapler validate "$STAGING_DIR/$APP_NAME.app" 2>/dev/null || \
             xcrun stapler staple "$STAGING_DIR/$APP_NAME.app"
+
+          # Finder metadata is not signed application content and makes strict
+          # codesign verification fail after the app is copied out of the DMG.
+          # Remove only these forbidden metadata forks so the staple remains.
+          while IFS= read -r path; do
+            xattr -d com.apple.FinderInfo "$path" 2>/dev/null || true
+            xattr -d com.apple.ResourceFork "$path" 2>/dev/null || true
+          done < <(find "$STAGING_DIR/$APP_NAME.app" -print)
+          codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"
+          xcrun stapler validate "$STAGING_DIR/$APP_NAME.app"
 
           # Use dmgbuild instead of create-dmg — writes .DS_Store directly
           # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
@@ -2742,6 +2698,22 @@ workflows:
           echo "EdDSA signature: $ED_SIGNATURE"
           echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
 
+      - name: Create Omi Beta variant (sign, notarize, package)
+        script: |
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            echo "External previews do not ship an Omi Beta variant."
+            exit 0
+          fi
+          set -euo pipefail
+          scripts/create-omi-beta-variant.sh \
+            --source-app "$APP_BUNDLE" \
+            --build-dir "$BUILD_DIR" \
+            --beta-app-name "$BETA_APP_NAME" \
+            --beta-bundle-id "$BETA_BUNDLE_ID" \
+            --sparkle-zip-out "$BETA_SPARKLE_ZIP_PATH" \
+            --dmg-out "$BETA_DMG_PATH" \
+            --cm-env "$CM_ENV"
+
       - name: Smoke signed desktop artifact
         script: |
           if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
@@ -2762,11 +2734,29 @@ workflows:
               --zip "$SPARKLE_ZIP_PATH" \
               --dmg "$DMG_PATH" \
               --tag "$CM_TAG" \
+              --source-sha "$(git rev-parse HEAD)" \
               --expected-channel beta \
               --launch \
               --auth-storage-canary \
               --notification-callback-canary \
               --result-json "$BUILD_DIR/desktop-smoke-result.json"
+
+            # The Omi Beta variant is what beta users actually install — smoke the
+            # exact signed artifacts under the beta identity as well.
+            OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
+            scripts/smoke-signed-desktop-artifact.sh \
+              --app "$BUILD_DIR/$BETA_APP_NAME.app" \
+              --zip "$BETA_SPARKLE_ZIP_PATH" \
+              --dmg "$BETA_DMG_PATH" \
+              --tag "$CM_TAG" \
+              --source-sha "$(git rev-parse HEAD)" \
+              --expected-channel beta \
+              --expected-bundle-id "$BETA_BUNDLE_ID" \
+              --expected-feed-url "https://api.omi.me/v2/desktop/appcast.xml?identity=beta" \
+              --launch \
+              --auth-storage-canary \
+              --notification-callback-canary \
+              --result-json "$BUILD_DIR/desktop-smoke-result-beta.json"
           fi
 
       - name: Publish immutable external preview
@@ -2846,6 +2836,14 @@ workflows:
             echo "External previews do not create GitHub releases."
             exit 0
           fi
+          set -euo pipefail
+
+          # Symbolication is a release requirement, not best-effort publishing.
+          # Upload the UUID-verified dSYM before creating the immutable candidate.
+          scripts/publish-desktop-debug-symbols.sh upload \
+            --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
+            --dsym "$DSYM_PATH"
+
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
@@ -2864,6 +2862,7 @@ workflows:
           isLive: false
           channel: candidate
           edSignature: ${ED_SIGNATURE}
+          betaEdSignature: ${BETA_ED_SIGNATURE}
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
 
@@ -2873,13 +2872,30 @@ workflows:
           if gh release view "$CM_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
             echo "GitHub release candidate already exists; preserving immutable evidence for $CM_TAG"
           else
+            # The backend reservation is the authoritative Beta fence. It runs
+            # only after package, signature, notarization, and signed smoke pass,
+            # immediately before this workflow creates the immutable candidate.
+            set -euo pipefail
+            test -n "${BETA_PROMOTION_TOKEN:-}" || {
+              echo "ERROR: BETA_PROMOTION_TOKEN is required to reserve a canonical candidate" >&2
+              exit 1
+            }
+            curl --fail-with-body --silent --show-error \
+              --request POST "${OMI_PYTHON_API_URL%/}/v2/desktop/beta/candidates/reserve" \
+              --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data "{\"tag\":\"${CM_TAG}\"}"
             gh release create "$CM_TAG" \
               --repo "$GITHUB_REPO" \
               --title "Omi Desktop v${VERSION} (candidate)" \
               --notes "$RELEASE_NOTES" \
               "$SPARKLE_ZIP_PATH" \
               "$DMG_PATH" \
-              "$BUILD_DIR/desktop-smoke-result.json"
+              "$BETA_SPARKLE_ZIP_PATH" \
+              "$BETA_DMG_PATH" \
+              "$DSYM_ARCHIVE" \
+              "$BUILD_DIR/desktop-smoke-result.json" \
+              "$BUILD_DIR/desktop-smoke-result-beta.json"
             echo "GitHub release candidate created: $CM_TAG"
           fi
 
@@ -2889,19 +2905,17 @@ workflows:
             echo "External previews do not enter beta or stable qualification."
             exit 0
           fi
-          if [[ "${DESKTOP_AUTO_BETA_ENABLED:-true}" == "false" ]]; then
-            echo "Automatic desktop beta qualification paused by DESKTOP_AUTO_BETA_ENABLED=false; candidate remains non-live."
-            exit 0
-          fi
           set -euo pipefail
-          dispatch_key="codemagic:${CM_TAG}"
-          # The GitHub Actions workflow owns every release-body transition.
-          # Its per-candidate concurrency group is the authoritative atomic
-          # serialiser for claim/running/complete state; Codemagic must never
-          # replay a stale queued body over a runner-owned transition.
+          # Per-tag GitHub concurrency and immutable qualification evidence own
+          # duplicate dispatches; this bounded retry only handles dispatch I/O.
+          # Codemagic also loads appstore_credentials, whose legacy GH_TOKEN
+          # takes precedence over GITHUB_TOKEN in the GitHub CLI. Bind this
+          # handoff explicitly to the desktop_secrets token that is scoped for
+          # candidate-release and Actions-dispatch access.
           for attempt in 1 2 3; do
-            if gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
-              -f release_tag="$CM_TAG" -f dispatch_key="$dispatch_key"; then
+            if GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}" \
+              gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
+              -f release_tag="$CM_TAG" --ref "$CM_TAG"; then
               echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
               exit 0
             fi
@@ -2909,12 +2923,14 @@ workflows:
               sleep "$((attempt * 2))"
             fi
           done
-          echo "WARNING: qualification dispatch was not confirmed after bounded retry; candidate remains non-live."
+          echo "ERROR: qualification dispatch was not confirmed after bounded retry; candidate remains non-live." >&2
+          exit 1
 
     artifacts:
       - build/*.app
       - build/*.dmg
       - build/*.zip
+      - build/*.dSYM
       - build/desktop-smoke-result.json
     publishing:
       email:
@@ -2931,14 +2947,18 @@ workflows:
   # after this trusted configuration has loaded.
   omi-desktop-swift-preview:
     name: Publish OMI Desktop Preview (Swift)
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m4
     max_build_duration: 120
     environment:
-      # Do not reuse desktop_secrets or the normal release groups. This group
-      # contains the preview-only signing/notarization credentials, the
-      # DESKTOP_PREVIEW_PUBLISH_KEY, and a GCS identity restricted to previews/.
+      # TEMPORARY — tracked by #10221. The dedicated Preview group was not
+      # provisioned with the signing/notarization inputs required by the shared
+      # signed-artifact steps. Reuse the existing groups only to unblock an
+      # immutable Preview publication; restore a signing-only group and remove
+      # these broad imports in the follow-up.
       groups:
         - desktop_preview_secrets
+        - appstore_credentials
+        - desktop_secrets
       vars:
         PREVIEW_MODE: "true"
         BINARY_NAME: "Omi Computer"

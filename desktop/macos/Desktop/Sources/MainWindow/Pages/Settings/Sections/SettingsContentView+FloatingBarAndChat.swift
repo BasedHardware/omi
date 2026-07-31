@@ -321,6 +321,10 @@ extension SettingsContentView {
             Spacer()
           }
 
+          Text("Reference only — CLAUDE.md content is never injected into chat instructions.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(OmiColors.textTertiary)
+
           // Global CLAUDE.md
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             HStack {
@@ -343,11 +347,6 @@ extension SettingsContentView {
                   showFileViewer = true
                 }
                 .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-
-                Toggle("", isOn: $claudeMdEnabled)
-                  .toggleStyle(OmiToggleStyle())
-                  .controlSize(.small)
-                  .labelsHidden()
               }
             }
 
@@ -390,11 +389,6 @@ extension SettingsContentView {
                     showFileViewer = true
                   }
                   .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-
-                  Toggle("", isOn: $projectClaudeMdEnabled)
-                    .toggleStyle(OmiToggleStyle())
-                    .controlSize(.small)
-                    .labelsHidden()
                 }
               }
 
@@ -486,17 +480,17 @@ extension SettingsContentView {
             ScrollView {
               let filteredSkills = allSkills.enumerated().filter { _, item in
                 skillSearchQuery.isEmpty
-                  || item.skill.name.localizedCaseInsensitiveContains(skillSearchQuery)
-                  || item.skill.description.localizedCaseInsensitiveContains(skillSearchQuery)
+                  || item.skill.name.localizedStandardContains(skillSearchQuery)
+                  || item.skill.description.localizedStandardContains(skillSearchQuery)
               }
 
               VStack(spacing: 0) {
-                ForEach(Array(filteredSkills.enumerated()), id: \.offset) { filteredIndex, item in
+                ForEach(filteredSkills, id: \.element.skill.path) { item in
                   let skill = item.element.skill
                   let origin = item.element.origin
                   HStack(spacing: OmiSpacing.sm) {
                     Toggle(
-                      "",
+                      "Enable \(skill.name)",
                       isOn: Binding(
                         get: { !aiChatDisabledSkills.contains(skill.name) },
                         set: { enabled in
@@ -557,7 +551,7 @@ extension SettingsContentView {
                   .padding(.vertical, OmiSpacing.xs)
                   .padding(.horizontal, OmiSpacing.xxs)
 
-                  if filteredIndex < filteredSkills.count - 1 {
+                  if item.offset != filteredSkills.last?.offset {
                     Divider()
                       .opacity(0.3)
                   }

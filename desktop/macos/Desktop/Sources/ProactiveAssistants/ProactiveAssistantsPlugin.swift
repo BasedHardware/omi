@@ -1,4 +1,5 @@
 import Cocoa
+import CoreGraphics
 @preconcurrency import UserNotifications
 
 /// Pure gating policy for scheduled screen-capture ticks. Extracted so the
@@ -37,6 +38,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var taskAssistant: TaskAssistant?
   private var insightAssistant: InsightAssistant?
   private var memoryAssistant: MemoryAssistant?
+  private var suggestionAssistant: SuggestionAssistant?
   private var captureTimer: Timer?
   private var analysisDelayTimer: Timer?
   private var isInDelayPeriod = false
@@ -45,6 +47,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
   private var _hasScreenRecordingPermission: Bool?  // Cached permission state
   private var currentApp: String?
+  private var currentAppBundleID: String?
   private var currentWindowID: CGWindowID?
   private var currentWindowTitle: String?
   private var lastStatus: FocusStatus?
@@ -78,12 +81,14 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var videoCallThrottleGate = ProactiveVideoCallThrottleGate()
   private let videoCallThrottleFactor = 5  // Capture 1 out of every 5 frames (effective ~5s interval)
 
-  // Screenshot-app yielding: pause capture entirely while another screenshot/recording
-  // app is frontmost, and hold a short backoff after it resigns so its editor UI isn't
-  // disturbed. Prevents Omi's 3s capture loop from locking WindowServer at the moment
-  // the user is trying to take a screenshot (CleanShot, Shottr, macOS screenshot, etc.).
-  private var screenshotCaptureGate = ProactiveScreenshotCaptureGate()
+  // External-capture yielding: pause capture entirely while a screenshot/recording app is
+  // frontmost (CleanShot, Shottr, macOS screenshot — WindowServer stalls, #6819) or while
+  // another app actively shares the screen in a call (Zoom/Teams/Meet presenting — the
+  // contention has been observed to stop the user's share, issue #10143). Each condition
+  // holds a short backoff after it clears. See ProactiveExternalCaptureYield.
+  private var externalCaptureYield = ProactiveExternalCaptureYield()
   private let screenshotAppBackoffDuration: TimeInterval = 10
+  private let screenShareBackoffDuration: TimeInterval = 10
 
   // Change-gated distribution: only distribute frames to assistants when context changes.
   // Eliminates continuous polling when the user stays on the same app/window.
@@ -147,7 +152,32 @@ public class ProactiveAssistantsPlugin: NSObject {
   private static var hasSoftRecoveryThisSession = false
 
   // Retain distributed notification observer tokens
-  private var testNotificationObservers: [NSObjectProtocol] = []
+  private var testNotificationObservers: [ProactiveTestNotificationObserver] = []
+
+  // Capture trigger: event-driven gating that avoids fixed-cadence screenshots.
+  // Polls cheap signals on a short interval, only capturing when context changes,
+  // the user is active, or a heartbeat elapses.
+  private var captureTrigger = ProactiveCaptureTrigger(
+    idleThreshold: 60,
+    heartbeatInterval: 3.0
+  )
+  /// Fast poll interval for checking idle/app/window state without capturing.
+  private let capturePollInterval: TimeInterval = 1.0
+  /// Apps whose content changes slowly. The value is the heartbeat interval in seconds.
+  /// Uses bundle ID when available, falling back to localized app name.
+  private let appSpecificHeartbeatIntervals: [String: TimeInterval] = [
+    "com.apple.Music": 10,
+    "com.apple.Podcasts": 10,
+    "com.apple.TV": 30,
+    "com.apple.Photos": 10,
+    "com.apple.iBooks": 20,
+    "Music": 10,
+    "Podcasts": 10,
+    "TV": 30,
+    "Photos": 10,
+    "Books": 20,
+  ]
+  private var lastHeartbeatAppKey: String?
 
   // MARK: - Initialization
 
@@ -377,6 +407,12 @@ public class ProactiveAssistantsPlugin: NSObject {
         AssistantCoordinator.shared.register(memory)
       }
 
+      suggestionAssistant = try SuggestionAssistant()
+
+      if let suggestion = suggestionAssistant {
+        AssistantCoordinator.shared.register(suggestion)
+      }
+
     } catch {
       log("ProactiveAssistantsPlugin: Failed to initialize assistants: \(error.localizedDescription)")
       logError("ProactiveAssistantsPlugin: Assistant initialization failed", error: error)
@@ -402,6 +438,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
     windowMonitor?.start()
 
+    captureTrigger.reset()
     setupPowerAwareCaptureTimer()
     restartCaptureTimer(reason: "monitoring start")
 
@@ -440,7 +477,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         Task {
           do {
-            _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
+            _ = try await RewindStorage.shared.flushCurrentVideoChunk()
           } catch {
             logError("ProactiveAssistantsPlugin: Failed to flush video chunk before power cadence switch", error: error)
           }
@@ -461,13 +498,16 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   private func restartCaptureTimer(reason: String) {
     captureTimer?.invalidate()
-    let interval = RewindSettings.shared.effectiveCaptureInterval(isOnBattery: PowerMonitor.shared.isOnBattery)
-    captureTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+    let heartbeat = RewindSettings.shared.effectiveCaptureInterval(isOnBattery: PowerMonitor.shared.isOnBattery)
+    captureTrigger.updateHeartbeatInterval(heartbeat)
+    captureTimer = Timer.scheduledTimer(withTimeInterval: capturePollInterval, repeats: true) { [weak self] _ in
       Task { @MainActor in
         await self?.captureFrame()
       }
     }
-    log("ProactiveAssistantsPlugin: Capture timer set to \(String(format: "%.1f", interval))s (\(reason))")
+    log(
+      "ProactiveAssistantsPlugin: Capture poll set to \(String(format: "%.1f", capturePollInterval))s, heartbeat \(String(format: "%.1f", heartbeat))s (\(reason))"
+    )
   }
 
   /// Stop monitoring
@@ -493,9 +533,10 @@ public class ProactiveAssistantsPlugin: NSObject {
     backgroundPollCount = 0
     recoveryRetryCount = 0
     isInDelayPeriod = false
-    screenshotCaptureGate.reset()
+    externalCaptureYield.reset()
     videoCallThrottleGate.reset()
     distributionGate.reset()
+    captureTrigger.reset()
     latestCapturedFrame = nil
 
     windowMonitor?.stop()
@@ -617,11 +658,19 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   // MARK: - Frame Capture
 
+  /// Seconds since the last HID (keyboard/mouse) event. Used to pause capture
+  /// when the user is away from the machine without polling the screen.
+  private func systemIdleSeconds() -> TimeInterval {
+    TimeInterval(CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .null))
+  }
+
   private func onAppActivated(appName: String) {
     guard appName != currentApp else { return }
     currentApp = appName
+    currentAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     currentWindowID = nil
     currentWindowTitle = nil  // Reset window title on app switch
+    applyHeartbeatForApp()
 
     // Update FocusStorage immediately with detected app (before analysis)
     FocusStorage.shared.updateDetectedApp(appName)
@@ -658,10 +707,20 @@ public class ProactiveAssistantsPlugin: NSObject {
     } else {
       isInDelayPeriod = false
       FocusStorage.shared.updateDelayEndTime(nil)
-      Task { @MainActor in
-        await captureFrame()
-      }
+      // Request a debounced capture on the next poll instead of capturing
+      // immediately on every app-switch notification.
+      captureTrigger.requestAppSwitchCapture(app: appName, at: Date())
     }
+  }
+
+  private func applyHeartbeatForApp() {
+    let key = currentAppBundleID ?? currentApp ?? ""
+    guard key != lastHeartbeatAppKey else { return }
+    lastHeartbeatAppKey = key
+    let base = RewindSettings.shared.effectiveCaptureInterval(
+      isOnBattery: PowerMonitor.shared.isOnBattery)
+    let interval = appSpecificHeartbeatIntervals[key] ?? base
+    captureTrigger.updateHeartbeatInterval(interval)
   }
 
   private func captureFrame() async {
@@ -694,32 +753,27 @@ public class ProactiveAssistantsPlugin: NSObject {
       return
     }
 
-    // Skip capture while a screenshot / screen-recording app is frontmost.
-    // Both apps using ScreenCaptureKit at the same time contend for WindowServer
-    // locks, which can stall the user's capture UI for 20-60s. Yield to the user.
-    let wasScreenshotAppFrontmostBeforeDecision = screenshotCaptureGate.wasScreenshotAppFrontmost
-    switch screenshotCaptureGate.nextDecision(
+    // Yield to an external capture in progress: a frontmost screenshot/recording app, or an
+    // active outgoing call screen share. See ProactiveExternalCaptureYield for rationale.
+    if externalCaptureYield.shouldYield(
       isScreenshotAppFrontmost: isScreenshotAppFrontmost(),
+      isScreenShareActive: ConferencingApps.activeScreenSharePresent(),
       now: now,
-      backoffDuration: screenshotAppBackoffDuration
+      screenshotBackoffDuration: screenshotAppBackoffDuration,
+      shareBackoffDuration: screenShareBackoffDuration
     ) {
-    case .pause:
-      if !wasScreenshotAppFrontmostBeforeDecision {
-        log("ProactiveAssistantsPlugin: Screenshot app frontmost — pausing capture to avoid WindowServer contention")
-      }
       return
-    case .resumeIntoBackoff:
-      log(
-        "ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for \(Int(max(0, screenshotCaptureGate.backoffUntil.timeIntervalSinceNow)))s"
-      )
-      return
-    case .resumeAndCapture:
-      log("ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for 0s")
-    case .continueBackoff:
-      return
-    case .capture:
-      break
     }
+
+    // Cheap early exits before resolving the active window.
+    let idleSeconds = systemIdleSeconds()
+    if idleSeconds >= captureTrigger.idleThreshold {
+      return
+    }
+    if let currentApp = currentApp, RewindSettings.shared.isAppExcluded(currentApp) {
+      return
+    }
+
     // Get current window info (use real app name, not cached)
     let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
     guard !ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: realAppName) else { return }
@@ -791,6 +845,53 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Mutable because windowGone retry may re-resolve to a different app.
     var appName = realAppName ?? currentApp
 
+    // If the active window resolved to a different app, update tracking and
+    // apply any app-specific heartbeat profile.
+    if let resolvedApp = realAppName, resolvedApp != currentApp {
+      currentApp = resolvedApp
+      currentAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+      applyHeartbeatForApp()
+    }
+
+    // Skip capturing excluded apps; the context switch has already been recorded
+    // above so assistant state stays correct.
+    if isRewindExcluded {
+      return
+    }
+
+    // Event-driven capture trigger: skip when idle, capture on context change,
+    // and heartbeat only when the user is active.
+    switch captureTrigger.nextDecision(
+      app: appName ?? "",
+      windowTitle: currentWindowTitle,
+      idleSeconds: idleSeconds,
+      now: now
+    ) {
+    case .skip:
+      return
+    case .preview:
+      // On macOS 14+ capture a tiny preview first; if it's similar enough to a
+      // recent preview, skip the expensive full capture and stretch the next
+      // heartbeat. Older macOS falls through to full capture.
+      if #available(macOS 14.0, *) {
+        let previewResult = await screenCaptureService.captureWindowCGImage(
+          windowID: windowID, maxSize: 80)
+        if case .success(let previewImage) = previewResult {
+          let previewHash = RewindOCRService.dHash(of: previewImage)
+          let similarity = captureTrigger.previewSimilarity(to: previewHash)
+          let threshold = PreviewSimilarityThresholdPolicy.threshold(
+            bundleID: currentAppBundleID, appName: appName, windowTitle: currentWindowTitle)
+          if similarity >= threshold {
+            captureTrigger.markPreviewSkipped(at: now, similarity: similarity, threshold: threshold)
+            return
+          }
+          captureTrigger.recordPreviewHash(previewHash, at: now)
+        }
+      }
+    case .capture:
+      break
+    }
+
     // Always capture frames (other features may need them)
     // macOS 14+: capture CGImage directly, encode JPEG once for assistants,
     // pass CGImage to RewindIndexer (avoids redundant encode/decode round-trips)
@@ -835,42 +936,35 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         frameCount += 1
         let captureTime = Date()
+        let fullHash = RewindOCRService.dHash(of: cgImage)
+        captureTrigger.markCaptured(
+          app: appName, windowTitle: currentWindowTitle, at: captureTime, frameHash: fullHash)
 
-        // Encode JPEG off main actor — CGImageDestinationFinalize is CPU-heavy
-        let captureService = screenCaptureService
-        let jpegData = await Task.detached(priority: .userInitiated) {
-          captureService.encodeJPEG(from: cgImage)
-        }.value
-        if let jpegData = jpegData {
+        // Privacy gate: skip ALL assistant paths for Rewind-excluded apps.
+        // This includes trackFrame — the tracked frame can be passed to assistants
+        // via onContextSwitch (e.g. TaskAssistant), so excluded frames must never
+        // be stored as lastTrackedFrame.
+        // Context switch detection still works: it uses lastTrackedApp/lastTrackedWindowTitle
+        // (set by checkContextSwitch), not lastTrackedFrame.
+        if !isRewindExcluded {
           let frame = CapturedFrame(
-            jpegData: jpegData,
+            cgImage: cgImage,
+            jpegQuality: 0.8,
             appName: appName,
             windowTitle: currentWindowTitle,
             frameNumber: frameCount,
             captureTime: captureTime
           )
-
-          // Privacy gate: skip ALL assistant paths for Rewind-excluded apps.
-          // This includes trackFrame — the tracked frame can be passed to assistants
-          // via onContextSwitch (e.g. TaskAssistant), so excluded frames must never
-          // be stored as lastTrackedFrame.
-          // Context switch detection still works: it uses lastTrackedApp/lastTrackedWindowTitle
-          // (set by checkContextSwitch), not lastTrackedFrame.
-          if isRewindExcluded {
-            log("PrivacyGate: Blocked frame from Rewind-excluded app '\(appName)' — not sent to assistants")
-          }
-          if !isRewindExcluded {
-            AssistantCoordinator.shared.trackFrame(frame)
-            if !isInDelayPeriod {
-              distributeFrameIfChanged(frame)
-            } else {
-              // During delay, still distribute to assistants that need it (e.g. refocus detection)
-              AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
-            }
+          AssistantCoordinator.shared.trackFrame(frame)
+          if !isInDelayPeriod {
+            distributeFrameIfChanged(frame)
+          } else {
+            // During delay, still distribute to assistants that need it (e.g. refocus detection)
+            AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
           }
         }
 
-        // Pass CGImage directly to RewindIndexer (only if not excluded from Rewind)
+        // Pass CGImage directly to RewindIndexer (only if not excluded from Rewind).
         // Backpressure: skip this frame if the previous one is still being processed.
         // Without this, fire-and-forget Tasks queue up holding CGImages (~24MB each),
         // causing multi-GB memory growth when encoding can't keep up with capture rate.
@@ -922,12 +1016,16 @@ public class ProactiveAssistantsPlugin: NSObject {
       setScreenCaptureHealth(.active)
 
       frameCount += 1
+      let captureTime = Date()
+      captureTrigger.markCaptured(
+        app: resolvedApp, windowTitle: currentWindowTitle, at: captureTime)
 
       let frame = CapturedFrame(
         jpegData: jpegData,
         appName: resolvedApp,
         windowTitle: currentWindowTitle,
-        frameNumber: frameCount
+        frameNumber: frameCount,
+        captureTime: captureTime
       )
 
       // Privacy gate: skip ALL assistant paths for Rewind-excluded apps
@@ -1044,55 +1142,55 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   /// Listen for distributed notifications from CLI to trigger test runs
   private func setupTestNotificationListeners() {
-    // Use selector-based observer (more reliable with DistributedNotificationCenter)
-    DistributedNotificationCenter.default().addObserver(
-      self,
-      selector: #selector(handleInsightTestNotification(_:)),
-      name: NSNotification.Name("com.omi.test.insight"),
-      object: nil
-    )
-    DistributedNotificationCenter.default().addObserver(
-      self,
-      selector: #selector(handleFocusTestNotification(_:)),
-      name: NSNotification.Name("com.omi.test.focus"),
-      object: nil
-    )
-    DistributedNotificationCenter.default().addObserver(
-      self,
-      selector: #selector(handleNotificationTestNotification(_:)),
-      name: NSNotification.Name("com.omi.test.notification"),
-      object: nil
-    )
+    // Distributed notifications may arrive on the posting thread, so entering a selector on this
+    // MainActor-isolated plugin can trap before a Task-based actor hop executes.
+    let observers = [
+      ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.insight")) {
+        [weak self] payload in
+        self?.handleInsightTestNotification(payload)
+      },
+      ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.focus")) {
+        [weak self] payload in
+        self?.handleFocusTestNotification(payload)
+      },
+      ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.notification")) {
+        [weak self] payload in
+        self?.handleNotificationTestNotification(payload)
+      },
+    ]
+    for observer in observers {
+      observer.register(in: DistributedNotificationCenter.default())
+    }
+    testNotificationObservers = observers
     log("InsightTestCLI: Notification observer registered")
     log("FocusTestCLI: Notification observer registered")
     log("NotificationTestCLI: Notification observer registered")
   }
 
-  @objc private func handleInsightTestNotification(_ notification: Notification) {
+  private func handleInsightTestNotification(_ payload: ProactiveTestNotificationPayload) {
     Task { @MainActor in
-      let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
-      let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 10
+      let hours = payload["hours"].flatMap { Double($0) } ?? 1.0
+      let count = payload["count"].flatMap { Int($0) } ?? 10
       log("InsightTestCLI: Received test trigger (hours=\(hours), count=\(count))")
       await InsightTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
     }
   }
 
-  @objc private func handleFocusTestNotification(_ notification: Notification) {
+  private func handleFocusTestNotification(_ payload: ProactiveTestNotificationPayload) {
     Task { @MainActor in
-      let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
-      let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 20
+      let hours = payload["hours"].flatMap { Double($0) } ?? 1.0
+      let count = payload["count"].flatMap { Int($0) } ?? 20
       log("FocusTestCLI: Received test trigger (hours=\(hours), count=\(count))")
       await FocusTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
     }
   }
 
-  @objc private func handleNotificationTestNotification(_ notification: Notification) {
+  private func handleNotificationTestNotification(_ payload: ProactiveTestNotificationPayload) {
     Task { @MainActor in
       guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
-      let title = (notification.userInfo?["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let message = (notification.userInfo?["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let assistantId = (notification.userInfo?["assistantId"] as? String)?.trimmingCharacters(
-        in: .whitespacesAndNewlines)
+      let title = payload["title"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = payload["message"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let assistantId = payload["assistantId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
 
       let resolvedTitle = title?.isEmpty == false ? title! : "Insight"
       let resolvedMessage = message?.isEmpty == false ? message! : "Test notification from Omi"
@@ -1101,12 +1199,12 @@ public class ProactiveAssistantsPlugin: NSObject {
       let context = FloatingBarNotificationContext(
         sourceTitle: resolvedTitle,
         assistantId: resolvedAssistantId,
-        sourceApp: notification.userInfo?["sourceApp"] as? String,
-        windowTitle: notification.userInfo?["windowTitle"] as? String,
-        contextSummary: notification.userInfo?["contextSummary"] as? String,
-        currentActivity: notification.userInfo?["currentActivity"] as? String,
-        reasoning: notification.userInfo?["reasoning"] as? String,
-        detail: notification.userInfo?["detail"] as? String
+        sourceApp: payload["sourceApp"],
+        windowTitle: payload["windowTitle"],
+        contextSummary: payload["contextSummary"],
+        currentActivity: payload["currentActivity"],
+        reasoning: payload["reasoning"],
+        detail: payload["detail"]
       )
 
       log("NotificationTestCLI: Received test trigger (title=\(resolvedTitle), assistantId=\(resolvedAssistantId))")

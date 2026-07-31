@@ -35,6 +35,13 @@ export interface QueryMessage extends ProtocolEnvelope {
   expectedContextSnapshotGeneration?: number;
   expectedContextRendererFingerprint?: string;
   expectedCapabilityVersion?: string;
+  /**
+   * Per-turn reasoning-effort lane: "adaptive" for typed chat (model decides
+   * its own thinking depth), "fast" for PTT/voice (speed-optimized, no
+   * thinking). Relayed opaquely to the desktop backend as the
+   * x-omi-reasoning-effort header; never interpreted by the runtime.
+   */
+  reasoningEffort?: string;
 }
 
 export interface QueryAttachment {
@@ -330,6 +337,14 @@ export interface JournalTerminalizeTurnMessage extends ProtocolEnvelope {
   };
 }
 
+export interface JournalRepairTurnsMessage extends ProtocolEnvelope {
+  type: "journal_repair_turns";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  turnIds: string[];
+}
+
 export function journalTerminalizationDisposition(input: unknown): "accept" | "discard" {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Journal terminalization input must be an object");
@@ -356,6 +371,9 @@ export interface JournalClearTurnsMessage extends ProtocolEnvelope {
   externalRefKind: string;
   externalRefId: string;
   expectedGeneration: number;
+  // When false, purge the local journal only and leave server-side chat history
+  // intact (no backend delete). Defaults to true for the explicit user clear.
+  deleteBackend?: boolean;
 }
 
 export interface EnsureAgentSpawnJournalMessage extends ProtocolEnvelope {
@@ -442,6 +460,7 @@ export type InboundMessage =
   | JournalImportRemoteTurnMessage
   | JournalUpdateTurnMessage
   | JournalTerminalizeTurnMessage
+  | JournalRepairTurnsMessage
   | JournalListTurnsMessage
   | JournalClearTurnsMessage
   | EnsureAgentSpawnJournalMessage
@@ -631,7 +650,7 @@ export interface RuntimeFailurePayload {
 export interface ToolActivityMessage extends QueryScopedOutbound {
   type: "tool_activity";
   name: string;
-  status: "started" | "completed" | "failed";
+  status: "started" | "progress" | "completed" | "failed" | "cancelled" | "interrupted";
   toolUseId?: string;
   input?: Record<string, unknown>;
 }
@@ -867,7 +886,7 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear";
+  operation: "record" | "record_exchange" | "import_remote" | "update" | "repair" | "list" | "clear";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;

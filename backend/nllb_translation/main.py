@@ -116,6 +116,12 @@ TOKENIZATION_LATENCY = _histogram_no_labels(
     "SentencePiece tokenization latency",
     buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25],
 )
+QUEUE_WAIT = _histogram_no_labels(
+    "nllb_request_queue_duration_seconds",
+    "Time from request received to inference start (queue wait)",
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0],
+)
+MODEL_LOAD_DURATION = _gauge("nllb_model_load_duration_seconds", "Time taken to load the model on last startup")
 
 _translator: Optional[ctranslate2.Translator] = None
 _tokenizer: Optional[spm.SentencePieceProcessor] = None
@@ -139,6 +145,7 @@ def _load_model():
     _tokenizer.Load(sp_model_path)
     elapsed = time.monotonic() - t0
     MODEL_LOADED.set(1)
+    MODEL_LOAD_DURATION.set(elapsed)
     logger.info("Model loaded in %.1fs", elapsed)
 
 
@@ -188,7 +195,11 @@ def _resolve_nllb_code(bcp47_code: str) -> Optional[str]:
 _inference_pool = ThreadPoolExecutor(max_workers=INFERENCE_WORKERS, thread_name_prefix="nllb-infer")
 
 
-def _translate_batch(texts: List[str], source_nllb: str, target_nllb: str) -> List[TranslationResult]:
+def _translate_batch(
+    texts: List[str], source_nllb: str, target_nllb: str, t_queued: float = 0.0
+) -> List[TranslationResult]:
+    if t_queued > 0:
+        QUEUE_WAIT.observe(time.monotonic() - t_queued)
     if not _translator or not _tokenizer:
         raise RuntimeError("Model not loaded")
 
@@ -230,6 +241,7 @@ def _translate_batch(texts: List[str], source_nllb: str, target_nllb: str) -> Li
 
 @app.post("/v1/translate", response_model=TranslateResponse)
 async def translate(req: TranslateRequest):
+    t_queued = time.monotonic()
     ACTIVE_REQUESTS.inc()
     try:
         target_nllb = _resolve_nllb_code(req.target_language_code)
@@ -250,7 +262,7 @@ async def translate(req: TranslateRequest):
         loop = asyncio.get_running_loop()
         translations = await loop.run_in_executor(
             _inference_pool,
-            partial(_translate_batch, req.contents, source_nllb or "", target_nllb),
+            partial(_translate_batch, req.contents, source_nllb or "", target_nllb, t_queued),
         )
         latency = time.monotonic() - t0
 

@@ -5,6 +5,7 @@ description: Hermetic capture lifecycle via capture_test_transcript seam (no mic
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  - desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
   - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
   - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
@@ -17,6 +18,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/StorageFailureDiagnostics.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/OCREmbeddingService.swift
   - desktop/macos/Desktop/Sources/ResourceMonitor.swift
@@ -64,6 +66,8 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveModels.swift
   - desktop/macos/Desktop/Sources/ScreenActivitySyncService.swift
   - desktop/macos/Desktop/Sources/SingleInstanceGuard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/CaptureListeningControls.swift
+  - desktop/macos/Desktop/Sources/MainWindow/CaptureListeningLogic.swift
 preconditions:
   - automation_bridge_ready
 

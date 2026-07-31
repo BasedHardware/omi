@@ -88,7 +88,12 @@ MAX_DAILY_AUDIO_MS = MAX_DAILY_AUDIO_HOURS * 3600 * 1000
 
 
 LIVE_SPEECH_SOURCES = ('realtime', 'sync_fresh')
-_VALID_SPEECH_SOURCES = frozenset((*LIVE_SPEECH_SOURCES, 'sync_backfill'))
+# custom_stt is metered but never live-enforced: those users transcribe on
+# their own provider and are exempt from transcription caps, yet their speech
+# drives the same downstream LLM post-processing spend — the lane makes that
+# spend visible without gating anyone (#7690). Any cap is a separate policy
+# decision reading this lane.
+_VALID_SPEECH_SOURCES = frozenset((*LIVE_SPEECH_SOURCES, 'sync_backfill', 'custom_stt'))
 
 
 def _normalize_speech_source(source: str) -> str:
@@ -714,7 +719,10 @@ def get_dg_budget_status(uid: str) -> Dict[str, Any]:
         result['used_ms'] = used_ms
         result['remaining_ms'] = remaining
         result['exhausted'] = remaining <= 0
-        result['resets_at'] = tomorrow.isoformat() + 'Z'
+        # tomorrow is tz-aware, so isoformat() already yields a "+00:00" offset; append the
+        # Zulu suffix by replacing that offset rather than concatenating (which would emit an
+        # invalid "…+00:00Z" that datetime.fromisoformat rejects). Matches models/integrations._serialize_datetime.
+        result['resets_at'] = tomorrow.isoformat().replace('+00:00', 'Z')
     except Exception as e:
         logger.error(f'fair_use: Redis error reading DG budget for {uid}: {e}')
 

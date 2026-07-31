@@ -78,6 +78,10 @@ final class CloudConnectorGuidanceOverlay {
   static let shared = CloudConnectorGuidanceOverlay()
 
   private var window: NSWindow?
+  /// Click-through outline over the permission list. It is deliberately a
+  /// separate panel from `window`: the drop destination must remain available
+  /// to System Settings while the source card receives the initial drag.
+  private var dragTargetWindow: NSWindow?
   private var dismissTask: Task<Void, Never>?
   private var settingsWatchTask: Task<Void, Never>?
   private var lastAutomationState: [String: String]?
@@ -108,7 +112,7 @@ final class CloudConnectorGuidanceOverlay {
     candidates: [SpatialOverlayAnchorCandidate]
   ) {
     dismissTask?.cancel()
-    window?.close()
+    closeCurrentOverlay()
 
     let overlaySize = CGSize(width: 330, height: 118)
     guard
@@ -168,7 +172,7 @@ final class CloudConnectorGuidanceOverlay {
   /// near the relevant window (System Settings) so the user connects the dots.
   func presentInstructionCard(title: String, subtitle: String, near anchor: CGRect?) {
     dismissTask?.cancel()
-    window?.close()
+    closeCurrentOverlay()
 
     let cardSize = Self.instructionCardSize(title: title, subtitle: subtitle)
     let screen = Self.screen(forAnchor: anchor)
@@ -218,25 +222,31 @@ final class CloudConnectorGuidanceOverlay {
   }
 
   /// Screen Recording helper whose app icon can be dropped into System Settings.
-  func presentDragToGrantCard(appIcon: NSImage, appName: String, appURL: URL, near anchor: CGRect?) {
+  func presentDragToGrantCard(appIcon: NSImage, appName: String, appURL: URL, near anchor: CGRect) {
     dismissTask?.cancel()
     settingsWatchTask?.cancel()
-    window?.close()
+    closeCurrentOverlay()
 
-    let cardSize = CGSize(width: 180, height: 164)
+    let cardSize = Self.dragCardSize(appName: appName)
     dragCardSize = cardSize
-    let dragTargetState = ScreenRecordingDragTargetState(frame: anchor)
-    self.dragTargetState = dragTargetState
     let screen = Self.screen(forAnchor: anchor)
+    let targetFrame = Self.permissionListTargetFrame(in: anchor)
     let frame = Self.dragCardFrame(
-      anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
+      target: targetFrame, cardSize: cardSize, visibleFrame: screen.visibleFrame)
+    let dragTargetState = ScreenRecordingDragTargetState(
+      frame: targetFrame,
+      direction: Self.dragCardDirection(cardFrame: frame, targetFrame: targetFrame))
+    self.dragTargetState = dragTargetState
 
     lastAutomationState = [
       "visible": "true",
       "kind": "dragToGrant",
       "appName": appName,
       "panelFrame": Self.string(frame),
+      "dropTargetFrame": Self.string(targetFrame),
     ]
+
+    presentPermissionDropTarget(appName: appName, frame: targetFrame)
 
     let view = ScreenRecordingDragCardView(
       appIcon: appIcon, appName: appName, appURL: appURL, targetState: dragTargetState,
@@ -306,22 +316,90 @@ final class CloudConnectorGuidanceOverlay {
 
   func repositionDragCard(near anchor: CGRect) {
     guard let window, let size = dragCardSize else { return }
-    dragTargetState?.frame = anchor
     let screen = Self.screen(forAnchor: anchor)
+    let targetFrame = Self.permissionListTargetFrame(in: anchor)
+    dragTargetState?.frame = targetFrame
     let frame = Self.dragCardFrame(
-      anchor: anchor, cardSize: size, visibleFrame: screen.visibleFrame)
+      target: targetFrame, cardSize: size, visibleFrame: screen.visibleFrame)
+    dragTargetState?.direction = Self.dragCardDirection(cardFrame: frame, targetFrame: targetFrame)
     window.setFrame(frame, display: true)
+    dragTargetWindow?.setFrame(targetFrame, display: true)
     lastAutomationState?["panelFrame"] = Self.string(frame)
+    lastAutomationState?["dropTargetFrame"] = Self.string(targetFrame)
   }
 
-  /// Drag-card placement: horizontally centered on the anchor (Settings window)
-  /// when there is one, and vertically centered within the bottom quarter of the
-  /// screen — below the Settings list, so the card never covers the drop target.
-  static func dragCardFrame(anchor: CGRect?, cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
-    let x = (anchor ?? visibleFrame).midX - cardSize.width / 2
-    let y = visibleFrame.minY + (visibleFrame.height / 4 - cardSize.height) / 2
-    let proposed = CGRect(x: x, y: y, width: cardSize.width, height: cardSize.height)
-    return SpatialOverlayGeometry.clamped(proposed, to: visibleFrame, padding: 12)
+  /// The list is the actual drag destination, not the entire System Settings
+  /// window. System Settings does not expose this list before Accessibility has
+  /// been granted, so model its stable content region from the public window
+  /// geometry. Keep it proportional so a resized or moved Settings window gets
+  /// guidance in the same place.
+  static func permissionListTargetFrame(in settingsFrame: CGRect) -> CGRect {
+    let sidebarWidth = min(max(settingsFrame.width * 0.28, 180), 270)
+    let horizontalInset = min(max(settingsFrame.width * 0.05, 24), 44)
+    let x = min(
+      settingsFrame.maxX - horizontalInset - 120,
+      settingsFrame.minX + sidebarWidth + horizontalInset)
+    let width = max(120, settingsFrame.maxX - horizontalInset - x)
+    let height = min(max(settingsFrame.height * 0.28, 96), 180)
+    let y = settingsFrame.minY + max(56, settingsFrame.height * 0.22)
+    return CGRect(x: x, y: y, width: width, height: height)
+  }
+
+  /// Place the draggable source directly beside the highlighted permission list.
+  /// Leading placement keeps the list itself unobstructed; vertical fallbacks
+  /// preserve the same adjacency on unusually narrow displays.
+  static func dragCardFrame(target: CGRect, cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
+    let gap: CGFloat = 16
+    let padding: CGFloat = 12
+    let centeredY = target.midY - cardSize.height / 2
+    let leading = CGRect(
+      x: target.minX - gap - cardSize.width,
+      y: centeredY,
+      width: cardSize.width,
+      height: cardSize.height)
+    if leading.minX >= visibleFrame.minX + padding {
+      return SpatialOverlayGeometry.clamped(leading, to: visibleFrame, padding: padding)
+    }
+
+    let trailing = CGRect(
+      x: target.maxX + gap,
+      y: centeredY,
+      width: cardSize.width,
+      height: cardSize.height)
+    if trailing.maxX <= visibleFrame.maxX - padding {
+      return SpatialOverlayGeometry.clamped(trailing, to: visibleFrame, padding: padding)
+    }
+
+    let below = CGRect(
+      x: target.midX - cardSize.width / 2,
+      y: target.minY - gap - cardSize.height,
+      width: cardSize.width,
+      height: cardSize.height)
+    if below.minY >= visibleFrame.minY + padding {
+      return SpatialOverlayGeometry.clamped(below, to: visibleFrame, padding: padding)
+    }
+
+    let proposed = CGRect(
+      x: target.midX - cardSize.width / 2,
+      y: target.maxY + gap,
+      width: cardSize.width,
+      height: cardSize.height)
+    return SpatialOverlayGeometry.clamped(proposed, to: visibleFrame, padding: padding)
+  }
+
+  static func dragCardDirection(cardFrame: CGRect, targetFrame: CGRect) -> PermissionDragDirection {
+    if cardFrame.maxX <= targetFrame.minX { return .right }
+    if cardFrame.minX >= targetFrame.maxX { return .left }
+    if cardFrame.minY >= targetFrame.maxY { return .down }
+    return .up
+  }
+
+  /// A named development bundle can have a much longer display name than the
+  /// production app. Widen the helper rather than allowing its instruction to
+  /// render outside the transparent panel and get clipped by AppKit.
+  static func dragCardSize(appName: String) -> CGSize {
+    let hasLongDisplayName = appName.count > 16
+    return CGSize(width: hasLongDisplayName ? 260 : 220, height: hasLongDisplayName ? 200 : 190)
   }
 
   static func dragCardInitialAlpha(reduceMotion: Bool) -> CGFloat {
@@ -352,7 +430,7 @@ final class CloudConnectorGuidanceOverlay {
     near anchor: CGRect?
   ) {
     dismissTask?.cancel()
-    window?.close()
+    closeCurrentOverlay()
 
     CloudConnectorCopySection.assertUniqueIDs(sections)
     let fields = CloudConnectorCopySection.flattenedFields(sections)
@@ -478,10 +556,46 @@ final class CloudConnectorGuidanceOverlay {
     dismissTask = nil
     settingsWatchTask?.cancel()
     settingsWatchTask = nil
-    window?.close()
-    window = nil
+    closeCurrentOverlay()
     dragCardSize = nil
     dragTargetState = nil
+  }
+
+  private func closeCurrentOverlay() {
+    settingsWatchTask?.cancel()
+    settingsWatchTask = nil
+    window?.close()
+    window = nil
+    dragTargetWindow?.close()
+    dragTargetWindow = nil
+  }
+
+  private func presentPermissionDropTarget(appName: String, frame: CGRect) {
+    let view = PermissionDragDropTargetView(appName: appName, size: frame.size)
+    let hostingView = TransparentHostingView(rootView: view)
+    hostingView.frame = CGRect(origin: .zero, size: frame.size)
+    hostingView.wantsLayer = true
+    hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+    hostingView.layer?.isOpaque = false
+
+    let panel = NSPanel(
+      contentRect: frame,
+      styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered,
+      defer: false
+    )
+    panel.contentView = hostingView
+    panel.isOpaque = false
+    panel.backgroundColor = .clear
+    panel.hasShadow = false
+    panel.level = .screenSaver
+    // The highlight intentionally cannot receive events: the system list below
+    // must remain the real drop receiver.
+    panel.ignoresMouseEvents = true
+    panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+    panel.animationBehavior = .none
+    panel.orderFrontRegardless()
+    dragTargetWindow = panel
   }
 
   var automationWindow: NSWindow? {
@@ -660,11 +774,38 @@ private final class TransparentHostingView<Content: View>: NSHostingView<Content
   override var isOpaque: Bool { false }
 }
 
-final class ScreenRecordingDragTargetState {
-  var frame: CGRect?
+enum PermissionDragDirection: Equatable {
+  case up
+  case down
+  case left
+  case right
 
-  init(frame: CGRect?) {
+  var systemImage: String {
+    switch self {
+    case .up: return "arrow.up"
+    case .down: return "arrow.down"
+    case .left: return "arrow.left"
+    case .right: return "arrow.right"
+    }
+  }
+
+  var vector: CGSize {
+    switch self {
+    case .up: return CGSize(width: 0, height: 1)
+    case .down: return CGSize(width: 0, height: -1)
+    case .left: return CGSize(width: -1, height: 0)
+    case .right: return CGSize(width: 1, height: 0)
+    }
+  }
+}
+
+final class ScreenRecordingDragTargetState: ObservableObject {
+  var frame: CGRect?
+  @Published var direction: PermissionDragDirection
+
+  init(frame: CGRect?, direction: PermissionDragDirection = .up) {
     self.frame = frame
+    self.direction = direction
   }
 }
 
@@ -783,17 +924,55 @@ private struct AppBundleDragSource: NSViewRepresentable {
   }
 }
 
+/// A visual marker only. Its panel ignores every event so the native System
+/// Settings list underneath keeps receiving the actual app-bundle drop.
+private struct PermissionDragDropTargetView: View {
+  let appName: String
+  let size: CGSize
+
+  var body: some View {
+    RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+      .strokeBorder(
+        OmiColors.success.opacity(0.94),
+        style: StrokeStyle(lineWidth: 2.5, dash: [8, 5])
+      )
+      .overlay(alignment: .topLeading) {
+        Text("DROP \(appName.uppercased()) HERE")
+          .scaledFont(size: 10.5, weight: .bold)
+          .tracking(0.7)
+          .foregroundColor(.white)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xxs)
+          .background(Capsule().fill(OmiColors.success.opacity(0.96)))
+          .padding(OmiSpacing.sm)
+      }
+      .frame(width: size.width, height: size.height)
+      .accessibilityLabel("Drop \(appName) in this highlighted permission list")
+  }
+}
+
 private struct ScreenRecordingDragCardView: View {
   let appIcon: NSImage
   let appName: String
   let appURL: URL
-  let targetState: ScreenRecordingDragTargetState
+  @ObservedObject var targetState: ScreenRecordingDragTargetState
   let size: CGSize
 
-  /// Idle hint: the icon + chevron drift up a few points and settle, on a slow
-  /// loop, so the card reads as "drag me up into the list". Respects reduce-motion.
+  /// Idle hint: the icon + chevron drift toward the list and settle, on a slow
+  /// loop, so the card reads as "drag me into the list". Respects reduce-motion.
   @State private var hintUp = false
   private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+  /// The source card starts beside the target rather than below the whole
+  /// Settings window. The arrow and idle motion make that relationship explicit.
+  private var direction: PermissionDragDirection { targetState.direction }
+  private var hintOffset: CGSize {
+    let amount: CGFloat = hintUp ? 3 : -1
+    return CGSize(width: direction.vector.width * amount, height: direction.vector.height * amount)
+  }
+  private var iconHintOffset: CGSize {
+    let amount: CGFloat = hintUp ? 6 : 0
+    return CGSize(width: direction.vector.width * amount, height: direction.vector.height * amount)
+  }
 
   var body: some View {
     ZStack {
@@ -805,24 +984,26 @@ private struct ScreenRecordingDragCardView: View {
       )
 
       VStack(spacing: 7) {
-        Image(systemName: "chevron.up")
+        Image(systemName: direction.systemImage)
           .scaledFont(size: 14, weight: .bold)
           .foregroundColor(OmiColors.textSecondary.opacity(hintUp ? 1 : 0.6))
-          .offset(y: hintUp ? -3 : 1)
+          .offset(hintOffset)
 
         AppBundleDragSource(icon: appIcon, appURL: appURL, targetState: targetState)
           .frame(width: 64, height: 64)
           .shadow(color: Color.black.opacity(0.58), radius: 12, y: 5)
-          .offset(y: hintUp ? -6 : 0)
-          .help("Drag \(appName) into the Screen Recording list")
-          .accessibilityLabel("Drag \(appName) to enable Screen Recording")
+          .offset(iconHintOffset)
+          .help("Press, drag \(appName) to the highlighted permission list, then release")
+          .accessibilityLabel(
+            "Press and drag \(appName) to the highlighted permission list, then release")
 
-        Text("Drag \(appName)\ninto the list")
+        Text("Press, drag, and release \(appName)\nin the highlighted list")
           .scaledFont(size: 13.5, weight: .bold)
           .foregroundColor(OmiColors.textPrimary)
           .multilineTextAlignment(.center)
           .lineSpacing(-1)
-          .fixedSize(horizontal: true, vertical: true)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: size.width - 20)
           .shadow(color: Color.black.opacity(0.65), radius: 3, y: 1)
       }
     }

@@ -1,10 +1,16 @@
 import Foundation
 @preconcurrency import GRDB
 import OmiSupport
+import os
 
 /// Actor-based database manager for Rewind screenshots
 actor RewindDatabase {
   static let shared = RewindDatabase()
+  private static let terminationStateLock = OSAllocatedUnfairLock<Bool>(initialState: false)
+
+  nonisolated static var isTerminationInProgress: Bool {
+    terminationStateLock.withLock { $0 }
+  }
 
   private var dbQueue: DatabasePool?
 
@@ -35,8 +41,13 @@ actor RewindDatabase {
   /// on open does not break the in-flight-close detection in `initialize()`.
   private var poolEpoch: Int = 0
 
-  /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
-  nonisolated(unsafe) static var currentUserId: String?
+  /// Lock-gated (`OSAllocatedUnfairLock`) so concurrent access from the actor,
+  /// `MainActor` (`AgentVMService`), and nonisolated shutdown is race-free (SCA-8).
+  private static let currentUserIdLock = OSAllocatedUnfairLock<String?>(initialState: nil)
+  static var currentUserId: String? {
+    get { currentUserIdLock.withLock { $0 } }
+    set { currentUserIdLock.withLock { $0 = newValue } }
+  }
 
   /// Runtime error tracking: consecutive SQLITE_IOERR/CORRUPT errors during normal queries.
   /// When this hits the threshold, we close the database so the next initialize() attempt
@@ -97,16 +108,43 @@ actor RewindDatabase {
 
   /// A sanitized SQLite corruption/I/O classifier. Avoid logging DB paths or row data.
   private func isRecoverableDatabaseError(_ error: Error) -> Bool {
-    guard let dbError = error as? DatabaseError else { return false }
-    if isBusyDatabaseError(error) { return false }
-    let code = dbError.resultCode
-    let extendedCode = dbError.extendedResultCode.rawValue
-    return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+    if let dbError = error as? DatabaseError {
+      if isBusyDatabaseError(error) { return false }
+      let code = dbError.resultCode
+      let extendedCode = dbError.extendedResultCode.rawValue
+      return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+    }
+
+    // GRDB can bridge a SQLite failure through NSError before a storage actor
+    // reports it. NSError.code is meaningful only with its domain, so restrict
+    // this to known SQLite/GRDB domains to avoid rotating local storage when an
+    // unrelated POSIX or application error happens to share a numeric code.
+    let nsError = error as NSError
+    if isKnownSQLiteDomain(nsError.domain),
+      nsError.code == 10 || nsError.code == 11 || nsError.code == 6922
+    {
+      return true
+    }
+    let description = error.localizedDescription.lowercased()
+    return description.contains("sqlite error 10")
+      || description.contains("sqlite error 11")
+      || description.contains("sqlite error 6922")
   }
 
   private func isBusyDatabaseError(_ error: Error) -> Bool {
     guard let dbError = error as? DatabaseError else { return false }
     return dbError.resultCode == .SQLITE_BUSY
+  }
+
+  /// NSError domains that carry canonical SQLite result codes. GRDB bridges
+  /// SQLite errors through these before the storage actor reports a typed
+  /// `DatabaseError`; other domains may reuse the same numeric codes for
+  /// unrelated POSIX or application failures.
+  private func isKnownSQLiteDomain(_ domain: String) -> Bool {
+    domain == "GRDB"
+      || domain == "GRDB.DatabaseError"
+      || domain == "SQLite3"
+      || domain == "NSSQLiteErrorDomain"
   }
 
   /// Handle corruption/I/O failures from cleanup and other maintenance operations.
@@ -124,7 +162,7 @@ actor RewindDatabase {
 
     guard FileManager.default.fileExists(atPath: dbPath) else { return }
     do {
-      try await handleCorruptedDatabase(at: dbPath, in: omiDir)
+      try await handleCorruptedDatabase(at: dbPath, in: omiDir, triggerError: error)
       try await initialize()
       log("RewindDatabase: recovered and reopened database after \(operation)")
     } catch {
@@ -337,6 +375,7 @@ actor RewindDatabase {
   /// Call from applicationWillTerminate to avoid unnecessary integrity checks on next launch.
   /// This is nonisolated so it can be called synchronously from the main thread during termination.
   nonisolated static func markCleanShutdown() {
+    terminationStateLock.withLock { $0 = true }
     let userDir = staticUserBaseDirectory()
     let flagPath = userDir.appendingPathComponent(".omi_running").path
     try? FileManager.default.removeItem(atPath: flagPath)
@@ -488,7 +527,7 @@ actor RewindDatabase {
 
         if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
           log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
-          try await handleCorruptedDatabase(at: dbPath, in: omiDir)
+          try await handleCorruptedDatabase(at: dbPath, in: omiDir, triggerError: retryError)
           // Retry with recovered or fresh database
           queue = try DatabasePool(path: dbPath, configuration: config)
         } else {
@@ -790,7 +829,11 @@ actor RewindDatabase {
   private(set) var recoveredRecordCount: Int = 0
 
   /// Handle corrupted database: attempt recovery, backup, and recreate
-  private func handleCorruptedDatabase(at dbPath: String, in omiDir: URL) async throws {
+  private func handleCorruptedDatabase(
+    at dbPath: String,
+    in omiDir: URL,
+    triggerError: Error? = nil
+  ) async throws {
     let fileManager = FileManager.default
 
     // Create backup directory
@@ -852,7 +895,14 @@ actor RewindDatabase {
       }
     }
 
-    logError("RewindDatabase: Corrupted database backed up and removed. A fresh database will be created.")
+    logError(
+      "RewindDatabase: Corrupted database backed up and removed. A fresh database will be created.",
+      context: StorageFailureDiagnostics.context(
+        pathClass: "rewind-db",
+        containingURL: omiDir,
+        databaseURL: URL(fileURLWithPath: dbPath),
+        error: triggerError,
+        appIsTerminating: Self.isTerminationInProgress))
 
     // Clean up old backups (keep only last 5)
     try await cleanupOldBackups(in: backupDir, keepCount: 5)
@@ -1417,7 +1467,8 @@ actor RewindDatabase {
         t.column("language", .text).notNull().defaults(to: "en")
         t.column("timezone", .text).notNull().defaults(to: "UTC")
         t.column("inputDeviceName", .text)
-        t.column("status", .text).notNull().defaults(to: "recording")  // recording|pending_upload|uploading|completed|failed
+        // recording|pending_upload|uploading|completed|failed
+        t.column("status", .text).notNull().defaults(to: "recording")
         t.column("retryCount", .integer).notNull().defaults(to: 0)
         t.column("lastError", .text)
         t.column("backendId", .text)  // Server conversation ID
@@ -2556,6 +2607,8 @@ actor RewindDatabase {
       }
     }
 
+    RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
+
     try migrator.migrate(queue)
   }
 
@@ -2707,24 +2760,6 @@ actor RewindDatabase {
 
   // MARK: - CRUD Operations
 
-  /// Insert a new screenshot record
-  @discardableResult
-  func insertScreenshot(_ screenshot: Screenshot) throws -> Screenshot {
-    guard let dbQueue = dbQueue else {
-      throw RewindError.databaseNotInitialized
-    }
-
-    return try dbQueue.write { db -> Screenshot in
-      var record = screenshot
-      // The `imagePath` column is NOT NULL in the schema, but the model field is
-      // optional (nil for video-based screenshots). Coalesce nil → "" so a video
-      // screenshot never trips a NOT NULL constraint violation on insert.
-      if record.imagePath == nil { record.imagePath = "" }
-      try record.insert(db)
-      return record
-    }
-  }
-
   /// Atomically replace every database row reconstructed from one video chunk.
   ///
   /// Rebuilds can be retried, so inserting reconstructed rows one at a time would
@@ -2757,6 +2792,8 @@ actor RewindDatabase {
     }
 
     return try dbQueue.write { db in
+      try RewindAbandonedVideoChunkQuarantine.requireAvailable(db, videoChunkPath: path)
+
       try db.execute(
         sql: "DELETE FROM screenshots WHERE videoChunkPath = ?",
         arguments: [path]
@@ -3193,14 +3230,16 @@ actor RewindDatabase {
 
   /// Expand a search query by splitting compound words (camelCase, numbers)
   /// e.g., "ActivityPerformance" -> "(ActivityPerformance* OR Activity* OR Performance*)"
-  private func expandSearchQuery(_ query: String) -> String {
+  ///
+  /// Pure — depends on no actor state, so it is `nonisolated` and directly testable.
+  nonisolated func expandSearchQuery(_ query: String) -> String {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "" }
 
     // Split query into words
     let words = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
 
-    let expandedWords = words.map { word -> String in
+    let expandedWords = words.compactMap { word -> String? in
       var parts: [String] = [word]
 
       // Split camelCase: "ActivityPerformance" -> ["Activity", "Performance"]
@@ -3217,6 +3256,11 @@ actor RewindDatabase {
 
       // Remove duplicates and create OR query with prefix matching
       let uniqueParts = Array(Set(parts)).filter { $0.count >= 2 }
+      // A single-character word (e.g. the "2" and "1" in a "2.1.220" window title) leaves
+      // nothing to match on. Contribute no term rather than an empty group: emitting "()"
+      // makes the whole MATCH invalid with `fts5: syntax error near ")"`, which fails the
+      // entire search instead of just this word.
+      guard !uniqueParts.isEmpty else { return nil }
       if uniqueParts.count == 1 {
         return "\(uniqueParts[0])*"
       } else {
@@ -3229,7 +3273,7 @@ actor RewindDatabase {
   }
 
   /// Split camelCase string into parts
-  private func splitCamelCase(_ string: String) -> [String] {
+  nonisolated private func splitCamelCase(_ string: String) -> [String] {
     var parts: [String] = []
     var currentPart = ""
 
@@ -3250,7 +3294,7 @@ actor RewindDatabase {
   }
 
   /// Split string on number boundaries
-  private func splitOnNumbers(_ string: String) -> [String] {
+  nonisolated private func splitOnNumbers(_ string: String) -> [String] {
     var parts: [String] = []
     var currentPart = ""
     var wasDigit = false

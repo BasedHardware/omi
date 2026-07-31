@@ -13,10 +13,12 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -233,6 +235,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {
     final deviceName = device?.name ?? 'Omi DevKit';
     final deviceId = device?.id ?? '12AB34CD:56EF78GH';
+    const firmwarePolicy = FirmwareUpdateBuildPolicy.current;
+    final isOpenGlass = firmwarePolicy.isOpenGlassDevice(device);
+    final allowsFirmwareUpdate = firmwarePolicy.allowsFirmwareUpdateForDevice(device);
 
     String truncateId(String id) {
       if (id.length > 10) {
@@ -260,13 +265,20 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             copyValue: deviceId,
             showChevron: false,
           ),
-          const Divider(height: 1, color: Color(0xFF3C3C43)),
-          _buildProfileStyleItem(
-            icon: FontAwesomeIcons.download,
-            title: context.l10n.firmware,
-            chipValue: device?.firmwareRevision ?? '1.0.2',
-            onTap: () => routeToPage(context, FirmwareUpdate(device: device)),
-          ),
+          if (allowsFirmwareUpdate) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.download,
+              title: context.l10n.firmware,
+              chipValue: device?.firmwareRevision ?? '1.0.2',
+              onTap: () => routeToPage(
+                context,
+                isOpenGlass
+                    ? OmiGlassOtaUpdate(device: device, latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails)
+                    : FirmwareUpdate(device: device),
+              ),
+            ),
+          ],
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.sdCard,
@@ -766,7 +778,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 24,
                       height: 24,
                       child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.redAccent, size: 20),
@@ -823,7 +835,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 24,
                       height: 24,
                       child: FaIcon(FontAwesomeIcons.ban, color: Colors.orange, size: 20),
@@ -883,7 +895,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             leading: IconButton(
-              icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
             title: Text(

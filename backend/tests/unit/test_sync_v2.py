@@ -23,6 +23,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.routing import APIRoute
+from models.users import PlanType
 from utils.executors import run_blocking as _production_run_blocking
 
 PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
@@ -399,8 +400,8 @@ class TestSyncJobsRedis:
         mock_redis.get.return_value = None
         assert mod.get_sync_job('nonexistent') is None
 
-    def test_get_sync_job_is_pure_for_stale_processing_job(self):
-        """Polling reads cannot publish a terminal state without a run lease."""
+    def test_get_sync_job_self_heals_stale_processing_job(self):
+        """A dead worker's job is finalized to failed on read so the client re-uploads."""
         mod, mock_redis = self._load_sync_jobs_module()
         stale_job = {
             'job_id': 'stale-1',
@@ -412,9 +413,9 @@ class TestSyncJobsRedis:
         mock_redis.get.return_value = json.dumps(stale_job).encode()
 
         result = mod.get_sync_job('stale-1')
-        assert result['status'] == 'processing'
-        assert mod.is_sync_job_stale(result) is True
-        mock_redis.set.assert_not_called()
+        assert result['status'] == 'failed'
+        assert result['error']
+        mock_redis.set.assert_called()
 
     def test_get_sync_job_does_not_mark_fresh_as_stale(self):
         """Processing jobs within threshold should not be marked failed."""
@@ -448,6 +449,28 @@ class TestSyncJobsRedis:
         assert result['status'] == 'queued'
         assert result.get('error') is None
         mock_redis.set.assert_not_called()
+
+    def test_never_dispatched_cloud_tasks_queued_job_goes_stale(self):
+        """#10033: a cloud_tasks job that never left 'queued' lost its task and
+        must become stale-eligible instead of zombieing until JOB_TTL expiry."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        base = {
+            'job_id': 'q-lost',
+            'uid': 'uid',
+            'status': 'queued',
+            'dispatch_mode': 'cloud_tasks',
+            'started_at': None,
+            'created_at': time.time() - mod.QUEUED_DISPATCH_STALE_SECONDS - 100,
+            'updated_at': time.time() - mod.QUEUED_DISPATCH_STALE_SECONDS - 100,
+        }
+        assert mod.is_sync_job_stale(dict(base)) is True
+        # Under the dispatch threshold: not stale yet.
+        assert mod.is_sync_job_stale({**base, 'updated_at': time.time() - 60}) is False
+        # Inline queued jobs keep the #7469 contract at any age.
+        assert mod.is_sync_job_stale({**base, 'dispatch_mode': 'inline'}) is False
+        # A pending Cloud Tasks retry (worker re-queued between attempts) must
+        # never be flipped terminal by a poll, however long its backoff.
+        assert mod.is_sync_job_stale({**base, 'attempt': 2, 'started_at': time.time() - 4000}) is False
 
     def test_finalize_sync_job_sets_status(self):
         """finalize_sync_job must set correct terminal status."""
@@ -806,8 +829,8 @@ class TestSyncJobsRedisBoundary:
         result = mod.get_sync_job('j')
         assert result['status'] == 'processing'
 
-    def test_stale_just_over_threshold_is_reported_without_mutating_read(self):
-        """The owner-safe route finalizer, not the database read, owns failure."""
+    def test_stale_just_over_threshold_self_heals(self):
+        """A job one second past the stale bound is finalized to failed on read."""
         mod, mock_redis = self._load_sync_jobs_module()
         job = {
             'job_id': 'j',
@@ -817,11 +840,10 @@ class TestSyncJobsRedisBoundary:
         }
         mock_redis.get.return_value = json.dumps(job).encode()
         result = mod.get_sync_job('j')
-        assert result['status'] == 'processing'
-        assert mod.is_sync_job_stale(result) is True
+        assert result['status'] == 'failed'
 
-    def test_stale_read_never_persists_to_redis(self):
-        """A stale read alone cannot strand the content claim or telemetry."""
+    def test_stale_read_persists_failure(self):
+        """The self-heal is durable — the failed status is written back, not just returned."""
         mod, mock_redis = self._load_sync_jobs_module()
         job = {
             'job_id': 'j',
@@ -831,8 +853,8 @@ class TestSyncJobsRedisBoundary:
         }
         mock_redis.get.return_value = json.dumps(job).encode()
         result = mod.get_sync_job('j')
-        assert mod.is_sync_job_stale(result) is True
-        mock_redis.set.assert_not_called()
+        assert result['status'] == 'failed'
+        mock_redis.set.assert_called()
 
     def test_completed_job_not_stale_checked(self):
         """Terminal jobs must not be re-evaluated for staleness."""
@@ -1005,10 +1027,11 @@ class TestAsyncCoordinatorStructure:
         assert 'build_person_embeddings_cache' in _get_pipeline_async_function_body('_load_sync_segment_context')
 
     def test_no_thread_pool_slot_held_for_coordinator(self):
-        """Async coordinator must NOT use submit_with_context or hold a thread pool slot."""
+        """Async coordinator must not submit itself to a thread pool slot."""
         body = self._get_bg_func_body()
         assert 'submit_with_context' not in body, "Async coordinator must not use submit_with_context"
-        assert '.result(' not in body, "Async coordinator must not call future.result()"
+        assert body.count('.result(') == 1, "Only the sync-worker fence callback may synchronously await a future"
+        assert 'asyncio.run_coroutine_threadsafe(' in body
 
 
 # ---------------------------------------------------------------------------
@@ -1512,6 +1535,70 @@ class TestAsyncCoordinatorBehavioral:
             yield module, stubs
         finally:
             self._cleanup(stubs['saved_modules'])
+
+    def test_merged_reprocess_fence_isolated_to_its_conversation(self, fenced_worker_module):
+        """One replaced merge target must not supersede its sibling conversations."""
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+
+        class ConversationPersistenceFenced(RuntimeError):
+            pass
+
+        pipeline.SyncConversationPersistenceFenced = ConversationPersistenceFenced
+        pipeline.logger = MagicMock()
+        pipeline._reprocess_conversation_after_update = MagicMock(
+            side_effect=[ConversationPersistenceFenced('conversation replaced'), None]
+        )
+        response = {
+            '_merged': {'replaced-conversation': 'en', 'current-conversation': 'fr'},
+            'updated_memories': {'replaced-conversation', 'current-conversation'},
+            # A conversation can appear in both new_memories (created in an
+            # earlier segment) and updated_memories (merged into by a later
+            # segment).  The fence must discard it from both.
+            'new_memories': {'replaced-conversation'},
+        }
+        checkpointed_fences = []
+
+        pipeline._reprocess_merged_conversations(
+            'uid',
+            response,
+            on_fenced=lambda: checkpointed_fences.append(
+                {
+                    'fenced': set(response['_fenced_conversation_ids']),
+                    'updated': set(response['updated_memories']),
+                }
+            ),
+        )
+
+        assert response == {
+            '_fenced_conversation_ids': {'replaced-conversation'},
+            'updated_memories': {'current-conversation'},
+            'new_memories': set(),
+        }
+        assert checkpointed_fences == [{'fenced': {'replaced-conversation'}, 'updated': {'current-conversation'}}]
+        assert pipeline._reprocess_conversation_after_update.call_args_list == [
+            unittest.mock.call('uid', 'replaced-conversation', 'en'),
+            unittest.mock.call('uid', 'current-conversation', 'fr'),
+        ]
+        pipeline.logger.info.assert_called_once_with(
+            'event=sync_conversation_reprocess outcome=fenced conversation_id=%s',
+            'replaced-conversation',
+        )
+        pipeline.logger.error.assert_not_called()
+
+        audio_file = MagicMock()
+        audio_file.model_dump.return_value = {'path': 'current.opus'}
+        pipeline.conversations_db = MagicMock()
+        pipeline.conversations_db.create_audio_files_from_chunks.return_value = [audio_file]
+        pipeline.precache_conversation_audio = MagicMock()
+        pipeline.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+
+        pipeline._finalize_sync_audio_files('uid', response)
+
+        pipeline.conversations_db.create_audio_files_from_chunks.assert_called_once_with('uid', 'current-conversation')
+        pipeline.conversations_db.update_conversation.assert_called_once_with(
+            'uid', 'current-conversation', {'audio_files': [{'path': 'current.opus'}]}
+        )
 
     @pytest.mark.asyncio
     async def test_durable_completion_offloads_epoch_and_terminal_metric(self, fenced_worker_module):
@@ -2128,8 +2215,11 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_provider_empty_after_vad_releases_content_for_retry(self):
-        """VAD-positive empty STT must fail and leave the content ledger retryable."""
+    async def test_provider_empty_after_vad_completes_as_silence(self):
+        """A provider that returns no words for VAD-admitted audio is reporting
+        silence, not failing. The job completes, the content ledger is marked
+        done rather than left retryable, and no usage is billed — the client
+        stops re-uploading the same noise as a failed recording."""
         module, stubs = self._load_sync_module()
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2147,11 +2237,11 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
             stubs['pipeline'].prerecorded = MagicMock(return_value=([], 'en'))
             terminal_events = []
-            stubs['pipeline'].release_sync_content_claim_after_job_retired.side_effect = (
-                lambda *_args: terminal_events.append('claim_released')
+            stubs['pipeline'].mark_sync_content_completed.side_effect = lambda *_a, **_k: (
+                terminal_events.append('content_completed') or True
             )
             stubs['sync_jobs'].finalize_sync_job.side_effect = lambda *_args: (
-                terminal_events.append('job_finalized') or {'status': 'partial_failure'}
+                terminal_events.append('job_finalized') or {'status': 'completed'}
             )
 
             await module._run_full_pipeline_background_async(
@@ -2165,16 +2255,16 @@ class TestAsyncCoordinatorBehavioral:
             )
 
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
-            assert result['failed_segments'] == 1
-            assert result['errors'] == ['stt_empty_unexpected']
-            assert result['outcome'] == 'empty_unexpected'
-            stubs['pipeline'].mark_sync_content_completed.assert_not_called()
-            stubs['pipeline'].release_sync_content_claim_after_job_retired.assert_called_once_with(
-                'uid', 'content-empty', 'j-empty'
-            )
+            assert result['failed_segments'] == 0
+            assert result['errors'] == []
+            assert result['outcome'] == 'success'
+            # Marked complete, not released for a retry that would repeat identically.
+            stubs['pipeline'].mark_sync_content_completed.assert_called_once()
+            stubs['pipeline'].release_sync_content_claim_after_job_retired.assert_not_called()
             stubs['pipeline'].release_sync_content_claim.assert_not_called()
-            assert terminal_events[:2] == ['job_finalized', 'claim_released']
-            stubs['sync_jobs'].add_processed_segment.assert_not_called()
+            # No transcript was produced, so nothing is billed.
+            stubs['pipeline'].record_usage.assert_not_called()
+            assert 'content_completed' in terminal_events
         finally:
             self._cleanup(stubs['saved_modules'])
 
@@ -2373,6 +2463,67 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('subscription', 'expected_plan', 'lookup_error'),
+        [
+            (types.SimpleNamespace(plan=PlanType.unlimited_v2), PlanType.unlimited_v2, None),
+            (types.SimpleNamespace(plan=PlanType.basic), PlanType.basic, None),
+            (None, None, None),
+            (None, None, RuntimeError('subscription store unavailable')),
+        ],
+        ids=['unlimited', 'basic', 'missing-subscription', 'subscription-read-failure'],
+    )
+    async def test_fresh_soft_caps_use_the_current_subscription_plan(self, subscription, expected_plan, lookup_error):
+        """Queued fresh work applies the persisted plan instead of the default cap tier."""
+        module, stubs = self._load_sync_module()
+        try:
+            pipeline = stubs['pipeline']
+            pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            pipeline._cleanup_files = MagicMock()
+
+            def _vad_with_segments(path, segmented_paths, errors):
+                segmented_paths.add('/tmp/seg_1700000001.wav')
+
+            speech_totals = {'daily_ms': 5_000, 'three_day_ms': 5_000, 'weekly_ms': 5_000}
+            pipeline.retrieve_vad_segments = _vad_with_segments
+            pipeline.get_wav_duration = MagicMock(return_value=5.0)
+            pipeline.FAIR_USE_ENABLED = True
+            pipeline.FAIR_USE_RESTRICT_DAILY_DG_MS = 0
+            pipeline.record_speech_ms = MagicMock()
+            pipeline.get_rolling_speech_ms = MagicMock(return_value=speech_totals)
+            pipeline.check_soft_caps = MagicMock(return_value=[])
+            pipeline.users_db = MagicMock()
+            pipeline.users_db.get_existing_user_subscription = MagicMock(return_value=subscription)
+            if lookup_error:
+                pipeline.users_db.get_existing_user_subscription.side_effect = lookup_error
+            pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            pipeline.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            pipeline.users_db.get_data_protection_level = MagicMock(return_value=None)
+            pipeline.build_person_embeddings_cache = MagicMock(return_value={})
+            pipeline.process_segment = MagicMock()
+            pipeline.record_dg_usage_ms = MagicMock()
+            pipeline.record_usage = MagicMock()
+
+            await module._run_full_pipeline_background_async('j-plan', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job')
+
+            pipeline.users_db.get_existing_user_subscription.assert_called_once_with('uid')
+            pipeline.check_soft_caps.assert_called_once_with('uid', speech_totals=speech_totals, plan=expected_plan)
+            stubs['sync_jobs'].finalize_sync_job.assert_called_once()
+            if lookup_error:
+                pipeline.record_fallback.assert_called_once_with(
+                    component='other',
+                    from_mode='subscription_plan',
+                    to_mode='default_cap',
+                    reason='policy',
+                    outcome='degraded',
+                    log=pipeline.logger,
+                )
+            else:
+                pipeline.record_fallback.assert_not_called()
+        finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
     async def test_partial_segment_failure_completes(self):
         """Partial segment failure must complete (not fail) with error count."""
         module, stubs = self._load_sync_module()
@@ -2489,6 +2640,189 @@ class TestAsyncCoordinatorBehavioral:
             assert result['failed_segments'] == 0
             assert result['total_segments'] == 1
         finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
+    async def test_retry_hydration_excludes_durably_fenced_conversation_from_audio_finalization(self):
+        """A fence recorded before a retry cannot let its stale checkpoint finalize audio."""
+        module, stubs = self._load_sync_module()
+        try:
+            segment_path = '/tmp/seg_1700000001.wav'
+            pipeline = stubs['pipeline']
+            pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            pipeline._cleanup_files = MagicMock()
+            pipeline.retrieve_vad_segments = lambda _path, paths, _errors: paths.add(segment_path)
+            pipeline.get_wav_duration = MagicMock(return_value=5.0)
+            pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            pipeline.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=True)
+            pipeline.users_db.get_data_protection_level = MagicMock(return_value=None)
+            pipeline.build_person_embeddings_cache = MagicMock(return_value={})
+            pipeline.get_sync_job = MagicMock(
+                return_value={
+                    'partial_result': {
+                        'updated_memories': ['fenced-conversation', 'current-conversation'],
+                        'new_memories': ['fenced-conversation'],
+                    }
+                }
+            )
+            pipeline.get_sync_content_partial_result = MagicMock(
+                return_value={'fenced_conversation_ids': ['fenced-conversation']}
+            )
+            pipeline.get_processed_sync_segment_ids = MagicMock(return_value={'segment-1'})
+            pipeline.compute_sync_segment_id = MagicMock(return_value='segment-1')
+            pipeline.process_segment = MagicMock()
+            pipeline._reprocess_merged_conversations = MagicMock()
+            pipeline._finalize_sync_audio_files = MagicMock()
+
+            await module._run_full_pipeline_background_async(
+                'job-retry-fenced',
+                'uid',
+                ['/tmp/f.opus'],
+                'omi',
+                False,
+                '/tmp/job-retry-fenced',
+                task_mode=True,
+                content_id='content-retry-fenced',
+                content_run_bound=True,
+                ledger_fence_active=False,
+            )
+
+            pipeline.process_segment.assert_not_called()
+            pipeline._finalize_sync_audio_files.assert_called_once()
+            finalized_response = pipeline._finalize_sync_audio_files.call_args.args[1]
+            assert finalized_response['updated_memories'] == {'current-conversation'}
+            assert 'fenced-conversation' not in finalized_response['updated_memories']
+            assert 'fenced-conversation' not in finalized_response['new_memories']
+        finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
+    async def test_fence_checkpoint_handoffs_to_db_executor_before_audio_finalization(self):
+        """A sync-worker fence persists ledger then job state through the coordinator loop."""
+        module, stubs = self._load_sync_module()
+        sync_worker = ThreadPoolExecutor(max_workers=1)
+        try:
+            segment_path = '/tmp/seg_1700000001.wav'
+            pipeline = stubs['pipeline']
+            checkpoint_events = []
+            db_offload_calls = []
+            pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            pipeline._cleanup_files = MagicMock()
+            pipeline.retrieve_vad_segments = lambda _path, paths, _errors: paths.add(segment_path)
+            pipeline.get_wav_duration = MagicMock(return_value=5.0)
+            pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            pipeline.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=True)
+            pipeline.users_db.get_data_protection_level = MagicMock(return_value=None)
+            pipeline.build_person_embeddings_cache = MagicMock(return_value={})
+            pipeline.get_sync_job = MagicMock(return_value={'partial_result': {}})
+            pipeline.get_sync_content_partial_result = MagicMock(return_value={})
+            pipeline.get_processed_sync_segment_ids = MagicMock(return_value=set())
+            pipeline.compute_sync_segment_id = MagicMock(return_value='segment-1')
+            pipeline.process_segment = MagicMock(return_value=False)
+            pipeline.checkpoint_sync_content_partial_result = MagicMock(
+                side_effect=lambda *_args, **_kwargs: checkpoint_events.append('durable') or True
+            )
+
+            def _record_job_partial(*args):
+                if 'partial_result' in args[2]:
+                    checkpoint_events.append('job')
+
+            pipeline._update_sync_job_for_run = MagicMock(side_effect=_record_job_partial)
+
+            def _fence_in_sync_worker(_uid, response, on_fenced):
+                response['_fenced_conversation_ids'].add('fenced-conversation')
+                on_fenced()
+
+            pipeline._reprocess_merged_conversations = _fence_in_sync_worker
+            pipeline._finalize_sync_audio_files = MagicMock()
+
+            async def _threaded_run_blocking(executor, fn, *args, **kwargs):
+                if executor is pipeline.sync_executor:
+                    return await _production_run_blocking(sync_worker, fn, *args, **kwargs)
+                if executor is pipeline.db_executor and (
+                    fn is pipeline.checkpoint_sync_content_partial_result
+                    or (fn is pipeline._update_sync_job_for_run and 'partial_result' in args[2])
+                ):
+                    db_offload_calls.append(fn)
+                return fn(*args, **kwargs)
+
+            pipeline.run_blocking = _threaded_run_blocking
+
+            await module._run_full_pipeline_background_async(
+                'job-fence-checkpoint',
+                'uid',
+                ['/tmp/f.opus'],
+                'omi',
+                False,
+                '/tmp/job-fence-checkpoint',
+                task_mode=True,
+                content_id='content-fence-checkpoint',
+                content_run_bound=True,
+            )
+
+            assert db_offload_calls == [
+                pipeline.checkpoint_sync_content_partial_result,
+                pipeline._update_sync_job_for_run,
+            ]
+            assert checkpoint_events == ['durable', 'job']
+            pipeline._finalize_sync_audio_files.assert_called_once()
+        finally:
+            sync_worker.shutdown(wait=True)
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
+    async def test_fence_checkpoint_lease_loss_stops_audio_finalization(self):
+        """A durable fence checkpoint failure reaches the sync callback before side effects."""
+        module, stubs = self._load_sync_module()
+        sync_worker = ThreadPoolExecutor(max_workers=1)
+        try:
+            segment_path = '/tmp/seg_1700000001.wav'
+            pipeline = stubs['pipeline']
+            pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            pipeline._cleanup_files = MagicMock()
+            pipeline.retrieve_vad_segments = lambda _path, paths, _errors: paths.add(segment_path)
+            pipeline.get_wav_duration = MagicMock(return_value=5.0)
+            pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            pipeline.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=True)
+            pipeline.users_db.get_data_protection_level = MagicMock(return_value=None)
+            pipeline.build_person_embeddings_cache = MagicMock(return_value={})
+            pipeline.get_sync_job = MagicMock(return_value={'partial_result': {}})
+            pipeline.get_sync_content_partial_result = MagicMock(return_value={})
+            pipeline.get_processed_sync_segment_ids = MagicMock(return_value=set())
+            pipeline.compute_sync_segment_id = MagicMock(return_value='segment-1')
+            pipeline.process_segment = MagicMock(return_value=False)
+            pipeline.checkpoint_sync_content_partial_result = MagicMock(return_value=False)
+
+            def _fence_in_sync_worker(_uid, response, on_fenced):
+                response['_fenced_conversation_ids'].add('fenced-conversation')
+                on_fenced()
+
+            pipeline._reprocess_merged_conversations = _fence_in_sync_worker
+            pipeline._finalize_sync_audio_files = MagicMock()
+
+            async def _threaded_run_blocking(executor, fn, *args, **kwargs):
+                if executor is pipeline.sync_executor:
+                    return await _production_run_blocking(sync_worker, fn, *args, **kwargs)
+                return fn(*args, **kwargs)
+
+            pipeline.run_blocking = _threaded_run_blocking
+
+            with pytest.raises(pipeline.SyncJobRunLeaseLost):
+                await module._run_full_pipeline_background_async(
+                    'job-fence-lease-lost',
+                    'uid',
+                    ['/tmp/f.opus'],
+                    'omi',
+                    False,
+                    '/tmp/job-fence-lease-lost',
+                    task_mode=True,
+                    content_id='content-fence-lease-lost',
+                    content_run_bound=True,
+                )
+
+            pipeline._finalize_sync_audio_files.assert_not_called()
+        finally:
+            sync_worker.shutdown(wait=True)
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
@@ -2789,6 +3123,7 @@ class TestV2EndpointExecution:
         # Set up fair_use defaults
         sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
+        sys.modules['utils.fair_use'].is_daily_audio_ceiling_exceeded = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False

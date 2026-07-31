@@ -3,7 +3,7 @@
 Extracted from routers/sync.py so the router stays thin and utils never imports routers.
 """
 
-# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportUnusedVariable=false, reportUnnecessaryComparison=false, reportAssignmentType=false, reportIndexIssue=false, reportArgumentType=false
+# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportUnusedVariable=false, reportUnusedImport=false, reportUnnecessaryComparison=false, reportAssignmentType=false, reportIndexIssue=false, reportArgumentType=false
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import time
 import wave
 from collections import deque
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import httpx
 import numpy as np
@@ -33,6 +33,7 @@ from database.sync_jobs import (
     RUN_LOCK_HEARTBEAT_SECONDS,
     RUN_LOCK_RENEWAL_SAFETY_SECONDS,
     RUN_LOCK_TTL_SECONDS,
+    FencedSyncJobMutation,
     add_processed_segment,
     add_processed_segment_if_run_owner,
     delete_sync_job_run_lock_epoch,
@@ -95,6 +96,7 @@ from utils.other.storage import (
     upload_audio_chunk,
     upload_syncing_temporal_file,
 )
+from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
@@ -103,7 +105,6 @@ from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
     bounded_provider,
-    empty_unexpected_failure,
     failure_from_exception,
 )
 from utils.stt.speaker_embedding import (
@@ -121,7 +122,12 @@ from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_
 logger = logging.getLogger(__name__)
 
 MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
+
+# Valid terminal segment results — a transcript, or audio with no speech. All else is a failure.
+_NON_ERROR_SEGMENT_OUTCOMES = frozenset({TranscriptionOutcome.SUCCESS, TranscriptionOutcome.EXPECTED_SILENCE})
 _SYNC_STT_MODELS = {'nova-3', 'velma-2', 'parakeet'}
+_PARTIAL_RESULT_FENCED_CONVERSATION_IDS = 'fenced_conversation_ids'
+_RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
 _SYNC_FAILURE_REASON_CODES = {
     'backfill_capacity',
     'backfill_paced',
@@ -132,6 +138,7 @@ _SYNC_FAILURE_REASON_CODES = {
     'stt_upstream_error',
     'sync_backfill_dispatch_unavailable',
     'sync_backfill_paced',
+    'sync_conversation_persistence_fenced',
     'sync_dispatch_staging_failed',
     'sync_decode_failed',
     'sync_invalid_audio',
@@ -154,6 +161,27 @@ def _bounded_sync_lane(lane: str | None) -> str:
 def _bounded_exception_type(error: BaseException) -> str:
     name = error.__class__.__name__
     return name if name.replace('_', '').isalnum() and len(name) <= 64 else 'Exception'
+
+
+async def _resolve_fair_use_soft_cap_plan(uid: str):
+    """Return the stored plan, falling back to the default soft-cap tier on read failure."""
+    try:
+        fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+        return fair_use_sub.plan if fair_use_sub else None
+    except Exception as e:
+        logger.warning(
+            'event=sync_fair_use outcome=subscription_plan_fallback exception_type=%s',
+            _bounded_exception_type(e),
+        )
+        record_fallback(
+            component='other',
+            from_mode='subscription_plan',
+            to_mode='default_cap',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
+        return None
 
 
 def _bounded_sync_failure_reason(reason: str | None) -> str:
@@ -181,7 +209,7 @@ def _record_sync_segment_outcome(
             # completing. A later retry may duplicate this metric, but not the
             # customer-visible transcription result.
             logger.warning('event=sync_transcription_metric outcome=dedupe_failed kind=segment')
-    log = logger.info if outcome == TranscriptionOutcome.SUCCESS else logger.error
+    log = logger.info if outcome in _NON_ERROR_SEGMENT_OUTCOMES else logger.error
     log(
         'event=sync_transcription_segment outcome=%s provider=%s model=%s lane=%s retryable=%s',
         outcome.value,
@@ -225,6 +253,36 @@ def _record_sync_segment_failure(
         )
     with lock:
         errors.append(failure.error_code)
+
+
+def _record_empty_segment_as_silence(
+    *,
+    provider: str,
+    model: str,
+    lane: str,
+    deferred_outcome: dict | None,
+) -> None:
+    """Record a speech-free segment as a valid empty result, not a failure.
+
+    Records the outcome exactly as the success path does but appends nothing to
+    the job's error list, so a job whose every segment is speech-free finalizes
+    completed rather than failed and the client stops re-uploading it.
+    """
+    _set_deferred_segment_outcome(
+        deferred_outcome,
+        outcome=TranscriptionOutcome.EXPECTED_SILENCE,
+        provider=provider,
+        model=model,
+        retryable=False,
+    )
+    if deferred_outcome is None:
+        _record_sync_segment_outcome(
+            TranscriptionOutcome.EXPECTED_SILENCE,
+            provider=provider,
+            model=model,
+            lane=lane,
+            retryable=False,
+        )
 
 
 def _set_deferred_segment_outcome(
@@ -371,12 +429,27 @@ class SyncJobRunLeaseLost(RuntimeError):
     """A worker tried to write after its run token stopped owning the job."""
 
 
-def _require_run_owner(mutation, *, job_id: str) -> Dict | None:
+class SyncConversationPersistenceFenced(RuntimeError):
+    """Conversation lifecycle rejected this worker's stale processing result."""
+
+
+def _require_current_conversation_persistence(persisted: bool) -> None:
+    """Turn a lifecycle fence into the worker's terminal supersession signal."""
+    if not persisted:
+        raise SyncConversationPersistenceFenced('sync conversation persistence fenced')
+
+
+def _raise_sync_terminal_result(result: object) -> None:
+    """Preserve lifecycle fences across ``asyncio.gather`` exception fan-in."""
+    if isinstance(result, SyncConversationPersistenceFenced):
+        raise result
+
+
+def _require_run_owner(mutation: FencedSyncJobMutation, *, job_id: str) -> Dict | None:
     """Turn a non-applied Redis CAS result into the worker's stop signal."""
-    if getattr(mutation, 'applied', False):
-        return getattr(mutation, 'job', None)
-    outcome = getattr(getattr(mutation, 'outcome', None), 'value', 'unknown')
-    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={outcome}')
+    if mutation.applied:
+        return mutation.job
+    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={mutation.outcome.value}')
 
 
 def _update_sync_job_for_run(job_id: str, run_lock_token: str | None, updates: Dict) -> Dict | None:
@@ -486,6 +559,41 @@ def bind_or_converge_sync_ledger_completion(
     )
     delete_sync_job_run_lock_epoch(job_id)
     return finalized
+
+
+async def finalize_sync_job_superseded(
+    *,
+    job_id: str,
+    run_lock_token: str | None,
+    lane: str,
+    provider: str,
+    model: str,
+) -> None:
+    """Acknowledge a stale conversation processor without inviting a WAL retry.
+
+    A lifecycle fence means another generation owns the conversation, not that
+    audio decoding or the Cloud Task failed.  The released clients only
+    acknowledge ``completed`` sync jobs, so publish a zero-segment completed
+    result with an explicit bounded ``superseded`` outcome rather than a
+    retryable failure status.
+    """
+    finalized = await run_blocking(
+        db_executor,
+        _finalize_sync_job_for_run,
+        job_id,
+        run_lock_token,
+        {
+            'failed_segments': 0,
+            'total_segments': 0,
+            'errors': [],
+            'outcome': 'superseded',
+            'provider': provider,
+            'model': model,
+            'lane': lane,
+        },
+    )
+    if finalized is None:
+        raise SyncJobRunLeaseLost(f'sync job state is no longer mutable: job={job_id} outcome=superseded')
 
 
 async def _finalize_sync_job_failure(
@@ -672,6 +780,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         conversation=conversation,
         force_process=True,
         is_reprocess=True,
+        persistence_observer=_require_current_conversation_persistence,
     )
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
@@ -963,43 +1072,30 @@ def process_segment(
         )
         language = user_language if (single_language_mode and user_language) else detected_language
         if not words:
-            # Every process_segment input has already passed VAD and is therefore
-            # speech-eligible. A provider returning no words here is not the same
-            # as the valid zero-segment result produced by the VAD phase.
-            failure = empty_unexpected_failure(provider)
-            _set_deferred_segment_outcome(
-                deferred_outcome,
-                outcome=failure.outcome,
-                provider=failure.provider,
-                model=model,
-                retryable=failure.retryable,
-            )
-            _record_sync_segment_failure(
-                failure,
+            # A provider that returns without error and produces no words is
+            # reporting that the audio holds no transcribable speech. VAD
+            # admitting the segment is not evidence to the contrary — it
+            # over-reports on noise — so this is the same valid empty result as
+            # VAD finding nothing, not a failure to retry. Counting it as a
+            # failed segment finalized the whole job failed, and the client
+            # re-uploaded the same noise on every pass until it gave up and
+            # showed the recording as permanently failed.
+            _record_empty_segment_as_silence(
+                provider=provider,
                 model=model,
                 lane=sync_lane,
-                lock=lock,
-                errors=errors,
-                record_metric=deferred_outcome is None,
+                deferred_outcome=deferred_outcome,
             )
             return False
         transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
         if not transcript_segments:
-            failure = empty_unexpected_failure(provider)
-            _set_deferred_segment_outcome(
-                deferred_outcome,
-                outcome=failure.outcome,
-                provider=failure.provider,
-                model=model,
-                retryable=failure.retryable,
-            )
-            _record_sync_segment_failure(
-                failure,
+            # Words survived the provider but nothing survived post-processing:
+            # again no transcribable speech, valid and empty rather than failed.
+            _record_empty_segment_as_silence(
+                provider=provider,
                 model=model,
                 lane=sync_lane,
-                lock=lock,
-                errors=errors,
-                record_metric=deferred_outcome is None,
+                deferred_outcome=deferred_outcome,
             )
             return False
 
@@ -1037,9 +1133,9 @@ def process_segment(
         # attach segments to it directly instead of searching by timestamp.
         if target_conversation_id:
             closest_memory = conversations_db.get_conversation(uid, target_conversation_id)
-            if not closest_memory:
+            if not conversations_db.eligible_merge_target(closest_memory):
                 logger.warning(
-                    f'Target conversation {target_conversation_id} not found, falling back to timestamp lookup'
+                    f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'
                 )
                 closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
         else:
@@ -1058,7 +1154,12 @@ def process_segment(
                 client_device_id=client_device_id,
                 client_platform=client_platform,
             )
-            created = process_conversation(uid, language, create_memory)
+            created = process_conversation(
+                uid,
+                language,
+                create_memory,
+                persistence_observer=_require_current_conversation_persistence,
+            )
             with lock:
                 response['new_memories'].add(created.id)
             if private_cloud_sync_enabled:
@@ -1172,6 +1273,8 @@ def process_segment(
                 retryable=False,
             )
         return True
+    except SyncConversationPersistenceFenced:
+        raise
     except Exception as e:
         failure = failure_from_exception(e, provider=provider)
         _set_deferred_segment_outcome(
@@ -1195,18 +1298,63 @@ def process_segment(
             turnstile.complete(path)
 
 
-def _reprocess_merged_conversations(uid: str, response: dict):
+def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optional[Callable[[], None]] = None):
     """Regenerate summary/structured data for conversations that gained segments this batch.
 
     The merge path in process_segment only appends transcript segments; without this the
-    conversation keeps the summary generated from its first chunk only.
+    enriched fields (summary, structured, speakers) remain stale.  Fences are isolated
+    per conversation: a replaced/reopened conversation must not block siblings in the
+    same batch.
     """
     merged = response.pop('_merged', {})
     for conversation_id, language in merged.items():
         try:
             _reprocess_conversation_after_update(uid, conversation_id, language)
+        except SyncConversationPersistenceFenced:
+            response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
+            response.get('updated_memories', set()).discard(conversation_id)
+            response.get('new_memories', set()).discard(conversation_id)
+            if on_fenced:
+                on_fenced()
+            logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
+
+
+async def _checkpoint_fenced_conversations_for_run(
+    uid: str,
+    response: dict,
+    content_id: str | None,
+    job_id: str,
+    active_run_lock_token: str,
+    active_run_lock_epoch: int | None,
+):
+    """Persist a fence tombstone before the losing worker can finalize audio."""
+    partial = {
+        'new_memories': sorted(response['new_memories']),
+        'updated_memories': sorted(response['updated_memories']),
+        _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(response[_RESPONSE_FENCED_CONVERSATION_IDS]),
+    }
+    if content_id:
+        checkpointed = await run_blocking(
+            db_executor,
+            checkpoint_sync_content_partial_result,
+            uid,
+            content_id,
+            job_id,
+            partial,
+            run_token=active_run_lock_token,
+            run_epoch=active_run_lock_epoch,
+        )
+        if not checkpointed:
+            raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
+    await run_blocking(
+        db_executor,
+        _update_sync_job_for_run,
+        job_id,
+        active_run_lock_token,
+        {'partial_result': partial},
+    )
 
 
 def _wav_bytes_to_pcm16_16k(audio_bytes: Optional[bytes]) -> Optional[bytes]:
@@ -1265,7 +1413,7 @@ def _finalize_sync_audio_files(uid: str, response: dict):
             )
 
 
-def _cleanup_files(file_paths):
+def _cleanup_files(file_paths: Iterable[str]):
     """Helper to clean up temporary files."""
     for path in file_paths:
         try:
@@ -1440,7 +1588,7 @@ async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[li
     phase_started = time.monotonic()
     vad_errors: list[str] = []
 
-    def _run_vad_bg(path):
+    def _run_vad_bg(path: str):
         local_errors: list[str] = []
         try:
             retrieve_vad_segments(path, segmented_paths, local_errors)
@@ -1466,11 +1614,11 @@ async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[li
     return vad_errors, vad_ms
 
 
-async def _run_full_pipeline_background_async(
+async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
     raw_paths: list,
-    source,
+    source: ConversationSource,
     should_lock: bool,
     job_dir: str,
     target_conversation_id: str = None,
@@ -1789,8 +1937,11 @@ async def _run_full_pipeline_background_async(
                         raise_on_error=bool(content_id),
                     )
                 if sync_lane == SyncLane.FRESH.value:
+                    fair_use_plan = await _resolve_fair_use_soft_cap_plan(uid)
                     speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
-                    triggered_caps = await run_blocking(db_executor, check_soft_caps, uid, speech_totals=speech_totals)
+                    triggered_caps = await run_blocking(
+                        db_executor, check_soft_caps, uid, speech_totals=speech_totals, plan=fair_use_plan
+                    )
                     if triggered_caps:
                         logger.info(
                             'event=sync_fair_use outcome=soft_cap_triggered cap_count=%d',
@@ -1875,12 +2026,22 @@ async def _run_full_pipeline_background_async(
                         set(partial_result.get('updated_memories') or [])
                         | set(durable_partial.get('updated_memories') or [])
                     ),
+                    _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(
+                        set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
+                        | set(durable_partial.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
+                    ),
                 }
+            fenced_conversation_ids = set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
             response = {
-                'updated_memories': set(partial_result.get('updated_memories') or []),
-                'new_memories': set(partial_result.get('new_memories') or []),
+                'updated_memories': set(partial_result.get('updated_memories') or []) - fenced_conversation_ids,
+                'new_memories': set(partial_result.get('new_memories') or []) - fenced_conversation_ids,
+                _RESPONSE_FENCED_CONVERSATION_IDS: fenced_conversation_ids,
             }
             segment_errors = []
+            # Segments that yielded a transcript, distinct from failed and
+            # speech-free ones: only transcribed audio is billed, so a silent
+            # job records no usage though it is not a failure.
+            content_segment_count = [0]
             segment_lock = threading.Lock()
 
             # Segments that fully landed in a prior Cloud Tasks attempt are skipped
@@ -1910,7 +2071,7 @@ async def _run_full_pipeline_background_async(
             segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
 
-            def _process_one_segment(path):
+            def _process_one_segment(path: str):
                 segment_id = segment_ids_by_path.get(path)
                 if path in already_processed or (segment_id and segment_id in durable_processed_segment_ids):
                     # Release the assignment slot — later segments wait on it
@@ -1941,9 +2102,13 @@ async def _run_full_pipeline_background_async(
                     # Therefore any skipped segment on a retry has its visible
                     # conversation IDs available for response hydration.
                     with segment_lock:
+                        content_segment_count[0] += 1
                         partial = {
                             'new_memories': sorted(response['new_memories']),
                             'updated_memories': sorted(response['updated_memories']),
+                            _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(
+                                response[_RESPONSE_FENCED_CONVERSATION_IDS]
+                            ),
                         }
                         _update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})
                         if content_id:
@@ -2018,6 +2183,9 @@ async def _run_full_pipeline_background_async(
                 for path, r in zip(chunk, seg_results):
                     if isinstance(r, SyncJobRunLeaseLost):
                         raise r
+                    # A lifecycle fence has a semantic terminal outcome at the
+                    # task boundary; never reduce it to a retryable segment error.
+                    _raise_sync_terminal_result(r)
                     if isinstance(r, Exception):
                         failure = failure_from_exception(r, provider=sync_provider)
                         await _record_sync_segment_failure_async(
@@ -2042,7 +2210,31 @@ async def _run_full_pipeline_background_async(
                 except Exception:
                     pass
 
-            await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
+            coordinator_loop = asyncio.get_running_loop()
+
+            def _checkpoint_fenced_conversations():
+                # This callback runs in sync_executor. Waiting here keeps the fence
+                # durable before audio finalization, while the coordinator loop stays
+                # available to dispatch the writes through db_executor.
+                asyncio.run_coroutine_threadsafe(
+                    _checkpoint_fenced_conversations_for_run(
+                        uid,
+                        response,
+                        content_id,
+                        job_id,
+                        active_run_lock_token,
+                        active_run_lock_epoch,
+                    ),
+                    coordinator_loop,
+                ).result()
+
+            await run_blocking(
+                sync_executor,
+                _reprocess_merged_conversations,
+                uid,
+                response,
+                on_fenced=_checkpoint_fenced_conversations,
+            )
 
             # Persist conversation audio (private-cloud chunks → audio_files) so synced
             # conversations play exactly like realtime ones. Gated on the user's setting.
@@ -2073,7 +2265,7 @@ async def _run_full_pipeline_background_async(
                 result['total_segments'] = total_segments
                 result['errors'] = segment_errors[:10]
 
-            if successful_segments > 0:
+            if content_segment_count[0] > 0:
                 try:
                     usage_seconds = int(total_speech_seconds)
                     should_record_usage = bool(content_id) or await run_blocking(

@@ -18,8 +18,8 @@ Dispatch [Deploy Backend to Cloud RUN](https://github.com/BasedHardware/omi/acti
 |---|---|---|
 | `mode` | `deploy` (default) | Normal image build + rollout |
 | `mode` | `repair-traffic-only` | Restore `spec.traffic` to the currently serving revision without deploying |
-| `deploy_targets` | `all` (default) | Cloud Run + GKE (`backend-secrets`, `backend-listen`) |
-| `deploy_targets` | `cloud-run-only` | REST/MCP/OAuth router changes that do not touch `backend-listen` or WebSocket protocol |
+| `deploy_targets` | `cloud-run-only` (default) | The only production deploy target; promotes the four validated Cloud Run revisions |
+| `deploy_targets` | `all` | Development only; production dispatch rejects it before credentials or mutations |
 
 ## Pre-deploy checklist (prod)
 
@@ -57,17 +57,15 @@ sequenceDiagram
   participant WF as gcp_backend.yml
   participant PF as preflight-cloud-run-deploy
   participant CR as CloudRun_no_traffic
-  participant GKE as GKE_optional
   participant Ready as wait_revision_ready
   participant Shift as update_traffic
+  participant Smoke as api.omi.me
 
   WF->>PF: secrets + traffic preflight
   WF->>CR: deploy backend/backend-sync/backend-integration (no traffic)
-  opt deploy_targets=all
-    WF->>GKE: backend-secrets + backend-listen
-  end
   WF->>Ready: poll revision Ready=True
   WF->>Shift: shift traffic only after ready
+  WF->>Smoke: verify serving vector, safe route presence, known audio
 ```
 
 Prod deploys auto-repair `spec.traffic != status.traffic` before creating revisions. Traffic shifts only after new revisions are `Ready=True`.
@@ -90,13 +88,17 @@ gcloud run services update-traffic backend \
 
 ## Cloud Run-only hotfixes
 
-Use `deploy_targets: cloud-run-only` when the change only affects Cloud Run REST services (`backend`, `backend-sync`, `backend-integration`) and does not require:
+The only normal production dispatch is `environment=prod`, `mode=deploy`,
+`deploy_targets=cloud-run-only`, and the exact admitted 40-character
+`release_sha`. The workflow validates no-traffic revisions and their rendered
+runtime contract, snapshots traffic, promotes exact revisions, verifies the
+serving release vector, then runs the authenticated smoke through
+`https://api.omi.me`. A failed shift, vector check, route-presence assertion,
+or known-audio smoke restores and verifies the saved Cloud Run snapshot.
 
-- `backend-listen` Helm chart changes
-- `backend-secrets` ExternalSecret changes
-- WebSocket / listen pipeline changes
-
-For listen-only chart changes, use `gcp_backend_listen_helm.yml` instead.
+`deploy_targets=all` remains available for development only. Production
+`backend-listen`, GKE, and backend-secret changes use their dedicated approved
+workflows rather than this rollback-scoped Cloud Run deploy.
 
 ## Runtime env source of truth
 

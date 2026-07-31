@@ -33,6 +33,7 @@ import 'package:omi/env/prod_env.dart';
 import 'package:omi/firebase_options_dev.dart' as dev;
 import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
+import 'package:omi/startup_routing.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -73,10 +74,9 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/utils/analytics/rage_click_context_tracker.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/environment_detector.dart';
-import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -127,6 +127,7 @@ Future _init() async {
   } else {
     Env.init(DevEnv());
   }
+  validateApplicationStartupRouting();
 
   FlutterForegroundTask.initCommunicationPort();
 
@@ -156,18 +157,10 @@ Future _init() async {
 
   await SharedPreferencesUtil.init();
 
-  // TestFlight environment detection — must be after SharedPreferencesUtil.init()
+  // TestFlight remains a distribution/telemetry signal; production-family
+  // builds always use the established production backend.
   if (F.env == Environment.prod) {
-    final isTestFlight = await EnvironmentDetector.isTestFlight();
-    if (EnvironmentDetector.shouldUseBetaReleaseRing(isTestFlight)) {
-      Env.isTestFlight = isTestFlight;
-      final beta = Env.stagingApiUrl;
-      if (beta == null) {
-        throw StateError('Beta release build requires STAGING_API_URL to point at the beta release ring');
-      }
-      Env.overrideApiBaseUrl(beta);
-      debugPrint('Beta release build detected: using beta release ring ($beta)');
-    }
+    Env.isTestFlight = await EnvironmentDetector.isTestFlight();
   }
 
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
@@ -405,41 +398,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
-              Widget content;
-              if (Env.isUsingStagingApi) {
-                final topPadding = MediaQuery.of(context).padding.top;
-                content = Column(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        MyApp.navigatorKey.currentState?.push(
-                          MaterialPageRoute(builder: (context) => const DeveloperSettingsPage()),
-                        );
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.only(top: topPadding + 4, bottom: 4),
-                        color: Colors.orange.shade800,
-                        child: Text(
-                          context.l10n.staging.toUpperCase(),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
-                    ),
-                  ],
-                );
-              } else {
-                content = child!;
-              }
+              final content = child!;
               return PlatformService.isIOS && Env.posthogApiKey != null
                   ? RageClickContextTracker(child: content)
                   : content;

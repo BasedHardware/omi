@@ -604,7 +604,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         point: LatLng(loc.latitude, loc.longitude),
         width: 32,
         height: 32,
-        child: FaIcon(FontAwesomeIcons.locationDot, color: Colors.deepPurple, size: 28),
+        child: const FaIcon(FontAwesomeIcons.locationDot, color: Colors.deepPurple, size: 28),
       );
     }).toList();
 

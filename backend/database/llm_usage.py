@@ -36,7 +36,7 @@ def record_llm_usage(
     Args:
         uid: User ID
         feature: Feature name (e.g., "chat", "rag", "conversation_processing")
-        model: Model name (e.g., "gpt-4.1-mini", "o4-mini")
+        model: Model name (e.g., "gpt-5.6-luna", "gpt-5-nano")
         input_tokens: Number of input/prompt tokens
         output_tokens: Number of output/completion tokens
     """

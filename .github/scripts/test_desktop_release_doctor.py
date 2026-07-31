@@ -54,8 +54,8 @@ def healthy_snapshot(*, phase: str = "beta") -> dict[str, object]:
         },
         "manifest": {
             "release_id": RELEASE_ID,
-            "source_sha": SOURCE_SHA,
-            "qualification": {"evidence_asset": "qualification-evidence-0.12.72+12072.json"},
+            "app_source_sha": SOURCE_SHA,
+            "qualification_evidence_asset": "qualification-evidence-0.12.72+12072.json",
         },
         "pointers": {"beta": pointer, "stable": pointer if phase == "stable" else {"release_id": "v0.12.71+12071-macos"}},
         "legacy_release": {"channel": current_channel, "is_live": True},
@@ -64,7 +64,14 @@ def healthy_snapshot(*, phase: str = "beta") -> dict[str, object]:
             "rust": {"channels": {current_channel: RELEASE_ID}},
         },
         "static": {"beta": static if phase == "beta" else {"channel": "beta", "release_id": "v0.12.71+12071-macos"}, "stable": static if phase == "stable" else {"channel": "stable", "release_id": "v0.12.71+12071-macos"}},
-        "backend": {"release_tag": RELEASE_ID, "release_sha": SOURCE_SHA, "release_channel": "stable", "revision": "desktop-backend-1"},
+        "backend": {
+            "status": "healthy",
+            "service": "omi-desktop-backend",
+            "backend_release_sha": "b" * 40,
+            "backend_release_channel": "production",
+            "chat_contract_version": "1",
+            "revision": "desktop-backend-1",
+        },
         "tracking": {"desktop_backend_prod_deployed_sha": SOURCE_SHA},
         "codemagic": {"artifact_status": "passed", "post_artifact_failure": ""},
         "metrics": available_metrics(),
@@ -140,7 +147,7 @@ class DesktopReleaseDoctorTests(unittest.TestCase):
         document = {
             "fields": {
                 "release_id": {"stringValue": RELEASE_ID},
-                "source_sha": {"stringValue": SOURCE_SHA},
+                "app_source_sha": {"stringValue": SOURCE_SHA},
                 "changelog": {"arrayValue": {"values": [{"stringValue": "private prose"}]}},
                 "download_url": {"stringValue": "https://example.invalid/private"},
             }
@@ -151,9 +158,9 @@ class DesktopReleaseDoctorTests(unittest.TestCase):
                 "desktop_release_manifests",
                 RELEASE_ID,
                 "access-token",
-                allowed_fields=("release_id", "source_sha"),
+                allowed_fields=("release_id", "app_source_sha"),
             )
-        self.assertEqual(projection, {"release_id": RELEASE_ID, "source_sha": SOURCE_SHA})
+        self.assertEqual(projection, {"release_id": RELEASE_ID, "app_source_sha": SOURCE_SHA})
 
     def test_release_projection_keeps_control_metadata_but_drops_prose(self) -> None:
         summary = doctor._project_release_summary(

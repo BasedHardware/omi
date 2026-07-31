@@ -122,11 +122,11 @@ class LanguageSelectionDialog {
                         fillColor: const Color(0xFF2A2A2A),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Color(0xFF35343B)),
+                          borderSide: const BorderSide(color: Color(0xFF35343B)),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Color(0xFF35343B)),
+                          borderSide: const BorderSide(color: Color(0xFF35343B)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),

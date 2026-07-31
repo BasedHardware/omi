@@ -1479,7 +1479,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get payYourSttProvider => 'Nutzen Sie Omi kostenlos. Sie bezahlen nur Ihren STT-Anbieter direkt.';
 
   @override
-  String get freeMinutesMonth => '1.200 kostenlose Minuten/Monat inklusive. Unbegrenzt mit ';
+  String get freeMinutesMonth => '300 kostenlose Minuten/Monat inklusive. Unbegrenzt mit ';
 
   @override
   String get omiUnlimited => 'Omi Unbegrenzt';
@@ -1802,20 +1802,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Gefällt Ihnen Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Helfen Sie uns, mehr Menschen zu erreichen, indem Sie eine Bewertung im App Store hinterlassen. Ihr Feedback bedeutet uns die Welt!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Helfen Sie uns, mehr Menschen zu erreichen, indem Sie eine Bewertung im Google Play Store hinterlassen. Ihr Feedback bedeutet uns die Welt!';
-
-  @override
-  String get rateOnAppStore => 'Im App Store bewerten';
-
-  @override
-  String get rateOnGooglePlay => 'Im Google Play Store bewerten';
 
   @override
   String get maybeLater => 'Vielleicht später';
@@ -2157,6 +2143,18 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Erinnerung bearbeiten';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Ich esse gerne Eis...';
@@ -4746,7 +4744,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Kein spezifischer Datenzugriff konfiguriert.';
 
   @override
-  String get basicPlanDescription => '1.200 Premium-Minuten + unbegrenzt on-device';
+  String get basicPlanDescription => '300 Premium-Minuten + unbegrenzt on-device';
 
   @override
   String get minutes => 'Minuten';
@@ -6045,7 +6043,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription.';
+      '300 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription.';
 
   @override
   String get viewUsage => 'Nutzung anzeigen';
@@ -6128,7 +6126,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription. ';
+      '300 Premium-Minuten/Monat. Der Tab Auf Gerät bietet unbegrenzte kostenlose Transkription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9687,151 +9685,172 @@ class AppLocalizationsDe extends AppLocalizations {
       'Deine Daten sind standardmäßig durch starke Verschlüsselung geschützt, und du behältst die Kontrolle darüber, wie sie gespeichert und verwendet werden.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Genauigkeit';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Basis';
 
   @override
-  String get cloudTranscription => 'Cloud Transcription';
+  String get cloudTranscription => 'Cloud-Transkription';
 
   @override
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Modell löschen';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Möchten Sie dieses Modell wirklich löschen?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Heruntergeladen';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Schneller';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Automatisch';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Höher';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Groß';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Niedriger';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Mittel';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Modell gelöscht';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Modell-Download fehlgeschlagen';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc =>
+      'Whisper-Modell konnte nicht heruntergeladen werden. Bitte versuchen Sie es erneut.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Modell heruntergeladen';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper-Modell erfolgreich heruntergeladen';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Modellgröße';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Keine';
 
   @override
-  String get onDeviceTranscription => 'On-Device Transcription';
+  String get onDeviceTranscription => 'Transkription auf dem Gerät';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+  String get onDeviceTranscriptionDesc => 'Die Transkription wird lokal auf Ihrem Gerät verarbeitet';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Langsamer';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Klein';
 
   @override
   String get sttProviderSoniox => 'Soniox';
 
   @override
-  String get speechToTextProvider => 'Speech-to-Text Provider';
+  String get speechToTextProvider => 'Sprache-zu-Text-Anbieter';
 
   @override
-  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+  String get speechToTextProviderDesc => 'Wählen Sie den Dienst für die Transkription';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Geschwindigkeit';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Winzig';
 
   @override
-  String get transcriptionLanguage => 'Transcription Language';
+  String get transcriptionLanguage => 'Transkriptionssprache';
 
   @override
-  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+  String get transcriptionLanguageDesc => 'Wählen Sie die Sprache für die Sprachtranskription';
 
   @override
-  String get whisperModel => 'Whisper Model';
+  String get whisperModel => 'Whisper-Modell';
 
   @override
-  String get whisperModelDesc => 'Choose the model for on-device transcription';
+  String get whisperModelDesc => 'Wählen Sie das Modell für die Transkription auf dem Gerät';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Auf Freemium herabstufen?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Diese Einschränkungen erwarten Sie:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7-facher Batterieverbrauch';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '30 % geringere Transkriptionsqualität';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => '5–7 Sekunden Verzögerung';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Sprecher können nicht erkannt werden';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Trotzdem herabstufen';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google Kalender nicht verbunden';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Verbinden Sie Ihren Google Kalender, um Konversationen mit Kalenderterminen zu verknüpfen.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Verknüpft mit „$title“';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Kalendertermin konnte nicht verknüpft werden';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Danke für Ihr Feedback!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Nachricht kopieren';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Einstellungen durchsuchen…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Fehler beim Laden der Audiodatei';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Ray-Ban Meta-Mikrofon auswählen';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Wähle das Bluetooth-Mikrofon deiner Brille. Musik wird pausiert, während Omi es verwendet.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Keine Bluetooth-Mikrofone gefunden. Verbinde deine Brille in den iPhone-Einstellungen und versuche es erneut.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth-Mikrofone konnten nicht geladen werden. Prüfe, ob Bluetooth aktiviert ist, und versuche es erneut.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Verbindung mit diesem Mikrofon fehlgeschlagen. Stelle sicher, dass es in den iPhone-Einstellungen verbunden ist.';
 }

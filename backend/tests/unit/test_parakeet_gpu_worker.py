@@ -72,6 +72,7 @@ def _gpu_worker_module():
         g["WorkItem"] = gw.WorkItem
         g["WorkType"] = gw.WorkType
         g["AudioDurationExceededError"] = gw.AudioDurationExceededError
+        g["classify_fatal_cuda_error"] = gw.classify_fatal_cuda_error
         g["_safe_set_result"] = gw._safe_set_result
         g["_safe_set_exception"] = gw._safe_set_exception
         g["_torch"] = _torch
@@ -99,8 +100,8 @@ def _make_mock_model():
     return model
 
 
-def _start_worker_with_mock():
-    w = GPUWorker()
+def _start_worker_with_mock(on_fatal_cuda_error=None):
+    w = GPUWorker(on_fatal_cuda_error=on_fatal_cuda_error)
     mock_model = _make_mock_model()
     nemo_asr = _get_nemo_asr()
     nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
@@ -108,6 +109,10 @@ def _start_worker_with_mock():
     w.start()
     w.wait_ready(timeout=10)
     return w
+
+
+class AcceleratorError(RuntimeError):
+    pass
 
 
 class TestGPUWorkerLifecycle:
@@ -154,6 +159,77 @@ class TestGPUWorkerLifecycle:
         blocker.set()
         nemo_asr.models.ASRModel.from_pretrained.side_effect = None
         worker.stop()
+
+
+class TestGPUWorkerFatalCUDA:
+    def test_typed_accelerator_error_is_fatal_without_known_message(self):
+        import gpu_worker as gw_mod
+
+        gw_mod._torch.cuda.AcceleratorError = AcceleratorError
+
+        assert classify_fatal_cuda_error(AcceleratorError("unknown CUDA runtime failure")) == "accelerator_error"
+
+    def test_accelerator_error_fails_worker_closed_and_reports_once(self):
+        import gpu_worker as gw_mod
+
+        gw_mod._torch.cuda.AcceleratorError = AcceleratorError
+        fatal_reasons = []
+        worker = _start_worker_with_mock(on_fatal_cuda_error=fatal_reasons.append)
+        model = worker._model
+        model.transcribe.side_effect = AcceleratorError("CUDA error: operation not permitted when stream is capturing")
+
+        with pytest.raises(AcceleratorError):
+            worker.submit_sync({"audio_paths": ["/tmp/a.wav"], "timestamps": True})
+
+        assert not worker.is_ready
+        assert worker.fatal_cuda_reason == "stream_capture"
+        assert fatal_reasons == ["stream_capture"]
+        assert worker.report_inference_error(AcceleratorError("another CUDA failure"))
+        assert fatal_reasons == ["stream_capture"]
+        with pytest.raises(RuntimeError, match="not ready"):
+            worker.submit_sync({"audio_paths": ["/tmp/b.wav"], "timestamps": True})
+        assert model.transcribe.call_count == 1
+        worker.stop()
+        assert worker._thread is not None and not worker._thread.is_alive()
+
+    def test_ordinary_runtime_error_does_not_poison_next_request(self):
+        worker = _start_worker_with_mock()
+        original_transcribe = worker._model.transcribe.side_effect
+        attempts = 0
+
+        def transient_error(*args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("temporary decoder failure")
+            return original_transcribe(*args, **kwargs)
+
+        worker._model.transcribe.side_effect = transient_error
+        try:
+            with pytest.raises(RuntimeError, match="temporary decoder failure"):
+                worker.submit_sync({"audio_paths": ["/tmp/a.wav"], "timestamps": True})
+            assert worker.is_ready
+
+            result = worker.submit_sync({"audio_paths": ["/tmp/b.wav"], "timestamps": True})
+            assert result[0]["text"] == "transcribed:/tmp/b.wav"
+            assert worker.fatal_cuda_reason is None
+        finally:
+            worker.stop()
+
+    def test_cuda_oom_is_not_classified_as_fatal(self):
+        assert classify_fatal_cuda_error(RuntimeError("CUDA out of memory")) is None
+
+    def test_cuda_graphs_are_rejected_when_streaming_shares_the_gpu(self):
+        worker = GPUWorker()
+        with patch.dict(
+            os.environ,
+            {
+                "PARAKEET_STREAM_MODEL": "nvidia/parakeet-rnnt-1.1b",
+                "PARAKEET_CUDA_GRAPHS": "true",
+            },
+        ):
+            with pytest.raises(ValueError, match="must be false"):
+                worker._load_model()
 
 
 class TestGPUWorkerSubmitSync:
@@ -508,7 +584,13 @@ class TestCUDAGraphConfig:
 
         worker = GPUWorker()
         with patch.dict(
-            os.environ, {"PARAKEET_CUDA_GRAPHS": "true", "PARAKEET_TORCH_COMPILE": "false", "PARAKEET_BF16": "0"}
+            os.environ,
+            {
+                "PARAKEET_STREAM_MODEL": "",
+                "PARAKEET_CUDA_GRAPHS": "true",
+                "PARAKEET_TORCH_COMPILE": "false",
+                "PARAKEET_BF16": "0",
+            },
         ):
             worker._load_model()
 

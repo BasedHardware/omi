@@ -61,7 +61,43 @@ export type SimNode = SimNodeDatum & {
   // distance-from-center target (re-rolled on reshuffle). Center node: 1 and 0.
   sizeScale: number
   targetRadius: number
+  // Where this node first appeared (set once, never mutated again). getPositions()
+  // reports this — not the live x/y/z — for a node's first frame, so the renderer's
+  // per-mesh lerp has somewhere to glide FROM; the live simulation position is the
+  // fixed target it glides TO. Without this split, a node's initial render position
+  // and its settle target would be the same value and there'd be nothing to animate.
+  seedX: number
+  seedY: number
+  seedZ: number
 }
+
+// Snapshot of a fully-settled layout, keyed by node id. Cached at module scope
+// (survives a component remount, e.g. revisiting the Memories tab, or the
+// second <BrainGraph> instance Settings.tsx mounts for its own Memories tab)
+// so an unchanged graph never re-pays the settle cost.
+type CachedLayout = Map<
+  string,
+  { x: number; y: number; z: number; sizeScale: number; targetRadius: number }
+>
+const layoutCache = new Map<string, CachedLayout>()
+// Small cap — a session only ever produces a handful of distinct node-set
+// snapshots (floor-only, floor+kg, +1 memory, ...), but bound it anyway so a
+// pathological amount of add/delete churn can't grow this unboundedly.
+const LAYOUT_CACHE_MAX = 20
+
+// Test-only escape hatch: the cache is intentionally module-scoped (it must
+// survive a component remount within one renderer process), which means it
+// otherwise leaks across test cases in the same file. Not used by app code.
+export function __clearLayoutCacheForTests(): void {
+  layoutCache.clear()
+}
+
+// Ticks for the one-shot synchronous settle below. Same physics as before, but
+// run as a single batch instead of spread across ~170 animation frames — that
+// spread is what made the entry read as heavy (a full force pass every frame
+// for seconds) and glitchy (the renderer's lerp chases a target that is itself
+// still jittering under live collision/radial forces, instead of a fixed spot).
+const SETTLE_TICKS = 220
 type SimLink = { source: string; target: string }
 export type NodePosition = {
   id: string
@@ -82,12 +118,21 @@ export class GraphSimulation {
   private nodeMap = new Map<string, SimNode>()
   private newlyAdded: string[] = []
 
-  constructor(private centerNodeId?: string) {
-    // 2D layout: every node lives on the z=0 plane so the camera faces it head
-    // on. This is what makes labels reliably readable — in 3D, two nodes far
-    // apart in space can still project on top of each other; on a plane they
-    // cannot, and label-aware collision (below) keeps titles from touching.
-    this.sim = forceSimulation<SimNode>([], 2).stop()
+  // `dimensions` selects a 2D (default) or 3D layout. 2D pins every node to z=0 so
+  // the camera faces it head on — what makes labels reliably readable, since two
+  // nodes far apart in 3D can still project on top of each other. Onboarding + the
+  // inline Memories card pass 2 (fixed camera). Only the full-screen INTERACTIVE
+  // brain map passes 3, where OrbitControls lets the user rotate to disambiguate
+  // depth (mirroring macOS's SceneKit force-directed MemoryGraphPage).
+  constructor(
+    private centerNodeId?: string,
+    private dimensions: 2 | 3 = 2
+  ) {
+    this.sim = forceSimulation<SimNode>([], this.dimensions).stop()
+  }
+
+  private get is3D(): boolean {
+    return this.dimensions === 3
   }
 
   // The drawn radius of a node's sphere. The center ("you") node is a fixed,
@@ -129,6 +174,20 @@ export class GraphSimulation {
       if (e.targetId in degree && e.targetId !== e.sourceId) degree[e.targetId]++
     }
 
+    // Prune nodes no longer in the incoming graph. Historically every caller only
+    // GREW the node set (onboarding reveals more each step), so this was a no-op.
+    // The knowledge-graph viewer's node cap is the first caller that can SHRINK it
+    // (toggling "Show all 188" back to "Show key 120"); without pruning, getPositions()
+    // would keep reporting the high-water-mark set and the scene would never shed the
+    // dropped spheres. Safe for the grow-only callers (nothing to remove there).
+    const incoming = new Set(graph.nodes.map((n) => n.id))
+    if (this.nodes.some((n) => !incoming.has(n.id))) {
+      this.nodes = this.nodes.filter((n) => incoming.has(n.id))
+      for (const id of [...this.nodeMap.keys()]) {
+        if (!incoming.has(id)) this.nodeMap.delete(id)
+      }
+    }
+
     this.newlyAdded = []
     for (const n of graph.nodes) {
       const existing = this.nodeMap.get(n.id)
@@ -147,12 +206,17 @@ export class GraphSimulation {
         targetRadius: isCenter ? 0 : RING_RADIUS * (RADIUS_MIN + Math.random() * RADIUS_SPAN),
         x: seed.x,
         y: seed.y,
-        z: seed.z
+        z: seed.z,
+        seedX: seed.x,
+        seedY: seed.y,
+        seedZ: seed.z
       }
       if (isCenter) {
         node.x = node.y = node.z = 0
+        node.seedX = node.seedY = node.seedZ = 0
         node.fx = 0
         node.fy = 0
+        if (this.is3D) node.fz = 0
       } else {
         // Keep the node + its (possibly long) label inside the frame.
         node.targetRadius = Math.min(node.targetRadius, this.maxRadiusFor(node))
@@ -200,27 +264,109 @@ export class GraphSimulation {
       // cools, rather than leaving residual overlaps.
       .force(
         'collide',
-        (forceCollide((d) => this.collideRadius(d as SimNode)) as {
-          iterations(n: number): unknown
-        }).iterations(10)
+        (
+          forceCollide((d) => this.collideRadius(d as SimNode)) as {
+            iterations(n: number): unknown
+          }
+        ).iterations(10)
       )
-      // Gentle reheat (not 0.9): existing settled nodes barely shift when a new
-      // node is revealed, so the reveal reads as an addition, not an upheaval.
-      .alpha(0.6)
-      .restart()
-      .stop()
+    const key = this.cacheKey(graph)
+    const cached = layoutCache.get(key)
+    const t0 = typeof performance !== 'undefined' ? performance.now() : 0
+    if (cached) {
+      // Exact node-set match to a layout we've already settled (a remount with
+      // unchanged data) — adopt it directly, zero physics. getPositions() still
+      // reports each of these as "not fresh" (they were added in an earlier
+      // call), so the renderer draws them straight at rest, no fly-in replay.
+      for (const n of this.nodes) {
+        const c = cached.get(n.id)
+        if (!c) continue
+        n.x = c.x
+        n.y = c.y
+        n.z = c.z
+        n.sizeScale = c.sizeScale
+        n.targetRadius = c.targetRadius
+      }
+      this.sim.alpha(0).stop()
+    } else {
+      // Freeze everything already settled so the burst below only has to place
+      // the newly-added nodes among fixed neighbors — this IS "existing settled
+      // nodes barely shift when a new node is revealed" (now they don't shift at
+      // all), and it means an incremental update is cheap regardless of how
+      // large the existing graph has grown.
+      const fresh = new Set(this.newlyAdded)
+      for (const n of this.nodes) {
+        if (fresh.has(n.id) || n.id === this.centerNodeId) continue
+        n.fx = n.x
+        n.fy = n.y
+        if (this.is3D) n.fz = n.z
+      }
+      // One synchronous batch instead of ~170 live animation frames: same total
+      // force math, but as a single fast pass, so nothing is left to visibly
+      // (and jitterily) converge on screen.
+      this.sim.alpha(0.6).restart().tick(SETTLE_TICKS)
+      this.clampPositions()
+      this.sim.stop()
+      for (const n of this.nodes) {
+        if (fresh.has(n.id) || n.id === this.centerNodeId) continue
+        n.fx = undefined
+        n.fy = undefined
+        if (this.is3D) n.fz = undefined
+      }
+      const snapshot: CachedLayout = new Map()
+      for (const n of this.nodes) {
+        snapshot.set(n.id, {
+          x: n.x ?? 0,
+          y: n.y ?? 0,
+          z: n.z ?? 0,
+          sizeScale: n.sizeScale,
+          targetRadius: n.targetRadius
+        })
+      }
+      if (layoutCache.size >= LAYOUT_CACHE_MAX) {
+        const oldest = layoutCache.keys().next().value
+        if (oldest !== undefined) layoutCache.delete(oldest)
+      }
+      layoutCache.set(key, snapshot)
+    }
+    if (typeof performance !== 'undefined' && import.meta.env.DEV) {
+      console.debug(
+        `[BrainGraph] settle ${(performance.now() - t0).toFixed(1)}ms (${cached ? 'cache hit' : 'fresh'}, ${this.nodes.length} nodes, +${this.newlyAdded.length} new)`
+      )
+    }
+  }
+
+  // Dimensions + node-id-set + center id: two graphs with the same nodes settle
+  // to the same shape, so this is enough to detect "we've already laid this out"
+  // without hashing content that doesn't affect layout (labels, edge direction,
+  // etc). Dimensions MUST be part of the key: the 2D card and the 3D full-screen
+  // page render the same node set, and a 2D layout has every node at z=0 — a 3D
+  // sim adopting it would render the "interactive 3D" scene as a flat plane with
+  // zero parallax (orbiting reads as panning).
+  private cacheKey(graph: KnowledgeGraph): string {
+    const ids = graph.nodes
+      .map((n) => n.id)
+      .sort()
+      .join(',')
+    return `${this.dimensions}|${this.centerNodeId ?? ''}|${ids}`
   }
 
   private seedPositionNear(id: string, graph: KnowledgeGraph): { x: number; y: number; z: number } {
     const edge = graph.edges.find((e) => e.sourceId === id || e.targetId === id)
     const neighborId = edge ? (edge.sourceId === id ? edge.targetId : edge.sourceId) : undefined
     const neighbor = neighborId ? this.nodeMap.get(neighborId) : undefined
-    // z stays 0 — the layout is 2D (see constructor). Only x/y are simulated.
+    // z stays 0 in 2D (only x/y are simulated); in 3D it gets the same jitter so
+    // the cloud spreads through depth instead of collapsing onto one plane.
     const jitter = (): number => (Math.random() - 0.5) * 60
+    const jz = (): number => (this.is3D ? jitter() : 0)
     if (neighbor) {
-      return { x: (neighbor.x ?? 0) + jitter(), y: (neighbor.y ?? 0) + jitter(), z: 0 }
+      return {
+        x: (neighbor.x ?? 0) + jitter(),
+        y: (neighbor.y ?? 0) + jitter(),
+        z: (neighbor.z ?? 0) + jz()
+      }
     }
-    return { x: jitter(), y: jitter(), z: 0 }
+    return { x: jitter(), y: jitter(), z: jz() }
   }
 
   // Hard-clamp every node's actual position so the node AND its label always
@@ -233,7 +379,9 @@ export class GraphSimulation {
       if (n.id === this.centerNodeId) continue
       const x = n.x ?? 0
       const y = n.y ?? 0
-      const r = Math.hypot(x, y)
+      const z = n.z ?? 0
+      // In 3D clamp to a sphere (include z); in 2D the plane radius as before.
+      const r = this.is3D ? Math.hypot(x, y, z) : Math.hypot(x, y)
       const maxR = Math.max(RING_RADIUS * RADIUS_MIN, frame - this.collideRadius(n))
       if (r > maxR && r > 0) {
         const k = maxR / r
@@ -241,6 +389,10 @@ export class GraphSimulation {
         n.y = y * k
         n.vx = 0
         n.vy = 0
+        if (this.is3D) {
+          n.z = z * k
+          n.vz = 0
+        }
       }
     }
   }
@@ -274,7 +426,9 @@ export class GraphSimulation {
   boundingRadius(): number {
     let max = 0
     for (const n of this.nodes) {
-      const d = Math.hypot(n.x ?? 0, n.y ?? 0) + this.collideRadius(n)
+      const d =
+        (this.is3D ? Math.hypot(n.x ?? 0, n.y ?? 0, n.z ?? 0) : Math.hypot(n.x ?? 0, n.y ?? 0)) +
+        this.collideRadius(n)
       if (d > max) max = d
     }
     return max
@@ -348,17 +502,27 @@ export class GraphSimulation {
     this.sim.alpha(0.4).restart().stop()
   }
 
+  // For a node added in the most recent setGraph() call, report its SEED spot
+  // (not its already-settled final one) so the renderer's initial render — and
+  // thus the per-mesh lerp's starting point — is the fly-in origin, while
+  // liveNode() (read every frame) already returns the final, fixed target.
+  // Nodes from an earlier call report their current (already on-screen, at
+  // rest) position, so they never re-play the fly-in on a later update.
   getPositions(): NodePosition[] {
-    return this.nodes.map((n) => ({
-      id: n.id,
-      label: n.label,
-      nodeType: n.nodeType,
-      degree: n.degree,
-      sizeScale: n.sizeScale,
-      x: n.x ?? 0,
-      y: n.y ?? 0,
-      z: n.z ?? 0
-    }))
+    const fresh = new Set(this.newlyAdded)
+    return this.nodes.map((n) => {
+      const useSeed = fresh.has(n.id)
+      return {
+        id: n.id,
+        label: n.label,
+        nodeType: n.nodeType,
+        degree: n.degree,
+        sizeScale: n.sizeScale,
+        x: useSeed ? n.seedX : (n.x ?? 0),
+        y: useSeed ? n.seedY : (n.y ?? 0),
+        z: useSeed ? n.seedZ : (n.z ?? 0)
+      }
+    })
   }
 
   // Returns and clears the list of node ids added since the last call, so the
@@ -377,11 +541,12 @@ export class GraphSimulation {
 // sim.liveNode(), so there are zero per-frame React re-renders.
 export function useGraphSimulation(
   graph: KnowledgeGraph,
-  centerNodeId?: string
+  centerNodeId?: string,
+  dimensions: 2 | 3 = 2
 ): { nodes: NodePosition[]; sim: GraphSimulation; reduced: boolean } {
   const simRef = useRef<GraphSimulation>(undefined)
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
-  if (!simRef.current) simRef.current = new GraphSimulation(centerNodeId)
+  if (!simRef.current) simRef.current = new GraphSimulation(centerNodeId, dimensions)
   const reducedRef = useRef(
     typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true

@@ -14,11 +14,12 @@ export function RewindSearchBar({ onSearch }: { onSearch: (q: string) => void })
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Search what was on screen…"
-        className="flex-1 rounded bg-white/10 px-3 py-2 text-sm text-white outline-none"
+        autoFocus
+        className="flex-1 rounded-control border border-line bg-white/[0.07] px-3.5 py-2 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-line-strong"
       />
       <button
         type="submit"
-        className="rounded bg-[color:var(--accent)] px-3 py-2 text-sm text-white"
+        className="rounded-control bg-[color:var(--accent)] px-4 py-2 text-sm font-medium text-[color:var(--accent-contrast)] transition-opacity hover:opacity-90"
       >
         Search
       </button>

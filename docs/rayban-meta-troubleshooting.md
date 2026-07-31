@@ -76,7 +76,8 @@ Expected — DAT 0.8 exposes no battery API; the row is hidden.
 
 ## App crashes at launch after linking the DAT SDK (SwiftProtobuf collision)
 
-**Known integration blocker — must be resolved before shipping the DAT build.**
+This crash occurs only when DAT and `mcumgr_flutter` are linked into the same
+app target. The repository keeps them in separate build graphs.
 
 Symptom: with `MWDATCore`/`MWDATCamera` linked, the app crashes on launch
 (`EXC_BAD_ACCESS` / `SIGSEGV` in `swift_getObjectType`, during Flutter plugin
@@ -100,10 +101,11 @@ unrelated Swift plugin's `register(with:)` dereferences null.
 
 Confirmed by removing `mcumgr_flutter` (the app's only SwiftProtobuf consumer —
 `whisper_flutter_new` does not use it): the duplicate disappears (`nm Runner |
-grep -c SwiftProtobuf` → 0) and the launch crash goes away. That removal is not
-shippable, though — it disables Omi CV1 MCU firmware updates.
+grep -c SwiftProtobuf` → 0) and the launch crash goes away. The default build
+still needs that pod for Omi CV1 firmware updates, so the DAT build uses a
+dedicated target instead of changing the default target.
 
-Fix directions (pick one before enabling the DAT build in production):
+Possible long-term fix directions are:
 
 1. **Ask Meta to stop exporting SwiftProtobuf** from `MWDATCore` (build it with
    hidden symbol visibility / a private module, or vendor it under a renamed
@@ -118,48 +120,38 @@ Fix directions (pick one before enabling the DAT build in production):
    `mcumgr_flutter` (Ray-Ban glasses don't do nRF MCU firmware updates anyway),
    accepting that that flavor can't OTA-update Omi CV1 pendants.
 
-Until one of these lands, keep the DAT SPM package out of the default shipping
-build (the `#if canImport(MWDATCore)` guard already makes the app compile and
-run in audio-only mode without it).
+The repository implements option 3. Keep the DAT SPM products off the default
+`Runner` target; its `#if canImport(MWDATCore)` guard remains the audio-only
+path.
 
-### Concrete implementation plan (chosen: option 3 — DAT flavor without `mcumgr_flutter`)
+### Implemented option 3 — DAT flavor without `mcumgr_flutter`
 
-Option 3 is the only fix landable without waiting on Meta, and it is fully in
-our control. The audio-only path (the one that ships today) needs none of this;
-this is only for producing a **camera-capable DAT build**. It must be built and
-verified on a Mac + a physical iPhone + glasses — there is **no iOS build in PR
-CI** (mobile CI is `ubuntu-latest`: `flutter pub get`, `gen-l10n`, `dart
-analyze`, `flutter test` only), so none of the steps below are exercised by CI
-and each must be validated on-device.
+The audio-only build needs none of this. The camera-capable path is isolated as
+follows:
 
-1. **Gate `mcumgr_flutter` behind a build flag.** In `app/ios/Podfile`, when an
-   env flag is set (e.g. `OMI_RAYBAN_DAT=1`), remove the `mcumgr_flutter` pod
-   target and every pod that depends on it from `installer.pods_project` in
-   `pre_install`/`post_install`, so SwiftProtobuf never enters the `Runner`
-   static image alongside `MWDATCore`.
-2. **Stop the generated registrant from importing it (the easy-to-miss step).**
-   `app/ios/Runner/GeneratedPluginRegistrant.swift` is regenerated on every
-   `flutter pub get`/build from pub resolution, and it will `import
-   mcumgr_flutter` + call `McumgrFlutterPlugin.register(...)`. With the pod
-   removed that is a compile/link error, so a Podfile change **alone produces a
-   broken DAT build**. Either (a) exclude the plugin from pub resolution for the
-   DAT build so it is never generated, or (b) add a build phase that strips the
-   `mcumgr_flutter` import/registration from the generated file for that
-   configuration.
-3. **Guard the Dart firmware-update call sites.** `mcumgr_flutter` is used
-   across the CV1/OpenGlass OTA flows (`firmware_mixin.dart`,
-   `firmware_update*.dart`, `device_provider.dart`, `omiglass_ota_update.dart`,
-   et al.). In a DAT build those paths must be unreachable (feature-flagged
-   off), since the plugin is absent. Ray-Ban glasses never do nRF MCU firmware
-   updates, so this is acceptable for that flavor.
-4. **Accept the tradeoff:** the DAT flavor cannot OTA-update Omi CV1 pendants.
-   Ship it as a separate build, not the default.
+1. `RunnerRayBanDat` is a separate Xcode target and `raybanDat` scheme. Only
+   that target links `MWDATCore` and `MWDATCamera` from the exact 0.8.0 package;
+   default `Runner` has no DAT product dependency.
+2. Exact shell flag `OMI_RAYBAN_DAT=1` makes `app/ios/Podfile` resolve only the
+   DAT target. `rayban_dat_plugin_boundary.rb` removes the iOS
+   `mcumgr_flutter` entry and its Objective-C
+   `Runner/GeneratedPluginRegistrant.m` import/registration before CocoaPods
+   runs. It leaves Android and Dart dependency metadata intact and fails closed
+   if Flutter's generated shape changes.
+3. `app/scripts/rayban_dat.sh` is the only supported build entry point. It runs
+   Flutter with `--flavor raybanDat`, `--dart-define=OMI_RAYBAN_DAT=true`, and
+   `--no-pub`, then restores the exact default generated plugin files, Flutter
+   flavor environment, pod graph, and lock on exit.
+4. Dart firmware policy disables Omi pendant DFU in DAT builds before any
+   `mcumgr_flutter` factory or channel call. OpenGlass Wi-Fi OTA remains
+   available because it does not use mcumgr.
+5. The accepted tradeoff remains: a DAT build cannot OTA-update Omi pendants.
 
-Verification (Mac + hardware, no CI coverage): build the DAT flavor, launch,
-confirm the `objc[…] Class _TtC13SwiftProtobuf… implemented in both …` warning
-is gone and there is no `SIGSEGV`/`EXC_BAD_ACCESS` in `swift_getObjectType`
-during plugin registration, then run the founder-acceptance checklist
-(`rayban-meta-founder-acceptance.md`) end-to-end including a photo capture.
+Hermetic Ruby contracts cover the plugin transform, build transaction, package
+pin, target separation, signing identity, and default mcumgr lock. They do not
+replace runtime proof: launch on a physical iPhone, confirm the duplicate-class
+warning and `swift_getObjectType` crash are absent, then complete
+`rayban-meta-founder-acceptance.md`, including a real photo.
 
 ## Reference
 

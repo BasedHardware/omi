@@ -78,6 +78,25 @@ class TestRecordSpeechMs:
             )
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_custom_stt_lane_records_under_its_own_keys(self):
+        """#7690: custom-STT speech is metered in an isolated lane, never
+        coerced into the live-enforced realtime lane."""
+        pipe = MagicMock()
+        _mock_redis.pipeline.return_value = pipe
+        fair_use_mod.record_speech_ms('user1', 5000, source='custom_stt')
+        bucket_key = pipe.hincrby.call_args.args[0]
+        zset_key = pipe.zadd.call_args.args[0]
+        assert bucket_key == 'fair_use:v2:bucket:custom_stt:user1'
+        assert zset_key == 'fair_use:v2:speech:custom_stt:user1'
+
+    def test_custom_stt_source_is_valid_and_outside_live_enforcement(self):
+        """#7690: the lane must exist (unknown sources coerce to realtime,
+        which would gate exempt users) and must stay out of the live meter."""
+        assert fair_use_mod._normalize_speech_source('custom_stt') == 'custom_stt'
+        assert fair_use_mod._normalize_speech_source('not-a-lane') == 'realtime'
+        assert 'custom_stt' not in fair_use_mod.LIVE_SPEECH_SOURCES
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_ignores_zero_speech(self):
         pipe = MagicMock()
         _mock_redis.pipeline.return_value = pipe
@@ -620,6 +639,22 @@ class TestDgBudget:
         assert result['exhausted'] is False
         assert result['resets_at'] is not None
         assert result['resets_at'].endswith('Z')
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_get_dg_budget_status_resets_at_is_valid_iso8601(self):
+        # resets_at is emitted to API clients (routers/fair_use_admin). tomorrow is tz-aware,
+        # so a naive `isoformat() + 'Z'` produced an invalid "…+00:00Z" that both carries an
+        # offset and a Zulu suffix — datetime.fromisoformat rejects it.
+        _mock_redis.get.return_value = b'600000'
+        result = fair_use_mod.get_dg_budget_status('user1')
+        resets_at = result['resets_at']
+        assert '+00:00Z' not in resets_at, f'malformed offset+Z timestamp: {resets_at!r}'
+        # Must be parseable as ISO-8601 (the reason a client would consume this field).
+        parsed = datetime.fromisoformat(resets_at.replace('Z', '+00:00'))
+        assert parsed.tzinfo is not None
+        # Next-midnight-UTC contract: time component is zeroed.
+        assert (parsed.hour, parsed.minute, parsed.second, parsed.microsecond) == (0, 0, 0, 0)
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)

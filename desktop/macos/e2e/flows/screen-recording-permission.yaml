@@ -17,12 +17,20 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Focus/FocusAssistant.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Focus/FocusStorage.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistantTelemetry.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryExtractionModels.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ScreenCaptureTargetPolicy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/CapturedFrame.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveAssistantOrchestrationPolicy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveExternalCaptureYield.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+NotificationSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+ScreenCaptureHealth.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/SettingsSyncManager.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistantSettings.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
+  - desktop/macos/Desktop/Sources/ModelQoS.swift
 preconditions:
   - auth_ready
 

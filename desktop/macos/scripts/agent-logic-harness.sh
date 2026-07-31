@@ -236,13 +236,6 @@ run_cross_surface_agent_smoke() {
   )
 }
 
-run_cross_surface_rust_smoke() {
-  (
-    cd "$DESKTOP_DIR/Backend-Rust"
-    cargo test retrieval_policy
-  )
-}
-
 ensure_pi_mono_extension_deps() {
   if [[ -d "$DESKTOP_DIR/pi-mono-extension/node_modules" ]]; then
     return
@@ -336,7 +329,6 @@ fi
 if [[ "$RUN_CROSS_SURFACE_SMOKE" -eq 1 ]]; then
   run_step "cross-surface Swift contract smoke" run_cross_surface_swift_smoke
   run_step "cross-surface agent contract smoke" run_cross_surface_agent_smoke
-  run_step "cross-surface Rust retrieval contract smoke" run_cross_surface_rust_smoke
 fi
 
 if [[ "$RUN_GAUNTLET" -eq 1 ]]; then

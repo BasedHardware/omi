@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-surface-tool-authority-projection",
+  "violated_contract": "An authority that admits tool invocations must compute its allowlist from the same manifest projection that advertised the tool to the invoking surface. The realtime-voice surface offers tools generated from the surface projection, but the kernel run-tool capability filtered by chat-adapter projection, structurally rejecting every voice-only tool (ask_higher_model, point_click) with tool_not_allowed.",
+  "canonical_prevention": "Kernel run-tool capability registration unions the run surface's manifest projection (toolsForSurface) with the adapter projection, and a behavioral test registers a swift_realtime run and authorizes a voice-only tool end-to-end.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/agent/tests/run-tool-capability.test.ts"
+  ],
+  "evidence_prs": [9597],
+  "scope_hints": [
+    "desktop/macos/agent/src/runtime/run-tool-capability.ts",
+    "desktop/macos/agent/src/runtime/omi-tool-manifest.ts",
+    "desktop/macos/Desktop/Sources/Generated/GeneratedToolCapabilities.swift"
+  ],
+  "status": "open"
+}

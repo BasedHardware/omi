@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for desktop-changelog.py I/O encoding (stdlib unittest).
+"""Unit tests for desktop changelog tooling (stdlib unittest).
 
 Regression coverage for #9717: read_json/write_json must always use UTF-8 so a
 contributor on a non-UTF-8 host locale (e.g. GBK on native Windows Python) does
@@ -21,6 +21,12 @@ _SPEC = importlib.util.spec_from_file_location(
 )
 changelog = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(changelog)
+
+_CHECK_SPEC = importlib.util.spec_from_file_location(
+    "check_desktop_changelog", Path(__file__).with_name("check-desktop-changelog.py")
+)
+checker = importlib.util.module_from_spec(_CHECK_SPEC)
+_CHECK_SPEC.loader.exec_module(checker)
 
 
 class EncodingTests(unittest.TestCase):
@@ -59,6 +65,40 @@ class EncodingTests(unittest.TestCase):
             payload = {"note": "“curly” — café"}
             changelog.write_json(path, payload)
             self.assertEqual(changelog.read_json(path), payload)
+
+
+class ChangelogRequirementTests(unittest.TestCase):
+    def test_internal_release_controls_are_exempt_but_product_source_is_not(self) -> None:
+        for path in (
+            "desktop/macos/docs/release.md",
+            "desktop/macos/scripts/qualify-desktop-beta.sh",
+            # Sibling qualification-runner helper (EXEMPT_DESKTOP_PATHS).
+            "desktop/macos/scripts/qualification-swift-cache.sh",
+            "desktop/macos/scripts/qualification-lease-command.sh",
+            # CI-only flow validation and its shared source inventory do not
+            # alter the desktop application users receive.
+            "desktop/macos/scripts/desktop-flow-lint.py",
+            "desktop/macos/scripts/desktop_flow_contract.py",
+            # Test files are never user-facing app changes (EXEMPT_DESKTOP_PATH_PREFIXES).
+            # #10374's timeout bump touched this file; without the exemption the
+            # post-merge push run of the changelog gate reddened main (#10387).
+            "desktop/macos/tests/test-qualify-desktop-beta-contract.sh",
+            "desktop/macos/tests/some-other-desktop-test.sh",
+            # Generated Swift is derived from the OpenAPI contract, never a
+            # user-facing app note (EXEMPT_DESKTOP_PATH_PREFIXES).
+            "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(checker.is_desktop_change_requiring_changelog(path))
+
+        # Product source still requires a changelog — the exemptions must not leak.
+        # Note the hand-written Sources file is NOT under Sources/Generated/.
+        for path in (
+            "desktop/macos/Desktop/Sources/AppDelegate.swift",
+            "desktop/macos/scripts/some-user-facing-script.sh",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(checker.is_desktop_change_requiring_changelog(path))
 
 
 if __name__ == "__main__":

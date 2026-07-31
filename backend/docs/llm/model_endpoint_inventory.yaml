@@ -54,6 +54,7 @@ model_config_features:
       - conv_app_select
       - external_structure
       - proactive_notification
+      - translation
       - trends
       - what_matters_now
     streaming:
@@ -69,7 +70,7 @@ model_config_features:
     pinned:
       - fair_use
   gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini, openrouter, perplexity, and anthropic.
-  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway; gateway Gemini uses native Vertex generateContent authenticated by GKE Workload Identity; Gemini BYOK remains unsupported and fails closed; temporary direct exceptions retain the native Vertex legacy client until those callers migrate.
+  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway and does not retain a direct-provider fallback; gateway Gemini uses native Vertex generateContent authenticated by GKE Workload Identity; Gemini BYOK remains unsupported and fails closed.
   test_guardrail_coverage:
     - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
     - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
@@ -89,46 +90,46 @@ surfaces:
     migration_status: gateway_capable_central_flip
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: anthropic_agentic_chat
-    code_path: backend/utils/llm/gateway_anthropic.py:_GatewayAnthropicStreamWithFallback
+    code_path: backend/utils/llm/gateway_anthropic.py:_GatewayAnthropicStream
     current_provider_model: anthropic/chat_agent
     request_shape: streaming, native tool calling, server-side web search
     gateway_lane_capability_needed: native anthropic.messages surface with streaming and tools on omi:auto:chat-agent
-    migration_status: gateway_routed_with_direct_anthropic_transport_fallback; fallback reports recovered only after terminal legacy success and exhausted on legacy failure
+    migration_status: gateway_only_fail_closed; transport failures and an open circuit return a typed gateway-unavailable error without constructing or calling a direct Anthropic client
     test_guardrail_coverage: backend/tests/unit/test_gateway_anthropic_client.py
   - surface: perplexity_web_search_tool
     code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
     current_provider_model: perplexity/web_search
     request_shape: provider search chat completion
     gateway_lane_capability_needed: perplexity OpenAI-compatible provider adapter on omi:auto:web-search
-    migration_status: gateway_routed
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+    migration_status: gateway_only_fail_closed
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_perplexity_tool_always_uses_gateway
   - surface: app_icon_generation
     code_path: backend/utils/llm/app_generator.py:generate_app_icon
     current_provider_model: openai/dall-e-3
     request_shape: image generation
     gateway_lane_capability_needed: gateway-owned /v1/images/generations proxy
-    migration_status: gateway_routed
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+    migration_status: gateway_only_fail_closed
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_app_icon_generation_always_uses_gateway
   - surface: file_chat_vision
     code_path: backend/utils/other/chat_file.py:_ask_vision_stream
-    current_provider_model: openai/gpt-4.1
+    current_provider_model: openai/gpt-5.6-luna
     request_shape: streaming vision chat completion
     gateway_lane_capability_needed: gateway-owned vision chat lane or file-chat replacement retrieval path
-    migration_status: inventoried_explicit_direct_file_lifecycle_exception; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway unless explicitly acknowledged
+    migration_status: inventoried_direct_file_lifecycle_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: file_chat_assistants
     code_path: backend/utils/other/chat_file.py:FileChatTool
-    current_provider_model: openai/gpt-4.1 with Assistants, Threads, Files, File Search
+    current_provider_model: openai/gpt-5.6-luna with Assistants, Threads, Files, File Search
     request_shape: file upload, assistants, file_search, streaming run deltas
     gateway_lane_capability_needed: gateway-owned file/assistant lifecycle or replacement retrieval path
-    migration_status: inventoried_explicit_direct_file_lifecycle_exception; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway unless explicitly acknowledged
+    migration_status: inventoried_direct_file_lifecycle_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: omni_realtime_relay
     code_path: backend/routers/omni_relay.py
     current_provider_model: openai realtime or gemini live selected by client query
     request_shape: realtime websocket relay
     gateway_lane_capability_needed: gateway-owned realtime websocket relay
-    migration_status: inventoried_explicit_realtime_exception; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway unless explicitly acknowledged; prod behavior unchanged
+    migration_status: inventoried_direct_realtime_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: fair_use_classifier
     code_path: backend/utils/llm/fair_use_classifier.py:classify_user_purpose

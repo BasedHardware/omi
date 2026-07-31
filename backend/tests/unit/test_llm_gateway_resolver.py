@@ -107,6 +107,7 @@ def test_lkg_is_selected_only_for_active_route_policy_allowed_failure():
         FailureClass.BYOK_UNSUPPORTED_PROVIDER,
         FailureClass.MISSING_BYOK_KEY,
         FailureClass.CAPABILITY_MISMATCH,
+        FailureClass.PROVIDER_INVALID_REQUEST,
         FailureClass.INVALID_CONFIG,
     ],
 )

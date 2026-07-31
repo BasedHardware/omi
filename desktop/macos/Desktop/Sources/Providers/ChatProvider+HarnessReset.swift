@@ -11,9 +11,12 @@ extension ChatProvider {
 
   /// Completes a harness reset after its non-production automation entrypoint
   /// has established eligibility. The main-chat transaction sets
-  /// `defaultJournalAlreadyCleared` only after its authoritative owner-scoped
-  /// control clear has succeeded.
-  func resetChatForAuthorizedHarness(defaultJournalAlreadyCleared: Bool = false) async -> String? {
+  /// `journalAlreadyCleared` only after its authoritative owner-scoped control
+  /// clear has succeeded for the active surface.
+  func resetChatForAuthorizedHarness(
+    journalAlreadyCleared: Bool = false,
+    createReplacementSession: (@MainActor () async -> ChatSession?)? = nil
+  ) async -> String? {
     isClearing = true
     defer { isClearing = false }
 
@@ -21,7 +24,7 @@ extension ChatProvider {
       let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
       let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
       AgentRuntimeStatusStore.shared.clear(surface: surface)
-      if !defaultJournalAlreadyCleared {
+      if !journalAlreadyCleared {
         guard await kernelTurnProjection.clear(surface: surface) else {
           return "failed to clear default kernel journal"
         }
@@ -31,8 +34,10 @@ extension ChatProvider {
       if let session = sessionToDelete {
         let surface = AgentSurfaceReference.mainChat(chatId: session.id)
         AgentRuntimeStatusStore.shared.clear(surface: surface)
-        guard await kernelTurnProjection.clear(surface: surface) else {
-          return "failed to clear session kernel journal"
+        if !journalAlreadyCleared {
+          guard await kernelTurnProjection.clear(surface: surface) else {
+            return "failed to clear session kernel journal"
+          }
         }
       }
       if let session = sessionToDelete {
@@ -41,7 +46,11 @@ extension ChatProvider {
       currentSession = nil
       messages = []
       resetMessagesPagination()
-      _ = await createNewSession()
+      if let createReplacementSession {
+        _ = await createReplacementSession()
+      } else {
+        _ = await createNewSession()
+      }
     }
     return nil
   }
@@ -57,16 +66,26 @@ extension ChatProvider {
 
   /// Performs the owner-scoped reset transaction after the automation entrypoint
   /// has established that the bundle is non-production.
-  func performMainChatHarnessResetTransaction() async -> String? {
+  func performMainChatHarnessResetTransaction(
+    createReplacementSession: (@MainActor () async -> ChatSession?)? = nil
+  ) async -> String? {
     let bundleScope = (Bundle.main.bundleIdentifier ?? "desktop")
       .replacingOccurrences(of: ".", with: "-")
     let resetOwnerID = "desktop-harness-reset-\(bundleScope)"
     return await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(resetOwnerID) { [self] in
-      let clear = await clearOwnerSurfaceStateForAuthorizedHarness(chatId: "default")
+      // Clear the active main-chat surface, not a hard-coded "default". When
+      // the provider is on an app-scoped default chat (default|<app>) or a
+      // non-default session, a hard-coded "default" would clear the wrong
+      // surface and leave the visible/persisted rows for the next ask intact.
+      let activeChatId = mainChatSurfaceReference().externalRefId
+      let clear = await clearOwnerSurfaceStateForAuthorizedHarness(chatId: activeChatId)
       if let error = clear["error"] {
         return error
       }
-      return await resetChatForAuthorizedHarness(defaultJournalAlreadyCleared: true)
+      return await resetChatForAuthorizedHarness(
+        journalAlreadyCleared: true,
+        createReplacementSession: createReplacementSession
+      )
     }
   }
 }

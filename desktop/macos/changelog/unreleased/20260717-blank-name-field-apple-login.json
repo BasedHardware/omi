@@ -1,3 +1,0 @@
-{
-  "change": "The onboarding name field starts blank when sign-in provided no name, instead of pre-filling the literal text \"there\""
-}

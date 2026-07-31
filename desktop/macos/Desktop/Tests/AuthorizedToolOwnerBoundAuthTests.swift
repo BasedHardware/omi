@@ -498,6 +498,45 @@ private actor PermissionCallbackBox<Value: Sendable> {
     XCTAssertEqual(retryCount, 0)
   }
 
+  func testBackendTaskWriteRefreshesTasksForCreateActionItem() async {
+    var refreshCount = 0
+    let completed = await ChatToolExecutor.executeBackendTaskWritePostEffects(
+      toolName: "create_action_item",
+      expectedOwnerID: "owner-a",
+      ownerIsCurrent: { _ in true },
+      refreshTasksFromServer: { refreshCount += 1 })
+
+    // Regression: an agent-created task must refresh the list from the server
+    // so it appears without waiting for the next poll or a manual reload.
+    XCTAssertTrue(completed)
+    XCTAssertEqual(refreshCount, 1)
+  }
+
+  func testBackendTaskWriteDoesNotRefreshForReadTools() async {
+    var refreshCount = 0
+    let completed = await ChatToolExecutor.executeBackendTaskWritePostEffects(
+      toolName: "get_action_items",
+      expectedOwnerID: "owner-a",
+      ownerIsCurrent: { _ in true },
+      refreshTasksFromServer: { refreshCount += 1 })
+
+    // Read tools (and non-task writes) must not trigger a server refresh.
+    XCTAssertTrue(completed)
+    XCTAssertEqual(refreshCount, 0)
+  }
+
+  func testBackendTaskWriteDoesNotRefreshUnderReplacementOwner() async {
+    var refreshCount = 0
+    let completed = await ChatToolExecutor.executeBackendTaskWritePostEffects(
+      toolName: "create_action_item",
+      expectedOwnerID: "owner-a",
+      ownerIsCurrent: { $0 == "owner-b" },  // expected owner-a is no longer current
+      refreshTasksFromServer: { refreshCount += 1 })
+
+    XCTAssertFalse(completed)
+    XCTAssertEqual(refreshCount, 0)
+  }
+
   func testNonHubProviderDispatchIsNotCalledAfterOwnerChangesDuringPreparation() async {
     var currentOwner = "owner-a"
     let coordinator = VoiceTurnCoordinator(
@@ -557,22 +596,26 @@ private actor PermissionCallbackBox<Value: Sendable> {
   }
 
   private func replaceStandardOwner(with ownerID: String?) async {
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: .standard,
-      allowAutomationOverride: false,
-      plannedNextOwner: { _, _ in ownerID },
-      quiesceVoice: { _, _ in },
-      revokeKernelOwner: { _, _ in },
-      retargetLocalStorage: { _, _ in },
-      ownerDidChange: {}
-    ) { defaults in
-      defaults.removeObject(forKey: .automationOwnerOverride)
-      defaults.removeObject(forKey: .automationOwnerABackup)
-      if let ownerID {
-        defaults.set(ownerID, forKey: .authUserId)
-      } else {
-        defaults.removeObject(forKey: .authUserId)
+    do {
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+        defaults: .standard,
+        allowAutomationOverride: false,
+        plannedNextOwner: { _, _ in ownerID },
+        quiesceVoice: { _, _ in },
+        revokeKernelOwner: { _, _ in },
+        retargetLocalStorage: { _, _ in },
+        ownerDidChange: {}
+      ) { defaults in
+        defaults.removeObject(forKey: .automationOwnerOverride)
+        defaults.removeObject(forKey: .automationOwnerABackup)
+        if let ownerID {
+          defaults.set(ownerID, forKey: .authUserId)
+        } else {
+          defaults.removeObject(forKey: .authUserId)
+        }
       }
+    } catch {
+      XCTFail("owner transition failed: \(error)")
     }
   }
 
@@ -597,26 +640,30 @@ private actor PermissionCallbackBox<Value: Sendable> {
     // Force one distinct completed generation first so even an authority that
     // a mismatch test deliberately left revoked is quiescent before restore.
     await replaceStandardOwner(with: "authorized-tool-owner-restore")
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: .standard,
-      allowAutomationOverride: true,
-      plannedNextOwner: { _, _ in effectiveOwner },
-      quiesceVoice: { _, _ in },
-      revokeKernelOwner: { _, _ in },
-      retargetLocalStorage: { _, _ in },
-      ownerDidChange: {}
-    ) { defaults in
-      for (key, value) in [
-        (DefaultsKey.authUserId, authOwner),
-        (DefaultsKey.automationOwnerOverride, ownerOverride),
-        (DefaultsKey.automationOwnerABackup, ownerBackup),
-      ] {
-        if let value {
-          defaults.set(value, forKey: key.rawValue)
-        } else {
-          defaults.removeObject(forKey: key.rawValue)
+    do {
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+        defaults: .standard,
+        allowAutomationOverride: true,
+        plannedNextOwner: { _, _ in effectiveOwner },
+        quiesceVoice: { _, _ in },
+        revokeKernelOwner: { _, _ in },
+        retargetLocalStorage: { _, _ in },
+        ownerDidChange: {}
+      ) { defaults in
+        for (key, value) in [
+          (DefaultsKey.authUserId, authOwner),
+          (DefaultsKey.automationOwnerOverride, ownerOverride),
+          (DefaultsKey.automationOwnerABackup, ownerBackup),
+        ] {
+          if let value {
+            defaults.set(value, forKey: key.rawValue)
+          } else {
+            defaults.removeObject(forKey: key.rawValue)
+          }
         }
       }
+    } catch {
+      XCTFail("owner restoration failed: \(error)")
     }
   }
 }

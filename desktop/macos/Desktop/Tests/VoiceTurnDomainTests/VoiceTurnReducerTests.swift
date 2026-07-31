@@ -240,6 +240,62 @@ final class VoiceTurnReducerTests: XCTestCase {
       timedOut.effects.contains(.fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
   }
 
+  func testBargeInReplacementUsesTheBoundedReconnectWindow() {
+    XCTAssertEqual(reducer.deadlines.bargeInReplacement, 3)
+    XCTAssertEqual(reducer.deadlines.providerReconnect, 3)
+  }
+
+  func testLateReplacementReadyCannotReclaimHubWarmBatchFallback() {
+    let turnID = VoiceTurnID()
+    let replacementResponseID = VoiceResponseID("late-replacement")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+    model = reduce(model, .finalize(turnID: turnID)).model
+    model = reduce(model, .hubCommitDeferredForReplacement(turnID: turnID)).model
+
+    let fallback = reduce(model, .deadlineFired(turnID: turnID, deadline: .hubWarm))
+
+    XCTAssertEqual(fallback.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(fallback.model.turn?.phase, .finalizing)
+    XCTAssertEqual(fallback.model.turn?.providerConnection, .ready)
+    XCTAssertNil(fallback.model.turn?.sessionID)
+    XCTAssertNil(fallback.model.turn?.providerEffectIdentity)
+    XCTAssertNil(fallback.model.turn?.responseID)
+    XCTAssertFalse(fallback.model.turn?.hubCommitPending == true)
+    XCTAssertFalse(fallback.model.turn?.deadlines.contains(.bargeInReplacement) == true)
+    XCTAssertTrue(fallback.model.turn?.deadlines.contains(.transcription) == true)
+    XCTAssertTrue(
+      fallback.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
+
+    let lateReady = reduce(
+      fallback.model,
+      .providerReplacementReady(
+        turnID: turnID,
+        identity: reservation.identity,
+        sessionID: VoiceSessionID(),
+        responseID: replacementResponseID)
+    )
+
+    XCTAssertEqual(lateReady.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(lateReady.model.turn?.phase, .finalizing)
+    XCTAssertEqual(lateReady.model.turn?.providerConnection, .ready)
+    XCTAssertEqual(lateReady.model.staleEventCount, 1)
+    XCTAssertEqual(
+      lateReady.effects,
+      [.staleEventDropped(turnID: turnID, event: "provider_replacement_ready")])
+  }
+
   func testBufferedReconnectSupersedesGenericHubWarmDeadline() {
     let turnID = VoiceTurnID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
@@ -286,6 +342,155 @@ final class VoiceTurnReducerTests: XCTestCase {
     let ready = reduce(reconnected.model, .hubReady(turnID: turnID, sessionID: sessionID))
     XCTAssertEqual(ready.model.turn?.route, .hub(sessionID: sessionID))
     XCTAssertTrue(ready.effects.contains(.prepareHubInput(turnID: turnID, sessionID: sessionID)))
+  }
+
+  /// Barge-in replacement is the sibling of the reconnect path above and must
+  /// honour the same capture-ownership contract. A press that lands on a
+  /// still-speaking reply routes through `.hubWarmWait`, so PushToTalkManager —
+  /// not the controller — holds the PCM. When the replacement socket became
+  /// ready, the reducer rewrote the route to `.hub`, which suppressed the
+  /// `hubReady` -> `prepareHubInput` flush the manager was waiting on and left
+  /// the released turn parked in `.finalizing` (observed: a PTT that would not
+  /// stop for 150s, until the provider's idle socket teardown).
+  func testReplacementReadyKeepsManagerOwnedWarmCaptureRoutable() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    let replacementResponseID = VoiceResponseID("replacement-response")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+    // Physical release while the replacement socket is still connecting: the
+    // manager holds the captured audio and has not claimed a hub commit.
+    model = reduce(model, .finalize(turnID: turnID)).model
+    XCTAssertEqual(model.turn?.phase, .finalizing)
+    XCTAssertFalse(model.turn?.hubCommitPending == true)
+
+    let replacementReady = reduce(
+      model,
+      .providerReplacementReady(
+        turnID: turnID,
+        identity: reservation.identity,
+        sessionID: sessionID,
+        responseID: replacementResponseID))
+
+    XCTAssertEqual(replacementReady.model.turn?.providerConnection, .ready)
+    XCTAssertEqual(replacementReady.model.turn?.sessionID, sessionID)
+    XCTAssertEqual(replacementReady.model.turn?.route, .hubWarmWait)
+    XCTAssertEqual(replacementReady.model.turn?.phase, .finalizing)
+    XCTAssertEqual(replacementReady.model.staleEventCount, 0)
+
+    let ready = reduce(
+      replacementReady.model, .hubReady(turnID: turnID, sessionID: sessionID))
+    XCTAssertEqual(ready.model.turn?.route, .hub(sessionID: sessionID))
+    XCTAssertTrue(ready.effects.contains(.prepareHubInput(turnID: turnID, sessionID: sessionID)))
+    XCTAssertTrue(ready.effects.contains(.cancelDeadline(turnID: turnID, deadline: .hubWarm)))
+  }
+
+  /// The route rewrite also disarmed the only remaining rescue: `.hubWarm` is
+  /// admitted by `deadlineMatchesCurrentState` solely while the route reads
+  /// `.hubWarmWait`, so the fired deadline was dropped as stale and the turn had
+  /// no path to a terminal at all. A replacement that never delivers
+  /// `hubReady` must still fall back to transcription within the warm window.
+  func testWarmWaitRescueDeadlineSurvivesReplacementReady() {
+    let turnID = VoiceTurnID()
+    let replacementResponseID = VoiceResponseID("replacement-response")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+    model = reduce(model, .finalize(turnID: turnID)).model
+    model =
+      reduce(
+        model,
+        .providerReplacementReady(
+          turnID: turnID,
+          identity: reservation.identity,
+          sessionID: VoiceSessionID(),
+          responseID: replacementResponseID)
+      ).model
+
+    XCTAssertTrue(model.turn?.deadlines.contains(.hubWarm) == true)
+
+    let timedOut = reduce(model, .deadlineFired(turnID: turnID, deadline: .hubWarm))
+
+    XCTAssertEqual(timedOut.model.staleEventCount, 0)
+    XCTAssertEqual(timedOut.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(timedOut.model.turn?.phase, .finalizing)
+    XCTAssertTrue(timedOut.model.turn?.deadlines.contains(.transcription) == true)
+    XCTAssertTrue(
+      timedOut.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
+  }
+
+  /// Reusable guard for the class: every provider-ready admission binds the hub
+  /// route through one helper, so no future admission path can silently take a
+  /// manager-owned warm capture away from its `prepareHubInput` flush.
+  func testNoProviderReadyTransitionClobbersAManagerOwnedWarmCapture() {
+    let sessionID = VoiceSessionID()
+    let responseID = VoiceResponseID("provider-ready")
+
+    for readyFact in ["reconnected", "replacement_ready"] {
+      let turnID = VoiceTurnID()
+      var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+      model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+      let reservation = reserveIdentity(model, turnID: turnID)
+      let ready: VoiceTurnReduction
+      switch readyFact {
+      case "reconnected":
+        model =
+          reduce(
+            reservation.model,
+            .providerReconnectStarted(
+              turnID: turnID,
+              identity: reservation.identity,
+              previousSessionID: nil)
+          ).model
+        ready = reduce(
+          model,
+          .providerReconnected(
+            turnID: turnID, identity: reservation.identity, sessionID: sessionID))
+      default:
+        model =
+          reduce(
+            reservation.model,
+            .providerReplacementStarted(
+              turnID: turnID,
+              identity: reservation.identity,
+              previousResponseID: nil,
+              nextResponseID: responseID)
+          ).model
+        ready = reduce(
+          model,
+          .providerReplacementReady(
+            turnID: turnID,
+            identity: reservation.identity,
+            sessionID: sessionID,
+            responseID: responseID))
+      }
+
+      XCTAssertEqual(
+        ready.model.turn?.route, .hubWarmWait,
+        "\(readyFact) must leave the manager-owned warm capture routable")
+      XCTAssertEqual(ready.model.turn?.providerConnection, .ready, "\(readyFact)")
+      XCTAssertEqual(ready.model.turn?.sessionID, sessionID, "\(readyFact)")
+    }
   }
 
   func testTransportReadyBindsHubRouteAndPreparesContext() {
@@ -448,10 +653,35 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(claimed.effects, [.commitClaimedHubInput(turnID: turnID)])
   }
 
-  func testBargeInReplacementDeadlineTerminatesWithTypedReason() {
+  func testBargeInReplacementDeadlineFallsBackAndFencesLateReady() {
+    let oldTurnID = VoiceTurnID()
     let turnID = VoiceTurnID()
-    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
-    model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: nil))).model
+    let sessionID = VoiceSessionID()
+    let oldResponseID = VoiceResponseID("old-response")
+    let replacementResponseID = VoiceResponseID("replacement-response")
+    var model = reduce(.idle, .start(turnID: oldTurnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: oldTurnID, route: .hub(sessionID: sessionID))).model
+    model = reduce(model, .finalize(turnID: oldTurnID)).model
+    model =
+      reduce(
+        model,
+        .hubCommitAccepted(
+          turnID: oldTurnID,
+          sessionID: sessionID,
+          responseID: oldResponseID)
+      ).model
+    model = reduce(model, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: sessionID))).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: oldResponseID,
+          nextResponseID: replacementResponseID)
+      ).model
     model = reduce(model, .finalize(turnID: turnID)).model
     model = reduce(model, .hubCommitDeferredForReplacement(turnID: turnID)).model
 
@@ -459,8 +689,140 @@ final class VoiceTurnReducerTests: XCTestCase {
       model,
       .deadlineFired(turnID: turnID, deadline: .bargeInReplacement))
 
-    XCTAssertEqual(result.model.turn?.phase, .terminal(.bargeInReplacementTimeout))
-    XCTAssertEqual(result.model.lastTerminal?.reason, .bargeInReplacementTimeout)
+    XCTAssertEqual(result.model.turn?.phase, .finalizing)
+    XCTAssertEqual(result.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(result.model.turn?.providerConnection, .ready)
+    XCTAssertNil(result.model.turn?.sessionID)
+    XCTAssertNil(result.model.turn?.providerEffectIdentity)
+    XCTAssertNil(result.model.turn?.responseID)
+    XCTAssertFalse(result.model.turn?.hubCommitPending == true)
+    XCTAssertNil(result.model.turn?.terminalReason)
+    XCTAssertTrue(result.model.turn?.deadlines.contains(.transcription) == true)
+    XCTAssertTrue(
+      result.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .bargeInReplacementTimeout)))
+
+    let lateReady = reduce(
+      result.model,
+      .providerReplacementReady(
+        turnID: turnID,
+        identity: reservation.identity,
+        sessionID: VoiceSessionID(),
+        responseID: replacementResponseID)
+    )
+    XCTAssertEqual(lateReady.model.turn?.phase, .finalizing)
+    XCTAssertEqual(lateReady.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(lateReady.model.staleEventCount, result.model.staleEventCount + 1)
+    XCTAssertEqual(
+      lateReady.effects,
+      [.staleEventDropped(turnID: turnID, event: "provider_replacement_ready")])
+  }
+
+  func testProviderReplacementFailureFallsBackAndFencesLateEvents() {
+    let turnID = VoiceTurnID()
+    let replacementResponseID = VoiceResponseID("replacement-response")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID()))).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+    model = reduce(model, .finalize(turnID: turnID)).model
+    model = reduce(model, .hubCommitDeferredForReplacement(turnID: turnID)).model
+
+    let failed = reduce(
+      model,
+      .providerReplacementFailed(
+        turnID: turnID,
+        identity: reservation.identity,
+        message: "1007 provider transient"))
+
+    XCTAssertEqual(failed.model.turn?.phase, .finalizing)
+    XCTAssertEqual(failed.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(failed.model.turn?.providerConnection, .ready)
+    XCTAssertNil(failed.model.turn?.sessionID)
+    XCTAssertNil(failed.model.turn?.providerEffectIdentity)
+    XCTAssertNil(failed.model.turn?.responseID)
+    XCTAssertFalse(failed.model.turn?.hubCommitPending == true)
+    XCTAssertNil(failed.model.turn?.terminalReason)
+    XCTAssertTrue(failed.model.turn?.deadlines.contains(.transcription) == true)
+    XCTAssertTrue(
+      failed.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .providerFailed)))
+
+    let lateReady = reduce(
+      failed.model,
+      .providerReplacementReady(
+        turnID: turnID,
+        identity: reservation.identity,
+        sessionID: VoiceSessionID(),
+        responseID: replacementResponseID))
+    XCTAssertEqual(lateReady.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(lateReady.model.turn?.phase, .finalizing)
+    XCTAssertEqual(lateReady.model.staleEventCount, failed.model.staleEventCount + 1)
+    XCTAssertEqual(
+      lateReady.effects,
+      [.staleEventDropped(turnID: turnID, event: "provider_replacement_ready")])
+
+    let lateFailure = reduce(
+      lateReady.model,
+      .providerReplacementFailed(
+        turnID: turnID,
+        identity: reservation.identity,
+        message: "late 1007"))
+    XCTAssertEqual(lateFailure.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(lateFailure.model.turn?.phase, .finalizing)
+    XCTAssertEqual(lateFailure.model.staleEventCount, lateReady.model.staleEventCount + 1)
+  }
+
+  func testProviderReplacementFailureWhileHoldingPreservesCaptureUntilRelease() {
+    let turnID = VoiceTurnID()
+    let captureID = VoiceCaptureID(7)
+    let replacementResponseID = VoiceResponseID("replacement-response")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID()))).model
+    model = reduce(model, .captureStarted(turnID: turnID, captureID: captureID)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+
+    let failed = reduce(
+      model,
+      .providerReplacementFailed(
+        turnID: turnID,
+        identity: reservation.identity,
+        message: "1007 provider transient"))
+
+    XCTAssertEqual(failed.model.turn?.phase, .recording)
+    XCTAssertEqual(failed.model.turn?.route, .deepgramBatch)
+    XCTAssertTrue(failed.model.turn?.projection.isListening == true)
+    XCTAssertFalse(failed.model.turn?.projection.isThinking == true)
+    XCTAssertFalse(failed.model.turn?.deadlines.contains(.transcription) == true)
+    XCTAssertFalse(failed.effects.contains(.stopCapture(turnID: turnID, captureID: captureID)))
+    XCTAssertFalse(failed.effects.contains(.finalizeCapturedInput(turnID: turnID)))
+    XCTAssertTrue(
+      failed.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .providerFailed)))
+
+    let released = reduce(failed.model, .finalize(turnID: turnID))
+    XCTAssertEqual(released.model.turn?.phase, .finalizing)
+    XCTAssertTrue(
+      released.effects.contains(
+        .stopCapture(turnID: turnID, captureID: captureID)))
+    XCTAssertTrue(released.effects.contains(.finalizeCapturedInput(turnID: turnID)))
   }
 
   func testStaleBargeInReplacementDeadlineCannotTerminalizeAdvancedTurn() {

@@ -27,7 +27,7 @@ actor AgentVMService {
           log("AgentVMService: VM already ready — vmName=\(status.vmName) ip=\(ip)")
           // Only upload if the VM doesn't have a database yet
           if await checkVMNeedsDatabase(vmIP: ip, authToken: status.authToken) {
-            await uploadDatabase(vmIP: ip, authToken: status.authToken)
+            _ = await uploadDatabase(vmIP: ip, authToken: status.authToken)
           } else {
             log("AgentVMService: VM already has database, skipping upload")
           }
@@ -43,7 +43,7 @@ actor AgentVMService {
           {
             log("AgentVMService: VM became ready — ip=\(ip)")
             if await checkVMNeedsDatabase(vmIP: ip, authToken: result.authToken) {
-              await uploadDatabase(vmIP: ip, authToken: result.authToken)
+              _ = await uploadDatabase(vmIP: ip, authToken: result.authToken)
             }
             await startIncrementalSync(vmIP: ip, authToken: result.authToken)
           }
@@ -110,7 +110,7 @@ actor AgentVMService {
     }
 
     // Step 3: Check if DB exists and upload it
-    await uploadDatabase(vmIP: ip, authToken: authToken)
+    _ = await uploadDatabase(vmIP: ip, authToken: authToken)
 
     // Step 4: Start incremental sync
     await startIncrementalSync(vmIP: ip, authToken: authToken)
@@ -159,9 +159,9 @@ actor AgentVMService {
 
   /// Re-upload the database to a VM that lost its data (e.g. after a restart).
   /// Called by AgentSyncService when it detects databaseReady: false on the VM.
-  func reuploadDatabase(vmIP: String, authToken: String) async {
+  func reuploadDatabase(vmIP: String, authToken: String) async -> Bool {
     log("AgentVMService: Re-uploading database to VM (triggered by sync failure)")
-    await uploadDatabase(vmIP: vmIP, authToken: authToken)
+    return await uploadDatabase(vmIP: vmIP, authToken: authToken)
   }
 
   /// Compression ratio as a whole-number percent. Guards against a zero
@@ -175,7 +175,7 @@ actor AgentVMService {
 
   /// Upload the local omi.db (gzip-compressed) to the VM's /upload endpoint.
   /// Pauses AgentSync during upload to prevent competing for memory and network.
-  private func uploadDatabase(vmIP: String, authToken: String) async {
+  private func uploadDatabase(vmIP: String, authToken: String) async -> Bool {
     await AgentSyncService.shared.pause()
     defer { Task { await AgentSyncService.shared.resume() } }
     // Find the local database path
@@ -189,7 +189,7 @@ actor AgentVMService {
 
     guard FileManager.default.fileExists(atPath: dbPath.path) else {
       log("AgentVMService: Local database not found at \(dbPath.path), skipping upload")
-      return
+      return false
     }
 
     // Get original file size
@@ -199,7 +199,7 @@ actor AgentVMService {
       originalSize = attrs[.size] as? UInt64 ?? 0
     } catch {
       log("AgentVMService: Failed to get DB size — \(error.localizedDescription)")
-      return
+      return false
     }
 
     log("AgentVMService: Compressing database (\(originalSize / 1024 / 1024) MB) via streaming gzip...")
@@ -217,7 +217,7 @@ actor AgentVMService {
       FileManager.default.createFile(atPath: tempGzPath.path, contents: nil)
       guard let outHandle = FileHandle(forWritingAtPath: tempGzPath.path) else {
         log("AgentVMService: Failed to create temp gzip file")
-        return
+        return false
       }
       process.standardOutput = outHandle
       try process.run()
@@ -227,7 +227,7 @@ actor AgentVMService {
       guard process.terminationStatus == 0 else {
         log("AgentVMService: gzip failed with exit code \(process.terminationStatus)")
         try? FileManager.default.removeItem(at: tempGzPath)
-        return
+        return false
       }
 
       let compressedAttrs = try FileManager.default.attributesOfItem(atPath: tempGzPath.path)
@@ -238,7 +238,7 @@ actor AgentVMService {
     } catch {
       log("AgentVMService: Compression failed — \(error.localizedDescription)")
       try? FileManager.default.removeItem(at: tempGzPath)
-      return
+      return false
     }
 
     log("AgentVMService: Uploading compressed database to \(vmIP)...")
@@ -247,7 +247,7 @@ actor AgentVMService {
     guard let uploadURL = URL(string: "http://\(vmIP):8080/upload?token=\(authToken)") else {
       log("AgentVMService: Invalid upload URL for IP \(vmIP)")
       try? FileManager.default.removeItem(at: tempGzPath)
-      return
+      return false
     }
     var request = URLRequest(url: uploadURL)
     request.httpMethod = "POST"
@@ -263,7 +263,7 @@ actor AgentVMService {
 
       guard let httpResponse = response as? HTTPURLResponse else {
         log("AgentVMService: Upload failed — invalid response")
-        return
+        return false
       }
 
       if httpResponse.statusCode == 200 {
@@ -274,13 +274,16 @@ actor AgentVMService {
         } else {
           log("AgentVMService: Upload complete")
         }
+        return true
       } else {
         let body = String(data: data, encoding: .utf8) ?? ""
         log("AgentVMService: Upload failed — HTTP \(httpResponse.statusCode): \(body)")
+        return false
       }
     } catch {
       try? FileManager.default.removeItem(at: tempGzPath)
       log("AgentVMService: Upload failed — \(error.localizedDescription)")
+      return false
     }
   }
 

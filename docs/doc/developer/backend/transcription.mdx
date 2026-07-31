@@ -222,15 +222,16 @@ The backend retains any buffered audio it could not hand to the provider. It
 does not keep a green client WebSocket while discarding later audio; the close
 activates the client's existing reconnect or local-recovery path.
 
-## Production transcription candidate gate
+## Production transcription serving smoke
 
-The manual backend workflow deploys a no-traffic, uniquely tagged `backend`
-candidate and proves the real `/v2/voice-message/transcribe` route before
-shifting any Cloud Run traffic. The same path runs for an explicit development
-deployment first, which is the required identity-and-route dry run before a
-production release. The tag resolver requires the exact candidate revision
-recorded in Cloud Run `status.traffic`; it cannot accidentally exercise the
-current serving revision or latest-created revision.
+Development deployments retain the no-traffic, uniquely tagged `backend`
+candidate gate. Production does not use a tagged URL, Cloud Run Job, service
+account, or temporary IAM binding. Instead it validates exact no-traffic Cloud
+Run revisions, snapshots traffic, promotes them, verifies the exact serving
+release vector, and only then proves the real `/v2/voice-message/transcribe`
+route through `https://api.omi.me`. This is post-promotion serving evidence,
+not candidate evidence: any serving-vector, route-presence, or known-audio
+failure restores the saved Cloud Run traffic snapshot.
 
 `backend/testing/release_fixtures/transcription-release-probe.wav` and its
 versioned JSON manifest provide the known audio, language, expected transcript,
@@ -250,9 +251,11 @@ have only the Secret Manager read and `iam.serviceAccounts.signJwt` access this
 action needs. Missing access fails closed before promotion. Reports contain only
 redacted booleans and status codes.
 
-The Cloud Run candidate itself makes the private VPC hop to Parakeet. After a
-passing or failed candidate gate, the workflow removes its temporary tag; a
-failed gate never shifts traffic.
+The production smoke first makes a deliberately unauthorized, malformed-safe
+reservation-route request and requires its expected validation response; it
+does not create a reservation. It then runs the known-audio probe with the same
+runner-local token file. The token is never a workflow output, command-line
+argument, artifact, or resource metadata.
 
 ## Automatic development candidate acceptance
 

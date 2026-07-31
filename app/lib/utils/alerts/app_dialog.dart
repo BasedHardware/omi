@@ -48,8 +48,10 @@ class AppDialog {
     bool singleButton = false,
     String? okButtonText,
   }) {
+    final state = globalNavigatorKey.currentState;
+    if (state == null || state.overlay == null) return;
     showDialog(
-      context: globalNavigatorKey.currentState!.overlay!.context,
+      context: state.overlay!.context,
       builder: (c) => _getDialog(
         context: globalNavigatorKey.currentState!.context,
         onConfirm: onConfirm,

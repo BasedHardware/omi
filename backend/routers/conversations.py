@@ -17,6 +17,7 @@ from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
+    ConversationAnalytics,
     ConversationFinalizationStatusResponse,
     ConversationMutationResponse,
     CreateConversationResponse,
@@ -32,6 +33,7 @@ from models.conversation import (
     UpdateSummaryRequest,
 )
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.render import conversation_to_dict
 from models.conversation_enums import ConversationStatus, ConversationVisibility
@@ -50,7 +52,11 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils import byok
 from utils.memory.surface_routing import pin_memory_system
-from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
+from utils.conversations.search import (
+    ConversationSearchUnavailableError,
+    conversation_matches_speaker,
+    search_conversations,
+)
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
@@ -87,21 +93,27 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
     the conversation immediately: the client gets an instant open (transcript already present) and
-    polls until `status` flips to `completed`. The `deferred` flag is cleared first so the poll's
-    repeated GETs don't each kick off another enrichment. On enrichment failure the flag is
-    re-armed and status reset to completed so the next open retries cleanly instead of spinning."""
+    polls until `status` flips to `completed`. The `deferred` flag is cleared atomically with the
+    admission-lease renewal so the stale-processing sweep cannot terminalize the row between clear
+    and first heartbeat. On enrichment failure the flag is re-armed and status reset to completed
+    so the next open retries cleanly instead of spinning."""
     conversation_id = conversation.get('id')
     try:
-        conversations_db.update_conversation(uid, conversation_id, {'deferred': False})
+        reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
     except Exception as e:
-        logger.error(f"lazy enrich claim failed uid={uid} conv={conversation_id}: {e}")
+        logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
+        return conversation
+    if not reacquired:
+        # The row was terminalized or discarded before reacquisition. A stale
+        # processor must not persist derived side effects after ownership loss.
         return conversation
 
     def _run_enrichment():
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
-            process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
+            with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
+                process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
@@ -318,6 +330,14 @@ def reprocess_conversation(
     :return: The updated conversation after reprocessing.
     """
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    # Reprocess force-processes a *discarded* conversation to revive it, but a
+    # soft-deleted tombstone is invisible to the user and must not be reprocessed:
+    # process_conversation would regenerate structured data, action items, memories
+    # and embeddings from content the user deleted, resurrecting it. Same
+    # tombstone-eligibility contract as sync (#10119) and merge (#10262). Checked
+    # on the raw doc because the Conversation model does not carry `deleted`.
+    if conversations_db.is_soft_deleted(conversation):
+        raise HTTPException(status_code=404, detail="Conversation not found")
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -1118,7 +1138,14 @@ def get_shared_conversation_by_id(conversation_id: str):
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
     conversation = deserialize_conversation(conversation)
+    # This endpoint is public and unauthenticated. Strip fields that are internal
+    # to the owner and never part of the shared transcript/summary the user chose
+    # to publish: precise geolocation, the server-side encryption tier, and
+    # external_data (which carries merge provenance — other conversation ids — and
+    # integration metadata).
     conversation.geolocation = None
+    conversation.data_protection_level = None
+    conversation.external_data = None
 
     # Fetch people data for speaker names
     person_ids = conversation.get_person_ids()
@@ -1181,6 +1208,14 @@ def search_conversations_endpoint(
     # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
     # so search never leaks that a locked conversation matched a query.
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+    # Speaker filtering happens here, not in Typesense: the index has no transcript_segments field, so
+    # asking Typesense for one 400'd and 500'd the request. The hydrated Firestore documents do carry
+    # transcript_segments, so match against those.
+    conversations = [
+        conversation
+        for conversation in conversations
+        if conversation_matches_speaker(conversation, search_request.speaker_id)
+    ]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
@@ -1225,6 +1260,24 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
             suggested_apps.append(app)
 
     return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
+
+
+@router.get(
+    "/v1/conversations/{conversation_id}/analytics", response_model=ConversationAnalytics, tags=['conversations']
+)
+def get_conversation_analytics(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Per-speaker analytics for a conversation (issue #4481).
+
+    Returns each speaker's talk time, word count, and words per minute, plus the
+    conversation totals. Speakers are the account owner ("You"), identified people
+    (resolved to their name), and any remaining diarization speakers.
+    """
+    conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation_data)
+    person_ids = conversation.get_person_ids()
+    people = users_db.get_people_by_ids(uid, person_ids) if person_ids else []
+    names = {p['id']: p.get('name', '') for p in people}
+    return build_conversation_analytics(conversation, names)
 
 
 @router.post(

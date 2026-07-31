@@ -1,6 +1,28 @@
 import Foundation
 @preconcurrency import GRDB
 
+/// Identity of a memory surfaced to the UI: either a backend ID, or the
+/// `local_<rowid>` placeholder minted by `MemoryRecord.toServerMemory()` for a
+/// local-only row. Mutations must resolve both forms: filtering a local ID by
+/// `backendId` silently misses rows whose backend sync failed or is pending.
+enum MemoryIdentity: Equatable {
+  case backend(String)
+  case localRow(Int64)
+
+  init(surfacedId: String) {
+    if surfacedId.hasPrefix("local_"), let rowId = Int64(surfacedId.dropFirst(6)) {
+      self = .localRow(rowId)
+    } else {
+      self = .backend(surfacedId)
+    }
+  }
+
+  var isLocalOnly: Bool {
+    if case .localRow = self { return true }
+    return false
+  }
+}
+
 /// Selects which provenance class may participate in a local-memory read.
 ///
 /// This is intentionally separate from ``MemoryLayer``: legacy compatibility
@@ -195,6 +217,36 @@ actor MemoryStorage {
 
       return try query.fetchCount(database)
     }
+  }
+
+  /// Fetch specific memories by their backend id.
+  ///
+  /// Deliberately unfiltered by tier, device scope, or dismissal: the caller
+  /// already knows exactly which memories it wants because something else
+  /// (a knowledge-graph edge, a citation) named them. Applying the list's
+  /// browsing filters here would silently drop cited evidence and make it look
+  /// like the memory does not exist.
+  func getMemories(backendIds: [String]) async throws -> [ServerMemory] {
+    let wanted = Array(Set(backendIds.filter { !$0.isEmpty }))
+    guard !wanted.isEmpty else { return [] }
+    let db = try await ensureInitialized()
+
+    // SQLite caps host parameters per statement, and an entity in a large graph
+    // can cite more ids than that, so read in chunks rather than one IN (...).
+    let chunkSize = 400
+    var found: [ServerMemory] = []
+    for start in stride(from: 0, to: wanted.count, by: chunkSize) {
+      let chunk = Array(wanted[start..<min(start + chunkSize, wanted.count)])
+      let records = try await db.read { database in
+        try MemoryRecord
+          .filter(Column("deleted") == false)
+          .filter(chunk.contains(Column("backendId")))
+          .order(Column("createdAt").desc)
+          .fetchAll(database)
+      }
+      found.append(contentsOf: records.compactMap { $0.toServerMemory() })
+    }
+    return found.sorted { $0.createdAt > $1.createdAt }
   }
 
   /// Get memories matching ANY of the specified tags (OR logic)
@@ -449,9 +501,10 @@ actor MemoryStorage {
   func syncServerMemories(_ memories: [ServerMemory]) async throws {
     let db = try await ensureInitialized()
 
-    let (skipped, adopted) = try await db.write { database -> (Int, Int) in
+    let (skipped, adopted, inserted) = try await db.write { database -> (Int, Int, Int) in
       var skipped = 0
       var adopted = 0
+      var inserted = 0
       for memory in memories {
         if var existingRecord =
           try MemoryRecord
@@ -488,6 +541,7 @@ actor MemoryStorage {
         } else {
           do {
             _ = try MemoryRecord.from(memory).inserted(database)
+            inserted += 1
           } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
             // Race: record already exists — update instead
             if var record = try MemoryRecord.filter(Column("backendId") == memory.id).fetchOne(database) {
@@ -497,7 +551,7 @@ actor MemoryStorage {
           }
         }
       }
-      return (skipped, adopted)
+      return (skipped, adopted, inserted)
     }
 
     if skipped > 0 || adopted > 0 {
@@ -506,6 +560,9 @@ actor MemoryStorage {
       )
     } else {
       log("MemoryStorage: Synced \(memories.count) memories from backend")
+    }
+    if inserted > 0 {
+      HomeKnowledgeCountInvalidation.post()
     }
   }
 
@@ -546,6 +603,7 @@ actor MemoryStorage {
     }
 
     log("MemoryStorage: Inserted local memory (id: \(inserted.id ?? -1))")
+    HomeKnowledgeCountInvalidation.post()
     return inserted
   }
 
@@ -693,6 +751,7 @@ actor MemoryStorage {
     }
 
     log("MemoryStorage: Soft deleted memory \(id)")
+    HomeKnowledgeCountInvalidation.post()
   }
 
   /// Soft-delete synced memories tied to a deleted conversation (local cache hygiene).
@@ -700,42 +759,84 @@ actor MemoryStorage {
   func softDeleteMemoriesByConversationId(_ conversationId: String) async throws -> Int {
     let db = try await ensureInitialized()
 
-    return try await db.write { database -> Int in
+    let deleted = try await db.write { database -> Int in
       try database.execute(
         sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE deleted = 0 AND conversationId = ?",
         arguments: [Date(), conversationId]
       )
       return database.changesCount
     }
+    if deleted > 0 {
+      HomeKnowledgeCountInvalidation.post()
+    }
+    return deleted
   }
 
   /// Soft delete a memory by backend ID
   func deleteMemoryByBackendId(_ backendId: String) async throws {
-    let db = try await ensureInitialized()
-
-    try await db.write { database in
-      try database.execute(
-        sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE backendId = ?",
-        arguments: [Date(), backendId]
-      )
-    }
-
-    log("MemoryStorage: Soft deleted memory with backendId \(backendId)")
+    try await deleteMemory(surfacedId: backendId)
   }
 
-  /// Restore a soft-deleted memory by backend ID. Used by undo/delete-failure paths;
-  /// callers must requery the active tier scope instead of appending directly to UI arrays.
-  func restoreMemoryByBackendId(_ backendId: String) async throws {
-    let db = try await ensureInitialized()
+  /// Soft-delete a memory addressed by either a backend ID or a surfaced
+  /// `local_<rowid>` placeholder.
+  func deleteMemory(surfacedId: String) async throws {
+    switch MemoryIdentity(surfacedId: surfacedId) {
+    case .localRow(let rowId):
+      try await deleteMemory(id: rowId)
+    case .backend(let backendId):
+      let db = try await ensureInitialized()
 
-    try await db.write { database in
-      try database.execute(
-        sql: "UPDATE memories SET deleted = 0, updatedAt = ? WHERE backendId = ?",
-        arguments: [Date(), backendId]
-      )
+      try await db.write { database in
+        try database.execute(
+          sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE backendId = ?",
+          arguments: [Date(), backendId]
+        )
+      }
+
+      log("MemoryStorage: Soft deleted memory with backendId \(backendId)")
+      HomeKnowledgeCountInvalidation.post()
     }
+  }
 
-    log("MemoryStorage: Restored memory with backendId \(backendId)")
+  /// Restore a soft-deleted memory addressed by either a backend ID or a
+  /// surfaced `local_<rowid>` placeholder. Used by undo/delete-failure paths;
+  /// callers must requery the active tier scope instead of appending directly
+  /// to UI arrays.
+  func restoreMemory(surfacedId: String) async throws {
+    switch MemoryIdentity(surfacedId: surfacedId) {
+    case .localRow(let rowId):
+      let db = try await ensureInitialized()
+
+      try await db.write { database in
+        guard var record = try MemoryRecord.fetchOne(database, key: rowId) else {
+          throw MemoryStorageError.recordNotFound
+        }
+        record.deleted = false
+        record.updatedAt = Date()
+        try record.update(database)
+      }
+
+      log("MemoryStorage: Restored local memory \(rowId)")
+      HomeKnowledgeCountInvalidation.post()
+    case .backend(let backendId):
+      let db = try await ensureInitialized()
+
+      try await db.write { database in
+        try database.execute(
+          sql: "UPDATE memories SET deleted = 0, updatedAt = ? WHERE backendId = ?",
+          arguments: [Date(), backendId]
+        )
+      }
+
+      log("MemoryStorage: Restored memory with backendId \(backendId)")
+      HomeKnowledgeCountInvalidation.post()
+    }
+  }
+
+  /// Restore a soft-deleted memory by backend ID. Kept for existing callers;
+  /// surfaced local IDs are resolved by `restoreMemory(surfacedId:)` as well.
+  func restoreMemoryByBackendId(_ backendId: String) async throws {
+    try await restoreMemory(surfacedId: backendId)
   }
 
   /// Soft-delete synced memories whose backendId is no longer present on the
@@ -749,7 +850,7 @@ actor MemoryStorage {
   ) async throws -> Int {
     let db = try await ensureInitialized()
 
-    return try await db.write { database -> Int in
+    let removed = try await db.write { database -> Int in
       var query =
         MemoryRecord
         .filter(Column("backendId") != nil)
@@ -768,6 +869,10 @@ actor MemoryStorage {
       }
       return removed
     }
+    if removed > 0 {
+      HomeKnowledgeCountInvalidation.post()
+    }
+    return removed
   }
 
   /// Soft delete memories within a tier scope.
@@ -788,6 +893,7 @@ actor MemoryStorage {
     }
 
     log("MemoryStorage: Soft deleted memories for scope \(scope.sqlTierRawValues)")
+    HomeKnowledgeCountInvalidation.post()
   }
 
   /// Update content by backend ID

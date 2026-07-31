@@ -48,6 +48,12 @@ final class SentryBeforeSendScrubTests: XCTestCase {
       "non-report dev events pollute production Sentry data and must be dropped")
   }
 
+  func testDropsHeartbeatIssueEventButKeepsNormalProductionEvents() {
+    XCTAssertTrue(drop(message: "Session Heartbeat"))
+    XCTAssertTrue(drop(message: "  session heartbeat\n"))
+    XCTAssertFalse(drop(message: "Session refresh failed"))
+  }
+
   func testDropsLocalAndTunnelUrlTaggedErrors() {
     for u in [
       "http://localhost:8080/v1/x", "https://127.0.0.1:9000/y",
@@ -97,5 +103,23 @@ final class SentryBeforeSendScrubTests: XCTestCase {
     XCTAssertFalse(drop(isUserReport: true, isDev: true, message: "User Report: broken"))
     // And a dev-build non-report is still dropped even if it looks otherwise genuine.
     XCTAssertTrue(drop(isUserReport: false, isDev: true, message: "genuine-looking error"))
+  }
+
+  func testStorageFailureContextHasAnExplicitPrivacyAllowList() {
+    let context = StorageFailureDiagnostics.context(
+      pathClass: "video-chunk",
+      containingURL: FileManager.default.temporaryDirectory,
+      databaseURL: nil,
+      error: NSError(domain: NSPOSIXErrorDomain, code: 28),
+      appIsTerminating: false)
+
+    XCTAssertEqual(
+      Set(context.values.keys),
+      [
+        "path_class", "volume_free_bytes", "volume_total_bytes", "database_file_size_bytes",
+        "app_terminating", "error_domain", "error_code", "sqlite_result_code",
+        "sqlite_extended_result_code",
+      ])
+    XCTAssertFalse(context.values.values.contains { "\($0)".contains(FileManager.default.temporaryDirectory.path) })
   }
 }

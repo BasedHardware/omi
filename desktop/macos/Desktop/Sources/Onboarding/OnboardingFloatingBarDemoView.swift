@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import OmiTheme
 import SwiftUI
 
@@ -21,6 +22,7 @@ struct OnboardingFloatingBarDemoView: View {
   @State private var pressedTokens: Set<String> = []
   @State private var mainKeyDown = false
   @State private var keyLightMonitor: Any?
+  @State private var demoQuerySent = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -47,83 +49,82 @@ struct OnboardingFloatingBarDemoView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, OmiSpacing.xl)
 
-      Spacer()
-
-      // Content
-      VStack(spacing: OmiSpacing.xxl) {
-        VStack(spacing: OmiSpacing.md) {
-          if !barActivated {
-            Text("Omi sees your screen and gives you hyper-personalized responses")
-              .font(.system(size: 20, weight: .bold))
-              .foregroundColor(OmiColors.textPrimary)
-              .multilineTextAlignment(.center)
-              .frame(maxWidth: 560)
-
-            Text("Press this shortcut to open Ask Omi.")
-              .font(.system(size: 18, weight: .medium))
-              .foregroundColor(OmiColors.textSecondary)
-              .multilineTextAlignment(.center)
-          } else {
-            Text("Type in the Floating Bar 'Which computer should I buy?'")
-              .font(.system(size: 24, weight: .bold))
-              .foregroundColor(OmiColors.textPrimary)
-              .lineLimit(1)
-              .fixedSize()
-          }
-        }
-
-        if !barActivated {
+      // Keep the header/progress chrome fixed. The interactive content is
+      // centered when it fits and becomes vertically scrollable when a compact
+      // display or expanded response would otherwise clip the action row.
+      OnboardingContentWithPinnedActions {
+        VStack(spacing: OmiSpacing.xxl) {
           VStack(spacing: OmiSpacing.md) {
-            HStack(spacing: OmiSpacing.xs) {
-              ForEach(Array(shortcutSettings.askOmiShortcut.displayTokens.enumerated()), id: \.offset) {
-                index, symbol in
-                if index > 0 {
-                  Text("+")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(OmiColors.textTertiary)
-                }
-                keyCap(symbol, isPressed: pressedTokens.contains(symbol))
-              }
+            if !barActivated {
+              Text("Omi sees your screen and gives you hyper-personalized responses")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(OmiColors.textPrimary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 560)
+
+              Text("Press this shortcut to try it.")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(OmiColors.textSecondary)
+                .multilineTextAlignment(.center)
+            } else {
+              Text("Omi is answering 'Which computer should I buy?' in the floating bar")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(OmiColors.textPrimary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             }
-
-            Text("Ask Omi opens at the top of your screen.")
-              .font(.system(size: 13))
-              .foregroundColor(OmiColors.textTertiary)
           }
-          .padding(.top, OmiSpacing.xxs)
-          .transition(.opacity)
-        } else {
-          MacLineupPreview()
-            .frame(maxWidth: 980)
-            .transition(.opacity.combined(with: .move(edge: .bottom)))
-        }
 
-      }
-      .padding(.top, 88)
-      .padding(.horizontal, OmiSpacing.page)
+          if !barActivated {
+            VStack(spacing: OmiSpacing.md) {
+              HStack(spacing: OmiSpacing.xs) {
+                ForEach(Array(shortcutSettings.askOmiShortcut.displayTokens.enumerated()), id: \.offset) {
+                  index, symbol in
+                  if index > 0 {
+                    Text("+")
+                      .font(.system(size: 15, weight: .medium))
+                      .foregroundColor(OmiColors.textTertiary)
+                  }
+                  keyCap(symbol, isPressed: pressedTokens.contains(symbol))
+                }
+              }
 
-      Spacer()
-
-      // Bottom row — back is always available; Continue appears after the AI responds
-      HStack(spacing: OmiSpacing.md) {
-        OnboardingBackButton()
-
-        if showContinue {
-          Button(action: onComplete) {
-            Text("Continue")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(.black)
-              .frame(maxWidth: 280)
-              .padding(.vertical, OmiSpacing.md)
-              .background(Color.white)
-              .cornerRadius(OmiChrome.smallControlRadius)
+              Text("Omi answers in the floating bar at the top of your screen.")
+                .font(.system(size: 13))
+                .foregroundColor(OmiColors.textTertiary)
+            }
+            .padding(.top, OmiSpacing.xxs)
+            .transition(.opacity)
+          } else {
+            MacLineupPreview()
+              .frame(maxWidth: 980)
+              .transition(.opacity.combined(with: .move(edge: .bottom)))
           }
-          .buttonStyle(.plain)
-          .keyboardShortcut(.defaultAction)
-          .transition(.move(edge: .bottom).combined(with: .opacity))
+
         }
+        .frame(maxWidth: 980)
+      } actions: {
+        // Back/Continue stays visible while the response preview scrolls.
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if showContinue {
+            Button(action: onComplete) {
+              Text("Continue")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.black)
+                .frame(maxWidth: 280)
+                .padding(.vertical, OmiSpacing.md)
+                .background(Color.white)
+                .cornerRadius(OmiChrome.smallControlRadius)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.defaultAction)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+          }
+        }
+        .frame(maxWidth: 980)
       }
-      .padding(.bottom, OmiSpacing.section)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(OmiColors.backgroundPrimary)
@@ -231,6 +232,14 @@ struct OnboardingFloatingBarDemoView: View {
 
     // Only light caps that belong to this shortcut.
     pressedTokens = tokens.intersection(Set(shortcut.displayTokens))
+
+    // The shortcut now opens the main app (typing moved out of the floating
+    // bar), so the demo sends the sample question itself the moment the full
+    // shortcut is pressed — the floating bar then shows the live answer.
+    if !demoQuerySent, pressedTokens == Set(shortcut.displayTokens), !shortcut.displayTokens.isEmpty {
+      demoQuerySent = true
+      FloatingControlBarManager.shared.openAIInputWithQuery("Which computer should I buy?")
+    }
   }
 
   // MARK: - Key Cap

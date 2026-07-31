@@ -292,7 +292,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                           )
                                         else
-                                          FaIcon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
+                                          const FaIcon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
                                         const SizedBox(width: 6),
                                         Text(
                                           isRecording

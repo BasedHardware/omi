@@ -21,7 +21,7 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(27);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(28);
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",
@@ -205,6 +205,67 @@ describe("SqliteAgentStore", () => {
     })).toThrow();
 
     store.close();
+  });
+
+  it("drops queued backend delivery when an upgraded conversation is canonically local-only", () => {
+    const databasePath = newDatabasePath();
+    const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "acp",
+    });
+    store.insertSurfaceConversation({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "upgrade-local-only",
+      conversationId: "conv-upgrade-local-only",
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    store.execute(
+      `INSERT INTO conversation_turns(
+         turn_id, conversation_id, role, surface_kind, origin, status,
+         content, content_blocks_json, resources_json, metadata_json, created_at_ms,
+         updated_at_ms, turn_seq
+       ) VALUES (
+         'turn-upgrade-local-only', 'conv-upgrade-local-only', 'user',
+         'main_chat', 'typed_chat', 'completed', 'setup transcript', '[]', '[]',
+         '{}', 2, 2, 1
+       )`,
+    );
+    store.execute(
+      `INSERT INTO backend_turn_outbox(
+         turn_id, conversation_id, owner_id, client_message_id, status, attempt_count,
+         delivery_generation, conversation_generation, payload_hash,
+         available_at_ms, created_at_ms, updated_at_ms
+       ) VALUES (
+         'turn-upgrade-local-only', 'conv-upgrade-local-only', 'owner',
+         'turn-upgrade-local-only', 'pending',
+         0, 0, 1, 'sha256:upgrade-local-only', 2, 2, 2
+       )`,
+    );
+    store.execute(
+      `UPDATE surface_conversations
+       SET surface_kind = 'onboarding'
+       WHERE conversation_id = 'conv-upgrade-local-only' AND owner_id = 'owner'`,
+    );
+    store.execute("DELETE FROM schema_migrations WHERE version = 28");
+    store.close();
+
+    const upgraded = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    expect(upgraded.getRow(
+      "SELECT COUNT(*) AS count FROM backend_turn_outbox WHERE conversation_id = 'conv-upgrade-local-only'",
+    ).count).toBe(0);
+    expect(upgraded.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE conversation_id = 'conv-upgrade-local-only'",
+    ).count).toBe(1);
+    expect(upgraded.getRow(
+      "SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 28",
+    ).count).toBe(1);
+    upgraded.close();
   });
 
   it("persists desktop coordinator records and rejects invalid JSON", () => {

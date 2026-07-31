@@ -1,4 +1,6 @@
 abstract class Env {
+  static const productionApiBaseUrl = 'https://api.omi.me/';
+  static const productionAgentProxyWsUrl = 'wss://agent.omi.me/v1/agent/ws';
   static late final EnvFields _instance;
   static String? _apiBaseUrlOverride;
   static String? _agentProxyWsUrlOverride;
@@ -12,6 +14,10 @@ abstract class Env {
     _apiBaseUrlOverride = url;
   }
 
+  static void clearApiBaseUrlOverrideForTesting() {
+    _apiBaseUrlOverride = null;
+  }
+
   static void overrideAgentProxyWsUrl(String url) {
     _agentProxyWsUrlOverride = url;
   }
@@ -23,37 +29,30 @@ abstract class Env {
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
 
-  /// Staging API URL from STAGING_API_URL env var. Null when not configured.
-  static String? get stagingApiUrl {
-    final url = _instance.stagingApiUrl;
-    if (url == null || url.isEmpty) return null;
-    return url;
-  }
-
-  /// Whether STAGING_API_URL is configured in the environment.
-  static bool get isStagingConfigured => stagingApiUrl != null;
-
-  static bool get isUsingStagingApi {
-    final effective = apiBaseUrl;
-    final staging = stagingApiUrl;
-    if (effective == null || staging == null) return false;
-    return _normalizeUrl(effective) == _normalizeUrl(staging);
-  }
-
-  static String _normalizeUrl(String url) {
-    var s = url.trim().toLowerCase();
-    while (s.endsWith('/')) {
-      s = s.substring(0, s.length - 1);
+  /// Production-family packages have one pinned backend authority. This runs
+  /// during startup so a misconfigured signing group fails before networking.
+  static void validateStartupRouting({required bool productionFamily, String? configuredApiBaseUrl}) {
+    if (!productionFamily) return;
+    final normalized = (configuredApiBaseUrl ?? apiBaseUrl ?? '').trim().replaceFirst(RegExp(r'/+$'), '');
+    if (normalized != productionApiBaseUrl.replaceFirst(RegExp(r'/+$'), '')) {
+      throw StateError('Production packages require API_BASE_URL=https://api.omi.me/');
     }
-    return s;
+    if (_agentProxyWsUrlFor(normalized) != productionAgentProxyWsUrl) {
+      throw StateError('Production packages require the production agent WebSocket endpoint.');
+    }
   }
+
+  static void requireProductionRouting() => validateStartupRouting(productionFamily: true);
 
   /// WebSocket URL for the agent proxy service.
   /// Derives from apiBaseUrl: api.omi.me → agent.omi.me, api.omiapi.com → agent.omiapi.com.
   /// Can be overridden via Env.overrideAgentProxyWsUrl() for local testing.
   static String get agentProxyWsUrl {
     if (_agentProxyWsUrlOverride != null) return _agentProxyWsUrlOverride!;
-    final base = apiBaseUrl ?? 'https://api.omi.me';
+    return _agentProxyWsUrlFor(apiBaseUrl ?? productionApiBaseUrl);
+  }
+
+  static String _agentProxyWsUrlFor(String base) {
     final host = Uri.parse(base).host.replaceFirst('api.', 'agent.');
     return 'wss://$host/v1/agent/ws';
   }
@@ -97,6 +96,4 @@ abstract class EnvFields {
   bool? get useWebAuth;
 
   bool? get useAuthCustomToken;
-
-  String? get stagingApiUrl;
 }

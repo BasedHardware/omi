@@ -36,18 +36,30 @@ jobs:
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
           fi
-          if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
-            echo "Production artifact deploys are release-record-only; use deploy-release-ring.yml with ring=prod." >&2
-            exit 1
-          fi
-
       - name: Delete huge unnecessary tools folder
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
+          fetch-depth: 0
+
+      - name: Admit checked-out production source and image identity
+        run: |
+          set -euo pipefail
+          CHECKED_OUT_SHA=$(git rev-parse HEAD)
+          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            if ! git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main; then
+              echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
+              exit 1
+            fi
+          fi
+          IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")
+          echo "Admitted deployment source: $CHECKED_OUT_SHA"
+          echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
       - name: Google Auth
         id: auth
@@ -66,11 +78,11 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/agent-proxy/Dockerfile .
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG} -f backend/agent-proxy/Dockerfile .
           python3 backend/scripts/runtime_image_contracts.py smoke \
             --dockerfile backend/agent-proxy/Dockerfile \
-            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
@@ -81,7 +93,7 @@ jobs:
 
       - name: Deploy Agent Proxy to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-agent-proxy ./backend/charts/agent-proxy -f ./backend/charts/agent-proxy/${{ vars.ENV }}_omi_agent_proxy_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-agent-proxy ./backend/charts/agent-proxy -f ./backend/charts/agent-proxy/${{ vars.ENV }}_omi_agent_proxy_values.yaml --set-string "image.tag=${IMAGE_TAG}"
           if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-agent-proxy --timeout=300s; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service agent-proxy || true
             exit 1

@@ -230,7 +230,7 @@ class TestMemoryServiceParity:
         get_memories.assert_called_with("uid-test", 25, 10)
         assert via_service == direct
 
-    def test_read_first_page_uses_router_limit_cap(self, monkeypatch):
+    def test_read_respects_caller_limit_without_first_page_expansion(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
         memories = [_sample_memory_dict()]
 
@@ -240,7 +240,7 @@ class TestMemoryServiceParity:
             direct = service_mod._legacy_read_memories("uid-test", limit=25, offset=0)
 
         assert get_memories.call_count == 2
-        get_memories.assert_called_with("uid-test", 5000, 0)
+        get_memories.assert_called_with("uid-test", 25, 0)
         assert via_service == direct
 
     def test_search_matches_direct_legacy_helper(self, monkeypatch):
@@ -458,6 +458,22 @@ class TestMemoryServiceParity:
 
         assert len(result) == 1
         assert result[0].id == "mem-1"
+
+    @pytest.mark.parametrize("canonical_enabled", [False, True])
+    def test_memory_service_forwards_read_clock_to_selected_backend(self, monkeypatch, canonical_enabled):
+        service_mod = _load_memory_service(monkeypatch)
+        monkeypatch.setattr(service_mod, "canonical_read_enabled", lambda *args, **kwargs: canonical_enabled)
+        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        service._legacy.read = MagicMock(return_value=[])
+        service._canonical.read = MagicMock(return_value=[])
+        read_time = datetime(2040, 1, 15, 12, 0, tzinfo=timezone.utc)
+
+        assert service.read("uid-test", now=read_time) == []
+
+        selected = service._canonical.read if canonical_enabled else service._legacy.read
+        unselected = service._legacy.read if canonical_enabled else service._canonical.read
+        assert selected.call_args.kwargs["now"] == read_time
+        unselected.assert_not_called()
 
     def test_legacy_backend_strips_canonical_lifecycle_fields_on_read(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)

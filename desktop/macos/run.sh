@@ -54,9 +54,9 @@ Usage: ./run.sh [options]
 Build and run the Omi Desktop dev app with local backend services.
 
 Options (via environment variables):
-  OMI_SKIP_BACKEND=1      Skip starting Rust backend (use remote backend via OMI_DESKTOP_API_URL)
+  OMI_SKIP_BACKEND=1      Skip starting Python backend (use remote backend via OMI_DESKTOP_API_URL)
   OMI_SKIP_TUNNEL=1        Skip Cloudflare tunnel (use OMI_DESKTOP_API_URL from .env directly)
-  PORT=10201                Rust backend port (default: 10201, never use 8080)
+  PORT=10201                Desktop backend port (default: 10201, never use 8080)
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
   OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
   OMI_SKIP_SETTINGS_SEED=1  Do not copy shortcuts/settings from Omi Dev into named bundles
@@ -65,20 +65,20 @@ Options (via environment variables):
   OMI_DEV_EAGER_PERMISSIONS=1  Preserve eager mic/screen/file startup behavior in named bundles
   OMI_PYTHON_API_URL="..."  Python backend URL (explicit override; named bundles default to dev)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
-  OMI_DESKTOP_BACKEND_RELEASE=1  Use an optimized Rust backend locally (debug is the fast default)
   OMI_FORCE_FULL_BUNDLE=1  Rebuild the complete app bundle on this launch
   OMI_SCAN_STALE_BUNDLES=1  Remove stale same-named app bundles under $HOME (recovery only)
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
   OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
   OMI_AUTOMATION_PORT=47777       Bridge port (set per bundle when running several at once)
+  OMI_FORCE_CANONICAL_MEMORY_ATLAS=1  Non-production-only local QA override for the canonical atlas rollout gate
   OMI_DESKTOP_LOCAL_PROFILE=1     Local harness profile; localhost endpoints/Auth emulator only
 
 Required files:
-  Backend-Rust/.env         Environment variables (copy from ../.env.example)
-  Backend-Rust/google-credentials.json  GCP service account key
+  ../../backend/.env         Environment variables (copy from ../../backend/.env.template)
+  ../../backend/google-credentials.json  GCP service account key
 
 Required tools:
-  cargo, xcrun/swift, python3, npm, node, codesign, cloudflared (unless skipped)
+  xcrun/swift, python3, uv, npm, node, codesign, cloudflared (unless skipped)
 
 Port allocation (avoid 8080 to prevent port conflicts):
   Backend default: 10201
@@ -102,8 +102,12 @@ fi
 apply_yolo_env() {
     export OMI_SKIP_BACKEND=1
     export OMI_SKIP_TUNNEL=1
-    export OMI_DESKTOP_API_URL="https://desktop-backend-dt5lrfkkoa-uc.a.run.app"
-    export OMI_PYTHON_API_URL="https://api.omiapi.com"
+    # `--yolo` supplies remote-development defaults, but must not discard an
+    # explicitly targeted backend. Named QA and fault-injection bundles use
+    # these overrides to exercise a chosen service revision without requiring
+    # a local desktop backend or .env file.
+    export OMI_DESKTOP_API_URL="${OMI_DESKTOP_API_URL:-https://desktop-backend-dt5lrfkkoa-uc.a.run.app}"
+    export OMI_PYTHON_API_URL="${OMI_PYTHON_API_URL:-https://api.omiapi.com}"
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 }
 
@@ -115,7 +119,7 @@ if [ "$YOLO_MODE" = "1" ]; then
     echo ""
     echo "  WARNING: This connects directly to the dev Cloud Run backends."
     echo "  They currently use production Firebase identities and data stores."
-    echo "  No local Rust backend, no local auth, no tunnel."
+    echo "  No local Python backend, no local auth, no tunnel."
     echo "  This is a temporary shortcut — will be removed once"
     echo "  desktop dev setup friction is fully resolved."
     echo ""
@@ -137,8 +141,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/scripts/fast-dev-bundle.sh"
 # shellcheck source=local-profile-env.sh
 source "$SCRIPT_DIR/scripts/local-profile-env.sh"
-# shellcheck source=rust-backend-dev.sh
-source "$SCRIPT_DIR/scripts/rust-backend-dev.sh"
+# shellcheck source=python-desktop-backend-dev.sh
+source "$SCRIPT_DIR/scripts/python-desktop-backend-dev.sh"
 
 # Timing utilities
 SCRIPT_START_TIME=$(date +%s.%N)
@@ -218,7 +222,7 @@ fi
 
 # Named QA bundles are remote-dev by default. Apply this before any launch
 # preparation so they do not start a local backend or tunnel, and reapply it
-# after sourcing Backend-Rust/.env below so repository-local defaults cannot
+# after sourcing backend/.env below so repository-local defaults cannot
 # silently retarget a QA bundle. Explicit launch environment values above opt
 # out and remain authoritative.
 if [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
@@ -281,17 +285,26 @@ if [ "$LOCAL_PROFILE" = true ]; then
 fi
 AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-${AUTOMATION_PORT:-47777}}"
 AUTOMATION_CAPTURE_ROOT="${OMI_AUTOMATION_CAPTURE_ROOT:-$SCRIPT_DIR/.harness/runs}"
+# An external harness may request an ownership proof for a detached `open`
+# launch. The token is passed as an app argument (and therefore visible in the
+# spawned process command) and copied into the owner-only launch signal. It is
+# intentionally opt-in so ordinary local launches keep their existing behavior.
+DESKTOP_LAUNCH_TOKEN="${OMI_DESKTOP_LAUNCH_TOKEN:-}"
+if [[ -n "$DESKTOP_LAUNCH_TOKEN" && ! "$DESKTOP_LAUNCH_TOKEN" =~ ^[A-Za-z0-9_-]{16,128}$ ]]; then
+    echo "ERROR: OMI_DESKTOP_LAUNCH_TOKEN must be 16-128 URL-safe characters" >&2
+    exit 2
+fi
 AUTOMATION_ARGS=("--automation-port=$AUTOMATION_PORT" "--automation-capture-root=$AUTOMATION_CAPTURE_ROOT")
 if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
     AUTOMATION_ARGS=(--automation-bridge "${AUTOMATION_ARGS[@]}")
 fi
 
-# Backend configuration (Rust)
-BACKEND_DIR="$(cd "$(dirname "$0")/Backend-Rust" && pwd)"
+# Backend configuration
+BACKEND_DIR="$(cd "$SCRIPT_DIR/../../backend" && pwd)"
 BACKEND_PID=""
 BACKEND_REUSED_PID=""
-BACKEND_PIDFILE="$OMI_DEV_DIR/rust-backend.pid"
-BACKEND_METADATA="$OMI_DEV_DIR/rust-backend.meta"
+BACKEND_PIDFILE="$OMI_DEV_DIR/python-desktop-backend.pid"
+BACKEND_METADATA="$OMI_DEV_DIR/python-desktop-backend.meta"
 TUNNEL_PID=""
 TUNNEL_URL="${TUNNEL_URL:-}"
 AUTH_CACHE=""
@@ -576,14 +589,14 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
-# Keep an owned local Rust backend alive until a replacement has compiled. The
+# Keep an owned local Python backend alive until a replacement has started. The
 # backend startup path refreshes Firebase keys before it binds, so restarting it
 # for a Swift-only edit adds network-dependent delay and makes a compiler error
 # take down an otherwise healthy development server.
 if [ -n "${OMI_HARNESS_INSTANCE:-}" ]; then
     substep "Keeping harness desktop-backend (OMI_HARNESS_INSTANCE=${OMI_HARNESS_INSTANCE})"
-elif omi_rust_backend_pid_is_alive "$BACKEND_PIDFILE"; then
-    OLD_BACKEND_PID="$(omi_rust_backend_read_pid "$BACKEND_PIDFILE")"
+elif omi_python_desktop_backend_pid_is_alive "$BACKEND_PIDFILE"; then
+    OLD_BACKEND_PID="$(omi_python_desktop_backend_read_pid "$BACKEND_PIDFILE")"
     substep "Deferring recorded backend verification until a candidate is ready (PID: $OLD_BACKEND_PID, port $BACKEND_PORT)"
 else
     if [ -f "$BACKEND_PIDFILE" ] || [ -f "$BACKEND_METADATA" ]; then
@@ -666,14 +679,8 @@ fi
 cd "$BACKEND_DIR"
 
 if [ "$LOCAL_PROFILE" = true ]; then
-    substep "Omi Dev local harness: skipping Backend-Rust/.env copy/source and google-credentials bootstrap"
+    substep "Omi Dev local harness: skipping backend/.env copy/source and google-credentials bootstrap"
 else
-# Copy .env if not present — try sibling dirs, then scaffold from .env.example
-if [ ! -f ".env" ] && [ -f "../../backend/.env" ]; then
-    cp "../../backend/.env" ".env"
-elif [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
-    cp "../Backend/.env" ".env"
-fi
 if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" != true ] \
     && { [ "${OMI_SKIP_BACKEND:-0}" != "1" ] || [ -z "${OMI_DESKTOP_API_URL:-}" ]; }; then
     echo ""
@@ -681,7 +688,7 @@ if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BA
     echo "No .env file found at $BACKEND_DIR/.env"
     echo ""
     echo "Quick start:"
-    echo "  1. cp .env.example .env"
+    echo "  1. cp .env.template .env"
     echo "  2. Fill in required values (see comments in .env.example)"
     echo "  3. Place google-credentials.json in $BACKEND_DIR/"
     echo "     (GCP service account key with Firestore + Firebase Auth access)"
@@ -700,13 +707,6 @@ if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BA
     echo "  ./run.sh --yolo"
     echo "==========================="
     exit 1
-fi
-
-# Symlink google-credentials.json if not present
-if [ ! -f "google-credentials.json" ] && [ -f "../../backend/google-credentials.json" ]; then
-    ln -sf "../../backend/google-credentials.json" "google-credentials.json"
-elif [ ! -f "google-credentials.json" ] && [ -f "../Backend/google-credentials.json" ]; then
-    ln -sf "../Backend/google-credentials.json" "google-credentials.json"
 fi
 
 # Read environment from .env (skip if missing — yolo mode doesn't need it)
@@ -754,21 +754,20 @@ fi
 substep "Firebase project: $FIREBASE_PROJECT_ID | Backend port: $BACKEND_PORT"
 cd - > /dev/null
 
-# ─── Start Rust backend ───────────────────────────────────────────────
+# ─── Start Python backend ─────────────────────────────────────────────
 if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
     cd "$BACKEND_DIR"
-    RUST_BACKEND_PROFILE="$(omi_rust_backend_profile)"
-    RUST_BACKEND_BINARY="$(omi_rust_backend_binary "$BACKEND_DIR" "$RUST_BACKEND_PROFILE")"
+    PYTHON_BACKEND_BINARY="$(omi_python_desktop_backend_binary "$BACKEND_DIR")"
     OLD_BACKEND_PID=""
-    if omi_rust_backend_pid_is_alive "$BACKEND_PIDFILE"; then
-        OLD_BACKEND_PID="$(omi_rust_backend_read_pid "$BACKEND_PIDFILE")"
+    if omi_python_desktop_backend_pid_is_alive "$BACKEND_PIDFILE"; then
+        OLD_BACKEND_PID="$(omi_python_desktop_backend_read_pid "$BACKEND_PIDFILE")"
         # A pidfile alone is never authority to signal a process: PIDs can be
         # reused after a crash. Require the recorded process-start identity
         # before a later replacement may stop it. This intentionally does not
         # require the requested profile/configuration to match: a known-owned
         # debug process must be safely replaceable by an explicit release run.
-        if ! omi_rust_backend_pid_matches_metadata "$BACKEND_METADATA" "$OLD_BACKEND_PID"; then
-            substep "Ignoring unverified Rust backend pidfile (PID: $OLD_BACKEND_PID)"
+        if ! omi_python_desktop_backend_pid_matches_metadata "$BACKEND_METADATA" "$OLD_BACKEND_PID"; then
+            substep "Ignoring unverified Python backend pidfile (PID: $OLD_BACKEND_PID)"
             rm -f "$BACKEND_PIDFILE" "$BACKEND_METADATA"
             OLD_BACKEND_PID=""
         fi
@@ -779,33 +778,22 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
     if [ -n "${OMI_HARNESS_INSTANCE:-}" ]; then
         substep "Reusing harness desktop-backend (instance $OMI_HARNESS_INSTANCE)"
     elif [ -n "$OLD_BACKEND_PID" ] \
-        && omi_rust_backend_metadata_matches "$BACKEND_METADATA" "$RUST_BACKEND_PROFILE" "$RUST_BACKEND_BINARY" "$BACKEND_PORT" \
-        && ! omi_rust_backend_sources_are_stale "$BACKEND_DIR" "$RUST_BACKEND_BINARY" \
-        && ! omi_rust_backend_config_is_newer "$BACKEND_DIR" "$BACKEND_PIDFILE" \
-        && omi_rust_backend_pid_listens_on_port "$OLD_BACKEND_PID" "$BACKEND_PORT" \
-        && omi_rust_backend_health_check "$BACKEND_PORT"; then
+        && omi_python_desktop_backend_metadata_matches "$BACKEND_METADATA" "$BACKEND_PORT" \
+        && ! omi_python_desktop_backend_sources_are_stale "$BACKEND_DIR" "$BACKEND_PIDFILE" \
+        && ! omi_python_desktop_backend_config_is_newer "$BACKEND_DIR" "$BACKEND_PIDFILE" \
+        && omi_python_desktop_backend_pid_listens_on_port "$OLD_BACKEND_PID" "$BACKEND_PORT" \
+        && omi_python_desktop_backend_health_check "$BACKEND_PORT"; then
         BACKEND_REUSED_PID="$OLD_BACKEND_PID"
-        substep "Reusing healthy $RUST_BACKEND_PROFILE Rust backend (PID: $BACKEND_REUSED_PID, port $BACKEND_PORT)"
+        substep "Reusing healthy Python backend (PID: $BACKEND_REUSED_PID, port $BACKEND_PORT)"
     else
-        # Compile before stopping the current owned backend. A Rust compiler
-        # error must leave the developer's last healthy server available.
-        if omi_rust_backend_sources_are_stale "$BACKEND_DIR" "$RUST_BACKEND_BINARY"; then
-            step "Building Rust backend (cargo build --locked, $RUST_BACKEND_PROFILE)..."
-            if [ "$RUST_BACKEND_PROFILE" = "release" ]; then
-                cargo build --locked --release
-            else
-                cargo build --locked
-            fi
-        fi
-
-        if [ ! -x "$RUST_BACKEND_BINARY" ]; then
-            echo "ERROR: Rust backend build did not produce $RUST_BACKEND_BINARY" >&2
+        if [ ! -x "$PYTHON_BACKEND_BINARY" ]; then
+            echo "ERROR: Python backend dependencies are not synced. Run: (cd backend && ./scripts/sync-python-deps.sh)" >&2
             exit 1
         fi
 
         if [ -n "$OLD_BACKEND_PID" ]; then
-            substep "Replacing owned Rust backend after successful build (PID: $OLD_BACKEND_PID)"
-            omi_rust_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
+            substep "Replacing owned Python backend (PID: $OLD_BACKEND_PID)"
+            omi_python_desktop_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
         fi
 
         # Fail loud (don't clobber) if our derived port is held by a different
@@ -825,8 +813,8 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
         chmod 700 "$BACKEND_LOG_DIR"
         BACKEND_LOG_FILE="$BACKEND_LOG_DIR/backend.log"
 
-        step "Starting Rust backend ($RUST_BACKEND_PROFILE)..."
-        "$RUST_BACKEND_BINARY" >>"$BACKEND_LOG_FILE" 2>&1 &
+        step "Starting Python backend..."
+        "$PYTHON_BACKEND_BINARY" desktop_backend:app --host 127.0.0.1 --port "$BACKEND_PORT" >>"$BACKEND_LOG_FILE" 2>&1 &
         BACKEND_PID=$!
         printf '%s\n' "$BACKEND_PID" > "$BACKEND_PIDFILE"
         substep "Backend log: $BACKEND_LOG_FILE"
@@ -834,25 +822,25 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
         step "Waiting for backend to start..."
         BACKEND_READY=0
         for i in {1..30}; do
-            if omi_rust_backend_health_check "$BACKEND_PORT"; then
+            if omi_python_desktop_backend_health_check "$BACKEND_PORT"; then
                 BACKEND_READY=1
                 substep "Backend is ready!"
                 break
             fi
             if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
                 echo "ERROR: Backend failed to start. Check $BACKEND_DIR/.env and credentials."
-                omi_rust_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
+                omi_python_desktop_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
                 exit 1
             fi
             sleep 0.5
         done
         if [ "$BACKEND_READY" != "1" ]; then
             echo "ERROR: Backend did not become healthy on port $BACKEND_PORT. Check $BACKEND_LOG_FILE" >&2
-            omi_rust_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
+            omi_python_desktop_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
             exit 1
         fi
-        omi_rust_backend_write_metadata \
-            "$BACKEND_METADATA" "$RUST_BACKEND_PROFILE" "$RUST_BACKEND_BINARY" "$BACKEND_PORT" "$BACKEND_PID"
+        omi_python_desktop_backend_write_metadata \
+            "$BACKEND_METADATA" "$BACKEND_PORT" "$BACKEND_PID"
     fi
     cd - > /dev/null
 else
@@ -1106,7 +1094,7 @@ if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
     fi
 fi
 # Bootstrap OMI_PYTHON_API_URL — main Omi Python backend (auth, subscriptions, payments, transcription).
-# Do NOT fall back to OMI_DESKTOP_API_URL — that's the Rust desktop-backend which doesn't serve these routes.
+# Do NOT fall back to OMI_DESKTOP_API_URL — that is the Python desktop backend, which does not serve these routes.
 # If the caller set OMI_PYTHON_API_URL (for example --yolo), it must override copied .env values.
 PYTHON_API_URL="${OMI_PYTHON_API_URL:-}"
 if [ -z "$PYTHON_API_URL" ] && [ -f "$BACKEND_DIR/.env" ]; then
@@ -1240,6 +1228,31 @@ fi
 
 fi # full bundle path
 
+signal_desktop_launch() {
+    local signal_file="${OMI_DESKTOP_LAUNCH_SIGNAL_FILE:-}"
+    local launch_transport="${1:-unknown}"
+    local signal_dir signal_tmp
+    [ -n "$signal_file" ] || return 0
+    signal_dir="$(dirname "$signal_file")"
+    if [ ! -d "$signal_dir" ]; then
+        echo "ERROR: desktop launch signal directory does not exist: $signal_dir" >&2
+        return 1
+    fi
+    signal_tmp="${signal_file}.tmp.$$"
+    # A harness cleanup proof is valid only when this token has also been
+    # passed to the process launched by `open`. Do not emit half a proof.
+    if [ -n "$DESKTOP_LAUNCH_TOKEN" ]; then
+        umask 077
+        printf 'schema_version=1\nbundle_id=%s\napp_path=%s\nexecutable_path=%s\nlaunch_token=%s\nlaunch_transport=%s\n' \
+            "$BUNDLE_ID" "$APP_PATH" "$APP_PATH/Contents/MacOS/$BINARY_NAME" \
+            "$DESKTOP_LAUNCH_TOKEN" "$launch_transport" > "$signal_tmp"
+        chmod 600 "$signal_tmp"
+    else
+        printf 'bundle_id=%s\napp_path=%s\n' "$BUNDLE_ID" "$APP_PATH" > "$signal_tmp"
+    fi
+    mv -f "$signal_tmp" "$signal_file"
+}
+
 step "Starting app..."
 
 # Print summary
@@ -1280,11 +1293,49 @@ printf 'launch_mode=%s fast_reason=%s bundle_id=%s profile_root=%q\n' \
     "$LAUNCH_MODE" "$FAST_BUNDLE_REASON" "$BUNDLE_ID" "$PROFILE_ROOT"
 
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
-    open "$APP_PATH" --args "${AUTOMATION_ARGS[@]}" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
+
+# `open` starts the app from launchd, not this shell, so documented QA
+# overrides must be forwarded explicitly or they silently do nothing. Only the
+# direct-exec fallback below inherits this shell's environment.
+build_launch_env_args() {
+    LAUNCH_ENV_ARGS=()
+    if [ -n "${OMI_FORCE_CANONICAL_MEMORY_ATLAS:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CANONICAL_MEMORY_ATLAS=$OMI_FORCE_CANONICAL_MEMORY_ATLAS")
+    fi
+    # Forward automation token overrides when the caller already pinned them
+    # (e.g. qualify-desktop-beta.sh). Default token discovery prefers Darwin
+    # user temp in harness clients, matching NSTemporaryDirectory().
+    if [ -n "${OMI_AUTOMATION_TOKEN_FILE:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_AUTOMATION_TOKEN_FILE=$OMI_AUTOMATION_TOKEN_FILE")
+    fi
+    if [ -n "${OMI_AUTOMATION_TOKEN:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_AUTOMATION_TOKEN=$OMI_AUTOMATION_TOKEN")
+    fi
+}
+
+build_launch_env_args
+
+LAUNCH_TRANSPORT="open"
+if [ -n "$DESKTOP_LAUNCH_TOKEN" ]; then
+    # `-n` guarantees this invocation creates a process carrying the capability
+    # token instead of focusing an existing instance of the same app.
+    LAUNCH_ARGS=("${AUTOMATION_ARGS[@]}" "--omi-launch-token=$DESKTOP_LAUNCH_TOKEN")
+    if ! open -n ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${LAUNCH_ARGS[@]}"; then
+        LAUNCH_TRANSPORT="direct"
+        "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${LAUNCH_ARGS[@]}" &
+    fi
+elif [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
+    if ! open ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${AUTOMATION_ARGS[@]}"; then
+        LAUNCH_TRANSPORT="direct"
+        "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
+    fi
 else
-    open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
+    if ! open ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH"; then
+        LAUNCH_TRANSPORT="direct"
+        "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
+    fi
 fi
+signal_desktop_launch "$LAUNCH_TRANSPORT"
 
 # Launch finished — free this worktree's lock so other checkouts (and a later
 # rebuild here) are not blocked by the long-running wait below. Kept through

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-post-commit-index-maintenance-terminal",
+  "violated_contract": "Search-index maintenance that runs after a request's authoritative write has already committed is best-effort: its failure may not terminate that request. A raise from the index boundary turns a landed create/update/delete into a 5xx the client reads as 'the write failed', which drives retries of an applied mutation and shows the user an error for state that changed.",
+  "canonical_prevention": "Contain the failure inside the index boundary itself rather than at each call site: the vector helpers log and return their empty result (None / 0) on any embedding or index error, exactly as find_similar_action_items already degrades, so no post-commit caller can propagate an indexing fault. Deletes that carry a retention obligation stay loud and are not covered by this class.",
+  "evidence_prs": [
+    10871
+  ],
+  "scope_hints": [
+    "backend/database/vector_db.py",
+    "backend/routers/**"
+  ],
+  "canonical_prevention_artifact": [
+    "backend/database/vector_db.py",
+    "backend/tests/unit/test_action_item_vector_best_effort.py"
+  ],
+  "status": "open"
+}

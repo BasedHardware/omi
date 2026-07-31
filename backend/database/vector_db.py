@@ -13,10 +13,11 @@ from pinecone import Pinecone
 from database import projection_repair
 from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
+    build_canonical_memory_vector_delete_filter,
     build_default_memory_vector_filter,
     build_memory_vector_metadata,
+    canonical_memory_provider_id,
     parse_memory_search_vector_hit,
-    parse_search_vector_hit,
     strip_null_metadata_values,
 )
 from models.conversation_metadata import ConversationMetadataKeys, metadata_list
@@ -551,52 +552,12 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
     return [match['metadata'].get('memory_id') for match in matches]
 
 
-def query_memory_vector_candidates(  # type: ignore[reportRedeclaration]  # intentional: shadowed by a later def with the same name; preserved to keep both call paths reachable in isolation
-    uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
-) -> VectorCandidateQueryResult:
-    """Query existing ns2 for memory candidates using strict tier-safe metadata filters.
-
-    The returned hits are vector candidates only. Product callers must still
-    hydrate authoritative ``memory_items`` and run the memory search gateway before
-    returning any memory to a user or integration.
-    """
-    if index is None:
-        logger.warning('Pinecone index not initialized, skipping memory memory vector candidate search')
-        return VectorCandidateQueryResult()
-
-    vector = embeddings.embed_query(query)
-    filter_data = (
-        build_archive_memory_vector_filter(uid)
-        if mode == SearchMode.archive_explicit
-        else build_default_memory_vector_filter(uid)
-    )
-    response = index.query(
-        vector=vector,
-        top_k=limit,
-        include_metadata=True,
-        include_values=False,
-        filter=filter_data,
-        namespace=MEMORIES_NAMESPACE,
-    )
-
-    hits: List[SearchVectorHit] = []
-    rejected_count = 0
-    matches: List[Any] = response.get('matches', [])
-    for match in matches:
-        parsed = parse_search_vector_hit(match)
-        if parsed.hit is None:
-            rejected_count += 1
-            continue
-        hits.append(parsed.hit)
-    return VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
-
-
 def upsert_canonical_memory_vector(
     item: MemoryItem,
     *,
     projection_commit_id: str | None = None,
 ) -> List[float] | None:
-    """Upsert one canonical-cohort memory vector using neutral id + neutral metadata."""
+    """Upsert one canonical-cohort memory vector using a user-scoped provider id."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping canonical memory vector upsert')
         return None
@@ -621,13 +582,35 @@ def upsert_canonical_memory_vector(
         vector_updated_at=vector_updated_at,
     )
     data: VectorRecordDoc = {
-        "id": item.memory_id,
+        "id": canonical_memory_provider_id(item.uid, item.memory_id),
         "values": vector,
         "metadata": metadata,
     }
+    # Migration cleanup is metadata-fenced: remove both the former bare
+    # ``memory_id`` row and any prior ``memproj:`` row for this user only.
+    # A failed cleanup must abort the upsert so the durable outbox retries.
+    index.delete(
+        filter=build_canonical_memory_vector_delete_filter(item.uid, item.memory_id),
+        namespace=MEMORIES_NAMESPACE,
+    )
     res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
     logger.info('upsert_canonical_memory_vector %s %s', item.memory_id, res)
     return vector
+
+
+def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> bool:
+    """Delete canonical vectors by authoritative UID metadata, including legacy bare-ID rows."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping canonical memory vector filter delete')
+        return False
+    delete_filter = build_canonical_memory_vector_delete_filter(uid, memory_id)
+    index.delete(filter=delete_filter, namespace=MEMORIES_NAMESPACE)
+    logger.info(
+        'delete_canonical_memory_vectors uid=%s memory_id=%s',
+        uid,
+        memory_id or '*',
+    )
+    return True
 
 
 def query_memory_vector_candidates(
@@ -810,17 +793,18 @@ def upsert_screen_activity_vectors(uid: str, rows: List[Dict[str, Any]]) -> int:
             if isinstance(ts_value, str)
             else int(ts_value)
         )
+        metadata = {
+            "uid": uid,
+            "screenshot_id": str(row.get("storageId") or row['id']),
+            "timestamp": timestamp,
+            "appName": row.get('appName', ''),
+        }
+        if row.get('deviceName'):
+            metadata['deviceName'] = row['deviceName']
+        if row.get('clientDeviceId'):
+            metadata['clientDeviceId'] = row['clientDeviceId']
         vectors.append(
-            {
-                "id": f'{uid}-sa-{row["id"]}',
-                "values": embedding,
-                "metadata": {
-                    "uid": uid,
-                    "screenshot_id": str(row['id']),
-                    "timestamp": timestamp,
-                    "appName": row.get('appName', ''),
-                },
-            }
+            {"id": f'{uid}-sa-{row.get("storageId") or row["id"]}', "values": embedding, "metadata": metadata}
         )
 
     if not vectors:
@@ -896,26 +880,44 @@ ACTION_ITEMS_NAMESPACE = "ns4"
 
 
 def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -> List[float] | None:
+    """Index one action item for semantic search.
+
+    Every caller runs this *after* the Firestore write has already committed, so an
+    embedding/Pinecone failure must not propagate: it would turn a successful
+    create/update into an HTTP 500 (and make clients retry a write that landed).
+    Degrades to ``None`` — the task is simply absent from semantic search until it
+    is next indexed, matching ``find_similar_action_items``.
+    """
     if index is None:
         logger.warning('Pinecone index not initialized, skipping action item vector upsert')
         return None
 
-    vector = embeddings.embed_query(description)
-    data: VectorRecordDoc = {
-        "id": f'{uid}-ai-{action_item_id}',
-        "values": vector,
-        "metadata": {
-            "uid": uid,
-            "action_item_id": action_item_id,
-            "created_at": int(datetime.now(timezone.utc).timestamp()),
-        },
-    }
-    res = index.upsert(vectors=[data], namespace=ACTION_ITEMS_NAMESPACE)
-    logger.info(f'upsert_action_item_vector {action_item_id} {res}')
-    return vector
+    try:
+        vector = embeddings.embed_query(description)
+        data: VectorRecordDoc = {
+            "id": f'{uid}-ai-{action_item_id}',
+            "values": vector,
+            "metadata": {
+                "uid": uid,
+                "action_item_id": action_item_id,
+                "created_at": int(datetime.now(timezone.utc).timestamp()),
+            },
+        }
+        res = index.upsert(vectors=[data], namespace=ACTION_ITEMS_NAMESPACE)
+        logger.info(f'upsert_action_item_vector {action_item_id} {res}')
+        return vector
+    except Exception as e:
+        logger.exception(
+            f'upsert_action_item_vector failed uid={uid} action_item_id={action_item_id} '
+            f'(task saved, vector missing): {e}'
+        )
+        return None
 
 
 def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
+    """Index a batch of action items. Best-effort, for the same reason as
+    ``upsert_action_item_vector``: returns 0 instead of raising into a caller
+    whose Firestore writes already succeeded."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping action item vector batch upsert')
         return 0
@@ -923,25 +925,32 @@ def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> i
     if not items:
         return 0
 
-    descriptions: List[str] = [item['description'] for item in items]
-    vectors: List[List[float]] = embeddings.embed_documents(descriptions)
+    try:
+        descriptions: List[str] = [item['description'] for item in items]
+        vectors: List[List[float]] = embeddings.embed_documents(descriptions)
 
-    now_ts = int(datetime.now(timezone.utc).timestamp())
-    payload: List[VectorRecordDoc] = [
-        {
-            "id": f"{uid}-ai-{item['action_item_id']}",
-            "values": vectors[i],
-            "metadata": {
-                "uid": uid,
-                "action_item_id": item['action_item_id'],
-                "created_at": now_ts,
-            },
-        }
-        for i, item in enumerate(items)
-    ]
-    res = index.upsert(vectors=payload, namespace=ACTION_ITEMS_NAMESPACE)
-    logger.info(f'upsert_action_item_vectors_batch count={len(payload)} {res}')
-    return len(payload)
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        payload: List[VectorRecordDoc] = [
+            {
+                "id": f"{uid}-ai-{item['action_item_id']}",
+                "values": vectors[i],
+                "metadata": {
+                    "uid": uid,
+                    "action_item_id": item['action_item_id'],
+                    "created_at": now_ts,
+                },
+            }
+            for i, item in enumerate(items)
+        ]
+        res = index.upsert(vectors=payload, namespace=ACTION_ITEMS_NAMESPACE)
+        logger.info(f'upsert_action_item_vectors_batch count={len(payload)} {res}')
+        return len(payload)
+    except Exception as e:
+        logger.exception(
+            f'upsert_action_item_vectors_batch failed uid={uid} count={len(items)} '
+            f'(tasks saved, vectors missing): {e}'
+        )
+        return 0
 
 
 def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_score: float = 0.3) -> List[str]:
@@ -1053,8 +1062,8 @@ def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]) -> 
 def delete_pinecone_memory_vectors_by_id(vector_ids: List[str]) -> int:
     """Delete ns2 memory vectors by exact Pinecone id.
 
-    Supports legacy ``{uid}-{memory_id}``, memory ``memvec:…``, and canonical neutral ``mem_…`` ids.
-    Used by canonical account-delete purge; legacy batch delete keeps ``{uid}-{id}`` scheme unchanged.
+    Canonical cleanup uses ``delete_canonical_memory_vectors`` so legacy
+    provider identities are removed by UID metadata instead of guessed IDs.
     """
     if index is None:
         logger.warning("Pinecone index not initialized, skipping memory vector delete by id")

@@ -1467,7 +1467,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get payYourSttProvider => 'Slobodno koristi omi. Plaćate samo vašem STT dobavljaču direktno.';
 
   @override
-  String get freeMinutesMonth => '1.200 besplatnih minuta/mesec uključeno. Neograničeno sa ';
+  String get freeMinutesMonth => '300 besplatnih minuta/mesec uključeno. Neograničeno sa ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1789,20 +1789,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Vam se sviđa Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Pomozite nam da dosegnemo više ljudi ostavljanjem recenzije u App Store-u. Vaša povratna informacija znači nam sve!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Pomozite nam da dosegnemo više ljudi ostavljanjem recenzije u Google Play Store-u. Vaša povratna informacija znači nam sve!';
-
-  @override
-  String get rateOnAppStore => 'Oceni u App Store-u';
-
-  @override
-  String get rateOnGooglePlay => 'Oceni na Google Play';
 
   @override
   String get maybeLater => 'Možda kasnije';
@@ -2140,6 +2126,18 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Izmeni uspomenu';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Volim da jedem sladoled...';
@@ -4719,7 +4717,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nema specifičnog pristupa podacima konfiguriranog.';
 
   @override
-  String get basicPlanDescription => '1.200 premium minuta + neograničeno na uređaju';
+  String get basicPlanDescription => '300 premium minuta + neograničeno na uređaju';
 
   @override
   String get minutes => 'minute';
@@ -6013,7 +6011,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 premium minuta/mjesec. Kartaca na uređaju nudi neограничenu besplatnu transkripciju.';
+      '300 premium minuta/mjesec. Kartaca na uređaju nudi neограничenu besplatnu transkripciju.';
 
   @override
   String get viewUsage => 'Prikaži upotrebu';
@@ -6095,7 +6093,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 premium minuta/mjesec. Kartaca na uređaju nudi neograničenu besplatnu transkripciju. ';
+      '300 premium minuta/mjesec. Kartaca na uređaju nudi neograničenu besplatnu transkripciju. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9633,151 +9631,171 @@ class AppLocalizationsBs extends AppLocalizations {
       'Vaši podaci su prema zadanim postavkama zaštićeni jakom enkripcijom, a vi kontrolišete kako se pohranjuju i koriste.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Tačnost';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'Osnovni';
 
   @override
-  String get cloudTranscription => 'Cloud Transcription';
+  String get cloudTranscription => 'Transkripcija u oblaku';
 
   @override
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Izbriši model';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Jeste li sigurni da želite izbrisati ovaj model?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Preuzeto';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Brže';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Automatski';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Veća';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Veliki';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Manja';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Srednji';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Model izbrisan';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Preuzimanje modela nije uspjelo';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Preuzimanje Whisper modela nije uspjelo. Pokušajte ponovo.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Model preuzet';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper model je uspješno preuzet';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Veličina modela';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Nijedan';
 
   @override
-  String get onDeviceTranscription => 'On-Device Transcription';
+  String get onDeviceTranscription => 'Prepis na uređaju';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+  String get onDeviceTranscriptionDesc => 'Prepis se obrađuje lokalno na vašem uređaju';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Sporije';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Mali';
 
   @override
   String get sttProviderSoniox => 'Soniox';
 
   @override
-  String get speechToTextProvider => 'Speech-to-Text Provider';
+  String get speechToTextProvider => 'Pružatelj usluge govor-u-tekst';
 
   @override
-  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+  String get speechToTextProviderDesc => 'Odaberite uslugu koja se koristi za prepis';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Brzina';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Sićušni';
 
   @override
-  String get transcriptionLanguage => 'Transcription Language';
+  String get transcriptionLanguage => 'Jezik prepisa';
 
   @override
-  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+  String get transcriptionLanguageDesc => 'Odaberite jezik za prepis govora';
 
   @override
-  String get whisperModel => 'Whisper Model';
+  String get whisperModel => 'Whisper model';
 
   @override
-  String get whisperModelDesc => 'Choose the model for on-device transcription';
+  String get whisperModelDesc => 'Odaberite model za prepis na uređaju';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Preći na besplatni plan?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Suočit ćete se sa sljedećim ograničenjima:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => '7x veća potrošnja baterije';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => '30% lošiji kvalitet prepisa';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => 'Kašnjenje od 5-7 sekundi';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Nije moguće prepoznati govornike';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Ipak pređi na niži plan';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google Kalendar nije povezan';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Povežite Google Kalendar da biste razgovore povezali s događajima u kalendaru.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Povezano s „$title“';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Povezivanje s događajem u kalendaru nije uspjelo';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Hvala na povratnoj informaciji!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Kopiraj poruku';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Pretraži postavke…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Greška pri učitavanju zvuka';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Odaberite Ray-Ban Meta mikrofon';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Odaberite Bluetooth mikrofon svojih naočala. Muzika se pauzira dok ga Omi koristi.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nije pronađen nijedan Bluetooth mikrofon. Povežite naočale u postavkama iPhonea pa pokušajte ponovo.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth mikrofoni se nisu mogli učitati. Provjerite je li Bluetooth uključen pa pokušajte ponovo.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Povezivanje s tim mikrofonom nije uspjelo. Provjerite je li povezan u postavkama iPhonea.';
 }

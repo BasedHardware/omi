@@ -123,6 +123,95 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertTrue(coordinator.schedule(messageID: messageID, supersededByTerminalization: false) {})
   }
 
+  func testTerminalizationRetriesOneFailedIdempotentProjection() async {
+    let coordinator = ChatJournalWriteCoordinator()
+    var attempts = 0
+
+    let accepted = await coordinator.retryTerminalization {
+      attempts += 1
+      return attempts == 2
+    }
+
+    XCTAssertTrue(accepted)
+    XCTAssertEqual(attempts, 2, "Terminalization retries exactly once after a transient failure")
+  }
+
+  func testTerminalizationRetryIsBounded() async {
+    let coordinator = ChatJournalWriteCoordinator()
+    var attempts = 0
+
+    let accepted = await coordinator.retryTerminalization {
+      attempts += 1
+      return false
+    }
+
+    XCTAssertFalse(accepted)
+    XCTAssertEqual(attempts, 2, "A persistent journal failure must not retry indefinitely")
+  }
+
+  func testAcceptedTerminalPayloadWinsOverStaleStreamingProjection() {
+    let full = "RELAUNCH-PERSIST-1784573311"
+    let retainedResource = ChatResource.localGeneratedFile(
+      id: "artifact:relaunch",
+      title: "durable-result.txt",
+      subtitle: "text/plain",
+      mimeType: "text/plain",
+      uri: "file:///tmp/durable-result.txt")
+    let staleStreamingMessage = ChatMessage(
+      id: "attempt-relaunch-assistant",
+      text: "RELAUNCH-PERSIST-1",
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [
+        .text(id: "attempt-relaunch-assistant:stream", text: "RELAUNCH-PERSIST-1"),
+        .thinking(id: "attempt-relaunch-assistant:thinking", text: "Retain this non-text block"),
+      ],
+      resources: [retainedResource]
+    )
+
+    let terminalText = KernelTurnProjection.acceptedTerminalContent(
+      message: staleStreamingMessage,
+      acceptedContent: full)
+    let blocks = KernelTurnProjection.acceptedTerminalContentBlocks(
+      message: staleStreamingMessage,
+      acceptedContent: full
+    )
+    XCTAssertEqual(
+      terminalText, full, "The accepted agent result, not a stale UI buffer, is canonical terminal content")
+    XCTAssertEqual(blocks.count, 2)
+    guard case .text(let id, let text) = blocks[0] else {
+      return XCTFail("Terminal payload must start with one authoritative text block")
+    }
+    XCTAssertEqual(id, "attempt-relaunch-assistant:terminal")
+    XCTAssertEqual(text, full)
+    guard case .thinking(let thinkingID, let thinkingText) = blocks[1] else {
+      return XCTFail("Terminal payload must retain non-text streaming blocks")
+    }
+    XCTAssertEqual(thinkingID, "attempt-relaunch-assistant:thinking")
+    XCTAssertEqual(thinkingText, "Retain this non-text block")
+    XCTAssertEqual(staleStreamingMessage.displayResources, [retainedResource])
+  }
+
+  func testEmptyAcceptedContentKeepsTheIntentionalStreamingProjection() {
+    let message = ChatMessage(
+      id: "attempt-empty-terminal",
+      text: "intentional partial response",
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [.text(id: "attempt-empty-terminal:stream", text: "intentional partial response")]
+    )
+
+    XCTAssertEqual(
+      KernelTurnProjection.acceptedTerminalContent(message: message, acceptedContent: ""),
+      "intentional partial response")
+    let blocks = KernelTurnProjection.acceptedTerminalContentBlocks(message: message, acceptedContent: "")
+    guard let first = blocks.first, case .text(let id, let text) = first else {
+      return XCTFail("An intentional empty result must keep the current structured projection")
+    }
+    XCTAssertEqual(id, "attempt-empty-terminal:stream")
+    XCTAssertEqual(text, "intentional partial response")
+  }
+
   // MARK: - Bug 2: projection preserves local-only fields across replay
 
   func testProjectionPreservesLocalOnlyFieldsAcrossTerminalReplay() throws {

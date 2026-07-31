@@ -219,12 +219,17 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'id: deploy-backend-sync-backfill' in action
     assert 'render_cloud_run_clone_env.py' in action
     assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
-    assert '--min-instances=0' in action
-    assert '--max-instances=4' in action
+    # Dispatch concurrency must equal the worker's max instances: offering more
+    # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
+    # back it off, which previously stranded recordings for hours. A warm
+    # instance keeps a scale-from-zero poke from being rejected outright.
+    assert '--min-instances=1' in action
+    assert '--max-instances=30' in action
     assert '--concurrency=1' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     assert 'gcloud tasks queues create sync-backfill' in action
-    assert '--max-concurrent-dispatches=4' in action
+    assert '--max-concurrent-dispatches=30' in action
+    assert '--max-backoff=60s' in action
     assert 'collection-group=sync_content_ledger' in action
     assert "inputs.provision_sync_ledger_ttl == 'true'" in action
     assert "inputs.provision_budget_alerts == 'true'" in action
@@ -253,6 +258,7 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
     for workflow in (manual, auto_dev):
         assert 'verify_sync_ledger_fence_transition.py' in workflow
         assert '--desired-mode="$SYNC_LEDGER_FENCE_MODE"' in workflow
+        assert '--allow-tagged-no-percent-targets' in workflow
         assert workflow.count("SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}") >= 2
 
     assert "TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}" in manual
@@ -264,23 +270,14 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
     assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in manual
     assert 'Remove passed transcription candidate tag' in manual
     assert 'Remove failed transcription candidate tag' in manual
-    assert (
-        'if: ${{ failure() && steps.deploy-backend.outcome == \'success\''
-        ' && github.event.inputs.environment == \'development\' }}' in manual
-    )
+    assert "github.event.inputs.environment == 'development'" in manual
     assert manual.index('Gate backend candidate on known audio') < manual.index(
         'Shift Cloud Run traffic to validated revisions'
     )
 
 
-def test_transcription_candidate_gate_is_development_only():
-    """The candidate probe must never gate a production deploy.
-
-    The probe reaches the candidate over a Cloud Run tag URL, which is a run.app
-    URL. Production disables run.app URLs and restricts ingress to internal and
-    load-balancer traffic, so a production tag resolves to no HTTPS endpoint and
-    every production deploy fails at the probe (2026-07-17, run 29574215693).
-    """
+def test_production_cloud_run_only_smokes_the_promoted_serving_api():
+    """Prod Cloud Run promotion rolls back on runner-local serving smoke failure."""
     import yaml
 
     root = Path(__file__).resolve().parents[3]
@@ -288,26 +285,34 @@ def test_transcription_candidate_gate_is_development_only():
     steps = workflow['jobs']['deploy']['steps']
     by_name = {step.get('name'): step for step in steps}
 
-    gate_steps = (
+    public_probe = by_name['Gate backend candidate on known audio']
+    assert public_probe['if'] == "${{ github.event.inputs.environment == 'development' }}"
+
+    serving_smoke = by_name['Smoke promoted production serving API']
+    assert serving_smoke['if'] == "${{ github.event.inputs.environment == 'prod' }}"
+    assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']
+    assert '--candidate-api-url https://api.omi.me' in serving_smoke['run']
+    assert 'firebase-production-serving-token' in serving_smoke['run']
+    assert 'FIREBASE_PROBE_TOKEN' not in serving_smoke['run']
+
+    for name in (
         'Resolve transcription candidate URL',
-        'Gate backend candidate on known audio',
         'Remove passed transcription candidate tag',
         'Remove failed transcription candidate tag',
-    )
-    for name in gate_steps:
-        assert name in by_name, f'{name} step is missing'
+    ):
         condition = by_name[name].get('if') or ''
-        assert (
-            "github.event.inputs.environment == 'development'" in condition
-        ), f'{name} must be development-only; a production run cannot resolve a tag URL'
+        assert "github.event.inputs.environment == 'development'" in condition
 
-    # The tag itself is only requested for development; production never creates one.
     deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
-    assert "github.event.inputs.environment == 'development' && format('--tag={0}'" in deploy_flags
-
-    # Promotion must not depend on the skipped gate.
-    for name in ('Verify validated revisions are still current', 'Shift Cloud Run traffic to validated revisions'):
-        assert by_name[name].get('if') is None, f'{name} must still run when the gate is skipped'
+    assert "github.event.inputs.environment == 'development'" in deploy_flags
+    assert steps.index(by_name['Verify serving backend release vector']) < steps.index(serving_smoke)
+    assert steps.index(serving_smoke) < steps.index(
+        by_name['Restore Cloud Run traffic snapshot after failed promotion']
+    )
+    assert (
+        "steps.smoke-promoted-production-serving-api.outcome == 'failure'"
+        in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
+    )
 
 
 def test_static_processed_segment_marker_follows_partial_result_checkpoint():

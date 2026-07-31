@@ -144,16 +144,27 @@ final class PushToTalkStateMachineTests: XCTestCase {
   // RealtimeHubOwnerBoundarySnapshot); the release-mode CI test compile must skip it.
   #if DEBUG
     @MainActor
+    func testOwnerBoundaryEffectHandlerInstallDoesNotStartListening() {
+      let manager = PushToTalkManager.shared
+      manager.cleanup()
+      defer { manager.cleanup() }
+
+      manager.installOwnerBoundaryEffectHandlerFixture()
+
+      XCTAssertNil(VoiceTurnCoordinator.shared.activeTurn)
+      XCTAssertNil(manager.ownerBoundarySnapshot.activeTurnID)
+      XCTAssertFalse(manager.ownerBoundarySnapshot.hasCaptureDriver)
+      XCTAssertFalse(manager.ownerBoundarySnapshot.captureStartInFlight)
+    }
+
+    @MainActor
     func testOwnerTransitionTerminatesActiveNonHubCaptureBeforeOwnerBBecomesVisible() async {
       let manager = PushToTalkManager.shared
       let defaults = ownerBoundaryDefaults("non-hub")
       manager.cleanup()
       await transitionOwner(defaults: defaults, to: "owner-a")
 
-      // Install the production physical-effect handler without touching a real
-      // microphone, then admit an exact non-hub capture through the reducer.
-      _ = manager.beginPushToTalkForAutomation()
-      manager.cleanup()
+      manager.installOwnerBoundaryEffectHandlerFixture()
       let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
       VoiceTurnCoordinator.shared.publish(
         .selectRoute(turnID: turnID, route: .deepgramLive))
@@ -214,8 +225,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
       manager.cleanup()
       await transitionOwner(defaults: defaults, to: "owner-a")
 
-      _ = manager.beginPushToTalkForAutomation()
-      manager.cleanup()
+      manager.installOwnerBoundaryEffectHandlerFixture()
       hub.installOwnerBoundaryFixture(ownerID: "owner-a")
       let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
       VoiceTurnCoordinator.shared.publish(
@@ -244,8 +254,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
       manager.cleanup()
       await transitionOwner(defaults: defaults, to: "owner-a")
 
-      _ = manager.beginPushToTalkForAutomation()
-      manager.cleanup()
+      manager.installOwnerBoundaryEffectHandlerFixture()
       hub.installOwnerBoundaryFixture(ownerID: "owner-a")
       let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
       VoiceTurnCoordinator.shared.publish(
@@ -300,10 +309,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
       manager.cleanup()
       await transitionOwner(defaults: defaults, to: "owner-a")
 
-      // Install the production terminal-effect handler without starting a real
-      // microphone capture, then model a begin whose receipt was lost to Swift.
-      _ = manager.beginPushToTalkForAutomation()
-      manager.cleanup()
+      manager.installOwnerBoundaryEffectHandlerFixture()
       let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
       hub.installOwnerBoundaryUnresolvedExternalRunFixture(
         ownerID: "owner-a",
@@ -333,17 +339,22 @@ final class PushToTalkStateMachineTests: XCTestCase {
       // the transition from a nonisolated static helper so neither `defaults` nor
       // `self` crosses an isolation boundary.
       let boxed = OwnerDefaultsBox(value: defaults)
-      await Self.runOwnerTransition(boxed: boxed, ownerID: ownerID)
+      do {
+        try await Self.runOwnerTransition(boxed: boxed, ownerID: ownerID)
+      } catch {
+        XCTFail("owner transition failed: \(error)")
+      }
     }
 
     private static nonisolated func runOwnerTransition(
       boxed: OwnerDefaultsBox, ownerID: String
-    ) async {
-      await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+    ) async throws {
+      try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
         defaults: boxed.value,
         allowAutomationOverride: false,
         plannedNextOwner: { _, _ in ownerID },
         retargetLocalStorage: { _, _ in },
+        prepareLocalStorageTransition: { _, _ in },
         ownerDidChange: {}
       ) { defaults in
         defaults.set(ownerID, forKey: .authUserId)

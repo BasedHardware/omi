@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from database import users as users_db
 from models.memories import Memory, MemoryCategory
+from models.memory_contracts import L1MemoryArchiveClass
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
@@ -74,6 +75,27 @@ class HighRecallMemories(BaseModel):
     )
 
 
+class CanonicalL1MemoryCandidate(BaseModel):
+    """Transient broad-capture candidate for canonical Short-term intake."""
+
+    content: str
+    archive_class: L1MemoryArchiveClass = L1MemoryArchiveClass.general
+    evidence_quotes: List[str] = Field(default_factory=list)
+    speaker_label: Optional[str] = None
+    speaker_scope: str = "session-local"
+    about: str = ""
+    confidence: str = "medium"
+    risk_flags: List[str] = Field(default_factory=list)
+
+
+class MemoryExtractionError(RuntimeError):
+    """A strict memory extraction failed before producing a valid batch."""
+
+    def __init__(self, extractor: str):
+        self.extractor = extractor
+        super().__init__(f"{extractor} failed before producing a valid extraction result")
+
+
 class MemoriesByTexts(BaseModel):
     facts: List[ExtractedMemory] = Field(
         description="List of **new** facts. If any",
@@ -99,6 +121,65 @@ LEGACY_TO_NEW_CATEGORY = {
     'other': MemoryCategory.system,
     'learnings': MemoryCategory.interesting,  # learnings are external insights
 }
+
+
+def extract_canonical_l1_memory_candidates(
+    uid: str,
+    source_id: str,
+    segments: List[TranscriptSegment],
+    *,
+    user_name: Optional[str] = None,
+    language: Optional[str] = None,
+    strict: bool = False,
+) -> List[CanonicalL1MemoryCandidate]:
+    """Run the broad, source-aware L1 extractor without persisting archive routes.
+
+    Canonical conversation intake owns the resulting lifecycle write. The
+    existing L1 archive schema is only the structured LLM boundary here; these
+    transient values are translated into Short-term canonical items by the
+    caller.
+    """
+    if not any((segment.text or "").strip() for segment in segments):
+        return []
+
+    if user_name is None:
+        user_name, _ = get_prompt_memories(uid)
+
+    person_ids = sorted({segment.person_id for segment in segments if segment.person_id})
+    people_records = cast(List[Dict[str, Any]], users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
+    people = Person.deserialize_many_safe(people_records)
+    content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
+    if not content or not content.strip():
+        return []
+
+    # Keep the broad L1 extractor behind the canonical call boundary. Several
+    # lightweight API/test paths intentionally stub ``utils.llm.memories`` and
+    # must not transitively import the working-observation provider stack.
+    from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
+
+    items = extract_l1_memory_archive_items_from_text(
+        uid=uid,
+        source_id=source_id,
+        source_type="voice_transcript",
+        text=content,
+        user_name=user_name,
+        language_instruction=_get_language_instruction(uid, language),
+        persist_route_outcomes=False,
+        strict=strict,
+    )
+    return [
+        CanonicalL1MemoryCandidate(
+            content=item.text,
+            archive_class=item.archive_class,
+            evidence_quotes=item.evidence_quotes,
+            speaker_label=item.speaker_label,
+            speaker_scope=item.speaker_scope,
+            about=item.about,
+            confidence=item.confidence,
+            risk_flags=item.risk_flags,
+        )
+        for item in items
+    ]
 
 
 def new_memories_extractor(
@@ -160,6 +241,8 @@ def extract_memories_from_text(
     memories_str: Optional[str] = None,
     language: Optional[str] = None,
     content_date: Optional[str] = None,
+    *,
+    strict: bool = False,
 ) -> List[Memory]:
     """Extract memories from external integration text sources like email, posts, messages"""
     if user_name is None or memories_str is None:
@@ -194,7 +277,9 @@ def extract_memories_from_text(
 
         return memories
     except Exception as e:
-        logger.error(f'Error extracting facts from {text_source}: {e}')
+        logger.error("Error extracting facts from %s: %s", text_source, type(e).__name__)
+        if strict:
+            raise MemoryExtractionError("external_text_memory_extractor") from e
         return []
 
 

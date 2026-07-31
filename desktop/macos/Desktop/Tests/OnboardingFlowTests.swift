@@ -387,6 +387,99 @@ final class OnboardingFlowTests: XCTestCase {
     }
   }
 
+  /// Static tripwire: keyboard shortcut registration is a SwiftUI wiring
+  /// contract, so assert every visible onboarding proceed action remains the
+  /// default action without trying to synthesize AppKit key events in a unit test.
+  func testOnboardingProceedActionsUseDefaultActionKeyboardShortcut() throws {
+    // omi-test-quality: source-inspection -- static contract: verifies SwiftUI default-action wiring on every visible onboarding proceed control
+    let chatSource = try desktopSourceFile("Onboarding/OnboardingChatView.swift")
+    XCTAssertTrue(
+      chatSource.contains("handleOnboardingComplete()\n              })")
+        && chatSource.contains(".keyboardShortcut(.defaultAction)\n              .padding(.top"),
+      "the conversational onboarding Continue button must accept Return")
+
+    let fileIndexingSource = try desktopSourceFile("FileIndexing/FileIndexingView.swift")
+    XCTAssertTrue(
+      fileIndexingSource.contains("onComplete(totalFilesScanned)")
+        && fileIndexingSource.contains(".keyboardShortcut(.defaultAction)\n        .padding(.bottom"),
+      "the file-index onboarding Continue button must accept Return")
+
+    let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
+    for title in ["Set up Omi →", "Continue"] {
+      XCTAssertTrue(
+        secondBrainSource.contains("SBInkButton(title: \"\(title)\", isDefaultAction: true)"),
+        "the second-brain \(title) action must accept Return")
+    }
+    XCTAssertEqual(
+      secondBrainSource.components(separatedBy: "isDefaultAction: true").count - 1,
+      7,
+      "every visible second-brain proceed action must register Return")
+    XCTAssertTrue(
+      secondBrainSource.contains("Text(\"Continue →\")")
+        && secondBrainSource.contains(".keyboardShortcut(.defaultAction)\n      } else {"),
+      "the granted-permission Continue action must accept Return")
+
+    let componentsSource = try desktopSourceFile("MainWindow/SecondBrain/SBComponents.swift")
+    XCTAssertTrue(
+      componentsSource.contains("content.keyboardShortcut(.defaultAction)"),
+      "SBInkButton must wire opted-in proceed actions to Return")
+  }
+
+  func testSecondBrainCaptureDefaultsToMeetingsWithoutShortcutReminder() throws {
+    // omi-test-quality: source-inspection -- static contract: verifies the SwiftUI capture-choice hierarchy and copy
+    let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
+    let defaultChoice = try XCTUnwrap(
+      secondBrainSource.range(of: "model.capture(SBOnboardingModel.defaultCaptureSelection)"))
+    let continuousChoice = try XCTUnwrap(secondBrainSource.range(of: "model.capture(.continuous)"))
+
+    XCTAssertLessThan(
+      defaultChoice.lowerBound,
+      continuousChoice.lowerBound,
+      "Meeting-only recording must be the first capture choice")
+    XCTAssertTrue(
+      secondBrainSource[defaultChoice.lowerBound..<continuousChoice.lowerBound]
+        .contains(".keyboardShortcut(.defaultAction)"),
+      "Return must choose the meeting-only capture default")
+    XCTAssertFalse(secondBrainSource.contains("reaches me anytime"))
+  }
+
+  // Regression: arrow navigation must be computed from persisted step state and
+  // applied by the mounted view — the NSEvent monitor's captured view copy drops
+  // @AppStorage writes on some macOS versions. These cover the extracted
+  // decision + validation seam the monitor and .onReceive now route through.
+  func testArrowNavigationDecisions() {
+    // Left/up go back one step; blocked at the first step.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 123, step: 10, furthestStep: 15), .jump(to: 9))
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 126, step: 1, furthestStep: 1), .jump(to: 0))
+    XCTAssertNil(OnboardingFlow.arrowNavigation(keyCode: 123, step: 0, furthestStep: 5))
+    // Right/down jump when the next step is cleared or skippable.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 124, step: 10, furthestStep: 15), .jump(to: 11))
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 125, step: 5, furthestStep: 5), .jump(to: 6))
+    // At an uncleared required step, defer to the step's own Continue gating.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 124, step: 1, furthestStep: 1),
+      .forwardDefaultAction)
+    // Non-arrow keys navigate nothing.
+    XCTAssertNil(OnboardingFlow.arrowNavigation(keyCode: 36, step: 5, furthestStep: 10))
+  }
+
+  func testValidatedNavigationTargetPolicy() {
+    // Backward always allowed, forward gated by canJump, range clamped.
+    XCTAssertEqual(
+      OnboardingFlow.validatedNavigationTarget(9, currentStep: 10, furthestStep: 15), 9)
+    XCTAssertEqual(
+      OnboardingFlow.validatedNavigationTarget(11, currentStep: 10, furthestStep: 15), 11)
+    XCTAssertNil(OnboardingFlow.validatedNavigationTarget(2, currentStep: 1, furthestStep: 1))
+    XCTAssertNil(OnboardingFlow.validatedNavigationTarget(-1, currentStep: 0, furthestStep: 0))
+    XCTAssertNil(
+      OnboardingFlow.validatedNavigationTarget(
+        OnboardingFlow.lastStepIndex + 1, currentStep: 5, furthestStep: 17))
+  }
+
   @MainActor
   func testHowDidYouHearKeepsOtherLast() {
     XCTAssertEqual(OnboardingHowDidYouHearStepView.sources.last?.name, "Other")
@@ -403,11 +496,15 @@ final class OnboardingFlowTests: XCTestCase {
   }
 
   private func onboardingSourceFile(_ name: String) throws -> String {
+    try desktopSourceFile("Onboarding/\(name)")
+  }
+
+  private func desktopSourceFile(_ relativePath: String) throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Onboarding")
-      .appendingPathComponent(name)
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
     // omi-test-quality: source-inspection -- static contract: forbids uncancellable deferred-advance patterns in step views
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }

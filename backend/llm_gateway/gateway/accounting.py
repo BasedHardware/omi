@@ -431,15 +431,36 @@ def image_usage(*, count: int, size: object, quality: object) -> ProviderUsage:
 
 def cache_requested_for_openai_request(request: Mapping[str, Any]) -> bool:
     prompt_cache_key = request.get('prompt_cache_key')
-    return isinstance(prompt_cache_key, str) and bool(prompt_cache_key.strip())
+    if not isinstance(prompt_cache_key, str) or not prompt_cache_key.strip():
+        return False
+    # Pre-5.6 callers use implicit caching with only a routing key.  Explicit
+    # GPT-5.6 requests without a marker deliberately opt out of cache writes.
+    if request.get('prompt_cache_options') == {'mode': 'explicit', 'ttl': '30m'}:
+        return _has_openai_cache_breakpoint(request.get('messages'))
+    return True
+
+
+def _has_openai_cache_breakpoint(messages: object) -> bool:
+    if not isinstance(messages, list):
+        return False
+    for message in messages:
+        if not isinstance(message, Mapping):
+            continue
+        content = message.get('content')
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if isinstance(part, Mapping) and part.get('prompt_cache_breakpoint') == {'mode': 'explicit'}:
+                return True
+    return False
 
 
 def cache_requested_for_anthropic_request(request: Mapping[str, Any]) -> bool:
-    return any(_contains_cache_control(request.get(field)) for field in ('system', 'messages', 'tools'))
+    return _contains_cache_control(request)
 
 
 def cache_write_ttl_for_anthropic_request(request: Mapping[str, Any]) -> str | None:
-    ttls = _cache_control_ttls([request.get(field) for field in ('system', 'messages', 'tools')])
+    ttls = _cache_control_ttls(request)
     if len(ttls) == 1:
         return next(iter(ttls))
     return 'mixed' if ttls else None
@@ -506,6 +527,7 @@ def _openai_usage(raw: Mapping[str, Any], *, cache_requested: bool) -> ProviderU
     details = raw.get('prompt_tokens_details', raw.get('input_tokens_details'))
     cached = _nonnegative_int(details.get('cached_tokens')) if isinstance(details, Mapping) else 0
     cached = min(prompt, cached)
+    cache_write = _nonnegative_int(details.get('cache_write_tokens')) if isinstance(details, Mapping) else 0
     completion_details = raw.get('completion_tokens_details', raw.get('output_tokens_details'))
     reasoning = (
         _nonnegative_int(completion_details.get('reasoning_tokens')) if isinstance(completion_details, Mapping) else 0
@@ -516,10 +538,14 @@ def _openai_usage(raw: Mapping[str, Any], *, cache_requested: bool) -> ProviderU
     return ProviderUsage(
         prompt_tokens=prompt,
         cached_input_tokens=cached,
-        uncached_input_tokens=max(prompt - cached, 0),
+        # OpenAI includes explicit cache-write tokens in prompt_tokens; their
+        # write rate replaces the ordinary uncached-input rate for those units.
+        uncached_input_tokens=max(prompt - cached - cache_write, 0),
         output_tokens=output,
         reasoning_tokens=reasoning,
         output_tokens_include_reasoning=True,
+        cache_write_tokens=cache_write,
+        cache_write_ttl='30m' if cache_write else None,
         total_tokens=total,
         cache_status=_cache_status(
             prompt_tokens=prompt,

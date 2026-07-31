@@ -155,6 +155,14 @@ final class ChatJournalWriteCoordinator {
     return true
   }
 
+  /// Retry one idempotent terminal journal operation after transient local
+  /// projection failure. The caller must first claim terminalization ownership;
+  /// this helper never reopens that ownership or permits a streaming update.
+  func retryTerminalization(_ operation: @MainActor () async -> Bool) async -> Bool {
+    if await operation() { return true }
+    return await operation()
+  }
+
   func cancelAll() {
     for task in updateTasks.values { task.cancel() }
     updateTasks.removeAll()

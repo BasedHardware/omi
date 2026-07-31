@@ -143,11 +143,7 @@ void main() {
     test('removes miss but preserves terminal corrupted and synced WALs', () async {
       final syncedWal = _makeWal(timerStart: 9000, status: WalStatus.synced, filePath: null);
       final corruptedWal = _makeWal(timerStart: 2000, status: WalStatus.corrupted, filePath: null);
-      sync.testWals = [
-        _makeWal(timerStart: 1000, status: WalStatus.miss, filePath: null),
-        corruptedWal,
-        syncedWal,
-      ];
+      sync.testWals = [_makeWal(timerStart: 1000, status: WalStatus.miss, filePath: null), corruptedWal, syncedWal];
 
       await sync.deleteAllPendingWals();
 

@@ -278,11 +278,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["voice speed", "speech speed", "playback speed", "tts speed"],
       section: .floatingBar, icon: "sparkles", settingId: "floatingbar.voicespeed"),
     SettingsSearchItem(
-      name: "Shortcuts", subtitle: "Configure Ask omi and push-to-talk keyboard shortcuts",
+      name: "Shortcuts", subtitle: "Configure Open Omi and push-to-talk keyboard shortcuts",
       keywords: ["shortcuts", "keyboard", "hotkeys", "push to talk"], section: .shortcuts,
       icon: "keyboard", settingId: "floatingbar.shortcut"),
     SettingsSearchItem(
-      name: "Ask omi Shortcut", subtitle: "Global shortcut to open Ask omi from anywhere",
+      name: "Open Omi Shortcut", subtitle: "Global shortcut to open the Omi app from anywhere",
       keywords: ["shortcut", "hotkey", "keyboard", "global shortcut"], section: .shortcuts,
       icon: "keyboard", settingId: "floatingbar.shortcut"),
     SettingsSearchItem(
@@ -319,6 +319,12 @@ struct SettingsSearchItem: Identifiable {
   ]
 }
 
+enum SettingsSidebarMetrics {
+  static let expandedWidth: CGFloat = 260
+  static let horizontalInset: CGFloat = OmiSpacing.sm
+  static let itemAvailableWidth = expandedWidth - 2 * horizontalInset
+}
+
 /// Settings sidebar that replaces the main sidebar when in settings
 struct SettingsSidebar: View {
   @Binding var selectedSection: SettingsContentView.SettingsSection
@@ -329,7 +335,6 @@ struct SettingsSidebar: View {
   @State private var searchQuery = ""
   @FocusState private var isSearchFocused: Bool
 
-  private let expandedWidth: CGFloat = 260
   private let iconWidth: CGFloat = 20
   // Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
   // too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
@@ -411,7 +416,7 @@ struct SettingsSidebar: View {
 
       Spacer()
     }
-    .frame(width: expandedWidth)
+    .frame(width: SettingsSidebarMetrics.expandedWidth)
     .background(OmiColors.backgroundPrimary)
   }
 
@@ -548,6 +553,9 @@ struct SettingsSidebarItem: View {
             Text(section.displayTitle)
               .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+              .lineLimit(1)
+              .truncationMode(.tail)
+              .layoutPriority(1)
 
             Spacer()
           }

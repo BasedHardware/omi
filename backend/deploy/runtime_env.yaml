@@ -32,7 +32,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_PRERECORDED_MODEL:
-            value: modulate-velma-2,parakeet
+            value: parakeet,modulate-velma-2
             category: stt_policy
           GOOGLE_CLIENT_ID:
             config_map:
@@ -118,7 +118,7 @@ environments:
             value: 'off'
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'true'
+            value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
@@ -152,15 +152,15 @@ environments:
           MEMORY_V3_GET_ENABLED:
             value: 'true'
             category: memory_rollout
-          MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             value: 'false'
-            category: memory_rollout
-          MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-            value: 'true'
             category: memory_rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
+          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+            value: '900'
+            category: reliability
       parakeet:
         values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
         env:
@@ -222,19 +222,18 @@ environments:
             value: http://parakeet.omiapi.com
             category: service_discovery
           STT_PRERECORDED_MODEL:
-            value: modulate-velma-2,parakeet
+            value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
             value: modulate-velma-2,parakeet
             category: stt_policy
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware-dev
+            category: runtime
           GOOGLE_CLIENT_SECRET:
             secret:
               name: dev-omi-backend-secrets
               key: GOOGLE_CLIENT_SECRET
-          GOOGLE_APPLICATION_CREDENTIALS:
-            secret:
-              name: dev-omi-backend-secrets
-              key: GOOGLE_APPLICATION_CREDENTIALS
           ENCRYPTION_SECRET:
             secret:
               name: dev-omi-backend-secrets
@@ -310,11 +309,29 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            # Dev-only, exact-principal replay capture. Cloud Run's writable
+            # scratch is ephemeral; persist synchronously to the private dev
+            # bucket and never copy these values into the prod manifest.
+            OMI_PARITY_PACK_CAPTURE:
+              value: '1'
+              category: replay_capture
+            OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: replay_capture
+            OMI_PARITY_PACK_ROOT:
+              value: /tmp/omi-parity-pack
+              category: replay_capture
+            OMI_PARITY_PACK_GCS_URI:
+              value: gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0
+              category: replay_capture
+            OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
+              value: '3600'
+              category: replay_capture
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             # Dev Cloud Run must stay within the dev Parakeet topology; never point this at
             # the production-only parakeet.omi.me endpoint.
@@ -348,7 +365,7 @@ environments:
               provisional: true
               category: service_auth
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
@@ -381,15 +398,15 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: 'true'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -444,11 +461,26 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            OMI_PARITY_PACK_CAPTURE:
+              value: '1'
+              category: replay_capture
+            OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: replay_capture
+            OMI_PARITY_PACK_ROOT:
+              value: /tmp/omi-parity-pack
+              category: replay_capture
+            OMI_PARITY_PACK_GCS_URI:
+              value: gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0
+              category: replay_capture
+            OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
+              value: '3600'
+              category: replay_capture
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
@@ -464,7 +496,7 @@ environments:
               value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
@@ -497,11 +529,8 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: 'true'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -510,6 +539,9 @@ environments:
               value: 'true'
               category: rollout
               provisional: true
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           forbidden_env:
             - HOSTED_PUSHER_API_URL
           secrets:
@@ -545,11 +577,26 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            OMI_PARITY_PACK_CAPTURE:
+              value: '1'
+              category: replay_capture
+            OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: replay_capture
+            OMI_PARITY_PACK_ROOT:
+              value: /tmp/omi-parity-pack
+              category: replay_capture
+            OMI_PARITY_PACK_GCS_URI:
+              value: gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0
+              category: replay_capture
+            OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
+              value: '3600'
+              category: replay_capture
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
@@ -565,7 +612,7 @@ environments:
               value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
               value: 'false'
@@ -598,15 +645,15 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: 'true'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           forbidden_env:
             - HOSTED_PUSHER_API_URL
           secrets:
@@ -662,6 +709,7 @@ environments:
             --task-timeout: 3600s
             --cpu: '2'
             --memory: 2Gi
+            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
@@ -678,10 +726,7 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'true'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
@@ -768,7 +813,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_PRERECORDED_MODEL:
-            value: modulate-velma-2,parakeet
+            value: parakeet,modulate-velma-2
             category: stt_policy
           GOOGLE_CLIENT_ID:
             config_map:
@@ -867,7 +912,7 @@ environments:
               name: prod-omi-backend-secrets
               key: SERVICE_ACCOUNT_JSON
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: 'off'
+            value: gateway
             category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
@@ -876,7 +921,7 @@ environments:
             value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'true'
+            value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret:
@@ -891,10 +936,7 @@ environments:
           MEMORY_V3_GET_ENABLED:
             value: 'false'
             category: memory_rollout
-          MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-            value: 'false'
-            category: memory_rollout
-          MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             value: 'false'
             category: memory_rollout
           MEMORY_TYPESENSE_COLLECTION:
@@ -904,6 +946,9 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
+          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+            value: '900'
+            category: reliability
       parakeet:
         values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
         env:
@@ -998,7 +1043,7 @@ environments:
             STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
               value: price_1TuIap1F8wnoWYvwHWq0EvNU
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
@@ -1010,7 +1055,7 @@ environments:
               default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
@@ -1027,7 +1072,7 @@ environments:
               value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -1041,10 +1086,7 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'false'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
@@ -1059,9 +1101,15 @@ environments:
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             DESKTOP_PREVIEW_PUBLISH_KEY:
               secret: DESKTOP_PREVIEW_PUBLISH_KEY
+              version: latest
+            BETA_PROMOTION_TOKEN:
+              secret: BETA_PROMOTION_TOKEN
               version: latest
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
@@ -1156,7 +1204,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
@@ -1166,7 +1214,7 @@ environments:
               default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
@@ -1175,7 +1223,7 @@ environments:
               value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -1189,10 +1237,7 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'false'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
@@ -1202,6 +1247,9 @@ environments:
               value: 'true'
               category: rollout
               provisional: true
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
@@ -1254,7 +1302,7 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              value: modulate-velma-2,parakeet
+              value: parakeet,modulate-velma-2
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
@@ -1264,7 +1312,7 @@ environments:
               default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
@@ -1273,7 +1321,7 @@ environments:
               value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: 'true'
+              value: 'false'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -1287,15 +1335,15 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'false'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
@@ -1333,6 +1381,8 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
         memory-maintenance-job:
+          flags:
+            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
             OMI_ENV_STAGE:
               value: prod
@@ -1346,10 +1396,7 @@ environments:
             MEMORY_V3_GET_ENABLED:
               value: 'false'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: 'false'
-              category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
@@ -1357,6 +1404,12 @@ environments:
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
+              category: memory_rollout
+            TYPESENSE_HOST_PORT:
+              value: '443'
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              value: memories-backend
               category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:

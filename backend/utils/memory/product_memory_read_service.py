@@ -1,20 +1,28 @@
-from __future__ import annotations
-
 """Canonical product memory read service module (WS-G8a).
 
 Neutral ``product_memory_read_service`` is the source of truth. Legacy ``product_memory_read_service`` remains an importable alias.
 """
 
+from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, Iterable, List, Optional, cast
 
+from google.cloud.firestore_v1 import FieldFilter
+
+from database.firestore_index_registry import (
+    CONVERSATION_SOURCE_MEMORY_QUERY,
+    SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
+    SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
+)
 from database.memory_collections import MemoryCollections
-from models.product_memory import MemoryAccessPolicy, MemoryItem
+from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.memory_read_api import query_archive_product_memory_items, query_default_product_memory_items
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
 MAX_PRODUCT_MEMORY_READ_LIMIT = 500
+SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT = 100
+FIRESTORE_IN_QUERY_MAX_VALUES = 30
 
 
 def fetch_default_product_memory_search(
@@ -104,6 +112,96 @@ def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> Lis
             raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
         items.append(item)
     return sorted(items, key=_memory_item_sort_key)
+
+
+def fetch_authoritative_product_memory_items_for_source(
+    uid: str,
+    source_id: str,
+    *,
+    db_client: Any,
+    page_size: int = SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT,
+) -> List[MemoryItem]:
+    """Load one complete source cohort through the indexed, cursor-paged boundary."""
+
+    if not source_id or not source_id.strip():
+        raise ValueError('source_id must not be blank')
+    query = CONVERSATION_SOURCE_MEMORY_QUERY.build(
+        db_client.collection(MemoryCollections(uid=uid).memory_items),
+        {'source_id': source_id},
+        field_filter_factory=FieldFilter,
+    ).order_by('__name__')
+    return _fetch_authoritative_memory_query_pages(
+        uid,
+        query=query,
+        page_size=page_size,
+    )
+
+
+def fetch_authoritative_superseded_memory_items_for_targets(
+    uid: str,
+    target_memory_ids: Iterable[str],
+    *,
+    db_client: Any,
+    page_size: int = SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT,
+) -> List[MemoryItem]:
+    """Load superseded aliases of target rows, including the pre-canonical edge."""
+
+    normalized_target_ids = sorted(
+        {memory_id.strip() for memory_id in target_memory_ids if memory_id and memory_id.strip()}
+    )
+    if not normalized_target_ids:
+        return []
+
+    collection = db_client.collection(MemoryCollections(uid=uid).memory_items)
+    items_by_id: Dict[str, MemoryItem] = {}
+    for offset in range(0, len(normalized_target_ids), FIRESTORE_IN_QUERY_MAX_VALUES):
+        target_chunk = normalized_target_ids[offset : offset + FIRESTORE_IN_QUERY_MAX_VALUES]
+        for spec in (
+            SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
+            SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
+        ):
+            query = spec.build(
+                collection,
+                {
+                    'status': MemoryItemStatus.superseded.value,
+                    'target_memory_ids': target_chunk,
+                },
+                field_filter_factory=FieldFilter,
+            ).order_by('__name__')
+            for item in _fetch_authoritative_memory_query_pages(
+                uid,
+                query=query,
+                page_size=page_size,
+            ):
+                items_by_id[item.memory_id] = item
+    return sorted(items_by_id.values(), key=lambda item: item.memory_id)
+
+
+def _fetch_authoritative_memory_query_pages(
+    uid: str,
+    *,
+    query: Any,
+    page_size: int,
+) -> List[MemoryItem]:
+    if page_size < 1 or page_size > SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT:
+        raise ValueError(f'page_size must be between 1 and {SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT}')
+
+    items: List[MemoryItem] = []
+    cursor: Any = None
+    while True:
+        page_query = query.start_after(cursor) if cursor is not None else query
+        snapshots = list(page_query.limit(page_size).stream())
+        for snapshot in snapshots:
+            raw_payload: object = snapshot.to_dict()
+            payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
+            item = MemoryItem.model_validate(payload)
+            if item.uid != uid:
+                raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
+            items.append(item)
+        if len(snapshots) < page_size:
+            break
+        cursor = snapshots[-1]
+    return items
 
 
 def _memory_item_sort_key(item: MemoryItem) -> tuple[float, str]:

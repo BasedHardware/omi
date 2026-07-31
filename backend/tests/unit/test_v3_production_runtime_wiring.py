@@ -257,7 +257,7 @@ def test_real_router_uses_actual_builder_and_does_zero_db_reads_while_v3_gate_of
     assert 'memory_tier' not in body[0]
     assert response.headers['x-omi-memory-canonical-lifecycle-exposed'] == 'false'
     assert response.headers['x-omi-memory-device-scope-supported'] == 'false'
-    assert legacy_calls == [{'uid': 'uid-a', 'limit': 5000, 'offset': 0}]
+    assert legacy_calls == [{'uid': 'uid-a', 'limit': 3, 'offset': 0}]
     assert db.reads == []
     assert db.streams == []
 

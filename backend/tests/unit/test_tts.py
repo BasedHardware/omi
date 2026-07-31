@@ -1,8 +1,7 @@
 """Unit tests for the TTS proxy (/v2/tts/synthesize).
 
 Covers input validation (voice_id, text length, empty text) by importing the
-pure helpers directly — mirrors the test pattern used by the sibling Rust
-implementation in desktop/macos/Backend-Rust/src/routes/tts.rs.
+pure helpers directly.
 
 End-to-end wiring (Redis rate-limit + ElevenLabs upstream) is exercised via
 integration tests — the unit layer here is intentionally scoped to the bits

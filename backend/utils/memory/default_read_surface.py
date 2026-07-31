@@ -14,7 +14,10 @@ from utils.memory.default_read_rollout import (
     disabled_default_read_rollout_decision,
 )
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.memory.vector_search_service import fetch_default_vector_memory_search
+from utils.memory.vector_search_service import (
+    DEFAULT_MEMORY_VECTOR_MAX_CANDIDATES,
+    fetch_default_vector_memory_search,
+)
 
 T = TypeVar('T')
 MemoryPayload = dict[str, Any]
@@ -170,6 +173,12 @@ def fetch_default_read_vector(
         policy=policy,
         vector_query=vector_query,
         limit=bounded_limit,
+        # The candidate budget must cover the requested limit — fetch_default_vector_memory_search
+        # rejects max_candidates < limit. Its default is 50 while the developer_api branch above
+        # admits up to 100, so limits of 51..100 raised ValueError (HTTP 500) instead of returning
+        # results. Only widen the budget when the caller actually asked for more than the default;
+        # bounded_limit never exceeds MAX_MEMORY_VECTOR_SEARCH_LIMIT, so this stays in range.
+        max_candidates=max(DEFAULT_MEMORY_VECTOR_MAX_CANDIDATES, bounded_limit),
         required_projection_commit_id=projection_commit_id,
         required_account_generation=decision.rollout_capabilities.account_generation,
         now=now,

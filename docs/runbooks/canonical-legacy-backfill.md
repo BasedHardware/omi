@@ -93,7 +93,10 @@ Re-run is safe: already-present and both-store-duplicate rows are skipped. Stage
 
 ## Historical remediation plan (read-only)
 
-Rows written by older backfill versions may already be active Long-term. Do **not** rerun backfill to clean them: deterministic ids make that a no-op and it can only repair side effects. Build a metadata-only plan first:
+Rows written by older backfill versions may already be active Long-term. Do
+**not** rerun backfill to clean them: deterministic ids make that a no-op, and
+normal backfill intentionally does not mutate projections or legacy KG state
+directly. Build a metadata-only plan first:
 
 ```bash
 cd backend
@@ -142,6 +145,12 @@ assert report.errors == []
 - **Stage-all checkpoint:** `backfill_user` and `--strategy stage-all-for-admission` use the legacy id-set checkpoint. Bucketed dogfood does not use that checkpoint; re-runs reconcile by deterministic canonical ids and can upgrade an existing candidate after positive review.
 - **Derived stores:** pending backfill rows create no keyword, vector, or KG projection. Those projections are built only after processing and Long-term promotion.
 
-## Short-term promotion (canonical cohort)
+## Canonical maintenance projection outbox
 
-Scheduled maintenance (`canonical_short_term_maintenance_cron`) promotes short-term items via the same vector sync path. After a promotion run, check `promotion.vector_sync_failures` on the maintenance report (and `vector_sync_failures_total` on the cron summary). Non-zero values mean Firestore tier flips succeeded but Pinecone metadata may still show `memory_layer=short_term` — investigate vector sync logs; re-run promotion does not re-upsert already-long-term items, so repair may require a targeted vector re-sync.
+Scheduled maintenance (`canonical_short_term_maintenance_cron`) deterministically selects a server-bounded set of eligible pending Short-term items, routes every selected item through consolidation, then drains the durable normal outbox that converges compatibility and vector projections. Overflow remains immediately eligible on the next Scheduler run; there is no 24-hour watermark delay. The authoritative Firestore mutation and its outbox event commit together; provider delivery is never part of the admission transaction.
+
+The datastore applies eligibility before each query cap: required processing selects active pending required rows (negative review is terminal `processing_rejected`), TTL selects active processed expired rows by `expires_at, memory_id`, and consolidation selects active processed source-active rows by `captured_at, memory_id`. If an eligible row is absent from one bounded result, unrelated or terminal rows cannot keep it hidden from later passes.
+
+After a per-user maintenance run, inspect `outbox.delivered_count`, `outbox.retryable_failure_count`, `outbox.dead_letter_count`, `outbox.ack_failed_count`, and `outbox.errors`. The cohort cron aggregates the same outcomes as `outbox_delivered_total`, `outbox_retryable_failures_total`, `outbox_dead_letters_total`, and `outbox_ack_failures_total`; any delivery failure also makes `errors` non-empty so the Cloud Run Job fails visibly.
+
+A retryable failure remains in `users/{uid}/memory_outbox` with a bounded `available_at` backoff and is retried by the next enabled maintenance run. A dead letter, acknowledgement failure, or worker error requires inspecting the outbox document's sanitized `status` and `last_error_code`, repairing the provider or lease failure, and following the outbox recovery procedure. Do not rerun the retired generic promotion path or issue a targeted vector upsert: the canonical item plus durable outbox event remain the repair authority.

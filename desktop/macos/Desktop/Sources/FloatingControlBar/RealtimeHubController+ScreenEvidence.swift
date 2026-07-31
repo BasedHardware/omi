@@ -186,10 +186,10 @@ extension RealtimeHubController {
   ) {
     if case .rejected = screenGroundingState { return }
     guard let token = screenGroundingState.protocolToken else { return }
-    // The screenshot tool already returns a structured `permission_required`
-    // result for this case. Let the provider turn that into its normal spoken
+    // The screenshot tool already returns a structured recoverable result for
+    // unavailable evidence. Let the provider turn that into its normal spoken
     // answer; taking over with the one-shot fallback produces the robotic
-    // system voice and contradicts that recoverable tool contract.
+    // system voice and can consume an otherwise healthy PTT turn.
     if reason == "capture_unavailable",
       RealtimeScreenGroundingPolicy.failureDisposition(for: evidence) == .providerContinuation
     {
@@ -429,6 +429,11 @@ extension RealtimeHubController {
       "stale_event_count": "\(coordinator.model.staleEventCount)",
       "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
       "pending_tool_count": "\(turn?.pendingToolCallIDs.count ?? 0)",
+      // Live animation inputs — lets automation assert the notch waveform /
+      // speaking pulse actually receive audio levels during a real turn.
+      "live_mic_level": String(format: "%.4f", AudioLevelMonitor.shared.liveMicrophoneLevel),
+      "live_voice_playback_level": String(
+        format: "%.4f", AudioLevelMonitor.shared.liveVoicePlaybackLevel),
       "post_tool_continuation_required": turn?.postToolContinuationRequired == true ? "true" : "false",
       "provider_finished": turn?.providerFinished == true ? "true" : "false",
     ]

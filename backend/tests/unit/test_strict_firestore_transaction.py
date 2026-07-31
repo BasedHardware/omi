@@ -89,7 +89,6 @@ def test_transaction_rejects_reads_from_a_different_store():
 @pytest.mark.parametrize(
     'operation',
     [
-        pytest.param(lambda database, record: database.transaction().create(record, {'value': 'after'}), id='create'),
         pytest.param(lambda database, record: database.transaction().delete(record), id='transaction-delete'),
         pytest.param(lambda database, record: database.transaction().get(record), id='transaction-get'),
         pytest.param(lambda database, record: database.transaction().get_all([record]), id='transaction-get-all'),
@@ -106,3 +105,18 @@ def test_unsupported_operations_fail_loudly(operation):
 
     with pytest.raises(UnsupportedFirestoreOperationError, match='supports only'):
         operation(database, record)
+
+
+def test_transaction_create_inserts_a_new_document_and_rejects_an_existing_one():
+    database = StrictFirestore()
+    record = _record(database)
+    transaction = database.transaction()
+
+    transaction.create(record, {'value': 'after'})
+    assert transaction.has_written is True
+    assert transaction.creates == [(record.path, {'value': 'after'})]
+    # read-after-write is forbidden within the same transaction; verify via a fresh one
+    assert record.get(transaction=database.transaction()).to_dict() == {'value': 'after'}
+
+    with pytest.raises(RuntimeError, match='document already exists'):
+        transaction.create(record, {'value': 'again'})

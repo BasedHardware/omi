@@ -182,7 +182,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () => Navigator.pop(context),
-            icon: FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+            icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
           ),
         ),
         title: Text(

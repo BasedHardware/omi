@@ -37,6 +37,12 @@ logger = logging.getLogger(__name__)
 JOB_KEY_PREFIX = 'sync_job:'
 JOB_TTL_SECONDS = 86400  # 24 hours — reconcile window (see module docstring)
 STALE_THRESHOLD_SECONDS = 600  # 10 minutes — if processing exceeds this, treat as failed
+# Cloud Tasks dispatch is near-immediate and its named task is created before
+# the 202 returns. A cloud_tasks job still 'queued' this long has lost its task
+# (enqueue_uncertain, queue purge) and would otherwise sit until JOB_TTL expiry
+# with the client polling the whole time (#10033). Generous enough to absorb a
+# transient worker outage riding Cloud Tasks retry backoff.
+QUEUED_DISPATCH_STALE_SECONDS = 1800  # 30 minutes
 
 TERMINAL_STATUSES = ('completed', 'partial_failure', 'failed')
 _SYNC_JOB_OUTCOMES = (
@@ -47,6 +53,7 @@ _SYNC_JOB_OUTCOMES = (
     'upstream_error',
     'config_error',
     'invalid_input',
+    'superseded',
 )
 _SYNC_LANES = ('fresh', 'backfill')
 _SYNC_PROVIDERS = ('deepgram', 'modulate', 'parakeet')
@@ -193,7 +200,17 @@ def delete_sync_job(job_id: str) -> None:
 
 
 def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
-    """Get a sync job by ID without changing its lifecycle state."""
+    """Get a sync job by ID, self-healing a dead worker on read.
+
+    A job stuck in 'processing' past STALE_THRESHOLD_SECONDS is finalized to
+    'failed' here, on every read and for every dispatch mode, so the client
+    reverts the WAL to 'miss' and re-uploads within ~10 minutes instead of
+    waiting out the 24h reconcile TTL. The pipeline heartbeats 'updated_at' at
+    every stage and per segment, so 600s of silence only ever means the worker
+    is gone — see is_sync_job_stale. 'queued' jobs are never finalized: no
+    worker has claimed them, and flipping them to 'failed' caused spurious
+    client "retrying" loops (#7469).
+    """
     key = f'{JOB_KEY_PREFIX}{job_id}'
     data = r.get(key)
     if not data:
@@ -207,23 +224,56 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
         return None
     job: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
+    if is_sync_job_stale(job):
+        updated_at = job.get('updated_at') or job.get('created_at') or time.time()
+        logger.warning(
+            "sync_job %s (uid=%s) stale after %.0fs in 'processing' — marking failed",
+            job_id,
+            job.get('uid'),
+            time.time() - updated_at,
+        )
+        job['status'] = 'failed'
+        job['error'] = 'Job timed out (background worker likely died)'
+        job['completed_at'] = time.time()
+        r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
+
     return job
 
 
 def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bool:
-    """Return whether a processing job needs an explicit owner-safe finalizer.
+    """Return whether a 'processing' job has gone silent past the stale bound.
 
     A read must never publish a terminal failure: callers first acquire the
-    per-job run lease, re-read, then finalize/release retry material. Queued
-    jobs are intentionally never stale because no worker has claimed them.
+    per-job run lease, re-read, then finalize/release retry material.
+
+    Queued inline jobs are never stale — their coordinator is the request
+    itself, and a saturated pool must not fail them (#7469). A queued
+    cloud_tasks job is different: its named task is the only thing that will
+    ever start it, and a lost task (enqueue_uncertain, queue purge) leaves the
+    job 'queued' until JOB_TTL expiry with the client polling the whole time
+    (#10033) — so it goes stale after QUEUED_DISPATCH_STALE_SECONDS. Only a
+    job no attempt ever started qualifies: a worker re-queuing between Cloud
+    Tasks retries (mark_job_queued_for_retry) sets ``attempt``/``started_at``,
+    and that pending retry must never be flipped terminal by a poll, however
+    long its backoff.
     """
-    if job.get('status') != 'processing':
+    status = job.get('status')
+    if status == 'processing':
+        threshold = STALE_THRESHOLD_SECONDS
+    elif (
+        status == 'queued'
+        and job.get('dispatch_mode') == 'cloud_tasks'
+        and job.get('started_at') is None
+        and job.get('attempt') is None
+    ):
+        threshold = QUEUED_DISPATCH_STALE_SECONDS
+    else:
         return False
     updated_at = job.get('updated_at') or job.get('created_at')
     if not isinstance(updated_at, (int, float)):
         return False
     reference_time = time.time() if now is None else now
-    return reference_time - updated_at > STALE_THRESHOLD_SECONDS
+    return reference_time - updated_at > threshold
 
 
 def _as_redis_text(value: Any) -> str:

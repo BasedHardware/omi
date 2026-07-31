@@ -27,6 +27,14 @@ extension AppState {
     NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
   }
 
+  var canLoadMoreConversations: Bool {
+    conversationRepository.hasMore
+  }
+
+  func loadMoreConversations() async {
+    await conversationRepository.loadMore()
+  }
+
   /// Optimistically update star state, then settle from the canonical mutation response.
   func setConversationStarred(_ conversationId: String, starred: Bool) async {
     do {

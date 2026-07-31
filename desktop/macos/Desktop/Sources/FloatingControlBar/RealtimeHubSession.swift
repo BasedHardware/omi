@@ -1,26 +1,5 @@
 import Foundation
-import Network
 import VoiceTurnDomain
-
-/// Boxes a non-Sendable value so the session's serial-queue (`q`) and main-actor
-/// closures can capture it. All access is serialized on `q` (or the main actor),
-/// so sharing the reference is race-free — the same model the `@unchecked
-/// Sendable` class relies on.
-private struct SessionCallbackBox<T>: @unchecked Sendable {
-  let value: T
-  init(_ value: T) { self.value = value }
-}
-
-/// A provider continuation is recovery work for one already-owned physical turn. Expose why it
-/// did not start so the controller can distinguish a healthy in-flight cycle from a terminal
-/// transport/exhaustion failure instead of waiting blindly for the ordinary response deadline.
-enum RealtimePostToolContinuationStartResult: Equatable {
-  case started
-  case alreadyInFlight
-  case stale
-  case exhausted
-  case transportUnavailable
-}
 
 // MARK: - Realtime Hub Session
 //
@@ -47,44 +26,6 @@ enum RealtimePostToolContinuationStartResult: Equatable {
 //
 // Normalized events: transcript_in (input STT) / audio_out (OpenAI) |
 // text_out (Gemini) / tool_call / turn.done.
-
-@MainActor
-protocol RealtimeHubSessionDelegate: AnyObject {
-  func hubDidConnect(source: RealtimeHubSession)
-  func hubDidReceiveInputTranscript(
-    _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  /// OpenAI native spoken audio (PCM16 mono 24 kHz).
-  func hubDidReceiveAudio(
-    _ pcm24k: Data, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  /// Assistant text to display / speak. Gemini emits its whole reply here;
-  /// OpenAI emits its spoken transcript here (for the on-screen bubble).
-  func hubDidEmitText(
-    _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  func hubDidRequestTool(
-    name: String, callId: String, argumentsJSON: String,
-    identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
-  func hubDidError(_ message: String, source: RealtimeHubSession)
-}
-
-struct RealtimeHubEventIdentity: Equatable, Sendable {
-  let turnID: VoiceTurnID
-  let responseID: VoiceResponseID
-}
-
-enum GeminiRealtimeEventOwnership {
-  /// Gemini input-transcription messages do not include a provider item ID. Once
-  /// A has completed, receiving an event while B is active on the same socket is
-  /// ambiguous and must be dropped instead of mutating B's transcript.
-  static func inputIdentity(
-    active: RealtimeHubEventIdentity?,
-    completed: RealtimeHubEventIdentity?
-  ) -> RealtimeHubEventIdentity? {
-    guard let completed else { return active }
-    guard active == nil || active == completed else { return nil }
-    return completed
-  }
-}
 
 private struct PendingOpenAIResponseIdentity {
   let identity: RealtimeHubEventIdentity
@@ -118,6 +59,7 @@ enum RealtimeHubBargeInStrategy: Equatable {
   struct RealtimeHubInputLifecycleSnapshot: Equatable {
     let isOpen: Bool
     let activityOpen: Bool
+    let pendingTextInputCount: Int
     let pendingAudioChunkCount: Int
     let pendingVideoFrameCount: Int
     let pendingCommit: Bool
@@ -150,13 +92,25 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
 
   // All socket + state access is serialized here (audio arrives on the capture
   // thread; receives on the URLSession/NW queue). Delegate calls hop to main.
-  private let q = DispatchQueue(label: "omi.realtime-hub.session")
+  let q = DispatchQueue(label: "omi.realtime-hub.session")
 
-  private var task: URLSessionWebSocketTask?
-  private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+  var task: URLSessionWebSocketTask?
+  var completedURLTaskIDs = Set<Int>()
+  var urlTaskTerminalWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
+  private var _session: URLSession?
+  /// Created lazily only on the URLSession-backed (OpenAI) transport path; Gemini
+  /// uses the injected raw websocket and never touches this. Retired in
+  /// `beginTransportTerminationOnQueue` to break the URLSession -> delegate cycle.
+  private var session: URLSession {
+    if let existing = _session { return existing }
+    let created = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+    _session = created
+    return created
+  }
   // Gemini's Live endpoint rejects both of Apple's WebSocket stacks, so it uses a
   // hand-rolled RFC 6455 client (RawWebSocket). OpenAI uses URLSession.
-  private var rawWS: RawWebSocket?
+  var rawWS: RealtimeRawWebSocketTransport?
+  private let rawWebSocketFactory: (URL, DispatchQueue) -> RealtimeRawWebSocketTransport
   private var usesRawWS: Bool { provider == .gemini }
 
   private var isOpen = false
@@ -169,6 +123,13 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     private var testingResponseCreateCount = 0
     private var testingLastResponseToolChoice: String?
     private var testingLastResponseInstruction: String?
+    /// When set, the testing transport reports this error from `send`, so a
+    /// confirmed-delivery caller can be tested against a failed provider send.
+    private var testingForcedSendError: Error?
+
+    func setTestingForcedSendError(_ error: Error?) {
+      q.async { [weak self] in self?.testingForcedSendError = error }
+    }
   #endif
   private var activeEventIdentity: RealtimeHubEventIdentity?
   private var completedGeminiEventIdentity: RealtimeHubEventIdentity?
@@ -238,6 +199,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     stableCacheIdentity: String = "",
     dynamicContextIdentity: String = "",
     contextCacheReplaced: Bool = false,
+    rawWebSocketFactory: @escaping (URL, DispatchQueue) -> RealtimeRawWebSocketTransport = {
+      RawWebSocket(url: $0, queue: $1)
+    },
     delegate: RealtimeHubSessionDelegate
   ) {
     self.provider = provider
@@ -248,6 +212,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     self.stableCacheIdentity = stableCacheIdentity
     self.dynamicContextIdentity = dynamicContextIdentity
     self.contextCacheReplaced = contextCacheReplaced
+    self.rawWebSocketFactory = rawWebSocketFactory
     self.delegate = delegate
     super.init()
   }
@@ -261,12 +226,17 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private func _start() {
     guard !terminated else { return }
     guard let request = makeRequest(), let url = request.url else {
-      notifyError("Could not build \(provider.displayName) request URL")
+      notifyError(
+        RealtimeHubTransportFailure(
+          kind: .configuration,
+          message: "Could not build \(provider.displayName) request URL",
+          systemDomain: nil,
+          systemCode: nil))
       return
     }
     log("RealtimeHub: connecting \(provider.displayName) → \(url.host ?? "?") (client-direct)")
     if usesRawWS {
-      let ws = RawWebSocket(url: url, queue: q)
+      let ws = rawWebSocketFactory(url, q)
       rawWS = ws
       ws.onOpen = { [weak self] in
         guard let self else { return }
@@ -275,8 +245,12 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.sendSessionSetup()
       }
       ws.onMessage = { [weak self] data in self?.handleMessage(data) }
-      ws.onClose = { [weak self] code, reason in self?.notifyError("WebSocket closed (\(code)) \(reason)") }
-      ws.onError = { [weak self] msg in self?.notifyError(msg) }
+      ws.onClose = { [weak self] code, reason in
+        self?.notifyError(.providerClose(code: code, reason: reason))
+      }
+      ws.onError = { [weak self] failure in
+        self?.notifyError(.rawWebSocket(failure))
+      }
       ws.connect()
       return
     }
@@ -295,26 +269,12 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
 
   func stop() {
     q.async { [weak self] in
-      self?.stopOnQueue()
+      self?.beginStopOnQueue()
     }
   }
 
-  /// Close the transport and drain its serialization queue before returning.
-  /// Owner replacement awaits this before the replacement owner becomes visible.
-  func stopAndWait() async {
-    await withCheckedContinuation { continuation in
-      q.async { [weak self] in
-        self?.stopOnQueue()
-        continuation.resume()
-      }
-    }
-  }
-
-  private func stopOnQueue() {
-    task?.cancel(with: .goingAway, reason: nil)
-    task = nil
-    rawWS?.close()
-    rawWS = nil
+  func beginStopOnQueue() {
+    beginTransportTerminationOnQueue()
     isOpen = false
     pendingAudio.removeAll()
     pendingVideo.removeAll()
@@ -337,16 +297,33 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     completedGeminiEventIdentity = nil
   }
 
-  private func notifyError(_ message: String) {
+  private func beginTransportTerminationOnQueue() {
+    task?.cancel(with: .goingAway, reason: nil)
+    rawWS?.close()
+    isOpen = false
+    // Break the URLSession -> delegate(self) retain cycle. URLSession holds its
+    // delegate strongly until invalidated, so without this a drained/failed
+    // session self-retains and never deallocates — leaking one RealtimeHubSession
+    // per reconnect / 60-min rotation / failover, defeating the drain-and-release
+    // design. finishTasksAndInvalidate lets the just-cancelled task's terminal
+    // delegate callback still fire (resolving urlTaskTerminalWaiters) before the
+    // delegate ref is released, so the drain path is unaffected. Only touch a
+    // URLSession that was actually created (Gemini never makes one).
+    _session?.finishTasksAndInvalidate()
+    _session = nil
+  }
+
+  private func notifyError(_ failure: RealtimeHubTransportFailure) {
     guard !terminated else { return }
     terminated = true
-    // Make this physical session non-sendable on q before the main-actor
-    // controller observes the error and schedules teardown.
-    isOpen = false
-    task = nil
-    rawWS = nil
+    // The session owns the physical transport. Retire it before publishing the
+    // terminal callback so controller recovery can never overlap a replacement
+    // with a still-live socket.
+    // Preserve buffered logical input until the controller has captured any
+    // reconnect obligation. Only the physical transport terminates here.
+    beginTransportTerminationOnQueue()
     let d = delegate
-    Task { @MainActor in d?.hubDidError(message, source: self) }
+    Task { @MainActor in d?.hubDidError(failure, source: self) }
   }
 
   // MARK: Public stream API
@@ -404,6 +381,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
             returning: RealtimeHubInputLifecycleSnapshot(
               isOpen: self.isOpen,
               activityOpen: self.activityOpen,
+              pendingTextInputCount: self.pendingTextInputs.count,
               pendingAudioChunkCount: self.pendingAudio.count,
               pendingVideoFrameCount: self.pendingVideo.count,
               pendingCommit: self.pendingCommit,
@@ -498,6 +476,38 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
 
   func sendTestTextInput(_ text: String) async -> Bool {
     await sendTextInput(text, logLabel: "test text input")
+  }
+
+  /// True when the session can accept injected (non-PTT) context *right now*.
+  /// Evaluated on `q`. OpenAI accepts on any open socket; Gemini needs an open
+  /// speech-activity window (opened per turn by `beginInputTurn`).
+  private var canAcceptInjectedContext: Bool {
+    isOpen && (provider == .openai || activityOpen)
+  }
+
+  /// Silently appends completed background-agent context to the conversation.
+  /// No response is requested — the model uses it on its next turn.
+  ///
+  /// Unlike ordinary PTT text input this does NOT buffer: the caller advances an
+  /// exactly-once kernel checkpoint on a `true` return, so `true` must mean
+  /// "confirmed delivered," never "buffered" (a buffered item is dropped by
+  /// `stopOnQueue`/`abandonInputTurn` — an acked-but-lost completion). When the
+  /// session can't accept context yet it returns `false` and the checkpoint
+  /// stays unadvanced; the delivery service retries when the session next
+  /// becomes ready (`hubDidOpenInputWindow`). When it can, `true` follows the
+  /// provider send's completion, not a fire-and-forget enqueue.
+  func sendBackgroundAgentContext(_ text: String) async -> Bool {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        guard let self, self.canAcceptInjectedContext else {
+          continuation.resume(returning: false)
+          return
+        }
+        self.send(json: self.textInputWire(text)) { error in
+          continuation.resume(returning: error == nil)
+        }
+      }
+    }
   }
 
   /// A provider can complete a tool-only response after accepting the final tool
@@ -621,20 +631,27 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
   }
 
-  private func sendTextInputNow(_ text: String, logLabel: String) {
+  /// Per-provider wire form of a user text-input message. Shared by the buffered
+  /// PTT path (`sendTextInputNow`) and the confirmed, non-buffering background
+  /// path (`sendBackgroundAgentContext`).
+  private func textInputWire(_ text: String) -> [String: Any] {
     switch provider {
     case .gemini:
-      send(json: ["realtimeInput": ["text": text]])
+      return ["realtimeInput": ["text": text]]
     case .openai:
-      send(json: [
+      return [
         "type": "conversation.item.create",
         "item": [
           "type": "message",
           "role": "user",
           "content": [["type": "input_text", "text": text]],
         ],
-      ])
+      ]
     }
+  }
+
+  private func sendTextInputNow(_ text: String, logLabel: String) {
+    send(json: textInputWire(text))
     log("\(tag): \(logLabel) sent (\(text.count) chars)")
   }
 
@@ -671,6 +688,11 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.flushPendingAudioIfReady()
         self.flushPendingTextInputs()
         log("\(self.tag): turn begin (activityStart\(interrupting ? ", interrupting in-flight reply" : ""))")
+        // The activity window is open — the session can now accept injected
+        // context. Signal delivery so a background completion left unadvanced
+        // while warm-idle is retried at this natural turn boundary.
+        let delegate = self.delegate
+        Task { @MainActor in delegate?.hubDidOpenInputWindow(source: self) }
         if self.pendingCommit {
           self.pendingCommit = false
           self.commitInputTurnNow()
@@ -1104,7 +1126,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       guard let self else { return }
       switch result {
       case .failure(let error):
-        self.q.async { self.notifyError(error.localizedDescription) }
+        self.q.async { self.notifyError(.system(error, phase: .receive)) }
       case .success(let message):
         let data: Data?
         switch message {
@@ -1352,7 +1374,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       openAIResponseCreatePending = false
       openAIActiveResponseID = nil
       let msg = (e["error"] as? [String: Any])?["message"] as? String ?? "OpenAI realtime error"
-      notifyError(msg)
+      notifyError(.providerError(msg))
     default:
       break
     }
@@ -1539,7 +1561,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           testingLastResponseToolChoice = (json["response"] as? [String: Any])?["tool_choice"] as? String
           testingLastResponseInstruction = (json["response"] as? [String: Any])?["instructions"] as? String
         }
-        completion?(nil)
+        // Lets tests exercise a failed send so callers that gate on delivery
+        // (sendBackgroundAgentContext → exactly-once checkpoint) can be verified.
+        completion?(testingForcedSendError)
         return
       }
     #endif
@@ -1551,7 +1575,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       rawWS.sendText(text) { [weak self] error in
         guard let self else { return }
         self.q.async {
-          if let error { self.notifyError(error.localizedDescription) }
+          if let error { self.notifyError(.system(error, phase: .send)) }
           completionBox.value?(error)
         }
       }
@@ -1564,7 +1588,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     task.send(.string(text)) { [weak self] error in
       guard let self else { return }
       self.q.async {
-        if let error { self.notifyError(error.localizedDescription) }
+        if let error { self.notifyError(.system(error, phase: .send)) }
         completionBox.value?(error)
       }
     }
@@ -1574,7 +1598,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   /// and encoding paths. A screen-evidence receipt must never wait for a provider deadline after
   /// the session has already proved it cannot enqueue the exact wire.
   private func failSend(_ error: Error, completion: ((Error?) -> Void)?) {
-    notifyError(error.localizedDescription)
+    notifyError(.system(error, phase: .send))
     completion?(error)
   }
 }
@@ -1610,12 +1634,25 @@ extension RealtimeHubSession: URLSessionWebSocketDelegate {
     didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?
   ) {
     let r = reason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-    q.async { self.notifyError("WebSocket closed (\(closeCode.rawValue)) \(r)") }
+    q.async {
+      self.notifyError(
+        .providerClose(
+          code: closeCode.rawValue,
+          reason: r))
+    }
   }
 
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-    if let error {
-      q.async { self.notifyError("WebSocket failed: \(error.localizedDescription)") }
+    q.async {
+      let taskID = task.taskIdentifier
+      self.completedURLTaskIDs.insert(taskID)
+      let waiters = self.urlTaskTerminalWaiters.removeValue(forKey: taskID) ?? []
+      for waiter in waiters {
+        waiter.resume()
+      }
+      if let error {
+        self.notifyError(.system(error, phase: .connect))
+      }
     }
   }
 }

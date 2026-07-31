@@ -24,6 +24,7 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
 from utils.stt.vad import (
@@ -173,6 +174,7 @@ class VADStreamingGate:
         _get_ort_session()
         self._vad_window_samples = VAD_WINDOW_SAMPLES  # 512 for 16kHz (Silero v6)
         self._vad_buffer = np.array([], dtype=np.float32)  # Buffer for cross-chunk accumulation
+        self._pcm_remainder = b''  # Trailing bytes of a frame split across chunks
         self._vad_state: np.ndarray[Any, Any]
         self._vad_context: np.ndarray[Any, Any]
         self._vad_state, self._vad_context = make_fresh_state()  # Per-connection ONNX recurrent state + context
@@ -229,6 +231,7 @@ class VADStreamingGate:
             # Reset VAD recurrent state and buffer for clean active-mode start
             self._vad_state, self._vad_context = make_fresh_state()
             self._vad_buffer = np.array([], dtype=np.float32)
+            self._pcm_remainder = b''
             # Sync mapper cursor: DG received all audio during shadow phase
             self.dg_wall_mapper._provider_cursor_sec = self._audio_cursor_ms / 1000.0  # type: ignore[reportPrivateUsage]  # sync internal mapper cursor
             logger.info(
@@ -249,8 +252,21 @@ class VADStreamingGate:
 
     def _convert_for_vad(self, pcm_data: bytes) -> np.ndarray[Any, Any]:
         """Convert audio to float32 at 16kHz mono for VAD."""
+        # A client may split PCM16 anywhere, so a chunk can end mid-frame. Carry
+        # those bytes into the next chunk: np.frombuffer rejects a partial sample,
+        # and dropping it would shift every later sample by one byte.
+        data = self._pcm_remainder + pcm_data if self._pcm_remainder else pcm_data
+        frame_bytes = self._sample_width * self.channels
+        leftover = len(data) % frame_bytes
+        if leftover:
+            self._pcm_remainder = data[len(data) - leftover :]
+            data = data[: len(data) - leftover]
+        else:
+            self._pcm_remainder = b''
+        if not data:
+            return np.array([], dtype=np.float32)
+
         # Convert to mono if stereo
-        data = pcm_data
         if self.channels == 2:
             data = audioop.tomono(data, self._sample_width, 0.5, 0.5)
 
@@ -589,12 +605,26 @@ class GatedSTTSocket(STTSocket):
     def death_reason(self) -> Optional[str]:
         return self._conn.death_reason
 
+    def _counted(self, audio: bytes) -> bytes:
+        """Count frames that are not whole 16-bit samples, as the provider receives them.
+
+        The gate re-chunks, so a count taken before it does not describe what a provider
+        gets. Deepgram accepts a misaligned frame silently; Velma rejects it and closes the
+        session, so the live Deepgram path is where that risk is measurable.
+        """
+        if len(audio) % 2:
+            OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(
+                provider=type(self._conn).__name__,
+                stage='provider_send',
+            ).inc()
+        return audio
+
     def send(self, data: bytes, wall_time: Optional[float] = None) -> bool:
         """Send audio through VAD gate and report whether it was accepted."""
         if self.is_connection_dead:
             return False
         if self._gate is None:
-            return self._conn.send(data)
+            return self._conn.send(self._counted(data))
 
         now = wall_time or time.time()
         try:
@@ -616,9 +646,9 @@ class GatedSTTSocket(STTSocket):
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if self._passthrough_audio:
-            accepted = self._conn.send(data)
+            accepted = self._conn.send(self._counted(data))
         elif gate_out.audio_to_send:
-            accepted = self._conn.send(gate_out.audio_to_send)
+            accepted = self._conn.send(self._counted(gate_out.audio_to_send))
         else:
             # Deliberately filtered silence is accepted by the gate; it is not
             # a provider enqueue failure and must not terminate the session.

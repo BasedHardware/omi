@@ -1,24 +1,4 @@
-import CryptoKit
 import Foundation
-
-enum AgentContextRevision {
-  static func make(
-    source: AgentContextSource,
-    payload: [String: Any],
-    outcome: AgentContextSourceOutcome
-  ) throws -> String {
-    let material: [String: Any] = [
-      "source": source.rawValue,
-      "outcome": outcome.rawValue,
-      "payload": payload,
-    ]
-    guard JSONSerialization.isValidJSONObject(material) else {
-      throw BridgeError.agentError("Context source payload is not valid JSON")
-    }
-    let data = try JSONSerialization.data(withJSONObject: material, options: [.sortedKeys])
-    return "sha256:" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-  }
-}
 
 struct AgentExecutionProfile: Equatable, Sendable {
   enum CredentialScope: String, Sendable {
@@ -1431,6 +1411,25 @@ actor AgentBridge {
     )
   }
 
+  func repairJournalTurns(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    turnIDs: [String],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> [KernelJournalTurn] {
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.repairJournalTurns(
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      turnIDs: turnIDs,
+      authorizationSnapshot: authorization
+    )
+  }
+
   func listJournalTurns(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
@@ -1499,6 +1498,7 @@ actor AgentBridge {
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
     expectedGeneration: Int? = nil,
+    deleteBackend: Bool = true,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> Int {
     let authorization = try resolveAuthorization(
@@ -1510,6 +1510,7 @@ actor AgentBridge {
       surface: surface,
       ownerID: ownerID,
       expectedGeneration: expectedGeneration,
+      deleteBackend: deleteBackend,
       authorizationSnapshot: authorization
     )
   }
@@ -1518,6 +1519,7 @@ actor AgentBridge {
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
     expectedGeneration: Int? = nil,
+    deleteBackend: Bool = true,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> Int {
     guard AppBuild.isNonProduction else {
@@ -1532,6 +1534,7 @@ actor AgentBridge {
       surface: surface,
       ownerID: ownerID,
       expectedGeneration: expectedGeneration,
+      deleteBackend: deleteBackend,
       authorizationSnapshot: authorization
     )
   }
@@ -1583,6 +1586,7 @@ actor AgentBridge {
     attachments: [AgentQueryAttachment] = [],
     producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
+    reasoningEffort: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolActivity: @escaping ToolActivityHandler,
@@ -1614,6 +1618,7 @@ actor AgentBridge {
       attachments: attachments,
       producingTurnId: producingTurnId,
       expectedContext: expectedContext,
+      reasoningEffort: reasoningEffort,
       authorizationSnapshot: authorization,
       onTextDelta: onTextDelta,
       onToolActivity: onToolActivity,
@@ -1633,6 +1638,7 @@ actor AgentBridge {
     attachments: [AgentQueryAttachment] = [],
     producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
+    reasoningEffort: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolActivity: @escaping ToolActivityHandler,
@@ -1732,6 +1738,7 @@ actor AgentBridge {
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
+        reasoningEffort: reasoningEffort,
         authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
         onToolActivity: trackedToolActivity,
@@ -1771,6 +1778,7 @@ actor AgentBridge {
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
+        reasoningEffort: reasoningEffort,
         authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
         onToolActivity: trackedToolActivity,
@@ -2102,6 +2110,9 @@ enum BridgeError: LocalizedError {
     case .agentError(let message):
       return Self.isSessionAuthenticationFailureMessage(message)
     case .agentRuntimeFailure(let failure):
+      if failure.failureCode == .authentication {
+        return true
+      }
       return Self.isSessionAuthenticationFailureMessage(failure.displayMessage)
         || (failure.technicalMessage.map(Self.isSessionAuthenticationFailureMessage) ?? false)
     case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError, .timeout,
@@ -2185,20 +2196,9 @@ enum BridgeError: LocalizedError {
   }
 
   private static func userFacingAgentErrorMessage(_ msg: String) -> String {
-    guard !msg.isEmpty else { return "Something went wrong. Please try again." }
-    let lower = msg.lowercased()
-    if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
-      || lower.contains("unauthorized") || lower.contains("permission denied")
-      || lower.contains("invalid key") || lower.contains("forbidden")
-    {
-      return "AI service authentication error. Please update the app to the latest version."
-    }
-    if lower.contains("quota") || lower.contains("rate limit") || lower.contains("resource exhausted") {
-      return "AI service is busy. Please try again in a moment."
-    }
-    if lower.contains("overloaded") || lower.contains("service unavailable") || lower.contains("internal error") {
-      return "AI service is temporarily unavailable. Please try again later."
-    }
-    return msg
+    // Classification owns the copy so "please try again" is only ever said for
+    // errors where retrying can help (unretryable causes previously produced
+    // retry storms — e.g. exhausted provider credits).
+    AgentErrorClassifier.classify(msg).userMessage
   }
 }

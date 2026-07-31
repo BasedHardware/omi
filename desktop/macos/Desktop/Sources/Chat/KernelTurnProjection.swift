@@ -193,7 +193,8 @@ final class KernelTurnProjection {
     _ client: AgentClient.Session,
     _ surface: AgentSurfaceReference,
     _ ownerID: String,
-    _ expectedGeneration: Int
+    _ expectedGeneration: Int,
+    _ deleteBackend: Bool
   ) async throws -> Int
 
   typealias KernelReadyOperation = () async -> Bool
@@ -241,9 +242,9 @@ final class KernelTurnProjection {
         await self.refresh(surface: surface)
       }
     }
-    if let surface = host?.mainChatSurfaceReference() {
-      await refresh(surface: surface, lease: lease)
-    }
+    // The visible-chat loader owns the first replay so it can keep the
+    // transcript in its loading state until the complete snapshot is ready.
+    // Event notifications above still refresh an already-mounted surface.
   }
 
   /// Attach the owner-bound client for a non-production journal control action
@@ -269,17 +270,22 @@ final class KernelTurnProjection {
 
   /// Ordered replay. A gap never advances the checkpoint: the next page starts
   /// from the last contiguous turnSeq, so out-of-order wakeups cannot drop data.
-  func refresh(surface: AgentSurfaceReference) async {
-    guard let lease = captureOwnerLease() else { return }
-    await refresh(surface: surface, lease: lease)
+  @discardableResult
+  func refresh(surface: AgentSurfaceReference) async -> Bool {
+    guard let lease = captureOwnerLease() else { return false }
+    return await refresh(surface: surface, lease: lease, publishPartialResults: true)
   }
 
-  private func refresh(surface: AgentSurfaceReference, lease: OwnerLease) async {
-    guard isCurrent(lease), let client else { return }
+  private func refresh(
+    surface: AgentSurfaceReference,
+    lease: OwnerLease,
+    publishPartialResults: Bool
+  ) async -> Bool {
+    guard isCurrent(lease), let client else { return false }
     let surfaceKey = surface.key
     if refreshingSurfaceEpochs[surfaceKey] == lease.epoch {
       refreshRequestedSurfaceEpochs[surfaceKey] = lease.epoch
-      return
+      return true
     }
     refreshingSurfaceEpochs[surfaceKey] = lease.epoch
     defer {
@@ -288,14 +294,26 @@ final class KernelTurnProjection {
       }
     }
 
+    // A restored conversation is not live streaming. Collect all contiguous
+    // turns fetched by this refresh, then publish one coherent transcript
+    // snapshot after the journal range is settled. Publishing each durable row
+    // independently makes first launch look like the user is watching old
+    // history arrive in real time, and causes the chat viewport to chase it.
+    var pendingProjectionTurns: [KernelJournalTurn] = []
+    var shouldResetProjection = false
+    var refreshSucceeded = true
+
     repeat {
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return false }
+      // A queued request is a fresh attempt. Its outcome supersedes an earlier
+      // failed pass once the accumulated replacement snapshot is complete.
+      refreshSucceeded = true
       if refreshRequestedSurfaceEpochs[surfaceKey] == lease.epoch {
         refreshRequestedSurfaceEpochs.removeValue(forKey: surfaceKey)
       }
       var shouldContinue = true
       while shouldContinue {
-        guard isCurrent(lease) else { return }
+        guard isCurrent(lease) else { return false }
         let knownConversation = conversationBySurface[surfaceKey]
         let knownCheckpoint = knownConversation.map {
           checkpointKeyFor(conversationId: $0, surface: surface)
@@ -309,7 +327,7 @@ final class KernelTurnProjection {
             afterTurnSeq: after,
             limit: 100
           )
-          guard isCurrent(lease) else { return }
+          guard isCurrent(lease) else { return false }
           let conversationId = page.conversationId
           guard !conversationId.isEmpty else {
             shouldContinue = false
@@ -321,8 +339,11 @@ final class KernelTurnProjection {
           if currentGeneration != page.conversationGeneration {
             highWaterByConversation[checkpointKey] = page.generationBaseTurnSeq
             generationByConversation[checkpointKey] = page.conversationGeneration
-            guard isCurrent(lease) else { return }
-            host?.resetJournalProjection(surface: surface)
+            guard isCurrent(lease) else { return false }
+            // A newer generation invalidates every accumulated row from the
+            // prior one. Keep the reset and its replacement snapshot atomic.
+            pendingProjectionTurns.removeAll()
+            shouldResetProjection = true
           }
           generationByConversation[checkpointKey] = page.conversationGeneration
           var contiguous = highWaterByConversation[checkpointKey] ?? 0
@@ -331,8 +352,8 @@ final class KernelTurnProjection {
             after: contiguous
           )
           for turn in contiguousPage {
-            guard isCurrent(lease) else { return }
-            host?.projectJournalTurn(turn)
+            guard isCurrent(lease) else { return false }
+            pendingProjectionTurns.append(turn)
             contiguous = turn.turnSeq
             highWaterByConversation[checkpointKey] = contiguous
           }
@@ -356,23 +377,67 @@ final class KernelTurnProjection {
           if isCurrent(lease) {
             log("KernelTurnProjection: journal replay failed (code=journal_range_fetch_failed)")
           }
+          refreshSucceeded = false
           shouldContinue = false
         }
       }
     } while isCurrent(lease) && refreshRequestedSurfaceEpochs[surfaceKey] == lease.epoch
+
+    guard isCurrent(lease) else { return false }
+    if !refreshSucceeded, !publishPartialResults {
+      return false
+    }
+    if shouldResetProjection {
+      host?.resetJournalProjection(surface: surface)
+    }
+    host?.projectJournalTurns(pendingProjectionTurns)
+    return refreshSucceeded
   }
 
-  func reload(surface: AgentSurfaceReference) async {
-    guard let lease = captureOwnerLease(), isCurrent(lease) else { return }
+  @discardableResult
+  func reload(surface: AgentSurfaceReference) async -> Bool {
+    guard let lease = captureOwnerLease(), isCurrent(lease) else { return false }
     let surfaceKey = surface.key
-    if let conversationId = conversationBySurface.removeValue(forKey: surfaceKey) {
+    if refreshingSurfaceEpochs[surfaceKey] == lease.epoch {
+      refreshRequestedSurfaceEpochs[surfaceKey] = lease.epoch
+      return false
+    }
+    let previousConversationId = conversationBySurface.removeValue(forKey: surfaceKey)
+    let previousCheckpointKey = previousConversationId.map {
+      checkpointKeyFor(conversationId: $0, surface: surface)
+    }
+    let previousHighWater = previousCheckpointKey.flatMap { highWaterByConversation[$0] }
+    let previousGeneration = previousCheckpointKey.flatMap { generationByConversation[$0] }
+    if let conversationId = previousConversationId {
       let key = checkpointKeyFor(conversationId: conversationId, surface: surface)
       highWaterByConversation.removeValue(forKey: key)
       generationByConversation.removeValue(forKey: key)
     }
-    guard isCurrent(lease) else { return }
-    host?.resetJournalProjection(surface: surface)
-    await refresh(surface: surface, lease: lease)
+    guard isCurrent(lease) else { return false }
+    // The refresh builds a complete replacement snapshot and publishes it
+    // atomically. Keep the current projection visible if fetching fails.
+    let reloaded = await refresh(
+      surface: surface,
+      lease: lease,
+      publishPartialResults: false
+    )
+    guard !reloaded, isCurrent(lease) else { return reloaded }
+
+    if let failedConversationId = conversationBySurface.removeValue(forKey: surfaceKey) {
+      let failedKey = checkpointKeyFor(conversationId: failedConversationId, surface: surface)
+      highWaterByConversation.removeValue(forKey: failedKey)
+      generationByConversation.removeValue(forKey: failedKey)
+    }
+    if let previousConversationId, let previousCheckpointKey {
+      conversationBySurface[surfaceKey] = previousConversationId
+      if let previousHighWater {
+        highWaterByConversation[previousCheckpointKey] = previousHighWater
+      }
+      if let previousGeneration {
+        generationByConversation[previousCheckpointKey] = previousGeneration
+      }
+    }
+    return false
   }
 
   @discardableResult
@@ -403,7 +468,7 @@ final class KernelTurnProjection {
         )
       )
       guard isCurrent(lease) else { return nil }
-      await refresh(surface: surface, lease: lease)
+      _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
       guard isCurrent(lease) else { return nil }
       return turn
     } catch {
@@ -428,7 +493,7 @@ final class KernelTurnProjection {
         update: message.journalUpdate(status: status)
       )
       guard isCurrent(lease) else { return nil }
-      await refresh(surface: surface, lease: lease)
+      _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
       guard isCurrent(lease) else { return nil }
       return turn
     } catch {
@@ -451,16 +516,15 @@ final class KernelTurnProjection {
   ) async -> KernelJournalTurn? {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
     guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
-    let acceptedText = message.flatMap { $0.text.isEmpty ? nil : $0.text } ?? acceptedContent
+    let acceptedText = Self.acceptedTerminalContent(message: message, acceptedContent: acceptedContent)
+    let acceptedBlocks = Self.acceptedTerminalContentBlocks(message: message, acceptedContent: acceptedContent)
     let terminalization = KernelJournalTurnTerminalization(
       turnId: turnId,
       producingRunId: producingRunId,
       producingAttemptId: producingAttemptId,
       disposition: disposition,
       content: disposition == .accept ? acceptedText : nil,
-      contentBlocksJSON: disposition == .accept
-        ? message.flatMap { ChatContentBlockCodec.encode($0.contentBlocks) }
-        : nil,
+      contentBlocksJSON: disposition == .accept ? ChatContentBlockCodec.encode(acceptedBlocks) : nil,
       resourcesJSON: disposition == .accept
         ? message.flatMap { ChatResource.encodeResourcesForPersistence($0.displayResources) }
           ?? acceptedResources.flatMap { resources in
@@ -475,12 +539,60 @@ final class KernelTurnProjection {
         terminalization: terminalization
       )
       guard isCurrent(lease) else { return nil }
-      await refresh(surface: surface, lease: lease)
+      _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
       return isCurrent(lease) ? turn : nil
     } catch {
       log("KernelTurnProjection: journal terminalization failed (code=journal_terminalize_failed)")
       return nil
     }
+  }
+
+  @discardableResult
+  func repairNonterminalTurns(
+    surface: AgentSurfaceReference,
+    turnIDs: [String],
+    ownerID: String
+  ) async -> Int {
+    guard !turnIDs.isEmpty,
+      let lease = captureOwnerLease(ownerID: ownerID),
+      let host
+    else { return 0 }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return 0 }
+    do {
+      let repaired = try await client.repairJournalTurns(
+        surface: surface,
+        ownerID: lease.ownerID,
+        turnIDs: turnIDs
+      )
+      guard isCurrent(lease) else { return 0 }
+      _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
+      return isCurrent(lease) ? repaired.count : 0
+    } catch {
+      log("KernelTurnProjection: journal repair failed (code=journal_repair_failed)")
+      return 0
+    }
+  }
+
+  /// The query result is the authoritative final material. The streaming row is
+  /// an optimistic projection and can lag its terminal callback; use it only
+  /// when the final result intentionally contains no text.
+  static func acceptedTerminalContent(message: ChatMessage?, acceptedContent: String?) -> String? {
+    if let acceptedContent, !acceptedContent.isEmpty { return acceptedContent }
+    return message.flatMap { $0.text.isEmpty ? nil : $0.text }
+  }
+
+  static func acceptedTerminalContentBlocks(
+    message: ChatMessage?,
+    acceptedContent: String?
+  ) -> [ChatContentBlock] {
+    guard let acceptedContent, !acceptedContent.isEmpty else { return message?.contentBlocks ?? [] }
+    let nonTextBlocks =
+      message?.contentBlocks.filter {
+        if case .text = $0 { return false }
+        return true
+      } ?? []
+    let messageID = message?.id ?? "terminal"
+    return [.text(id: "\(messageID):terminal", text: acceptedContent)] + nonTextBlocks
   }
 
   /// Terminalize an existing turn without sourcing payload from the current UI
@@ -502,7 +614,7 @@ final class KernelTurnProjection {
         update: .statusOnly(turnId: turnId, status: status)
       )
       guard isCurrent(lease) else { return nil }
-      await refresh(surface: surface, lease: lease)
+      _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
       guard isCurrent(lease) else { return nil }
       return turn
     } catch {
@@ -685,7 +797,7 @@ final class KernelTurnProjection {
             update: KernelAgentLifecycleMutation.atomicAppendUpdate(mutation)
           )
           guard isCurrent(lease) else { return nil }
-          await refresh(surface: surface, lease: lease)
+          _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
           guard isCurrent(lease) else { return nil }
           return turn
         }
@@ -706,7 +818,8 @@ final class KernelTurnProjection {
   func clear(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,
-    requiresModelReadiness: Bool = true
+    requiresModelReadiness: Bool = true,
+    deleteBackend: Bool = true
   ) async -> Bool {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return false }
     let kernelReady =
@@ -761,19 +874,22 @@ final class KernelTurnProjection {
           client,
           surface,
           lease.ownerID,
-          expectedGeneration
+          expectedGeneration,
+          deleteBackend
         )
       } else if requiresModelReadiness {
         _ = try await client.clearJournalTurns(
           surface: surface,
           ownerID: lease.ownerID,
-          expectedGeneration: expectedGeneration
+          expectedGeneration: expectedGeneration,
+          deleteBackend: deleteBackend
         )
       } else {
         _ = try await client.clearJournalTurnsForControl(
           surface: surface,
           ownerID: lease.ownerID,
-          expectedGeneration: expectedGeneration
+          expectedGeneration: expectedGeneration,
+          deleteBackend: deleteBackend
         )
       }
       guard isCurrent(lease) else { return false }

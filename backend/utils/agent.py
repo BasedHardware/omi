@@ -5,6 +5,7 @@ from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, TYPE_CHE
 from models.app import App
 from models.chat import ChatSession, Message, MessageSender, MessageType
 from utils.retrieval.graph import AsyncStreamingCallback
+from utils.llm.model_config import get_model
 from openai.types.responses import ResponseTextDeltaEvent
 import logging
 
@@ -66,13 +67,13 @@ async def run(
     docs_agent = Agent(
         name="Omi Documentation Agent",
         instructions=omi_documentation_prompt,
-        model="o4-mini",
+        model=get_model('learnings'),
     )
     omi_agent = Agent(
         name="Omi Agent",
         instructions=f"You are a helpful assistant that answers questions from the user {uid}, using the tools you were provided.",
         mcp_servers=[mcp_server],
-        model="o4-mini",
+        model=get_model('learnings'),
         model_settings=ModelSettings(
             reasoning=Reasoning(effort="high"),  # summary="auto"
         ),

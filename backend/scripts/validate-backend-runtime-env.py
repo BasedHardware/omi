@@ -40,8 +40,7 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
         'MEMORY_V3_GET_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
@@ -68,8 +67,8 @@ def _as_config_list(value: object) -> list[Any] | None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description='Validate runtime manifests against GKE and Cloud Run state.')
-    parser.add_argument('--env', choices=('dev', 'beta', 'prod'), required=True)
+    parser = argparse.ArgumentParser(description='Validate backend runtime env manifests against GKE and Cloud Run.')
+    parser.add_argument('--env', choices=('dev', 'prod'), required=True)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument(
         '--cloud-run-state',
@@ -85,6 +84,11 @@ def main() -> int:
         '--check-workflows',
         action='store_true',
         help='Validate checked-in Cloud Run workflow env_vars blocks against the manifest.',
+    )
+    parser.add_argument(
+        '--workflow-root',
+        type=Path,
+        help='Immutable source root for workflow YAML and local composite actions; defaults to the runtime root.',
     )
     parser.add_argument(
         '--check-rendered-cloud-run',
@@ -105,6 +109,7 @@ def main() -> int:
         check_live_cloud_run=args.check_live_cloud_run,
         check_rendered_cloud_run=args.check_rendered_cloud_run,
         check_workflows=args.check_workflows,
+        workflow_root=args.workflow_root,
         strict_provisional=args.strict_provisional,
     )
     for error in errors:
@@ -123,6 +128,7 @@ def validate_runtime_env(
     check_live_cloud_run: bool = False,
     check_rendered_cloud_run: bool = False,
     check_workflows: bool = False,
+    workflow_root: Path | None = None,
     strict_provisional: bool = False,
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
@@ -146,6 +152,7 @@ def validate_runtime_env(
                 strict_provisional=strict_provisional,
                 manifest_path=manifest_path,
                 manifest=manifest,
+                workflow_root=workflow_root,
             )
         )
 
@@ -431,7 +438,7 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
     required_cloud_run_scopes: set[str] = set()
-    if env in {'dev', 'beta', 'prod'}:
+    if env in {'dev', 'prod'}:
         for service in ('backend', 'backend-sync', 'backend-integration'):
             if service not in cloud_run_services:
                 continue
@@ -509,10 +516,9 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     Also rejects:
     - canonical maintenance env/secrets on notifications-job (its workflow
       removes only those retired live bindings);
-    - request-path / other-job hosts keeping MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
+    - request-path / other-job hosts keeping MEMORY_CANONICAL_MAINTENANCE_ENABLED=true
       (ST→LT cron must run only on memory-maintenance-job);
-    - empty MEMORY_ENABLED_USERS on a read-mode surface while the job has a non-empty allowlist;
-    - mismatched MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED between job and read surfaces.
+    - empty MEMORY_ENABLED_USERS on a read-mode surface while the job has a non-empty allowlist.
     """
     errors: list[ValidationError] = []
     scope = f'{env}/cloud_run/jobs/memory-maintenance-job'
@@ -562,9 +568,10 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
         'MEMORY_V3_GET_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+        'PINECONE_INDEX_NAME',
+        'TYPESENSE_HOST_PORT',
     ):
         if required_env not in job_env:
             errors.append(ValidationError(scope, f'missing env {required_env}'))
@@ -580,10 +587,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
             errors.append(ValidationError(scope, f'missing secret {required_secret}'))
 
     job_mode = (_manifest_literal_env_value(job_env, 'MEMORY_MODE') or '').strip().lower()
-    job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
-    job_fast_track = (
-        (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED') or '').strip().lower()
-    )
+    job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
     job_users = (_manifest_literal_env_value(job_env, 'MEMORY_ENABLED_USERS') or '').strip()
 
     # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
@@ -593,13 +597,13 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         other_job = _as_config_dict(raw_other_job) or {}
         other_env = _as_config_dict(other_job.get('env')) or {}
         other_cron = (
-            (_manifest_literal_env_value(other_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+            (_manifest_literal_env_value(other_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
         )
         if other_cron == 'true':
             errors.append(
                 ValidationError(
                     f'{env}/cloud_run/jobs/{other_job_name}',
-                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false; '
+                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false; '
                     'ST→LT cron is hosted only by memory-maintenance-job',
                 )
             )
@@ -608,13 +612,13 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     for surface_scope, surface_env in _canonical_memory_surfaces(env_config):
         surface_mode = (_manifest_literal_env_value(surface_env, 'MEMORY_MODE') or '').strip().lower()
         surface_cron = (
-            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED') or '').strip().lower()
+            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
         )
         if surface_cron == 'true':
             errors.append(
                 ValidationError(
                     surface_scope,
-                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false on request-path surfaces; '
+                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false on request-path surfaces; '
                     'ST→LT cron is hosted only by memory-maintenance-job',
                 )
             )
@@ -626,7 +630,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
             errors.append(
                 ValidationError(
                     scope,
-                    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be false while MEMORY_MODE is off',
+                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false while MEMORY_MODE is off',
                 )
             )
         for surface_scope, _surface_env, surface_mode in read_surfaces:
@@ -634,7 +638,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 ValidationError(
                     scope,
                     f'{surface_scope} MEMORY_MODE={surface_mode!r} requires memory-maintenance-job '
-                    'MEMORY_MODE=read and MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true '
+                    'MEMORY_MODE=read and MEMORY_CANONICAL_MAINTENANCE_ENABLED=true '
                     '(ST→LT is not hosted by notifications-job)',
                 )
             )
@@ -649,7 +653,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         errors.append(
             ValidationError(
                 scope,
-                'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED must be true when MEMORY_MODE is not off '
+                'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be true when MEMORY_MODE is not off '
                 '(ST→LT maintenance is hosted by memory-maintenance-job, not notifications-job)',
             )
         )
@@ -671,19 +675,6 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                     scope,
                     f'{surface_scope} MEMORY_ENABLED_USERS must match memory-maintenance-job allowlist '
                     '(empty surface allowlist is not allowed while the job has a non-empty cohort)',
-                )
-            )
-        surface_fast_track = (
-            (_manifest_literal_env_value(surface_env, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED') or '')
-            .strip()
-            .lower()
-        )
-        if surface_fast_track and job_fast_track and surface_fast_track != job_fast_track:
-            errors.append(
-                ValidationError(
-                    scope,
-                    f'{surface_scope} MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED={surface_fast_track!r} '
-                    f'must match memory-maintenance-job ({job_fast_track!r})',
                 )
             )
     return errors
@@ -806,6 +797,7 @@ def _validate_cloud_run_workflows(
     strict_provisional: bool,
     manifest_path: Path,
     manifest: ConfigDict | None = None,
+    workflow_root: Path | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -818,14 +810,20 @@ def _validate_cloud_run_workflows(
     workflow_services: dict[str, ConfigDict] = {}
     workflow_jobs: dict[str, ConfigDict] = {}
     manifest = manifest if manifest is not None else _load_yaml(manifest_path)
+    workflow_root = workflow_root or ROOT
     for workflow_file in workflow_files:
         if not isinstance(workflow_file, str):
             errors.append(ValidationError('cloud_run/workflows', 'workflow file paths must be strings'))
             continue
-        workflow_path = ROOT / workflow_file
+        workflow_path = workflow_root / workflow_file
         workflow = _load_yaml(workflow_path)
         errors.extend(_validate_firestore_index_reconciliation_boundary(workflow_file, workflow))
-        extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest=manifest)
+        extracted = _extract_workflow_cloud_run_targets(
+            workflow,
+            env=env,
+            manifest=manifest,
+            workflow_root=workflow_root,
+        )
         errors.extend(_validate_sync_backfill_co_deploy(workflow_file, extracted['services']))
         workflow_services.update(extracted['services'])
         workflow_jobs.update(extracted['jobs'])
@@ -991,10 +989,28 @@ def _validate_firestore_readiness_workflow_contract(workflow_file: str, workflow
         errors.append(ValidationError(scope, admission_error))
     deploy_steps = [_as_config_dict(step) or {} for step in (_as_config_list(deploy_job.get('steps')) or [])]
     deploy_checkout = [step for step in deploy_steps if step.get('uses') == 'actions/checkout@v7']
+    runtime_checkout = [
+        step
+        for step in deploy_checkout
+        if (_as_config_dict(step.get('with')) or {}).get('ref')
+        == '${{ needs.firestore_readiness.outputs.admitted_sha }}'
+    ]
+    workflow_control_checkout = next(
+        (step for step in deploy_checkout if step.get('name') == 'Checkout workflow-owned deploy-control source'),
+        None,
+    )
+    workflow_control_with = _as_config_dict((workflow_control_checkout or {}).get('with')) or {}
+    expected_checkout_count = 2 if is_manual_deploy else 1
     if (
-        len(deploy_checkout) != 1
-        or (_as_config_dict(deploy_checkout[0].get('with')) or {}).get('ref')
-        != '${{ needs.firestore_readiness.outputs.admitted_sha }}'
+        len(deploy_checkout) != expected_checkout_count
+        or len(runtime_checkout) != 1
+        or (
+            is_manual_deploy
+            and (
+                workflow_control_with.get('ref') != '${{ github.sha }}'
+                or workflow_control_with.get('path') != '.workflow-source'
+            )
+        )
     ):
         errors.append(
             ValidationError(scope, 'backend deploy checkout must remain bound to the readiness-approved commit')
@@ -1149,17 +1165,11 @@ def _workflow_variable_map(env_config: ConfigDict, expected_services: ConfigDict
         '${{vars.MEMORY_ENABLED_USERS}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
         '${{ vars.MEMORY_V3_GET_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
         '${{vars.MEMORY_V3_GET_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
-        '${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}': _manifest_env_value(
-            expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
+        '${{ vars.MEMORY_CANONICAL_MAINTENANCE_ENABLED }}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED'
         ),
-        '${{vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED}}': _manifest_env_value(
-            expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
-        ),
-        '${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}': _manifest_env_value(
-            expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
-        ),
-        '${{vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED}}': _manifest_env_value(
-            expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
+        '${{vars.MEMORY_CANONICAL_MAINTENANCE_ENABLED}}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED'
         ),
     }
 
@@ -1345,6 +1355,7 @@ def _extract_workflow_cloud_run_targets(
     *,
     env: str,
     manifest: ConfigDict,
+    workflow_root: Path,
 ) -> dict[str, dict[str, ConfigDict]]:
     workflow_env = _as_config_dict(workflow.get('env')) or {}
     rendered_runtime_env = _rendered_runtime_env_outputs(workflow, env=env, manifest=manifest)
@@ -1361,7 +1372,7 @@ def _extract_workflow_cloud_run_targets(
         if steps is None:
             continue
         for step in steps:
-            for deploy_step in _expand_cloud_run_deploy_steps(step):
+            for deploy_step in _expand_cloud_run_deploy_steps(step, workflow_root=workflow_root):
                 step_dict = _as_config_dict(deploy_step) or {}
                 step_with = _as_config_dict(step_dict.get('with')) or {}
                 env_vars = _parse_workflow_env_vars(
@@ -1403,7 +1414,7 @@ def _validate_sync_backfill_co_deploy(workflow_file: str, services: dict[str, Co
     ]
 
 
-def _expand_cloud_run_deploy_steps(step: object) -> list[ConfigDict]:
+def _expand_cloud_run_deploy_steps(step: object, *, workflow_root: Path) -> list[ConfigDict]:
     step_dict = _as_config_dict(step)
     if step_dict is None:
         return []
@@ -1412,7 +1423,7 @@ def _expand_cloud_run_deploy_steps(step: object) -> list[ConfigDict]:
     uses = step_dict.get('uses')
     if not isinstance(uses, str) or not uses.startswith('./'):
         return []
-    action = _load_local_composite_action(uses)
+    action = _load_local_composite_action(uses, workflow_root=workflow_root)
     if action is None:
         return []
     runs = _as_config_dict(action.get('runs')) or {}
@@ -1452,8 +1463,8 @@ def _composite_step_active_for_caller(nested_step: ConfigDict, caller_with: Conf
     return True
 
 
-def _load_local_composite_action(uses: str) -> ConfigDict | None:
-    action_dir = ROOT / uses[2:]
+def _load_local_composite_action(uses: str, *, workflow_root: Path) -> ConfigDict | None:
+    action_dir = workflow_root / uses[2:]
     for name in ('action.yml', 'action.yaml'):
         path = action_dir / name
         if path.is_file():

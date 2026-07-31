@@ -195,6 +195,7 @@ def build_vector_repair_outbox_production_dependencies(
         ),
         vector_repairer=make_pinecone_vector_repairer(
             embed_text=embeddings.embed_query,
+            delete_vectors=pinecone_index.delete,
             upsert_vectors=pinecone_index.upsert,
             namespace=VECTOR_REPAIR_PINECONE_NAMESPACE,
         ),

@@ -28,6 +28,7 @@ from config.stt_provider_policy import (
 )
 from utils.async_tasks import create_named_task
 from utils.executors import sync_executor, run_blocking
+from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
@@ -693,6 +694,11 @@ class SafeModulateSocket(STTSocket):
         self._prev_partial_text: str = ''
         self._prev_partial_start_ms: int = 0
         self._prev_partial_word_count: int = 0
+        # Velma rejects any s16le frame that is not a whole number of samples with
+        # {"type":"error","error":"Invalid input audio"} and then closes the socket, so a
+        # single odd-length frame ends the session even after valid audio. Nothing upstream
+        # guarantees even-length buffers, so carry a trailing odd byte to the next frame.
+        self._pending_odd_byte: bytes = b''
         self._recv_task: asyncio.Task[None] = asyncio.ensure_future(self._recv_loop(), loop=loop)
         self._send_task: asyncio.Task[None] = asyncio.ensure_future(self._send_loop(), loop=loop)
 
@@ -724,8 +730,29 @@ class SafeModulateSocket(STTSocket):
         with self._lock:
             if self._dead or self._closed:
                 return False
+            if not data:
+                # b'' is this socket's shutdown sentinel: _send_loop breaks on it and finish()
+                # uses it to stop the loop. Enqueuing an empty audio frame would therefore end
+                # the send loop mid-session while the socket still reports itself alive, so every
+                # later frame would be queued and never sent. The Parakeet sockets guard the same
+                # way. The header stays pending because _header_sent is only set once it is queued.
+                return True
+            aligned = self._pending_odd_byte + data
+            self._pending_odd_byte = aligned[-1:] if len(aligned) % 2 else b''
+            if self._pending_odd_byte:
+                aligned = aligned[:-1]
+                misaligned = True
+            else:
+                misaligned = False
+            if misaligned:
+                OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(
+                    provider=STTService.modulate.value, stage='provider_send'
+                ).inc()
+            if not aligned:
+                # One carried byte and nothing else yet: it is buffered, not dropped.
+                return True
             prepend_header = not self._header_sent and self._wav_header is not None
-            queued_data = (self._wav_header or b'') + data if prepend_header else data
+            queued_data = (self._wav_header or b'') + aligned if prepend_header else aligned
 
         try:
             current_loop = asyncio.get_running_loop()
@@ -844,6 +871,14 @@ class SafeModulateSocket(STTSocket):
                 elif msg_type == 'utterance':
                     utt = msg.get('utterance', msg)
                     self._handle_utterance(utt)
+            # A clean async-for exhaustion means the provider closed the upstream
+            # WebSocket without raising. A local drain (self._closed) or an
+            # explicit provider 'done' (self._done_event) is expected
+            # finalization; any other clean close is unexpected provider death and
+            # must latch terminal so the listen loop propagates it without waiting
+            # for another client audio frame (#10028).
+            if not self._closed and not self._done_event.is_set():
+                self._mark_dead('modulate ws closed cleanly without terminal frame')
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws recv closed: {e}')
         except Exception as e:
@@ -1369,6 +1404,13 @@ class ParakeetWebSocketSocket(STTSocket):
                                 self._stream_transcript([seg])
                     except json.JSONDecodeError:
                         pass
+            # A clean async-for exhaustion means the provider closed the upstream
+            # WebSocket without raising. Unless this is a local drain/finalization
+            # (self._closed, set by drain_and_close and the _run finally), it is an
+            # unexpected clean provider close and must latch terminal so the listen
+            # loop propagates it without waiting for another client audio frame (#10028).
+            if not self._closed:
+                self._mark_dead('parakeet ws closed cleanly by provider')
         except Exception as e:
             if not self._closed:
                 logger.error(f"Parakeet WS recv error: {e}")

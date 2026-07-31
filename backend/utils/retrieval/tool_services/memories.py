@@ -3,7 +3,7 @@ Shared service functions for memory retrieval.
 Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Optional, Any, Dict, List, cast
 
 import database.memories as memory_db
@@ -16,6 +16,7 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
 from utils.memory.chat_memory_adapter import (
+    chat_legacy_read_authorized,
     list_default_chat_memories_decision_text,
     search_memory_default_chat_memories_vector_decision_text,
 )
@@ -32,6 +33,7 @@ def get_memories_text(
     offset: int = 0,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> str:
     """Fetch user memories/facts and format as LLM-ready text."""
     logger.info(f"get_memories_text - uid: {uid}, limit: {limit}, offset: {offset}")
@@ -55,7 +57,7 @@ def get_memories_text(
 
     memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
-        memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
+        memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset, now=now)
         if start_dt or end_dt:
             filtered: List[MemoryDB] = []
             for memory in memories:
@@ -80,7 +82,7 @@ def get_memories_text(
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
         logger.info("get_memories_text - using memory default chat memory list results")
         return default_memories.text or "No memory default memories found."
-    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not chat_legacy_read_authorized(default_memories):
         logger.info(
             "get_memories_text - memory default memory list denied without legacy fallback: "
             f"{default_memories.fallback_reason}"
@@ -169,7 +171,7 @@ def search_memories_text(
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
         logger.info("search_memories_text - using memory default chat vector memory results")
         return default_memories.text or f"No memory vector memories found matching '{query}'."
-    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not chat_legacy_read_authorized(default_memories):
         logger.info(
             "search_memories_text - memory default memory vector search denied without legacy fallback: "
             f"{default_memories.fallback_reason}"

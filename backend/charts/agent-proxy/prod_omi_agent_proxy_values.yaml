@@ -2,7 +2,6 @@ replicaCount: 1
 
 image:
   repository: gcr.io/based-hardware/agent-proxy
-  digest: ""
   pullPolicy: Always
   tag: ""
 

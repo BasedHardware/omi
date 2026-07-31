@@ -32,7 +32,8 @@ const PERMISSIONS: { icon: LucideIcon; title: string; detail: string }[] = [
 export function TrustStep({
   stepIndex,
   totalSteps,
-  onContinue
+  onContinue,
+  onBack
 }: TrustStepProps): React.JSX.Element {
   return (
     <StepScaffold
@@ -63,6 +64,13 @@ export function TrustStep({
         </div>
 
         <div className="mt-6 flex items-center justify-center gap-2.5">
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-lg bg-black px-5 py-2 text-sm font-medium text-white ring-1 ring-white/15 transition-colors hover:bg-white/5"
+          >
+            Back
+          </button>
           <button
             type="button"
             onClick={onContinue}

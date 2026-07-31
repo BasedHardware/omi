@@ -53,6 +53,7 @@ import {
   type ChartItem,
 } from "@/components/dashboard/resizable-chart-grid";
 import { AgentPromptWidget } from "@/components/dashboard/agent-prompt-widget";
+import { useResponseReliabilityItems } from "@/components/dashboard/response-reliability-summary";
 import { Sparkles } from "lucide-react";
 
 // --- Types ---
@@ -79,8 +80,9 @@ interface SubscriptionTrendPoint {
 interface SubscriptionCounts {
   totalSubscriptions: number;
   partial?: boolean;
-  priceIdOne: { count: number; priceId: string };
-  priceIdTwo: { count: number; priceId: string };
+  monthly: number;
+  annual: number;
+  trialing: number;
 }
 
 interface ConversationCount {
@@ -480,8 +482,8 @@ export default function AnalyticsPage() {
   const mrr = revenue?.mrr ?? 0;
   const arr = revenue?.arr ?? 0;
   const totalSubs = subCounts?.totalSubscriptions ?? 0;
-  const monthlySubs = subCounts?.priceIdOne?.count ?? 0;
-  const annualSubs = subCounts?.priceIdTwo?.count ?? 0;
+  const monthlySubs = subCounts?.monthly ?? 0;
+  const annualSubs = subCounts?.annual ?? 0;
   const hasPartialData = !!(revenue?.partial || subCounts?.partial || (mrrTrends as any)?.partial || (subTrends as any)?.partial);
   const totalConversations = convCount?.totalConversations ?? 0;
   const mrrData = mrrTrends?.data ?? [];
@@ -1668,6 +1670,7 @@ export default function AnalyticsPage() {
   // ─────────────────────────────────────────────────────────────────────
 
   const chatRatingsItems = useChatRatingsItems({ token });
+  const responseReliabilityItems = useResponseReliabilityItems({ token });
 
   const cpuMobile = profitability?.summary.avgCostPerUserMobile ?? null;
   const cpuDesktop = profitability?.summary.avgCostPerUserDesktop ?? null;
@@ -2208,6 +2211,7 @@ export default function AnalyticsPage() {
   // can drag any item anywhere; this is just the default layout.
   const unifiedItems = useMemo<ChartItem[]>(() => {
     return [
+      ...responseReliabilityItems,
       ...topKpiAndNewWidgets,
 
       profitabilityHeader,
@@ -2240,7 +2244,8 @@ export default function AnalyticsPage() {
       ...chatRatingsItems,
     ];
   }, [
-    topKpiAndNewWidgets, profitCharts, revenueCharts, macosKpis, macosGrowthCharts,
+    responseReliabilityItems, topKpiAndNewWidgets, profitCharts, revenueCharts,
+    macosKpis, macosGrowthCharts,
     notificationKpis, notificationCharts, ratingsAndUsageCharts, viralCharts,
     retentionView, retentionCharts, chatRatingsItems,
     // Inline header/control items capture state via closures; React's

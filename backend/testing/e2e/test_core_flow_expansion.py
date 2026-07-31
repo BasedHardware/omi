@@ -221,7 +221,7 @@ def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_heade
     monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)
     monkeypatch.setattr(sync_pipeline, "get_wav_duration", lambda path: 2.0)
     monkeypatch.setattr(sync_pipeline, "process_segment", fake_process_segment)
-    monkeypatch.setattr(sync_pipeline, "_reprocess_merged_conversations", lambda uid, response: None)
+    monkeypatch.setattr(sync_pipeline, "_reprocess_merged_conversations", lambda uid, response, on_fenced=None: None)
     monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
     monkeypatch.setattr(sync_router, "get_hard_restriction_status", lambda uid: (False, None))
     monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)

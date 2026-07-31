@@ -10,14 +10,15 @@ no fake transcripts, no manual uploads.
 - [ ] Physical Ray-Ban Meta glasses, charged, paired in the Meta AI app,
       **Developer Mode enabled** (Meta AI app → Settings → App Info → tap the
       version 5×), glasses software v20.0+.
-- [ ] SwiftProtobuf collision resolved (see
-      `rayban-meta-troubleshooting.md` → "App crashes at launch"). The DAT SDK
-      cannot ship in the same binary as `mcumgr_flutter` until then.
+- [ ] Build through `app/scripts/rayban_dat.sh`; its dedicated target links DAT
+      without the `mcumgr_flutter`/SwiftProtobuf pod graph.
 - [ ] Omi built in **full** mode (`getAvailabilityMode() == 'full'`): DAT SPM
-      package linked (already committed) + glasses Developer Mode on. No Meta
-      Developer Center credentials are needed for Developer-Mode testing.
-- [ ] Fresh install of this branch's Omi app (dev flavor), signed into an
+      package 0.8.0 linked only to `RunnerRayBanDat` + glasses Developer Mode
+      on. No Meta Developer Center credentials are needed for local testing.
+- [ ] Fresh install of this branch's Omi app (`raybanDat` flavor), signed into an
       account.
+- [ ] Local backend is reachable from the iPhone over the Mac's LAN URL and its
+      log is visible for transcript/photo evidence.
 
 ## Signing / build environment (read first — this is what blocks on-device runs)
 
@@ -28,18 +29,24 @@ Sign-in-with-Apple entitlement loss, and Watch-app/widget bundle-prefix
 signing errors. Instead:
 
 - [ ] Sign with the **Based Hardware Apple team** (`9536L8KLMP`, the committed
-      default). Your Apple ID must have the **Developer** role on that team in
-      App Store Connect — *Customer Support* cannot issue certificates or
-      provisioning profiles (Xcode fails with "No profiles for
-      'com.friend-app-with-wearable.ios12.development' were found"). Have a team
-      admin bump the role once.
+      default). The team's Apple Developer Program membership must be active,
+      and your Apple ID must have the **Developer** role plus Certificates,
+      Identifiers & Profiles access — *Customer Support* cannot issue profiles.
+      Have the Account Holder renew the membership or an Admin grant access
+      when Apple reports "Access Unavailable".
+- [ ] The development profile for
+      `com.friend-app-with-wearable.ios12.development` contains the test
+      iPhone's UDID. `fastlane match development --readonly` only downloads the
+      existing profile; it cannot register a new device or regenerate it.
 - [ ] Keep the original bundle id (`com.friend-app-with-wearable.ios12.development`)
       so the committed `based-hardware-dev` Firebase config and
       `USE_AUTH_CUSTOM_TOKEN`/`USE_WEB_AUTH` flow match (custom-token auth; a
       natively-minted Firebase token is rejected by `api.omiapi.com` with 401).
-- [ ] Build and install via `flutter run --flavor dev` (or Xcode) — never
-      hand-install a stale `build/ios/iphoneos/Runner.app`; `flutter run`
-      produces the current binary.
+- [ ] Build and install via
+      `FLUTTER_BIN=/path/to/flutter-3.41.9/bin/flutter app/scripts/rayban_dat.sh run -d <device-id>`.
+      Never hand-install a stale `build/ios/iphoneos/Runner.app`.
+- [ ] Before pairing, inspect the launch log: no duplicate SwiftProtobuf class
+      warning, `SIGSEGV`, `EXC_BAD_ACCESS`, or `swift_getObjectType` crash.
 
 ## Acceptance checklist
 
@@ -95,6 +102,11 @@ Verified automatically in this repo (no glasses needed):
 
 - Dart device layer: serialization, locator, photo-event framing, discoverer
   matching — `app/test/unit/rayban_meta_device_test.dart`.
+- DAT build boundary: generated-plugin removal/restoration, dedicated target,
+  exact Meta package pin, signing identity, and default mcumgr preservation —
+  `app/ios/test/rayban_dat_*_test.rb`.
+- DAT firmware policy: Omi pendant DFU disabled while OpenGlass OTA remains —
+  `app/test/unit/firmware_*_test.dart`.
 - Backend source handling + photo provenance —
   `backend/tests/unit/test_rayban_meta_source.py`.
 - Full app compiles and existing suites pass; iOS dev-flavor build succeeds in
@@ -107,10 +119,7 @@ claimable from CI):
 - Real HFP mic capture quality and route stability.
 - End-to-end transcript/memory quality from glasses audio.
 
-Requires physical hardware + Meta Wearables Developer Center SDK access (NOT
-claimable from CI):
+Requires physical hardware + the DAT build (NOT claimable from CI):
 
 - DAT camera stream, photo capture, LED behavior.
-- First compile of the `#if canImport(MWDATCore)` code path against the real
-  SDK (written against the DAT 0.8 reference; symbol drift is possible and
-  fixes are contained to `RayBanMetaHostApiImpl.swift`).
+- Runtime launch without the SwiftProtobuf duplicate-class crash.

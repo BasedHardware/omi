@@ -40,6 +40,64 @@ def test_forwards_prompt_cache_key():
     assert validated.forwarded_params['prompt_cache_key'] == 'omi-extract-actions'
 
 
+def test_forwards_explicit_gpt56_cache_contract_on_a_text_content_block():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request(
+        prompt_cache_key='omi-extract-actions-v1-b0',
+        prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'explicit'},
+                    }
+                ],
+            },
+            {'role': 'user', 'content': 'Dynamic content.'},
+        ],
+    )
+
+    validated = validate_chat_completion_request(request, lane)
+
+    assert validated.messages == tuple(request['messages'])
+    assert validated.forwarded_params['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+
+
+@pytest.mark.parametrize(
+    'prompt_cache_options',
+    [None, {}, {'mode': 'implicit', 'ttl': '30m'}, {'mode': 'explicit'}, {'mode': 'explicit', 'ttl': '24h'}],
+)
+def test_rejects_invalid_gpt56_cache_options(prompt_cache_options):
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    with pytest.raises(GatewayInvalidRequestError, match='prompt_cache_options'):
+        validate_chat_completion_request(valid_request(prompt_cache_options=prompt_cache_options), lane)
+
+
+def test_rejects_invalid_cache_breakpoint_shape():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request(
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'implicit'},
+                    }
+                ],
+            }
+        ]
+    )
+
+    with pytest.raises(GatewayInvalidRequestError, match='prompt_cache_breakpoint'):
+        validate_chat_completion_request(request, lane)
+
+
 def test_accepts_matching_output_limit_aliases():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
 

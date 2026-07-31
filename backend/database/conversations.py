@@ -18,7 +18,8 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
-from ._client import db, get_firestore_client
+from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -378,9 +379,20 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             # Processing owns generated content, while these fields are explicitly
             # user-owned. The transaction retries if a concurrent mutation lands,
             # so an older in-memory Conversation cannot clobber that edit.
+            # A null existing value means "never user-set" (stub docs dump None
+            # fields), so only non-null values are preserved — otherwise the
+            # stub's folder_id: None would revert every AI folder assignment.
             for field in ('starred', 'folder_id', 'visibility', 'user_title'):
-                if field in existing:
+                if existing.get(field) is not None:
                     write_data[field] = existing[field]
+
+            # folder_id is user-owned even when explicitly cleared: the folder
+            # move endpoints stamp folder_user_set, so "no folder" chosen by the
+            # user (folder_id None + marker) must survive processing output.
+            # Only a stub's never-user-touched None may be overwritten by the
+            # AI folder assignment above.
+            if existing.get('folder_user_set'):
+                write_data['folder_id'] = existing.get('folder_id')
 
             user_title = existing.get('user_title')
             if isinstance(user_title, str):
@@ -407,14 +419,15 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 def persist_processing_result_with_lifecycle(
     uid: str,
     conversation_data: dict,
-    *,
-    expected_statuses: set[str],
 ) -> bool:
-    """Persist a processor result only while its lifecycle generation remains current.
+    """Merge a processor result into its conversation.
 
-    A processor works from an in-memory snapshot.  This transaction fences that
-    snapshot against a concurrent discard, delete, or terminal transition before
-    merging generated content back into the conversation document.
+    Only deletion is refused.  Lifecycle state is not: a discard is the system's
+    own verdict that a conversation held nothing, and a status is bookkeeping
+    about which generation ran, and every processor re-derives what it writes
+    from the content in front of it.  Fencing on either stranded conversations a
+    later sync had filled with speech — transcribed, untitled, and invisible to
+    their owner — to prevent races that had never been observed.
     """
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
@@ -432,18 +445,28 @@ def persist_processing_result_with_lifecycle(
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
-            # Treat deletion as the same terminal fence as a discard so a
-            # finalizer cannot resurrect it and emit derived side effects.
+            # Deleting one is a decision its owner made, and a merge write to a
+            # missing document would create it, so a late processor could bring
+            # back what they removed and emit derived side effects from it.
             return False
 
         existing = existing_snapshot.to_dict() or {}
-        if existing.get('discarded') or existing.get('status') not in expected_statuses:
-            return False
 
         # Generated processing content never owns user-managed fields.
+        # A null existing value means "never user-set" (stub docs dump None
+        # fields), so only non-null values are preserved — otherwise the
+        # stub's folder_id: None would revert every AI folder assignment.
         for field in ('starred', 'folder_id', 'visibility', 'user_title'):
-            if field in existing:
+            if existing.get(field) is not None:
                 write_data[field] = existing[field]
+
+        # folder_id is user-owned even when explicitly cleared: the folder
+        # move endpoints stamp folder_user_set, so "no folder" chosen by the
+        # user (folder_id None + marker) must survive processing output.
+        # Only a stub's never-user-touched None may be overwritten by the
+        # AI folder assignment above.
+        if existing.get('folder_user_set'):
+            write_data['folder_id'] = existing.get('folder_id')
 
         user_title = existing.get('user_title')
         if isinstance(user_title, str):
@@ -712,6 +735,36 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_ref.update(prepared_data)
 
 
+def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, firestore_client: Any = None) -> bool:
+    """Atomically claim the one analytics success slot for a conversation.
+
+    The marker lives in Firestore under the authoritative conversation document,
+    rather than in a best-effort cache. ``create`` is atomic: the caller that
+    creates the marker is the only caller allowed to capture the optional
+    analytics event; an existing marker means a retry/re-finalization must not
+    emit again. It deliberately has no TTL, so Redis loss, cache eviction, and
+    arbitrary retry windows cannot re-open the slot.
+
+    Callers must treat storage errors as *not acquired*. This is telemetry-only:
+    failing closed avoids a possible duplicate and must never interrupt the
+    underlying conversation extraction.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    marker_ref = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .collection('analytics_markers')
+        .document('conversation_memories_extracted')
+    )
+    try:
+        marker_ref.create({'created_at': firestore.SERVER_TIMESTAMP})
+        return True
+    except AlreadyExists:
+        return False
+
+
 def create_audio_files_from_chunks(
     uid: str,
     conversation_id: str,
@@ -949,18 +1002,18 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
 
 
 def delete_conversation(uid, conversation_id):
-    """
-    Delete a conversation and its photos subcollection.
+    """Delete a conversation and every subcollection underneath it.
 
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
+    Firestore does not cascade, and a conversation owns more than ``photos``: the per-provider
+    post-processing transcripts (verbatim segment text), the Hume emotion predictions, and the
+    analytics marker. Purging only photos left those behind as data no query can reach — not even
+    the account-deletion wipe, which walks *existing* documents and never sees a deleted parent.
+    Children are enumerated live, so a subcollection added later is purged too.
     """
-    # Delete photos subcollection first
-    delete_conversation_photos(uid, conversation_id)
-
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    for sub in conversation_ref.collections():
+        delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
 
 
@@ -1139,6 +1192,46 @@ def get_processing_conversations(uid: str):
     # back to pusher for background processing — that would defeat the freemium cost saving.
     conversations = [c for c in conversations if not c.get('deferred')]
     return conversations
+
+
+def select_stale_in_progress(conversations, cutoff: datetime, limit: int):
+    """Oldest-first bounded selection of orphaned in-progress conversations (#9809).
+
+    A conversation owned by any live session refreshes `finished_at` on every
+    segment and that session's lifecycle loop processes it within the
+    conversation timeout, so anything idle past the cutoff has no owner.
+    Missing or non-datetime `finished_at` is excluded: without a trustworthy
+    idle clock the row cannot be proven orphaned.
+    """
+    stale = []
+    for conversation in conversations:
+        finished_at = conversation.get('finished_at')
+        if isinstance(finished_at, datetime) and finished_at < cutoff:
+            stale.append(conversation)
+    stale.sort(key=lambda conversation: conversation['finished_at'])
+    return stale[:limit]
+
+
+def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, limit: int = 10, firestore_client=None):
+    """In-progress conversations whose last activity predates the cutoff (#9809).
+
+    The composite index orders by the last activity clock, so the bounded read
+    always reaches the oldest candidates. Without that ordering, an arbitrary
+    first page could keep old orphaned rows beyond it invisible forever.
+    """
+    client = firestore_client or get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    conversations_ref = (
+        STALE_IN_PROGRESS_CONVERSATIONS_QUERY.build(
+            user_ref.collection(conversations_collection),
+            {'status': ConversationStatus.in_progress.value},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('finished_at', direction=firestore.Query.ASCENDING)
+        .limit(limit)
+    )
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+    return select_stale_in_progress((doc.to_dict() for doc in conversations_ref.stream()), cutoff, limit)
 
 
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
@@ -1335,7 +1428,6 @@ def update_conversation_segments(
 ):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    transaction = client.transaction()
 
     @firestore.transactional
     def _write_segments(transaction) -> bool:
@@ -1358,7 +1450,7 @@ def update_conversation_segments(
         transaction.update(doc_ref, prepared_payload)
         return True
 
-    return _write_segments(transaction)
+    return run_transactional(client, _write_segments)
 
 
 # ***********************************
@@ -1524,6 +1616,49 @@ def store_conversation_photos(
 # ********************************
 
 
+def is_soft_deleted(conversation: Optional[dict]) -> bool:
+    """Whether a conversation is a soft-deleted tombstone.
+
+    A tombstone is invisible to the user, so any content operation that reads it
+    and writes derived state — merging its segments, or reprocessing to
+    regenerate structured data, action items, memories and embeddings —
+    resurrects data the user deleted. Such operations must reject a tombstone.
+
+    Shared predicate behind that contract (sync #10119 via `eligible_merge_target`,
+    merge #10262, reprocess). Deliberately distinct from `discarded`, which stays
+    revivable: the merge and reprocess paths intentionally revive a discarded row.
+    """
+    return bool(conversation) and bool(conversation.get('deleted'))
+
+
+def eligible_merge_target(conversation: Optional[dict]) -> bool:
+    """Whether synced audio may merge into this conversation (#10033).
+
+    A soft-deleted tombstone must never absorb new segments: the user cannot
+    see it, so merged audio disappears — recordings that "never create a
+    conversation". Discarded rows stay eligible; the merge path reprocesses
+    and revives them.
+    """
+    return bool(conversation) and not is_soft_deleted(conversation)
+
+
+def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
+    """Pure closest-by-boundary choice among eligible merge targets (#10033)."""
+    closest_conversation = None
+    min_diff = float('inf')
+    for conversation in conversations:
+        if not eligible_merge_target(conversation):
+            continue
+        conversation_start_timestamp = conversation['started_at'].timestamp()
+        conversation_end_timestamp = conversation['finished_at'].timestamp()
+        diff1 = abs(conversation_start_timestamp - start_timestamp)
+        diff2 = abs(conversation_end_timestamp - end_timestamp)
+        if diff1 < min_diff or diff2 < min_diff:
+            min_diff = min(diff1, diff2)
+            closest_conversation = conversation
+    return closest_conversation
+
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
@@ -1548,17 +1683,10 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     for conversation in conversations:
         logger.info(f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}")
 
-    # get the conversation that has the closest start timestamp or end timestamp
-    closest_conversation = None
-    min_diff = float('inf')
-    for conversation in conversations:
-        conversation_start_timestamp = conversation['started_at'].timestamp()
-        conversation_end_timestamp = conversation['finished_at'].timestamp()
-        diff1 = abs(conversation_start_timestamp - start_timestamp)
-        diff2 = abs(conversation_end_timestamp - end_timestamp)
-        if diff1 < min_diff or diff2 < min_diff:
-            min_diff = min(diff1, diff2)
-            closest_conversation = conversation
+    closest_conversation = select_closest_conversation(conversations, start_timestamp, end_timestamp)
+    if closest_conversation is None:
+        logger.info('get_closest_conversation_to_timestamps: no eligible merge target (deleted rows excluded)')
+        return None
 
     logger.info(f"get_closest_conversation_to_timestamps closest_conversation: {closest_conversation['id']}")
     return closest_conversation

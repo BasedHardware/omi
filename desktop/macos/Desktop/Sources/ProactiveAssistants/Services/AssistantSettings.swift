@@ -485,6 +485,9 @@ class AssistantSettings {
 
 extension Notification.Name {
   static let assistantSettingsDidChange = Notification.Name("assistantSettingsDidChange")
+  /// Posted after server-authoritative assistant settings have been applied.
+  /// Runtime services use this to restore or stop work from the persisted intent.
+  static let assistantSettingsDidSyncFromServer = Notification.Name("assistantSettingsDidSyncFromServer")
   static let assistantMonitoringStateDidChange = Notification.Name("assistantMonitoringStateDidChange")
   static let assistantMonitoringToggleRequested = Notification.Name("assistantMonitoringToggleRequested")
   static let transcriptionSettingsDidChange = Notification.Name("transcriptionSettingsDidChange")

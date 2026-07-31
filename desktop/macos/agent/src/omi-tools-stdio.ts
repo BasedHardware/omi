@@ -11,7 +11,7 @@ import { createInterface } from "readline";
 import { createConnection } from "net";
 import { readFileSync, writeFileSync } from "fs";
 import { isAgentControlToolName } from "./runtime/control-tools.js";
-import { loadSkillInstructions } from "./runtime/node-tools.js";
+import { loadSkillInstructions, searchSkills } from "./runtime/node-tools.js";
 import {
   buildToolAvailabilitySnapshot,
   mcpToolDefinitionsForAdapter,
@@ -318,6 +318,22 @@ async function handleJsonRpc(
       } else if (toolName === "load_skill") {
         const name = (args.name as string || "").trim();
         const content = await loadSkillInstructions(name);
+
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: {
+              content: [{
+                type: "text",
+                text: content,
+              }],
+            },
+          });
+        }
+      } else if (toolName === "search_skills") {
+        const query = (args.query as string || "").trim();
+        const content = await searchSkills(query);
 
         if (!isNotification) {
           send({

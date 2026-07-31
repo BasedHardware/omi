@@ -1475,7 +1475,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get payYourSttProvider => 'Folosește Omi liber. Plătești doar furnizorul STT direct.';
 
   @override
-  String get freeMinutesMonth => '1.200 de minute gratuite/lună incluse. Nelimitat cu ';
+  String get freeMinutesMonth => '300 de minute gratuite/lună incluse. Nelimitat cu ';
 
   @override
   String get omiUnlimited => 'Omi Nelimitat';
@@ -1798,20 +1798,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Vă place Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Ajută-ne să ajungem la mai mulți oameni lăsând o recenzie în App Store. Feedback-ul tău înseamnă enorm pentru noi!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Ajutați-ne să ajungem la mai multe persoane lăsând o recenzie în Google Play Store. Feedback-ul dvs. înseamnă enorm pentru noi!';
-
-  @override
-  String get rateOnAppStore => 'Evaluează în App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Evaluează pe Google Play';
 
   @override
   String get maybeLater => 'Poate mai târziu';
@@ -2149,6 +2135,18 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Editează amintirea';
+
+  @override
+  String get pinAsBaseline => 'Pin as Baseline';
+
+  @override
+  String get unpinAsBaseline => 'Unpin from Baseline';
+
+  @override
+  String get baselineMemory => 'Baseline Memory';
+
+  @override
+  String get alwaysInContext => 'Always in context';
 
   @override
   String get memoryContentHint => 'Îmi place să mănânc înghețată...';
@@ -4732,7 +4730,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Niciun acces specific la date configurat.';
 
   @override
-  String get basicPlanDescription => '1.200 minute premium + nelimitat pe dispozitiv';
+  String get basicPlanDescription => '300 minute premium + nelimitat pe dispozitiv';
 
   @override
   String get minutes => 'minute';
@@ -6027,8 +6025,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get cloudProvider => 'Furnizor cloud';
 
   @override
-  String get premiumMinutesInfo =>
-      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
+  String get premiumMinutesInfo => '300 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
 
   @override
   String get viewUsage => 'Vizualizați utilizarea';
@@ -6111,7 +6108,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
+      '300 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9653,10 +9650,10 @@ class AppLocalizationsRo extends AppLocalizations {
       'Datele tale sunt securizate în mod implicit cu criptare puternică, iar tu controlezi modul în care sunt stocate și utilizate.';
 
   @override
-  String get sttModelAccuracy => 'Accuracy';
+  String get sttModelAccuracy => 'Acuratețe';
 
   @override
-  String get whisperModelSizeBase => 'Base';
+  String get whisperModelSizeBase => 'De bază';
 
   @override
   String get cloudTranscription => 'Transcriere în cloud';
@@ -9665,52 +9662,52 @@ class AppLocalizationsRo extends AppLocalizations {
   String get sttProviderDeepgram => 'Deepgram';
 
   @override
-  String get deleteOnDeviceModel => 'Delete Model';
+  String get deleteOnDeviceModel => 'Șterge modelul';
 
   @override
-  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+  String get deleteOnDeviceModelConfirm => 'Sigur doriți să ștergeți acest model?';
 
   @override
-  String get onDeviceModelDownloaded => 'Downloaded';
+  String get onDeviceModelDownloaded => 'Descărcat';
 
   @override
-  String get sttModelFaster => 'Faster';
+  String get sttModelFaster => 'Mai rapid';
 
   @override
-  String get sttFilterAuto => 'Auto';
+  String get sttFilterAuto => 'Automat';
 
   @override
-  String get sttModelHigher => 'Higher';
+  String get sttModelHigher => 'Mai mare';
 
   @override
-  String get whisperModelSizeLarge => 'Large';
+  String get whisperModelSizeLarge => 'Mare';
 
   @override
-  String get sttModelLower => 'Lower';
+  String get sttModelLower => 'Mai mică';
 
   @override
-  String get whisperModelSizeMedium => 'Medium';
+  String get whisperModelSizeMedium => 'Mediu';
 
   @override
-  String get onDeviceModelDeleted => 'Model deleted';
+  String get onDeviceModelDeleted => 'Model șters';
 
   @override
-  String get onDeviceModelDownloadFailed => 'Model download failed';
+  String get onDeviceModelDownloadFailed => 'Descărcarea modelului a eșuat';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+  String get onDeviceModelDownloadFailedDesc => 'Descărcarea modelului Whisper a eșuat. Încercați din nou.';
 
   @override
-  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+  String get onDeviceModelDownloadSuccess => 'Model descărcat';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+  String get onDeviceModelDownloadSuccessDesc => 'Modelul Whisper a fost descărcat cu succes';
 
   @override
-  String get onDeviceModelSize => 'Model Size';
+  String get onDeviceModelSize => 'Dimensiunea modelului';
 
   @override
-  String get sttNone => 'None';
+  String get sttNone => 'Niciunul';
 
   @override
   String get onDeviceTranscription => 'Transcriere pe dispozitiv';
@@ -9719,10 +9716,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceTranscriptionDesc => 'Transcrierea este procesată local pe dispozitivul dvs.';
 
   @override
-  String get sttModelSlower => 'Slower';
+  String get sttModelSlower => 'Mai lent';
 
   @override
-  String get whisperModelSizeSmall => 'Small';
+  String get whisperModelSizeSmall => 'Mic';
 
   @override
   String get sttProviderSoniox => 'Soniox';
@@ -9737,10 +9734,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get sttProviderSpeechmatics => 'Speechmatics';
 
   @override
-  String get sttModelSpeed => 'Speed';
+  String get sttModelSpeed => 'Viteză';
 
   @override
-  String get whisperModelSizeTiny => 'Tiny';
+  String get whisperModelSizeTiny => 'Foarte mic';
 
   @override
   String get transcriptionLanguage => 'Limba transcrierii';
@@ -9755,49 +9752,69 @@ class AppLocalizationsRo extends AppLocalizations {
   String get whisperModelDesc => 'Selectați modelul pentru transcrierea pe dispozitiv';
 
   @override
-  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+  String get downgradeToFreemiumTitle => 'Treceți la planul gratuit?';
 
   @override
-  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+  String get downgradeLimitationsHeading => 'Veți întâmpina aceste limitări:';
 
   @override
-  String get downgradeLimitBattery => '7x battery consumption';
+  String get downgradeLimitBattery => 'Consum de baterie de 7 ori mai mare';
 
   @override
-  String get downgradeLimitQuality => '30% less transcription quality';
+  String get downgradeLimitQuality => 'Calitate a transcrierii cu 30% mai slabă';
 
   @override
-  String get downgradeLimitDelay => '5-7 second delay';
+  String get downgradeLimitDelay => 'Întârziere de 5-7 secunde';
 
   @override
-  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+  String get downgradeLimitSpeakers => 'Vorbitorii nu pot fi identificați';
 
   @override
-  String get downgradeAnyway => 'Downgrade Anyway';
+  String get downgradeAnyway => 'Retrogradează oricum';
 
   @override
-  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+  String get googleCalendarNotConnected => 'Google Calendar neconectat';
 
   @override
-  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+  String get googleCalendarConnectPrompt =>
+      'Conectați-vă Google Calendar pentru a asocia conversațiile cu evenimente din calendar.';
 
   @override
   String linkedToEvent(String title) {
-    return 'Linked to \"$title\"';
+    return 'Asociat cu „$title”';
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+  String get failedToLinkCalendarEvent => 'Asocierea evenimentului din calendar a eșuat';
 
   @override
-  String get thanksForYourFeedback => 'Thanks for your feedback!';
+  String get thanksForYourFeedback => 'Mulțumim pentru feedback!';
 
   @override
-  String get copyMessage => 'Copy message';
+  String get copyMessage => 'Copiază mesajul';
 
   @override
-  String get searchSettings => 'Search settings…';
+  String get searchSettings => 'Caută în setări…';
 
   @override
-  String get errorLoadingAudio => 'Error loading audio';
+  String get errorLoadingAudio => 'Eroare la încărcarea audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Alege microfonul Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Selectează microfonul Bluetooth al ochelarilor. Muzica este întreruptă cât timp Omi îl folosește.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nu s-au găsit microfoane Bluetooth. Conectează ochelarii în Configurările iPhone și încearcă din nou.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Microfoanele Bluetooth nu au putut fi încărcate. Verifică dacă Bluetooth este activat și încearcă din nou.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Nu s-a putut conecta la acel microfon. Asigură-te că este conectat în Configurările iPhone.';
 }

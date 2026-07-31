@@ -1,6 +1,6 @@
 """TTS proxy route — proxies ElevenLabs text-to-speech server-side.
 
-Mirrors `desktop/macos/Backend-Rust/src/routes/tts.rs` so mobile clients can play
+Provides the mobile TTS contract so mobile clients can play
 Omi's spoken responses in background / lock-screen scenarios without shipping
 an ElevenLabs API key to the client.
 
@@ -34,7 +34,6 @@ router = APIRouter()
 # concrete callable type instead of `Unknown`.
 _auth_module = cast(Any, auth)
 
-# Limits mirror desktop/macos/Backend-Rust/src/routes/tts.rs
 _TTS_BURST_PER_MINUTE = 50
 _TTS_DAILY_CHAR_LIMIT = 10_000
 _TTS_BURST_WINDOW_SECS = 60

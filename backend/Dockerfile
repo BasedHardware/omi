@@ -62,7 +62,19 @@ RUN ldconfig && \
     rm -rf /tmp/wheels
 
 COPY --from=builder /opt/venv /opt/venv
+COPY .github/scripts/desktop_release_manifest.py /app/desktop_release_manifest_contract.py
+COPY .github/scripts/desktop_qualification_admission.py /app/desktop_qualification_admission_contract.py
+COPY .github/scripts/desktop_qualification_evidence.py /app/desktop_qualification_evidence_contract.py
 COPY backend/ .
+
+# Run as a non-root user: a compromise of the app process (e.g. via a
+# dependency RCE) shouldn't hand the attacker root inside the container by
+# default. /app needs to stay writable — sync.py writes uploaded audio to a
+# relative `syncing/<uid>/` directory under the working dir at runtime.
+RUN groupadd --system --gid 10001 omi && \
+    useradd --system --uid 10001 --gid omi --no-create-home omi && \
+    chown -R omi:omi /app
+USER omi
 
 EXPOSE 8080
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"]

@@ -59,7 +59,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 
 ## Safety Rules
 
-- Never kill, stop, or restart the production macOS apps (`/Applications/Omi.app` / `Omi Beta.app`, bundle id `com.omi.computer-macos`). Dev commands target only dev or `omi-*` named test bundles.
+- Never kill, stop, or restart the production macOS apps (`/Applications/Omi.app` / `Omi Beta.app`, bundle ids `com.omi.computer-macos` and `com.omi.computer-macos.beta`). Dev commands target only dev or `omi-*` named test bundles.
 - **Nothing lands on `main` until the user explicitly says so.** Land through PRs only (regular merge, never squash); never push directly to `main`; never push or open PRs unless explicitly asked — commit locally on a feature branch by default. A prior approval never carries over to later changes.
 - **Exception — reverts merge right away.** A user request to revert a merged PR/commit is itself the approval to open and merge the revert PR.
 - **Exception — verified + peer-approved changes may auto-merge.** If you actually exercised the real user-facing path **and** an independent agent review approved it, you may open and merge without a separate go-ahead — except for risky, wide-blast-radius, or hard-to-reverse changes (migrations, release/CI pipeline, schema, access control, data deletion), which always need explicit user sign-off.
@@ -72,6 +72,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 - Always work in a git worktree for code changes (`git worktree add`); commit to the current branch and never switch branches mid-task.
 - Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
 - If push fails (remote ahead): `git pull --rebase && git push`.
+- **PR size is reported, not bounded** (`pr-scope` manifest check — advisory annotations, never blocks): 1,500+ changed production-source lines warns; 3,000+ cites the audited history of missed regressions. Split only when the pieces are independently verifiable; otherwise give the one PR proportional review depth.
 - **RELEASE command:** branch from `main`, individual commits, push, open PR, merge without squash, switch back to `main` and pull. **RELEASEWITHBACKEND:** RELEASE + `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## Issues
@@ -102,7 +103,6 @@ The pre-commit hook (installed by `make setup`) auto-formats staged files. Verif
 | Python (`backend/`) | `black --line-length 120 --skip-string-normalization <files>` |
 | ARB (`app/lib/l10n/`) | `jq --indent 4 '.' <file> > tmp && mv tmp <file>` |
 | C/C++ (firmware) | `clang-format -i <files>` |
-| Rust (`desktop/macos/Backend-Rust/`) | `rustfmt --edition 2021 <files>` |
 | Swift (`desktop/macos/Desktop/`) | `desktop/macos/scripts/swift-format-wrapper.sh format -i <files>` |
 | Web (`web/`) | `npx prettier --write <files>` |
 
@@ -117,6 +117,9 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 - **Coverage grows by ratchet, not mandate:** every bug fix adds the regression test that would have caught it; new features test the core path and main error path — no more. A small test that stays meaningful in a year beats ten brittle ones.
 - **Push gate budget:** `scripts/pre-push` is a bounded local acceptance gate, intentionally smaller than CI: cap broad backend selection at 40 files and use only the desktop debug compile. Do not add full suites, release compiles, or CI-only toolchain pins to it — push-time bloat breaks normal iteration. Use focused feedback while editing; CI remains the full test authority.
 - **CI tests must be hermetic** (no live services, network, sleeps, or ordering dependence) — and hermetic tests must run in CI: put them where the component's runner discovers them. A test needing a live service stays out of CI; note in the PR how you ran it.
+- Backend enforces test discovery mechanically: manifest check `backend-test-discovery` fails on any test file no verified runner discovers.
+- **New fail-closed gates ship with a legacy-principal test** — an existing/unmigrated principal (no state doc, old API key, already-shipped client) asserting the intended fallback; gates without one have shipped day-one breakage.
+- **A test rewritten in the same PR as the code it asserts is suspect** — the PR body must cite an external source (platform doc, wire contract, measurement) for the new expected value, or the rewrite deletes the guard.
 - Delete or fix a flaky/obsolete test you encounter — a suite people distrust is worse than a smaller suite.
 - Component runners and prerequisites: see the component guides (`backend/AGENTS.md` → Testing, `app/AGENTS.md` → Test Strategy). High-risk backend workflows must be listed in `backend/testing/workflow_contracts.json` with contract tests.
 
@@ -131,8 +134,6 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 | Blocked on | Hatch |
 |---|---|
 | Desktop candidate won't cut (`Desktop Swift Build & Tests` red/flaky) | `desktop_auto_release.yml` with `release_mode=break_glass` |
-| Beta qualification broken | `desktop_emergency_promote_beta.yml` (`confirm=emergency-promote-beta`) |
-| Stable promotion blocked | `desktop_promote_prod.yml` with `break_glass_confirm` |
 | Backend deploy has no Release Eligibility proof | `gcp_backend.yml` with `skip_eligibility_proof=true`, `break_glass_confirm=deploy-without-proof`, `break_glass_reason` |
 
 Hatches relax *evidence* requirements only. They never relax that code is merged to `main` first, and never reach stable/prod pointers without their own explicit confirm.

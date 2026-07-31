@@ -13,7 +13,9 @@ set -euo pipefail
 PORT="${OMI_AUTOMATION_PORT:-47777}"
 BASE="http://127.0.0.1:${PORT}"
 TOKEN="${OMI_AUTOMATION_TOKEN:-}"
-TOKEN_FILE="${OMI_AUTOMATION_TOKEN_FILE:-${TMPDIR:-/tmp}/omi-automation-${PORT}.token}"
+# shellcheck source=automation-token-path.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/automation-token-path.sh"
+TOKEN_FILE="$(omi_automation_token_file "$PORT")"
 
 load_token() {
   if [ -z "$TOKEN" ] && [ -f "$TOKEN_FILE" ]; then

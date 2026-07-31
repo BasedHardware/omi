@@ -49,7 +49,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
+              const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
               const SizedBox(width: 6),
               Text(
                 context.l10n.createKey,

@@ -52,6 +52,58 @@ enum OnboardingLayoutMode {
   case centered
 }
 
+/// Keeps the onboarding chrome visible while allowing a step's content to
+/// scroll only when a compact window cannot contain it. The minimum-height
+/// frame preserves the existing centered composition at ordinary sizes.
+struct OnboardingCenteredContentRegion<Content: View>: View {
+  let content: Content
+
+  init(@ViewBuilder content: () -> Content) {
+    self.content = content()
+  }
+
+  var body: some View {
+    GeometryReader { geometry in
+      ScrollView(showsIndicators: false) {
+        content
+          .frame(maxWidth: .infinity)
+          .frame(minHeight: geometry.size.height, alignment: .center)
+          .padding(.horizontal, OmiSpacing.page)
+          .padding(.vertical, OmiSpacing.section)
+      }
+      .scrollBounceBehavior(.basedOnSize)
+    }
+  }
+}
+
+/// Splits an onboarding step into scrollable content and persistent navigation
+/// actions. Keeping the footer outside the scroll view ensures users can
+/// always go back or continue, even while a compact-height window scrolls the
+/// larger instructional content.
+struct OnboardingContentWithPinnedActions<Content: View, Actions: View>: View {
+  let content: Content
+  let actions: Actions
+
+  init(
+    @ViewBuilder content: () -> Content,
+    @ViewBuilder actions: () -> Actions
+  ) {
+    self.content = content()
+    self.actions = actions()
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      OnboardingCenteredContentRegion { content }
+        .frame(maxHeight: .infinity)
+
+      actions
+        .padding(.horizontal, OmiSpacing.page)
+        .padding(.bottom, OmiSpacing.section)
+    }
+  }
+}
+
 struct OnboardingStepScaffold<Content: View>: View {
   @ObservedObject private var graphViewModel: MemoryGraphViewModel
   @Environment(\.onboardingJumpTo) private var onboardingJumpTo
@@ -165,13 +217,17 @@ struct OnboardingStepScaffold<Content: View>: View {
         Divider()
           .background(OmiColors.backgroundTertiary)
 
+        progressRow
+
         GeometryReader { geometry in
           ScrollView(showsIndicators: false) {
             VStack(spacing: OmiSpacing.xxl) {
-              progressRow(centered: true)
               titleBlock(centered: true)
               content
             }
+            // Optical centering: phantom bottom padding lifts the block a bit
+            // above true vertical center.
+            .padding(.bottom, 96)
             .frame(maxWidth: 560)
             .frame(
               minWidth: 0, maxWidth: .infinity, minHeight: geometry.size.height,
@@ -197,9 +253,10 @@ struct OnboardingStepScaffold<Content: View>: View {
       Divider()
         .background(OmiColors.backgroundTertiary)
 
+      progressRow
+
       ScrollView(showsIndicators: false) {
         VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
-          progressRow(centered: false)
           titleBlock(centered: false)
           content
         }
@@ -233,9 +290,12 @@ struct OnboardingStepScaffold<Content: View>: View {
     .padding(.vertical, OmiSpacing.lg)
   }
 
-  private func progressRow(centered: Bool) -> some View {
+  /// Fixed top strip under the header divider, matching the custom full-width
+  /// steps (shortcut/demo views) that place the bar themselves.
+  private var progressRow: some View {
     OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
-      .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+      .frame(maxWidth: .infinity, alignment: .center)
+      .padding(.top, OmiSpacing.xl)
   }
 
   private func titleBlock(centered: Bool) -> some View {

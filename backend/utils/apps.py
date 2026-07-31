@@ -395,6 +395,17 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     return apps
 
 
+def get_available_app_model_by_id(app_id: str, uid: str | None) -> Optional[App]:
+    """`get_available_app_by_id` as a validated App model.
+
+    This is the same availability authority the set-preferred-app route uses
+    (routers/users.py), for readers that must honor what that route admitted
+    rather than re-deciding availability with a different check (#10074).
+    """
+    raw_app = get_available_app_by_id(app_id, uid)
+    return _safe_build_app(dict(raw_app)) if raw_app else None
+
+
 def get_available_app_by_id(app_id: str, uid: str | None) -> Dict[str, Any] | None:
     cached_app = get_app_cache_by_id(app_id)
     if cached_app:
@@ -673,7 +684,7 @@ def upsert_app_payment_link(
             app.payment_product_id = payment_product.id
 
         # price
-        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, int(price * 100))
+        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, int(round(price * 100)))
         app.payment_price_id = payment_price.id
 
         # payment link

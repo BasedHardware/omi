@@ -83,6 +83,44 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertFalse(snapshots.last?.isLoading ?? true)
   }
 
+  func testLoadMoreAppendsTheNextServerPageWithoutReplacingTheVisibleList() async {
+    let firstPage = (0..<50).map { index in
+      makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
+    }
+    let second = makeConversation(id: "second", title: "Older", revision: 1)
+    let remote = FakeConversationRemote(listResult: .success(firstPage), countResult: .success(51))
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+
+    await repository.load(query: .all, includeCache: false)
+    remote.listResult = .success([second])
+    await repository.loadMore()
+
+    XCTAssertEqual(repository.conversations.map(\.id), firstPage.map(\.id) + ["second"])
+    XCTAssertEqual(remote.listRequests.map(\.offset), [0, 50])
+    XCTAssertEqual(remote.listRequests.map(\.limit), [50, 50])
+  }
+
+  func testLoadMoreRemainsAvailableWhenServerCountFailsOverCachedCount() async {
+    let firstPage = (0..<50).map { index in
+      makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
+    }
+    let second = makeConversation(id: "second", title: "Older", revision: 1)
+    let remote = FakeConversationRemote(listResult: .success(firstPage), countResult: .failure(TestFailure.offline))
+    let repository = ConversationRepository(
+      remote: remote,
+      local: FakeConversationLocal(listResult: firstPage, count: 50)
+    )
+
+    await repository.load(query: .all)
+    XCTAssertTrue(repository.hasMore)
+
+    remote.listResult = .success([second])
+    await repository.loadMore()
+
+    XCTAssertEqual(repository.conversations.map(\.id), firstPage.map(\.id) + ["second"])
+    XCTAssertEqual(remote.listRequests.map(\.offset), [0, 50])
+  }
+
   func testDetailPaintsCachedTranscriptThenRevalidatesServerOwnedFields() async throws {
     let seed = makeConversation(title: "List title", overview: "List summary", revision: 1)
     let cachedDetail = makeConversation(
@@ -858,6 +896,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
   var titleHandler: ((String) async throws -> ServerConversation)?
   var deleteHandler: ((String) async throws -> Void)?
   var deletedIds: [String] = []
+  var listRequests: [(offset: Int, limit: Int)] = []
 
   init(
     listResult: Result<[ServerConversation], Error> = .success([]),
@@ -879,7 +918,8 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
     self.deleteResult = deleteResult
   }
 
-  func list(query: ConversationListQuery) async throws -> [ServerConversation] {
+  func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation] {
+    listRequests.append((offset: offset, limit: limit))
     if let listHandler { return try await listHandler(query) }
     return try listResult.get()
   }
