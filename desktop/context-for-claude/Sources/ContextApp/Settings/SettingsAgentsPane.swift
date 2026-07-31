@@ -43,7 +43,7 @@ struct SettingsAgentsPane: View {
                         + "pre-filled, or run the `claude` CLI in Terminal."
                 ) {
                     Picker("", selection: $store.claudeTarget) {
-                        ForEach(ClaudeTarget.allCases) { Text($0.title).tag($0) }
+                        ForEach(ClaudeRouter.Target.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     .labelsHidden()
                     .frame(width: 150)

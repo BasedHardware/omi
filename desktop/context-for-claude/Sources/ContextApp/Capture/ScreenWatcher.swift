@@ -153,8 +153,12 @@ final class ScreenWatcher {
         }
         // Asked before the window is resolved so an app that must never be read costs no
         // WindowServer enumeration, and asked again below once there is a title to judge.
-        if let reason = ScreenPipeline.exclusionReason(appName: appName, bundleID: bundleID, title: nil) {
-            noteSkip(reason)
+        guard !ScreenPipeline.isOwnOutput(appName: appName, bundleID: bundleID, title: nil) else {
+            noteSkip("own output: \(appName)")
+            return
+        }
+        if let reason = ExclusionEngine.shared.exclusionReason(for: CaptureSubject(bundleID: bundleID, appName: appName)) {
+            noteSkip(reason.logDescription)
             return
         }
 
@@ -170,10 +174,14 @@ final class ScreenWatcher {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
 
-        if let reason = ScreenPipeline.exclusionReason(
-            appName: appName, bundleID: bundleID, title: windowTitle)
-        {
-            noteSkip(reason)
+        guard !ScreenPipeline.isOwnOutput(appName: appName, bundleID: bundleID, title: windowTitle) else {
+            noteSkip("own output: \(appName)")
+            return
+        }
+        let subject = CaptureSubject(bundleID: bundleID, appName: appName, windowTitle: windowTitle)
+        let admission = ExclusionEngine.shared.admit(subject)
+        guard let ticket = admission.ticket else {
+            noteSkip(admission.reason?.logDescription ?? "excluded")
             return
         }
 
@@ -199,7 +207,9 @@ final class ScreenWatcher {
                         capturedAt: capturedAt,
                         appName: appName,
                         bundleId: bundleID.nilIfEmpty,
-                        windowTitle: windowTitle))
+                        windowTitle: windowTitle),
+                    ticket: ticket,
+                    axNodes: [])
             }
             return
         }
@@ -235,11 +245,6 @@ final class ScreenWatcher {
             return
         }
 
-        // Nodes before the frame, always. The frame carries a root hash into a table those rows have
-        // to be in already, and both writes land on the same serialised queue in the order they are
-        // handed over — so a frame is never stored pointing at a subtree nobody wrote.
-        if !processed.axNodes.isEmpty { onAXNodes?(processed.axNodes) }
-
         emit(
             Frame(
                 capturedAt: capturedAt,
@@ -254,7 +259,9 @@ final class ScreenWatcher {
                 imagePath: processed.imagePath,
                 axText: processed.axText,
                 axRootHash: processed.axRootHash
-            )
+            ),
+            ticket: ticket,
+            axNodes: processed.axNodes
         )
     }
 
@@ -266,7 +273,16 @@ final class ScreenWatcher {
         }
     }
 
-    private func emit(_ frame: Frame) {
+    private func emit(_ frame: Frame, ticket: CaptureTicket, axNodes: [AXNodeRecord]) {
+        if let reason = ExclusionEngine.shared.revalidate(ticket) {
+            ExclusionEngine.shared.discard(frame, reason: reason)
+            noteSkip(reason.logDescription)
+            return
+        }
+        // Nodes before the frame, always. The frame carries a root hash into a table those rows have
+        // to be in already, and both writes land on the same serialised queue in the order they are
+        // handed over — so a frame is never stored pointing at a subtree nobody wrote.
+        if !axNodes.isEmpty { onAXNodes?(axNodes) }
         lastAppName = frame.appName
         lastWindowTitle = frame.windowTitle
         onFrame?(frame)
@@ -502,36 +518,6 @@ private enum ScreenPipeline {
     /// to `recognitionLanguages` has call-frame lifetime, and Vision keeps enumerating the bridged
     /// NSArray on its own queue after the frame is gone (omi #5891, #5151 — a trap, not an error).
     static let recognitionLanguages: [String] = ["en-US"]
-
-    // MARK: Exclusions
-
-    /// Why this window must not be read, or nil if it may be. The reason is the skip-log line.
-    ///
-    /// Called twice per tick — once with no title, before the WindowServer is asked anything, and
-    /// once with one. The same policy both times; the second call simply has more evidence.
-    ///
-    /// The credential half of it lives in `Redaction` so it can be unit-tested without a screen.
-    /// `Redaction` is asked twice because `app` matches either identifier form and this is the one
-    /// caller that holds both: the bundle id carries the title, and the display name catches the
-    /// vendors whose bundle id says nothing (a rebranded password manager still calls itself one).
-    /// The title is never put in the reason — a window excluded *because of* its title is exactly
-    /// the one whose title should not be written down.
-    static func exclusionReason(appName: String, bundleID: String, title: String?) -> String? {
-        if isOwnOutput(appName: appName, bundleID: bundleID, title: title) {
-            return "own output: \(appName)"
-        }
-        if Redaction.isSensitiveWindow(app: bundleID, title: nil)
-            || Redaction.isSensitiveWindow(app: appName, title: nil)
-        {
-            return "excluded app: \(appName)"
-        }
-        if Redaction.isSensitiveWindow(app: bundleID, title: title)
-            || Redaction.isSensitiveWindow(app: appName, title: title)
-        {
-            return "sensitive window in \(appName)"
-        }
-        return nil
-    }
 
     // MARK: Not reading ourselves
 

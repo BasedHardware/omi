@@ -313,7 +313,7 @@ enum ClaudeRouter {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: preferredTargetKey) }
     }
 
-    private static let preferredTargetKey = "context.search.claudeTarget"
+    private static let preferredTargetKey = "context.settings.claudeTarget"
 
     // MARK: - Copy
 

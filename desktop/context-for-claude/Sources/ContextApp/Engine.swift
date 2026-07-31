@@ -94,6 +94,7 @@ private enum CaptureComponent: CaseIterable {
 final class Engine: ObservableObject {
     /// Keeps the sign-in subscription that provisions the MCP key alive.
     private var keyProvisioning: Set<AnyCancellable> = []
+    private var settingsSubscriptions: Set<AnyCancellable> = []
     /// Sums mic and system into the single stream the backend transcribes.
     private let mixer = AudioMixer()
     /// The latest text seen per backend segment id, so a revised segment replaces rather than
@@ -197,6 +198,7 @@ final class Engine: ObservableObject {
         //    database opens — `EngineStore` holds it, bounded, until there is somewhere to put it.
         startPermittedSources()
         publishState()
+        observeScreenCaptureSetting()
 
         // 4. Storage. Nothing above waits on this.
         Task { [weak self] in
@@ -534,6 +536,7 @@ final class Engine: ObservableObject {
 
     private func startScreen() {
         guard !running.contains(.screen) else { return }
+        guard SettingsStore.shared.screenCaptureEnabled else { return }
         guard Permissions.check(.screen) else {
             // Screen Recording only takes effect after a relaunch; `Permissions` is what tells the
             // user that, so this stays a plain statement of the gap.
@@ -556,6 +559,21 @@ final class Engine: ObservableObject {
         screenWatcher?.stop()
         screenWatcher = nil
         running.remove(.screen)
+    }
+
+    private func observeScreenCaptureSetting() {
+        SettingsStore.shared.$screenCaptureEnabled
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] enabled in
+                guard let self, !self.isPaused else { return }
+                if enabled {
+                    self.startScreen()
+                } else {
+                    self.stopScreen()
+                }
+            }
+            .store(in: &settingsSubscriptions)
     }
 
     // MARK: - Transcript lines
@@ -863,16 +881,30 @@ private final class EngineStore: @unchecked Sendable {
             // Read it there, then do the sweep off it.
             let store: ContextStore? = self.queue.sync { self.store }
             guard let store else { return }
-            do {
-                // Both bounds, tighter one wins. Age alone is not enough on a machine that
-                // captures heavily: 30 days of dense capture outgrows any disk long before the
-                // oldest frame is old enough to delete.
-                let removed = try store.enforceRetention(olderThanDays: days)
-                if removed > 0 {
-                    ContextLog.info("Retention removed \(removed) frames", "store")
+            let defaults = UserDefaults.standard
+            let strategy: StorageStrategy = {
+                guard let raw = defaults.string(forKey: "context.settings.storageStrategy"),
+                    let value = StorageStrategy(rawValue: raw) else { return .off }
+                return value
+            }()
+            let limitBytes: Int64 = {
+                if let stored = defaults.object(forKey: "context.settings.storageLimitBytes") as? Int {
+                    return StorageLimit.clamp(Int64(stored))
                 }
-            } catch {
-                ContextLog.error("Frame retention sweep failed: \(error.localizedDescription)", "store")
+                return StorageLimit.defaultBytes
+            }()
+            if strategy == .limit {
+                do {
+                    // Both bounds, tighter one wins. Age alone is not enough on a machine that
+                    // captures heavily: 30 days of dense capture outgrows any disk long before the
+                    // oldest frame is old enough to delete.
+                    let removed = try store.enforceRetention(olderThanDays: days, toFitBytes: limitBytes)
+                    if removed > 0 {
+                        ContextLog.info("Retention removed \(removed) frames", "store")
+                    }
+                } catch {
+                    ContextLog.error("Frame retention sweep failed: \(error.localizedDescription)", "store")
+                }
             }
             // Re-arm. This app is meant to run for weeks at login, so a sweep that happens once per
             // launch is a sweep that happens once a fortnight — which is how an unbounded store

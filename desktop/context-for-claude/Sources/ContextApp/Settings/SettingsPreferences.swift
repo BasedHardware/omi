@@ -403,21 +403,6 @@ enum AgentRoute: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
-/// How a Claude Code query is opened.
-enum ClaudeTarget: String, CaseIterable, Identifiable, Codable, Sendable {
-    case claudeApp
-    case terminal
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .claudeApp: "Claude App"
-        case .terminal: "Terminal"
-        }
-    }
-}
-
 // MARK: - The store
 
 /// Every Settings preference this app owns, in one observable place.
@@ -537,7 +522,7 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    @Published var claudeTarget: ClaudeTarget {
+    @Published var claudeTarget: ClaudeRouter.Target {
         didSet {
             guard claudeTarget != oldValue else { return }
             defaults.set(claudeTarget.rawValue, forKey: Key.claudeTarget)
@@ -580,7 +565,7 @@ final class SettingsStore: ObservableObject {
         let storedLimit = defaults.object(forKey: Key.storageLimitBytes) as? Int
         self.storageLimitBytes = StorageLimit.clamp(Int64(storedLimit ?? Int(StorageLimit.defaultBytes)))
         self.agentRoute = enumValue(Key.agentRoute, AgentRoute.claudeCode)
-        self.claudeTarget = enumValue(Key.claudeTarget, ClaudeTarget.claudeApp)
+        self.claudeTarget = enumValue(Key.claudeTarget, ClaudeRouter.Target.claudeApp)
 
         applyAppearance()
         applyDockIcon()
