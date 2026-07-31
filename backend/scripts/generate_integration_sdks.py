@@ -482,6 +482,10 @@ def gen_dart_types(schemas: dict[str, dict[str, Any]]) -> str:
                     and (schemas.get(inner_base) or {}).get('type') == 'string'
                 ):
                     mapped = f"(json[{json.dumps(prop)}] as List<dynamic>?)?.map((e) => {inner_base}.fromJson(e as Map<String, dynamic>)).toList()"
+                elif inner_base == 'int':
+                    mapped = f"(json[{json.dumps(prop)}] as List<dynamic>?)?.map((e) => (e as num).toInt()).toList()"
+                elif inner_base == 'double':
+                    mapped = f"(json[{json.dumps(prop)}] as List<dynamic>?)?.map((e) => (e as num).toDouble()).toList()"
                 else:
                     mapped = f"(json[{json.dumps(prop)}] as List<dynamic>?)?.map((e) => e as {inner_base}).toList()"
                 if prop in required:
@@ -508,7 +512,17 @@ def gen_dart_types(schemas: dict[str, dict[str, Any]]) -> str:
                         lines.append(f"      {field}: {expr} ?? const {{}},")
                     else:
                         lines.append(f"      {field}: {expr},")
-                elif cast in {'String', 'int', 'double', 'bool', 'Object'}:
+                elif cast == 'int':
+                    expr = f"(json[{json.dumps(prop)}] as num).toInt()"
+                    if te.endswith('?'):
+                        expr = f"json[{json.dumps(prop)}] == null ? null : {expr}"
+                    lines.append(f"      {field}: {expr},")
+                elif cast == 'double':
+                    expr = f"(json[{json.dumps(prop)}] as num).toDouble()"
+                    if te.endswith('?'):
+                        expr = f"json[{json.dumps(prop)}] == null ? null : {expr}"
+                    lines.append(f"      {field}: {expr},")
+                elif cast in {'String', 'bool', 'Object'}:
                     lines.append(f"      {field}: json[{json.dumps(prop)}] as {te},")
                 else:
                     # enum typedefs etc.

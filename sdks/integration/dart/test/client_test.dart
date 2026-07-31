@@ -64,4 +64,19 @@ void main() {
     expect(jsonDecode(seen.body), {'query': 'project alpha'});
     client.close();
   });
+
+  test('accepts JSON numbers for integer and double fields', () {
+    final page = SearchConversationsResponse.fromJson({
+      'conversations': [],
+      'current_page': 1.0,
+      'per_page': 20.0,
+      'total_pages': 1.0,
+    });
+    final location = ConversationItemGeolocation.fromJson({'latitude': 40, 'longitude': -74});
+
+    expect(page.currentPage, 1);
+    expect(page.perPage, 20);
+    expect(location.latitude, 40.0);
+    expect(location.longitude, -74.0);
+  });
 }
