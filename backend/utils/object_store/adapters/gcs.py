@@ -3,7 +3,7 @@
 Encapsulates exactly the GCS logic that lived inline in ``utils/other/storage.py``: lazy client,
 ``blob.*`` ops, V4 signed URLs, ``make_public``. It is the contract of record; its behavior is what
 the S3 adapter must match (dual-backend contract test). Redis caching of signed URLs stays in the
-caller (``storage._get_signed_url``), not here — the adapter only mints.
+caller (``storage._signed_url``), not here — the adapter only mints.
 """
 
 from __future__ import annotations
