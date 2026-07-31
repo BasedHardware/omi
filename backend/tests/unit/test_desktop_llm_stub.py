@@ -39,6 +39,13 @@ def test_chat_hermetic_exact_reply_token():
     assert directive.text == 'MARKER:chat-hermetic'
 
 
+def test_paced_streaming_probe_uses_deterministic_reply():
+    body = _user_body('Return the paced streaming response [[STREAMING:chat-hermetic]].')
+    directive = stub.stub_directive(body)
+    assert isinstance(directive, stub._TextDirective)
+    assert directive.text == stub.PACED_STREAMING_REPLY
+
+
 def test_floating_bar_marker_echo():
     body = _user_body('Hermetic floating bar [[MARKER:floating-bar]]')
     directive = stub.stub_directive(body)

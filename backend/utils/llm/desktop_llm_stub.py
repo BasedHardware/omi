@@ -17,6 +17,7 @@ from typing import Any, Literal
 
 DEFAULT_ASSISTANT_TEXT = 'Hermetic LLM stub response.'
 EXACT_MEMORY_AGENT_REQUEST = "Have an agent look through my memories today and surface one surprising insight."
+PACED_STREAMING_REPLY = 'Paced streaming reveals this response in visible increments before the terminal event arrives.'
 _USER_MESSAGE_BOUNDARY = '\n\n# User Message\n'
 _HARNESS_TOKEN_RE = re.compile(r'(?:GAUNTLET|RESILIENCE)-[A-Z0-9_-]*')
 _MARKER_RE = re.compile(r'\[\[MARKER:([^\]]+)\]\]')
@@ -180,6 +181,10 @@ def first_chunk_delay_ms(user_text: str) -> int:
     return 0
 
 
+def is_paced_streaming_probe(user_text: str) -> bool:
+    return '[[STREAMING:chat-hermetic]]' in user_text
+
+
 def memory_tool_arguments_for_date(day: str) -> dict[str, Any]:
     return {'limit': 50, 'start_date': day, 'end_date': day}
 
@@ -267,6 +272,9 @@ def stub_directive(body: Mapping[str, object]) -> StubDirective:
 
     if 'single word probe only' in normalized:
         return _TextDirective('PROBE')
+
+    if is_paced_streaming_probe(user_text):
+        return _TextDirective(PACED_STREAMING_REPLY)
 
     exact = exact_reply_token(user_text)
     if exact:
@@ -435,6 +443,8 @@ async def stub_chat_completions_stream(body: Mapping[str, object]) -> AsyncItera
     for index, chunk in enumerate(chunks):
         if index == 0 and delay_ms:
             await asyncio.sleep(delay_ms / 1000.0)
+        if index == 1 and is_paced_streaming_probe(user_text):
+            await asyncio.sleep(0.4)
         yield chunk
 
 
