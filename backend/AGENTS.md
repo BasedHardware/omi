@@ -4,7 +4,7 @@ Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific
 
 ## Setup
 
-Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
+Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), and optional Redis.
 
 ```bash
 cp .env.template .env          # Fill in required values (see .env.template for full list)
@@ -21,7 +21,7 @@ When intentionally changing backend Python dependencies, edit the relevant `requ
 ./scripts/update-python-lock.sh
 ```
 
-By default, the lock refresh preserves already-locked package versions so unrelated transitive upgrades do not sneak into infrastructure changes. Set `PYLOCK_UPGRADE=1` only when intentionally refreshing dependency versions.
+By default, lock refresh preserves existing package versions. Set `PYLOCK_UPGRADE=1` only for intentional upgrades.
 
 Key env vars: `OPENAI_API_KEY` (LLM calls), `HOSTED_PARAKEET_API_URL` / `MODULATE_API_KEY` (default STT), `DEEPGRAM_API_KEY` with its self-hosted endpoint, `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` (desktop chat), `ENCRYPTION_SECRET` (tests), and `REDIS_DB_HOST` (fail-open rate limiting). `SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS` are default Firebase Admin credentials; never commit them. Dev desktop deploys use `FIREBASE_AUTH_CREDENTIALS_PATH` only for Firebase token verification, leaving Google clients on dev Cloud Run ADC.
 
@@ -218,7 +218,7 @@ Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.
 
 ## Testing
 
-Emulator commands require Bun 1.3.14 (the root `packageManager` pin): install/activate it, verify `bun --version`, then run `bun install --frozen-lockfile --ignore-scripts` from the repository root.
+Emulator commands require root Bun 1.3.14; run `bun install --frozen-lockfile --ignore-scripts` first.
 
 ```bash
 bash test-preflight.sh   # Verify env
