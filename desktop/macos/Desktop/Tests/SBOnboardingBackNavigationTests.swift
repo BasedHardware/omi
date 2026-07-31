@@ -8,8 +8,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
   private var voiceLanguages: [String] = []
   private var hasExplicitVoiceLanguages = false
 
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
     voiceLanguages = AssistantSettings.shared.voiceLanguages
     hasExplicitVoiceLanguages = AssistantSettings.shared.hasExplicitVoiceLanguages
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
@@ -17,12 +16,11 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
   }
 
-  override func tearDown() {
+  override func tearDown() async throws {
     AssistantSettings.shared.voiceLanguages = hasExplicitVoiceLanguages ? voiceLanguages : []
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingHowDidYouHearSource)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
-    super.tearDown()
   }
 
   func testBackFromPermissionsRetractsTheCurrentExchangeAndClearsRole() {
