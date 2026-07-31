@@ -268,7 +268,6 @@ class ListenSessionRuntime:
             self.language,
             multi_lang_enabled=not single_language_mode,
             preferred_service=request.stt_service,
-            codec=request.codec,
         )
         self.parity_capture = ListenParityCapture.from_environ(
             principal_id=request.uid,

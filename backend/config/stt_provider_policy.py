@@ -94,12 +94,6 @@ MODULATE_SUPPORTED_LANGUAGES: Final[frozenset[str]] = frozenset(
     }
 )
 
-# Client codecs whose bytes reach the provider without a decoder in between, so
-# nothing guarantees each frame is a whole number of 16-bit samples. Velma closes
-# the stream on any frame that is not, and live sessions have no in-session
-# failover, so it is not served these codecs until the cause is confirmed.
-MODULATE_EXCLUDED_CODECS: Final[frozenset[str]] = frozenset({'pcm16', 'linear16'})
-
 # This is the single source of truth for provider enablement. Cloud Deepgram is
 # intentionally absent from every serving surface. Self-hosted Deepgram is a
 # distinct product and remains available only to the streaming runtime that has
@@ -203,11 +197,6 @@ def normalized_stt_language(language: str | None) -> str:
 def modulate_supports_language(language: str | None) -> bool:
     """Return whether Velma-2 accepts a language code on a serving surface."""
     return normalized_stt_language(language) in MODULATE_SUPPORTED_LANGUAGES
-
-
-def modulate_supports_codec(codec: str | None) -> bool:
-    """Return whether a client codec may be served by Velma-2."""
-    return (codec or '').strip().lower() not in MODULATE_EXCLUDED_CODECS
 
 
 def supports_live_multilingual_mode(language: str | None) -> bool:
