@@ -530,12 +530,7 @@ impl JournalStore {
         let conversation_id = ensure_conversation(&transaction, surface)?;
         let current = turn_row(&transaction, &conversation_id, &turn_id)?
             .ok_or_else(|| "journal turn not found".to_owned())?;
-        if current.producing_run_id.is_some()
-            && matches!(
-                optional(input, "status").as_deref(),
-                Some("completed" | "failed")
-            )
-        {
+        if current.producing_run_id.is_some() {
             return Err(
                 "runtime-produced journal turns require kernel-authoritative terminalization"
                     .into(),
@@ -1249,6 +1244,43 @@ mod tests {
         let update = serde_json::from_value(json!({
             "turnId": "assistant-turn",
             "status": "failed"
+        }))
+        .expect("update fixture must be valid");
+        assert!(store.update(&surface, &update).is_err());
+    }
+
+    #[test]
+    fn public_update_cannot_rewrite_a_runtime_produced_turn() {
+        let mut store = must(JournalStore::in_memory());
+        let surface = Surface {
+            owner_id: "owner".into(),
+            surface_kind: "main_chat".into(),
+            external_ref_kind: "chat".into(),
+            external_ref_id: "chat-1".into(),
+        };
+        let conversation_id = must(store.conversation_id(&surface));
+        let run = must(store.admit_run("owner", "session", &conversation_id, 1));
+        let record = serde_json::from_value(json!({
+            "turnId": "assistant-turn",
+            "role": "assistant",
+            "content": "",
+            "status": "streaming"
+        }))
+        .expect("record fixture must be valid");
+        must(store.record(&surface, &record));
+        let terminalization = serde_json::from_value(json!({
+            "turnId": "assistant-turn",
+            "producingRunId": run.run_id,
+            "producingAttemptId": run.attempt_id,
+            "disposition": "accept",
+            "content": "done"
+        }))
+        .expect("terminalization fixture must be valid");
+        must(store.terminalize(&surface, &terminalization));
+        let update = serde_json::from_value(json!({
+            "turnId": "assistant-turn",
+            "content": "rewritten",
+            "appendContentBlocks": [{"type":"text","text":"rewritten"}]
         }))
         .expect("update fixture must be valid");
         assert!(store.update(&surface, &update).is_err());
