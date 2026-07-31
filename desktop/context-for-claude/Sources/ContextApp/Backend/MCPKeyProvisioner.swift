@@ -63,20 +63,38 @@ final class MCPKeyProvisioner {
         inFlight = nil
     }
 
+    func removeKey() {
+        inFlight?.cancel()
+        inFlight = nil
+        try? Self.removeKeyFiles(at: Self.keyFileURL)
+        isBlockedForThisLaunch = false
+        didLogReuse = false
+    }
+
     // MARK: - Provisioning
 
     private func provision() async {
-        let url = Self.keyFileURL
+        let keyURL = Self.keyFileURL
 
         // The file is the reuse mechanism, and deliberately the only one: the backend's list
         // endpoint returns a key's *prefix*, never its secret, so a key we did not write down at the
         // moment we minted it can never be used again — only recognised, and retired.
-        if Self.storedKey(at: url) != nil {
+        let ownerURL = keyURL.appendingPathExtension("owner")
+        if Self.storedKey(at: keyURL) != nil,
+            let storedOwner = Self.storedOwner(at: ownerURL),
+            let userId = OmiAuth.shared.userId,
+            storedOwner == userId
+        {
             if !didLogReuse {
                 didLogReuse = true
                 ContextLog.info("Reusing the Omi MCP key already on disk", Self.category)
             }
             return
+        }
+
+        if Self.storedKey(at: keyURL) != nil {
+            try? Self.removeKeyFiles(at: keyURL)
+            didLogReuse = false
         }
 
         guard !isBlockedForThisLaunch else { return }
@@ -105,8 +123,10 @@ final class MCPKeyProvisioner {
             return
         }
 
+        guard let owner = OmiAuth.shared.userId, !owner.isEmpty else { return }
+
         do {
-            try Self.persist(created.key, to: url)
+            try Self.persist(created.key, owner: owner, to: keyURL)
         } catch {
             isBlockedForThisLaunch = true
             ContextLog.error(
@@ -184,12 +204,30 @@ final class MCPKeyProvisioner {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private static func storedOwner(at url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func removeKeyFiles(at keyURL: URL) {
+        if FileManager.default.fileExists(atPath: keyURL.path) {
+            try? FileManager.default.removeItem(at: keyURL)
+        }
+        let ownerURL = keyURL.appendingPathExtension("owner")
+        if FileManager.default.fileExists(atPath: ownerURL.path) {
+            try? FileManager.default.removeItem(at: ownerURL)
+        }
+    }
+
     /// Writes the key and nothing else — no JSON envelope, no trailing newline.
     ///
     /// Created through `open(2)` with an explicit mode rather than `Data.write`, because this is a
     /// bearer credential for the user's whole account: a file that exists for even a moment at the
     /// umask's default is readable by every process running as this user for that window.
-    private static func persist(_ key: String, to url: URL) throws {
+    private static func persist(_ key: String, owner: String, to url: URL) throws {
         try ContextPaths.ensureSupportDirectory()
 
         // Replaced rather than truncated: an existing file may already be group-readable, and
@@ -210,6 +248,10 @@ final class MCPKeyProvisioner {
         // the case where the file survived removal — a stale hard link, a network volume — and kept
         // its old mode: the resolver would only warn about that, and the key would stay exposed.
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+
+        let ownerURL = url.appendingPathExtension("owner")
+        try Data(owner.utf8).write(to: ownerURL, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: ownerURL.path)
     }
 }
 

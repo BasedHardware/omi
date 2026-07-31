@@ -101,7 +101,7 @@ final class OmiAuth: ObservableObject {
         }
         adopt(stored, email: Self.claim("email", in: stored.idToken))
         ContextLog.info(
-            "Restored Omi session for \(stored.tokenUserId) (id token \(stored.isExpired ? "expired, refreshing on first use" : "valid"))",
+            "Restored Omi session (id token \(stored.isExpired ? "expired, refreshing on first use" : "valid"))",
             "auth"
         )
     }
@@ -109,7 +109,7 @@ final class OmiAuth: ObservableObject {
     func signIn(provider: OmiAuthProvider) async throws {
         guard !isSigningIn else {
             ContextLog.info("Sign-in already in progress; ignoring duplicate request", "auth")
-            return
+            throw OmiAuthError.cancelled
         }
         isSigningIn = true
         defer { isSigningIn = false }
@@ -168,7 +168,8 @@ final class OmiAuth: ObservableObject {
                 "Signed in, but Context for Claude couldn't store the session in your Keychain. Try again.")
         }
         adopt(stored, email: exchange.email ?? Self.claim("email", in: tokens.idToken))
-        ContextLog.info("Signed in as \(stored.tokenUserId) via \(provider.rawValue)", "auth")
+        ContextLog.info("Signed in via \(provider.rawValue)", "auth")
+        Task { await MCPKeyProvisioner.shared.ensureKey() }
     }
 
     func signOut() {
@@ -179,6 +180,7 @@ final class OmiAuth: ObservableObject {
         email = nil
         isSignedIn = false
         SessionStore.clear()
+        MCPKeyProvisioner.shared.removeKey()
         ContextLog.info("Signed out", "auth")
     }
 
@@ -280,13 +282,16 @@ final class OmiAuth: ObservableObject {
             expiryTime: Date().timeIntervalSince1970 + Double(expiresIn) - Self.expiryBuffer,
             tokenUserId: ownerId
         )
+        guard !Task.isCancelled, let session = self.session, session.refreshToken == refreshToken, self.isSignedIn else {
+            throw OmiAuthError.cancelled
+        }
         if !SessionStore.save(refreshed) {
             // The Keychain being briefly unavailable is not a reason to drop a valid session; keep
             // it for this launch and let the next successful refresh persist it.
             ContextLog.error("Refreshed session couldn't be stored; keeping it in memory for this launch", "auth")
         }
         adopt(refreshed, email: email)
-        ContextLog.info("Refreshed Omi session for \(ownerId)", "auth")
+        ContextLog.info("Refreshed Omi session", "auth")
         return idToken
     }
 
