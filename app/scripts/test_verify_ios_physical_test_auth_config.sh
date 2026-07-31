@@ -9,7 +9,7 @@ mkdir -p "$fixture/lib" "$fixture/ios/Config/Dev"
 
 write_valid_fixture() {
   cat >"$fixture/.dev.env" <<'EOF'
-API_BASE_URL=https://api.omiapi.com/
+API_BASE_URL=https://api.omi.me/
 USE_WEB_AUTH=true
 USE_AUTH_CUSTOM_TOKEN=true
 EOF
@@ -40,7 +40,7 @@ PY
 import sys
 from pathlib import Path
 
-url = "https://api.omiapi.com/"
+url = "https://api.omi.me/"
 keys = [0] * len(url)
 data = [ord(char) for char in url]
 Path(sys.argv[1]).parent.mkdir(parents=True, exist_ok=True)
@@ -68,7 +68,7 @@ write_valid_fixture
 OMI_PHYSICAL_TEST_APP_ROOT="$fixture" \
   bash "$script_dir/verify_ios_physical_test_auth_config.sh" >/dev/null
 
-sed -i.bak 's#https://api.omiapi.com/##' "$fixture/.dev.env"
+sed -i.bak 's#https://api.omi.me/#https://api.omiapi.com/#' "$fixture/.dev.env"
 expect_failure
 rm -f "$fixture/.dev.env.bak"
 

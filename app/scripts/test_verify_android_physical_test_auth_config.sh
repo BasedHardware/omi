@@ -5,11 +5,11 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fixture="$(mktemp -d "${TMPDIR:-/tmp}/omi-physical-auth-test.XXXXXX")"
 trap 'rm -rf "$fixture"' EXIT
 
-mkdir -p "$fixture/lib" "$fixture/android/app/src/dev"
+mkdir -p "$fixture/lib" "$fixture/android/app/src/dev" "$fixture/setup/prebuilt"
 
 write_valid_fixture() {
   cat >"$fixture/.dev.env" <<'EOF'
-API_BASE_URL=https://api.omiapi.com/
+API_BASE_URL=https://api.omi.me/
 USE_WEB_AUTH=true
 USE_AUTH_CUSTOM_TOKEN=true
 EOF
@@ -22,6 +22,16 @@ class DefaultFirebaseOptions {
   );
 }
 EOF
+  cat >"$fixture/lib/firebase_options_prod.dart" <<'EOF'
+class DefaultFirebaseOptions {}
+EOF
+  cat >"$fixture/android/key.properties" <<'EOF'
+keyAlias=androiddebugkey
+keyPassword=android
+storeFile=../../setup/prebuilt/debug.keystore
+storePassword=android
+EOF
+  : >"$fixture/setup/prebuilt/debug.keystore"
   cat >"$fixture/android/app/src/dev/google-services.json" <<'EOF'
 {
   "project_info": {"project_id": "based-hardware"},
@@ -38,7 +48,7 @@ EOF
 import sys
 from pathlib import Path
 
-url = "https://api.omiapi.com/"
+url = "https://api.omi.me/"
 keys = [0] * len(url)
 data = [ord(char) for char in url]
 Path(sys.argv[1]).parent.mkdir(parents=True, exist_ok=True)
@@ -66,7 +76,17 @@ write_valid_fixture
 OMI_PHYSICAL_TEST_APP_ROOT="$fixture" \
   bash "$script_dir/verify_android_physical_test_auth_config.sh" >/dev/null
 
-sed -i.bak 's#https://api.omiapi.com/##' "$fixture/.dev.env"
+rm -f "$fixture/lib/firebase_options_prod.dart"
+expect_failure
+
+write_valid_fixture
+sed -i.bak 's#../../setup/prebuilt/debug.keystore#debug.keystore#' \
+  "$fixture/android/key.properties"
+expect_failure
+rm -f "$fixture/android/key.properties.bak"
+
+write_valid_fixture
+sed -i.bak 's#https://api.omi.me/#https://api.omiapi.com/#' "$fixture/.dev.env"
 expect_failure
 rm -f "$fixture/.dev.env.bak"
 

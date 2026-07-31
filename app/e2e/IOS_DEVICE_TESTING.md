@@ -49,9 +49,10 @@ scripts/verify_ios_physical_test_auth_config.sh
 ```
 
 It checks only project/platform metadata and the generated API target; it does
-not print credentials. A passing check means the dev flavor has a production
-API, a `based-hardware` Firebase project, and an iOS (not Android) Firebase app
-registration. Signing and the isolated bundle ID remain local maintainer
+not print credentials. A passing check means the dev flavor has the canonical
+`https://api.omi.me/` customer API, a `based-hardware` Firebase project, and an
+iOS (not Android) Firebase app registration. It explicitly rejects
+`api.omiapi.com`. Signing and the isolated bundle ID remain local maintainer
 concerns.
 
 ## 3. Launch

@@ -14,15 +14,24 @@ From `app/`, run the focused behavioral contracts before touching hardware:
 
 ```bash
 flutter test \
+  test/providers/capture_provider_test.dart \
+  test/providers/device_provider_test.dart \
+  test/providers/sync_provider_sync_wal_wake_test.dart \
+  test/services/capture/conversation_session_window_test.dart \
   test/services/capture/device_audio_streaming_policy_test.dart \
+  test/services/capture/live_transcript_preview_test.dart \
   test/services/wals/ring_storage_sync_test.dart \
+  test/unit/conversation_audio_assembler_test.dart \
   test/unit/device_transport_exclusive_release_test.dart \
   test/unit/firmware_dfu_connection_handoff_test.dart \
+  test/unit/local_wal_sync_test.dart \
   test/unit/native_ble_transport_exclusive_release_test.dart \
   test/unit/omi_mcu_dfu_policy_test.dart \
   test/unit/omi_ready_generation_time_sync_test.dart \
-  test/providers/device_provider_test.dart
+  test/widgets/transcription_paused_warning_test.dart
 
+bash scripts/test_verify_android_physical_test_auth_config.sh
+bash scripts/test_verify_ios_physical_test_auth_config.sh
 scripts/analyze_ratchet.sh
 ```
 
@@ -57,7 +66,8 @@ account.
 
 Before every authenticated Android CV1 run, seed these ignored files from the
 primary maintainer checkout that already has the working prod-backed dev
-configuration:
+configuration. Do not install the APK unless the mandatory preflight below
+passes after generation:
 
 ```bash
 M=/absolute/path/to/maintainer-checkout/app
@@ -67,6 +77,15 @@ cp "$M/.dev.env" "$W/.dev.env"
 cp "$M/lib/firebase_options_dev.dart" "$W/lib/firebase_options_dev.dart"
 cp "$M/android/app/src/dev/google-services.json" \
   "$W/android/app/src/dev/google-services.json"
+# main.dart imports both flavor option libraries at compile time. A dev build
+# still needs the checked-in setup fixture at the unused prod import path.
+cp "$W/setup/prebuilt/firebase_options.dart" \
+  "$W/lib/firebase_options_prod.dart"
+cp "$W/setup/prebuilt/key.properties" "$W/android/key.properties"
+
+# The maintainer checkout may target the development API. Hardware acceptance
+# must exercise the canonical customer data plane with the production Firebase
+# project; set API_BASE_URL=https://api.omi.me/ in the copied .dev.env.
 
 cd "$W"
 dart run build_runner clean
@@ -78,8 +97,13 @@ flutter build apk --debug --flavor dev --target-platform android-arm64
 The clean is required because build_runner's cached asset graph may not notice
 an ignored `.dev.env` change and can report "wrote 0 outputs" while retaining
 the empty test URL. The preflight decrypts the generated
-`lib/env/dev_env.g.dart`; it must report generated prod API + prod Firebase with
-the dev package before the APK is installed. Re-run it after every `test.sh`,
+`lib/env/dev_env.g.dart`; it must report the canonical production API + prod
+Firebase with the dev package before the APK is installed. `api.omiapi.com` is
+a development backend and is invalid acceptance evidence even when Firebase
+authentication succeeds. Android and iOS preflights source the same executable
+authority in `scripts/physical_test_customer_plane.sh`; do not duplicate or
+override its endpoint in a platform-specific test workflow. Re-run the
+preflight after every `test.sh`,
 `flutter pub get`, setup script, branch switch, or rebase that may regenerate
 ignored configuration.
 An auth failure from an APK that did not pass this preflight is a build-fixture
@@ -105,7 +129,10 @@ that upload task. Gradle still compiles and packages the complete dev APK:
 
 ```bash
 cd android
-./gradlew app:assembleDevDebug \
+"$JAVA_HOME/bin/java" \
+  -classpath gradle/wrapper/gradle-wrapper.jar \
+  org.gradle.wrapper.GradleWrapperMain \
+  app:assembleDevDebug \
   -x app:uploadCrashlyticsMappingFileDevDebug \
   -Ptarget-platform=android-arm64 \
   -Ptarget=lib/main.dart
