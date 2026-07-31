@@ -121,9 +121,21 @@ QDRANT_VECTOR_DIM=768        # MUST equal the embedding model's dimension
 ```
 
 The embedding dimension must match `QDRANT_VECTOR_DIM`: `nomic-embed-text`=768,
-`mxbai-embed-large`=1024, OpenAI `text-embedding-3-large`=3072. Ollama does not serve a 3072-dim
-model — pick one and set the dim to match, on a **fresh** vector store (existing 3072-dim vectors
-are incompatible). VAD needs nothing: Silero ONNX runs in-process, bundled in the backend image.
+`mxbai-embed-large`/`bge-m3`=1024, OpenAI `text-embedding-3-large`=3072. Ollama does not serve a
+3072-dim model — pick one and set the dim to match, on a **fresh** vector store (existing 3072-dim
+vectors are incompatible). VAD needs nothing: Silero ONNX runs in-process, bundled in the backend image.
+
+Verify the embeddings path against a real endpoint (loopback under `--network host`, allowed by the
+hermetic guard; skips when the env is unset, so it is CI-safe):
+
+```
+docker run --rm --network host \
+  -e OMI_EMBEDDINGS_BASE_URL=http://127.0.0.1:11434/v1 \
+  -e OMI_EMBEDDINGS_MODEL=bge-m3 -e OMI_EMBEDDINGS_EXPECTED_DIM=1024 \
+  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+  python -m pytest tests/contract/test_embeddings_live_contract.py -q -p no:cacheprovider
+# expected: 3 passed  (real vector, correct dim, deterministic, no OpenAI/Google egress)
+```
 
 **STT / diarization / translation — the in-repo GPU servers (optional `inference` profile).**
 These build from `backend/{parakeet,diarizer,nllb_translation}/Dockerfile`:
