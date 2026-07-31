@@ -210,6 +210,24 @@ enum AgentProviderInstaller {
     case failure(String)
   }
 
+  private final class OutputTail: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [String] = []
+
+    func append(_ line: String) {
+      lock.lock()
+      lines.append(line)
+      if lines.count > 8 { lines.removeFirst() }
+      lock.unlock()
+    }
+
+    func lastThree() -> String {
+      lock.lock()
+      defer { lock.unlock() }
+      return lines.suffix(3).joined(separator: " · ")
+    }
+  }
+
   private static func runShell(
     _ script: String,
     timeout: TimeInterval,
@@ -229,13 +247,12 @@ enum AgentProviderInstaller {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
-        var lastLines: [String] = []
+        let lastLines = OutputTail()
         pipe.fileHandleForReading.readabilityHandler = { handle in
           let data = handle.availableData
           guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
           for line in text.split(separator: "\n").map(String.init) where !line.isEmpty {
             lastLines.append(line)
-            if lastLines.count > 8 { lastLines.removeFirst() }
             onEvent(line)
           }
         }
@@ -256,7 +273,7 @@ enum AgentProviderInstaller {
         pipe.fileHandleForReading.readabilityHandler = nil
 
         if failOnNonZeroExit && process.terminationStatus != 0 {
-          let tail = lastLines.suffix(3).joined(separator: " · ")
+          let tail = lastLines.lastThree()
           continuation.resume(
             returning: .failure(
               "exit \(process.terminationStatus)\(tail.isEmpty ? "" : " — \(tail)")"))

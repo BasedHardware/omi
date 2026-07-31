@@ -37,7 +37,7 @@ enum AgentProviderHealth {
 
     func executable(_ name: String) -> String? {
       LocalAgentProviderDetector.firstExecutable(
-        named: name, fileManager: fileManager, homeDirectory: homeDirectory,
+        named: name, fileManager: fileManager, environment: environment, homeDirectory: homeDirectory,
         searchDirectories: searchDirectories)
     }
 
@@ -50,7 +50,7 @@ enum AgentProviderHealth {
         !isDirectory.boolValue
       else { return false }
       let size = (try? fileManager.attributesOfItem(atPath: path)[.size] as? Int) ?? 0
-      return (size ?? 0) > 0
+      return size > 0
     }
 
     switch provider {

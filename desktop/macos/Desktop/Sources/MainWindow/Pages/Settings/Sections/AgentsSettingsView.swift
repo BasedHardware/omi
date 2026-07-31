@@ -100,7 +100,7 @@ struct AgentsSettingsView: View {
           }
           .buttonStyle(.bordered)
           Button {
-            if let url = URL(string: installable.docsURL) { NSWorkspace.shared.open(url) }
+            if let url = URL(string: installable.installDocsURL) { NSWorkspace.shared.open(url) }
           } label: {
             Label("Docs", systemImage: "book")
           }

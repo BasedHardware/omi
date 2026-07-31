@@ -90,6 +90,10 @@ struct LocalAgentProviderAvailability: Equatable {
     "I don't see \(provider.displayName) installed. Install it with `\(provider.installCommand)`, then run `\(provider.loginCommand)`."
   }
 
+  var spokenInstallGuide: String {
+    "I don't see \(provider.displayName) installed. Check the chat for the installation steps."
+  }
+
   var toolError: String {
     "Error: \(setupPrompt)"
   }
@@ -137,16 +141,18 @@ enum LocalAgentProviderDetector {
     return value.isEmpty ? nil : value
   }
 
-  private static func firstExecutable(
+  static func firstExecutable(
     named name: String,
     fileManager: FileManager,
-    environment: [String: String],
-    homeDirectory: String
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    homeDirectory: String,
+    searchDirectories: [String]? = nil
   ) -> String? {
-    for dir in adapterActivationSearchDirectories(
-      environment: environment,
-      homeDirectory: homeDirectory
-    ) {
+    let directories =
+      searchDirectories
+      ?? adapterActivationSearchDirectories(
+        environment: environment, homeDirectory: homeDirectory)
+    for dir in directories {
       let path = (dir as NSString).appendingPathComponent(name)
       if fileManager.isExecutableFile(atPath: path) {
         return path

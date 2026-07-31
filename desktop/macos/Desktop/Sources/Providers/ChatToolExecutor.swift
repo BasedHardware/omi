@@ -246,6 +246,11 @@ class ChatToolExecutor {
         toolCall.arguments,
         expectedOwnerID: expectedOwnerID)
 
+    case .deleteTask:
+      return await executeDeleteTask(
+        toolCall.arguments,
+        expectedOwnerID: expectedOwnerID)
+
     // Onboarding tools
     case .requestPermission:
       let isOnboardingRequest = isOnboardingSurface
