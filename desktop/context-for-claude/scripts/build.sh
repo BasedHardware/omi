@@ -10,6 +10,7 @@
 #   scripts/build.sh --no-install    stop after the signed bundle in build/
 #   scripts/build.sh --run           also launch the installed app
 #   scripts/build.sh --clean         wipe .build/ and build/ first
+#   scripts/build.sh --release       sign with release entitlements (no library-validation disable)
 #
 # SAFETY: this script only ever touches Context for Claude. It never reads, writes, signs, launches, or kills
 # /Applications/Omi.app, /Applications/Omi Beta.app, or any com.omi.computer-macos* bundle, and
@@ -32,13 +33,16 @@ BUILD_DIR="$PKG_DIR/build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 INSTALL_PATH="/Applications/$APP_NAME.app"
 INFO_PLIST_TEMPLATE="$PKG_DIR/Resources/Info.plist"
-ENTITLEMENTS="$PKG_DIR/Resources/ContextForClaude.entitlements"
+ENTITLEMENTS_RELEASE="$PKG_DIR/Resources/ContextForClaude.entitlements"
+ENTITLEMENTS_DEV="$PKG_DIR/Resources/ContextForClaudeDev.entitlements"
+ENTITLEMENTS="$ENTITLEMENTS_DEV"
 FONTS_DIR="$PKG_DIR/Resources/Fonts"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 DO_INSTALL=1
 DO_RUN=0
 DO_CLEAN=0
+DO_RELEASE=0
 
 log()  { printf '\033[1m[context]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[context]\033[0m %s\n' "$*" >&2; }
@@ -83,14 +87,24 @@ while [[ $# -gt 0 ]]; do
         --no-install) DO_INSTALL=0 ;;
         --run)        DO_RUN=1 ;;
         --clean)      DO_CLEAN=1 ;;
+        --release)    DO_RELEASE=1 ;;
         -h|--help)
-            sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *) die "unknown flag: $1 (see --help)" ;;
     esac
     shift
 done
+
+if [[ "$DO_RELEASE" -eq 1 ]] || [[ "$SIGN_IDENTITY" == *"Developer ID"* ]]; then
+    ENTITLEMENTS="$ENTITLEMENTS_RELEASE"
+    log "using release entitlements: $ENTITLEMENTS"
+else
+    log "using development entitlements: $ENTITLEMENTS"
+fi
+
+[[ -f "$ENTITLEMENTS" ]] || die "missing entitlements at $ENTITLEMENTS"
 
 [[ -f "$INFO_PLIST_TEMPLATE" ]] || die "missing Info.plist template at $INFO_PLIST_TEMPLATE"
 [[ -f "$ENTITLEMENTS" ]] || die "missing entitlements at $ENTITLEMENTS"

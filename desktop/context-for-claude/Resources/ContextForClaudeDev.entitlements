@@ -9,7 +9,11 @@
 	<true/>
 	<key>com.apple.security.device.screen-capture</key>
 	<true/>
-	<!-- Release builds are signed with a real Developer ID/Team ID, so hardened-runtime library
-	     validation succeeds and this weakening must not ship. -->
+	<!-- The local development signing identity has no Team ID, so hardened-runtime library
+	     validation would reject every linked framework at launch and the app would dyld-crash.
+	     This entitlement is stripped from the release entitlements file and must never ship in a
+	     Developer-ID-signed or notarized build. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
 </dict>
 </plist>
