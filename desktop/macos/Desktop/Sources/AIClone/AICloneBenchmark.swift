@@ -46,6 +46,7 @@ struct AICloneBenchmark {
     return Array(collected.suffix(maxSamples))
   }
 
+  @MainActor
   func run(
     chat: BeeperChat,
     history: [BeeperMessage],

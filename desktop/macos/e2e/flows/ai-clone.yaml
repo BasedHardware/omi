@@ -10,6 +10,7 @@ covers:
   - desktop/macos/Desktop/Sources/AIClone/AICloneReplyEngine.swift
   - desktop/macos/Desktop/Sources/AIClone/AICloneBenchmark.swift
   - desktop/macos/Desktop/Sources/AIClone/BeeperDesktopClient.swift
+  - desktop/macos/Desktop/Sources/AIClone/AICloneAutomationActions.swift
 preconditions:
   - automation_bridge_ready
 

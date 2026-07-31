@@ -165,7 +165,9 @@ struct AICloneContent: View {
   private var tokenEntry: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-        setupStep("1.", "Install and open Beeper Desktop from beeper.com and link your chat networks (Telegram, WhatsApp, iMessage).")
+        setupStep(
+          "1.",
+          "Install and open Beeper Desktop from beeper.com and link your chat networks (Telegram, WhatsApp, iMessage).")
         setupStep("2.", "In Beeper, open Settings, then Desktop API, and turn on Allow connections.")
         setupStep("3.", "Under Approved connections, tap the plus button to create an access token, then copy it.")
         setupStep("4.", "Paste the token below.")

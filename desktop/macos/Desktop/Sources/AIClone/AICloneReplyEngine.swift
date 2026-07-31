@@ -9,6 +9,7 @@ import Foundation
 // prompt hardens against instruction injection and the verdict carries an
 // explicit `suspected_injection` flag that policy maps to a human review.
 
+@MainActor
 protocol AICloneCompletionTransport {
   func complete(system: String, user: String) async throws -> String
 }
@@ -75,6 +76,7 @@ struct AICloneReplyEngine {
     return AICloneBackendCompletionTransport()
   }
 
+  @MainActor
   func decide(context: AICloneReplyContext) async throws -> AICloneReplyDecision {
     let raw = try await transport.complete(
       system: Self.systemPrompt(context: context),

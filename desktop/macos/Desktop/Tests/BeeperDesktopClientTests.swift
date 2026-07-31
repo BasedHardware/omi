@@ -25,7 +25,10 @@ final class BeeperStubURLProtocol: URLProtocol {
 
   override func startLoading() {
     let method = request.httpMethod ?? "GET"
-    let url = request.url!
+    guard let url = request.url else {
+      client?.urlProtocolDidFinishLoading(self)
+      return
+    }
     let bodyData =
       request.httpBody
       ?? request.httpBodyStream.map { stream -> Data in
@@ -44,8 +47,13 @@ final class BeeperStubURLProtocol: URLProtocol {
     let stub =
       Self.stubs[Self.key(method, url.path)]
       ?? Stub(statusCode: 404, body: Data(#"{"error":{"code":"NOT_FOUND"}}"#.utf8))
-    let response = HTTPURLResponse(
-      url: url, statusCode: stub.statusCode, httpVersion: "HTTP/1.1", headerFields: nil)!
+    guard
+      let response = HTTPURLResponse(
+        url: url, statusCode: stub.statusCode, httpVersion: "HTTP/1.1", headerFields: nil)
+    else {
+      client?.urlProtocolDidFinishLoading(self)
+      return
+    }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: stub.body)
     client?.urlProtocolDidFinishLoading(self)
