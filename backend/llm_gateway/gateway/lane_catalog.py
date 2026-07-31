@@ -15,8 +15,7 @@ enforce the split.
 
 Promotion path: dev_only → internal eval gate → promotion PR →
 prod_ready (in this catalog) → serving artifact added (in
-route_artifacts.yaml) → human review + merge. (R4's cron proposes
-the PR; humans merge.)
+route_artifacts.yaml) → human review + merge.
 """
 
 from __future__ import annotations
@@ -24,12 +23,12 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
-from llm_gateway.gateway.schemas import LaneId
+from llm_gateway.gateway.schemas import LaneId, Surface
 
 if TYPE_CHECKING:
     from llm_gateway.gateway.config_loader import GatewayConfig
@@ -68,7 +67,7 @@ class CatalogEntry(BaseModel):
 
     lane_id: LaneId
     description: str
-    surface: str
+    surface: Surface | Literal["unknown"]
     provider: str
     model: str
     provider_support_status: ProviderSupportStatus
@@ -76,16 +75,15 @@ class CatalogEntry(BaseModel):
     notes: str = ""
     promoted_at: Optional[datetime] = None
 
-    @field_validator("promoted_at")
-    @classmethod
-    def _validate_promoted_at_status(cls, v: Optional[datetime], info) -> Optional[datetime]:
-        # Cross-check: promoted_at should be set when status is prod_ready
-        status = info.data.get("provider_support_status")
-        if status == ProviderSupportStatus.PROD_READY and v is None:
+    @model_validator(mode="after")
+    def _validate_prod_ready(self):
+        if self.provider_support_status == ProviderSupportStatus.PROD_READY and self.promoted_at is None:
             raise ValueError("promoted_at must be set when provider_support_status is prod_ready")
-        if status != ProviderSupportStatus.PROD_READY and v is not None:
-            raise ValueError(f"promoted_at must NOT be set when status is {status.value}")
-        return v
+        if self.provider_support_status == ProviderSupportStatus.PROD_READY and not self.eval_suite:
+            raise ValueError("eval_suite must be set when provider_support_status is prod_ready")
+        if self.provider_support_status != ProviderSupportStatus.PROD_READY and self.promoted_at is not None:
+            raise ValueError(f"promoted_at must NOT be set when status is {self.provider_support_status.value}")
+        return self
 
 
 class LaneCatalog(BaseModel):
@@ -158,6 +156,20 @@ def validate_serving_config(
             raise ConfigValidationError(
                 f"serving lane {lane_id!r} is catalogued as "
                 f"{entry.provider_support_status.value}; only prod_ready lanes may serve"
+            )
+        lane = serving_cfg.lanes[lane_id]
+        if entry.surface != lane.surface:
+            raise ConfigValidationError(
+                f"serving lane {lane_id!r} surface {lane.surface.value!r} does not match catalog {entry.surface!r}"
+            )
+        active_route = serving_cfg.route_artifacts.get(lane.active_route)
+        if (
+            active_route is not None
+            and active_route.lane_id == lane_id
+            and (entry.provider != active_route.primary.provider or entry.model != active_route.primary.model)
+        ):
+            raise ConfigValidationError(
+                f"serving lane {lane_id!r} active route {active_route.route_artifact_id!r} does not match catalog provider/model"
             )
 
     # Every prod_ready catalog entry must have at least one serving

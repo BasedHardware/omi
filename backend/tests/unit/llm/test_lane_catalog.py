@@ -44,7 +44,7 @@ class TestLoadCatalog:
         for entry in catalog.lanes:
             assert entry.lane_id.startswith("omi:auto:")
             assert entry.provider in {"openai", "anthropic", "tbd"}
-            assert entry.surface in {"openai.chat_completions", "chat", "unknown"}
+            assert entry.surface in {"openai.chat_completions", "anthropic.messages", "unknown"}
 
     def test_catalog_has_two_prod_ready_lanes(self):
         catalog = load_catalog()
@@ -98,7 +98,7 @@ class TestLoadCatalog:
                             "provider": "openai",
                             "model": "gpt-4.1-mini",
                             "provider_support_status": "prod_ready",
-                            "eval_suite": None,
+                            "eval_suite": "eval.test",
                             "notes": "",
                             "promoted_at": "2026-07-01T00:00:00Z",
                         }
@@ -203,6 +203,31 @@ class TestValidateServingConfig:
     def test_valid_serving_config_passes(self):
         catalog = load_catalog()
         validate_serving_config(catalog, load_gateway_config(prod_mode=False))
+
+    def test_serving_lane_surface_must_match_catalog(self):
+        catalog = load_catalog()
+        entry = catalog.get("omi:auto:chat-structured")
+        assert entry is not None
+        catalog = LaneCatalog(
+            lanes=[
+                entry.model_copy(update={"surface": Surface.ANTHROPIC_MESSAGES}) if lane == entry else lane
+                for lane in catalog.lanes
+            ]
+        )
+        with pytest.raises(ConfigValidationError, match="surface .* does not match catalog"):
+            validate_serving_config(catalog, load_gateway_config(prod_mode=False))
+
+    def test_serving_lane_active_provider_and_model_must_match_catalog(self):
+        catalog = load_catalog()
+        entry = catalog.get("omi:auto:chat-structured")
+        assert entry is not None
+        catalog = LaneCatalog(
+            lanes=[
+                entry.model_copy(update={"model": "gpt-4.1-mini"}) if lane == entry else lane for lane in catalog.lanes
+            ]
+        )
+        with pytest.raises(ConfigValidationError, match="does not match catalog provider/model"):
+            validate_serving_config(catalog, load_gateway_config(prod_mode=False))
 
     def test_serving_lane_not_in_catalog_is_rejected(self):
         catalog = load_catalog()
@@ -384,7 +409,7 @@ class TestLoadGatewayConfigWithCatalog:
                             "provider": "openai",
                             "model": "gpt-4.1-mini",
                             "provider_support_status": "prod_ready",
-                            "eval_suite": None,
+                            "eval_suite": "eval.test",
                             "notes": "",
                             "promoted_at": "2026-07-01T00:00:00Z",
                         }
@@ -543,7 +568,20 @@ class TestCatalogEntry:
                 provider="openai",
                 model="gpt-4.1-mini",
                 provider_support_status=ProviderSupportStatus.PROD_READY,
+                eval_suite="eval.test",
                 promoted_at=None,
+            )
+
+    def test_prod_ready_requires_eval_suite(self):
+        with pytest.raises(ValueError, match="eval_suite must be set"):
+            CatalogEntry(
+                lane_id="omi:auto:test",
+                description="x",
+                surface="openai.chat_completions",
+                provider="openai",
+                model="gpt-4.1-mini",
+                provider_support_status=ProviderSupportStatus.PROD_READY,
+                promoted_at="2026-07-01T00:00:00Z",
             )
 
     def test_dev_only_rejects_promoted_at(self):

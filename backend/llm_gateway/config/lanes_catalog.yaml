@@ -23,9 +23,7 @@
 #
 # Promotion path: dev_only → internal eval gate → promotion PR → prod_ready
 # (in this catalog) → serving artifact added (in route_artifacts.yaml)
-# → human review + merge. Cron proposes the PR; humans merge.
-# (R4's cron uses the catalog to find lanes ready for promotion; the cron
-# does NOT directly mutate the serving config.)
+# → human review + merge.
 lanes:
   # ---------------------------------------------------------------------------
   # prod_ready (1): chat-structured is the R0 pilot. Real provider, real
@@ -204,11 +202,11 @@ lanes:
 
   - lane_id: omi:auto:public-shared-conversation-chat
     description: Public shared-conversation chat (auto-routing)
-    surface: chat
+    surface: openai.chat_completions
     provider: openai
-    model: omi-fast
+    model: gpt-5-nano
     provider_support_status: prod_ready
-    eval_suite: null
+    eval_suite: backend.tests.unit.test_public_shared_conversation_chat
     promoted_at: "2026-07-29T00:00:00Z"
     notes: |
       Serves public shared conversations via the auto-router.
