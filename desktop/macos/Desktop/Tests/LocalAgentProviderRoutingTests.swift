@@ -162,19 +162,25 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
     XCTAssertEqual(
       AgentSpawnFallbackPolicy.takeNextFallback(
         remaining: &remaining,
-        rawErrorMessage: "Failed to start child process"),
+        error: NSError(
+          domain: "test", code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "Failed to start child process"])),
       .some(.hermes))
     XCTAssertEqual(remaining, [nil])
     XCTAssertEqual(
       AgentSpawnFallbackPolicy.takeNextFallback(
         remaining: &remaining,
-        rawErrorMessage: "ENOENT: no such file or directory"),
+        error: NSError(
+          domain: "test", code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "ENOENT: no such file or directory"])),
       .some(nil))
     XCTAssertTrue(remaining.isEmpty)
     XCTAssertNil(
       AgentSpawnFallbackPolicy.takeNextFallback(
         remaining: &remaining,
-        rawErrorMessage: "Failed to start child process"))
+        error: NSError(
+          domain: "test", code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "Failed to start child process"])))
   }
 
   func testTakeNextFallbackIgnoresNonRetriableErrors() {
@@ -182,8 +188,36 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
     XCTAssertNil(
       AgentSpawnFallbackPolicy.takeNextFallback(
         remaining: &remaining,
-        rawErrorMessage: "Could not find the email thread"))
+        error: NSError(
+          domain: "test", code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "Could not find the email thread"])))
     XCTAssertEqual(remaining, [.openclaw, nil])
+  }
+
+  func testTakeNextFallbackRequiresStartupPhaseForStructuredFailures() {
+    var remaining: [AgentPillsManager.DirectedProvider?] = [.hermes, nil]
+    let executionFailure = BridgeError.agentRuntimeFailure(
+      AgentRuntimeFailure(
+        code: "adapter_spawn_failed",
+        failureCode: .bridgeStartFailed,
+        userMessage: "Failed to spawn adapter process",
+        phase: nil
+      ))
+    XCTAssertNil(
+      AgentSpawnFallbackPolicy.takeNextFallback(remaining: &remaining, error: executionFailure))
+    XCTAssertEqual(remaining, [.hermes, nil])
+
+    let startupFailure = BridgeError.agentRuntimeFailure(
+      AgentRuntimeFailure(
+        code: "adapter_unavailable",
+        failureCode: .adapterUnavailable,
+        userMessage: "Adapter not ready",
+        phase: "startup"
+      ))
+    XCTAssertEqual(
+      AgentSpawnFallbackPolicy.takeNextFallback(remaining: &remaining, error: startupFailure),
+      .some(.hermes))
+    XCTAssertEqual(remaining, [nil])
   }
 
   func testIsRetriableSpawnFailureMatchesInfrastructureErrors() {
@@ -192,6 +226,55 @@ final class LocalAgentProviderRoutingTests: XCTestCase {
     XCTAssertTrue(LocalAgentProviderRouting.isRetriableSpawnFailure("Failed to start child process"))
     XCTAssertFalse(LocalAgentProviderRouting.isRetriableSpawnFailure("Could not find the email thread"))
     XCTAssertFalse(LocalAgentProviderRouting.isRetriableSpawnFailure("Could not parse adapter response: invalid JSON"))
+  }
+
+  func testExplicitProviderSpawnHasEmptyFallbackChain() {
+    let env = [
+      "OMI_CODEX_ADAPTER_COMMAND": "/tmp/codex",
+      "OMI_HERMES_ADAPTER_COMMAND": "/tmp/hermes",
+      "OMI_OPENCLAW_ADAPTER_COMMAND": "/tmp/openclaw",
+    ]
+    let resolution = LocalAgentProviderRouting.resolveSpawn(
+      brief: "refactor the auth module",
+      requestedProvider: .codex,
+      userRequestText: "use codex to refactor the auth module",
+      title: nil,
+      environment: env,
+      fileManager: FileManager(),
+      homeDirectory: "/tmp/omi-routing-test"
+    )
+
+    guard case .spawn(let plan) = resolution else {
+      return XCTFail("Expected spawn, got \(resolution)")
+    }
+    XCTAssertEqual(plan.selectedProvider, .codex)
+    XCTAssertEqual(plan.context.explicitProvider, .codex)
+    XCTAssertEqual(plan.context.fallbackChain, [])
+    XCTAssertEqual(AgentSpawnFallbackPolicy.remainingProviders(from: plan.context), [])
+  }
+
+  func testChatToolExplicitProviderAlsoHasEmptyFallbackChain() {
+    let env = [
+      "OMI_CODEX_ADAPTER_COMMAND": "/tmp/codex",
+      "OMI_HERMES_ADAPTER_COMMAND": "/tmp/hermes",
+    ]
+    let resolution = LocalAgentProviderRouting.resolveSpawn(
+      brief: "write a script",
+      requestedProvider: .hermes,
+      userRequestText: nil,
+      title: nil,
+      treatRequestedAsExplicit: true,
+      environment: env,
+      fileManager: FileManager(),
+      homeDirectory: "/tmp/omi-routing-test"
+    )
+
+    guard case .spawn(let plan) = resolution else {
+      return XCTFail("Expected spawn, got \(resolution)")
+    }
+    XCTAssertEqual(plan.selectedProvider, .hermes)
+    XCTAssertEqual(plan.context.fallbackChain, [])
+    XCTAssertEqual(AgentSpawnFallbackPolicy.remainingProviders(from: plan.context), [])
   }
 
   func testNegatedProviderMentionDoesNotRouteToThatProvider() {

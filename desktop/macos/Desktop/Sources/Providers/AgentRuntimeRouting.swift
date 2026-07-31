@@ -235,9 +235,9 @@ enum AgentSpawnFallbackPolicy {
 
   static func takeNextFallback(
     remaining: inout [AgentPillsManager.DirectedProvider?],
-    rawErrorMessage: String
+    error: Error
   ) -> AgentPillsManager.DirectedProvider?? {
-    guard LocalAgentProviderRouting.isRetriableSpawnFailure(rawErrorMessage), !remaining.isEmpty else {
+    guard LocalAgentProviderRouting.isRetriableSpawnFailure(error), !remaining.isEmpty else {
       return nil
     }
     return .some(remaining.removeFirst())
@@ -330,6 +330,13 @@ enum LocalAgentProviderRouting {
       "without \(name)", "instead of \(name)",
     ]
     return negationPhrases.contains { lower.contains($0) }
+  }
+
+  static func isRetriableSpawnFailure(_ error: Error) -> Bool {
+    if let runtime = error as? BridgeError, case .agentRuntimeFailure(let failure) = runtime {
+      return failure.isStartupPhase
+    }
+    return isRetriableSpawnFailure(AgentSpawnFallbackPolicy.rawSpawnFailureMessage(for: error))
   }
 
   static func isRetriableSpawnFailure(_ message: String) -> Bool {
@@ -513,6 +520,14 @@ enum LocalAgentProviderRouting {
     fileManager: FileManager,
     homeDirectory: String
   ) -> AgentSpawnContext {
+    if explicitProvider != nil {
+      return AgentSpawnContext(
+        taskKind: taskKind,
+        explicitProvider: explicitProvider,
+        fallbackChain: [],
+        attemptedHarnesses: [selectedHarness]
+      )
+    }
     let availableHarnesses = preferredProviders(for: taskKind)
       .filter {
         LocalAgentProviderDetector.isAvailable(
@@ -526,7 +541,7 @@ enum LocalAgentProviderRouting {
     let fallbackChain = availableHarnesses + [nil]
     return AgentSpawnContext(
       taskKind: taskKind,
-      explicitProvider: explicitProvider,
+      explicitProvider: nil,
       fallbackChain: fallbackChain,
       attemptedHarnesses: [selectedHarness]
     )

@@ -348,16 +348,22 @@ struct SettingsSidebar: View {
   // too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
   // content too). The absorbed cases stay routable for deep links/automation
   // and highlight their merged item via `sidebarItem`.
-  private let visibleSections: [SettingsContentView.SettingsSection] = [
+  static let visibleNavSections: [SettingsContentView.SettingsSection] = [
     .general,
     .account,
     .transcription,
     .floatingBar,
     .aiAgents,
+    .notifications,
+    .rewind,
     .shortcuts,
     .advanced,
     .about,
   ]
+
+  private var visibleSections: [SettingsContentView.SettingsSection] {
+    Self.visibleNavSections
+  }
 
   private var filteredSearchItems: [SettingsSearchItem] {
     guard !searchQuery.isEmpty else { return [] }

@@ -741,10 +741,9 @@ final class AgentPillsManager: ObservableObject {
           await self.pollCanonicalRun(for: pill, generation: generation)
           return
         } catch {
-          let rawMessage = AgentSpawnFallbackPolicy.rawSpawnFailureMessage(for: error)
           if let nextProvider = AgentSpawnFallbackPolicy.takeNextFallback(
             remaining: &pill.fallbackProviders,
-            rawErrorMessage: rawMessage
+            error: error
           ),
             !Task.isCancelled,
             RuntimeOwnerIdentity.currentOwnerId() == spawnOwnerID,
