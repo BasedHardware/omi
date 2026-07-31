@@ -6,6 +6,7 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TasksEscapeHandling.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
 preconditions:
   - auth_ready
@@ -37,6 +38,13 @@ steps:
     do: "Verify the keyboard toolbar at the bottom shows navigation and editing controls: Navigate, New, Delete, Indent, Outdent."
     expect:
       interactive_count: { min: 3 }
+
+  - id: S4a
+    name: Cancel inline task creation with Escape
+    do: "Click New to begin an inline task, then press Escape. Verify the inline editor closes and the Tasks page remains visible."
+    expect:
+      text_visible:
+        - Tasks
 
   - id: S5
     name: Verify search and filter controls

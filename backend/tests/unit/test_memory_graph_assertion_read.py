@@ -187,6 +187,8 @@ def test_loader_excludes_assertions_not_fenced_to_an_active_current_item(item_ov
         "nodes": [],
         "edges": [],
         "truncated": False,
+        "node_count": 0,
+        "edge_count": 0,
         "node_limit": kg_db.MAX_KNOWLEDGE_GRAPH_NODES,
         "edge_limit": kg_db.MAX_KNOWLEDGE_GRAPH_EDGES,
     }
@@ -228,6 +230,8 @@ def test_tombstoned_canonical_item_fences_legacy_graph_before_projection_prune(g
         "nodes": [],
         "edges": [],
         "truncated": False,
+        "node_count": 0,
+        "edge_count": 0,
         "node_limit": kg_db.MAX_KNOWLEDGE_GRAPH_NODES,
         "edge_limit": kg_db.MAX_KNOWLEDGE_GRAPH_EDGES,
     }

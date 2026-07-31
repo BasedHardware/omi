@@ -24,20 +24,20 @@ def test_loads_default_gateway_config():
     assert lane.last_known_good == LKG_ROUTE
     assert config.route_artifacts[ACTIVE_ROUTE].content_digest.startswith('sha256:')
     assert config.feature_bundles['chat_extraction.requires_context'].lane_id == LANE_ID
-    assert config.route_artifacts[ACTIVE_ROUTE].primary.model == 'gpt-5.4-nano'
+    assert config.route_artifacts[ACTIVE_ROUTE].primary.model == 'gpt-5.6-luna'
     assert config.route_artifacts[ACTIVE_ROUTE].provider_options['reasoning_effort'] == 'low'
 
 
 def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     config = load_gateway_config(prod_mode=True)
 
-    assert get_model('conv_discard') == 'gpt-4.1-nano'
-    assert get_model('memories') == 'gpt-4.1-mini'
-    assert get_model('fair_use') == 'gpt-5.1'
+    assert get_model('conv_discard') == 'gpt-5-nano'
+    assert get_model('memories') == 'gpt-5.6-luna'
+    assert get_model('fair_use') == 'gpt-5.6-luna'
     assert get_model('chat_agent') == 'claude-sonnet-4-6'
 
     assert config.route_artifacts['route.conv_discard.model_config.001'].primary.model == 'gpt-5-nano'
-    assert config.route_artifacts['route.memories.model_config.001'].primary.model == 'gpt-5.4-nano'
+    assert config.route_artifacts['route.memories.model_config.001'].primary.model == 'gpt-5.6-luna'
     assert config.route_artifacts['route.fair_use.model_config.001'].primary.model == 'gpt-5.6-luna'
     assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == 'claude-sonnet-5'
     assert config.route_artifacts['route.memory_l2.model_config.001'].provider_options['reasoning_effort'] == 'medium'

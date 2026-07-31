@@ -166,9 +166,9 @@ def extract_knowledge_from_memory(
 
             saved_node = kg_db.upsert_knowledge_node(uid, node_data)
             created_nodes.append(saved_node)
-            label_to_node_id[node.label.lower()] = node_id
+            label_to_node_id[node.label.lower()] = saved_node['id']
             for alias in node.aliases:
-                label_to_node_id[alias.lower()] = node_id
+                label_to_node_id[alias.lower()] = saved_node['id']
 
         created_edges: List[Any] = []
         for edge in extraction.edges:

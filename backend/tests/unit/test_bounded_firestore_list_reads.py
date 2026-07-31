@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from unittest.mock import patch
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 import pytest
 
 from tests.store_fakes import FakeDocumentStore
@@ -152,6 +154,66 @@ def test_knowledge_graph_get_is_bounded(monkeypatch):
     assert captured['memory_graph_assertions'] == kg.MAX_KNOWLEDGE_GRAPH_ASSERTIONS + 1
 
 
+@pytest.mark.parametrize(
+    ('node_total', 'edge_total', 'expected_nodes', 'expected_edges', 'expected_truncated'),
+    (
+        (0, 0, 0, 0, False),
+        (3, 2, 3, 2, False),
+        (20_000, 20_000, 500, 1000, True),
+    ),
+)
+def test_knowledge_graph_get_is_deterministic_and_bounded_for_large_fixtures(
+    monkeypatch,
+    node_total,
+    edge_total,
+    expected_nodes,
+    expected_edges,
+    expected_truncated,
+):
+    import database.knowledge_graph as kg
+    from tests.store_fakes import FakeDocumentStore
+
+    # Migrated to the neutral storage port: the module now orders reads by document name
+    # (`_store().query(coll, order_by='__name__', limit=...)`) instead of a Firestore
+    # `.order_by(...).stream()` chain, and the FakeDocumentStore honors '__name__' as
+    # document-id order. Seeding N docs and asserting the bounded page + truncated flag against
+    # the store's ordered result is the behavioral equivalent of the retired stream-count and
+    # order_by-field assertions.
+    captured: dict = {}
+
+    class _RecordingStore(FakeDocumentStore):
+        def query(self, collection, **kwargs):
+            captured[collection.rsplit('/', 1)[-1]] = kwargs.get('limit')
+            return super().query(collection, **kwargs)
+
+    fake = _RecordingStore()
+    # Deterministic document-id order ('n0','n1',...) keeps the two edge endpoints ('n0','n1')
+    # inside the bounded node page so referential closure fills the edge page to the cap.
+    for i in range(node_total):
+        fake._docs[f'users/uid/knowledge_nodes/n{i}'] = {'id': f'n{i}', 'label': f'L{i}'}
+    for i in range(edge_total):
+        fake._docs[f'users/uid/knowledge_edges/e{i}'] = {
+            'id': f'e{i}',
+            'source_id': 'n0',
+            'target_id': 'n1',
+            'label': f'L{i}',
+        }
+    monkeypatch.setattr(kg, '_store', lambda: fake)
+
+    graph = kg.get_knowledge_graph('uid')
+    assert len(graph['nodes']) == expected_nodes
+    assert len(graph['edges']) == expected_edges
+    assert graph['node_count'] == expected_nodes
+    assert graph['edge_count'] == expected_edges
+    assert graph['truncated'] is expected_truncated
+    # Bounded reads: the reader fetches at most one row past each public cap, never the full
+    # collection (replaces the retired `limit_n == cap + 1` / stream-count call mechanics).
+    if node_total:
+        assert captured['knowledge_nodes'] == kg.MAX_KNOWLEDGE_GRAPH_NODES + 1
+    if edge_total:
+        assert captured['knowledge_edges'] == kg.MAX_KNOWLEDGE_GRAPH_EDGES + 1
+
+
 def test_legacy_get_memories_no_first_page_5000_force():
     import routers.memories as mem
 
@@ -177,12 +239,24 @@ def test_knowledge_graph_route_exposes_truncation(monkeypatch):
         'nodes': [{'id': 'n1'}],
         'edges': [],
         'truncated': True,
-        'node_limit': 2000,
-        'edge_limit': 5000,
+        'node_count': 1,
+        'edge_count': 0,
+        'node_limit': 500,
+        'edge_limit': 1000,
     }
     monkeypatch.setattr(kg_router, 'get_knowledge_graph_payload', lambda uid: payload)
-    resp = kg_router.get_knowledge_graph(uid='u')
-    assert resp.truncated is True
-    assert resp.node_limit == 2000
-    assert resp.edge_limit == 5000
-    assert resp.nodes == payload['nodes']
+    app = FastAPI()
+    app.include_router(kg_router.router)
+    app.dependency_overrides[kg_router.auth.get_current_user_uid] = lambda: 'u'
+
+    response = TestClient(app).get('/v1/knowledge-graph')
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
+def test_knowledge_graph_route_keeps_firebase_auth_dependency():
+    from routers import knowledge_graph as kg_router
+
+    route = next(route for route in kg_router.router.routes if route.path == '/v1/knowledge-graph')
+    assert [dependency.call for dependency in route.dependant.dependencies] == [kg_router.auth.get_current_user_uid]

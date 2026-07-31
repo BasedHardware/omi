@@ -16,11 +16,14 @@ knowledge_edges_collection = 'knowledge_edges'
 memory_graph_assertions_collection = 'memory_graph_assertions'
 memory_items_collection = 'memory_items'
 
-# GET /v1/knowledge-graph must not stream unbounded nodes/edges (prod 30s GET 504s).
-MAX_KNOWLEDGE_GRAPH_NODES = 2000
-MAX_KNOWLEDGE_GRAPH_EDGES = 5000
-MAX_KNOWLEDGE_GRAPH_ASSERTIONS = 2000
+# GET /v1/knowledge-graph feeds force-graph UIs, so a compact snapshot is both
+# cheaper to read and more usable than thousands of rendered entities. The
+# previous 2,000-node / 5,000-edge bounds still produced prod 30s GET 504s.
+MAX_KNOWLEDGE_GRAPH_NODES = 500
+MAX_KNOWLEDGE_GRAPH_EDGES = 1000
+MAX_KNOWLEDGE_GRAPH_ASSERTIONS = 500
 MAX_KNOWLEDGE_GRAPH_CITATION_FENCES = 500
+KNOWLEDGE_GRAPH_DOCUMENT_ORDER = '__name__'
 
 
 def _store():
@@ -155,7 +158,7 @@ def get_knowledge_nodes(
     capped = max(0, min(int(limit), MAX_KNOWLEDGE_GRAPH_NODES + 1))
     if capped == 0:
         return []
-    return [_typed_doc(doc) for doc in _store().query(nodes_collection, limit=capped)]
+    return [_typed_doc(doc) for doc in _store().query(nodes_collection, order_by=KNOWLEDGE_GRAPH_DOCUMENT_ORDER, limit=capped)]
 
 
 def get_knowledge_node(uid: str, node_id: str) -> Optional[Dict[str, Any]]:
@@ -240,7 +243,7 @@ def get_knowledge_edges(
     capped = max(0, min(int(limit), MAX_KNOWLEDGE_GRAPH_EDGES + 1))
     if capped == 0:
         return []
-    return [_typed_doc(doc) for doc in _store().query(edges_collection, limit=capped)]
+    return [_typed_doc(doc) for doc in _store().query(edges_collection, order_by=KNOWLEDGE_GRAPH_DOCUMENT_ORDER, limit=capped)]
 
 
 def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -337,7 +340,7 @@ def _load_active_memory_graph_assertions(
         truncated = False
     else:
         bounded_limit = max(0, int(scan_limit))
-        snapshots = _store().query(assertions_collection, limit=bounded_limit + 1)
+        snapshots = _store().query(assertions_collection, order_by=KNOWLEDGE_GRAPH_DOCUMENT_ORDER, limit=bounded_limit + 1)
         truncated = len(snapshots) > bounded_limit
         snapshots = snapshots[:bounded_limit]
 
@@ -694,10 +697,13 @@ def get_knowledge_graph(uid: str) -> Dict[str, Any]:
         or assertions_truncated
         or citation_fences_truncated
     )
+    edge_page = referentially_closed_edges[:MAX_KNOWLEDGE_GRAPH_EDGES]
     return {
         'nodes': node_page,
-        'edges': referentially_closed_edges[:MAX_KNOWLEDGE_GRAPH_EDGES],
+        'edges': edge_page,
         'truncated': nodes_truncated or edges_truncated,
+        'node_count': len(node_page),
+        'edge_count': len(edge_page),
         'node_limit': MAX_KNOWLEDGE_GRAPH_NODES,
         'edge_limit': MAX_KNOWLEDGE_GRAPH_EDGES,
     }

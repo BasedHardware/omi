@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.148",
+      "date": "2026-07-30",
+      "changes": [
+        "Fixed Escape so it closes active desktop editing and overlays before navigating home"
+      ]
+    },
+    {
       "version": "0.12.147",
       "date": "2026-07-30",
       "changes": [

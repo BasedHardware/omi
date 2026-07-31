@@ -20,12 +20,13 @@ REQUIRED_SOURCE_CHECK_NAMES = (
     "Desktop Swift Release Compile",
 )
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
-# The exact-SHA aggregate can complete after the former 12-minute boundary on
-# a healthy run. Give the normal 20-minute CI budget time to settle while
-# retaining a bounded, fail-closed source-check gate.
-SOURCE_CHECK_WAIT_SECONDS = 20 * 60
+# Desktop Swift CI regularly takes 30-45 minutes. Keep a 60-minute exact-SHA
+# gate budget so healthy builds are not timed out while still running. Override
+# via CI_GATE_TIMEOUT_SECONDS or --source-check-wait-seconds.
+SOURCE_CHECK_WAIT_SECONDS = 60 * 60
 SOURCE_CHECK_POLL_SECONDS = 30
 MAX_SOURCE_STATUS_POLLS = 20
+CI_GATE_TIMEOUT_ENV = "CI_GATE_TIMEOUT_SECONDS"
 # Short debounce so a merge is tagged within ~a minute instead of waiting ten.
 # The one-active-release fence (Codemagic build status on the latest tag) already
 # collapses rapid bursts to the newest SHA while a build runs, so this window only
@@ -240,6 +241,20 @@ def required_source_checks_gate(repository: str, sha: str) -> SourceCheckGate:
     return SourceCheckGate("ready")
 
 
+def default_source_check_wait_seconds() -> int:
+    """Resolve the CI gate wait budget from CI_GATE_TIMEOUT_SECONDS or the default."""
+    raw = os.environ.get(CI_GATE_TIMEOUT_ENV)
+    if raw is None or raw.strip() == "":
+        return SOURCE_CHECK_WAIT_SECONDS
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise SystemExit(f"{CI_GATE_TIMEOUT_ENV} must be an integer, got {raw!r}") from exc
+    if value < 0:
+        raise SystemExit(f"{CI_GATE_TIMEOUT_ENV} must be non-negative")
+    return value
+
+
 def wait_for_required_source_checks(
     repository: str, sha: str, *, wait_seconds: int, poll_seconds: int
 ) -> SourceCheckGate:
@@ -252,6 +267,12 @@ def wait_for_required_source_checks(
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
+            # One final look before giving up: GitHub check-run visibility can
+            # lag the true completion enough that the last poll still looked
+            # missing/in-progress even though the required checks are ready.
+            gate = required_source_checks_gate(repository, sha)
+            if gate.state != "waiting":
+                return gate
             return SourceCheckGate(
                 "blocked",
                 f"timed out after {wait_seconds}s waiting for required exact-SHA checks: {gate.reason}",
@@ -390,14 +411,27 @@ def set_output(name: str, value: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", required=True)
-    parser.add_argument("--source-check-wait-seconds", type=int, default=SOURCE_CHECK_WAIT_SECONDS)
+    parser.add_argument(
+        "--source-check-wait-seconds",
+        type=int,
+        default=None,
+        help=(
+            "Seconds to wait for required exact-SHA checks "
+            f"(default: ${{{CI_GATE_TIMEOUT_ENV}}} or {SOURCE_CHECK_WAIT_SECONDS})"
+        ),
+    )
     parser.add_argument("--source-check-poll-seconds", type=int, default=SOURCE_CHECK_POLL_SECONDS)
     parser.add_argument("--watch-source-sha")
     parser.add_argument("--watch-max-polls", type=int, default=1)
     parser.add_argument("--watch-poll-seconds", type=int, default=SOURCE_CHECK_POLL_SECONDS)
     args = parser.parse_args()
 
-    if args.source_check_wait_seconds < 0:
+    source_check_wait_seconds = (
+        args.source_check_wait_seconds
+        if args.source_check_wait_seconds is not None
+        else default_source_check_wait_seconds()
+    )
+    if source_check_wait_seconds < 0:
         parser.error("--source-check-wait-seconds must be non-negative")
     if args.source_check_poll_seconds <= 0:
         parser.error("--source-check-poll-seconds must be positive")
@@ -467,7 +501,7 @@ def main() -> int:
     source_check_gate = wait_for_required_source_checks(
         args.repository,
         source_sha,
-        wait_seconds=args.source_check_wait_seconds,
+        wait_seconds=source_check_wait_seconds,
         poll_seconds=args.source_check_poll_seconds,
     )
     if source_check_gate.state == "waiting":

@@ -19,6 +19,13 @@ enum PersistedCaptureLaunchPolicy {
   }
 }
 
+enum DesktopHomeEscapeNavigation {
+  static func shouldNavigateHome(selectedIndex: Int, usesLegacyHomeDesign: Bool) -> Bool {
+    guard !usesLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
+    return [.conversations, .memories, .tasks, .rewind].contains(item)
+  }
+}
+
 // MARK: - NSHostingView sizingOptions access
 
 /// Protocol to access sizingOptions on any NSHostingView<Content> regardless of the generic parameter.
@@ -1104,9 +1111,7 @@ struct DesktopHomeView: View {
           isShowingMemoryAtlasPage: $isShowingMemoryAtlasPage
         )
       }
-      .onExitCommand {
-        navigateHomeOnEscapeIfNeeded()
-      }
+      .onEscapeKey(priority: .navigation) { navigateHomeOnEscapeIfNeeded() }
       .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
     }
     .padding(OmiSpacing.md)
@@ -1265,17 +1270,21 @@ struct DesktopHomeView: View {
       }
   }
 
-  private func navigateHomeOnEscapeIfNeeded() {
+  private func navigateHomeOnEscapeIfNeeded() -> Bool {
     if isShowingMemoryAtlasPage {
       isShowingMemoryAtlasPage = false
-      return
+      return true
     }
-    guard !useLegacyHomeDesign else { return }
-    guard let item = SidebarNavItem(rawValue: selectedIndex) else { return }
-    guard [.conversations, .memories, .tasks, .rewind].contains(item) else { return }
+    guard
+      DesktopHomeEscapeNavigation.shouldNavigateHome(
+        selectedIndex: selectedIndex,
+        usesLegacyHomeDesign: useLegacyHomeDesign
+      )
+    else { return false }
     OmiMotion.withGated(Self.pageNavigationAnimation) {
       selectedIndex = SidebarNavItem.dashboard.rawValue
     }
+    return true
   }
 }
 
