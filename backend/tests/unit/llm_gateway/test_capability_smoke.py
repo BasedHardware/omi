@@ -124,7 +124,8 @@ class TestBuildFixture:
         assert req.response_format is None
 
     def test_fixture_includes_tools_when_capability_declared(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-agent")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
+        lane = lane.model_copy(update={"capabilities": lane.capabilities.model_copy(update={"tools": True})})
         req = build_fixture(lane, artifact)
         assert req.tools is not None
         assert req.tools[0]["type"] == "function"
@@ -135,7 +136,8 @@ class TestBuildFixture:
         assert req.tools is None
 
     def test_fixture_stream_true_when_streaming_capability(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-agent")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
+        lane = lane.model_copy(update={"capabilities": lane.capabilities.model_copy(update={"streaming": True})})
         req = build_fixture(lane, artifact)
         assert req.stream is True
 
