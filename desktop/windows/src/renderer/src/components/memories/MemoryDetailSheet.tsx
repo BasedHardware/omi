@@ -10,6 +10,7 @@ import {
   isProtectedContent,
   layerLabel
 } from '../../lib/memoryFilters'
+import { memorySourceLabel } from '../../lib/memoryProvenance'
 import { Badge } from '../ui/Badge'
 import { Toggle } from '../ui/Toggle'
 
@@ -59,6 +60,7 @@ export function MemoryDetailSheet({
   const layer = layerLabel(memory)
   const isPublic = memory.visibility === 'public'
   const tags = displayTags(memory)
+  const source = memorySourceLabel(memory)
 
   const saveEdit = async (): Promise<void> => {
     const text = draft.trim()
@@ -184,6 +186,7 @@ export function MemoryDetailSheet({
 
               {/* Metadata panel */}
               <div className="mt-5 rounded-xl bg-[var(--bg-tertiary)] px-4 py-2">
+                <MetaRow label="Learned from" value={source} />
                 {typeof memory.capture_confidence === 'number' && (
                   <MetaRow
                     label="Confidence"
