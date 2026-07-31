@@ -43,6 +43,12 @@ describe('memorySource', () => {
     expect(memorySource(memory())).toBe('unknown')
   })
 
+  it('uses recorded API evidence before legacy source flags', () => {
+    expect(
+      memorySource(memory({ manually_added: true, evidence: [{ source_type: 'developer_api' }] }))
+    ).toBe('app')
+  })
+
   it('returns an honest fallback label when no origin was recorded', () => {
     expect(memorySourceLabel(memory())).toBe('Origin not recorded')
   })

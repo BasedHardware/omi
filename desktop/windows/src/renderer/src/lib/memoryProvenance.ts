@@ -3,14 +3,7 @@ import { APP_INDEX_TAG } from './memoryCleanup'
 import { SCREEN_TAG } from './screenTag'
 
 export type MemorySource =
-  | 'screen'
-  | 'file-index'
-  | 'gmail'
-  | 'sticky-notes'
-  | 'manual'
-  | 'conversation'
-  | 'app'
-  | 'unknown'
+  'screen' | 'file-index' | 'gmail' | 'sticky-notes' | 'manual' | 'conversation' | 'app' | 'unknown'
 
 const sourceLabels: Record<MemorySource, string> = {
   screen: 'Screen capture',
@@ -32,9 +25,6 @@ export function memorySource(memory: Memory): MemorySource {
   if (tags.includes(APP_INDEX_TAG)) return 'file-index'
   if (tags.some((tag) => tag.startsWith('gmail/'))) return 'gmail'
   if (tags.some((tag) => tag.startsWith('sticky_notes/'))) return 'sticky-notes'
-  if (memory.manually_added || memory.category === 'manual') return 'manual'
-  if (memory.conversation_id) return 'conversation'
-  if (memory.app_id) return 'app'
   if (evidenceTypes?.includes('manual')) return 'manual'
   if (
     evidenceTypes?.some((type) =>
@@ -55,6 +45,9 @@ export function memorySource(memory: Memory): MemorySource {
   ) {
     return 'app'
   }
+  if (memory.manually_added || memory.category === 'manual') return 'manual'
+  if (memory.conversation_id) return 'conversation'
+  if (memory.app_id) return 'app'
   return 'unknown'
 }
 
