@@ -77,7 +77,7 @@ public struct QueryStamp: Codable, Sendable, Equatable {
         let directory = url.deletingLastPathComponent()
         // The MCP server can be spawned before the app has ever run, so the directory may not exist
         // yet. Recording the very first call still has to work.
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        _ = try ContextPaths.ensureSupportDirectory(at: directory)
 
         let lock = try QueryStampLock(at: ContextPaths.queryStampLockURL(for: url))
         defer { lock.release() }

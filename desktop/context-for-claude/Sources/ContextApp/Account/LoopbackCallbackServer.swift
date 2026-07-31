@@ -150,9 +150,28 @@ final class LoopbackCallbackServer: @unchecked Sendable {
                 setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
                 setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
 
-                var buffer = [UInt8](repeating: 0, count: 8192)
-                let read = recv(client, &buffer, buffer.count - 1, 0)
-                guard read > 0, let request = String(bytes: buffer.prefix(read), encoding: .utf8) else {
+                var buffer = [UInt8]()
+                buffer.reserveCapacity(8192)
+                var temp = [UInt8](repeating: 0, count: 1024)
+                var foundTerminator = false
+                while buffer.count < 8192 {
+                    let space = min(temp.count, 8192 - buffer.count)
+                    let read = recv(client, &temp, space, 0)
+                    guard read > 0 else { break }
+                    buffer.append(contentsOf: temp.prefix(read))
+                    if buffer.count >= 4 {
+                        for i in 0..<(buffer.count - 3) {
+                            if buffer[i] == 0x0D && buffer[i+1] == 0x0A &&
+                               buffer[i+2] == 0x0D && buffer[i+3] == 0x0A {
+                                buffer = Array(buffer[0..<i])
+                                foundTerminator = true
+                                break
+                            }
+                        }
+                    }
+                    if foundTerminator { break }
+                }
+                guard foundTerminator, let request = String(bytes: buffer, encoding: .utf8) else {
                     self.respond(.invalid, to: client)
                     continue
                 }

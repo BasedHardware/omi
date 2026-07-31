@@ -16,9 +16,9 @@ private func note(_ message: String) {
 /// nilled into one. The heartbeat is the tiebreaker — the app rewrites it every 30s, so a live beat
 /// against an unopenable store proves the fault is in this process, not in the user's history. It is
 /// logged loudly here because the operator reading stderr is the one who can fix it.
-private func openStore() -> ContextStore? {
+private func openStore() -> (store: ContextStore?, error: Error?) {
     do {
-        return try ContextStore(readOnly: true)
+        return (try ContextStore(readOnly: true), nil)
     } catch ContextStoreError.notInitialized {
         switch CaptureState.diagnoseMissingDatabase() {
         case let .readerIsStale(_, age):
@@ -32,20 +32,21 @@ private func openStore() -> ContextStore? {
         case .databaseAwaitingUpgrade:
             note("database predates this binary — launch the Context for Claude app once to upgrade it")
         }
-        return nil
+        return (nil, nil)
     } catch ContextStoreError.awaitingAppUpgrade {
         note("""
         the capture database predates this binary and the app owns migrations, so every query would \
         fail. Launch the Context for Claude app once — it upgrades on launch. No captured data is lost.
         """)
-        return nil
+        return (nil, nil)
     } catch {
         note("could not open the database read-only: \(error)")
-        return nil
+        return (nil, error)
     }
 }
 
 // A client that goes away mid-write must surface as an EPIPE error on the write, not kill us.
 _ = signal(SIGPIPE, SIG_IGN)
 
-MCPServer(store: openStore()).run()
+let opened = openStore()
+MCPServer(store: opened.store, openError: opened.error).run()

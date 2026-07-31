@@ -19,6 +19,10 @@ enum ClaudeRegistrar {
 
     private static let logCategory = "claude"
 
+    private struct RegistrationError: Error {
+        let message: String
+    }
+
     // MARK: - The binary Claude will spawn
 
     private static let binaryName = "context-for-claude-mcp"
@@ -106,6 +110,10 @@ enum ClaudeRegistrar {
     private static func connect(_ surface: Surface, binary: String) -> Outcome {
         modify(surface) { existing in
             guard !ClaudeConfig.isRegistered(in: existing, mcpBinaryPath: binary) else { return nil }
+            if let mcpServers = existing["mcpServers"], !(mcpServers is [String: Any]) {
+                throw RegistrationError(
+                    message: "I couldn’t update \(surface.name) — the `mcpServers` key in \(displayPath(surface.configURL)) isn’t a dictionary. I left it exactly as it was.")
+            }
             return ClaudeConfig.merged(into: existing, mcpBinaryPath: binary)
         }
     }
@@ -122,12 +130,12 @@ enum ClaudeRegistrar {
     /// Reads a surface's config, applies `transform`, and writes the result back. `transform`
     /// returning nil means "already correct" — that is the difference between `.changed` and
     /// `.unchanged`, which is the difference the user reads in the message.
-    private static func modify(_ surface: Surface, _ transform: ([String: Any]) -> [String: Any]?) -> Outcome {
+    private static func modify(_ surface: Surface, _ transform: ([String: Any]) throws -> [String: Any]?) -> Outcome {
         guard surface.isInstalled else { return .absent }
         let url = surface.configURL
         do {
             let existing = try currentDocument(at: url)
-            guard let updated = transform(existing) else { return .unchanged }
+            guard let updated = try transform(existing) else { return .unchanged }
             // Only ever reached once `isInstalled` has confirmed the surface is really here, so
             // this creates a directory for an app the user has, never for one they don't.
             try FileManager.default.createDirectory(
@@ -217,6 +225,10 @@ enum ClaudeRegistrar {
         let path = displayPath(surface.configURL)
         // The error's detail string is deliberately never logged: it comes from parsing the user's
         // own config, and `~/.claude.json` carries their whole project history.
+        if let registrationError = error as? RegistrationError {
+            ContextLog.error(registrationError.message, logCategory)
+            return registrationError.message
+        }
         if let configError = error as? ClaudeConfigError {
             switch configError {
             case .unreadable:

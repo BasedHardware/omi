@@ -83,8 +83,12 @@ public enum Tools {
     /// `store` is nil when nothing has been captured on this Mac yet — which is the *normal* state
     /// five minutes after install, and no longer means the tools have nothing to say: the Omi
     /// account's own history answers most of them on its own.
-    public static func call(name: String, arguments: JSONValue?, store: ContextStore?) throws -> String {
+    public static func call(name: String, arguments: JSONValue?, store: ContextStore?, openError: Error? = nil) throws -> String {
         guard all.contains(where: { $0.name == name }) else { throw ToolError.unknownTool(name) }
+
+        if store == nil, let openError = openError, name != "status" {
+            throw openError
+        }
 
         let text: String
         switch name {
@@ -94,7 +98,7 @@ public enum Tools {
         case "transcript": text = try runTranscript(arguments, store)
         case "screen": text = try runScreen(arguments, store)
         case "activity": text = try runActivity(arguments, store)
-        case "status": text = runStatus(store)
+        case "status": text = runStatus(store, openError)
         default: throw ToolError.unknownTool(name)
         }
         // The last thing before the transport, and deliberately here rather than in `renderMerged`:
@@ -879,7 +883,7 @@ extension Tools {
     /// the database is right there and readable enough to open, so reporting "never captured
     /// anything" is a lie about the user rather than a report about the reader. Carry the failure
     /// through and say which of the three actually happened.
-    private static func runStatus(_ store: ContextStore?) -> String {
+    private static func runStatus(_ store: ContextStore?, _ openError: Error? = nil) -> String {
         var local: StatusInfo?
         var queryFailure: String?
         if let store {
@@ -888,6 +892,8 @@ extension Tools {
             } catch {
                 queryFailure = error.localizedDescription
             }
+        } else if let openError {
+            queryFailure = openError.localizedDescription
         }
         return renderStatus(local, queryFailure: queryFailure) + "\n\n" + renderOmiStatus()
     }

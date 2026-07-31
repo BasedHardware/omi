@@ -43,6 +43,7 @@ public final class MCPServer {
     public static let serverVersion = "1.0.0"
 
     private let store: ContextStore?
+    private let openError: Error?
     /// Where a served tool call is recorded so the app can prove Claude reached us.
     private let queryStampURL: URL
 
@@ -52,8 +53,9 @@ public final class MCPServer {
     /// the standard location when there is no database yet. Both resolve to the same file in a real
     /// install; deriving it from the store keeps a server that was pointed at another data directory
     /// from reporting its calls into the default one.
-    public init(store: ContextStore?, queryStampURL: URL? = nil) {
+    public init(store: ContextStore?, openError: Error? = nil, queryStampURL: URL? = nil) {
         self.store = store
+        self.openError = openError
         self.queryStampURL = queryStampURL
             ?? store.map { ContextPaths.queryStampURL(besideDatabaseAt: $0.databaseURL) }
             ?? ContextPaths.queryStampURL
@@ -167,7 +169,7 @@ public final class MCPServer {
         // rather than on the connection.
         defer { if isOurTool { recordServedCall(name) } }
         do {
-            let text = try Tools.call(name: name, arguments: request.params?["arguments"], store: store)
+            let text = try Tools.call(name: name, arguments: request.params?["arguments"], store: store, openError: openError)
             return RPC.result(id: request.id, Self.content(text, isError: false))
         } catch {
             // MCP models a tool failure as a *result* so the model can read the reason and recover;

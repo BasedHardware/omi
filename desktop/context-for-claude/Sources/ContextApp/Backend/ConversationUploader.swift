@@ -86,10 +86,11 @@ final class ConversationUploader: ObservableObject {
     /// Fire-and-forget on purpose: the caller is finishing a conversation, and an upload must never
     /// be in front of that.
     func enqueue(sessionId: Int64) {
+        let ownerId = OmiAuth.shared.userId
         Task { [weak self] in
             guard let self else { return }
             do {
-                try await self.database.perform { try UploadQueue.markPending($0, sessionId: sessionId) }
+                try await self.database.perform { try UploadQueue.markPending($0, sessionId: sessionId, ownerId: ownerId) }
                 ContextLog.info("Session \(sessionId) queued for upload", Self.category)
             } catch {
                 // The session is still on disk and reconciliation will find it again; this is a
@@ -352,9 +353,10 @@ final class ConversationUploader: ObservableObject {
     }
 
     private func nextDue(excluding blocked: Set<Int64>) async -> UploadQueue.Entry? {
+        let ownerId = OmiAuth.shared.userId
         do {
             let due = try await database.perform {
-                try UploadQueue.pending($0, dueAt: ContextTime.now, limit: 20)
+                try UploadQueue.pending($0, ownerId: ownerId, dueAt: ContextTime.now, limit: 20)
             }
             return due.first { !blocked.contains($0.sessionId) }
         } catch {

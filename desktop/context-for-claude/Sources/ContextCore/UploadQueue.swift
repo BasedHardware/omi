@@ -128,36 +128,46 @@ public enum UploadQueue {
                 db,
                 sql: "SELECT identifier FROM grdb_migrations WHERE identifier = ?",
                 arguments: [migrationIdentifier])
-            guard applied == nil else { return }
 
-            // One row per local session, keyed by it: a session can be enqueued twice — by the
-            // engine when it closes and by reconciliation afterwards — and the primary key is what
-            // makes the second one a no-op instead of a duplicate conversation.
-            try db.execute(
-                sql: """
-                    CREATE TABLE IF NOT EXISTS uploads (
-                      sessionId INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
-                      state TEXT NOT NULL,
-                      attempts INTEGER NOT NULL DEFAULT 0,
-                      partsDone INTEGER NOT NULL DEFAULT 0,
-                      queuedAt DOUBLE NOT NULL,
-                      updatedAt DOUBLE NOT NULL,
-                      nextAttemptAt DOUBLE NOT NULL DEFAULT 0,
-                      conversationIds TEXT,
-                      lastError TEXT)
-                    """)
-            // The drain's only hot query is "oldest thing that is due now".
-            try db.execute(
-                sql: """
-                    CREATE INDEX IF NOT EXISTS idx_uploads_due
-                    ON uploads(state, nextAttemptAt, queuedAt)
-                    """)
-            try db.execute(
-                sql: """
-                    CREATE TABLE IF NOT EXISTS upload_meta (
-                      key TEXT PRIMARY KEY,
-                      value TEXT NOT NULL)
-                    """)
+            if applied == nil {
+                // One row per local session, keyed by it: a session can be enqueued twice — by the
+                // engine when it closes and by reconciliation afterwards — and the primary key is what
+                // makes the second one a no-op instead of a duplicate conversation.
+                try db.execute(
+                    sql: """
+                        CREATE TABLE IF NOT EXISTS uploads (
+                          sessionId INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+                          state TEXT NOT NULL,
+                          attempts INTEGER NOT NULL DEFAULT 0,
+                          partsDone INTEGER NOT NULL DEFAULT 0,
+                          queuedAt DOUBLE NOT NULL,
+                          updatedAt DOUBLE NOT NULL,
+                          nextAttemptAt DOUBLE NOT NULL DEFAULT 0,
+                          ownerId TEXT,
+                          conversationIds TEXT,
+                          lastError TEXT)
+                        """)
+                // The drain's only hot query is "oldest thing that is due now".
+                try db.execute(
+                    sql: """
+                        CREATE INDEX IF NOT EXISTS idx_uploads_due
+                        ON uploads(state, nextAttemptAt, queuedAt)
+                        """)
+                try db.execute(
+                    sql: """
+                        CREATE TABLE IF NOT EXISTS upload_meta (
+                          key TEXT PRIMARY KEY,
+                          value TEXT NOT NULL)
+                        """)
+            }
+
+            let columnExists = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM pragma_table_info('uploads') WHERE name = ?",
+                arguments: ["ownerId"]) ?? 0
+            if columnExists == 0 {
+                try db.execute(sql: "ALTER TABLE uploads ADD COLUMN ownerId TEXT")
+            }
             try db.execute(
                 sql: "INSERT OR IGNORE INTO grdb_migrations (identifier) VALUES (?)",
                 arguments: [migrationIdentifier])
@@ -170,19 +180,20 @@ public enum UploadQueue {
     ///
     /// Deliberately does nothing to a session that is already `uploaded` or `skipped`: the engine
     /// re-enqueueing a session it closed twice must never turn a finished upload back into work.
-    public static func markPending(_ store: ContextStore, sessionId: Int64) throws {
+    public static func markPending(_ store: ContextStore, sessionId: Int64, ownerId: String? = nil) throws {
         let now = ContextTime.now
         try store.write { db in
             try db.execute(
                 sql: """
                     INSERT INTO uploads
-                      (sessionId, state, attempts, partsDone, queuedAt, updatedAt, nextAttemptAt)
-                    VALUES (?, 'pending', 0, 0, ?, ?, 0)
+                      (sessionId, state, attempts, partsDone, queuedAt, updatedAt, nextAttemptAt, ownerId)
+                    VALUES (?, 'pending', 0, 0, ?, ?, 0, ?)
                     ON CONFLICT(sessionId) DO UPDATE SET
-                      state = 'pending', nextAttemptAt = 0, updatedAt = excluded.updatedAt
+                      state = 'pending', nextAttemptAt = 0, updatedAt = excluded.updatedAt,
+                      ownerId = COALESCE(excluded.ownerId, uploads.ownerId)
                     WHERE uploads.state = 'failed'
                     """,
-                arguments: [sessionId, now, now])
+                arguments: [sessionId, now, now, ownerId])
         }
     }
 
@@ -277,19 +288,20 @@ public enum UploadQueue {
 
     /// Everything still owed to the account and due by `dueAt`, oldest first.
     public static func pending(
-        _ store: ContextStore, dueAt: Double = ContextTime.now, limit: Int = 50
+        _ store: ContextStore, ownerId: String?, dueAt: Double = ContextTime.now, limit: Int = 50
     ) throws -> [Entry] {
         try store.read { db in
             guard try db.tableExists("uploads") else { return [] }
+            guard let ownerId = ownerId else { return [] }
             let rows = try Row.fetchAll(
                 db,
                 sql: """
                     SELECT * FROM uploads
-                    WHERE state IN ('pending', 'failed') AND nextAttemptAt <= ?
+                    WHERE state IN ('pending', 'failed') AND nextAttemptAt <= ? AND ownerId = ?
                     ORDER BY queuedAt ASC, sessionId ASC
                     LIMIT ?
                     """,
-                arguments: [dueAt, limit])
+                arguments: [dueAt, ownerId, limit])
             return rows.map(entry(from:))
         }
     }

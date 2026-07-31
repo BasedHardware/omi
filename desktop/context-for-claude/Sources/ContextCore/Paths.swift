@@ -97,8 +97,8 @@ public enum ContextPaths {
     static let queryStampFilename = "last-query.json"
 
     @discardableResult
-    public static func ensureSupportDirectory() throws -> URL {
-        let dir = supportDirectory
+    public static func ensureSupportDirectory(at url: URL? = nil) throws -> URL {
+        let dir = url ?? supportDirectory
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? setPermissions(dir, mode: 0o700)
         return dir
