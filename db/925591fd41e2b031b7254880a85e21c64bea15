@@ -1,0 +1,60 @@
+desktop/context-for-claude/Tests/ContextAppTests/InkAccentTests.swift
+  s_d60bd669afaade::t_db8cf116125ea8 1-51,120-279
+  s_d60bd669afaade::t_5393984cf4a252 52-58,73-87,89-119
+  s_d60bd669afaade::t_065e2b6f756b9b 59-72
+  s_d60bd669afaade::t_d8348d41e9bcf7 88
+desktop/context-for-claude/Sources/ContextApp/Onboarding/InkGlass.swift
+  s_d60bd669afaade::t_e24b92f2dfbcc1 44
+desktop/context-for-claude/Tests/ContextAppTests/BrandColourGuard.swift
+  s_d60bd669afaade::t_26ea075e185b48 1-134
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsAppearancePane.swift
+  s_d60bd669afaade::t_701e1952f4f519 205-214
+desktop/context-for-claude/Sources/ContextApp/Onboarding/MenuBarSpotlight.swift
+  s_d60bd669afaade::t_2baa1f8be54331 123-125
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindPalette.swift
+  s_d60bd669afaade::t_d5836f75c652f2 20-21,24-26,30,32-34,38-47
+  s_d60bd669afaade::t_d4ace5ede47f15 78,83-92,95,97,105-114,116
+  s_d60bd669afaade::t_8b5ea5b3cfed59 61-65
+  s_d60bd669afaade::t_c00eabc5c8d402 35-37
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindView.swift
+  s_d60bd669afaade::t_326fec091207f1 7
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsPreferences.swift
+  s_d60bd669afaade::t_115d78d29ab004 48,50-52
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Ink.swift
+  s_d60bd669afaade::t_fc1f3dbc5b3214 25-27
+  s_d60bd669afaade::t_240347cd36c8cc 175-181
+  s_d60bd669afaade::t_c3af521d6bc38d 217-225,227-231
+  s_d60bd669afaade::t_35ca60ffc05a87 5-6
+  s_d60bd669afaade::t_77a86668dd78ce 710-713
+  s_d60bd669afaade::t_693424b8047749 118-135
+  s_d60bd669afaade::t_19116825288755 854-861
+  s_d60bd669afaade::t_b328a95b9c68f6 226
+desktop/context-for-claude/Tests/ContextAppTests/RewindTests.swift
+  s_d60bd669afaade::t_e9a395ff6315fd 36-50,55-62,70-73,76-87,91-93,97-99,105,111,113-118,120-122,127,129-135,141-144
+  s_d60bd669afaade::t_5559a745b99ba6 51-54,63-69,74-75
+  s_d60bd669afaade::t_9caec952692815 152-155,159-165
+  s_d60bd669afaade::t_2af5ac2a328612 88-90,94-96,100-104,106-110,112
+  s_d60bd669afaade::t_1691619f79d436 145-146
+desktop/context-for-claude/Tests/ContextAppTests/SettingsTests.swift
+  s_d60bd669afaade::t_d1cd62fe1818fb 145-146,148-157
+  s_d60bd669afaade::t_f9fe412c0bdcb9 59-68,78-79,82-84,88-108
+  s_d60bd669afaade::t_3f8d6a3faad9d6 109-110
+desktop/context-for-claude/Sources/ContextApp/Onboarding/CinematicMark.swift
+  s_d60bd669afaade::t_2ac556ddf02619 36-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "db925591fd41e2b031b7254880a85e21c64bea15",
+  "prompts": {},
+  "sessions": {
+    "s_d60bd669afaade": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f395fd8f-7d90-4c08-838d-d64797dec91b",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
