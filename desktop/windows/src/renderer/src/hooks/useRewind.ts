@@ -51,6 +51,7 @@ export function useRewind({ active = true }: { active?: boolean } = {}): RewindS
   const [cursorTs, setCursorTs] = useState<number>(() => Date.now())
   const [playing, setPlaying] = useState(false)
   const [results, setResults] = useState<RewindSearchGroup[]>([])
+  const [normalizedQuery, setNormalizedQuery] = useState('')
 
   const framesRef = useRef(frames)
   useEffect(() => {
@@ -177,15 +178,20 @@ export function useRewind({ active = true }: { active?: boolean } = {}): RewindS
   // merged in later by the subscription below, if they arrive at all.
   const search = useCallback(async (q: string) => {
     queryRef.current = q.trim()
-    setResults(await window.omi.rewindSearch(q))
+    const result = await window.omi.rewindSearch(q)
+    setNormalizedQuery(result.normalizedQuery)
+    setResults(result.groups)
   }, [])
 
   // Phase 2 of a search (see the rewind:search handler): the same list with
   // semantic recall merged in. Applied only if it belongs to the query currently on
   // screen — a slow round-trip for "invoice" must not overwrite "receipt".
   useEffect(() => {
-    return window.omi.onRewindSearchResults(({ query, groups }) => {
-      if (query === queryRef.current) setResults(groups)
+    return window.omi.onRewindSearchResults(({ query, normalizedQuery, groups }) => {
+      if (query === queryRef.current) {
+        setNormalizedQuery(normalizedQuery)
+        setResults(groups)
+      }
     })
   }, [])
 
@@ -205,6 +211,7 @@ export function useRewind({ active = true }: { active?: boolean } = {}): RewindS
     playing,
     setPlaying,
     results,
+    normalizedQuery,
     search
   }
 }

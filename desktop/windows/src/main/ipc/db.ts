@@ -1705,7 +1705,8 @@ export function linkRewindEmbedding(frameId: number, hash: string): boolean {
  */
 export async function searchRewindEmbeddings(
   query: Float32Array,
-  limit: number
+  limit: number,
+  scope?: { from: number; to: number }
 ): Promise<{ frameId: number; similarity: number }[]> {
   const d = get()
   // EXISTS against idx_rewind_embeddings_hash: skips vectors no live frame points
@@ -1717,11 +1718,14 @@ export async function searchRewindEmbeddings(
   // anywhere in the table silently truncated the scan there, and every vector past
   // it went unranked. Filtering in the query keeps LIMIT and "rows returned"
   // describing the same set.
-  const page = d.prepare(searchEmbeddingPageSql())
+  const page = d.prepare(searchEmbeddingPageSql(undefined, scope != null))
 
   const scored = await scanTopKBySimilarity(
     (offset, size) =>
-      (page.all(size, offset) as { hash: string; vec: Uint8Array }[]).map((r) => ({
+      (page.all(...(scope ? [scope.from, scope.to] : []), size, offset) as {
+        hash: string
+        vec: Uint8Array
+      }[]).map((r) => ({
         hash: r.hash,
         vec: bufferToVector(r.vec)
       })),
@@ -1739,9 +1743,13 @@ export async function searchRewindEmbeddings(
     .prepare(
       `SELECT e.frame_id AS frameId, e.hash AS hash, f.ts AS ts FROM rewind_embeddings e
          JOIN rewind_frames f ON f.id = e.frame_id
-        WHERE e.hash IN (${placeholders})`
+        WHERE e.hash IN (${placeholders})${scope ? ' AND f.ts BETWEEN ? AND ?' : ''}`
     )
-    .all(...scored.map((s) => s.hash)) as { frameId: number; hash: string; ts: number }[]
+    .all(...scored.map((s) => s.hash), ...(scope ? [scope.from, scope.to] : [])) as {
+    frameId: number
+    hash: string
+    ts: number
+  }[]
 
   const similarityByHash = new Map(scored.map((s) => [s.hash, s.similarity]))
   return rows

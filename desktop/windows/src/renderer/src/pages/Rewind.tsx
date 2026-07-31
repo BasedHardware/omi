@@ -26,6 +26,7 @@ export function Rewind(): React.JSX.Element {
   // Stable useCallbacks — destructured so effects can depend on them without
   // re-running on every render (the `r` object identity changes each render).
   const { search, jumpTo } = r
+  const highlightQuery = searching ? r.normalizedQuery : query
   // The search field is always present in the top bar (macOS keeps one page — the
   // content switches between the day timeline and the search results, it is not a
   // separate mode/route). A non-empty query IS "searching".
@@ -84,9 +85,9 @@ export function Rewind(): React.JSX.Element {
   // drill-down mini-timeline (macOS search-result markers).
   const markerTimes = useMemo(() => {
     if (!group) return []
-    const terms = highlightTerms(query)
+    const terms = highlightTerms(highlightQuery)
     return group.frames.filter((f) => lineTextMatches(f.ocrText, terms)).map((f) => f.ts)
-  }, [group, query])
+  }, [group, highlightQuery])
 
   return (
     <div ref={pageRef} data-testid="rewind-page" className="flex h-full min-h-0 flex-col gap-3 p-4">
@@ -152,7 +153,7 @@ export function Rewind(): React.JSX.Element {
             <ChevronLeft className="h-4 w-4" />
             Back to results
           </button>
-          <RewindPlayer frames={group.frames} cursorTs={r.cursorTs} highlightQuery={query} />
+          <RewindPlayer frames={group.frames} cursorTs={r.cursorTs} highlightQuery={highlightQuery} />
           <RewindTimelineBar
             frames={group.frames}
             bounds={null}
@@ -165,7 +166,7 @@ export function Rewind(): React.JSX.Element {
         <div className="min-h-0 flex-1 overflow-y-auto">
           <SearchResultsFilmstrip
             groups={r.results}
-            query={query}
+            query={highlightQuery}
             loading={searchLoading}
             onSelect={openGroup}
           />
